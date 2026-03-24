@@ -1,6 +1,6 @@
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { describe, expect, it, vi, afterEach } from "vitest";
 
@@ -345,4 +345,29 @@ async function writePackage(
   await mkdir(packageRoot, { recursive: true });
   await writeFile(join(packageRoot, "manifest.json"), JSON.stringify(input.manifest, null, 2), "utf8");
   await writeFile(join(packageRoot, "SKILL.md"), input.skill, "utf8");
+
+  for (const command of input.manifest.contributes.commands) {
+    const commandPath = join(packageRoot, command.entry);
+    await mkdir(dirname(commandPath), { recursive: true });
+    await writeFile(
+      commandPath,
+      [
+        "export const command = {",
+        "  argsSchema: {",
+        "    safeParse(value) {",
+        "      return { success: true, data: value ?? {} };",
+        "    }",
+        "  },",
+        "  async execute() {",
+        `    return { content: \"${command.name} executed\" };`,
+        "  }",
+        "};"
+      ].join("\n"),
+      "utf8"
+    );
+
+    const schemaPath = join(packageRoot, command.argsSchema);
+    await mkdir(dirname(schemaPath), { recursive: true });
+    await writeFile(schemaPath, JSON.stringify({ type: "object" }, null, 2), "utf8");
+  }
 }

@@ -37,6 +37,7 @@ describe("first-party package discovery", () => {
     expect(runtime.getCommand("guide")).toMatchObject({
       packageName: "core-guide"
     });
+    expect(runtime.getCommand("guide")?.execute).toBeTypeOf("function");
     expect(runtime.getBlock("choices")).toMatchObject({
       packageName: "core-guide"
     });

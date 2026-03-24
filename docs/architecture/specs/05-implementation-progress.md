@@ -110,12 +110,14 @@
 - `SKILL.md` 渐进式加载
 - `enable / disable`
 - context / command / block / renderer 注册
+- command module 动态加载
 - path traversal 防护
 
 状态：
 
 - fixture 测试已通过
 - 真实 `extensions/*` 扫描测试已通过
+- 第一方 command handler 已可通过 package runtime 加载
 
 ### 1.8 Storage
 
@@ -128,6 +130,7 @@
 - PostgreSQL schema bootstrap
 - PostgreSQL-backed repository persistence
 - `DATABASE_URL` 存在时的 runtime 选择
+- `docker compose` 本地 PostgreSQL 启动文件
 
 状态：
 
@@ -170,6 +173,8 @@
 - `/actions`
 - runtime composition
 - `start:runtime` 入口
+- package-backed command registry 组装
+- built-in `/help`
 
 状态：
 
@@ -209,8 +214,10 @@
 
 状态：
 
-- 目前主要是 package runtime 可消费的最小壳
-- 还不是完整业务实现
+- `core-guide / core-archive / core-memory-rag / core-presets / core-debug-commands`
+  - 已具备最小 command handler
+- 其余 package 仍主要是 package runtime 可消费的最小壳
+- 仍不是完整业务实现
 
 ## 2. 当前验证结果
 
@@ -237,10 +244,10 @@
 - `core-worldbook` 的真实 context 逻辑
 - `core-character-card` 的真实角色卡逻辑
 - `core-persona` 的真实人格逻辑
-- `core-memory-rag` 的真实 package surface
-- `core-archive` 的完整 package command surface
-- `core-presets` 的完整 schema/settings UI
-- `core-debug-commands` 的完整调试命令实现
+- `core-memory-rag` 的更完整 package surface
+- `core-archive` 的更完整 package command surface
+- `core-presets` 的完整 schema/settings UI 与持久化
+- `core-debug-commands` 的完整调试命令与调试页联动
 
 ### 3.2 Memory / RAG 仍未达到规范全文能力
 
@@ -307,6 +314,7 @@
 - 连接池生命周期管理
 - 真实生产级错误处理与重试
 - 健康检查与启动时 schema upgrade 策略
+- artifact metadata / preset metadata 的更系统化持久化模型
 
 ## 4. 当前判断
 

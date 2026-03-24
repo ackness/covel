@@ -24,6 +24,13 @@
         "argsSchema": "schemas/commands/packages.args.json",
         "entry": "server/commands/packages.ts",
         "resume": false
+      },
+      {
+        "name": "session",
+        "description": "Inspect the current session state.",
+        "argsSchema": "schemas/commands/session.args.json",
+        "entry": "server/commands/session.ts",
+        "resume": false
       }
     ],
     "blocks": [],

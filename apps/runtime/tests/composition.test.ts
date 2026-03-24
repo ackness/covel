@@ -21,6 +21,7 @@ describe("createRuntimeComposition", () => {
     expect(runtime.commandRegistry.listHelp().map((entry) => entry.name)).toEqual([
       "archive",
       "guide",
+      "help",
       "memory",
       "packages",
       "presets",
@@ -62,5 +63,37 @@ describe("createRuntimeComposition", () => {
       baseUrl: "https://dashscope.example/compatible-mode/v1",
       model: "qwen3.5-flash"
     });
+  });
+
+  it("executes the package-backed guide command and returns an interactive block", async () => {
+    const runtime = await createRuntimeComposition({
+      env: {}
+    });
+
+    const result = await runtime.commandBus.dispatch("/guide", {
+      sessionId: "session_guide"
+    }) as {
+      content?: string;
+      blocks?: Array<{ type: string }>;
+    };
+
+    expect(result.content).toContain("guide");
+    expect(result.blocks?.[0]).toMatchObject({
+      type: "choices"
+    });
+  });
+
+  it("executes the built-in help command and lists the registered commands", async () => {
+    const runtime = await createRuntimeComposition({
+      env: {}
+    });
+
+    const result = await runtime.commandBus.dispatch("/help") as {
+      content?: string;
+    };
+
+    expect(result.content).toContain("/guide");
+    expect(result.content).toContain("/archive");
+    expect(result.content).toContain("/help");
   });
 });

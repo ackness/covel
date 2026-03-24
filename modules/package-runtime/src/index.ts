@@ -14,6 +14,7 @@ export {
 export { resolvePackageRelativePath } from "./path.js";
 export {
   PackageRuntime,
+  type PackageCommandModule,
   type PackageRuntimeOptions,
   type RegisteredBlock,
   type RegisteredCommand,

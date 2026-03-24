@@ -200,147 +200,53 @@ export async function createRuntimeComposition(input: {
   });
 
   const commandRegistry = new CommandRegistry();
-  commandRegistry.register(createSlashCommandSpec({
-    name: "guide",
-    description: "Generate a guide block",
-    handler: "runtime/guide",
-    resume: false,
-    argsSchema: {
-      safeParse(value: unknown) {
-        return { success: true, data: value ?? {} } as const;
-      }
-    } as any,
-    async execute() {
-      return {
-        content: "Guide generated.",
-        blocks: [
-          {
-            id: "blk_guide",
-            type: "choices",
-            version: "1.0",
-            meta: {
-              package: "core-guide",
-              requestId: "req_guide",
-              traceId: "tr_guide",
-              sessionId: "ses_guide",
-              turnId: "turn_guide"
-            },
-            interaction: {
-              requiresResponse: true,
-              responseSchema: "schemas/blocks/choices.response.json",
-              submitAs: "block_response",
-              resumePolicy: "resume_current_flow"
-            },
-            data: {
-              title: "Next step",
-              options: [
-                { id: "opt_a", label: "Continue" },
-                { id: "opt_b", label: "Observe" }
-              ]
-            }
-          }
-        ]
-      };
-    },
-    help: {
-      usage: "/guide"
-    }
-  }));
-  commandRegistry.register(createSlashCommandSpec({
-    name: "archive",
-    description: "Create an archive snapshot",
-    handler: "runtime/archive",
-    resume: false,
-    argsSchema: {
-      safeParse() {
-        return { success: true, data: {} } as const;
-      }
-    } as any,
-    async execute(_args, context) {
-      const sessionId = String((context as Record<string, unknown>).sessionId ?? "");
-      if (!sessionId) {
+  for (const registeredCommand of packageRuntime.listCommands()) {
+    commandRegistry.register(
+      createSlashCommandSpec({
+        name: registeredCommand.name,
+        description: registeredCommand.description,
+        handler: registeredCommand.entry,
+        resume: registeredCommand.resume,
+        argsSchema: registeredCommand.argsSchema,
+        execute: async (args, context) =>
+          registeredCommand.execute(args, {
+            ...context,
+            archiveService,
+            packageRuntime,
+            runtimePreset,
+            ingestionRegistry,
+            observability
+          }),
+        help: registeredCommand.help,
+        autocomplete: registeredCommand.autocomplete
+      })
+    );
+  }
+
+  commandRegistry.register(
+    createSlashCommandSpec({
+      name: "help",
+      description: "List available commands",
+      handler: "runtime/help",
+      resume: false,
+      argsSchema: {
+        safeParse() {
+          return { success: true, data: {} } as const;
+        }
+      } as any,
+      async execute() {
         return {
-          content: "No active session."
+          content: commandRegistry
+            .listHelp()
+            .map((entry) => `${entry.usage ?? `/${entry.name}`} - ${entry.description}`)
+            .join("\n")
         };
+      },
+      help: {
+        usage: "/help"
       }
-      const snapshot = await archiveService.createSnapshot({
-        sessionId,
-        turnCutoff: 0,
-        stateSnapshot: {},
-        workingSummary: "Working summary",
-        archiveSummary: "Archive summary"
-      });
-      return {
-        content: `Archive ${snapshot.version.id} created.`
-      };
-    },
-    help: { usage: "/archive" }
-  }));
-  commandRegistry.register(createSlashCommandSpec({
-    name: "packages",
-    description: "List enabled packages",
-    handler: "runtime/packages",
-    resume: false,
-    argsSchema: { safeParse() { return { success: true, data: {} } as const; } } as any,
-    async execute() {
-      return {
-        content: packageRuntime.listPackages().filter((pkg) => pkg.enabled).map((pkg) => pkg.name).join(", ")
-      };
-    },
-    help: { usage: "/packages" }
-  }));
-  commandRegistry.register(createSlashCommandSpec({
-    name: "trace",
-    description: "Inspect trace state",
-    handler: "runtime/trace",
-    resume: false,
-    argsSchema: { safeParse() { return { success: true, data: {} } as const; } } as any,
-    async execute() {
-      return {
-        content: "Trace inspection available."
-      };
-    },
-    help: { usage: "/trace" }
-  }));
-  commandRegistry.register(createSlashCommandSpec({
-    name: "memory",
-    description: "Inspect memory state",
-    handler: "runtime/memory",
-    resume: false,
-    argsSchema: { safeParse() { return { success: true, data: {} } as const; } } as any,
-    async execute() {
-      return {
-        content: `Ingestion registry size: ${ingestionRegistry.get("world:world_01") ? 1 : 0}`
-      };
-    },
-    help: { usage: "/memory" }
-  }));
-  commandRegistry.register(createSlashCommandSpec({
-    name: "presets",
-    description: "Inspect active preset state",
-    handler: "runtime/presets",
-    resume: false,
-    argsSchema: { safeParse() { return { success: true, data: {} } as const; } } as any,
-    async execute() {
-      return {
-        content: runtimePreset.id
-      };
-    },
-    help: { usage: "/presets" }
-  }));
-  commandRegistry.register(createSlashCommandSpec({
-    name: "session",
-    description: "Inspect current session state",
-    handler: "runtime/session",
-    resume: false,
-    argsSchema: { safeParse() { return { success: true, data: {} } as const; } } as any,
-    async execute(_args, context) {
-      return {
-        content: String((context as Record<string, unknown>).sessionId ?? "no-session")
-      };
-    },
-    help: { usage: "/session" }
-  }));
+    })
+  );
 
   const commandBus = new CommandBus({
     registry: commandRegistry
@@ -412,6 +318,7 @@ export async function createRuntimeComposition(input: {
     repositories,
     packageRuntime,
     commandRegistry,
+    commandBus,
     providerRegistry,
     profileRegistry,
     archiveService,

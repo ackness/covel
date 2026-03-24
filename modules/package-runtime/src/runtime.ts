@@ -1,9 +1,17 @@
 import * as nodeFs from "node:fs/promises";
 import type { PathLike } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { ZodError } from "zod";
 
+import type {
+  CommandArgsSchema,
+  CommandExecutionContext,
+  CommandHandler,
+  SlashCommandAutocompleteMetadata,
+  SlashCommandHelpMetadata
+} from "../../command-system/src/index.js";
 import { PackageRuntimeError } from "./error.js";
 import {
   type BlockContribution,
@@ -37,8 +45,12 @@ export interface RegisteredContextProvider extends ContextContribution {
   packageName: string;
 }
 
-export interface RegisteredCommand extends CommandContribution {
+export interface RegisteredCommand extends Omit<CommandContribution, "argsSchema"> {
   packageName: string;
+  argsSchema: CommandArgsSchema;
+  execute: CommandHandler<any, any, CommandExecutionContext>;
+  help?: SlashCommandHelpMetadata;
+  autocomplete?: SlashCommandAutocompleteMetadata;
 }
 
 export interface RegisteredBlock extends BlockContribution {
@@ -55,6 +67,17 @@ export interface RuntimePackageRecord {
   manifest: PackageManifest;
   enabled: boolean;
   skillMarkdown?: string;
+}
+
+export interface PackageCommandModule<
+  TArgs = any,
+  TResult = any,
+  TContext extends CommandExecutionContext = CommandExecutionContext
+> {
+  argsSchema: CommandArgsSchema<TArgs>;
+  execute: CommandHandler<TArgs, TResult, TContext>;
+  help?: SlashCommandHelpMetadata;
+  autocomplete?: SlashCommandAutocompleteMetadata;
 }
 
 interface MutablePackageRecord extends RuntimePackageRecord {
@@ -140,7 +163,7 @@ export class PackageRuntime {
 
     const skillMarkdown = toUtf8String(await this.#fs.readFile(join(pkg.rootDir, "SKILL.md"), "utf8"));
 
-    this.#registerPackage(pkg);
+    await this.#registerPackage(pkg);
     pkg.skillMarkdown = skillMarkdown;
     pkg.enabled = true;
 
@@ -184,6 +207,10 @@ export class PackageRuntime {
     return this.#commands.get(name);
   }
 
+  listCommands(): RegisteredCommand[] {
+    return Array.from(this.#commands.values()).sort((left, right) => left.name.localeCompare(right.name));
+  }
+
   getBlock(type: string): RegisteredBlock | undefined {
     return this.#blocks.get(type);
   }
@@ -206,7 +233,7 @@ export class PackageRuntime {
     return pkg;
   }
 
-  #registerPackage(pkg: MutablePackageRecord): void {
+  async #registerPackage(pkg: MutablePackageRecord): Promise<void> {
     const nextRegistrations = {
       contextIds: [] as string[],
       commandNames: [] as string[],
@@ -225,11 +252,16 @@ export class PackageRuntime {
       }
 
       for (const command of pkg.manifest.contributes.commands) {
-        resolvePackageRelativePath(pkg.rootDir, command.entry);
+        const commandEntryPath = resolvePackageRelativePath(pkg.rootDir, command.entry);
         resolvePackageRelativePath(pkg.rootDir, command.argsSchema);
+        const commandModule = await loadCommandModule(commandEntryPath);
         this.#registerUnique(this.#commands, command.name, {
           ...command,
-          packageName: pkg.name
+          packageName: pkg.name,
+          argsSchema: commandModule.argsSchema,
+          execute: commandModule.execute,
+          help: commandModule.help,
+          autocomplete: commandModule.autocomplete
         }, "command");
         nextRegistrations.commandNames.push(command.name);
       }
@@ -302,6 +334,26 @@ export class PackageRuntime {
       ...(pkg.skillMarkdown ? { skillMarkdown: pkg.skillMarkdown } : {})
     };
   }
+}
+
+async function loadCommandModule(commandEntryPath: string): Promise<PackageCommandModule> {
+  const imported = await import(pathToFileURL(commandEntryPath).href) as {
+    command?: PackageCommandModule;
+    default?: PackageCommandModule;
+  };
+
+  const commandModule = imported.command ?? imported.default;
+  if (!commandModule || typeof commandModule.execute !== "function" || !commandModule.argsSchema) {
+    throw new PackageRuntimeError({
+      code: "INVALID_PACKAGE_MANIFEST",
+      message: `Package command module at '${commandEntryPath}' is missing required exports.`,
+      details: {
+        commandEntryPath
+      }
+    });
+  }
+
+  return commandModule;
 }
 
 function parseManifest(rawManifest: string, manifestPath: string): PackageManifest {
