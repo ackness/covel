@@ -19,6 +19,7 @@ import {
   serializeSseEvent
 } from "./helpers/fetch-stub.js";
 import { loadWebModule } from "./helpers/load-web-module.js";
+import { renderWithI18n } from "./helpers/render-with-i18n.js";
 
 interface InteractiveBlockFormProps {
   runtimeBaseUrl: string;
@@ -73,7 +74,7 @@ describe("apps/web InteractiveBlockForm", () => {
     ]);
     const user = userEvent.setup();
 
-    render(createElement(InteractiveBlockForm, {
+    renderWithI18n(createElement(InteractiveBlockForm, {
       runtimeBaseUrl: "http://runtime.test",
       block,
       sessionId: "ses_01",
@@ -83,12 +84,13 @@ describe("apps/web InteractiveBlockForm", () => {
     }));
 
     await user.click(screen.getByLabelText("继续前进"));
-    await user.click(screen.getByRole("button", { name: "Submit response" }));
+    await user.click(screen.getByRole("button", { name: "提交响应" }));
 
     await expect(fetchStub.calls[0]?.json()).resolves.toEqual({
       requestId: "req_block_01",
       type: "submit_block_response",
       sessionId: "ses_01",
+      locale: "zh-CN",
       payload: {
         blockId: "blk_01",
         blockType: "choices",
@@ -101,9 +103,34 @@ describe("apps/web InteractiveBlockForm", () => {
     });
     expect(onSubmitted).toHaveBeenCalledWith("blk_01");
     expect(
-      (screen.getByRole("button", { name: "Submit response" }) as HTMLButtonElement).disabled
+      (screen.getByRole("button", { name: "提交响应" }) as HTMLButtonElement).disabled
     ).toBe(true);
 
     fetchStub.restore();
+  });
+
+  it("uses localized fallback chrome while preserving block-provided content", async () => {
+    const { InteractiveBlockForm } = await loadWebModule<InteractiveBlockFormModule>(
+      "components/interactive-block-form.ts"
+    );
+    const block = createInteractiveBlock({
+      data: {
+        options: [{ id: "opt_a", label: "Advance" }]
+      }
+    });
+
+    renderWithI18n(createElement(InteractiveBlockForm, {
+      runtimeBaseUrl: "http://runtime.test",
+      block,
+      sessionId: "ses_01",
+      turnId: "turn_01",
+      createRequestId: () => "req_block_01"
+    }), {
+      locale: "en"
+    });
+
+    expect(screen.getByText("Pending block")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Submit response" })).toBeTruthy();
+    expect(screen.getByText("Advance")).toBeTruthy();
   });
 });

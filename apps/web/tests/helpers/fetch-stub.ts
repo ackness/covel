@@ -18,7 +18,9 @@ export function installFetchStub(routes: RouteDefinition[]): FetchStubController
   const calls: Request[] = [];
 
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const request = input instanceof Request ? input : new Request(input, init);
+    const request = input instanceof Request
+      ? input
+      : new Request(resolveRequestUrl(input), init);
     const rawBody =
       typeof init?.body === "string"
         ? init.body
@@ -53,6 +55,14 @@ export function installFetchStub(routes: RouteDefinition[]): FetchStubController
       globalThis.fetch = originalFetch;
     }
   };
+}
+
+function resolveRequestUrl(input: RequestInfo | URL): RequestInfo | URL {
+  if (typeof input === "string" && input.startsWith("/")) {
+    return new URL(input, "http://localhost");
+  }
+
+  return input;
 }
 
 export function createJsonResponse(body: unknown, init: ResponseInit = {}): Response {

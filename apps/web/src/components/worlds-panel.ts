@@ -1,5 +1,7 @@
 import React, { createElement, useEffect, useState } from "react";
 
+import { getStoredLocale, useI18n } from "../i18n.js";
+
 type WorldRecord = {
   id: string;
   name: string;
@@ -10,6 +12,7 @@ export function WorldsPanel(input: {
   runtimeBaseUrl: string;
   onOpenWorld?(worldId: string): void;
 }) {
+  const { t } = useI18n();
   const [worlds, setWorlds] = useState<WorldRecord[]>([]);
   const [worldName, setWorldName] = useState("");
   const [worldDescription, setWorldDescription] = useState("");
@@ -19,7 +22,11 @@ export function WorldsPanel(input: {
   }, []);
 
   async function fetchWorlds() {
-    const response = await fetch(`${input.runtimeBaseUrl}/worlds`);
+    const response = await fetch(`${input.runtimeBaseUrl}/worlds`, {
+      headers: {
+        "accept-language": getStoredLocale()
+      }
+    });
     const payload = await response.json() as WorldRecord[];
     setWorlds(payload);
   }
@@ -29,6 +36,7 @@ export function WorldsPanel(input: {
     const response = await fetch(`${input.runtimeBaseUrl}/worlds`, {
       method: "POST",
       headers: {
+        "accept-language": getStoredLocale(),
         "content-type": "application/json"
       },
       body: JSON.stringify({
@@ -45,7 +53,7 @@ export function WorldsPanel(input: {
   return createElement(
     "section",
     { className: "panel-section" },
-    createElement("div", { className: "eyebrow" }, "Worlds"),
+    createElement("div", { className: "eyebrow" }, t("app.worlds")),
     createElement(
       "ul",
       { className: "stack-list" },
@@ -59,7 +67,9 @@ export function WorldsPanel(input: {
               className: "list-button",
               type: "button",
               onClick: () => input.onOpenWorld?.(world.id),
-              "aria-label": `Open ${world.name}`
+              "aria-label": t("worlds.openAria", {
+                name: world.name
+              })
             },
             world.name
           )
@@ -72,9 +82,9 @@ export function WorldsPanel(input: {
       createElement(
         "label",
         { className: "field" },
-        createElement("span", null, "World name"),
+        createElement("span", null, t("worlds.worldName")),
         createElement("input", {
-          "aria-label": "World name",
+          "aria-label": t("worlds.worldName"),
           value: worldName,
           onChange: (event: React.ChangeEvent<HTMLInputElement>) => setWorldName(event.target.value)
         })
@@ -82,9 +92,9 @@ export function WorldsPanel(input: {
       createElement(
         "label",
         { className: "field" },
-        createElement("span", null, "World description"),
+        createElement("span", null, t("worlds.worldDescription")),
         createElement("textarea", {
-          "aria-label": "World description",
+          "aria-label": t("worlds.worldDescription"),
           value: worldDescription,
           onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) =>
             setWorldDescription(event.target.value)
@@ -96,7 +106,7 @@ export function WorldsPanel(input: {
           className: "primary-button",
           type: "submit"
         },
-        "Create world"
+        t("worlds.createWorld")
       )
     )
   );

@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   createProviderRegistry,
+  createModelGateway,
+  createModelProfileRegistry,
   type EmbeddingResult,
   type ModelProviderAdapter,
   type ModelRequestContext,
   type ObjectGenerationParams,
   type PresetMetadata,
+  type ProviderLifecycleHook,
+  type ProviderProtocol,
   type ProviderConfig,
   type StreamEvent,
   type TextGenerationParams
@@ -80,6 +84,7 @@ describe("ProviderRegistry", () => {
       id: "preset-medium",
       name: "Default medium",
       provider: "openaiCompatible",
+      protocol: "openai-chat-v1",
       model: "gpt-medium",
       tier: "medium",
       baseUrl: "https://preset.example/v1",
@@ -89,7 +94,9 @@ describe("ProviderRegistry", () => {
       scope: "global"
     };
 
-    const resolved = registry.resolve(preset);
+    const resolved = registry.resolve(preset, {
+      mode: "text"
+    });
 
     expect(resolved.adapter).toBe(adapter);
     expect(resolved.config).toEqual({
@@ -109,13 +116,193 @@ describe("ProviderRegistry", () => {
         id: "missing",
         name: "Missing",
         provider: "unknown",
+        protocol: "openai-chat-v1",
         model: "gpt-missing",
         tier: "small",
         supportedModes: ["text"],
         enabled: true,
         isDefault: false,
         scope: "global"
+      }, {
+        mode: "text"
       })
     ).toThrowError("Provider registry error: provider \"unknown\" is not registered.");
+  });
+
+  it("resolves protocol-specific adapters and route defaults", () => {
+    const chatAdapter = new StubProviderAdapter();
+    const responsesAdapter = new StubProviderAdapter();
+    const registry = createProviderRegistry({
+      providers: {
+        openaiCompatible: {
+          defaults: {
+            baseUrl: "https://runtime.example/v1",
+            apiKey: "runtime-key"
+          },
+          protocols: {
+            "openai-chat-v1": {
+              adapter: chatAdapter
+            },
+            "openai-responses-v1": {
+              adapter: responsesAdapter,
+              defaults: {
+                baseUrl: "https://responses.example/v1"
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const resolved = registry.resolve({
+      id: "preset-responses",
+      name: "Responses preset",
+      provider: "openaiCompatible",
+      protocol: "openai-responses-v1",
+      model: "gpt-responses",
+      tier: "medium",
+      supportedModes: ["text", "object", "stream"],
+      enabled: true,
+      isDefault: false,
+      scope: "global"
+    }, {
+      mode: "text"
+    });
+
+    expect(resolved.adapter).toBe(responsesAdapter);
+    expect(resolved.protocol).toBe("openai-responses-v1");
+    expect(resolved.config).toMatchObject({
+      baseUrl: "https://responses.example/v1",
+      apiKey: "runtime-key"
+    });
+  });
+
+  it("exposes provider lifecycle hooks on the resolved route", () => {
+    const hook: ProviderLifecycleHook = {
+      onRequestStart() {},
+      onRequestSuccess() {},
+      onRequestError() {}
+    };
+    const registry = createProviderRegistry({
+      providers: {
+        anthropic: {
+          defaults: {
+            baseUrl: "https://api.anthropic.test/v1",
+            apiKey: "anthropic-key"
+          },
+          hooks: [hook],
+          protocols: {
+            "anthropic-messages-v1": {
+              adapter: new StubProviderAdapter()
+            }
+          }
+        }
+      }
+    });
+
+    const resolved = registry.resolve({
+      id: "claude-default",
+      name: "Claude default",
+      provider: "anthropic",
+      protocol: "anthropic-messages-v1",
+      model: "claude-sonnet",
+      tier: "medium",
+      supportedModes: ["text", "object", "stream"],
+      enabled: true,
+      isDefault: true,
+      scope: "global"
+    }, {
+      mode: "text"
+    });
+
+    expect(resolved.protocol).toBe("anthropic-messages-v1");
+    expect(resolved.hooks).toEqual([hook]);
+  });
+
+  it("allows hooks to observe request lifecycle through the model gateway", async () => {
+    const events: string[] = [];
+    const adapter = new StubProviderAdapter();
+    const registry = createProviderRegistry({
+      providers: {
+        openaiCompatible: {
+          defaults: {
+            baseUrl: "https://runtime.example/v1",
+            apiKey: "runtime-key"
+          },
+          hooks: [
+            {
+              onRequestStart(event) {
+                events.push(`start:${event.protocol}:${event.mode}:${event.model}`);
+              },
+              onRequestSuccess(event) {
+                events.push(`success:${event.protocol}:${event.mode}:${event.usage?.outputTokens ?? 0}`);
+              }
+            }
+          ],
+          protocols: {
+            "openai-chat-v1": {
+              adapter
+            }
+          }
+        }
+      }
+    });
+    const gateway = createModelGateway({
+      providerRegistry: registry,
+      profileRegistry: createModelProfileRegistry({
+        runtimeProfiles: [
+          {
+            id: "medium",
+            tier: "medium",
+            provider: "openaiCompatible",
+            model: "qwen-medium",
+            contextWindow: 64_000,
+            latencyClass: "medium",
+            costClass: "medium",
+            supportedModes: ["text", "object", "stream"]
+          },
+          {
+            id: "embed-default",
+            tier: "embed-default",
+            provider: "openaiCompatible",
+            model: "embed-model",
+            contextWindow: 8_000,
+            latencyClass: "low",
+            costClass: "low",
+            supportedModes: ["embed"]
+          }
+        ],
+        runtimePresets: [
+          {
+            id: "default-medium",
+            name: "Default medium",
+            provider: "openaiCompatible",
+            protocol: "openai-chat-v1",
+            model: "qwen-medium",
+            tier: "medium",
+            baseUrl: "https://runtime.example/v1",
+            supportedModes: ["text", "object", "stream"],
+            enabled: true,
+            isDefault: true,
+            scope: "global"
+          }
+        ]
+      })
+    });
+
+    await gateway.generateText({
+      presetId: "default-medium",
+      messages: [
+        {
+          role: "user",
+          content: "Say hello."
+        }
+      ]
+    });
+
+    expect(events).toEqual([
+      "start:openai-chat-v1:text:qwen-medium",
+      "success:openai-chat-v1:text:1"
+    ]);
   });
 });

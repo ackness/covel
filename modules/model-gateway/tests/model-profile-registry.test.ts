@@ -53,6 +53,7 @@ const runtimePreset: PresetMetadata = {
   id: "story-default",
   name: "Story default",
   provider: "openaiCompatible",
+  protocol: "openai-chat-v1",
   model: "qwen-medium",
   tier: "medium",
   baseUrl: "https://runtime.example/v1",
@@ -118,6 +119,7 @@ describe("ModelProfileRegistry", () => {
     });
     expect(resolved.preset).toMatchObject({
       id: "story-default",
+      protocol: "openai-chat-v1",
       model: "project-medium",
       baseUrl: "https://project.example/v1"
     });
@@ -156,5 +158,26 @@ describe("ModelProfileRegistry", () => {
     expect(() => registry.resolveTextTarget({ presetId: "disabled" })).toThrowError(
       "Model profile registry error: preset \"disabled\" is disabled."
     );
+  });
+
+  it("supports protocol overrides through persisted presets", () => {
+    const registry = createModelProfileRegistry({
+      runtimeProfiles,
+      runtimePresets: [runtimePreset],
+      persistedPresets: [
+        {
+          ...runtimePreset,
+          protocol: "openai-responses-v1"
+        }
+      ]
+    });
+
+    const resolved = registry.resolveTextTarget({
+      presetId: "story-default"
+    });
+
+    expect(resolved.preset).toMatchObject({
+      protocol: "openai-responses-v1"
+    });
   });
 });

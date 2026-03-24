@@ -1,5 +1,9 @@
 export type ModelTier = "small" | "medium" | "large" | "embed-default";
 export type SupportedMode = "text" | "object" | "stream" | "embed";
+export type ProviderProtocol =
+  | "openai-chat-v1"
+  | "openai-responses-v1"
+  | "anthropic-messages-v1";
 
 export interface ModelProfile {
   id: string;
@@ -16,6 +20,7 @@ export interface PresetMetadata {
   id: string;
   name: string;
   provider: string;
+  protocol?: ProviderProtocol;
   model: string;
   tier: Exclude<ModelTier, "embed-default">;
   baseUrl?: string;

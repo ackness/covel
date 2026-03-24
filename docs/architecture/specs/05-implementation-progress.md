@@ -77,14 +77,19 @@
 
 - `ProviderRegistry`
 - `ModelProfileRegistry`
-- `openai-compatible` adapter
+- 自定义 provider 路由层
+- `openai-chat-v1`
+- `openai-responses-v1`
+- `anthropic-messages-v1`
 - `text / object / stream / embed`
 - 错误归一化
+- provider lifecycle hooks
 - DashScope live smoke
 
 状态：
 
 - mocked integration tests 已通过
+- 多协议 adapter tests 已通过
 - live smoke tests 已通过
 
 ### 1.6 Flow Engine
@@ -227,8 +232,13 @@
 - `core-guide / core-archive / core-memory-rag / core-presets / core-debug-commands`
   - 已具备最小 command handler
 - runtime 已优先从 first-party package command module 组装命令系统
+- `core-guide / core-memory-rag / core-worldbook / core-character-card / core-persona`
+  - 已补 manifest 对应占位 `context.ts` / renderer 文件，避免目录结构与声明脱节
+- runtime 当前仍只真正消费 package command
+- `Preset` 当前主要由 `model-gateway + storage + runtime/web host` 承载
 - 其余 package 仍主要是 package runtime 可消费的最小壳
 - 仍不是完整业务实现
+- 旧项目的代表性世界观资产已先迁入 `extensions/core-worldbook/assets/legacy`
 
 ## 2. 当前验证结果
 
@@ -259,6 +269,11 @@
 - `core-archive` 的更完整 package command surface
 - `core-presets` 的完整 schema/settings UI 与持久化
 - `core-debug-commands` 的完整调试命令与调试页联动
+
+补充说明：
+
+- package manifest 虽已声明 `context` / `renderer` contribution，但 runtime 仍未执行 package-owned context provider，也未动态装载 package-owned renderer
+- 这意味着当前 package 层更接近“已建好承载位，但尚未接主链路”
 
 ### 3.2 Memory / RAG 仍未达到规范全文能力
 
@@ -327,6 +342,15 @@
 - 真实生产级错误处理与重试
 - 健康检查与启动时 schema upgrade 策略
 - artifact metadata / preset metadata 的更系统化持久化模型
+
+### 3.8 Provider Layer 仍未完全产品化
+
+未完成：
+
+- provider routing 策略仍偏简单，尚未达到 LiteLLM 那类完整路由器能力
+- 还没有正式 WebSocket provider transport
+- 还没有真正的 Langfuse adapter，只保留了 hooks / trace 接口位
+- 还没有 request-level cost accounting 与更完整统计聚合
 
 ## 4. 当前判断
 

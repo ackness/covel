@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { pickLocalizedText } from "../../../shared/locale.js";
+
 export const command = {
   argsSchema: z.object({
     _: z.array(z.string()).default([]),
@@ -7,7 +9,7 @@ export const command = {
   }),
   async execute(
     _args: { _: string[]; mode?: "create" },
-    context: { sessionId?: string; archiveService?: { createSnapshot(input: {
+    context: { sessionId?: string; locale?: string; archiveService?: { createSnapshot(input: {
       sessionId: string;
       turnCutoff: number;
       stateSnapshot: Record<string, unknown>;
@@ -17,7 +19,10 @@ export const command = {
   ) {
     if (!context.sessionId || !context.archiveService) {
       return {
-        content: "archive package could not resolve an active session"
+        content: pickLocalizedText(context.locale, {
+          "zh-CN": "归档扩展无法解析当前活动会话。",
+          en: "Archive package could not resolve an active session."
+        })
       };
     }
 
@@ -25,12 +30,21 @@ export const command = {
       sessionId: context.sessionId,
       turnCutoff: 0,
       stateSnapshot: {},
-      workingSummary: "Working summary",
-      archiveSummary: "Archive summary"
+      workingSummary: pickLocalizedText(context.locale, {
+        "zh-CN": "工作摘要",
+        en: "Working summary"
+      }),
+      archiveSummary: pickLocalizedText(context.locale, {
+        "zh-CN": "归档摘要",
+        en: "Archive summary"
+      })
     });
 
     return {
-      content: `archive ${snapshot.version.id} created`
+      content: pickLocalizedText(context.locale, {
+        "zh-CN": `已创建归档 ${snapshot.version.id}`,
+        en: `Archive ${snapshot.version.id} created`
+      })
     };
   },
   help: {

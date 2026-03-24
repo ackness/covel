@@ -15,10 +15,12 @@ import {
 } from "./api.js";
 import { TraceSummary } from "./components/trace-summary.js";
 import { PresetEditor } from "./components/preset-editor.js";
+import { useI18n, type Locale } from "./i18n.js";
 import { applySseEvent, createInitialWorkspaceState, timelineFromMessages } from "./state.js";
 import type { ArchiveRecord, SessionRecord, TraceRecord, WorldRecord, WorkspaceState } from "./types.js";
 
 export function App() {
+  const { locale, setLocale, t } = useI18n();
   const [worlds, setWorlds] = useState<WorldRecord[]>([]);
   const [packages, setPackages] = useState<Array<{ name: string; enabled: boolean }>>([]);
   const [selectedWorldId, setSelectedWorldId] = useState<string | null>(null);
@@ -30,7 +32,7 @@ export function App() {
   const [composer, setComposer] = useState("");
   const [worldName, setWorldName] = useState("");
   const [worldDescription, setWorldDescription] = useState("");
-  const [status, setStatus] = useState("Idle");
+  const [status, setStatus] = useState<"idle" | "streaming">("idle");
 
   useEffect(() => {
     void loadInitialData();
@@ -130,7 +132,7 @@ export function App() {
       return;
     }
 
-    setStatus("Streaming");
+    setStatus("streaming");
     const events = await sendMessage({
       sessionId: selectedSession.id,
       content: composer
@@ -145,7 +147,7 @@ export function App() {
         }
         return nextState;
       });
-      setStatus("Idle");
+      setStatus("idle");
     });
   }
 
@@ -190,8 +192,8 @@ export function App() {
       stateSnapshot: {
         timelineCount: workspace.timeline.length
       },
-      workingSummary: "Working summary",
-      archiveSummary: "Archive summary"
+      workingSummary: t("app.archiveWorkingSummary"),
+      archiveSummary: t("app.archiveSummary")
     });
 
     startTransition(() => {
@@ -210,11 +212,35 @@ export function App() {
     });
   }
 
+  function formatSessionStatus(value: string | null | undefined): string {
+    if (value === "active") {
+      return t("app.sessionStatus.active");
+    }
+
+    if (value === "waiting_for_input") {
+      return t("app.sessionStatus.waiting_for_input");
+    }
+
+    if (!value) {
+      return t("app.notAvailable");
+    }
+
+    return value;
+  }
+
+  function formatTimelineRole(role: "assistant" | "user"): string {
+    return role === "assistant" ? t("app.role.assistant") : t("app.role.user");
+  }
+
+  function formatStatusLabel(value: "idle" | "streaming"): string {
+    return value === "idle" ? t("app.status.idle") : t("app.status.streaming");
+  }
+
   return (
     <div className="workspace-shell">
       <aside className="workspace-panel panel-left">
         <div className="panel-section">
-          <div className="eyebrow">Worlds</div>
+          <div className="eyebrow">{t("app.worlds")}</div>
           <ul className="stack-list">
             {worlds.map((world) => (
               <li key={world.id}>
@@ -230,25 +256,33 @@ export function App() {
         </div>
 
         <form className="panel-section form-stack" onSubmit={handleCreateWorld}>
-          <div className="eyebrow">Create World</div>
+          <div className="eyebrow">{t("app.createWorld")}</div>
           <label className="field">
-            <span>World Name</span>
-            <input value={worldName} onChange={(event) => setWorldName(event.currentTarget.value)} />
+            <span>{t("app.worldName")}</span>
+            <input
+              aria-label={t("app.worldName")}
+              value={worldName}
+              onChange={(event) => setWorldName(event.currentTarget.value)}
+            />
           </label>
           <label className="field">
-            <span>World Description</span>
-            <textarea value={worldDescription} onChange={(event) => setWorldDescription(event.currentTarget.value)} />
+            <span>{t("app.worldDescription")}</span>
+            <textarea
+              aria-label={t("app.worldDescription")}
+              value={worldDescription}
+              onChange={(event) => setWorldDescription(event.currentTarget.value)}
+            />
           </label>
-          <button type="submit" className="primary-button">Create World</button>
+          <button type="submit" className="primary-button">{t("app.createWorld")}</button>
         </form>
 
         <div className="panel-section">
-          <div className="eyebrow">Packages</div>
+          <div className="eyebrow">{t("app.packages")}</div>
           <ul className="stack-list">
             {packages.map((pkg) => (
               <li key={pkg.name} className="package-row">
                 <span>{pkg.name}</span>
-                <span>{pkg.enabled ? "Enabled" : "Disabled"}</span>
+                <span>{pkg.enabled ? t("preset.enabled") : t("preset.disabled")}</span>
               </li>
             ))}
           </ul>
@@ -261,15 +295,26 @@ export function App() {
         <header className="workspace-header">
           <div>
             <div className="brand">covel</div>
-            <div className="workspace-meta">{selectedSession?.id ?? "No session"}</div>
+            <div className="workspace-meta">{selectedSession?.id ?? t("app.noSession")}</div>
           </div>
-          <div className="workspace-meta">{status}</div>
+          <label className="workspace-meta">
+            <span className="sr-only">{t("app.localeLabel")}</span>
+            <select
+              aria-label={t("app.localeLabel")}
+              value={locale}
+              onChange={(event) => setLocale(event.currentTarget.value as Locale)}
+            >
+              <option value="zh-CN">{t("language.zh-CN")}</option>
+              <option value="en">{t("language.en")}</option>
+            </select>
+          </label>
+          <div className="workspace-meta">{formatStatusLabel(status)}</div>
         </header>
 
         <section className="timeline">
           {workspace.timeline.map((item) => (
             <article key={item.id} className={`message message-${item.role}`}>
-              <div className="message-role">{item.role}</div>
+              <div className="message-role">{formatTimelineRole(item.role)}</div>
               <div>{item.content}</div>
             </article>
           ))}
@@ -278,7 +323,7 @@ export function App() {
         {workspace.pendingBlock ? (
           <section className="pending-block">
             <div className="eyebrow">{workspace.pendingBlock.type}</div>
-            <h3>{String((workspace.pendingBlock.data as { title?: string }).title ?? "Pending block")}</h3>
+            <h3>{String((workspace.pendingBlock.data as { title?: string }).title ?? t("app.pendingBlock"))}</h3>
             <div className="choice-grid">
               {((workspace.pendingBlock.data as { options?: Array<{ id: string; label: string }> }).options ?? []).map((option) => (
                 <button
@@ -295,31 +340,35 @@ export function App() {
 
         <form className="composer" onSubmit={handleSendMessage}>
           <label className="field composer-field">
-            <span>Composer</span>
-            <textarea value={composer} onChange={(event) => setComposer(event.currentTarget.value)} />
+            <span>{t("app.composer")}</span>
+            <textarea
+              aria-label={t("app.composer")}
+              value={composer}
+              onChange={(event) => setComposer(event.currentTarget.value)}
+            />
           </label>
-          <button type="submit" className="primary-button">Send</button>
+          <button type="submit" className="primary-button">{t("app.send")}</button>
         </form>
       </main>
 
       <aside className="workspace-panel panel-right">
         <div className="panel-section">
-          <div className="eyebrow">Session</div>
+          <div className="eyebrow">{t("app.session")}</div>
           <div className="session-card">
-            <div>{selectedSession?.id ?? "No session selected"}</div>
-            <div>{selectedSession?.status ?? "n/a"}</div>
+            <div>{selectedSession?.id ?? t("app.noSessionSelected")}</div>
+            <div>{formatSessionStatus(selectedSession?.status)}</div>
           </div>
         </div>
 
         <div className="panel-section">
-          <div className="eyebrow">Archives</div>
-          <button className="primary-button" onClick={handleCreateArchive}>Create Snapshot</button>
+          <div className="eyebrow">{t("app.archives")}</div>
+          <button className="primary-button" onClick={handleCreateArchive}>{t("app.createSnapshot")}</button>
           <ul className="stack-list">
             {archives.map((archive) => (
               <li key={archive.id} className="archive-row">
                 <span>{archive.id}</span>
                 <button className="secondary-button" onClick={() => handleRestoreArchive(archive.id)}>
-                  Restore As Fork
+                  {t("app.restoreAsFork")}
                 </button>
               </li>
             ))}

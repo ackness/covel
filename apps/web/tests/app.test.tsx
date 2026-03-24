@@ -6,6 +6,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 
 import { App } from "../src/App.js";
+import { renderWithI18n } from "./helpers/render-with-i18n.js";
 
 const originalFetch = globalThis.fetch;
 
@@ -245,31 +246,35 @@ describe("App", () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    window.localStorage.clear();
     vi.restoreAllMocks();
   });
 
-  it("loads the initial workspace and displays worlds, packages, and session messages", async () => {
-    render(<App />);
+  it("renders web chrome in Chinese by default and displays session data", async () => {
+    renderWithI18n(<App />);
 
     await screen.findByText("Northreach");
+    expect(screen.getByText("世界")).toBeTruthy();
+    expect(screen.getByText("扩展包")).toBeTruthy();
+    expect(screen.getByText("空闲")).toBeTruthy();
     expect(screen.getByText("core-guide")).toBeTruthy();
     expect(await screen.findByText("The gatehouse is silent.")).toBeTruthy();
   });
 
   it("creates a world, sends a message, renders a pending block, and submits the response", async () => {
-    render(<App />);
+    renderWithI18n(<App />);
     const user = userEvent.setup();
 
     await screen.findByText("Northreach");
 
-    await user.type(screen.getByLabelText("World Name"), "Shattercoast");
-    await user.type(screen.getByLabelText("World Description"), "Storm-lashed islands");
-    await user.click(screen.getByRole("button", { name: "Create World" }));
+    await user.type(screen.getByLabelText("世界名称"), "Shattercoast");
+    await user.type(screen.getByLabelText("世界描述"), "Storm-lashed islands");
+    await user.click(screen.getByRole("button", { name: "创建世界" }));
 
     await screen.findByText("Shattercoast");
 
-    await user.type(screen.getByLabelText("Composer"), "Advance through the drift");
-    await user.click(screen.getByRole("button", { name: "Send" }));
+    await user.type(screen.getByLabelText("输入"), "Advance through the drift");
+    await user.click(screen.getByRole("button", { name: "发送" }));
 
     await screen.findByText("The snow parts.");
     await screen.findByText("Choose");
@@ -282,16 +287,29 @@ describe("App", () => {
   });
 
   it("creates an archive and restores it as a fork", async () => {
-    render(<App />);
+    renderWithI18n(<App />);
     const user = userEvent.setup();
 
     await screen.findByText("Northreach");
 
-    await user.click(screen.getByRole("button", { name: "Create Snapshot" }));
+    await user.click(screen.getByRole("button", { name: "创建快照" }));
     await screen.findByText("archive_01");
 
-    await user.click(screen.getByRole("button", { name: "Restore As Fork" }));
+    await user.click(screen.getByRole("button", { name: "以分支恢复" }));
 
     await screen.findByText("session_02");
+  });
+
+  it("allows switching chrome text to English without translating runtime content", async () => {
+    renderWithI18n(<App />);
+    const user = userEvent.setup();
+
+    await screen.findByText("Northreach");
+    await user.selectOptions(screen.getByLabelText("语言"), "en");
+
+    expect(screen.getByText("Worlds")).toBeTruthy();
+    expect(screen.getByText("Packages")).toBeTruthy();
+    expect(screen.getByText("Idle")).toBeTruthy();
+    expect(screen.getByText("The gatehouse is silent.")).toBeTruthy();
   });
 });

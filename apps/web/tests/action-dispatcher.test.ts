@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ActionRequest, SseEnvelope } from "../../../modules/contracts/src/index.js";
@@ -23,6 +25,7 @@ interface ActionDispatcherModule {
 const runtimeBaseUrl = "http://runtime.test";
 
 afterEach(() => {
+  window.localStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -73,11 +76,13 @@ describe("apps/web action dispatcher", () => {
 
     const request = fetchStub.calls[0];
     expect(request).toBeDefined();
+    expect(request?.headers.get("accept-language")).toBe("zh-CN");
     expect(request?.headers.get("content-type")).toContain("application/json");
     await expect(request?.json()).resolves.toEqual({
       requestId: "req_01",
       type: "send_message",
       sessionId: "ses_01",
+      locale: "zh-CN",
       payload: {
         content: "继续前进"
       }

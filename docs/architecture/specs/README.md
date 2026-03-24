@@ -34,11 +34,18 @@
 3. `02-package-command-ui-spec.md`
 4. `03-memory-rag-archive-observability-spec.md`
 5. `04-development-testing-strategy.md`
+6. `05-implementation-progress.md`
+7. `06-content-package-migration.md`
 
 如果你只剩 10 分钟，至少先读：
 
 1. `00-v1-open-core-plan.md`
 2. 本文件
+
+如果你要处理“当前实现和规范的差距”或“旧项目内容迁移”，再读：
+
+1. `05-implementation-progress.md`
+2. `06-content-package-migration.md`
 
 ## 3. 一页决策摘要
 

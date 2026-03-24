@@ -1,32 +1,32 @@
 import { z } from "zod";
 
 import { BlockResponseSchema } from "./block.js";
+import { SupportedLocaleSchema } from "./locale.js";
 
 const NonEmptyString = z.string().trim().min(1);
-
-const SendMessageActionSchema = z.object({
+const ActionBaseSchema = z.object({
   requestId: NonEmptyString,
-  type: z.literal("send_message"),
   sessionId: NonEmptyString,
+  locale: SupportedLocaleSchema.optional()
+});
+
+const SendMessageActionSchema = ActionBaseSchema.extend({
+  type: z.literal("send_message"),
   payload: z.object({
     content: NonEmptyString
   })
 });
 
-const ExecuteCommandActionSchema = z.object({
-  requestId: NonEmptyString,
+const ExecuteCommandActionSchema = ActionBaseSchema.extend({
   type: z.literal("execute_command"),
-  sessionId: NonEmptyString,
   payload: z.object({
     command: NonEmptyString,
     args: z.record(z.string(), z.unknown()).optional()
   })
 });
 
-const SubmitBlockResponseActionSchema = z.object({
-  requestId: NonEmptyString,
+const SubmitBlockResponseActionSchema = ActionBaseSchema.extend({
   type: z.literal("submit_block_response"),
-  sessionId: NonEmptyString,
   payload: BlockResponseSchema
 });
 

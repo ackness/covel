@@ -1,6 +1,7 @@
 import React, { createElement, useEffect, useState } from "react";
 
 import type { PresetMetadata } from "../../../../modules/model-gateway/src/index.js";
+import { getStoredLocale, useI18n } from "../i18n.js";
 
 type EditablePreset = PresetMetadata & {
   apiKey?: string;
@@ -9,6 +10,7 @@ type EditablePreset = PresetMetadata & {
 export function PresetEditor(input: {
   runtimeBaseUrl: string;
 }) {
+  const { t } = useI18n();
   const [presets, setPresets] = useState<EditablePreset[]>([]);
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
   const [formState, setFormState] = useState<{
@@ -28,7 +30,11 @@ export function PresetEditor(input: {
   }, []);
 
   async function loadPresets() {
-    const response = await fetch(`${input.runtimeBaseUrl}/presets`);
+    const response = await fetch(`${input.runtimeBaseUrl}/presets`, {
+      headers: {
+        "accept-language": getStoredLocale()
+      }
+    });
     const payload = await response.json() as EditablePreset[];
     setPresets(payload);
   }
@@ -52,6 +58,7 @@ export function PresetEditor(input: {
     const response = await fetch(`${input.runtimeBaseUrl}/presets/${editingPresetId}`, {
       method: "PUT",
       headers: {
+        "accept-language": getStoredLocale(),
         "content-type": "application/json"
       },
       body: JSON.stringify({
@@ -77,7 +84,7 @@ export function PresetEditor(input: {
   return createElement(
     "section",
     { className: "panel-section" },
-    createElement("div", { className: "eyebrow" }, "Presets"),
+    createElement("div", { className: "eyebrow" }, t("preset.presets")),
     createElement(
       "ul",
       { className: "stack-list" },
@@ -95,8 +102,8 @@ export function PresetEditor(input: {
             createElement(
               "div",
               { className: "workspace-meta" },
-              createElement("span", null, preset.enabled ? "Enabled" : "Disabled"),
-              preset.isDefault ? createElement("span", null, "Default") : null
+              createElement("span", null, preset.enabled ? t("preset.enabled") : t("preset.disabled")),
+              preset.isDefault ? createElement("span", null, t("preset.default")) : null
             )
           ),
           createElement(
@@ -105,9 +112,11 @@ export function PresetEditor(input: {
               className: "secondary-button",
               type: "button",
               onClick: () => beginEdit(preset),
-              "aria-label": `Edit ${preset.name}`
+              "aria-label": t("preset.editAria", {
+                name: preset.name
+              })
             },
-            "Edit"
+            t("preset.edit")
           )
         )
       )
@@ -119,9 +128,9 @@ export function PresetEditor(input: {
           createElement(
             "label",
             { className: "field" },
-            createElement("span", null, "Model"),
+            createElement("span", null, t("preset.model")),
             createElement("input", {
-              "aria-label": "Model",
+              "aria-label": t("preset.model"),
               value: formState.model,
               onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
                 const value = event.currentTarget.value;
@@ -135,9 +144,9 @@ export function PresetEditor(input: {
           createElement(
             "label",
             { className: "field" },
-            createElement("span", null, "Base URL"),
+            createElement("span", null, t("preset.baseUrl")),
             createElement("input", {
-              "aria-label": "Base URL",
+              "aria-label": t("preset.baseUrl"),
               value: formState.baseUrl,
               onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
                 const value = event.currentTarget.value;
@@ -153,7 +162,7 @@ export function PresetEditor(input: {
             { className: "field checkbox-field" },
             createElement("input", {
               type: "checkbox",
-              "aria-label": "Enabled",
+              "aria-label": t("preset.enabled"),
               checked: formState.enabled,
               onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
                 const checked = event.currentTarget.checked;
@@ -163,14 +172,14 @@ export function PresetEditor(input: {
                 }));
               }
             }),
-            createElement("span", null, "Enabled")
+            createElement("span", null, t("preset.enabled"))
           ),
           createElement(
             "label",
             { className: "field checkbox-field" },
             createElement("input", {
               type: "checkbox",
-              "aria-label": "Default preset",
+              "aria-label": t("preset.defaultPreset"),
               checked: formState.isDefault,
               onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
                 const checked = event.currentTarget.checked;
@@ -180,7 +189,7 @@ export function PresetEditor(input: {
                 }));
               }
             }),
-            createElement("span", null, "Default preset")
+            createElement("span", null, t("preset.defaultPreset"))
           ),
           createElement(
             "button",
@@ -188,7 +197,7 @@ export function PresetEditor(input: {
               className: "primary-button",
               type: "submit"
             },
-            "Save preset"
+            t("preset.save")
           )
         )
       : null

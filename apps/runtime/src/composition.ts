@@ -8,7 +8,12 @@ import { createModelGateway, createModelProfileRegistry, createProviderRegistry,
 import { createObservability } from "../../../modules/observability/src/index.js";
 import { PackageRuntime } from "../../../modules/package-runtime/src/index.js";
 import { createInMemoryStorageRepositories, createPostgresStoragePort } from "../../../modules/storage/src/index.js";
+import { DEFAULT_LOCALE, type SupportedLocale } from "../../../modules/contracts/src/index.js";
 import type { PersistedPresetMetadata, PersistedPresetRecord } from "../../../modules/storage/src/index.js";
+import {
+  createLocaleSystemInstruction,
+  translateCommandDescription
+} from "./locale.js";
 
 function createIdFactory() {
   let counter = 1;
@@ -257,10 +262,15 @@ export async function createRuntimeComposition(input: {
           return { success: true, data: {} } as const;
         }
       } as any,
-      async execute() {
+      async execute(_args, context: { locale?: SupportedLocale }) {
+        const locale = context.locale ?? DEFAULT_LOCALE;
         return {
           content: commandRegistry
             .listHelp()
+            .map((entry) => ({
+              ...entry,
+              description: translateCommandDescription(entry.name, entry.description, locale)
+            }))
             .map((entry) => `${entry.usage ?? `/${entry.name}`} - ${entry.description}`)
             .join("\n")
         };
@@ -284,10 +294,15 @@ export async function createRuntimeComposition(input: {
         prompt: string;
         requestId: string;
         flowId: string;
+        locale: SupportedLocale;
       }) {
         const result = await modelGateway.generateText({
           presetId: runtimePreset.id,
           messages: [
+            {
+              role: "system",
+              content: createLocaleSystemInstruction(input.locale)
+            },
             {
               role: "user",
               content: input.prompt
@@ -319,9 +334,11 @@ export async function createRuntimeComposition(input: {
         commandText: string;
         sessionId: string;
         requestId: string;
+        locale: SupportedLocale;
       }) {
         const result = await commandBus.dispatch(input.commandText, {
-          sessionId: input.sessionId
+          sessionId: input.sessionId,
+          locale: input.locale
         }) as {
           content?: string;
           blocks?: any[];

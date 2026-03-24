@@ -1,4 +1,11 @@
-import type { ActionRequest, BlockEnvelope, BlockResponse, SseEnvelope } from "../../contracts/src/index.js";
+import {
+  DEFAULT_LOCALE,
+  type ActionRequest,
+  type BlockEnvelope,
+  type BlockResponse,
+  type SseEnvelope,
+  type SupportedLocale
+} from "../../contracts/src/index.js";
 import type { Message, Session } from "../../domain/src/index.js";
 
 export interface ModelTurnResult {
@@ -13,6 +20,7 @@ export interface ModelGateway {
     prompt: string;
     requestId: string;
     flowId: string;
+    locale: SupportedLocale;
   }): Promise<ModelTurnResult>;
 }
 
@@ -27,6 +35,7 @@ export interface CommandBus {
     commandText: string;
     sessionId: string;
     requestId: string;
+    locale: SupportedLocale;
   }): Promise<CommandExecutionResult>;
 }
 
@@ -66,17 +75,19 @@ export class FlowEngine {
       case "execute_command":
         return this.handleExecuteCommand(action);
       case "submit_block_response":
-        return this.handleSubmitBlockResponse(action.payload, action.requestId);
+        return this.handleSubmitBlockResponse(action.payload, action.requestId, action.locale ?? DEFAULT_LOCALE);
     }
   }
 
   private async handleSendMessage(
     action: Extract<ActionRequest, { type: "send_message" }>
   ): Promise<SseEnvelope[]> {
+    const locale = action.locale ?? DEFAULT_LOCALE;
     const session = await this.dependencies.sessions.getById(action.sessionId);
     if (!session) {
       return [this.createTerminalEvent("flow.failed", action.requestId, action.sessionId, this.dependencies.createId("flow"), {
-        message: "Session not found."
+        code: "SESSION_NOT_FOUND",
+        message: translateFlowError("SESSION_NOT_FOUND", locale)
       })];
     }
 
@@ -103,7 +114,8 @@ export class FlowEngine {
       sessionId: action.sessionId,
       prompt: action.payload.content,
       requestId: action.requestId,
-      flowId
+      flowId,
+      locale
     });
 
     events.push(this.createEvent("message.delta", action.requestId, action.sessionId, turnId, flowId, seq++, {
@@ -148,10 +160,12 @@ export class FlowEngine {
   private async handleExecuteCommand(
     action: Extract<ActionRequest, { type: "execute_command" }>
   ): Promise<SseEnvelope[]> {
+    const locale = action.locale ?? DEFAULT_LOCALE;
     const session = await this.dependencies.sessions.getById(action.sessionId);
     if (!session) {
       return [this.createTerminalEvent("flow.failed", action.requestId, action.sessionId, this.dependencies.createId("flow"), {
-        message: "Session not found."
+        code: "SESSION_NOT_FOUND",
+        message: translateFlowError("SESSION_NOT_FOUND", locale)
       })];
     }
 
@@ -167,7 +181,8 @@ export class FlowEngine {
     const result = await this.dependencies.commandBus.execute({
       commandText: action.payload.command,
       sessionId: action.sessionId,
-      requestId: action.requestId
+      requestId: action.requestId,
+      locale
     });
 
     if (result.content) {
@@ -210,19 +225,22 @@ export class FlowEngine {
 
   private async handleSubmitBlockResponse(
     response: BlockResponse,
-    requestId: string
+    requestId: string,
+    locale: SupportedLocale = DEFAULT_LOCALE
   ): Promise<SseEnvelope[]> {
     const session = await this.dependencies.sessions.getById(response.sessionId);
     if (!session) {
       return [this.createTerminalEvent("flow.failed", requestId, response.sessionId, this.dependencies.createId("flow"), {
-        message: "Session not found."
+        code: "SESSION_NOT_FOUND",
+        message: translateFlowError("SESSION_NOT_FOUND", locale)
       })];
     }
 
     const pending = this.pendingBlocks.get(response.blockId);
     if (!pending) {
       return [this.createTerminalEvent("flow.failed", requestId, response.sessionId, this.dependencies.createId("flow"), {
-        message: "Pending block not found."
+        code: "PENDING_BLOCK_NOT_FOUND",
+        message: translateFlowError("PENDING_BLOCK_NOT_FOUND", locale)
       })];
     }
 
@@ -240,7 +258,8 @@ export class FlowEngine {
       sessionId: response.sessionId,
       prompt,
       requestId,
-      flowId
+      flowId,
+      locale
     });
 
     const messageId = this.dependencies.createId("msg");
@@ -304,4 +323,15 @@ export class FlowEngine {
     const turnId = typeof payload.turnId === "string" ? payload.turnId : this.dependencies.createId("turn");
     return this.createEvent(type, requestId, sessionId, turnId, flowId, seq, payload, traceId);
   }
+}
+
+function translateFlowError(
+  code: "SESSION_NOT_FOUND" | "PENDING_BLOCK_NOT_FOUND",
+  locale: SupportedLocale
+): string {
+  if (code === "SESSION_NOT_FOUND") {
+    return locale === "en" ? "Session not found." : "未找到会话。";
+  }
+
+  return locale === "en" ? "Pending block not found." : "未找到待响应的交互块。";
 }

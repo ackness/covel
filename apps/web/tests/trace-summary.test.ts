@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { TraceRecord } from "../../../modules/contracts/src/index.js";
 import { loadWebModule } from "./helpers/load-web-module.js";
+import { renderWithI18n } from "./helpers/render-with-i18n.js";
 
 interface TraceSummaryProps {
   traceId: string | null;
@@ -29,7 +30,7 @@ describe("apps/web TraceSummary", () => {
   it("renders the latest trace id with a component/eventType summary list", async () => {
     const { TraceSummary } = await loadWebModule<TraceSummaryModule>("components/trace-summary.ts");
 
-    render(createElement(TraceSummary, {
+    renderWithI18n(createElement(TraceSummary, {
       traceId: "trace_req_03",
       entries: [
         {
@@ -59,7 +60,7 @@ describe("apps/web TraceSummary", () => {
       ]
     }));
 
-    expect(screen.getByText("Recent trace")).toBeTruthy();
+    expect(screen.getByText("最近追踪")).toBeTruthy();
     expect(screen.getByText("trace_req_03")).toBeTruthy();
     expect(screen.getByText("flow-engine / flow.started")).toBeTruthy();
     expect(screen.getByText("model-gateway / model.completed")).toBeTruthy();

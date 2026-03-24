@@ -12,6 +12,7 @@ describe("ActionRequestSchema", () => {
       requestId: "req_01",
       type: "send_message",
       sessionId: "ses_01",
+      locale: "zh-CN",
       payload: {
         content: "继续前进"
       }
@@ -23,6 +24,7 @@ describe("ActionRequestSchema", () => {
       requestId: "req_02",
       type: "execute_command",
       sessionId: "ses_01",
+      locale: "en",
       payload: {
         command: "/guide",
         args: {

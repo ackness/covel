@@ -2,6 +2,7 @@ import React, { createElement, useMemo, useState } from "react";
 
 import type { BlockEnvelope } from "../../../../modules/contracts/src/index.js";
 import { dispatchActionWithSse } from "../actions/action-dispatcher.js";
+import { useI18n } from "../i18n.js";
 
 export function InteractiveBlockForm(input: {
   runtimeBaseUrl: string;
@@ -11,6 +12,7 @@ export function InteractiveBlockForm(input: {
   createRequestId(): string;
   onSubmitted?(blockId: string): void;
 }) {
+  const { t } = useI18n();
   const options = useMemo(
     () =>
       ((input.block.data as { options?: Array<{ id: string; label: string }> }).options ?? []),
@@ -51,7 +53,7 @@ export function InteractiveBlockForm(input: {
   return createElement(
     "form",
     { className: "form-stack", onSubmit: handleSubmit },
-    createElement("h3", null, String((input.block.data as { title?: string }).title ?? "Pending block")),
+    createElement("h3", null, String((input.block.data as { title?: string }).title ?? t("app.pendingBlock"))),
     ...options.map((option) =>
       createElement(
         "label",
@@ -78,7 +80,7 @@ export function InteractiveBlockForm(input: {
         type: "submit",
         disabled: submitted || !selectedOptionId
       },
-      "Submit response"
+      t("interactive.submitResponse")
     )
   );
 }

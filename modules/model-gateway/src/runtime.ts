@@ -5,6 +5,7 @@ import type { ModelProfile, PresetMetadata } from "./model-profile-registry.js";
 import type {
   EmbeddingResult,
   ObjectGenerationParams,
+  ProviderLifecycleHook,
   StreamEvent,
   TextGenerationParams
 } from "./provider-registry.js";
@@ -16,7 +17,11 @@ type TextMessage = {
 
 export function createModelGateway(dependencies: {
   providerRegistry: {
-    resolve(target: Pick<PresetMetadata, "provider" | "baseUrl"> | Pick<ModelProfile, "provider">): {
+    resolve(
+      target: Pick<PresetMetadata, "provider" | "baseUrl" | "protocol"> |
+        Pick<ModelProfile, "provider">,
+      options?: { mode: "text" | "object" | "stream" | "embed" }
+    ): {
       adapter: {
         generateText: (
           config: { baseUrl?: string; apiKey?: string; headers?: Record<string, string> },
@@ -44,6 +49,8 @@ export function createModelGateway(dependencies: {
         apiKey?: string;
         headers?: Record<string, string>;
       };
+      protocol: string;
+      hooks: ProviderLifecycleHook[];
     };
   };
   profileRegistry: {
@@ -69,9 +76,17 @@ export function createModelGateway(dependencies: {
     const target = dependencies.profileRegistry.resolveTextTarget({
       presetId: input.presetId
     });
-    const resolved = dependencies.providerRegistry.resolve(target.preset ?? target.profile);
+    const resolved = dependencies.providerRegistry.resolve(target.preset ?? target.profile, {
+      mode: "text"
+    });
 
     try {
+      await notifyRequestStart(resolved.hooks, {
+        provider: target.profile.provider,
+        protocol: resolved.protocol,
+        mode: "text",
+        model: target.preset?.model ?? target.profile.model
+      });
       return await resolved.adapter.generateText(
         resolved.config,
         {
@@ -84,8 +99,24 @@ export function createModelGateway(dependencies: {
           preset: target.preset,
           mode: "text"
         }
-      );
+      ).then(async (result) => {
+        await notifyRequestSuccess(resolved.hooks, {
+          provider: target.profile.provider,
+          protocol: resolved.protocol,
+          mode: "text",
+          model: target.preset?.model ?? target.profile.model,
+          usage: result.usage
+        });
+        return result;
+      });
     } catch (error) {
+      await notifyRequestError(resolved.hooks, {
+        provider: target.profile.provider,
+        protocol: resolved.protocol,
+        mode: "text",
+        model: target.preset?.model ?? target.profile.model,
+        error
+      });
       throw normalizeGatewayError(error, target.profile.provider);
     }
   }
@@ -99,9 +130,17 @@ export function createModelGateway(dependencies: {
     const target = dependencies.profileRegistry.resolveTextTarget({
       presetId: input.presetId
     });
-    const resolved = dependencies.providerRegistry.resolve(target.preset ?? target.profile);
+    const resolved = dependencies.providerRegistry.resolve(target.preset ?? target.profile, {
+      mode: "object"
+    });
 
     try {
+      await notifyRequestStart(resolved.hooks, {
+        provider: target.profile.provider,
+        protocol: resolved.protocol,
+        mode: "object",
+        model: target.preset?.model ?? target.profile.model
+      });
       return await resolved.adapter.generateObject(
         resolved.config,
         {
@@ -124,6 +163,13 @@ export function createModelGateway(dependencies: {
         };
       };
     } catch (error) {
+      await notifyRequestError(resolved.hooks, {
+        provider: target.profile.provider,
+        protocol: resolved.protocol,
+        mode: "object",
+        model: target.preset?.model ?? target.profile.model,
+        error
+      });
       throw normalizeGatewayError(error, target.profile.provider);
     }
   }
@@ -136,9 +182,18 @@ export function createModelGateway(dependencies: {
     const target = dependencies.profileRegistry.resolveTextTarget({
       presetId: input.presetId
     });
-    const resolved = dependencies.providerRegistry.resolve(target.preset ?? target.profile);
+    const resolved = dependencies.providerRegistry.resolve(target.preset ?? target.profile, {
+      mode: "stream"
+    });
 
     try {
+      await notifyRequestStart(resolved.hooks, {
+        provider: target.profile.provider,
+        protocol: resolved.protocol,
+        mode: "stream",
+        model: target.preset?.model ?? target.profile.model
+      });
+      let finalUsage: { inputTokens: number; outputTokens: number } | null = null;
       for await (const event of resolved.adapter.streamText(
         resolved.config,
         {
@@ -152,9 +207,26 @@ export function createModelGateway(dependencies: {
           mode: "stream"
         }
       )) {
+        if (event.type === "done") {
+          finalUsage = event.usage;
+        }
         yield event;
       }
+      await notifyRequestSuccess(resolved.hooks, {
+        provider: target.profile.provider,
+        protocol: resolved.protocol,
+        mode: "stream",
+        model: target.preset?.model ?? target.profile.model,
+        usage: finalUsage
+      });
     } catch (error) {
+      await notifyRequestError(resolved.hooks, {
+        provider: target.profile.provider,
+        protocol: resolved.protocol,
+        mode: "stream",
+        model: target.preset?.model ?? target.profile.model,
+        error
+      });
       throw normalizeGatewayError(error, target.profile.provider);
     }
   }
@@ -170,9 +242,17 @@ export function createModelGateway(dependencies: {
     const fallbackTextTarget = dependencies.profileRegistry.resolveTextTarget({
       presetId: input.presetId
     });
-    const resolved = dependencies.providerRegistry.resolve(fallbackTextTarget.preset ?? target.profile);
+    const resolved = dependencies.providerRegistry.resolve(fallbackTextTarget.preset ?? target.profile, {
+      mode: "embed"
+    });
 
     try {
+      await notifyRequestStart(resolved.hooks, {
+        provider: target.profile.provider,
+        protocol: resolved.protocol,
+        mode: "embed",
+        model: target.profile.model
+      });
       return await resolved.adapter.embed(
         resolved.config,
         {
@@ -185,8 +265,24 @@ export function createModelGateway(dependencies: {
           preset: target.preset,
           mode: "embed"
         }
-      );
+      ).then(async (result) => {
+        await notifyRequestSuccess(resolved.hooks, {
+          provider: target.profile.provider,
+          protocol: resolved.protocol,
+          mode: "embed",
+          model: target.profile.model,
+          usage: result.usage
+        });
+        return result;
+      });
     } catch (error) {
+      await notifyRequestError(resolved.hooks, {
+        provider: target.profile.provider,
+        protocol: resolved.protocol,
+        mode: "embed",
+        model: target.profile.model,
+        error
+      });
       throw normalizeGatewayError(error, target.profile.provider);
     }
   }
@@ -234,4 +330,48 @@ function normalizeGatewayError(error: unknown, provider: string): ModelGatewayEr
     retriable: false,
     cause: error
   });
+}
+
+async function notifyRequestStart(
+  hooks: ProviderLifecycleHook[],
+  event: {
+    provider: string;
+    protocol: string;
+    mode: "text" | "object" | "stream" | "embed";
+    model: string;
+  }
+) {
+  for (const hook of hooks) {
+    await hook.onRequestStart?.(event as any);
+  }
+}
+
+async function notifyRequestSuccess(
+  hooks: ProviderLifecycleHook[],
+  event: {
+    provider: string;
+    protocol: string;
+    mode: "text" | "object" | "stream" | "embed";
+    model: string;
+    usage: { inputTokens: number; outputTokens: number } | null;
+  }
+) {
+  for (const hook of hooks) {
+    await hook.onRequestSuccess?.(event as any);
+  }
+}
+
+async function notifyRequestError(
+  hooks: ProviderLifecycleHook[],
+  event: {
+    provider: string;
+    protocol: string;
+    mode: "text" | "object" | "stream" | "embed";
+    model: string;
+    error: unknown;
+  }
+) {
+  for (const hook of hooks) {
+    await hook.onRequestError?.(event as any);
+  }
 }

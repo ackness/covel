@@ -3,6 +3,13 @@ export {
   type ActionRequest
 } from "./action-request.js";
 export {
+  DEFAULT_LOCALE,
+  SupportedLocaleSchema,
+  normalizeLocale,
+  resolveLocaleFromHeader,
+  type SupportedLocale
+} from "./locale.js";
+export {
   SseEnvelopeSchema,
   type SseEnvelope
 } from "./sse.js";

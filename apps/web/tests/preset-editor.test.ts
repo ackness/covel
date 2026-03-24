@@ -16,6 +16,7 @@ import {
   installFetchStub
 } from "./helpers/fetch-stub.js";
 import { loadWebModule } from "./helpers/load-web-module.js";
+import { renderWithI18n } from "./helpers/render-with-i18n.js";
 
 type PresetRecord = PresetMetadata & {
   apiKey?: string;
@@ -75,7 +76,7 @@ describe("apps/web PresetEditor", () => {
       }
     ]);
 
-    render(createElement(PresetEditor, {
+    renderWithI18n(createElement(PresetEditor, {
       runtimeBaseUrl: "http://runtime.test"
     }));
 
@@ -124,19 +125,19 @@ describe("apps/web PresetEditor", () => {
     ]);
     const user = userEvent.setup();
 
-    render(createElement(PresetEditor, {
+    renderWithI18n(createElement(PresetEditor, {
       runtimeBaseUrl: "http://runtime.test"
     }));
 
     await screen.findByText("Story alt");
-    await user.click(screen.getByRole("button", { name: "Edit Story alt" }));
-    await user.clear(screen.getByLabelText("Model"));
-    await user.type(screen.getByLabelText("Model"), "qwen-max-latest");
-    await user.clear(screen.getByLabelText("Base URL"));
-    await user.type(screen.getByLabelText("Base URL"), "https://openrouter.example/api/v1");
-    await user.click(screen.getByLabelText("Enabled"));
-    await user.click(screen.getByLabelText("Default preset"));
-    await user.click(screen.getByRole("button", { name: "Save preset" }));
+    await user.click(screen.getByRole("button", { name: "编辑 Story alt" }));
+    await user.clear(screen.getByLabelText("模型"));
+    await user.type(screen.getByLabelText("模型"), "qwen-max-latest");
+    await user.clear(screen.getByLabelText("基础 URL"));
+    await user.type(screen.getByLabelText("基础 URL"), "https://openrouter.example/api/v1");
+    await user.click(screen.getByLabelText("已启用"));
+    await user.click(screen.getByLabelText("默认预设"));
+    await user.click(screen.getByRole("button", { name: "保存预设" }));
 
     await expect(fetchStub.calls[1]?.json()).resolves.toMatchObject({
       model: "qwen-max-latest",
@@ -185,25 +186,25 @@ describe("apps/web PresetEditor", () => {
     ]);
     const user = userEvent.setup();
 
-    render(createElement(PresetEditor, {
+    renderWithI18n(createElement(PresetEditor, {
       runtimeBaseUrl: "http://runtime.test"
     }));
 
     await screen.findByText("Story alt");
-    await user.click(screen.getByRole("button", { name: "Edit Story alt" }));
-    await user.clear(screen.getByLabelText("Model"));
-    await user.type(screen.getByLabelText("Model"), updatedPreset.model);
-    await user.clear(screen.getByLabelText("Base URL"));
-    await user.type(screen.getByLabelText("Base URL"), updatedPreset.baseUrl ?? "");
-    await user.click(screen.getByLabelText("Enabled"));
-    await user.click(screen.getByLabelText("Default preset"));
-    await user.click(screen.getByRole("button", { name: "Save preset" }));
+    await user.click(screen.getByRole("button", { name: "编辑 Story alt" }));
+    await user.clear(screen.getByLabelText("模型"));
+    await user.type(screen.getByLabelText("模型"), updatedPreset.model);
+    await user.clear(screen.getByLabelText("基础 URL"));
+    await user.type(screen.getByLabelText("基础 URL"), updatedPreset.baseUrl ?? "");
+    await user.click(screen.getByLabelText("已启用"));
+    await user.click(screen.getByLabelText("默认预设"));
+    await user.click(screen.getByRole("button", { name: "保存预设" }));
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("qwen-max-latest")).toBeTruthy();
       expect(screen.getByDisplayValue("https://openrouter.example/api/v1")).toBeTruthy();
-      expect(screen.getByText("Disabled")).toBeTruthy();
-      expect(screen.getAllByText("Default").length).toBeGreaterThan(0);
+      expect(screen.getByText("已停用")).toBeTruthy();
+      expect(screen.getAllByText("默认").length).toBeGreaterThan(0);
     });
 
     fetchStub.restore();

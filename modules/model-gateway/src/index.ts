@@ -6,6 +6,7 @@ export {
   createProviderRegistry,
   type EmbeddingResult,
   type ModelProviderAdapter,
+  type ProviderLifecycleHook,
   type ModelRequestContext,
   type ObjectGenerationParams,
   type ProviderConfig,
@@ -15,7 +16,8 @@ export {
 export {
   createModelProfileRegistry,
   type ModelProfile,
-  type PresetMetadata
+  type PresetMetadata,
+  type ProviderProtocol
 } from "./model-profile-registry.js";
 export {
   createModelGateway

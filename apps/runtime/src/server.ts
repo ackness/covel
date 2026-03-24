@@ -3,6 +3,7 @@ import { createServer, type Server, type IncomingMessage } from "node:http";
 import { ActionRequestSchema, type SseEnvelope } from "../../../modules/contracts/src/index.js";
 import { createSession, createWorld, type DomainRepositories } from "../../../modules/domain/src/index.js";
 import type { PersistedPresetMetadata, PersistedPresetRecord } from "../../../modules/storage/src/index.js";
+import { createRuntimeErrorPayload, resolveRequestLocale } from "./locale.js";
 
 async function readRequestBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -70,7 +71,12 @@ export function createRuntimeServer(dependencies: {
         const body = (await readRequestBody(request)) as {
           name?: string;
           description?: string;
+          locale?: string;
         };
+        const locale = resolveRequestLocale({
+          header: request.headers["accept-language"],
+          bodyLocale: body.locale
+        });
         const world = createWorld({
           id: createId(dependencies, "world"),
           name: String(body.name ?? ""),
@@ -83,12 +89,13 @@ export function createRuntimeServer(dependencies: {
         });
         response.end(JSON.stringify(world));
       } catch (error) {
+        const locale = resolveRequestLocale({
+          header: request.headers["accept-language"]
+        });
         response.writeHead(400, {
           "content-type": "application/json"
         });
-        response.end(JSON.stringify({
-          error: error instanceof Error ? error.message : "Invalid request."
-        }));
+        response.end(JSON.stringify(createRuntimeErrorPayload("INVALID_REQUEST", locale)));
       }
       return;
     }
@@ -111,7 +118,12 @@ export function createRuntimeServer(dependencies: {
         const repositories = requireRepositories(dependencies.repositories);
         const body = (await readRequestBody(request)) as {
           worldId?: string;
+          locale?: string;
         };
+        const locale = resolveRequestLocale({
+          header: request.headers["accept-language"],
+          bodyLocale: body.locale
+        });
         const session = createSession({
           id: createId(dependencies, "session"),
           worldId: String(body.worldId ?? ""),
@@ -124,12 +136,13 @@ export function createRuntimeServer(dependencies: {
         });
         response.end(JSON.stringify(session));
       } catch (error) {
+        const locale = resolveRequestLocale({
+          header: request.headers["accept-language"]
+        });
         response.writeHead(400, {
           "content-type": "application/json"
         });
-        response.end(JSON.stringify({
-          error: error instanceof Error ? error.message : "Invalid request."
-        }));
+        response.end(JSON.stringify(createRuntimeErrorPayload("INVALID_REQUEST", locale)));
       }
       return;
     }
@@ -172,12 +185,13 @@ export function createRuntimeServer(dependencies: {
         });
         response.end(JSON.stringify(updated));
       } catch (error) {
+        const locale = resolveRequestLocale({
+          header: request.headers["accept-language"]
+        });
         response.writeHead(400, {
           "content-type": "application/json"
         });
-        response.end(JSON.stringify({
-          error: error instanceof Error ? error.message : "Invalid request."
-        }));
+        response.end(JSON.stringify(createRuntimeErrorPayload("INVALID_REQUEST", locale)));
       }
       return;
     }
@@ -227,7 +241,12 @@ export function createRuntimeServer(dependencies: {
           stateSnapshot?: Record<string, unknown>;
           workingSummary?: string;
           archiveSummary?: string;
+          locale?: string;
         };
+        const locale = resolveRequestLocale({
+          header: request.headers["accept-language"],
+          bodyLocale: body.locale
+        });
         const snapshot = await archiveService.createSnapshot({
           sessionId: String(body.sessionId ?? ""),
           turnCutoff: Number(body.turnCutoff ?? 0),
@@ -240,12 +259,13 @@ export function createRuntimeServer(dependencies: {
         });
         response.end(JSON.stringify(snapshot));
       } catch (error) {
+        const locale = resolveRequestLocale({
+          header: request.headers["accept-language"]
+        });
         response.writeHead(400, {
           "content-type": "application/json"
         });
-        response.end(JSON.stringify({
-          error: error instanceof Error ? error.message : "Invalid request."
-        }));
+        response.end(JSON.stringify(createRuntimeErrorPayload("INVALID_REQUEST", locale)));
       }
       return;
     }
@@ -256,7 +276,12 @@ export function createRuntimeServer(dependencies: {
         const archiveVersionId = requestUrl.pathname.split("/")[2] ?? "";
         const body = (await readRequestBody(request)) as {
           mode?: string;
+          locale?: string;
         };
+        const locale = resolveRequestLocale({
+          header: request.headers["accept-language"],
+          bodyLocale: body.locale
+        });
         const result =
           body.mode === "restore-as-fork"
             ? await archiveService.restoreAsFork({ archiveVersionId })
@@ -266,12 +291,13 @@ export function createRuntimeServer(dependencies: {
         });
         response.end(JSON.stringify(result));
       } catch (error) {
+        const locale = resolveRequestLocale({
+          header: request.headers["accept-language"]
+        });
         response.writeHead(400, {
           "content-type": "application/json"
         });
-        response.end(JSON.stringify({
-          error: error instanceof Error ? error.message : "Invalid request."
-        }));
+        response.end(JSON.stringify(createRuntimeErrorPayload("INVALID_REQUEST", locale)));
       }
       return;
     }
@@ -279,7 +305,14 @@ export function createRuntimeServer(dependencies: {
     if (request.method === "POST" && requestUrl.pathname === "/actions") {
       try {
         const body = await readRequestBody(request);
-        const action = ActionRequestSchema.parse(body);
+        const locale = resolveRequestLocale({
+          header: request.headers["accept-language"],
+          bodyLocale: (body as { locale?: string } | null | undefined)?.locale
+        });
+        const action = ActionRequestSchema.parse({
+          ...(body as Record<string, unknown>),
+          locale
+        });
         const events = await dependencies.flowEngine.handle(action);
 
         response.writeHead(200, {
@@ -296,12 +329,14 @@ export function createRuntimeServer(dependencies: {
 
         response.end();
       } catch (error) {
+        const locale = resolveRequestLocale({
+          header: request.headers["accept-language"],
+          bodyLocale: undefined
+        });
         response.writeHead(400, {
           "content-type": "application/json"
         });
-        response.end(JSON.stringify({
-          error: error instanceof Error ? error.message : "Invalid request."
-        }));
+        response.end(JSON.stringify(createRuntimeErrorPayload("INVALID_REQUEST", locale)));
       }
       return;
     }
@@ -309,9 +344,9 @@ export function createRuntimeServer(dependencies: {
     response.writeHead(404, {
       "content-type": "application/json"
     });
-    response.end(JSON.stringify({
-      error: "Not found."
-    }));
+    response.end(JSON.stringify(createRuntimeErrorPayload("NOT_FOUND", resolveRequestLocale({
+      header: request.headers["accept-language"]
+    }))));
   });
 }
 

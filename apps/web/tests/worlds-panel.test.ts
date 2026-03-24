@@ -17,6 +17,7 @@ import {
   installFetchStub
 } from "./helpers/fetch-stub.js";
 import { loadWebModule } from "./helpers/load-web-module.js";
+import { renderWithI18n } from "./helpers/render-with-i18n.js";
 
 interface WorldsPanelProps {
   runtimeBaseUrl: string;
@@ -55,14 +56,14 @@ describe("apps/web WorldsPanel", () => {
     ]);
     const user = userEvent.setup();
 
-    render(createElement(WorldsPanel, {
+    renderWithI18n(createElement(WorldsPanel, {
       runtimeBaseUrl: "http://runtime.test"
     }));
 
     await screen.findByText("Northreach");
-    await user.type(screen.getByLabelText("World name"), "Sunmere");
-    await user.type(screen.getByLabelText("World description"), "Flooded ruins");
-    await user.click(screen.getByRole("button", { name: "Create world" }));
+    await user.type(screen.getByLabelText("世界名称"), "Sunmere");
+    await user.type(screen.getByLabelText("世界描述"), "Flooded ruins");
+    await user.click(screen.getByRole("button", { name: "创建世界" }));
 
     expect(await screen.findByText("Sunmere")).toBeTruthy();
     await expect(fetchStub.calls[1]?.json()).resolves.toEqual({
@@ -85,15 +86,39 @@ describe("apps/web WorldsPanel", () => {
     ]);
     const user = userEvent.setup();
 
-    render(createElement(WorldsPanel, {
+    renderWithI18n(createElement(WorldsPanel, {
       runtimeBaseUrl: "http://runtime.test",
       onOpenWorld
     }));
 
     await screen.findByText("Northreach");
-    await user.click(screen.getByRole("button", { name: "Open Northreach" }));
+    await user.click(screen.getByRole("button", { name: "打开 Northreach" }));
 
     expect(onOpenWorld).toHaveBeenCalledWith("world_01");
+
+    fetchStub.restore();
+  });
+
+  it("can render English chrome when requested", async () => {
+    const { WorldsPanel } = await loadWebModule<WorldsPanelModule>("components/worlds-panel.ts");
+    const fetchStub = installFetchStub([
+      {
+        method: "GET",
+        url: "http://runtime.test/worlds",
+        handler: async () => createJsonResponse([createWorldFixture()])
+      }
+    ]);
+
+    renderWithI18n(createElement(WorldsPanel, {
+      runtimeBaseUrl: "http://runtime.test"
+    }), {
+      locale: "en"
+    });
+
+    await screen.findByText("Northreach");
+    expect(screen.getByText("Worlds")).toBeTruthy();
+    expect(screen.getByLabelText("World name")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Create world" })).toBeTruthy();
 
     fetchStub.restore();
   });

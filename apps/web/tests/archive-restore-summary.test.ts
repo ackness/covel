@@ -14,6 +14,7 @@ import {
   createArchiveVersionFixture
 } from "./helpers/fixtures.js";
 import { loadWebModule } from "./helpers/load-web-module.js";
+import { renderWithI18n } from "./helpers/render-with-i18n.js";
 
 interface ArchiveRestoreSummaryProps {
   archive: ArchiveVersion;
@@ -37,7 +38,7 @@ describe("apps/web ArchiveRestoreSummary", () => {
     const onRestore = vi.fn();
     const user = userEvent.setup();
 
-    render(createElement(ArchiveRestoreSummary, {
+    renderWithI18n(createElement(ArchiveRestoreSummary, {
       archive: createArchiveVersionFixture(),
       onRestore
     }));
@@ -45,8 +46,8 @@ describe("apps/web ArchiveRestoreSummary", () => {
     expect(screen.getByText("第一幕总结：抵达北境哨塔，找到地窖入口。")).toBeTruthy();
     expect(screen.getByText("队伍已经登上哨塔，并确认了下一步进入地窖。")).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Restore in place" }));
-    await user.click(screen.getByRole("button", { name: "Restore as fork" }));
+    await user.click(screen.getByRole("button", { name: "原地恢复" }));
+    await user.click(screen.getByRole("button", { name: "作为分支恢复" }));
 
     expect(onRestore).toHaveBeenNthCalledWith(1, "restore-in-place");
     expect(onRestore).toHaveBeenNthCalledWith(2, "restore-as-fork");

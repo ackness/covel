@@ -22,8 +22,8 @@ function createHarness(options?: {
     sessions.set(session.id, session);
   }
   const messages: Array<{ id: string; sessionId: string; role: "user" | "assistant" | "system"; content: string; createdAt: Date }> = [];
-  const modelCalls: Array<{ sessionId: string; prompt: string; requestId: string; flowId: string }> = [];
-  const commandCalls: Array<{ commandText: string; sessionId: string; requestId: string }> = [];
+  const modelCalls: Array<{ sessionId: string; prompt: string; requestId: string; flowId: string; locale: string }> = [];
+  const commandCalls: Array<{ commandText: string; sessionId: string; requestId: string; locale: string }> = [];
   let idCounter = 0;
 
   const modelGateway: ModelGateway = {
@@ -103,6 +103,7 @@ describe("FlowEngine", () => {
       "flow.completed"
     ]);
     expect(harness.modelCalls).toHaveLength(1);
+    expect(harness.modelCalls[0]?.locale).toBe("zh-CN");
     expect(harness.messages).toHaveLength(2);
     expect(harness.messages[0]?.role).toBe("user");
     expect(harness.messages[1]?.role).toBe("assistant");
@@ -144,6 +145,7 @@ describe("FlowEngine", () => {
       requestId: "req_02",
       type: "execute_command",
       sessionId: "session-1",
+      locale: "en",
       payload: {
         command: "/guide",
         args: {
@@ -153,6 +155,7 @@ describe("FlowEngine", () => {
     });
 
     expect(harness.commandCalls).toHaveLength(1);
+    expect(harness.commandCalls[0]?.locale).toBe("en");
     expect(events.map((event) => event.type)).toEqual([
       "flow.phase.changed",
       "message.completed",
@@ -201,6 +204,7 @@ describe("FlowEngine", () => {
       requestId: "req_03",
       type: "execute_command",
       sessionId: "session-1",
+      locale: "en",
       payload: {
         command: "/guide",
         args: {}
@@ -213,6 +217,7 @@ describe("FlowEngine", () => {
       requestId: "req_04",
       type: "submit_block_response",
       sessionId: "session-1",
+      locale: "en",
       payload: {
         blockId: "blk_01",
         blockType: "choices",
@@ -229,6 +234,7 @@ describe("FlowEngine", () => {
       "message.completed",
       "flow.completed"
     ]);
+    expect(harness.modelCalls.at(-1)?.locale).toBe("en");
     expect(resumeEvents.every((event) => event.flowId === initialFlowId)).toBe(true);
     expect(harness.sessions.get("session-1")?.status).toBe("active");
   });
@@ -248,6 +254,35 @@ describe("FlowEngine", () => {
     });
 
     expect(events.map((event) => event.type)).toEqual(["flow.failed"]);
+    expect(events[0]?.payload).toMatchObject({
+      code: "SESSION_NOT_FOUND",
+      message: "未找到会话。"
+    });
     expect(harness.modelCalls).toHaveLength(0);
+  });
+
+  it("localizes pending block lookup failures in English", async () => {
+    const harness = createHarness();
+
+    const events = await harness.engine.handle({
+      requestId: "req_06",
+      type: "submit_block_response",
+      sessionId: "session-1",
+      locale: "en",
+      payload: {
+        blockId: "missing",
+        blockType: "choices",
+        sessionId: "session-1",
+        turnId: "turn_01",
+        response: {
+          selected: "opt_a"
+        }
+      }
+    });
+
+    expect(events[0]?.payload).toMatchObject({
+      code: "PENDING_BLOCK_NOT_FOUND",
+      message: "Pending block not found."
+    });
   });
 });

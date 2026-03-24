@@ -54,9 +54,11 @@ describe("createRuntimeServer", () => {
   });
 
   it("streams flow-engine events as HTTP action + SSE", async () => {
+    let capturedLocale: string | undefined;
     const server = createRuntimeServer({
       flowEngine: {
-        async handle() {
+        async handle(action) {
+          capturedLocale = action.locale;
           return [
             createSseEvent("message.delta", 1),
             createSseEvent("message.completed", 2),
@@ -71,7 +73,8 @@ describe("createRuntimeServer", () => {
     const response = await fetch(`${baseUrl}/actions`, {
       method: "POST",
       headers: {
-        "content-type": "application/json"
+        "content-type": "application/json",
+        "accept-language": "en-US,en;q=0.9"
       },
       body: JSON.stringify({
         requestId: "req_01",
@@ -86,6 +89,7 @@ describe("createRuntimeServer", () => {
     const body = await response.text();
 
     expect(response.status).toBe(200);
+    expect(capturedLocale).toBe("en");
     expect(response.headers.get("content-type")).toContain("text/event-stream");
     expect(body).toContain("event: message.delta");
     expect(body).toContain("event: message.completed");
@@ -106,7 +110,8 @@ describe("createRuntimeServer", () => {
     const response = await fetch(`${baseUrl}/actions`, {
       method: "POST",
       headers: {
-        "content-type": "application/json"
+        "content-type": "application/json",
+        "accept-language": "en-US,en;q=0.9"
       },
       body: JSON.stringify({
         type: "send_message"
@@ -115,7 +120,32 @@ describe("createRuntimeServer", () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
-      error: expect.any(String)
+      error: {
+        code: "INVALID_REQUEST",
+        message: "Invalid request."
+      }
+    });
+  });
+
+  it("defaults runtime errors to Chinese when no locale is provided", async () => {
+    const server = createRuntimeServer({
+      flowEngine: {
+        async handle() {
+          return [];
+        }
+      }
+    });
+    servers.add(server);
+    const baseUrl = await listen(server);
+
+    const response = await fetch(`${baseUrl}/missing`);
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: "NOT_FOUND",
+        message: "资源不存在。"
+      }
     });
   });
 

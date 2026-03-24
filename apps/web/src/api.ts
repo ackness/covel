@@ -8,20 +8,42 @@ import type {
   SseEnvelope,
   WorldRecord
 } from "./types.js";
+import { getStoredLocale } from "./i18n.js";
 
 const API_BASE_URL = "";
+
+function createJsonHeaders(): HeadersInit {
+  return {
+    "accept-language": getStoredLocale(),
+    "content-type": "application/json"
+  };
+}
 
 async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    throw new Error(String((payload as { error?: unknown }).error ?? `HTTP ${response.status}`));
+    const errorPayload = (payload as {
+      error?: string | {
+        code?: string;
+        message?: string;
+      };
+    }).error;
+    throw new Error(String(
+      typeof errorPayload === "string"
+        ? errorPayload
+        : errorPayload?.message ?? errorPayload?.code ?? `HTTP ${response.status}`
+    ));
   }
 
   return response.json() as Promise<T>;
 }
 
 export async function listWorlds(): Promise<WorldRecord[]> {
-  return readJson(await fetch(`${API_BASE_URL}/worlds`));
+  return readJson(await fetch(`${API_BASE_URL}/worlds`, {
+    headers: {
+      "accept-language": getStoredLocale()
+    }
+  }));
 }
 
 export async function createWorld(input: {
@@ -30,31 +52,49 @@ export async function createWorld(input: {
 }): Promise<WorldRecord> {
   return readJson(await fetch(`${API_BASE_URL}/worlds`, {
     method: "POST",
-    headers: {
-      "content-type": "application/json"
-    },
+    headers: createJsonHeaders(),
     body: JSON.stringify(input)
   }));
 }
 
 export async function listPackages(): Promise<PackageSummary[]> {
-  return readJson(await fetch(`${API_BASE_URL}/packages`));
+  return readJson(await fetch(`${API_BASE_URL}/packages`, {
+    headers: {
+      "accept-language": getStoredLocale()
+    }
+  }));
 }
 
 export async function listSessions(worldId: string): Promise<SessionRecord[]> {
-  return readJson(await fetch(`${API_BASE_URL}/sessions?worldId=${encodeURIComponent(worldId)}`));
+  return readJson(await fetch(`${API_BASE_URL}/sessions?worldId=${encodeURIComponent(worldId)}`, {
+    headers: {
+      "accept-language": getStoredLocale()
+    }
+  }));
 }
 
 export async function listMessages(sessionId: string): Promise<MessageRecord[]> {
-  return readJson(await fetch(`${API_BASE_URL}/sessions/${encodeURIComponent(sessionId)}/messages`));
+  return readJson(await fetch(`${API_BASE_URL}/sessions/${encodeURIComponent(sessionId)}/messages`, {
+    headers: {
+      "accept-language": getStoredLocale()
+    }
+  }));
 }
 
 export async function listArchives(sessionId: string): Promise<ArchiveRecord[]> {
-  return readJson(await fetch(`${API_BASE_URL}/archives?sessionId=${encodeURIComponent(sessionId)}`));
+  return readJson(await fetch(`${API_BASE_URL}/archives?sessionId=${encodeURIComponent(sessionId)}`, {
+    headers: {
+      "accept-language": getStoredLocale()
+    }
+  }));
 }
 
 export async function listTraces(traceId: string): Promise<TraceRecord[]> {
-  return readJson(await fetch(`${API_BASE_URL}/traces?traceId=${encodeURIComponent(traceId)}`));
+  return readJson(await fetch(`${API_BASE_URL}/traces?traceId=${encodeURIComponent(traceId)}`, {
+    headers: {
+      "accept-language": getStoredLocale()
+    }
+  }));
 }
 
 export async function createArchive(input: {
@@ -66,9 +106,7 @@ export async function createArchive(input: {
 }): Promise<{ version: ArchiveRecord }> {
   return readJson(await fetch(`${API_BASE_URL}/archives`, {
     method: "POST",
-    headers: {
-      "content-type": "application/json"
-    },
+    headers: createJsonHeaders(),
     body: JSON.stringify(input)
   }));
 }
@@ -79,9 +117,7 @@ export async function restoreArchive(input: {
 }): Promise<{ session: SessionRecord }> {
   return readJson(await fetch(`${API_BASE_URL}/archives/${encodeURIComponent(input.archiveVersionId)}/restore`, {
     method: "POST",
-    headers: {
-      "content-type": "application/json"
-    },
+    headers: createJsonHeaders(),
     body: JSON.stringify({
       mode: input.mode
     })
@@ -96,6 +132,7 @@ export async function sendMessage(input: {
     requestId: `req_${Date.now()}`,
     type: "send_message",
     sessionId: input.sessionId,
+    locale: getStoredLocale(),
     payload: {
       content: input.content
     }
@@ -110,6 +147,7 @@ export async function submitBlockResponse(input: {
     requestId: `req_${Date.now()}`,
     type: "submit_block_response",
     sessionId: input.sessionId,
+    locale: getStoredLocale(),
     payload: input.response
   });
 }
@@ -117,9 +155,7 @@ export async function submitBlockResponse(input: {
 async function postAction(body: Record<string, unknown>): Promise<SseEnvelope[]> {
   const response = await fetch(`${API_BASE_URL}/actions`, {
     method: "POST",
-    headers: {
-      "content-type": "application/json"
-    },
+    headers: createJsonHeaders(),
     body: JSON.stringify(body)
   });
 

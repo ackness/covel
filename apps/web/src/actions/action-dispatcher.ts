@@ -1,4 +1,5 @@
 import type { ActionRequest, SseEnvelope } from "../../../../modules/contracts/src/index.js";
+import { getStoredLocale } from "../i18n.js";
 
 export async function dispatchActionWithSse(input: {
   runtimeBaseUrl: string;
@@ -7,12 +8,17 @@ export async function dispatchActionWithSse(input: {
   fetchImpl?: typeof fetch;
 }): Promise<void> {
   const fetchImpl = input.fetchImpl ?? fetch;
+  const locale = input.action.locale ?? getStoredLocale();
   const response = await fetchImpl(`${input.runtimeBaseUrl}/actions`, {
     method: "POST",
     headers: {
+      "accept-language": locale,
       "content-type": "application/json"
     },
-    body: JSON.stringify(input.action)
+    body: JSON.stringify({
+      ...input.action,
+      locale
+    })
   });
 
   if (!response.ok || !response.body) {

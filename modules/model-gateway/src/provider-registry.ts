@@ -1,6 +1,11 @@
 import { z, type ZodType } from "zod";
 
-import { type ModelProfile, type PresetMetadata, type SupportedMode } from "./model-profile-registry.js";
+import {
+  type ModelProfile,
+  type PresetMetadata,
+  type ProviderProtocol,
+  type SupportedMode
+} from "./model-profile-registry.js";
 
 export interface ProviderConfig {
   baseUrl?: string;
@@ -80,41 +85,88 @@ export interface ModelProviderAdapter {
   ): Promise<EmbeddingResult>;
 }
 
+export interface ProviderLifecycleHook {
+  onRequestStart?(event: {
+    provider: string;
+    protocol: ProviderProtocol;
+    mode: SupportedMode;
+    model: string;
+  }): void | Promise<void>;
+  onRequestSuccess?(event: {
+    provider: string;
+    protocol: ProviderProtocol;
+    mode: SupportedMode;
+    model: string;
+    usage: UsageSummary | null;
+  }): void | Promise<void>;
+  onRequestError?(event: {
+    provider: string;
+    protocol: ProviderProtocol;
+    mode: SupportedMode;
+    model: string;
+    error: unknown;
+  }): void | Promise<void>;
+}
+
+interface ProtocolRouteRegistration {
+  adapter?: ModelProviderAdapter;
+  defaults?: ProviderConfig;
+}
+
+interface ProviderRegistration {
+  adapter?: ModelProviderAdapter;
+  defaults?: ProviderConfig;
+  protocols?: Partial<Record<ProviderProtocol, ProtocolRouteRegistration>>;
+  hooks?: ProviderLifecycleHook[];
+}
+
 export function createProviderRegistry(options?: {
-  providers?: Record<
-    string,
-    {
-      adapter?: ModelProviderAdapter;
-      defaults?: ProviderConfig;
-    }
-  >;
+  providers?: Record<string, ProviderRegistration>;
 }) {
   const providers = new Map(
     Object.entries(options?.providers ?? {}).map(([name, entry]) => [name, entry] as const)
   );
 
-  function resolve<TTarget extends { provider: string; baseUrl?: string }>(target: TTarget): {
+  function resolve<TTarget extends { provider: string; baseUrl?: string; protocol?: ProviderProtocol }>(
+    target: TTarget,
+    options: {
+      mode: SupportedMode;
+    } = {
+      mode: "text"
+    }
+  ): {
     adapter: ModelProviderAdapter;
     config: ProviderConfig;
+    protocol: ProviderProtocol;
+    hooks: ProviderLifecycleHook[];
   } {
     const registered = providers.get(target.provider);
     if (!registered) {
       throw new Error(`Provider registry error: provider "${target.provider}" is not registered.`);
     }
 
+    const protocol = resolveProtocol(target, options.mode);
+    const protocolRegistration = registered.protocols?.[protocol];
     const adapter =
-      registered.adapter ?? (target.provider === "openaiCompatible" ? createOpenAiCompatibleAdapter() : null);
+      protocolRegistration?.adapter ??
+      registered.adapter ??
+      builtinProtocolAdapter(protocol);
 
     if (!adapter) {
-      throw new Error(`Provider registry error: provider "${target.provider}" has no adapter.`);
+      throw new Error(
+        `Provider registry error: protocol "${protocol}" is not supported for provider "${target.provider}".`
+      );
     }
 
     return {
       adapter,
       config: normalizeResolvedConfig({
         ...registered.defaults,
+        ...protocolRegistration?.defaults,
         ...(target.baseUrl ? { baseUrl: target.baseUrl } : {})
-      })
+      }),
+      protocol,
+      hooks: [...(registered.hooks ?? [])]
     };
   }
 
@@ -123,11 +175,27 @@ export function createProviderRegistry(options?: {
   };
 }
 
+function resolveProtocol(
+  target: { provider: string; protocol?: ProviderProtocol },
+  mode: SupportedMode
+): ProviderProtocol {
+  if (target.protocol) {
+    return target.protocol;
+  }
+
+  if (target.provider === "anthropic") {
+    return "anthropic-messages-v1";
+  }
+
+  if (mode === "embed") {
+    return "openai-chat-v1";
+  }
+
+  return "openai-chat-v1";
+}
+
 function normalizeResolvedConfig(config: ProviderConfig): ProviderConfig {
-  if (
-    config.apiKey &&
-    config.baseUrl === "in-memory://demo-provider"
-  ) {
+  if (config.apiKey && config.baseUrl === "in-memory://demo-provider") {
     return {
       ...config,
       baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -137,7 +205,20 @@ function normalizeResolvedConfig(config: ProviderConfig): ProviderConfig {
   return config;
 }
 
-function createOpenAiCompatibleAdapter(): ModelProviderAdapter {
+function builtinProtocolAdapter(protocol: ProviderProtocol): ModelProviderAdapter | null {
+  switch (protocol) {
+    case "openai-chat-v1":
+      return createOpenAiChatV1Adapter();
+    case "openai-responses-v1":
+      return createOpenAiResponsesV1Adapter();
+    case "anthropic-messages-v1":
+      return createAnthropicMessagesV1Adapter();
+    default:
+      return null;
+  }
+}
+
+function createOpenAiChatV1Adapter(): ModelProviderAdapter {
   return {
     async generateText(config, params) {
       const response = await postJson(config, "/chat/completions", {
@@ -149,9 +230,9 @@ function createOpenAiCompatibleAdapter(): ModelProviderAdapter {
       assertSuccess(response, payload, "openaiCompatible");
 
       return {
-        text: readAssistantContent(payload),
-        finishReason: readFinishReason(payload),
-        usage: readUsage(payload)
+        text: readOpenAiChatAssistantText(payload),
+        finishReason: readOpenAiChatFinishReason(payload),
+        usage: readOpenAiChatUsage(payload)
       };
     },
     async generateObject(config, params) {
@@ -166,21 +247,16 @@ function createOpenAiCompatibleAdapter(): ModelProviderAdapter {
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openaiCompatible");
 
-      const rawObject = JSON.parse(readAssistantContent(payload));
+      const rawObject = JSON.parse(readOpenAiChatAssistantText(payload));
       const validation = params.schema.safeParse(rawObject);
       if (!validation.success) {
-        throw new Error(JSON.stringify({
-          name: "ModelGatewayError",
-          code: "SCHEMA_VALIDATION_FAILED",
-          provider: "openaiCompatible",
-          retriable: false
-        }));
+        throw createStructuredOutputError("openaiCompatible");
       }
 
       return {
         object: validation.data,
-        finishReason: readFinishReason(payload),
-        usage: readUsage(payload)
+        finishReason: readOpenAiChatFinishReason(payload),
+        usage: readOpenAiChatUsage(payload)
       };
     },
     async *streamText(config, params) {
@@ -190,11 +266,6 @@ function createOpenAiCompatibleAdapter(): ModelProviderAdapter {
         stream: true,
         ...params.providerRequestMetadata
       });
-      const text = await response.text();
-      const lines = text
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.startsWith("data:"));
 
       let usage: UsageSummary = {
         inputTokens: 0,
@@ -202,14 +273,8 @@ function createOpenAiCompatibleAdapter(): ModelProviderAdapter {
       };
       let finishReason = "stop";
 
-      for (const line of lines) {
-        const data = line.slice("data:".length).trim();
-        if (data === "[DONE]") {
-          continue;
-        }
-
-        const payload = JSON.parse(data) as Record<string, unknown>;
-        const delta = readStreamDelta(payload);
+      for await (const payload of iterateSsePayloads(response)) {
+        const delta = readOpenAiChatStreamDelta(payload);
         if (delta) {
           yield {
             type: "text-delta",
@@ -217,14 +282,14 @@ function createOpenAiCompatibleAdapter(): ModelProviderAdapter {
           };
         }
 
-        if ("usage" in payload && payload.usage && typeof payload.usage === "object") {
+        if (payload.usage && typeof payload.usage === "object") {
           usage = {
-            inputTokens: Number((payload.usage as Record<string, unknown>).prompt_tokens ?? 0),
-            outputTokens: Number((payload.usage as Record<string, unknown>).completion_tokens ?? 0)
+            inputTokens: Number(payload.usage.prompt_tokens ?? 0),
+            outputTokens: Number(payload.usage.completion_tokens ?? 0)
           };
         }
 
-        const candidateFinishReason = readStreamFinishReason(payload);
+        const candidateFinishReason = readOpenAiChatStreamFinishReason(payload);
         if (candidateFinishReason) {
           finishReason = candidateFinishReason;
         }
@@ -253,6 +318,201 @@ function createOpenAiCompatibleAdapter(): ModelProviderAdapter {
           outputTokens: 0
         }
       };
+    }
+  };
+}
+
+function createOpenAiResponsesV1Adapter(): ModelProviderAdapter {
+  return {
+    async generateText(config, params) {
+      const response = await postJson(config, "/responses", {
+        model: params.model,
+        input: params.messages,
+        ...params.providerRequestMetadata
+      });
+      const payload = await parseJson(response);
+      assertSuccess(response, payload, "openaiCompatible");
+
+      return {
+        text: readResponsesOutputText(payload),
+        finishReason: "stop",
+        usage: {
+          inputTokens: Number(payload.usage?.input_tokens ?? 0),
+          outputTokens: Number(payload.usage?.output_tokens ?? 0)
+        }
+      };
+    },
+    async generateObject(config, params) {
+      const response = await postJson(config, "/responses", {
+        model: params.model,
+        input: params.messages,
+        text: {
+          format: {
+            type: "json_schema"
+          }
+        },
+        ...params.providerRequestMetadata
+      });
+      const payload = await parseJson(response);
+      assertSuccess(response, payload, "openaiCompatible");
+
+      const rawObject = JSON.parse(readResponsesOutputText(payload));
+      const validation = params.schema.safeParse(rawObject);
+      if (!validation.success) {
+        throw createStructuredOutputError("openaiCompatible");
+      }
+
+      return {
+        object: validation.data,
+        finishReason: "stop",
+        usage: {
+          inputTokens: Number(payload.usage?.input_tokens ?? 0),
+          outputTokens: Number(payload.usage?.output_tokens ?? 0)
+        }
+      };
+    },
+    async *streamText(config, params) {
+      // Responses streaming emits semantic event types instead of chat deltas.
+      const response = await postJson(config, "/responses", {
+        model: params.model,
+        input: params.messages,
+        stream: true,
+        ...params.providerRequestMetadata
+      });
+
+      let usage: UsageSummary = {
+        inputTokens: 0,
+        outputTokens: 0
+      };
+
+      for await (const payload of iterateSsePayloads(response)) {
+        if (payload.type === "response.output_text.delta" && typeof payload.delta === "string") {
+          yield {
+            type: "text-delta",
+            textDelta: payload.delta
+          };
+        }
+
+        if (payload.type === "response.completed") {
+          usage = {
+            inputTokens: Number(payload.response?.usage?.input_tokens ?? 0),
+            outputTokens: Number(payload.response?.usage?.output_tokens ?? 0)
+          };
+        }
+      }
+
+      yield {
+        type: "done",
+        finishReason: "stop",
+        usage
+      };
+    },
+    async embed(config, params, context) {
+      return createOpenAiChatV1Adapter().embed(config, params, context);
+    }
+  };
+}
+
+function createAnthropicMessagesV1Adapter(): ModelProviderAdapter {
+  return {
+    async generateText(config, params) {
+      const response = await postJson(config, "/messages", {
+        model: params.model,
+        max_tokens: 1024,
+        messages: toAnthropicMessages(params.messages),
+        ...params.providerRequestMetadata
+      });
+      const payload = await parseJson(response);
+      assertSuccess(response, payload, "anthropic");
+
+      return {
+        text: readAnthropicText(payload),
+        finishReason: String(payload.stop_reason ?? "stop"),
+        usage: {
+          inputTokens: Number(payload.usage?.input_tokens ?? 0),
+          outputTokens: Number(payload.usage?.output_tokens ?? 0)
+        }
+      };
+    },
+    async generateObject(config, params) {
+      // Messages API has no native json_schema mode, so object generation stays prompt-driven.
+      const response = await postJson(config, "/messages", {
+        model: params.model,
+        max_tokens: 1024,
+        system: "Respond with JSON only.",
+        messages: toAnthropicMessages(params.messages),
+        ...params.providerRequestMetadata
+      });
+      const payload = await parseJson(response);
+      assertSuccess(response, payload, "anthropic");
+
+      const rawObject = JSON.parse(readAnthropicText(payload));
+      const validation = params.schema.safeParse(rawObject);
+      if (!validation.success) {
+        throw createStructuredOutputError("anthropic");
+      }
+
+      return {
+        object: validation.data,
+        finishReason: String(payload.stop_reason ?? "stop"),
+        usage: {
+          inputTokens: Number(payload.usage?.input_tokens ?? 0),
+          outputTokens: Number(payload.usage?.output_tokens ?? 0)
+        }
+      };
+    },
+    async *streamText(config, params) {
+      // Anthropic streams text through content_block_delta and closes with message_delta/message_stop.
+      const response = await postJson(config, "/messages", {
+        model: params.model,
+        max_tokens: 1024,
+        stream: true,
+        messages: toAnthropicMessages(params.messages),
+        ...params.providerRequestMetadata
+      });
+
+      let usage: UsageSummary = {
+        inputTokens: 0,
+        outputTokens: 0
+      };
+      let finishReason = "stop";
+
+      for await (const payload of iterateSsePayloads(response)) {
+        if (
+          payload.type === "content_block_delta" &&
+          payload.delta?.type === "text_delta" &&
+          typeof payload.delta.text === "string"
+        ) {
+          yield {
+            type: "text-delta",
+            textDelta: payload.delta.text
+          };
+        }
+
+        if (payload.type === "message_delta") {
+          finishReason = String(payload.delta?.stop_reason ?? finishReason);
+          usage = {
+            inputTokens: usage.inputTokens,
+            outputTokens: Number(payload.usage?.output_tokens ?? usage.outputTokens)
+          };
+        }
+      }
+
+      yield {
+        type: "done",
+        finishReason,
+        usage
+      };
+    },
+    async embed() {
+      throw new Error(
+        JSON.stringify({
+          name: "ModelGatewayError",
+          code: "PROVIDER_ERROR",
+          provider: "anthropic",
+          retriable: false
+        })
+      );
     }
   };
 }
@@ -287,6 +547,45 @@ async function parseJson(response: Response): Promise<Record<string, any>> {
   return (await response.json()) as Record<string, any>;
 }
 
+async function* iterateSsePayloads(response: Response): AsyncIterable<Record<string, any>> {
+  if (!response.body) {
+    return;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+
+    while (buffer.includes("\n\n")) {
+      const boundary = buffer.indexOf("\n\n");
+      const frame = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      const dataLine = frame
+        .split("\n")
+        .find((line) => line.startsWith("data: "));
+
+      if (!dataLine) {
+        continue;
+      }
+
+      const data = dataLine.slice(6).trim();
+      if (data === "[DONE]") {
+        continue;
+      }
+
+      yield JSON.parse(data) as Record<string, any>;
+    }
+  }
+}
+
 function assertSuccess(
   response: Response,
   payload: Record<string, any>,
@@ -298,37 +597,73 @@ function assertSuccess(
 
   const errorType = payload.error?.type;
   const isRateLimit = response.status === 429 || errorType === "rate_limit_error";
-  const error = {
-    name: "ModelGatewayError",
-    code: isRateLimit ? "RATE_LIMITED" : "PROVIDER_ERROR",
-    provider,
-    retriable: isRateLimit || response.status >= 500,
-    statusCode: response.status
-  };
-  throw new Error(JSON.stringify(error));
+  throw new Error(
+    JSON.stringify({
+      name: "ModelGatewayError",
+      code: isRateLimit ? "RATE_LIMITED" : "PROVIDER_ERROR",
+      provider,
+      retriable: isRateLimit || response.status >= 500,
+      statusCode: response.status
+    })
+  );
 }
 
-function readAssistantContent(payload: Record<string, any>): string {
+function createStructuredOutputError(provider: string): Error {
+  return new Error(
+    JSON.stringify({
+      name: "ModelGatewayError",
+      code: "SCHEMA_VALIDATION_FAILED",
+      provider,
+      retriable: false
+    })
+  );
+}
+
+function readOpenAiChatAssistantText(payload: Record<string, any>): string {
   return String(payload.choices?.[0]?.message?.content ?? "");
 }
 
-function readFinishReason(payload: Record<string, any>): string {
+function readOpenAiChatFinishReason(payload: Record<string, any>): string {
   return String(payload.choices?.[0]?.finish_reason ?? "stop");
 }
 
-function readUsage(payload: Record<string, any>): UsageSummary {
+function readOpenAiChatUsage(payload: Record<string, any>): UsageSummary {
   return {
     inputTokens: Number(payload.usage?.prompt_tokens ?? 0),
     outputTokens: Number(payload.usage?.completion_tokens ?? 0)
   };
 }
 
-function readStreamDelta(payload: Record<string, unknown>): string | null {
-  const delta = (payload.choices as Array<Record<string, any>> | undefined)?.[0]?.delta?.content;
+function readOpenAiChatStreamDelta(payload: Record<string, any>): string | null {
+  const delta = payload.choices?.[0]?.delta?.content;
   return typeof delta === "string" ? delta : null;
 }
 
-function readStreamFinishReason(payload: Record<string, unknown>): string | null {
-  const finishReason = (payload.choices as Array<Record<string, any>> | undefined)?.[0]?.finish_reason;
+function readOpenAiChatStreamFinishReason(payload: Record<string, any>): string | null {
+  const finishReason = payload.choices?.[0]?.finish_reason;
   return typeof finishReason === "string" ? finishReason : null;
+}
+
+function readResponsesOutputText(payload: Record<string, any>): string {
+  if (typeof payload.output_text === "string") {
+    return payload.output_text;
+  }
+
+  return String(payload.output?.[0]?.content?.[0]?.text ?? "");
+}
+
+function readAnthropicText(payload: Record<string, any>): string {
+  const firstTextBlock = Array.isArray(payload.content)
+    ? payload.content.find((entry: Record<string, unknown>) => entry.type === "text")
+    : null;
+  return String(firstTextBlock?.text ?? "");
+}
+
+function toAnthropicMessages(messages: Array<{ role: string; content: string }>) {
+  return messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .map((message) => ({
+      role: message.role,
+      content: message.content
+    }));
 }
