@@ -3,6 +3,7 @@ import type {
   BlockResponse,
   MessageRecord,
   PackageSummary,
+  TraceRecord,
   SessionRecord,
   SseEnvelope,
   WorldRecord
@@ -50,6 +51,10 @@ export async function listMessages(sessionId: string): Promise<MessageRecord[]> 
 
 export async function listArchives(sessionId: string): Promise<ArchiveRecord[]> {
   return readJson(await fetch(`${API_BASE_URL}/archives?sessionId=${encodeURIComponent(sessionId)}`));
+}
+
+export async function listTraces(traceId: string): Promise<TraceRecord[]> {
+  return readJson(await fetch(`${API_BASE_URL}/traces?traceId=${encodeURIComponent(traceId)}`));
 }
 
 export async function createArchive(input: {

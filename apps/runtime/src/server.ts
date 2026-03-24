@@ -2,6 +2,7 @@ import { createServer, type Server, type IncomingMessage } from "node:http";
 
 import { ActionRequestSchema, type SseEnvelope } from "../../../modules/contracts/src/index.js";
 import { createSession, createWorld, type DomainRepositories } from "../../../modules/domain/src/index.js";
+import type { PersistedPresetMetadata, PersistedPresetRecord } from "../../../modules/storage/src/index.js";
 
 async function readRequestBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -21,6 +22,13 @@ export function createRuntimeServer(dependencies: {
   repositories?: DomainRepositories;
   packageRuntime?: {
     listPackages(): unknown[];
+  };
+  presetMetadataStore?: {
+    list(): Promise<PersistedPresetMetadata[]>;
+    patch(
+      presetId: string,
+      input: Partial<PersistedPresetRecord>
+    ): Promise<PersistedPresetMetadata>;
   };
   archiveService?: {
     createSnapshot(input: {
@@ -144,6 +152,36 @@ export function createRuntimeServer(dependencies: {
       return;
     }
 
+    if (request.method === "GET" && requestUrl.pathname === "/presets") {
+      const presetMetadataStore = requirePresetMetadataStore(dependencies.presetMetadataStore);
+      response.writeHead(200, {
+        "content-type": "application/json"
+      });
+      response.end(JSON.stringify(await presetMetadataStore.list()));
+      return;
+    }
+
+    if ((request.method === "PUT" || request.method === "PATCH") && /^\/presets\/[^/]+$/.test(requestUrl.pathname)) {
+      try {
+        const presetMetadataStore = requirePresetMetadataStore(dependencies.presetMetadataStore);
+        const presetId = requestUrl.pathname.split("/")[2] ?? "";
+        const body = (await readRequestBody(request)) as Partial<PersistedPresetRecord>;
+        const updated = await presetMetadataStore.patch(presetId, body);
+        response.writeHead(200, {
+          "content-type": "application/json"
+        });
+        response.end(JSON.stringify(updated));
+      } catch (error) {
+        response.writeHead(400, {
+          "content-type": "application/json"
+        });
+        response.end(JSON.stringify({
+          error: error instanceof Error ? error.message : "Invalid request."
+        }));
+      }
+      return;
+    }
+
     if (request.method === "GET" && requestUrl.pathname === "/archives") {
       const repositories = requireRepositories(dependencies.repositories);
       const sessionId = requestUrl.searchParams.get("sessionId");
@@ -154,6 +192,29 @@ export function createRuntimeServer(dependencies: {
         "content-type": "application/json"
       });
       response.end(JSON.stringify(versions));
+      return;
+    }
+
+    if (request.method === "GET" && requestUrl.pathname === "/traces") {
+      const repositories = requireRepositories(dependencies.repositories);
+      const traceId = requestUrl.searchParams.get("traceId");
+      const entries = traceId
+        ? await repositories.traceRecords.listByTraceId(traceId)
+        : [];
+      response.writeHead(200, {
+        "content-type": "application/json"
+      });
+      response.end(JSON.stringify(entries));
+      return;
+    }
+
+    if (request.method === "GET" && /^\/traces\/[^/]+$/.test(requestUrl.pathname)) {
+      const repositories = requireRepositories(dependencies.repositories);
+      const traceId = requestUrl.pathname.split("/")[2] ?? "";
+      response.writeHead(200, {
+        "content-type": "application/json"
+      });
+      response.end(JSON.stringify(await repositories.traceRecords.listByTraceId(traceId)));
       return;
     }
 
@@ -260,6 +321,24 @@ function requireRepositories(repositories: DomainRepositories | undefined): Doma
   }
 
   return repositories;
+}
+
+function requirePresetMetadataStore(
+  presetMetadataStore:
+    | {
+        list(): Promise<PersistedPresetMetadata[]>;
+        patch(
+          presetId: string,
+          input: Partial<PersistedPresetRecord>
+        ): Promise<PersistedPresetMetadata>;
+      }
+    | undefined
+) {
+  if (!presetMetadataStore) {
+    throw new Error("Runtime preset metadata store is not configured.");
+  }
+
+  return presetMetadataStore;
 }
 
 function requireArchiveService(

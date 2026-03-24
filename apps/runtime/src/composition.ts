@@ -8,6 +8,7 @@ import { createModelGateway, createModelProfileRegistry, createProviderRegistry,
 import { createObservability } from "../../../modules/observability/src/index.js";
 import { PackageRuntime } from "../../../modules/package-runtime/src/index.js";
 import { createInMemoryStorageRepositories, createPostgresStoragePort } from "../../../modules/storage/src/index.js";
+import type { PersistedPresetMetadata, PersistedPresetRecord } from "../../../modules/storage/src/index.js";
 
 function createIdFactory() {
   let counter = 1;
@@ -83,6 +84,17 @@ export async function createRuntimeComposition(input: {
   const repositories = storagePort
     ? await storagePort.createRepositories()
     : createInMemoryStorageRepositories();
+  const presetMetadataStore = (repositories as {
+    presets?: {
+      save(input: PersistedPresetRecord): Promise<void>;
+      patch(
+        presetId: string,
+        input: Partial<PersistedPresetRecord>
+      ): Promise<PersistedPresetMetadata>;
+      getById(id: string): Promise<PersistedPresetMetadata | null>;
+      list(): Promise<PersistedPresetMetadata[]>;
+    };
+  }).presets;
   const packageRuntime = new PackageRuntime({
     packagesRoot: resolve(cwd, "extensions")
   });
@@ -104,24 +116,25 @@ export async function createRuntimeComposition(input: {
   const providerBaseUrl =
     env.LIVE_LLM_PRIMARY_BASE_URL ??
     env.OPENAI_COMPATIBLE_BASE_URL ??
-    env.DASHSCOPE_BASE_URL;
+    env.DASHSCOPE_BASE_URL ??
+    ((env.LIVE_LLM_PRIMARY_API_KEY ?? env.DASHSCOPE_API_KEY)
+      ? "https://dashscope.aliyuncs.com/compatible-mode/v1"
+      : undefined);
   const providerApiKey =
     env.LIVE_LLM_PRIMARY_API_KEY ??
     env.OPENAI_COMPATIBLE_API_KEY ??
     env.DASHSCOPE_API_KEY;
-  const shouldUseRealProvider =
-    typeof providerBaseUrl === "string" &&
-    providerBaseUrl.length > 0 &&
+  const hasProviderApiKey =
     typeof providerApiKey === "string" &&
     providerApiKey.length > 0;
   const primaryModel =
     env.LIVE_LLM_PRIMARY_MODEL ??
     env.OPENAI_COMPATIBLE_MODEL ??
     "qwen3.5-flash";
-  const baseUrl = shouldUseRealProvider
-    ? providerBaseUrl
+  const baseUrl = hasProviderApiKey
+    ? (providerBaseUrl ?? "https://dashscope.aliyuncs.com/compatible-mode/v1")
     : "in-memory://demo-provider";
-  const apiKey = shouldUseRealProvider ? providerApiKey : undefined;
+  const apiKey = hasProviderApiKey ? providerApiKey : undefined;
 
   const runtimeProfiles: ModelProfile[] = [
     {
@@ -178,6 +191,15 @@ export async function createRuntimeComposition(input: {
     isDefault: true,
     scope: "global"
   };
+  const persistedPresets =
+    storagePort && presetMetadataStore ? await presetMetadataStore.list() : [];
+
+  if (presetMetadataStore && persistedPresets.length === 0) {
+    await presetMetadataStore.save({
+      ...runtimePreset,
+      apiKey
+    });
+  }
 
   const providerRegistry = createProviderRegistry({
     providers: {
@@ -192,7 +214,8 @@ export async function createRuntimeComposition(input: {
   });
   const profileRegistry = createModelProfileRegistry({
     runtimeProfiles,
-    runtimePresets: [runtimePreset]
+    runtimePresets: [runtimePreset],
+    persistedPresets
   });
   const modelGateway = createModelGateway({
     providerRegistry,
@@ -321,6 +344,7 @@ export async function createRuntimeComposition(input: {
     commandBus,
     providerRegistry,
     profileRegistry,
+    presetMetadataStore,
     archiveService,
     observability,
     modelGateway,

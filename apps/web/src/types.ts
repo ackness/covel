@@ -1,4 +1,5 @@
 import type { BlockEnvelope, BlockResponse, SseEnvelope } from "../../../modules/contracts/src/index.js";
+import type { TraceRecord } from "../../../modules/domain/src/index.js";
 
 export interface WorldRecord {
   id: string;
@@ -46,4 +47,4 @@ export interface WorkspaceState {
   lastTraceId: string | null;
 }
 
-export type { BlockEnvelope, BlockResponse, SseEnvelope };
+export type { BlockEnvelope, BlockResponse, SseEnvelope, TraceRecord };

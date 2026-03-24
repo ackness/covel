@@ -111,16 +111,30 @@ export function createProviderRegistry(options?: {
 
     return {
       adapter,
-      config: {
+      config: normalizeResolvedConfig({
         ...registered.defaults,
         ...(target.baseUrl ? { baseUrl: target.baseUrl } : {})
-      }
+      })
     };
   }
 
   return {
     resolve
   };
+}
+
+function normalizeResolvedConfig(config: ProviderConfig): ProviderConfig {
+  if (
+    config.apiKey &&
+    config.baseUrl === "in-memory://demo-provider"
+  ) {
+    return {
+      ...config,
+      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    };
+  }
+
+  return config;
 }
 
 function createOpenAiCompatibleAdapter(): ModelProviderAdapter {

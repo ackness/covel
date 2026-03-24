@@ -129,6 +129,7 @@
 - PostgreSQL storage port
 - PostgreSQL schema bootstrap
 - PostgreSQL-backed repository persistence
+- preset metadata persistence
 - `DATABASE_URL` 存在时的 runtime 选择
 - `docker compose` 本地 PostgreSQL 启动文件
 
@@ -138,6 +139,7 @@
 - local artifact store tests 已通过
 - PostgreSQL adapter tests 已通过
 - runtime PostgreSQL selection tests 已通过
+- preset metadata persistence tests 已通过
 
 ### 1.9 Memory / Archive / Observability
 
@@ -154,6 +156,7 @@
 - lineage
 - reindex mark contract
 - app log / audit log / trace sink 最小本地能力
+- trace read API 最小版
 
 状态：
 
@@ -168,13 +171,18 @@
 - `/sessions`
 - `/sessions/:id/messages`
 - `/packages`
+- `/presets`
+- `/presets/:id`
 - `/archives`
 - `/archives/:id/restore`
+- `/traces`
+- `/traces/:traceId`
 - `/actions`
 - runtime composition
 - `start:runtime` 入口
 - package-backed command registry 组装
 - built-in `/help`
+- persisted preset 覆盖 runtime preset
 
 状态：
 
@@ -192,7 +200,9 @@
 - SSE reducer
 - action dispatcher
 - interactive block 提交
+- preset editor
 - archive summary / restore
+- trace summary
 
 状态：
 
@@ -216,6 +226,7 @@
 
 - `core-guide / core-archive / core-memory-rag / core-presets / core-debug-commands`
   - 已具备最小 command handler
+- runtime 已优先从 first-party package command module 组装命令系统
 - 其余 package 仍主要是 package runtime 可消费的最小壳
 - 仍不是完整业务实现
 
@@ -292,7 +303,7 @@
 
 - `shadcn/ui` 正式接入
 - 更完整的主界面信息架构
-- package/preset 编辑的正式 UI
+- package/preset 编辑的更完整正式 UI
 - session / archive / trace 的更完整 UX
 - Playwright E2E
 - 移动端适配细化
@@ -305,6 +316,7 @@
 - 将 block schema / response schema 校验接入 runtime submit 流
 - 将 archive / memory / observability 全量接进 action 主链路
 - 使用 PostgreSQL 时的 artifact metadata 与 artifact content 的真实协作链路
+- preset 更新后对已运行 runtime 的更细粒度热更新策略
 
 ### 3.7 PostgreSQL 仍未完全产品化
 

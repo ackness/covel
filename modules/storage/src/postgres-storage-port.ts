@@ -6,6 +6,11 @@ import type { DomainRepositories } from "../../domain/src/index.js";
 
 import { createArtifactPathPolicy, type ArtifactPathPolicy } from "./artifact-path-policy.js";
 import { createLocalArtifactStore, type LocalArtifactStore } from "./local-artifact-store.js";
+import type {
+  PersistedPresetRecord,
+  StorageRepositoriesWithPresets
+} from "./preset-metadata-store.js";
+import { stripPresetSecrets } from "./preset-metadata-store.js";
 
 type Queryable = {
   query<Row>(text: string, values?: unknown[]): Promise<{ rows: Row[] }>;
@@ -162,7 +167,21 @@ async function bootstrapSchema(queryable: Queryable): Promise<void> {
       payload_json text,
       created_at text
     )`,
-    `create unique index if not exists trace_records_trace_span_idx on trace_records(trace_id, span_id)`
+    `create unique index if not exists trace_records_trace_span_idx on trace_records(trace_id, span_id)`,
+    `create table if not exists preset_metadata (
+      id text,
+      name text,
+      provider text,
+      model text,
+      tier text,
+      base_url text,
+      supported_modes_json text,
+      enabled boolean,
+      is_default boolean,
+      scope text,
+      api_key text
+    )`,
+    `create unique index if not exists preset_metadata_id_idx on preset_metadata(id)`
   ];
 
   for (const statement of statements) {
@@ -170,7 +189,8 @@ async function bootstrapSchema(queryable: Queryable): Promise<void> {
   }
 }
 
-function createRepositories(queryable: Queryable): DomainRepositories {
+function createRepositories(queryable: Queryable): DomainRepositories &
+  StorageRepositoriesWithPresets {
   return {
     worlds: {
       async save(world) {
@@ -530,6 +550,123 @@ function createRepositories(queryable: Queryable): DomainRepositories {
           [traceId]
         );
         return result.rows.map(mapTraceRecord);
+      }
+    },
+    presets: {
+      async save(input: PersistedPresetRecord) {
+        await queryable.query(
+          `insert into preset_metadata (id, name, provider, model, tier, base_url, supported_modes_json, enabled, is_default, scope, api_key)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+           on conflict (id) do update set
+             name = excluded.name,
+             provider = excluded.provider,
+             model = excluded.model,
+             tier = excluded.tier,
+             base_url = excluded.base_url,
+             supported_modes_json = excluded.supported_modes_json,
+             enabled = excluded.enabled,
+             is_default = excluded.is_default,
+             scope = excluded.scope,
+             api_key = excluded.api_key`,
+          [
+            input.id,
+            input.name,
+            input.provider,
+            input.model,
+            input.tier,
+            input.baseUrl,
+            JSON.stringify(input.supportedModes),
+            input.enabled,
+            input.isDefault,
+            input.scope,
+            input.apiKey ?? null
+          ]
+        );
+      },
+      async patch(
+        presetId: string,
+        input: Partial<PersistedPresetRecord>
+      ) {
+        const existing = await this.getById(presetId);
+        const next: PersistedPresetRecord = {
+          ...(existing ?? {
+            id: presetId,
+            name: presetId,
+            provider: "openaiCompatible",
+            model: "",
+            tier: "medium",
+            baseUrl: "",
+            supportedModes: ["text", "object", "stream"],
+            enabled: true,
+            isDefault: false,
+            scope: "global"
+          }),
+          ...input,
+          id: presetId
+        } as PersistedPresetRecord;
+        await this.save(next);
+        return stripPresetSecrets(next);
+      },
+      async getById(id: string) {
+        const result = await queryable.query<{
+          id: string;
+          name: string;
+          provider: string;
+          model: string;
+          tier: "small" | "medium" | "large";
+          base_url: string;
+          supported_modes_json: string;
+          enabled: boolean;
+          is_default: boolean;
+          scope: string;
+          api_key: string | null;
+        }>("select * from preset_metadata where id = $1", [id]);
+        const row = result.rows[0];
+        return row
+          ? stripPresetSecrets({
+              id: row.id,
+              name: row.name,
+              provider: row.provider,
+              model: row.model,
+              tier: row.tier,
+              baseUrl: row.base_url,
+              supportedModes: JSON.parse(row.supported_modes_json) as Array<"text" | "object" | "stream">,
+              enabled: row.enabled,
+              isDefault: row.is_default,
+              scope: row.scope,
+              apiKey: row.api_key ?? undefined
+            })
+          : null;
+      },
+      async list() {
+        const result = await queryable.query<{
+          id: string;
+          name: string;
+          provider: string;
+          model: string;
+          tier: "small" | "medium" | "large";
+          base_url: string;
+          supported_modes_json: string;
+          enabled: boolean;
+          is_default: boolean;
+          scope: string;
+          api_key: string | null;
+        }>("select * from preset_metadata order by id asc");
+        return result.rows.map((row) =>
+          stripPresetSecrets({
+            id: row.id,
+            name: row.name,
+            provider: row.provider,
+            model: row.model,
+            tier: row.tier,
+            baseUrl: row.base_url,
+            supportedModes: JSON.parse(row.supported_modes_json) as Array<"text" | "object" | "stream">,
+            enabled: row.enabled,
+            isDefault: row.is_default,
+            scope: row.scope,
+            apiKey: row.api_key ?? undefined
+          })
+        );
       }
     }
   };

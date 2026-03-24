@@ -9,8 +9,11 @@ import type {
   TraceRecord,
   World
 } from "../../domain/src/index.js";
+import type { PersistedPresetRecord, StorageRepositoriesWithPresets } from "./preset-metadata-store.js";
+import { stripPresetSecrets } from "./preset-metadata-store.js";
 
-export function createInMemoryStorageRepositories(): DomainRepositories {
+export function createInMemoryStorageRepositories(): DomainRepositories &
+  StorageRepositoriesWithPresets {
   const worlds = new Map<string, World>();
   const sessions = new Map<string, Session>();
   const messages = new Map<string, Message>();
@@ -19,6 +22,7 @@ export function createInMemoryStorageRepositories(): DomainRepositories {
   const memoryDocuments = new Map<string, MemoryDocument>();
   const retrievalRuns = new Map<string, RetrievalRun>();
   const traceRecords = new Map<string, TraceRecord>();
+  const presets = new Map<string, PersistedPresetRecord>();
 
   return {
     worlds: {
@@ -97,6 +101,30 @@ export function createInMemoryStorageRepositories(): DomainRepositories {
       },
       async listByTraceId(traceId) {
         return Array.from(traceRecords.values()).filter((record) => record.traceId === traceId);
+      }
+    },
+    presets: {
+      async save(input) {
+        presets.set(input.id, { ...input });
+      },
+      async patch(presetId, input) {
+        const existing = presets.get(presetId);
+        const next = {
+          ...(existing ?? {
+            id: presetId
+          }),
+          ...input,
+          id: presetId
+        } as PersistedPresetRecord;
+        presets.set(presetId, next);
+        return stripPresetSecrets(next);
+      },
+      async getById(id) {
+        const preset = presets.get(id);
+        return preset ? stripPresetSecrets(preset) : null;
+      },
+      async list() {
+        return Array.from(presets.values()).map(stripPresetSecrets);
       }
     }
   };

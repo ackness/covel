@@ -19,7 +19,23 @@ export function installFetchStub(routes: RouteDefinition[]): FetchStubController
 
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(input, init);
-    calls.push(request);
+    const rawBody =
+      typeof init?.body === "string"
+        ? init.body
+        : init?.body instanceof URLSearchParams
+          ? init.body.toString()
+          : init?.body
+            ? String(init.body)
+            : null;
+    const recordedRequest = {
+      headers: request.headers,
+      method: request.method,
+      url: request.url,
+      async json() {
+        return rawBody ? JSON.parse(rawBody) : null;
+      }
+    } as unknown as Request;
+    calls.push(recordedRequest);
     const matchedRoute = routes.find(
       (route) => route.method === request.method && route.url === request.url
     );

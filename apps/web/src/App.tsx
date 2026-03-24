@@ -7,13 +7,16 @@ import {
   listMessages,
   listPackages,
   listSessions,
+  listTraces,
   listWorlds,
   restoreArchive,
   sendMessage,
   submitBlockResponse
 } from "./api.js";
+import { TraceSummary } from "./components/trace-summary.js";
+import { PresetEditor } from "./components/preset-editor.js";
 import { applySseEvent, createInitialWorkspaceState, timelineFromMessages } from "./state.js";
-import type { ArchiveRecord, SessionRecord, WorldRecord, WorkspaceState } from "./types.js";
+import type { ArchiveRecord, SessionRecord, TraceRecord, WorldRecord, WorkspaceState } from "./types.js";
 
 export function App() {
   const [worlds, setWorlds] = useState<WorldRecord[]>([]);
@@ -22,6 +25,7 @@ export function App() {
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
   const [selectedSession, setSelectedSession] = useState<SessionRecord | null>(null);
   const [archives, setArchives] = useState<ArchiveRecord[]>([]);
+  const [traceEntries, setTraceEntries] = useState<TraceRecord[]>([]);
   const [workspace, setWorkspace] = useState<WorkspaceState>(createInitialWorkspaceState());
   const [composer, setComposer] = useState("");
   const [worldName, setWorldName] = useState("");
@@ -47,6 +51,15 @@ export function App() {
 
     void loadSessionData(selectedSession.id);
   }, [selectedSession?.id]);
+
+  useEffect(() => {
+    if (!workspace.lastTraceId) {
+      setTraceEntries([]);
+      return;
+    }
+
+    void loadTraceEntries(workspace.lastTraceId);
+  }, [workspace.lastTraceId]);
 
   async function loadInitialData() {
     const [loadedWorlds, loadedPackages] = await Promise.all([
@@ -87,6 +100,13 @@ export function App() {
         lastTraceId: null
       });
       setArchives(archiveRecords);
+    });
+  }
+
+  async function loadTraceEntries(traceId: string) {
+    const entries = await listTraces(traceId);
+    startTransition(() => {
+      setTraceEntries(entries);
     });
   }
 
@@ -233,6 +253,8 @@ export function App() {
             ))}
           </ul>
         </div>
+
+        <PresetEditor runtimeBaseUrl="" />
       </aside>
 
       <main className="workspace-main">
@@ -305,8 +327,7 @@ export function App() {
         </div>
 
         <div className="panel-section">
-          <div className="eyebrow">Trace</div>
-          <div className="session-card">{workspace.lastTraceId ?? "No trace yet"}</div>
+          <TraceSummary traceId={workspace.lastTraceId} entries={traceEntries} />
         </div>
       </aside>
     </div>

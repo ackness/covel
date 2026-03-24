@@ -11,6 +11,7 @@ const server = createRuntimeServer({
   flowEngine: runtime.flowEngine,
   repositories: runtime.repositories,
   packageRuntime: runtime.packageRuntime,
+  presetMetadataStore: runtime.presetMetadataStore,
   archiveService: runtime.archiveService
 });
 
