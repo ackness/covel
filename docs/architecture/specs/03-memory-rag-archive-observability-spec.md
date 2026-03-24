@@ -471,6 +471,13 @@ v1 必须自带可视化调试能力，而不是只看终端日志。
 
 这部分是 v1 的正式功能，不是“以后再补”的调试面板。
 
+M1 的界面优先级补充约束：
+
+- Web Host 优先交付世界编辑与会话推进主界面
+- 本地 trace / retrieval / archive 数据链路必须完整落地
+- Web Host 中复杂调试视图可以先做轻量入口与摘要
+- 更深入的观测、筛选和复盘允许优先依托 Langfuse 承载
+
 ## 10. OpenTelemetry 与未来 Langfuse
 
 v1 不强绑定外部 tracing 平台，但必须预留：
@@ -481,6 +488,12 @@ v1 不强绑定外部 tracing 平台，但必须预留：
 - trace redaction policy
 
 后续接 Langfuse 时，应只新增 adapter，不改领域协议与本地 trace 语义。
+
+补充规则：
+
+- Langfuse 在 M1 中优先承担高级观测与复盘界面，而不是替代本地 trace 数据存储
+- 本地数据库中的 `TraceRecord`、`RetrievalRun`、`ArchiveVersion` 仍是系统 source of truth
+- 导出到 Langfuse 的字段必须可由本地 trace 语义稳定映射得到
 
 依赖策略：
 

@@ -33,6 +33,7 @@
 2. `01-runtime-repo-provider-spec.md`
 3. `02-package-command-ui-spec.md`
 4. `03-memory-rag-archive-observability-spec.md`
+5. `04-development-testing-strategy.md`
 
 如果你只剩 10 分钟，至少先读：
 
@@ -44,11 +45,13 @@
 v1 已固定的高优先级决策：
 
 - 产品边界：单机自部署、Web 优先、不实现 Hosted Platform
+- 项目关系：相对 `../ai-gamestudio-dev` 完全重构，只参考能力与体验，不兼容旧代码、旧数据、旧插件
 - 技术路线：TypeScript Monorepo、React、Node、PostgreSQL、Local Artifact Store
 - 前端基线：`Vite 8`、`shadcn/ui`
 - 主协议：`HTTP action + SSE streamed response`
 - 模型层：`ModelGateway + ProviderRegistry + ModelProfileRegistry`
 - profile：`small / medium / large + embed-default`
+- provider 策略：day-1 只实现 `openai-compatible`，并通过可编辑的 runtime preset 暴露给用户
 - package 形态：`manifest.json + SKILL.md + optional TS code`
 - package v1 只开放：
   - context provider
@@ -62,7 +65,11 @@ v1 已固定的高优先级决策：
   - arbitrary capability runtime
   - Python / 其他语言 hook runtime
 - 记忆与检索：M1 直接做完整 RAG，但只用 `PostgreSQL + pgvector + FTS + entity_edges`
-- 调试与追踪：本地 trace/debug UI 是正式能力，未来通过 OpenTelemetry 接 Langfuse
+- 调试与追踪：本地 trace/debug 数据链路是正式能力；Web Host 优先主界面体验，复杂观测优先通过 Langfuse 承载
+- 交付要求：M1 先做到可运行，不是只搭骨架
+- 开发方式：强制 `TDD`，采用 deterministic / mocked integration / live LLM 三层测试
+- live LLM 测试：支持使用 DashScope 的 `openai-compatible` 接口；主测试模型为 `qwen3.5-flash`，小型且不要求性能的测试可使用 `Qwen3.5-35B-A3B`
+- 执行方式：默认并行开发，可使用多个 subagent 并行推进互不重叠的模块
 
 ## 3.1 统一术语
 
@@ -175,13 +182,15 @@ v1 中正式包括：
 按下面顺序实现，风险最低：
 
 1. 建立 monorepo 骨架
-2. 实现 `contracts + domain + command-system`
-3. 实现 `model-gateway + provider registry + profile registry`
-4. 实现 `PostgreSQL repository + local artifact store`
-5. 实现 `turn flow / command flow / resume flow`
-6. 实现 `package runtime`
-7. 实现 `memory-rag + archive + observability`
-8. 实现 Web host、debug 页面、第一方 packages
+2. 先写 `contracts + domain + command-system` 的失败测试
+3. 实现 `contracts + domain + command-system`
+4. 先写 `model-gateway + provider registry + profile registry` 的失败测试
+5. 实现 `model-gateway + provider registry + profile registry`
+6. 实现 `PostgreSQL repository + local artifact store`
+7. 实现 `turn flow / command flow / resume flow`
+8. 实现 `package runtime`
+9. 实现 `memory-rag + archive + observability`
+10. 实现 Web host、debug 页面、第一方 packages
 
 ## 5. Day-1 交付范围
 
@@ -205,6 +214,10 @@ M1 首批必须可运行的能力：
   - `core-guide`
   - `core-presets`
   - `core-debug-commands`
+- 开发与测试要求：
+  - 关键模块先有测试再写实现
+  - 至少具备一组真实 `openai-compatible` live tests 验证结构化输出、SSE、interactive block、resume flow
+  - 主界面优先于重型调试后台
 
 ## 6. 非目标
 

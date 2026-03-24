@@ -106,6 +106,29 @@ v1 推荐工具链固定为：
 - block 渲染
 - trace / retrieval / package 调试页
 
+M1 主界面推荐固定为三栏工作台：
+
+- 左栏
+  - `World`
+  - `Packages`
+  - `Presets`
+- 中栏
+  - `Session Timeline`
+  - composer
+  - pending interactive block
+- 右栏
+  - inspector
+  - `State`
+  - `Archive`
+  - trace 摘要
+
+补充规则：
+
+- 主界面优先承载世界编辑与会话推进
+- 复杂调试详情可独立到 debug 页面
+- M1 不沿用旧项目的 `WebSocket` 主协议与 store 切法
+- 前端主写入入口统一对接 `HTTP action + SSE`
+
 UI 基线固定为：
 
 - `shadcn/ui`
@@ -267,6 +290,10 @@ v1 固定提供 3 档 profile：
 - `medium`
 - `large`
 
+另外固定一个内部 embedding profile：
+
+- `embed-default`
+
 每个 `ModelProfile` 至少声明：
 
 - `id`
@@ -291,6 +318,37 @@ v1 固定提供 3 档 profile：
   - 轻量分类
   - 简单 package 逻辑
   - 低成本辅助步骤
+
+### 5.3.1 Profile 与 Preset 的运行时语义
+
+v1 中面向用户暴露的模型与 provider 选择，统一通过 preset 体验交付。
+
+约束：
+
+- Web Host 中允许编辑的是 preset metadata 与 profile 绑定关系
+- preset / profile 元数据必须可落库、可编辑
+- 项目和会话层只引用 preset / profile，不直接保存原始 provider 密钥
+- 第一方 `core-presets` package 负责提供默认 preset 作者体验
+
+建议最小字段：
+
+- `id`
+- `name`
+- `provider`
+- `model`
+- `tier`
+- `baseUrl`
+- `supportedModes`
+- `enabled`
+- `isDefault`
+- `scope`
+
+运行时解析顺序固定为：
+
+1. runtime 内置默认值
+2. 数据库中的 preset / profile 记录
+3. project override
+4. session override
 
 ### 5.4 底层技术建议
 
@@ -317,13 +375,12 @@ v1 优先使用：
 为了保证 v1 可实现且可维护，day-1 provider 支持面固定为：
 
 - `openai-compatible`
-- `anthropic`
-- `google`
 
 补充规则：
 
-- `OpenRouter`、本地 OpenAI-compatible 服务、其他兼容 OpenAI chat/completions 的服务，都先归入 `openai-compatible` adapter
-- v1 不为每个新平台单独写 adapter，除非它不兼容上述 3 类
+- `DashScope`、`OpenRouter`、本地 OpenAI-compatible 服务、其他兼容 OpenAI chat/completions 或 Responses 风格接口的服务，都先归入 `openai-compatible` adapter
+- v1 不为每个新平台单独写 adapter，除非它不兼容 `openai-compatible` 语义
+- 真实集成测试基线允许优先使用 `DashScope`
 
 ### 5.6 凭据与配置来源
 
@@ -331,10 +388,12 @@ v1 自部署模式下，provider 配置来源固定为：
 
 1. 运行时环境变量
 2. 本地 runtime 配置文件
+3. 数据库中的可编辑 preset / profile metadata
 
 项目和会话只允许保存：
 
 - `modelProfileId`
+- `presetId`
 - provider 选择结果
 - 运行时覆盖引用
 
@@ -351,11 +410,13 @@ v1 不做：
 - 平台级 secret vault
 - 最终用户在 Web UI 中持久化保存原始 provider 密钥
 
+补充规则：
+
+- 原始 provider 密钥仍只来自运行时环境变量或本地配置文件
+- 数据库只保存 preset metadata、endpoint、model、scope 与 secret reference
+- Web Host 可以编辑 preset 的非敏感字段，但不能读取原始 provider 密钥明文
+
 ### 5.7 Embedding 配置
-
-v1 在 `small / medium / large` 三档生成 profile 之外，额外固定一个内部 embedding profile：
-
-- `embed-default`
 
 规则：
 

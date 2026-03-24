@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0",
+  "name": "core-worldbook",
+  "version": "0.1.0",
+  "description": "Worldbook context package.",
+  "scopes": ["world", "session"],
+  "permissions": ["read:world", "read:session"],
+  "modelPolicy": {
+    "preferredTier": "small"
+  },
+  "contributes": {
+    "context": [
+      {
+        "id": "worldbook-context",
+        "entry": "server/context.ts",
+        "reads": ["world", "session"],
+        "writes": []
+      }
+    ],
+    "commands": [],
+    "blocks": [],
+    "renderers": []
+  }
+}

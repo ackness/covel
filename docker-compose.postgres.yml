@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17.4
+    container_name: covel-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: covel
+      POSTGRES_PASSWORD: covel
+      POSTGRES_DB: covel
+    ports:
+      - "5432:5432"
+    volumes:
+      - covel-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U covel -d covel"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  covel-postgres-data:

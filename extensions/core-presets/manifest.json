@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0",
+  "name": "core-presets",
+  "version": "0.1.0",
+  "description": "Preset management package.",
+  "scopes": ["world", "session"],
+  "permissions": ["read:world", "read:session"],
+  "modelPolicy": {
+    "preferredTier": "small"
+  },
+  "contributes": {
+    "context": [],
+    "commands": [
+      {
+        "name": "presets",
+        "description": "Inspect the active runtime preset state.",
+        "argsSchema": "schemas/commands/presets.args.json",
+        "entry": "server/commands/presets.ts",
+        "resume": false
+      }
+    ],
+    "blocks": [],
+    "renderers": []
+  }
+}

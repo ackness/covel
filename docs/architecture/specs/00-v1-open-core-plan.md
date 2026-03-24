@@ -38,6 +38,14 @@ v1 固定为：
 - Open Core Runtime
 - 不依赖 Hosted Platform
 
+相对旧项目的工程约束固定为：
+
+- 完全重构
+- 只参考 `../ai-gamestudio-dev` 的能力范围与交互体验
+- 不兼容旧代码
+- 不兼容旧数据
+- 不兼容旧插件
+
 v1 的默认体验是：
 
 1. 写世界
@@ -79,6 +87,8 @@ v1 技术路线固定为：
 - 优先统一 provider 抽象，而不是在业务层直接接各家 SDK
 - 优先使用一套最小可运行存储组合，而不是一开始引入多种基础设施
 - 所有实现遵循奥卡姆剃刀原则：先做最小闭环，再预留扩展点
+- 开发方式固定采用 `TDD`
+- 默认优先 deterministic tests；真实 LLM 只用于高价值集成验证
 
 ### 3.1 参考的现代 agent 工程做法
 
@@ -181,6 +191,8 @@ v1 明确不做：
 - package 可以在不修改核心的情况下扩展上下文、命令和交互块
 - provider 更换不会改业务层接口
 - 记忆、RAG、存档、日志与 trace 都有清晰边界，不依赖临时脚本拼接
+- 主界面可优先承载世界编辑与会话推进，复杂观测能力可通过 Langfuse 辅助承载
+- 在真实 `openai-compatible` provider 上，最小主链路可通过 live tests 跑通
 
 ## 8. 文档关系
 
@@ -198,13 +210,15 @@ v1 明确不做：
 如果一个新工程师今天开始做 v1，建议严格按下面顺序开工：
 
 1. 建立 monorepo 骨架
-2. 先实现 `contracts + domain + command-system`
-3. 再实现 `model-gateway + provider registry + profile registry`
-4. 再实现 `PostgreSQL repository + local artifact store`
-5. 再实现 `turn flow / command flow / resume flow`
-6. 再实现 `package runtime`
-7. 再实现 `memory-rag + archive + observability`
-8. 最后实现 Web host、debug 页面和第一方 packages
+2. 先写 `contracts + domain + command-system` 的失败测试
+3. 再实现 `contracts + domain + command-system`
+4. 先写 `model-gateway + provider registry + profile registry` 的失败测试
+5. 再实现 `model-gateway + provider registry + profile registry`
+6. 再实现 `PostgreSQL repository + local artifact store`
+7. 再实现 `turn flow / command flow / resume flow`
+8. 再实现 `package runtime`
+9. 再实现 `memory-rag + archive + observability`
+10. 最后实现 Web host、debug 页面和第一方 packages
 
 M1 首批必须落地的第一方 packages：
 
