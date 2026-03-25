@@ -3,11 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { BlockEnvelope } from "../../contracts/src/index.js";
 import type { Session } from "../../domain/src/index.js";
 import { createSession } from "../../domain/src/index.js";
-import { FlowEngine, type CommandBus, type ModelGateway } from "../src/index.js";
+import { FlowEngine, type CommandBus, type ModelGateway, type ResumeExecutor } from "../src/index.js";
 
 function createHarness(options?: {
   modelResult?: { content: string; blocks?: BlockEnvelope[]; traceId?: string };
   commandResult?: { content?: string; blocks?: BlockEnvelope[]; traceId?: string };
+  resumeResult?: { content?: string; blocks?: BlockEnvelope[]; traceId?: string };
   session?: Session | null;
 }) {
   const session = options?.session ?? createSession({
@@ -24,6 +25,22 @@ function createHarness(options?: {
   const messages: Array<{ id: string; sessionId: string; role: "user" | "assistant" | "system"; content: string; createdAt: Date }> = [];
   const modelCalls: Array<{ sessionId: string; prompt: string; requestId: string; flowId: string; locale: string }> = [];
   const commandCalls: Array<{ commandText: string; sessionId: string; requestId: string; locale: string }> = [];
+  const resumeCalls: Array<{
+    handler: string;
+    block: BlockEnvelope;
+    response: {
+      blockId: string;
+      blockType: string;
+      sessionId: string;
+      turnId: string;
+      response: Record<string, unknown>;
+    };
+    sessionId: string;
+    requestId: string;
+    flowId: string;
+    turnId: string;
+    locale: string;
+  }> = [];
   let idCounter = 0;
   const pendingBlocks = new Map<string, {
     blockId: string;
@@ -55,6 +72,16 @@ function createHarness(options?: {
     }
   };
 
+  const resumeExecutor: ResumeExecutor = {
+    async execute(input) {
+      resumeCalls.push(input);
+      return options?.resumeResult ?? {
+        content: `resume:${input.handler}`,
+        traceId: "trace_resume"
+      };
+    }
+  };
+
   const engine = new FlowEngine({
     sessions: {
       async getById(id) {
@@ -74,6 +101,7 @@ function createHarness(options?: {
     },
     modelGateway,
     commandBus,
+    resumeExecutor,
     pendingBlockStore: {
       async save(entry) {
         pendingBlocks.set(entry.blockId, entry);
@@ -100,6 +128,7 @@ function createHarness(options?: {
     messages,
     modelCalls,
     commandCalls,
+    resumeCalls,
     pendingBlocks
   };
 }
@@ -361,9 +390,9 @@ describe("FlowEngine", () => {
 
   it("prefers a persisted resume handler from the stored block envelope", async () => {
     const harness = createHarness({
-      modelResult: {
+      resumeResult: {
         content: "You continue from the stored resume handler.",
-        traceId: "trace_model"
+        traceId: "trace_resume"
       }
     });
 
@@ -421,8 +450,166 @@ describe("FlowEngine", () => {
       "message.completed",
       "flow.completed"
     ]);
-    expect(harness.modelCalls.at(-1)?.prompt).toContain("\"handler\":\"director.resumeChoice\"");
+    expect(harness.resumeCalls).toHaveLength(1);
+    expect(harness.resumeCalls[0]?.handler).toBe("director.resumeChoice");
+    expect(harness.modelCalls).toHaveLength(0);
     expect(harness.pendingBlocks.has("blk_saved")).toBe(false);
+  });
+
+  it("uses the resume executor for in-memory pending blocks that carry a resume handler", async () => {
+    const resumeBlock: BlockEnvelope = {
+      id: "blk_runtime_resume",
+      type: "choice_set",
+      version: "1.0",
+      meta: {
+        package: "director-choices",
+        handler: "director.resumeChoice",
+        requestId: "req_runtime_resume",
+        traceId: "tr_runtime_resume",
+        sessionId: "session-1",
+        turnId: "turn_runtime_resume"
+      },
+      interaction: {
+        requiresResponse: true,
+        responseSchema: "schemas/blocks/choice-set.response.json",
+        submitAs: "block_response",
+        resumePolicy: "resume_current_flow",
+        resumeHandler: "director.resumeChoice"
+      },
+      data: {
+        title: "Choose",
+        options: [{ id: "opt_a", label: "Advance" }]
+      }
+    };
+
+    const harness = createHarness({
+      resumeResult: {
+        content: "Resume executor handled the block.",
+        traceId: "trace_resume"
+      }
+    });
+    harness.pendingBlocks.set("blk_runtime_resume", {
+      blockId: "blk_runtime_resume",
+      sessionId: "session-1",
+      flowId: "flow_runtime_resume",
+      turnId: "turn_runtime_resume",
+      blockEnvelope: resumeBlock as unknown as Record<string, unknown>,
+      packageName: "director-choices",
+      resumeHandler: "director.resumeChoice"
+    });
+
+    const resumeEvents = await harness.engine.handle({
+      requestId: "req_runtime_resume_submit",
+      type: "submit_block_response",
+      sessionId: "session-1",
+      locale: "en",
+      payload: {
+        blockId: "blk_runtime_resume",
+        blockType: "choice_set",
+        sessionId: "session-1",
+        turnId: "turn_runtime_resume",
+        response: {
+          selected: "opt_a"
+        }
+      }
+    });
+
+    expect(resumeEvents.map((event) => event.type)).toEqual([
+      "flow.phase.changed",
+      "message.completed",
+      "flow.completed"
+    ]);
+    expect(harness.resumeCalls).toHaveLength(1);
+    expect(harness.resumeCalls[0]?.block.type).toBe("choice_set");
+    expect(harness.modelCalls).toHaveLength(0);
+  });
+
+  it("emits resume-executor blocks without routing them back through the model", async () => {
+    const emittedByResume: BlockEnvelope = {
+      id: "blk_new",
+      type: "choices",
+      version: "1.0",
+      meta: {
+        package: "director-choices",
+        requestId: "req_new",
+        traceId: "tr_new",
+        sessionId: "session-1",
+        turnId: "turn_new"
+      },
+      interaction: {
+        requiresResponse: false
+      },
+      data: {
+        title: "Follow-up",
+        options: []
+      }
+    };
+    const harness = createHarness({
+      resumeResult: {
+        content: "Resume executor handled the block.",
+        traceId: "trace_resume",
+        blocks: [emittedByResume]
+      }
+    });
+    harness.pendingBlocks.set("blk_resume_emit", {
+      blockId: "blk_resume_emit",
+      sessionId: "session-1",
+      flowId: "flow_resume_emit",
+      turnId: "turn_resume_emit",
+      blockEnvelope: {
+        id: "blk_resume_emit",
+        type: "choice_set",
+        version: "1.0",
+        meta: {
+          package: "director-choices",
+          handler: "director.resumeChoice",
+          requestId: "req_saved",
+          traceId: "tr_saved",
+          sessionId: "session-1",
+          turnId: "turn_resume_emit"
+        },
+        interaction: {
+          requiresResponse: true,
+          responseSchema: "schemas/blocks/choice-set.response.json",
+          submitAs: "block_response",
+          resumePolicy: "resume_current_flow",
+          resumeHandler: "director.resumeChoice"
+        },
+        data: {
+          title: "Choose",
+          options: [{ id: "opt_a", label: "Advance" }]
+        }
+      },
+      packageName: "director-choices",
+      resumeHandler: "director.resumeChoice"
+    });
+
+    const resumeEvents = await harness.engine.handle({
+      requestId: "req_resume_emit",
+      type: "submit_block_response",
+      sessionId: "session-1",
+      locale: "en",
+      payload: {
+        blockId: "blk_resume_emit",
+        blockType: "choice_set",
+        sessionId: "session-1",
+        turnId: "turn_resume_emit",
+        response: {
+          selected: "opt_a"
+        }
+      }
+    });
+
+    expect(resumeEvents.map((event) => event.type)).toEqual([
+      "flow.phase.changed",
+      "message.completed",
+      "block.emitted",
+      "flow.completed"
+    ]);
+    expect(harness.modelCalls).toHaveLength(0);
+    expect(resumeEvents[2]?.payload.block).toMatchObject({
+      type: "choices"
+    });
   });
 
   it("uses the persisted pending block turnId when resuming instead of trusting the client payload", async () => {

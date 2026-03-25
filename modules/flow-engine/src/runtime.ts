@@ -39,6 +39,19 @@ export interface CommandBus {
   }): Promise<CommandExecutionResult>;
 }
 
+export interface ResumeExecutor {
+  execute(input: {
+    handler: string;
+    block: BlockEnvelope;
+    response: BlockResponse;
+    sessionId: string;
+    requestId: string;
+    flowId: string;
+    turnId: string;
+    locale: SupportedLocale;
+  }): Promise<CommandExecutionResult>;
+}
+
 interface SessionRepository {
   getById(id: string): Promise<Session | null>;
   save(session: Session): Promise<void>;
@@ -70,6 +83,7 @@ export interface FlowDependencies {
   messages: MessageRepository;
   modelGateway: ModelGateway;
   commandBus: CommandBus;
+  resumeExecutor?: ResumeExecutor;
   pendingBlockStore?: PendingBlockStore;
   createId(prefix: string): string;
   now(): Date;
@@ -287,37 +301,64 @@ export class FlowEngine {
     const sessionId = pending.block.meta.sessionId;
     const events: SseEnvelope[] = [];
     let seq = 1;
+    let terminalTraceId = "trace_local";
 
     events.push(this.createEvent("flow.phase.changed", requestId, sessionId, turnId, flowId, seq++, {
       phase: "resume"
     }));
 
-    const prompt = JSON.stringify({
-      blockType: pending.block.type,
-      handler: pending.block.interaction.resumeHandler ?? pending.block.meta.handler ?? null,
-      response: response.response
-    });
-    const result = await this.dependencies.modelGateway.generateText({
-      sessionId,
-      prompt,
-      requestId,
-      flowId,
-      locale
-    });
+    const resumeHandler = pending.block.interaction.resumeHandler ?? pending.block.meta.handler;
+    if (resumeHandler && this.dependencies.resumeExecutor) {
+      const result = await this.dependencies.resumeExecutor.execute({
+        handler: resumeHandler,
+        block: pending.block,
+        response,
+        sessionId,
+        requestId,
+        flowId,
+        turnId,
+        locale
+      });
+      terminalTraceId = result.traceId ?? terminalTraceId;
 
-    const messageId = this.dependencies.createId("msg");
-    events.push(this.createEvent("message.completed", requestId, sessionId, turnId, flowId, seq++, {
-      messageId,
-      content: result.content
-    }, result.traceId));
+      seq = await this.appendExecutionResultEvents({
+        events,
+        result,
+        requestId,
+        sessionId,
+        turnId,
+        flowId,
+        nextSeq: seq
+      });
+    } else {
+      const prompt = JSON.stringify({
+        blockType: pending.block.type,
+        handler: resumeHandler ?? null,
+        response: response.response
+      });
+      const result = await this.dependencies.modelGateway.generateText({
+        sessionId,
+        prompt,
+        requestId,
+        flowId,
+        locale
+      });
+      terminalTraceId = result.traceId ?? terminalTraceId;
 
-    await this.dependencies.messages.save({
-      id: messageId,
-      sessionId,
-      role: "assistant",
-      content: result.content,
-      createdAt: this.dependencies.now()
-    });
+      const messageId = this.dependencies.createId("msg");
+      events.push(this.createEvent("message.completed", requestId, sessionId, turnId, flowId, seq++, {
+        messageId,
+        content: result.content
+      }, result.traceId));
+
+      await this.dependencies.messages.save({
+        id: messageId,
+        sessionId,
+        role: "assistant",
+        content: result.content,
+        createdAt: this.dependencies.now()
+      });
+    }
 
     this.pendingBlocks.delete(response.blockId);
     await this.dependencies.pendingBlockStore?.delete(response.blockId);
@@ -328,7 +369,7 @@ export class FlowEngine {
 
     events.push(this.createTerminalEvent("flow.completed", requestId, sessionId, flowId, {
       turnId
-    }, result.traceId, seq));
+    }, terminalTraceId, seq));
     return events;
   }
 
@@ -447,6 +488,68 @@ export class FlowEngine {
       flowId: persisted.flowId,
       turnId: persisted.turnId
     };
+  }
+
+  private async appendExecutionResultEvents(input: {
+    events: SseEnvelope[];
+    result: CommandExecutionResult;
+    requestId: string;
+    sessionId: string;
+    turnId: string;
+    flowId: string;
+    nextSeq: number;
+  }): Promise<number> {
+    let seq = input.nextSeq;
+
+    if (input.result.content) {
+      const messageId = this.dependencies.createId("msg");
+      input.events.push(this.createEvent(
+        "message.completed",
+        input.requestId,
+        input.sessionId,
+        input.turnId,
+        input.flowId,
+        seq++,
+        {
+          messageId,
+          content: input.result.content
+        },
+        input.result.traceId
+      ));
+
+      await this.dependencies.messages.save({
+        id: messageId,
+        sessionId: input.sessionId,
+        role: "assistant",
+        content: input.result.content,
+        createdAt: this.dependencies.now()
+      });
+    }
+
+    if (input.result.blocks) {
+      for (const block of input.result.blocks) {
+        const emittedBlock = this.normalizeBlockEnvelope(block, {
+          requestId: input.requestId,
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          traceId: input.result.traceId
+        });
+        input.events.push(this.createEvent(
+          "block.emitted",
+          input.requestId,
+          input.sessionId,
+          input.turnId,
+          input.flowId,
+          seq++,
+          {
+            block: emittedBlock
+          },
+          input.result.traceId
+        ));
+      }
+    }
+
+    return seq;
   }
 }
 

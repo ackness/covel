@@ -6,5 +6,6 @@ export {
   type ModelGateway,
   type ModelTurnResult,
   type PendingBlockRecord,
-  type PendingBlockStore
+  type PendingBlockStore,
+  type ResumeExecutor
 } from "./runtime.js";

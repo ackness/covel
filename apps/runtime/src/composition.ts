@@ -140,8 +140,24 @@ export async function createRuntimeComposition(input: {
   }).presets;
   const pendingBlockStore = (repositories as {
     pendingBlocks?: {
-      save(input: { blockId: string; sessionId: string; flowId: string; turnId: string }): Promise<void>;
-      getByBlockId(blockId: string): Promise<{ blockId: string; sessionId: string; flowId: string; turnId: string } | null>;
+      save(input: {
+        blockId: string;
+        sessionId: string;
+        flowId: string;
+        turnId: string;
+        blockEnvelope?: Record<string, unknown>;
+        packageName?: string;
+        resumeHandler?: string;
+      }): Promise<void>;
+      getByBlockId(blockId: string): Promise<{
+        blockId: string;
+        sessionId: string;
+        flowId: string;
+        turnId: string;
+        blockEnvelope?: Record<string, unknown>;
+        packageName?: string;
+        resumeHandler?: string;
+      } | null>;
       delete(blockId: string): Promise<void>;
     };
   }).pendingBlocks;
@@ -211,7 +227,7 @@ export async function createRuntimeComposition(input: {
       contextWindow: 32_000,
       latencyClass: "low",
       costClass: "low",
-      supportedModes: ["text", "object", "stream"]
+      supportedModes: ["text", "object", "stream", "image", "speech", "transcription"]
     },
     {
       id: "medium",
@@ -221,7 +237,7 @@ export async function createRuntimeComposition(input: {
       contextWindow: 64_000,
       latencyClass: "medium",
       costClass: "medium",
-      supportedModes: ["text", "object", "stream"]
+      supportedModes: ["text", "object", "stream", "image", "speech", "transcription"]
     },
     {
       id: "large",
@@ -231,7 +247,7 @@ export async function createRuntimeComposition(input: {
       contextWindow: 128_000,
       latencyClass: "high",
       costClass: "high",
-      supportedModes: ["text", "object", "stream"]
+      supportedModes: ["text", "object", "stream", "image", "speech", "transcription"]
     },
     {
       id: "embed-default",
@@ -254,7 +270,7 @@ export async function createRuntimeComposition(input: {
     tier: "medium",
     baseUrl,
     ...(fallbackPresetIds.length > 0 ? { fallbackPresetIds } : {}),
-    supportedModes: ["text", "object", "stream"],
+    supportedModes: ["text", "object", "stream", "image", "speech", "transcription"],
     enabled: true,
     isDefault: true,
     scope: "global"
@@ -276,7 +292,7 @@ export async function createRuntimeComposition(input: {
       model: secondaryModel,
       tier: "small",
       baseUrl,
-      supportedModes: ["text", "object", "stream"],
+      supportedModes: ["text", "object", "stream", "image", "speech", "transcription"],
       enabled: true,
       isDefault: false,
       scope: "global",
@@ -299,7 +315,7 @@ export async function createRuntimeComposition(input: {
       model: openRouterModel,
       tier: "small",
       baseUrl: openRouterBaseUrl,
-      supportedModes: ["text", "object", "stream"],
+      supportedModes: ["text", "object", "stream", "image", "speech", "transcription"],
       enabled: true,
       isDefault: false,
       scope: "global",
@@ -356,6 +372,32 @@ export async function createRuntimeComposition(input: {
   });
 
   const commandRegistry = new CommandRegistry();
+  function buildPackageExecutionContext(
+    packageName: string,
+    context: {
+      sessionId?: string;
+      locale?: SupportedLocale;
+      requestId?: string;
+      flowId?: string;
+      turnId?: string;
+      block?: unknown;
+      response?: unknown;
+    }
+  ) {
+    const manifestPermissions = new Set(
+      packageRuntime.getPackage(packageName)?.manifest.permissions ?? []
+    );
+
+    return {
+      ...context,
+      ...(manifestPermissions.has("read:archive") ? { archiveService } : {}),
+      ...(manifestPermissions.has("read:packages") ? { packageRuntime } : {}),
+      ...(manifestPermissions.has("read:preset") ? { runtimePreset } : {}),
+      ...(manifestPermissions.has("read:memory") ? { ingestionRegistry } : {}),
+      ...(manifestPermissions.has("write:observability") ? { observability } : {}),
+      ...(manifestPermissions.has("invoke:model") ? { modelGateway } : {})
+    };
+  }
   for (const registeredCommand of packageRuntime.listCommands()) {
     commandRegistry.register(
       createSlashCommandSpec({
@@ -364,20 +406,14 @@ export async function createRuntimeComposition(input: {
         handler: registeredCommand.entry,
         resume: registeredCommand.resume,
         argsSchema: registeredCommand.argsSchema,
-        execute: async (args, context) => {
-          const manifestPermissions = new Set(
-            packageRuntime.getPackage(registeredCommand.packageName)?.manifest.permissions ?? []
-          );
-
-          return registeredCommand.execute(args, {
-            ...context,
-            ...(manifestPermissions.has("read:archive") ? { archiveService } : {}),
-            ...(manifestPermissions.has("read:packages") ? { packageRuntime } : {}),
-            ...(manifestPermissions.has("read:preset") ? { runtimePreset } : {}),
-            ...(manifestPermissions.has("read:memory") ? { ingestionRegistry } : {}),
-            ...(manifestPermissions.has("write:observability") ? { observability } : {})
-          });
-        },
+        execute: async (args, context) =>
+          registeredCommand.execute(
+            args,
+            buildPackageExecutionContext(registeredCommand.packageName, {
+              sessionId: context.sessionId as string | undefined,
+              locale: context.locale as SupportedLocale | undefined
+            })
+          ),
         help: registeredCommand.help,
         autocomplete: registeredCommand.autocomplete
       })
@@ -500,6 +536,87 @@ export async function createRuntimeComposition(input: {
           ...result,
           traceId: `trace_${input.requestId}`
         };
+      }
+    },
+    resumeExecutor: {
+      async execute(input: {
+        handler: string;
+        block: {
+          meta: {
+            package: string;
+          };
+        };
+        response: unknown;
+        sessionId: string;
+        requestId: string;
+        flowId: string;
+        turnId: string;
+        locale: SupportedLocale;
+      }) {
+        const packageName = input.block.meta.package;
+        const capability = packageRuntime.getCapability(input.handler);
+        if (capability && capability.packageName === packageName) {
+          const result = await capability.execute(
+            {
+              block: input.block,
+              response: input.response,
+              requestId: input.requestId,
+              flowId: input.flowId,
+              turnId: input.turnId
+            },
+            buildPackageExecutionContext(packageName, {
+              sessionId: input.sessionId,
+              locale: input.locale,
+              requestId: input.requestId,
+              flowId: input.flowId,
+              turnId: input.turnId,
+              block: input.block,
+              response: input.response
+            })
+          ) as {
+            content?: string;
+            blocks?: any[];
+          };
+
+          return {
+            ...result,
+            traceId: `trace_${input.requestId}`
+          };
+        }
+
+        const hook = packageRuntime.getHook(input.handler);
+        if (hook && hook.packageName === packageName) {
+          const result = await hook.execute(
+            {
+              block: input.block,
+              response: input.response,
+              requestId: input.requestId,
+              flowId: input.flowId,
+              turnId: input.turnId
+            },
+            buildPackageExecutionContext(packageName, {
+              sessionId: input.sessionId,
+              locale: input.locale,
+              requestId: input.requestId,
+              flowId: input.flowId,
+              turnId: input.turnId,
+              block: input.block,
+              response: input.response
+            })
+          ) as {
+            content?: string;
+            blocks?: any[];
+          };
+
+          return {
+            ...result,
+            traceId: `trace_${input.requestId}`
+          };
+        }
+
+        throw new Error(
+          `Resume handler '${input.handler}' was not found for package '${packageName}'.`
+        );
       }
     },
     createId,
