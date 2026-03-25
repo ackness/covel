@@ -3,6 +3,9 @@ export interface PersistedPendingBlockRecord {
   sessionId: string;
   flowId: string;
   turnId: string;
+  blockEnvelope?: Record<string, unknown>;
+  packageName?: string;
+  resumeHandler?: string;
 }
 
 export interface PendingBlockStore {

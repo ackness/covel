@@ -14,7 +14,7 @@ const runtimeProfiles: ModelProfile[] = [
     contextWindow: 64_000,
     latencyClass: "medium",
     costClass: "medium",
-    supportedModes: ["text", "object", "stream"]
+    supportedModes: ["text", "object", "stream", "image", "speech", "transcription"]
   },
   {
     id: "embed-default",
@@ -35,7 +35,7 @@ const runtimePreset = (baseUrl: string): PresetMetadata => ({
   model: "preset-chat-model",
   tier: "medium",
   baseUrl,
-  supportedModes: ["text", "object", "stream"],
+  supportedModes: ["text", "object", "stream", "image", "speech", "transcription"],
   enabled: true,
   isDefault: true,
   scope: "global"
@@ -51,6 +51,21 @@ async function startOpenAiCompatibleFixture(): Promise<ServerControl> {
   const receivedBodies: Array<Record<string, unknown>> = [];
 
   const server = createServer(async (request: IncomingMessage, response: ServerResponse) => {
+    if (request.url === "/audio/transcriptions") {
+      const rawBody = await readRawBody(request);
+      receivedBodies.push({
+        contentType: request.headers["content-type"] ?? "",
+        rawBody
+      });
+      response.writeHead(200, {
+        "content-type": "application/json"
+      });
+      response.end(JSON.stringify({
+        text: "transcribed fixture"
+      }));
+      return;
+    }
+
     const body = await readJsonBody(request);
     receivedBodies.push(body);
 
@@ -73,6 +88,34 @@ async function startOpenAiCompatibleFixture(): Promise<ServerControl> {
           total_tokens: 6
         }
       }));
+      return;
+    }
+
+    if (request.url === "/images/generations") {
+      response.writeHead(200, {
+        "content-type": "application/json"
+      });
+      response.end(JSON.stringify({
+        data: [
+          {
+            b64_json: Buffer.from("fixture-image").toString("base64"),
+            mime_type: "image/png"
+          }
+        ],
+        usage: {
+          prompt_tokens: 7,
+          completion_tokens: 1,
+          total_tokens: 8
+        }
+      }));
+      return;
+    }
+
+    if (request.url === "/audio/speech") {
+      response.writeHead(200, {
+        "content-type": "audio/mpeg"
+      });
+      response.end(Buffer.from(`speech:${String(body.input ?? "")}`));
       return;
     }
 
@@ -111,6 +154,16 @@ async function readJsonBody(request: IncomingMessage): Promise<Record<string, un
   }
 
   return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+}
+
+async function readRawBody(request: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 function handleChatCompletion(body: Record<string, unknown>, response: ServerResponse): void {
@@ -323,6 +376,75 @@ describe("openai-compatible adapter contract", () => {
     expect(fixture.receivedBodies[0]).toMatchObject({
       model: "test-embed-model",
       input: ["northreach", "observatory"]
+    });
+  });
+
+  it("supports image generation through the selected preset/profile", async () => {
+    const { gateway, server: fixture } = await createGateway();
+
+    const result = await gateway.generateImage({
+      presetId: "default-medium",
+      prompt: "Paint a foggy harbor."
+    });
+
+    expect(result).toEqual({
+      images: [
+        {
+          mimeType: "image/png",
+          dataBase64: Buffer.from("fixture-image").toString("base64")
+        }
+      ],
+      usage: {
+        inputTokens: 7,
+        outputTokens: 1
+      }
+    });
+    expect(fixture.receivedBodies[0]).toMatchObject({
+      model: "preset-chat-model",
+      prompt: "Paint a foggy harbor."
+    });
+  });
+
+  it("supports speech synthesis through the selected preset/profile", async () => {
+    const { gateway, server: fixture } = await createGateway();
+
+    const result = await gateway.synthesizeSpeech({
+      presetId: "default-medium",
+      text: "The harbor wakes.",
+      voice: "alloy",
+      format: "audio/mpeg"
+    });
+
+    expect(result.audio.mimeType).toBe("audio/mpeg");
+    expect(Buffer.from(result.audio.data).toString("utf8")).toBe("speech:The harbor wakes.");
+    expect(result.usage).toBeNull();
+    expect(fixture.receivedBodies[0]).toMatchObject({
+      model: "preset-chat-model",
+      input: "The harbor wakes.",
+      voice: "alloy",
+      format: "audio/mpeg"
+    });
+  });
+
+  it("supports audio transcription through the selected preset/profile", async () => {
+    const { gateway, server: fixture } = await createGateway();
+
+    const result = await gateway.transcribeAudio({
+      presetId: "default-medium",
+      audio: {
+        data: Buffer.from("wav-bytes"),
+        mimeType: "audio/wav",
+        fileName: "turn.wav"
+      }
+    });
+
+    expect(result).toEqual({
+      text: "transcribed fixture",
+      usage: null
+    });
+    expect(fixture.receivedBodies[0]).toMatchObject({
+      contentType: expect.stringContaining("multipart/form-data"),
+      rawBody: expect.stringContaining("turn.wav")
     });
   });
 

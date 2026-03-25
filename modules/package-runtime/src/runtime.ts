@@ -14,9 +14,13 @@ import type {
 } from "../../command-system/src/index.js";
 import { PackageRuntimeError } from "./error.js";
 import {
+  type ArtifactTypeContribution,
   type BlockContribution,
+  type CapabilityContribution,
   type CommandContribution,
   type ContextContribution,
+  type ContextProviderContribution,
+  type HookContribution,
   type PackageManifest,
   PackageManifestSchema,
   type RendererContribution
@@ -41,8 +45,9 @@ export interface PackageRuntimeOptions {
   fs?: RuntimeFs;
 }
 
-export interface RegisteredContextProvider extends ContextContribution {
+export interface RegisteredContextProvider extends ContextProviderContribution {
   packageName: string;
+  build: (input?: unknown, context?: CommandExecutionContext) => Promise<unknown> | unknown;
 }
 
 export interface RegisteredCommand extends Omit<CommandContribution, "argsSchema"> {
@@ -57,7 +62,23 @@ export interface RegisteredBlock extends BlockContribution {
   packageName: string;
 }
 
+export interface RegisteredHook extends HookContribution {
+  packageName: string;
+  execute: (input?: unknown, context?: CommandExecutionContext) => Promise<unknown> | unknown;
+}
+
+export interface RegisteredCapability extends Omit<CapabilityContribution, "inputSchema" | "outputSchema"> {
+  packageName: string;
+  inputSchemaPath: string;
+  outputSchemaPath: string;
+  execute: (input?: unknown, context?: CommandExecutionContext) => Promise<unknown> | unknown;
+}
+
 export interface RegisteredRenderer extends RendererContribution {
+  packageName: string;
+}
+
+export interface RegisteredArtifactType extends ArtifactTypeContribution {
   packageName: string;
 }
 
@@ -80,12 +101,33 @@ export interface PackageCommandModule<
   autocomplete?: SlashCommandAutocompleteMetadata;
 }
 
+export interface PackageContextProviderModule<
+  TContext extends CommandExecutionContext = CommandExecutionContext
+> {
+  build(input?: unknown, context?: TContext): Promise<unknown> | unknown;
+}
+
+export interface PackageHookModule<
+  TContext extends CommandExecutionContext = CommandExecutionContext
+> {
+  execute(input?: unknown, context?: TContext): Promise<unknown> | unknown;
+}
+
+export interface PackageCapabilityModule<
+  TContext extends CommandExecutionContext = CommandExecutionContext
+> {
+  execute(input?: unknown, context?: TContext): Promise<unknown> | unknown;
+}
+
 interface MutablePackageRecord extends RuntimePackageRecord {
   registrations: {
     contextIds: string[];
     commandNames: string[];
+    hookIds: string[];
+    capabilityIds: string[];
     blockTypes: string[];
     rendererNames: string[];
+    artifactTypes: string[];
   };
 }
 
@@ -95,8 +137,11 @@ export class PackageRuntime {
   readonly #packages = new Map<string, MutablePackageRecord>();
   readonly #contexts = new Map<string, RegisteredContextProvider>();
   readonly #commands = new Map<string, RegisteredCommand>();
+  readonly #hooks = new Map<string, RegisteredHook>();
+  readonly #capabilities = new Map<string, RegisteredCapability>();
   readonly #blocks = new Map<string, RegisteredBlock>();
   readonly #renderers = new Map<string, RegisteredRenderer>();
+  readonly #artifactTypes = new Map<string, RegisteredArtifactType>();
 
   constructor(options: PackageRuntimeOptions) {
     this.#packagesRoot = options.packagesRoot;
@@ -134,8 +179,11 @@ export class PackageRuntime {
         registrations: {
           contextIds: [],
           commandNames: [],
+          hookIds: [],
+          capabilityIds: [],
           blockTypes: [],
-          rendererNames: []
+          rendererNames: [],
+          artifactTypes: []
         }
       });
     }
@@ -183,18 +231,30 @@ export class PackageRuntime {
     for (const commandName of pkg.registrations.commandNames) {
       this.#commands.delete(commandName);
     }
+    for (const hookId of pkg.registrations.hookIds) {
+      this.#hooks.delete(hookId);
+    }
+    for (const capabilityId of pkg.registrations.capabilityIds) {
+      this.#capabilities.delete(capabilityId);
+    }
     for (const blockType of pkg.registrations.blockTypes) {
       this.#blocks.delete(blockType);
     }
     for (const rendererName of pkg.registrations.rendererNames) {
       this.#renderers.delete(rendererName);
     }
+    for (const artifactType of pkg.registrations.artifactTypes) {
+      this.#artifactTypes.delete(artifactType);
+    }
 
     pkg.registrations = {
       contextIds: [],
       commandNames: [],
+      hookIds: [],
+      capabilityIds: [],
       blockTypes: [],
-      rendererNames: []
+      rendererNames: [],
+      artifactTypes: []
     };
     pkg.enabled = false;
   }
@@ -211,12 +271,40 @@ export class PackageRuntime {
     return Array.from(this.#commands.values()).sort((left, right) => left.name.localeCompare(right.name));
   }
 
+  getHook(id: string): RegisteredHook | undefined {
+    return this.#hooks.get(id);
+  }
+
+  listHooks(): RegisteredHook[] {
+    return Array.from(this.#hooks.values()).sort((left, right) => left.id.localeCompare(right.id));
+  }
+
+  getCapability(id: string): RegisteredCapability | undefined {
+    return this.#capabilities.get(id);
+  }
+
+  listCapabilities(): RegisteredCapability[] {
+    return Array.from(this.#capabilities.values()).sort((left, right) => left.id.localeCompare(right.id));
+  }
+
   getBlock(type: string): RegisteredBlock | undefined {
     return this.#blocks.get(type);
   }
 
+  getBlockType(type: string): RegisteredBlock | undefined {
+    return this.getBlock(type);
+  }
+
   getRenderer(name: string): RegisteredRenderer | undefined {
     return this.#renderers.get(name);
+  }
+
+  getArtifactType(type: string): RegisteredArtifactType | undefined {
+    return this.#artifactTypes.get(type);
+  }
+
+  listArtifactTypes(): RegisteredArtifactType[] {
+    return Array.from(this.#artifactTypes.values()).sort((left, right) => left.type.localeCompare(right.type));
   }
 
   #getPackageOrThrow(name: string): MutablePackageRecord {
@@ -237,16 +325,25 @@ export class PackageRuntime {
     const nextRegistrations = {
       contextIds: [] as string[],
       commandNames: [] as string[],
+      hookIds: [] as string[],
+      capabilityIds: [] as string[],
       blockTypes: [] as string[],
-      rendererNames: [] as string[]
+      rendererNames: [] as string[],
+      artifactTypes: [] as string[]
     };
 
     try {
-      for (const context of pkg.manifest.contributes.context) {
-        resolvePackageRelativePath(pkg.rootDir, context.entry);
+      for (const state of pkg.manifest.state) {
+        resolvePackageRelativePath(pkg.rootDir, state.schema);
+      }
+
+      for (const context of pkg.manifest.contributes.contextProviders) {
+        const contextEntryPath = resolvePackageRelativePath(pkg.rootDir, context.entry);
+        const contextModule = await loadContextProviderModule(contextEntryPath);
         this.#registerUnique(this.#contexts, context.id, {
           ...context,
-          packageName: pkg.name
+          packageName: pkg.name,
+          build: contextModule.build
         }, "context provider");
         nextRegistrations.contextIds.push(context.id);
       }
@@ -266,7 +363,33 @@ export class PackageRuntime {
         nextRegistrations.commandNames.push(command.name);
       }
 
-      for (const block of pkg.manifest.contributes.blocks) {
+      for (const hook of pkg.manifest.contributes.hooks) {
+        const hookEntryPath = resolvePackageRelativePath(pkg.rootDir, hook.entry);
+        const hookModule = await loadHookModule(hookEntryPath);
+        this.#registerUnique(this.#hooks, hook.id, {
+          ...hook,
+          packageName: pkg.name,
+          execute: hookModule.execute
+        }, "hook");
+        nextRegistrations.hookIds.push(hook.id);
+      }
+
+      for (const capability of pkg.manifest.contributes.capabilities) {
+        const capabilityEntryPath = resolvePackageRelativePath(pkg.rootDir, capability.entry);
+        const inputSchemaPath = resolvePackageRelativePath(pkg.rootDir, capability.inputSchema);
+        const outputSchemaPath = resolvePackageRelativePath(pkg.rootDir, capability.outputSchema);
+        const capabilityModule = await loadCapabilityModule(capabilityEntryPath);
+        this.#registerUnique(this.#capabilities, capability.id, {
+          ...capability,
+          packageName: pkg.name,
+          inputSchemaPath,
+          outputSchemaPath,
+          execute: capabilityModule.execute
+        }, "capability");
+        nextRegistrations.capabilityIds.push(capability.id);
+      }
+
+      for (const block of pkg.manifest.contributes.blockTypes) {
         resolvePackageRelativePath(pkg.rootDir, block.dataSchema);
         resolvePackageRelativePath(pkg.rootDir, block.responseSchema);
         this.#registerUnique(this.#blocks, block.type, {
@@ -284,6 +407,14 @@ export class PackageRuntime {
         }, "renderer");
         nextRegistrations.rendererNames.push(renderer.name);
       }
+
+      for (const artifactType of pkg.manifest.contributes.artifactTypes) {
+        this.#registerUnique(this.#artifactTypes, artifactType.type, {
+          ...artifactType,
+          packageName: pkg.name
+        }, "artifact type");
+        nextRegistrations.artifactTypes.push(artifactType.type);
+      }
     } catch (error) {
       for (const contextId of nextRegistrations.contextIds) {
         this.#contexts.delete(contextId);
@@ -291,11 +422,20 @@ export class PackageRuntime {
       for (const commandName of nextRegistrations.commandNames) {
         this.#commands.delete(commandName);
       }
+      for (const hookId of nextRegistrations.hookIds) {
+        this.#hooks.delete(hookId);
+      }
+      for (const capabilityId of nextRegistrations.capabilityIds) {
+        this.#capabilities.delete(capabilityId);
+      }
       for (const blockType of nextRegistrations.blockTypes) {
         this.#blocks.delete(blockType);
       }
       for (const rendererName of nextRegistrations.rendererNames) {
         this.#renderers.delete(rendererName);
+      }
+      for (const artifactType of nextRegistrations.artifactTypes) {
+        this.#artifactTypes.delete(artifactType);
       }
 
       throw error;
@@ -354,6 +494,66 @@ async function loadCommandModule(commandEntryPath: string): Promise<PackageComma
   }
 
   return commandModule;
+}
+
+async function loadContextProviderModule(contextEntryPath: string): Promise<PackageContextProviderModule> {
+  const imported = await import(pathToFileURL(contextEntryPath).href) as {
+    contextProvider?: PackageContextProviderModule;
+    default?: PackageContextProviderModule;
+  };
+
+  const contextModule = imported.contextProvider ?? imported.default;
+  if (!contextModule || typeof contextModule.build !== "function") {
+    throw new PackageRuntimeError({
+      code: "INVALID_PACKAGE_MANIFEST",
+      message: `Package context provider module at '${contextEntryPath}' is missing required exports.`,
+      details: {
+        contextEntryPath
+      }
+    });
+  }
+
+  return contextModule;
+}
+
+async function loadHookModule(hookEntryPath: string): Promise<PackageHookModule> {
+  const imported = await import(pathToFileURL(hookEntryPath).href) as {
+    hook?: PackageHookModule;
+    default?: PackageHookModule;
+  };
+
+  const hookModule = imported.hook ?? imported.default;
+  if (!hookModule || typeof hookModule.execute !== "function") {
+    throw new PackageRuntimeError({
+      code: "INVALID_PACKAGE_MANIFEST",
+      message: `Package hook module at '${hookEntryPath}' is missing required exports.`,
+      details: {
+        hookEntryPath
+      }
+    });
+  }
+
+  return hookModule;
+}
+
+async function loadCapabilityModule(capabilityEntryPath: string): Promise<PackageCapabilityModule> {
+  const imported = await import(pathToFileURL(capabilityEntryPath).href) as {
+    capability?: PackageCapabilityModule;
+    default?: PackageCapabilityModule;
+  };
+
+  const capabilityModule = imported.capability ?? imported.default;
+  if (!capabilityModule || typeof capabilityModule.execute !== "function") {
+    throw new PackageRuntimeError({
+      code: "INVALID_PACKAGE_MANIFEST",
+      message: `Package capability module at '${capabilityEntryPath}' is missing required exports.`,
+      details: {
+        capabilityEntryPath
+      }
+    });
+  }
+
+  return capabilityModule;
 }
 
 function parseManifest(rawManifest: string, manifestPath: string): PackageManifest {

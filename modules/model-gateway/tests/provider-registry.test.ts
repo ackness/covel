@@ -5,6 +5,8 @@ import {
   createModelGateway,
   createModelProfileRegistry,
   type EmbeddingResult,
+  type ImageGenerationParams,
+  type ImageGenerationResult,
   type ModelProviderAdapter,
   type ModelRequestContext,
   type ObjectGenerationParams,
@@ -12,8 +14,12 @@ import {
   type ProviderLifecycleHook,
   type ProviderProtocol,
   type ProviderConfig,
+  type SpeechSynthesisParams,
+  type SpeechSynthesisResult,
   type StreamEvent,
-  type TextGenerationParams
+  type TextGenerationParams,
+  type TranscriptionParams,
+  type TranscriptionResult
 } from "../src/index.js";
 
 class StubProviderAdapter implements ModelProviderAdapter {
@@ -58,6 +64,42 @@ class StubProviderAdapter implements ModelProviderAdapter {
     return {
       embeddings: [[1, 0, 0]],
       usage: { inputTokens: 1, outputTokens: 0 }
+    };
+  }
+
+  async generateImage(
+    _config: ProviderConfig,
+    _params: ImageGenerationParams,
+    _context: ModelRequestContext
+  ): Promise<ImageGenerationResult> {
+    return {
+      images: [{ mimeType: "image/png", dataBase64: "aW1hZ2U=" }],
+      usage: { inputTokens: 1, outputTokens: 1 }
+    };
+  }
+
+  async synthesizeSpeech(
+    _config: ProviderConfig,
+    _params: SpeechSynthesisParams,
+    _context: ModelRequestContext
+  ): Promise<SpeechSynthesisResult> {
+    return {
+      audio: {
+        mimeType: "audio/mpeg",
+        data: Buffer.from("speech")
+      },
+      usage: { inputTokens: 1, outputTokens: 1 }
+    };
+  }
+
+  async transcribeAudio(
+    _config: ProviderConfig,
+    _params: TranscriptionParams,
+    _context: ModelRequestContext
+  ): Promise<TranscriptionResult> {
+    return {
+      text: "transcribed",
+      usage: { inputTokens: 1, outputTokens: 1 }
     };
   }
 }
@@ -217,6 +259,38 @@ describe("ProviderRegistry", () => {
 
     expect(resolved.protocol).toBe("anthropic-messages-v1");
     expect(resolved.hooks).toEqual([hook]);
+  });
+
+  it("resolves multimodal routes using the requested mode", () => {
+    const adapter = new StubProviderAdapter();
+    const registry = createProviderRegistry({
+      providers: {
+        openaiCompatible: {
+          adapter,
+          defaults: {
+            baseUrl: "https://runtime.example/v1",
+            apiKey: "runtime-key"
+          }
+        }
+      }
+    });
+
+    const resolved = registry.resolve({
+      id: "story-media",
+      name: "Story media",
+      provider: "openaiCompatible",
+      model: "media-model",
+      tier: "medium",
+      supportedModes: ["image", "speech", "transcription"],
+      enabled: true,
+      isDefault: false,
+      scope: "global"
+    }, {
+      mode: "image"
+    });
+
+    expect(resolved.adapter).toBe(adapter);
+    expect(resolved.protocol).toBe("openai-chat-v1");
   });
 
   it("allows hooks to observe request lifecycle through the model gateway", async () => {

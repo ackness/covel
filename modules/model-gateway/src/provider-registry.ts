@@ -39,6 +39,54 @@ export interface EmbeddingResult {
   usage: UsageSummary;
 }
 
+export interface ImageGenerationParams {
+  model: string;
+  prompt: string;
+  providerRequestMetadata?: Record<string, unknown>;
+}
+
+export interface GeneratedImage {
+  mimeType: string;
+  dataBase64?: string;
+  url?: string;
+}
+
+export interface ImageGenerationResult {
+  images: GeneratedImage[];
+  usage: UsageSummary | null;
+}
+
+export interface SpeechSynthesisParams {
+  model: string;
+  text: string;
+  voice?: string;
+  format?: string;
+  providerRequestMetadata?: Record<string, unknown>;
+}
+
+export interface SpeechSynthesisResult {
+  audio: {
+    mimeType: string;
+    data: Uint8Array;
+  };
+  usage: UsageSummary | null;
+}
+
+export interface TranscriptionParams {
+  model: string;
+  audio: {
+    data: Uint8Array;
+    mimeType: string;
+    fileName?: string;
+  };
+  providerRequestMetadata?: Record<string, unknown>;
+}
+
+export interface TranscriptionResult {
+  text: string;
+  usage: UsageSummary | null;
+}
+
 export type StreamEvent =
   | {
       type: "text-delta";
@@ -83,6 +131,21 @@ export interface ModelProviderAdapter {
     },
     context: ModelRequestContext
   ): Promise<EmbeddingResult>;
+  generateImage(
+    config: ProviderConfig,
+    params: ImageGenerationParams,
+    context: ModelRequestContext
+  ): Promise<ImageGenerationResult>;
+  synthesizeSpeech(
+    config: ProviderConfig,
+    params: SpeechSynthesisParams,
+    context: ModelRequestContext
+  ): Promise<SpeechSynthesisResult>;
+  transcribeAudio(
+    config: ProviderConfig,
+    params: TranscriptionParams,
+    context: ModelRequestContext
+  ): Promise<TranscriptionResult>;
 }
 
 export interface ProviderLifecycleHook {
@@ -318,6 +381,75 @@ function createOpenAiChatV1Adapter(): ModelProviderAdapter {
           outputTokens: 0
         }
       };
+    },
+    async generateImage(config, params) {
+      const response = await postJson(config, "/images/generations", {
+        model: params.model,
+        prompt: params.prompt,
+        ...params.providerRequestMetadata
+      });
+      const payload = await parseJson(response);
+      assertSuccess(response, payload, "openaiCompatible");
+
+      const data = Array.isArray(payload.data) ? payload.data : [];
+      return {
+        images: data
+          .map((entry) => ({
+            mimeType: typeof entry.mime_type === "string" ? entry.mime_type : "image/png",
+            ...(typeof entry.b64_json === "string" ? { dataBase64: entry.b64_json } : {}),
+            ...(typeof entry.url === "string" ? { url: entry.url } : {})
+          }))
+          .filter((entry) => entry.dataBase64 || entry.url),
+        usage: readOpenAiChatUsage(payload)
+      };
+    },
+    async synthesizeSpeech(config, params) {
+      const response = await postJson(config, "/audio/speech", {
+        model: params.model,
+        input: params.text,
+        ...(params.voice ? { voice: params.voice } : {}),
+        ...(params.format ? { format: params.format } : {}),
+        ...params.providerRequestMetadata
+      });
+
+      if (!response.ok) {
+        const payload = await parseJson(response);
+        assertSuccess(response, payload, "openaiCompatible");
+      }
+
+      return {
+        audio: {
+          mimeType: response.headers.get("content-type") ?? "audio/mpeg",
+          data: new Uint8Array(await response.arrayBuffer())
+        },
+        usage: null
+      };
+    },
+    async transcribeAudio(config, params) {
+      const formData = new FormData();
+      formData.set("model", params.model);
+      formData.set(
+        "file",
+        new Blob([params.audio.data.buffer as ArrayBuffer], {
+          type: params.audio.mimeType
+        }),
+        params.audio.fileName ?? "audio.bin"
+      );
+      appendProviderRequestMetadata(formData, params.providerRequestMetadata);
+
+      const response = await postFormData(config, "/audio/transcriptions", formData);
+      const payload = await parseJson(response);
+      assertSuccess(response, payload, "openaiCompatible");
+
+      return {
+        text: String(payload.text ?? ""),
+        usage: payload.usage && typeof payload.usage === "object"
+          ? {
+              inputTokens: Number(payload.usage.prompt_tokens ?? 0),
+              outputTokens: Number(payload.usage.completion_tokens ?? 0)
+            }
+          : null
+      };
     }
   };
 }
@@ -409,6 +541,15 @@ function createOpenAiResponsesV1Adapter(): ModelProviderAdapter {
     },
     async embed(config, params, context) {
       return createOpenAiChatV1Adapter().embed(config, params, context);
+    },
+    async generateImage(config, params, context) {
+      return createOpenAiChatV1Adapter().generateImage(config, params, context);
+    },
+    async synthesizeSpeech(config, params, context) {
+      return createOpenAiChatV1Adapter().synthesizeSpeech(config, params, context);
+    },
+    async transcribeAudio(config, params, context) {
+      return createOpenAiChatV1Adapter().transcribeAudio(config, params, context);
     }
   };
 }
@@ -513,6 +654,15 @@ function createAnthropicMessagesV1Adapter(): ModelProviderAdapter {
           retriable: false
         })
       );
+    },
+    async generateImage() {
+      throw createUnsupportedModeError("anthropic", "image");
+    },
+    async synthesizeSpeech() {
+      throw createUnsupportedModeError("anthropic", "speech");
+    },
+    async transcribeAudio() {
+      throw createUnsupportedModeError("anthropic", "transcription");
     }
   };
 }
@@ -534,6 +684,25 @@ async function postJson(
       ...config.headers
     },
     body: JSON.stringify(body)
+  });
+}
+
+async function postFormData(
+  config: ProviderConfig,
+  path: string,
+  body: FormData
+): Promise<Response> {
+  if (!config.baseUrl) {
+    throw new Error("Provider registry error: baseUrl is required.");
+  }
+
+  return fetch(buildProviderUrl(config.baseUrl, path), {
+    method: "POST",
+    headers: {
+      ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+      ...(config.headers ?? {})
+    },
+    body
   });
 }
 
@@ -615,6 +784,35 @@ function createStructuredOutputError(provider: string): Error {
       code: "SCHEMA_VALIDATION_FAILED",
       provider,
       retriable: false
+    })
+  );
+}
+
+function appendProviderRequestMetadata(
+  formData: FormData,
+  metadata: Record<string, unknown> | undefined
+) {
+  if (!metadata) {
+    return;
+  }
+
+  for (const [key, value] of Object.entries(metadata)) {
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      formData.set(key, String(value));
+    }
+  }
+}
+
+function createUnsupportedModeError(provider: string, mode: SupportedMode): Error {
+  return new Error(
+    JSON.stringify({
+      name: "ModelGatewayError",
+      code: "PROVIDER_ERROR",
+      provider,
+      retriable: false,
+      details: {
+        mode
+      }
     })
   );
 }

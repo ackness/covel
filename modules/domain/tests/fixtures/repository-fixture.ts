@@ -1,6 +1,6 @@
-import type { DomainRepositories } from "../../src/index.js";
+import type { DomainRepositories, DomainRepositoriesWithPackageStateAndJobs } from "../../src/index.js";
 
-export function createRepositoryFixture(): DomainRepositories {
+export function createRepositoryFixture(): DomainRepositories & DomainRepositoriesWithPackageStateAndJobs {
   const worlds = new Map<string, Awaited<ReturnType<DomainRepositories["worlds"]["getById"]>> extends infer T ? Exclude<T, null> : never>();
   const sessions = new Map<string, Awaited<ReturnType<DomainRepositories["sessions"]["getById"]>> extends infer T ? Exclude<T, null> : never>();
   const messages = new Map<string, import("../../src/index.js").Message>();
@@ -9,6 +9,8 @@ export function createRepositoryFixture(): DomainRepositories {
   const memoryDocuments = new Map<string, import("../../src/index.js").MemoryDocument>();
   const retrievalRuns = new Map<string, import("../../src/index.js").RetrievalRun>();
   const traceRecords = new Map<string, import("../../src/index.js").TraceRecord>();
+  const packageState = new Map<string, import("../../src/index.js").PackageStateRecord>();
+  const jobs = new Map<string, import("../../src/index.js").JobRecord>();
 
   return {
     worlds: {
@@ -87,6 +89,41 @@ export function createRepositoryFixture(): DomainRepositories {
       },
       async listByTraceId(traceId) {
         return Array.from(traceRecords.values()).filter((record) => record.traceId === traceId);
+      }
+    },
+    packageState: {
+      async save(record) {
+        packageState.set(
+          `${record.scope}:${record.ownerId}:${record.packageName}:${record.collection}:${record.key}`,
+          record
+        );
+      },
+      async get(input) {
+        return packageState.get(
+          `${input.scope}:${input.ownerId}:${input.packageName}:${input.collection}:${input.key}`
+        ) ?? null;
+      },
+      async listByCollection(input) {
+        return Array.from(packageState.values()).filter((record) =>
+          record.scope === input.scope &&
+          record.ownerId === input.ownerId &&
+          record.packageName === input.packageName &&
+          record.collection === input.collection
+        );
+      }
+    },
+    jobs: {
+      async save(record) {
+        jobs.set(record.id, record);
+      },
+      async getById(id) {
+        return jobs.get(id) ?? null;
+      },
+      async listBySessionId(sessionId) {
+        return Array.from(jobs.values()).filter((record) => record.sessionId === sessionId);
+      },
+      async listByStatus(status) {
+        return Array.from(jobs.values()).filter((record) => record.status === status);
       }
     }
   };

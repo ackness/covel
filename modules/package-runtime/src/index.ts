@@ -5,20 +5,33 @@ export {
 } from "./error.js";
 export {
   PackageManifestSchema,
+  type ArtifactTypeContribution,
   type BlockContribution,
+  type BlockTypeContribution,
+  type CapabilityContribution,
   type CommandContribution,
   type ContextContribution,
+  type ContextProviderContribution,
+  type HookContribution,
   type PackageManifest,
+  type PackageSetting,
+  type PackageState,
   type RendererContribution
 } from "./manifest.js";
 export { resolvePackageRelativePath } from "./path.js";
 export {
+  type PackageCapabilityModule,
+  type PackageContextProviderModule,
   PackageRuntime,
   type PackageCommandModule,
+  type PackageHookModule,
   type PackageRuntimeOptions,
+  type RegisteredArtifactType,
   type RegisteredBlock,
+  type RegisteredCapability,
   type RegisteredCommand,
   type RegisteredContextProvider,
+  type RegisteredHook,
   type RegisteredRenderer,
   type RuntimePackageRecord
 } from "./runtime.js";

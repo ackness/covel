@@ -20,6 +20,18 @@ export {
   type BlockResponse
 } from "./block.js";
 export {
+  JobRecordSchema,
+  JobStatusSchema,
+  type JobRecord,
+  type JobStatus
+} from "./job.js";
+export {
+  PackageStateRecordSchema,
+  PackageStateScopeSchema,
+  type PackageStateRecord,
+  type PackageStateScope
+} from "./package-state.js";
+export {
   TraceRecordSchema,
   type TraceRecord
 } from "./trace.js";

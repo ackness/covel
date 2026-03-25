@@ -5,19 +5,27 @@ export {
 export {
   createProviderRegistry,
   type EmbeddingResult,
+  type GeneratedImage,
+  type ImageGenerationParams,
+  type ImageGenerationResult,
   type ModelProviderAdapter,
   type ProviderLifecycleHook,
   type ModelRequestContext,
   type ObjectGenerationParams,
   type ProviderConfig,
+  type SpeechSynthesisParams,
+  type SpeechSynthesisResult,
   type StreamEvent,
-  type TextGenerationParams
+  type TextGenerationParams,
+  type TranscriptionParams,
+  type TranscriptionResult
 } from "./provider-registry.js";
 export {
   createModelProfileRegistry,
   type ModelProfile,
   type PresetMetadata,
-  type ProviderProtocol
+  type ProviderProtocol,
+  type SupportedMode
 } from "./model-profile-registry.js";
 export {
   createModelGateway

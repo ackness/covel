@@ -5,10 +5,16 @@ export interface World {
   createdAt: Date;
 }
 
+export type TaskBindings = Record<string, string>;
+
+export const STORY_NARRATION_TASK = "story.narration";
+
 export interface Session {
   id: string;
   worldId: string;
   status: "active" | "waiting_for_input" | "archived";
+  presetId?: string;
+  taskBindings?: TaskBindings;
   createdAt: Date;
 }
 
@@ -72,6 +78,31 @@ export interface TraceRecord {
   createdAt: Date;
 }
 
+export interface PackageStateRecord {
+  scope: "world" | "session";
+  ownerId: string;
+  packageName: string;
+  collection: string;
+  key: string;
+  value: Record<string, unknown>;
+  updatedAt: Date;
+}
+
+export interface JobRecord {
+  id: string;
+  packageName: string;
+  jobType: string;
+  sessionId?: string;
+  status: "queued" | "running" | "completed" | "failed";
+  input: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  error?: string;
+  attempt: number;
+  createdAt: Date;
+  startedAt?: Date;
+  completedAt?: Date;
+}
+
 const SESSION_STATUSES = new Set<Session["status"]>([
   "active",
   "waiting_for_input",
@@ -82,6 +113,13 @@ const MESSAGE_ROLES = new Set<Message["role"]>([
   "system",
   "user",
   "assistant"
+]);
+
+const JOB_STATUSES = new Set<JobRecord["status"]>([
+  "queued",
+  "running",
+  "completed",
+  "failed"
 ]);
 
 function assertNonEmptyString(value: string, label: string, entity: string): void {
@@ -127,6 +165,13 @@ export function createSession(props: Session): Session {
 
   if (!SESSION_STATUSES.has(props.status)) {
     throw new Error("session invariant failed: status is unsupported.");
+  }
+
+  if (props.taskBindings) {
+    for (const [task, presetId] of Object.entries(props.taskBindings)) {
+      assertNonEmptyString(task, "taskBindings.task", "session");
+      assertNonEmptyString(presetId, "taskBindings.presetId", "session");
+    }
   }
 
   return { ...props };
@@ -195,6 +240,42 @@ export function createTraceRecord(props: TraceRecord): TraceRecord {
   assertNonEmptyString(props.component, "component", "trace");
   assertNonEmptyString(props.eventType, "eventType", "trace");
   assertValidDate(props.createdAt, "createdAt", "trace");
+
+  return { ...props };
+}
+
+export function createPackageStateRecord(props: PackageStateRecord): PackageStateRecord {
+  assertNonEmptyString(props.ownerId, "ownerId", "package-state");
+  assertNonEmptyString(props.packageName, "packageName", "package-state");
+  assertNonEmptyString(props.collection, "collection", "package-state");
+  assertNonEmptyString(props.key, "key", "package-state");
+  assertValidDate(props.updatedAt, "updatedAt", "package-state");
+
+  if (props.scope !== "world" && props.scope !== "session") {
+    throw new Error("package-state invariant failed: scope is unsupported.");
+  }
+
+  return { ...props };
+}
+
+export function createJobRecord(props: JobRecord): JobRecord {
+  assertNonEmptyString(props.id, "id", "job");
+  assertNonEmptyString(props.packageName, "packageName", "job");
+  assertNonEmptyString(props.jobType, "jobType", "job");
+  assertValidDate(props.createdAt, "createdAt", "job");
+  assertNonNegativeNumber(props.attempt, "attempt", "job");
+
+  if (!JOB_STATUSES.has(props.status)) {
+    throw new Error("job invariant failed: status is unsupported.");
+  }
+
+  if (props.startedAt) {
+    assertValidDate(props.startedAt, "startedAt", "job");
+  }
+
+  if (props.completedAt) {
+    assertValidDate(props.completedAt, "completedAt", "job");
+  }
 
   return { ...props };
 }

@@ -13,14 +13,16 @@ import {
 const tempRoots: string[] = [];
 
 describe("PackageManifestSchema", () => {
-  it("accepts the v1 minimal manifest shape", () => {
+  it("accepts the legacy v1 manifest shape and normalizes contribution aliases", () => {
     const manifest = {
       schemaVersion: "1.0",
       name: "core-guide",
       version: "0.1.0",
       description: "Guide and interactive choice package",
+      kind: "core",
       scopes: ["world", "session"],
       permissions: ["read:world", "read:session", "emit:block"],
+      dependencies: [],
       modelPolicy: {
         preferredTier: "small"
       },
@@ -58,11 +60,99 @@ describe("PackageManifestSchema", () => {
             name: "story-image",
             entry: "client/renderers/story-image.tsx"
           }
-        ]
-      }
+        ],
+        hooks: [],
+        capabilities: [],
+        artifactTypes: []
+      },
+      settings: [],
+      state: []
     };
 
-    expect(PackageManifestSchema.parse(manifest)).toEqual(manifest);
+    expect(PackageManifestSchema.parse(manifest)).toMatchObject({
+      contributes: {
+        context: manifest.contributes.context,
+        contextProviders: manifest.contributes.context,
+        blocks: manifest.contributes.blocks,
+        blockTypes: manifest.contributes.blocks,
+        commands: manifest.contributes.commands,
+        renderers: manifest.contributes.renderers,
+        hooks: [],
+        capabilities: [],
+        artifactTypes: []
+      }
+    });
+  });
+
+  it("accepts the expanded v1 manifest shape with hooks, capabilities, artifact types, settings, and state", () => {
+    const manifest = createManifest({
+      contributes: {
+        contextProviders: [
+          {
+            id: "guide-context",
+            entry: "server/context.ts",
+            reads: ["world", "session"],
+            writes: []
+          }
+        ],
+        commands: [],
+        hooks: [
+          {
+            id: "guide-after-turn",
+            phase: "afterNarration",
+            trigger: {
+              type: "event",
+              event: "narration.completed"
+            },
+            entry: "server/hooks/after-turn.ts"
+          }
+        ],
+        capabilities: [
+          {
+            id: "guide.generate",
+            type: "workflow",
+            entry: "server/capabilities/generate.ts",
+            inputSchema: "schemas/capabilities/generate.input.json",
+            outputSchema: "schemas/capabilities/generate.output.json",
+            timeoutMs: 3000
+          }
+        ],
+        blockTypes: [],
+        renderers: [],
+        artifactTypes: [
+          {
+            type: "guide-card",
+            kind: "card",
+            mediaType: "application/json"
+          }
+        ]
+      },
+      settings: [
+        {
+          key: "guide.auto",
+          type: "boolean",
+          default: true,
+          scope: "session"
+        }
+      ],
+      state: [
+        {
+          collection: "guide-state",
+          scope: "session",
+          schema: "schemas/state/guide-state.json"
+        }
+      ]
+    });
+
+    expect(PackageManifestSchema.parse(manifest)).toMatchObject({
+      settings: manifest.settings,
+      state: manifest.state,
+      contributes: {
+        hooks: manifest.contributes.hooks,
+        capabilities: manifest.contributes.capabilities,
+        artifactTypes: manifest.contributes.artifactTypes
+      }
+    });
   });
 
   it("rejects manifests missing required top-level fields", () => {
@@ -121,7 +211,7 @@ describe("PackageRuntime", () => {
       manifest: createManifest({
         name: "core-guide",
         contributes: {
-          context: [
+          contextProviders: [
             {
               id: "guide-context",
               entry: "server/context.ts",
@@ -138,7 +228,27 @@ describe("PackageRuntime", () => {
               resume: false
             }
           ],
-          blocks: [
+          hooks: [
+            {
+              id: "guide-after-turn",
+              phase: "afterNarration",
+              trigger: {
+                type: "event",
+                event: "narration.completed"
+              },
+              entry: "server/hooks/after-turn.ts"
+            }
+          ],
+          capabilities: [
+            {
+              id: "guide.generate",
+              type: "workflow",
+              entry: "server/capabilities/generate.ts",
+              inputSchema: "schemas/capabilities/generate.input.json",
+              outputSchema: "schemas/capabilities/generate.output.json"
+            }
+          ],
+          blockTypes: [
             {
               type: "choices",
               dataSchema: "schemas/blocks/choices.data.json",
@@ -154,6 +264,13 @@ describe("PackageRuntime", () => {
               name: "choices",
               entry: "client/renderers/choices.tsx"
             }
+          ],
+          artifactTypes: [
+            {
+              type: "guide-card",
+              kind: "card",
+              mediaType: "application/json"
+            }
           ]
         }
       }),
@@ -168,6 +285,8 @@ describe("PackageRuntime", () => {
 
     expect(runtime.getCommand("guide")).toBeUndefined();
     expect(runtime.getBlock("choices")).toBeUndefined();
+    expect(runtime.getHook("guide-after-turn")).toBeUndefined();
+    expect(runtime.getCapability("guide.generate")).toBeUndefined();
 
     const enabledPackage = await runtime.enable("core-guide");
 
@@ -177,8 +296,17 @@ describe("PackageRuntime", () => {
       id: "guide-context",
       packageName: "core-guide"
     });
+    expect(runtime.getContextProvider("guide-context")?.build).toBeTypeOf("function");
     expect(runtime.getCommand("guide")).toMatchObject({
       name: "guide",
+      packageName: "core-guide"
+    });
+    expect(runtime.getHook("guide-after-turn")).toMatchObject({
+      id: "guide-after-turn",
+      packageName: "core-guide"
+    });
+    expect(runtime.getCapability("guide.generate")).toMatchObject({
+      id: "guide.generate",
       packageName: "core-guide"
     });
     expect(runtime.getBlock("choices")).toMatchObject({
@@ -189,6 +317,10 @@ describe("PackageRuntime", () => {
       name: "choices",
       packageName: "core-guide"
     });
+    expect(runtime.getArtifactType("guide-card")).toMatchObject({
+      type: "guide-card",
+      packageName: "core-guide"
+    });
   });
 
   it("unregisters package contributions when disabled", async () => {
@@ -197,7 +329,7 @@ describe("PackageRuntime", () => {
       manifest: createManifest({
         name: "core-guide",
         contributes: {
-          context: [],
+          contextProviders: [],
           commands: [
             {
               name: "guide",
@@ -207,8 +339,11 @@ describe("PackageRuntime", () => {
               resume: false
             }
           ],
-          blocks: [],
-          renderers: []
+          hooks: [],
+          capabilities: [],
+          blockTypes: [],
+          renderers: [],
+          artifactTypes: []
         }
       }),
       skill: "# Guide"
@@ -237,7 +372,7 @@ describe("PackageRuntime", () => {
       manifest: createManifest({
         name: "unsafe-package",
         contributes: {
-          context: [],
+          contextProviders: [],
           commands: [
             {
               name: "unsafe",
@@ -247,7 +382,23 @@ describe("PackageRuntime", () => {
               resume: false
             }
           ],
-          blocks: [
+          hooks: [
+            {
+              id: "unsafe-hook",
+              phase: "afterNarration",
+              entry: "../server/hooks/unsafe.ts"
+            }
+          ],
+          capabilities: [
+            {
+              id: "unsafe-capability",
+              type: "script",
+              entry: "server/capabilities/unsafe.ts",
+              inputSchema: "../schemas/capabilities/unsafe.input.json",
+              outputSchema: "schemas/capabilities/unsafe.output.json"
+            }
+          ],
+          blockTypes: [
             {
               type: "unsafe-block",
               dataSchema: "schemas/blocks/unsafe.data.json",
@@ -258,7 +409,8 @@ describe("PackageRuntime", () => {
               }
             }
           ],
-          renderers: []
+          renderers: [],
+          artifactTypes: []
         }
       }),
       skill: "# Unsafe"
@@ -279,8 +431,10 @@ describe("PackageRuntime", () => {
 function createManifest(
   overrides: Partial<{
     name: string;
+    kind: string;
+    dependencies: string[];
     contributes: {
-      context: Array<{
+      contextProviders: Array<{
         id: string;
         entry: string;
         reads: string[];
@@ -293,7 +447,21 @@ function createManifest(
         entry: string;
         resume: boolean;
       }>;
-      blocks: Array<{
+      hooks: Array<{
+        id: string;
+        phase: string;
+        trigger?: Record<string, unknown>;
+        entry: string;
+      }>;
+      capabilities: Array<{
+        id: string;
+        type: "builtin" | "script" | "model" | "workflow" | "job";
+        entry: string;
+        inputSchema: string;
+        outputSchema: string;
+        timeoutMs?: number;
+      }>;
+      blockTypes: Array<{
         type: string;
         dataSchema: string;
         responseSchema: string;
@@ -306,7 +474,23 @@ function createManifest(
         name: string;
         entry: string;
       }>;
+      artifactTypes: Array<{
+        type: string;
+        kind: string;
+        mediaType: string;
+      }>;
     };
+    settings: Array<{
+      key: string;
+      type: string;
+      default?: unknown;
+      scope: string;
+    }>;
+    state: Array<{
+      collection: string;
+      scope: string;
+      schema: string;
+    }>;
   }> = {}
 ) {
   return {
@@ -314,17 +498,25 @@ function createManifest(
     name: overrides.name ?? "core-guide",
     version: "0.1.0",
     description: "Guide and interactive choice package",
+    kind: overrides.kind ?? "core",
+    defaultEnabled: true,
     scopes: ["world", "session"],
     permissions: ["read:world", "read:session", "emit:block"],
+    dependencies: overrides.dependencies ?? [],
     modelPolicy: {
       preferredTier: "small"
     },
     contributes: overrides.contributes ?? {
-      context: [],
+      contextProviders: [],
       commands: [],
-      blocks: [],
-      renderers: []
-    }
+      hooks: [],
+      capabilities: [],
+      blockTypes: [],
+      renderers: [],
+      artifactTypes: []
+    },
+    settings: overrides.settings ?? [],
+    state: overrides.state ?? []
   };
 }
 
@@ -369,5 +561,77 @@ async function writePackage(
     const schemaPath = join(packageRoot, command.argsSchema);
     await mkdir(dirname(schemaPath), { recursive: true });
     await writeFile(schemaPath, JSON.stringify({ type: "object" }, null, 2), "utf8");
+  }
+
+  for (const contextProvider of input.manifest.contributes.contextProviders ?? []) {
+    const contextPath = join(packageRoot, contextProvider.entry);
+    await mkdir(dirname(contextPath), { recursive: true });
+    await writeFile(
+      contextPath,
+      [
+        "export const contextProvider = {",
+        "  async build() {",
+        "    return [];",
+        "  }",
+        "};"
+      ].join("\n"),
+      "utf8"
+    );
+  }
+
+  for (const hook of input.manifest.contributes.hooks ?? []) {
+    const hookPath = join(packageRoot, hook.entry);
+    await mkdir(dirname(hookPath), { recursive: true });
+    await writeFile(
+      hookPath,
+      [
+        "export const hook = {",
+        "  async execute() {",
+        `    return { hookId: \"${hook.id}\" };`,
+        "  }",
+        "};"
+      ].join("\n"),
+      "utf8"
+    );
+  }
+
+  for (const capability of input.manifest.contributes.capabilities ?? []) {
+    const capabilityPath = join(packageRoot, capability.entry);
+    await mkdir(dirname(capabilityPath), { recursive: true });
+    await writeFile(
+      capabilityPath,
+      [
+        "export const capability = {",
+        "  async execute() {",
+        `    return { capabilityId: \"${capability.id}\" };`,
+        "  }",
+        "};"
+      ].join("\n"),
+      "utf8"
+    );
+
+    const inputSchemaPath = join(packageRoot, capability.inputSchema);
+    await mkdir(dirname(inputSchemaPath), { recursive: true });
+    await writeFile(inputSchemaPath, JSON.stringify({ type: "object" }, null, 2), "utf8");
+
+    const outputSchemaPath = join(packageRoot, capability.outputSchema);
+    await mkdir(dirname(outputSchemaPath), { recursive: true });
+    await writeFile(outputSchemaPath, JSON.stringify({ type: "object" }, null, 2), "utf8");
+  }
+
+  for (const block of input.manifest.contributes.blockTypes ?? []) {
+    const dataSchemaPath = join(packageRoot, block.dataSchema);
+    await mkdir(dirname(dataSchemaPath), { recursive: true });
+    await writeFile(dataSchemaPath, JSON.stringify({ type: "object" }, null, 2), "utf8");
+
+    const responseSchemaPath = join(packageRoot, block.responseSchema);
+    await mkdir(dirname(responseSchemaPath), { recursive: true });
+    await writeFile(responseSchemaPath, JSON.stringify({ type: "object" }, null, 2), "utf8");
+  }
+
+  for (const state of input.manifest.state ?? []) {
+    const stateSchemaPath = join(packageRoot, state.schema);
+    await mkdir(dirname(stateSchemaPath), { recursive: true });
+    await writeFile(stateSchemaPath, JSON.stringify({ type: "object" }, null, 2), "utf8");
   }
 }

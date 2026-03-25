@@ -8,7 +8,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   createArchiveVersion,
   createArtifact,
+  createJobRecord,
   createMessage,
+  createPackageStateRecord,
   createSession,
   createWorld
 } from "../../domain/src/index.js";
@@ -252,5 +254,75 @@ describe("createPostgresStoragePort", () => {
     await expect(secondArtifactStore.readContent(fixtures.artifact.id)).resolves.toEqual(
       Buffer.from([1, 2, 3])
     );
+  });
+
+  it("persists package state, jobs, and richer pending blocks across adapter restarts", async () => {
+    const harness = createPgMemHarness();
+    const firstPort = await createPort(harness);
+    const firstRepositories = await firstPort.createRepositories();
+
+    const packageState = createPackageStateRecord({
+      scope: "session",
+      ownerId: "session-1",
+      packageName: "director-choices",
+      collection: "choice_state",
+      key: "turn-1",
+      value: {
+        selected: "opt_a"
+      },
+      updatedAt: new Date("2026-01-01T00:00:10.000Z")
+    });
+    const job = createJobRecord({
+      id: "job-1",
+      packageName: "story-image",
+      jobType: "scene-image",
+      sessionId: "session-1",
+      status: "queued",
+      input: {
+        scene: "Northreach"
+      },
+      attempt: 0,
+      createdAt: new Date("2026-01-01T00:00:11.000Z")
+    });
+
+    await firstRepositories.packageState.save(packageState);
+    await firstRepositories.jobs.save(job);
+    await firstRepositories.pendingBlocks.save({
+      blockId: "blk_01",
+      sessionId: "session-1",
+      flowId: "flow-1",
+      turnId: "turn-1",
+      packageName: "director-choices",
+      resumeHandler: "director.resumeChoice",
+      blockEnvelope: {
+        id: "blk_01",
+        type: "choice_set"
+      }
+    });
+
+    const secondPort = await createPort(harness);
+    const secondRepositories = await secondPort.createRepositories();
+
+    await expect(secondRepositories.packageState.get({
+      scope: "session",
+      ownerId: "session-1",
+      packageName: "director-choices",
+      collection: "choice_state",
+      key: "turn-1"
+    })).resolves.toEqual(packageState);
+    await expect(secondRepositories.jobs.getById("job-1")).resolves.toEqual(job);
+    await expect(secondRepositories.jobs.listBySessionId("session-1")).resolves.toEqual([job]);
+    await expect(secondRepositories.pendingBlocks.getByBlockId("blk_01")).resolves.toEqual({
+      blockId: "blk_01",
+      sessionId: "session-1",
+      flowId: "flow-1",
+      turnId: "turn-1",
+      packageName: "director-choices",
+      resumeHandler: "director.resumeChoice",
+      blockEnvelope: {
+        id: "blk_01",
+        type: "choice_set"
+      }
+    });
   });
 });

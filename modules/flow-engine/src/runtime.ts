@@ -54,6 +54,9 @@ export interface PendingBlockRecord {
   sessionId: string;
   flowId: string;
   turnId: string;
+  blockEnvelope?: Record<string, unknown>;
+  packageName?: string;
+  resumeHandler?: string;
 }
 
 export interface PendingBlockStore {
@@ -289,7 +292,11 @@ export class FlowEngine {
       phase: "resume"
     }));
 
-    const prompt = JSON.stringify(response.response);
+    const prompt = JSON.stringify({
+      blockType: pending.block.type,
+      handler: pending.block.interaction.resumeHandler ?? pending.block.meta.handler ?? null,
+      response: response.response
+    });
     const result = await this.dependencies.modelGateway.generateText({
       sessionId,
       prompt,
@@ -389,7 +396,10 @@ export class FlowEngine {
       blockId: input.block.id,
       sessionId: input.block.meta.sessionId,
       flowId: input.flowId,
-      turnId: input.turnId
+      turnId: input.turnId,
+      blockEnvelope: input.block as unknown as Record<string, unknown>,
+      packageName: input.block.meta.package,
+      resumeHandler: input.block.interaction.resumeHandler ?? input.block.meta.handler
     });
   }
 
@@ -404,13 +414,22 @@ export class FlowEngine {
       return null;
     }
 
+    if (persisted.blockEnvelope && isBlockEnvelopeLike(persisted.blockEnvelope)) {
+      return {
+        block: persisted.blockEnvelope,
+        flowId: persisted.flowId,
+        turnId: persisted.turnId
+      };
+    }
+
     return {
       block: {
         id: persisted.blockId,
         type: "pending",
         version: "1.0",
         meta: {
-          package: "runtime",
+          package: persisted.packageName ?? "runtime",
+          ...(persisted.resumeHandler ? { handler: persisted.resumeHandler } : {}),
           requestId: "restored",
           traceId: "trace_local",
           sessionId: persisted.sessionId,
@@ -420,7 +439,8 @@ export class FlowEngine {
           requiresResponse: true,
           responseSchema: "",
           submitAs: "block_response",
-          resumePolicy: "resume_current_flow"
+          resumePolicy: "resume_current_flow",
+          ...(persisted.resumeHandler ? { resumeHandler: persisted.resumeHandler } : {})
         },
         data: {}
       },
@@ -439,4 +459,18 @@ function translateFlowError(
   }
 
   return locale === "en" ? "Pending block not found." : "未找到待响应的交互块。";
+}
+
+function isBlockEnvelopeLike(value: Record<string, unknown>): value is BlockEnvelope {
+  return (
+    typeof value.id === "string" &&
+    typeof value.type === "string" &&
+    typeof value.version === "string" &&
+    typeof value.meta === "object" &&
+    value.meta !== null &&
+    typeof value.interaction === "object" &&
+    value.interaction !== null &&
+    typeof value.data === "object" &&
+    value.data !== null
+  );
 }

@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   createArchiveVersion,
   createArtifact,
+  createJobRecord,
   createMemoryDocument,
   createMessage,
+  createPackageStateRecord,
   createRetrievalRun,
   createSession,
   createTraceRecord,
@@ -143,5 +145,80 @@ describe("repository port contracts", () => {
     await repositories.traceRecords.save(record);
 
     await expect(repositories.traceRecords.listByTraceId(record.traceId)).resolves.toEqual([record]);
+  });
+
+  it("PackageStateRepository stores package-scoped state by collection", async () => {
+    const repositories = createRepositoryFixture();
+    const record = createPackageStateRecord({
+      scope: "session",
+      ownerId: "session-1",
+      packageName: "director-choices",
+      collection: "choice_state",
+      key: "turn-1",
+      value: {
+        selected: "opt_a"
+      },
+      updatedAt: new Date("2026-01-01T00:00:00.000Z")
+    });
+
+    await repositories.packageState.save(record);
+
+    await expect(
+      repositories.packageState.get({
+        scope: record.scope,
+        ownerId: record.ownerId,
+        packageName: record.packageName,
+        collection: record.collection,
+        key: record.key
+      })
+    ).resolves.toEqual(record);
+    await expect(
+      repositories.packageState.listByCollection({
+        scope: record.scope,
+        ownerId: record.ownerId,
+        packageName: record.packageName,
+        collection: record.collection
+      })
+    ).resolves.toEqual([record]);
+  });
+
+  it("JobRepository stores jobs and filters by session and status", async () => {
+    const repositories = createRepositoryFixture();
+    const queued = createJobRecord({
+      id: "job-1",
+      packageName: "story-image",
+      jobType: "generate-scene-image",
+      sessionId: "session-1",
+      status: "queued",
+      input: {
+        prompt: "northreach at dusk"
+      },
+      attempt: 0,
+      createdAt: new Date("2026-01-01T00:00:00.000Z")
+    });
+    const completed = createJobRecord({
+      id: "job-2",
+      packageName: "story-image",
+      jobType: "generate-scene-image",
+      sessionId: "session-1",
+      status: "completed",
+      input: {
+        prompt: "northreach at dawn"
+      },
+      output: {
+        artifactId: "artifact-1"
+      },
+      attempt: 1,
+      createdAt: new Date("2026-01-01T00:00:01.000Z"),
+      startedAt: new Date("2026-01-01T00:00:02.000Z"),
+      completedAt: new Date("2026-01-01T00:00:03.000Z")
+    });
+
+    await repositories.jobs.save(queued);
+    await repositories.jobs.save(completed);
+
+    await expect(repositories.jobs.getById(queued.id)).resolves.toEqual(queued);
+    await expect(repositories.jobs.listBySessionId("session-1")).resolves.toEqual([queued, completed]);
+    await expect(repositories.jobs.listByStatus("queued")).resolves.toEqual([queued]);
   });
 });

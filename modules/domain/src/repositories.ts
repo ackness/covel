@@ -1,8 +1,10 @@
 import type {
   ArchiveVersion,
   Artifact,
+  JobRecord,
   MemoryDocument,
   Message,
+  PackageStateRecord,
   RetrievalRun,
   Session,
   TraceRecord,
@@ -53,6 +55,30 @@ export interface TraceRecordRepository {
   listByTraceId(traceId: string): Promise<TraceRecord[]>;
 }
 
+export interface PackageStateRepository {
+  save(record: PackageStateRecord): Promise<void>;
+  get(input: {
+    scope: PackageStateRecord["scope"];
+    ownerId: string;
+    packageName: string;
+    collection: string;
+    key: string;
+  }): Promise<PackageStateRecord | null>;
+  listByCollection(input: {
+    scope: PackageStateRecord["scope"];
+    ownerId: string;
+    packageName: string;
+    collection: string;
+  }): Promise<PackageStateRecord[]>;
+}
+
+export interface JobRepository {
+  save(record: JobRecord): Promise<void>;
+  getById(id: string): Promise<JobRecord | null>;
+  listBySessionId(sessionId: string): Promise<JobRecord[]>;
+  listByStatus(status: JobRecord["status"]): Promise<JobRecord[]>;
+}
+
 export interface DomainRepositories {
   worlds: WorldRepository;
   sessions: SessionRepository;
@@ -62,4 +88,9 @@ export interface DomainRepositories {
   memoryDocuments: MemoryDocumentRepository;
   retrievalRuns: RetrievalRunRepository;
   traceRecords: TraceRecordRepository;
+}
+
+export interface DomainRepositoriesWithPackageStateAndJobs {
+  packageState: PackageStateRepository;
+  jobs: JobRepository;
 }

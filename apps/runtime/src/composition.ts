@@ -10,6 +10,7 @@ import { createObservability } from "../../../modules/observability/src/index.js
 import { PackageRuntime } from "../../../modules/package-runtime/src/index.js";
 import { createInMemoryStorageRepositories, createPostgresStoragePort } from "../../../modules/storage/src/index.js";
 import { DEFAULT_LOCALE, type SupportedLocale } from "../../../modules/contracts/src/index.js";
+import { STORY_NARRATION_TASK } from "../../../modules/domain/src/index.js";
 import type { PersistedPresetMetadata, PersistedPresetRecord } from "../../../modules/storage/src/index.js";
 import {
   createLocaleSystemInstruction,
@@ -77,6 +78,32 @@ function createDemoAdapter() {
           inputTokens: 0,
           outputTokens: 0
         }
+      };
+    },
+    async generateImage(_config: unknown, params: { prompt: string }) {
+      return {
+        images: [
+          {
+            mimeType: "image/png",
+            dataBase64: Buffer.from(`demo-image:${params.prompt}`).toString("base64")
+          }
+        ],
+        usage: null
+      };
+    },
+    async synthesizeSpeech(_config: unknown, params: { text: string; format?: string }) {
+      return {
+        audio: {
+          mimeType: params.format ?? "audio/mpeg",
+          data: Buffer.from(`demo-speech:${params.text}`)
+        },
+        usage: null
+      };
+    },
+    async transcribeAudio(_config: unknown, params: { audio: { fileName?: string } }) {
+      return {
+        text: `demo transcription for ${params.audio.fileName ?? "audio"}`,
+        usage: null
       };
     }
   };
@@ -159,17 +186,28 @@ export async function createRuntimeComposition(input: {
     env.LIVE_LLM_PRIMARY_MODEL ??
     env.OPENAI_COMPATIBLE_MODEL ??
     "qwen3.5-flash";
+  const secondaryModel = env.LIVE_LLM_SECONDARY_MODEL;
   const baseUrl = hasProviderApiKey
     ? (providerBaseUrl ?? "https://dashscope.aliyuncs.com/compatible-mode/v1")
     : "in-memory://demo-provider";
   const apiKey = hasProviderApiKey ? providerApiKey : undefined;
+  const openRouterApiKey = env.OPENROUTER_API_KEY;
+  const openRouterBaseUrl = env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1";
+  const openRouterModel = env.OPENROUTER_MODEL;
+  const openRouterHeaders =
+    env.OPENROUTER_HTTP_REFERER || env.OPENROUTER_APP_NAME
+      ? {
+          ...(env.OPENROUTER_HTTP_REFERER ? { "HTTP-Referer": env.OPENROUTER_HTTP_REFERER } : {}),
+          ...(env.OPENROUTER_APP_NAME ? { "X-Title": env.OPENROUTER_APP_NAME } : {})
+        }
+      : undefined;
 
   const runtimeProfiles: ModelProfile[] = [
     {
       id: "small",
       tier: "small",
       provider: "openaiCompatible",
-      model: env.LIVE_LLM_SECONDARY_MODEL ?? primaryModel,
+      model: secondaryModel ?? primaryModel,
       contextWindow: 32_000,
       latencyClass: "low",
       costClass: "low",
@@ -207,6 +245,7 @@ export async function createRuntimeComposition(input: {
     }
   ];
 
+  const fallbackPresetIds: string[] = [];
   const runtimePreset: PresetMetadata = {
     id: "default-story",
     name: "Default story",
@@ -214,19 +253,74 @@ export async function createRuntimeComposition(input: {
     model: primaryModel,
     tier: "medium",
     baseUrl,
+    ...(fallbackPresetIds.length > 0 ? { fallbackPresetIds } : {}),
     supportedModes: ["text", "object", "stream"],
     enabled: true,
     isDefault: true,
     scope: "global"
   };
+  const runtimePresets: Array<PersistedPresetRecord> = [
+    {
+      ...runtimePreset,
+      apiKey
+    }
+  ];
+
+  if (secondaryModel && secondaryModel !== primaryModel) {
+    const secondaryPresetId = "fast-story";
+    fallbackPresetIds.push(secondaryPresetId);
+    runtimePresets.push({
+      id: secondaryPresetId,
+      name: "Fast story",
+      provider: "openaiCompatible",
+      model: secondaryModel,
+      tier: "small",
+      baseUrl,
+      supportedModes: ["text", "object", "stream"],
+      enabled: true,
+      isDefault: false,
+      scope: "global",
+      apiKey
+    });
+  }
+
+  if (
+    typeof openRouterApiKey === "string" &&
+    openRouterApiKey.length > 0 &&
+    typeof openRouterModel === "string" &&
+    openRouterModel.length > 0
+  ) {
+    const openRouterPresetId = "openrouter-story";
+    fallbackPresetIds.push(openRouterPresetId);
+    runtimePresets.push({
+      id: openRouterPresetId,
+      name: "OpenRouter story",
+      provider: "openrouter",
+      model: openRouterModel,
+      tier: "small",
+      baseUrl: openRouterBaseUrl,
+      supportedModes: ["text", "object", "stream"],
+      enabled: true,
+      isDefault: false,
+      scope: "global",
+      apiKey: openRouterApiKey
+    });
+  }
+
+  if (fallbackPresetIds.length > 0) {
+    runtimePreset.fallbackPresetIds = [...fallbackPresetIds];
+    runtimePresets[0] = {
+      ...runtimePresets[0],
+      fallbackPresetIds: [...fallbackPresetIds]
+    };
+  }
   const persistedPresets =
     storagePort && presetMetadataStore ? await presetMetadataStore.list() : [];
 
   if (presetMetadataStore && persistedPresets.length === 0) {
-    await presetMetadataStore.save({
-      ...runtimePreset,
-      apiKey
-    });
+    for (const preset of runtimePresets) {
+      await presetMetadataStore.save(preset);
+    }
   }
 
   const providerRegistry = createProviderRegistry({
@@ -237,12 +331,23 @@ export async function createRuntimeComposition(input: {
           baseUrl,
           apiKey
         }
-      }
+      },
+      ...(openRouterApiKey
+        ? {
+            openrouter: {
+              defaults: {
+                baseUrl: openRouterBaseUrl,
+                apiKey: openRouterApiKey,
+                ...(openRouterHeaders ? { headers: openRouterHeaders } : {})
+              }
+            }
+          }
+        : {})
     }
   });
   const profileRegistry = createModelProfileRegistry({
     runtimeProfiles,
-    runtimePresets: [runtimePreset],
+    runtimePresets: runtimePresets.map(({ apiKey: _apiKey, ...preset }) => preset),
     persistedPresets
   });
   const modelGateway = createModelGateway({
@@ -325,8 +430,14 @@ export async function createRuntimeComposition(input: {
         flowId: string;
         locale: SupportedLocale;
       }) {
+        const session = await repositories.sessions.getById(input.sessionId);
+        const activePresetId = session?.taskBindings?.[STORY_NARRATION_TASK] ?? session?.presetId ?? runtimePreset.id;
+        const activeTarget = profileRegistry.resolveTextTarget({
+          presetId: activePresetId
+        });
+        const activeModel = activeTarget.preset?.model ?? activeTarget.profile.model;
         const result = await modelGateway.generateText({
-          presetId: runtimePreset.id,
+          presetId: activePresetId,
           messages: [
             {
               role: "system",
@@ -347,7 +458,7 @@ export async function createRuntimeComposition(input: {
           component: "model-gateway",
           eventType: "model.completed",
           payload: {
-            model: primaryModel
+            model: activeModel
           },
           createdAt: new Date().toISOString()
         });
@@ -359,7 +470,7 @@ export async function createRuntimeComposition(input: {
           component: "model-gateway",
           eventType: "model.completed",
           payload: {
-            model: primaryModel
+            model: activeModel
           },
           createdAt: new Date()
         });

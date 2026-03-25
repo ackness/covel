@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   createArchiveVersion,
   createArtifact,
+  createJobRecord,
   createMemoryDocument,
   createMessage,
+  createPackageStateRecord,
   createRetrievalRun,
   createSession,
   createTraceRecord,
@@ -127,5 +129,70 @@ describe("createInMemoryStorageRepositories", () => {
     await expect(repositories.traceRecords.listByTraceId(traceRecord.traceId)).resolves.toEqual([
       traceRecord
     ]);
+  });
+
+  it("stores package state, jobs, and richer pending blocks", async () => {
+    const repositories = createInMemoryStorageRepositories();
+
+    const packageState = createPackageStateRecord({
+      scope: "session",
+      ownerId: "session-1",
+      packageName: "director-choices",
+      collection: "choice_state",
+      key: "turn-1",
+      value: {
+        selected: "opt_a"
+      },
+      updatedAt: new Date("2026-01-01T00:00:10.000Z")
+    });
+    const job = createJobRecord({
+      id: "job-1",
+      packageName: "story-image",
+      jobType: "scene-image",
+      sessionId: "session-1",
+      status: "queued",
+      input: {
+        scene: "Northreach"
+      },
+      attempt: 0,
+      createdAt: new Date("2026-01-01T00:00:11.000Z")
+    });
+
+    await repositories.packageState.save(packageState);
+    await repositories.jobs.save(job);
+    await repositories.pendingBlocks.save({
+      blockId: "blk_01",
+      sessionId: "session-1",
+      flowId: "flow-1",
+      turnId: "turn-1",
+      packageName: "director-choices",
+      resumeHandler: "director.resumeChoice",
+      blockEnvelope: {
+        id: "blk_01",
+        type: "choice_set"
+      }
+    });
+
+    await expect(repositories.packageState.get({
+      scope: "session",
+      ownerId: "session-1",
+      packageName: "director-choices",
+      collection: "choice_state",
+      key: "turn-1"
+    })).resolves.toEqual(packageState);
+    await expect(repositories.jobs.getById("job-1")).resolves.toEqual(job);
+    await expect(repositories.jobs.listByStatus("queued")).resolves.toEqual([job]);
+    await expect(repositories.pendingBlocks.getByBlockId("blk_01")).resolves.toEqual({
+      blockId: "blk_01",
+      sessionId: "session-1",
+      flowId: "flow-1",
+      turnId: "turn-1",
+      packageName: "director-choices",
+      resumeHandler: "director.resumeChoice",
+      blockEnvelope: {
+        id: "blk_01",
+        type: "choice_set"
+      }
+    });
   });
 });

@@ -25,7 +25,15 @@ function createHarness(options?: {
   const modelCalls: Array<{ sessionId: string; prompt: string; requestId: string; flowId: string; locale: string }> = [];
   const commandCalls: Array<{ commandText: string; sessionId: string; requestId: string; locale: string }> = [];
   let idCounter = 0;
-  const pendingBlocks = new Map<string, { blockId: string; sessionId: string; flowId: string; turnId: string }>();
+  const pendingBlocks = new Map<string, {
+    blockId: string;
+    sessionId: string;
+    flowId: string;
+    turnId: string;
+    blockEnvelope?: Record<string, unknown>;
+    packageName?: string;
+    resumeHandler?: string;
+  }>();
 
   const modelGateway: ModelGateway = {
     async generateText(input) {
@@ -184,6 +192,13 @@ describe("FlowEngine", () => {
       }
     });
     expect(harness.sessions.get("session-1")?.status).toBe("waiting_for_input");
+    expect(harness.pendingBlocks.get("block_4")).toMatchObject({
+      packageName: "core-guide",
+      blockEnvelope: expect.objectContaining({
+        id: "block_4",
+        type: "choices"
+      })
+    });
   });
 
   it("resumes a pending interactive block on submit_block_response and reuses the original flowId", async () => {
@@ -314,7 +329,9 @@ describe("FlowEngine", () => {
       blockId: emittedBlock.id,
       sessionId: "session-1",
       flowId: initialEvents[0]!.flowId,
-      turnId: emittedBlock.meta.turnId
+      turnId: emittedBlock.meta.turnId,
+      packageName: emittedBlock.meta.package,
+      blockEnvelope: emittedBlock as unknown as Record<string, unknown>
     });
 
     const resumeEvents = await resumedHarness.engine.handle({
@@ -339,6 +356,73 @@ describe("FlowEngine", () => {
       "flow.completed"
     ]);
     expect(resumeEvents.every((event) => event.flowId === initialEvents[0]?.flowId)).toBe(true);
+    expect(resumedHarness.modelCalls.at(-1)?.prompt).toContain("\"blockType\":\"choices\"");
+  });
+
+  it("prefers a persisted resume handler from the stored block envelope", async () => {
+    const harness = createHarness({
+      modelResult: {
+        content: "You continue from the stored resume handler.",
+        traceId: "trace_model"
+      }
+    });
+
+    harness.pendingBlocks.set("blk_saved", {
+      blockId: "blk_saved",
+      sessionId: "session-1",
+      flowId: "flow_saved",
+      turnId: "turn_saved",
+      packageName: "director-choices",
+      resumeHandler: "director.resumeChoice",
+      blockEnvelope: {
+        id: "blk_saved",
+        type: "choice_set",
+        version: "1.0",
+        meta: {
+          package: "director-choices",
+          handler: "director.resumeChoice",
+          requestId: "req_saved",
+          traceId: "tr_saved",
+          sessionId: "session-1",
+          turnId: "turn_saved"
+        },
+        interaction: {
+          requiresResponse: true,
+          responseSchema: "schemas/blocks/choice-set.response.json",
+          submitAs: "block_response",
+          resumePolicy: "resume_current_flow",
+          resumeHandler: "director.resumeChoice"
+        },
+        data: {
+          title: "Choose",
+          options: [{ id: "opt_a", label: "Advance" }]
+        }
+      }
+    });
+
+    const resumeEvents = await harness.engine.handle({
+      requestId: "req_saved_resume",
+      type: "submit_block_response",
+      sessionId: "session-1",
+      locale: "en",
+      payload: {
+        blockId: "blk_saved",
+        blockType: "choice_set",
+        sessionId: "session-1",
+        turnId: "turn_saved",
+        response: {
+          selected: "opt_a"
+        }
+      }
+    });
+
+    expect(resumeEvents.map((event) => event.type)).toEqual([
+      "flow.phase.changed",
+      "message.completed",
+      "flow.completed"
+    ]);
+    expect(harness.modelCalls.at(-1)?.prompt).toContain("\"handler\":\"director.resumeChoice\"");
+    expect(harness.pendingBlocks.has("blk_saved")).toBe(false);
   });
 
   it("uses the persisted pending block turnId when resuming instead of trusting the client payload", async () => {

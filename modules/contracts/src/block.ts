@@ -5,6 +5,7 @@ const JsonObject = z.record(z.string(), z.unknown());
 
 const BlockMetaSchema = z.object({
   package: NonEmptyString,
+  handler: NonEmptyString.optional(),
   requestId: NonEmptyString,
   traceId: NonEmptyString,
   sessionId: NonEmptyString,
@@ -16,7 +17,8 @@ const BlockInteractionSchema = z
     requiresResponse: z.boolean(),
     responseSchema: NonEmptyString.optional(),
     submitAs: NonEmptyString.optional(),
-    resumePolicy: NonEmptyString.optional()
+    resumePolicy: NonEmptyString.optional(),
+    resumeHandler: NonEmptyString.optional()
   })
   .superRefine((value, context) => {
     if (!value.requiresResponse) {

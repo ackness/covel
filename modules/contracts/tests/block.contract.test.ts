@@ -17,6 +17,7 @@ describe("BlockEnvelopeSchema", () => {
       version: "1.0",
       meta: {
         package: "core-guide",
+        handler: "guide.generateChoices",
         requestId: "req_01",
         traceId: "tr_01",
         sessionId: "ses_01",
@@ -26,7 +27,8 @@ describe("BlockEnvelopeSchema", () => {
         requiresResponse: true,
         responseSchema: "schemas/blocks/choices.response.json",
         submitAs: "block_response",
-        resumePolicy: "resume_current_flow"
+        resumePolicy: "resume_current_flow",
+        resumeHandler: "guide.handleChoiceResponse"
       },
       data: {
         title: "下一步做什么？",
@@ -62,6 +64,33 @@ describe("BlockEnvelopeSchema", () => {
       },
       data: {
         title: "下一步做什么？"
+      }
+    });
+  });
+
+  it("keeps package-owned handler metadata optional for backward compatibility", () => {
+    expectSchemaAccepts(BlockEnvelopeSchema, {
+      id: "blk_03",
+      type: "choices",
+      version: "1.0",
+      meta: {
+        package: "core-guide",
+        requestId: "req_01",
+        traceId: "tr_01",
+        sessionId: "ses_01",
+        turnId: "turn_01"
+      },
+      interaction: {
+        requiresResponse: true,
+        responseSchema: "schemas/blocks/choices.response.json",
+        submitAs: "block_response",
+        resumePolicy: "resume_current_flow"
+      },
+      data: {
+        title: "下一步做什么？",
+        options: [
+          { id: "opt_a", label: "继续前进" }
+        ]
       }
     });
   });

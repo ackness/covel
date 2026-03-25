@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   createArchiveVersion,
   createArtifact,
+  createJobRecord,
   createMemoryDocument,
   createMessage,
+  createPackageStateRecord,
   createRetrievalRun,
   createSession,
   createTraceRecord,
@@ -116,5 +118,33 @@ describe("domain entity invariants", () => {
         createdAt: new Date("invalid")
       })
     ).toThrow(/trace/i);
+  });
+
+  it("PackageStateRecord requires stable package-scoped coordinates", () => {
+    expect(() =>
+      createPackageStateRecord({
+        scope: "project" as never,
+        ownerId: "",
+        packageName: "",
+        collection: "",
+        key: "",
+        value: {},
+        updatedAt: new Date("invalid")
+      })
+    ).toThrow(/package-state/i);
+  });
+
+  it("JobRecord requires a supported status and non-negative attempts", () => {
+    expect(() =>
+      createJobRecord({
+        id: "",
+        packageName: "",
+        jobType: "",
+        status: "unknown" as never,
+        input: {},
+        attempt: -1,
+        createdAt: new Date("invalid")
+      })
+    ).toThrow(/job/i);
   });
 });

@@ -1,5 +1,12 @@
 export type ModelTier = "small" | "medium" | "large" | "embed-default";
-export type SupportedMode = "text" | "object" | "stream" | "embed";
+export type SupportedMode =
+  | "text"
+  | "object"
+  | "stream"
+  | "embed"
+  | "image"
+  | "speech"
+  | "transcription";
 export type ProviderProtocol =
   | "openai-chat-v1"
   | "openai-responses-v1"
@@ -24,6 +31,7 @@ export interface PresetMetadata {
   model: string;
   tier: Exclude<ModelTier, "embed-default">;
   baseUrl?: string;
+  fallbackPresetIds?: string[];
   supportedModes: SupportedMode[];
   enabled: boolean;
   isDefault: boolean;

@@ -2,8 +2,11 @@ import type {
   ArchiveVersion,
   Artifact,
   DomainRepositories,
+  DomainRepositoriesWithPackageStateAndJobs,
+  JobRecord,
   MemoryDocument,
   Message,
+  PackageStateRecord,
   RetrievalRun,
   Session,
   TraceRecord,
@@ -13,12 +16,14 @@ import type {
   PersistedPendingBlockRecord,
   StorageRepositoriesWithPendingBlocks
 } from "./pending-block-store.js";
+import type { StorageRepositoriesWithPackageStateAndJobs } from "./package-state-store.js";
 import type { PersistedPresetRecord, StorageRepositoriesWithPresets } from "./preset-metadata-store.js";
 import { stripPresetSecrets } from "./preset-metadata-store.js";
 
 export function createInMemoryStorageRepositories(): DomainRepositories &
   StorageRepositoriesWithPresets &
-  StorageRepositoriesWithPendingBlocks {
+  StorageRepositoriesWithPendingBlocks &
+  StorageRepositoriesWithPackageStateAndJobs {
   const worlds = new Map<string, World>();
   const sessions = new Map<string, Session>();
   const messages = new Map<string, Message>();
@@ -29,6 +34,8 @@ export function createInMemoryStorageRepositories(): DomainRepositories &
   const traceRecords = new Map<string, TraceRecord>();
   const presets = new Map<string, PersistedPresetRecord>();
   const pendingBlocks = new Map<string, PersistedPendingBlockRecord>();
+  const packageState = new Map<string, PackageStateRecord>();
+  const jobs = new Map<string, JobRecord>();
 
   return {
     worlds: {
@@ -120,6 +127,36 @@ export function createInMemoryStorageRepositories(): DomainRepositories &
         pendingBlocks.delete(blockId);
       }
     },
+    packageState: {
+      async save(record) {
+        packageState.set(buildPackageStateKey(record), { ...record });
+      },
+      async get(input) {
+        return packageState.get(buildPackageStateKey(input)) ?? null;
+      },
+      async listByCollection(input) {
+        return Array.from(packageState.values()).filter((record) =>
+          record.scope === input.scope &&
+          record.ownerId === input.ownerId &&
+          record.packageName === input.packageName &&
+          record.collection === input.collection
+        );
+      }
+    },
+    jobs: {
+      async save(record) {
+        jobs.set(record.id, { ...record });
+      },
+      async getById(id) {
+        return jobs.get(id) ?? null;
+      },
+      async listBySessionId(sessionId) {
+        return Array.from(jobs.values()).filter((record) => record.sessionId === sessionId);
+      },
+      async listByStatus(status) {
+        return Array.from(jobs.values()).filter((record) => record.status === status);
+      }
+    },
     presets: {
       async save(input) {
         presets.set(input.id, { ...input });
@@ -145,4 +182,14 @@ export function createInMemoryStorageRepositories(): DomainRepositories &
       }
     }
   };
+}
+
+function buildPackageStateKey(input: {
+  scope: PackageStateRecord["scope"];
+  ownerId: string;
+  packageName: string;
+  collection: string;
+  key: string;
+}): string {
+  return `${input.scope}:${input.ownerId}:${input.packageName}:${input.collection}:${input.key}`;
 }
