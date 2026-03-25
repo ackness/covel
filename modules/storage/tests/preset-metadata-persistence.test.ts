@@ -32,6 +32,7 @@ interface PersistedPresetRecord {
   model: string;
   tier: "small" | "medium" | "large";
   baseUrl: string;
+  fallbackPresetIds?: string[];
   supportedModes: Array<"text" | "object" | "stream">;
   enabled: boolean;
   isDefault: boolean;
@@ -74,6 +75,7 @@ function createPresetFixture(): PersistedPresetRecord {
     model: "qwen-plus",
     tier: "medium",
     baseUrl: "https://persisted.example/v1",
+    fallbackPresetIds: ["fallback-lab"],
     supportedModes: ["text", "object", "stream"],
     enabled: true,
     isDefault: true,
@@ -126,6 +128,7 @@ describe("preset metadata persistence", () => {
       model: "qwen-max",
       tier: "medium",
       baseUrl: "https://edited.example/v1",
+      fallbackPresetIds: ["fallback-lab"],
       supportedModes: ["text", "object", "stream"],
       enabled: true,
       isDefault: true,
@@ -139,6 +142,7 @@ describe("preset metadata persistence", () => {
         model: "qwen-max",
         tier: "medium",
         baseUrl: "https://edited.example/v1",
+        fallbackPresetIds: ["fallback-lab"],
         supportedModes: ["text", "object", "stream"],
         enabled: true,
         isDefault: true,
@@ -179,6 +183,7 @@ describe("preset metadata persistence", () => {
       model: "qwen-plus",
       tier: "medium",
       baseUrl: "https://persisted.example/v1",
+      fallbackPresetIds: ["fallback-lab"],
       supportedModes: ["text", "object", "stream"],
       enabled: true,
       isDefault: true,
@@ -192,6 +197,7 @@ describe("preset metadata persistence", () => {
         model: "qwen-plus",
         tier: "medium",
         baseUrl: "https://persisted.example/v1",
+        fallbackPresetIds: ["fallback-lab"],
         supportedModes: ["text", "object", "stream"],
         enabled: true,
         isDefault: true,
@@ -219,7 +225,8 @@ describe("preset metadata persistence", () => {
     await presets.save(preset);
     await presets.patch(preset.id, {
       model: "qwen-max",
-      enabled: false
+      enabled: false,
+      fallbackPresetIds: ["fallback-alt", "fallback-openrouter"]
     });
 
     await expect(presets.getById(preset.id)).resolves.toEqual({
@@ -229,6 +236,7 @@ describe("preset metadata persistence", () => {
       model: "qwen-max",
       tier: "medium",
       baseUrl: "https://persisted.example/v1",
+      fallbackPresetIds: ["fallback-alt", "fallback-openrouter"],
       supportedModes: ["text", "object", "stream"],
       enabled: false,
       isDefault: true,

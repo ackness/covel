@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createServer, type Server, type IncomingMessage } from "node:http";
 
 import { ActionRequestSchema, type SseEnvelope } from "../../../modules/contracts/src/index.js";
-import { createSession, createWorld, type DomainRepositories } from "../../../modules/domain/src/index.js";
+import { STORY_NARRATION_TASK, createSession, createWorld, type DomainRepositories, type TaskBindings } from "../../../modules/domain/src/index.js";
 import type { PersistedPresetMetadata, PersistedPresetRecord } from "../../../modules/storage/src/index.js";
 import { createRuntimeErrorPayload, resolveRequestLocale } from "./locale.js";
 
@@ -143,6 +143,8 @@ export function createRuntimeServer(dependencies: {
         const repositories = requireRepositories(dependencies.repositories);
         const body = (await readJsonBody()) as {
           worldId?: string;
+          presetId?: string;
+          taskBindings?: Record<string, unknown>;
           locale?: string;
         };
         const locale = resolveRequestLocale({
@@ -153,6 +155,7 @@ export function createRuntimeServer(dependencies: {
           id: createId(dependencies, "session"),
           worldId: String(body.worldId ?? ""),
           status: "active",
+          ...normalizeSessionBindingInput(body),
           createdAt: now(dependencies)
         });
         await repositories.sessions.save(session);
@@ -160,6 +163,46 @@ export function createRuntimeServer(dependencies: {
           "content-type": "application/json"
         });
         response.end(JSON.stringify(session));
+      } catch (error) {
+        const locale = resolveRequestLocale({
+          header: request.headers["accept-language"]
+        });
+        response.writeHead(resolveRuntimeErrorStatus(error), {
+          "content-type": "application/json"
+        });
+        response.end(JSON.stringify(createRuntimeErrorPayload(resolveRuntimeErrorCode(error), locale)));
+      }
+      return;
+    }
+
+    if ((request.method === "PUT" || request.method === "PATCH") && /^\/sessions\/[^/]+$/.test(requestUrl.pathname)) {
+      try {
+        const repositories = requireRepositories(dependencies.repositories);
+        const sessionId = requestUrl.pathname.split("/")[2] ?? "";
+        const existing = await repositories.sessions.getById(sessionId);
+        if (!existing) {
+          response.writeHead(404, {
+            "content-type": "application/json"
+          });
+          response.end(JSON.stringify(createRuntimeErrorPayload("NOT_FOUND", resolveRequestLocale({
+            header: request.headers["accept-language"]
+          }))));
+          return;
+        }
+
+        const body = (await readJsonBody()) as {
+          presetId?: string | null;
+          taskBindings?: Record<string, unknown> | null;
+        };
+        const nextSession = createSession({
+          ...existing,
+          ...normalizeSessionBindingInput(body, existing)
+        });
+        await repositories.sessions.save(nextSession);
+        response.writeHead(200, {
+          "content-type": "application/json"
+        });
+        response.end(JSON.stringify(nextSession));
       } catch (error) {
         const locale = resolveRequestLocale({
           header: request.headers["accept-language"]
@@ -462,8 +505,65 @@ function sanitizePresetPatch(input: Partial<PersistedPresetRecord>): Partial<Per
   if (typeof input.isDefault === "boolean") {
     patch.isDefault = input.isDefault;
   }
+  if (
+    Array.isArray(input.fallbackPresetIds) &&
+    input.fallbackPresetIds.every((presetId) => typeof presetId === "string" && presetId.trim().length > 0)
+  ) {
+    patch.fallbackPresetIds = input.fallbackPresetIds.map((presetId) => presetId.trim());
+  }
 
   return patch;
+}
+
+function normalizeSessionBindingInput(
+  input: {
+    presetId?: string | null;
+    taskBindings?: Record<string, unknown> | null;
+  },
+  existing?: {
+    presetId?: string;
+    taskBindings?: TaskBindings;
+  }
+): {
+  presetId?: string;
+  taskBindings?: TaskBindings;
+} {
+  const hasExplicitTaskBindings = input.taskBindings !== undefined;
+  let nextTaskBindings = hasExplicitTaskBindings
+    ? sanitizeTaskBindings(input.taskBindings)
+    : existing?.taskBindings
+      ? { ...existing.taskBindings }
+      : undefined;
+
+  if (typeof input.presetId === "string" && input.presetId.trim().length > 0) {
+    nextTaskBindings = {
+      ...(nextTaskBindings ?? {}),
+      [STORY_NARRATION_TASK]: input.presetId.trim()
+    };
+  } else if (input.presetId === null && nextTaskBindings) {
+    const { [STORY_NARRATION_TASK]: _removed, ...rest } = nextTaskBindings;
+    nextTaskBindings = Object.keys(rest).length > 0 ? rest : undefined;
+  }
+
+  const presetId = nextTaskBindings?.[STORY_NARRATION_TASK];
+  return {
+    ...(presetId ? { presetId } : {}),
+    ...(nextTaskBindings ? { taskBindings: nextTaskBindings } : {})
+  };
+}
+
+function sanitizeTaskBindings(input: Record<string, unknown> | null | undefined): TaskBindings | undefined {
+  if (input === null || input === undefined || typeof input !== "object" || Array.isArray(input)) {
+    return undefined;
+  }
+
+  const taskBindings = Object.fromEntries(
+    Object.entries(input)
+      .filter(([task, presetId]) => typeof task === "string" && task.trim().length > 0 && typeof presetId === "string" && presetId.trim().length > 0)
+      .map(([task, presetId]) => [task.trim(), (presetId as string).trim()])
+  );
+
+  return Object.keys(taskBindings).length > 0 ? taskBindings : undefined;
 }
 
 function resolveRuntimeErrorCode(error: unknown): string {

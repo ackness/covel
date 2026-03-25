@@ -34,6 +34,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -67,6 +68,47 @@ textarea {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+.workspace-hero {
+  padding: 1.35rem 1.5rem 1.2rem;
+  border-bottom: 1px solid rgba(23, 20, 17, 0.08);
+  background:
+    radial-gradient(circle at top right, rgba(52, 81, 77, 0.14), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.18));
+}
+
+.hero-title {
+  margin: 0.25rem 0 0;
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  line-height: 0.95;
+  letter-spacing: -0.05em;
+}
+
+.hero-copy,
+.empty-copy {
+  margin: 0;
+  max-width: 42rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.hero-actions,
+.button-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.hero-actions {
+  margin-top: 1rem;
+}
+
+.hero-meta {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.55);
 }
 
 .page-shell {
@@ -175,6 +217,15 @@ textarea {
   gap: 0.9rem;
 }
 
+.timeline-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.85rem;
+  padding: 1.5rem;
+}
+
 .message {
   max-width: 44rem;
   padding-bottom: 0.9rem;
@@ -228,11 +279,29 @@ textarea {
   background: rgba(255, 255, 255, 0.92);
 }
 
+.list-button:disabled,
+.choice-button:disabled,
+.secondary-button:disabled,
+.primary-button:disabled {
+  cursor: not-allowed;
+  transform: none;
+  opacity: 0.5;
+}
+
 .list-button.active,
 .primary-button {
   background: var(--accent);
   color: #f4efe6;
   border-color: transparent;
+}
+
+.list-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  text-align: left;
 }
 
 .secondary-button {
@@ -273,13 +342,21 @@ textarea {
 }
 
 .field input,
-.field textarea {
+.field textarea,
+.field select {
   width: 100%;
   border: 1px solid var(--line);
   background: var(--panel-strong);
   color: var(--ink);
   padding: 0.75rem 0.8rem;
   resize: vertical;
+}
+
+.field-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 .panel-section {
@@ -297,6 +374,12 @@ textarea {
   gap: 0.75rem;
   padding: 0.8rem 0;
   border-bottom: 1px solid rgba(23, 20, 17, 0.08);
+}
+
+.session-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
 }
 
 @media (max-width: 1024px) {

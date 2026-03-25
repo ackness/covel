@@ -11,6 +11,7 @@ interface PersistedPresetRecord {
   model: string;
   tier: "small" | "medium" | "large";
   baseUrl: string;
+  fallbackPresetIds?: string[];
   supportedModes: Array<"text" | "object" | "stream">;
   enabled: boolean;
   isDefault: boolean;
@@ -60,6 +61,7 @@ describe("runtime presets API", () => {
       model: "qwen-plus",
       tier: "medium",
       baseUrl: "https://persisted.example/v1",
+      fallbackPresetIds: ["fallback-lab"],
       supportedModes: ["text", "object", "stream"],
       enabled: true,
       isDefault: true,
@@ -74,6 +76,7 @@ describe("runtime presets API", () => {
         model: "qwen-plus",
         tier: "medium",
         baseUrl: "https://persisted.example/v1",
+        fallbackPresetIds: ["fallback-lab"],
         supportedModes: ["text", "object", "stream"],
         enabled: true,
         isDefault: true,
@@ -109,6 +112,7 @@ describe("runtime presets API", () => {
         model: "qwen-plus",
         tier: "medium",
         baseUrl: "https://persisted.example/v1",
+        fallbackPresetIds: ["fallback-lab"],
         supportedModes: ["text", "object", "stream"],
         enabled: true,
         isDefault: true,
@@ -129,6 +133,7 @@ describe("runtime presets API", () => {
       model: String(input.model),
       tier: "medium",
       baseUrl: "https://persisted.example/v1",
+      fallbackPresetIds: Array.isArray(input.fallbackPresetIds) ? input.fallbackPresetIds : undefined,
       supportedModes: ["text", "object", "stream"],
       enabled: Boolean(input.enabled),
       isDefault: true,
@@ -162,6 +167,7 @@ describe("runtime presets API", () => {
         baseUrl: "https://edited.example/v1",
         enabled: false,
         isDefault: true,
+        fallbackPresetIds: ["fallback-lab", "openrouter-free"],
         apiKey: "should-store-but-never-return"
       })
     });
@@ -173,7 +179,8 @@ describe("runtime presets API", () => {
       name: "Edited preset",
       model: "qwen-max",
       enabled: false,
-      isDefault: true
+      isDefault: true,
+      fallbackPresetIds: ["fallback-lab", "openrouter-free"]
     });
     expect(body).toEqual({
       id: "default-story",
@@ -182,6 +189,7 @@ describe("runtime presets API", () => {
       model: "qwen-max",
       tier: "medium",
       baseUrl: "https://persisted.example/v1",
+      fallbackPresetIds: ["fallback-lab", "openrouter-free"],
       supportedModes: ["text", "object", "stream"],
       enabled: false,
       isDefault: true,

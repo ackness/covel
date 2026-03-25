@@ -8,12 +8,12 @@
     "dev:web": "vite --config apps/web/vite.config.ts",
     "build:web": "vite build --config apps/web/vite.config.ts",
     "start:runtime": "tsx apps/runtime/src/main.ts",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --exclude modules/model-gateway/tests/live.openai-compatible.test.ts",
+    "test:watch": "vitest --exclude modules/model-gateway/tests/live.openai-compatible.test.ts",
     "test:contracts": "vitest run modules/contracts/tests",
     "test:domain": "vitest run modules/domain/tests",
     "test:live": "vitest run modules/model-gateway/tests/live.openai-compatible.test.ts",
-    "test:web": "vitest run apps/web/tests",
+    "test:web": "vitest run apps/web/tests/*.test.ts apps/web/tests/*.test.tsx",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

@@ -84,11 +84,12 @@ v1 技术路线固定为：
 技术原则：
 
 - 优先统一契约，而不是优先拆服务
-- 优先统一 provider 抽象，而不是在业务层直接接各家 SDK
+- 优先统一多能力 provider 抽象，而不是在业务层直接接各家 SDK
 - 优先使用一套最小可运行存储组合，而不是一开始引入多种基础设施
 - 所有实现遵循奥卡姆剃刀原则：先做最小闭环，再预留扩展点
 - 开发方式固定采用 `TDD`
 - 默认优先 deterministic tests；真实 LLM 只用于高价值集成验证
+- extension 与业务层只声明任务与能力，不直接选择原始 provider / model
 
 ### 3.1 参考的现代 agent 工程做法
 
@@ -117,6 +118,9 @@ v1 核心对象固定为：
 - `Block`
 - `Artifact`
 - `Package`
+- `ConnectionProfile`
+- `TaskPreset`
+- `TaskBindingProfile`
 - `ModelProfile`
 - `ArchiveVersion`
 - `MemoryDocument`
@@ -126,7 +130,8 @@ v1 核心对象固定为：
 说明：
 
 - `World`、`Session`、`Command System` 是核心领域的最小根对象
-- `CharacterCard`、`Persona`、`WorldBook`、`Preset` 必须实现，但优先作为第一方 package，而不是先写死成核心领域对象
+- `CharacterCard`、`Persona`、`WorldBook` 必须实现，但优先作为第一方 package，而不是先写死成核心领域对象
+- `ConnectionProfile / TaskPreset / TaskBindingProfile` 属于运行时配置与路由层，不等于 package 内容对象
 - 这样既支持 RPG，也支持 no-RPG、纯叙事、实验性交互等非传统场景
 
 ### 4.1 概念归属表
@@ -143,7 +148,9 @@ v1 核心对象固定为：
 | `CharacterCard` | first-party package | `extensions/core-character-card` |
 | `Persona` | first-party package | `extensions/core-persona` |
 | `WorldBook` | first-party package | `extensions/core-worldbook` |
-| `Preset` | first-party package | `extensions/core-presets` |
+| `ConnectionProfile` | runtime config object | `modules/model-gateway` + `modules/storage` + `apps/web` |
+| `TaskPreset` | runtime config object + first-party authoring surface | `modules/model-gateway` + `modules/storage` + `extensions/core-presets` |
+| `TaskBindingProfile` | world/session config object | `modules/domain` + `modules/storage` + `apps/runtime` + `apps/web` |
 | `Memory / RAG` | core subsystem + first-party package surface | `modules/memory-rag` + `extensions/core-memory-rag` |
 | `Archive` | core subsystem + first-party package surface | `modules/archive` + `extensions/core-archive` |
 
@@ -156,7 +163,7 @@ v1 会话推进固定为标准 flow：
 3. 构建 `ContextGraph`
 4. 运行 `RetrievalPipeline`
 5. 编译 `PromptGraph`
-6. 根据 `ModelProfile` 选择模型
+6. 根据 `TaskBindingProfile -> TaskPreset -> ConnectionProfile -> ModelProfile` 选择能力与执行目标
 7. 生成文本、block、state patch、artifact、trace
 8. 若存在 interactive block，则进入等待状态
 9. 用户提交 `BlockResponse`
@@ -167,6 +174,7 @@ v1 会话推进固定为标准 flow：
 - package 向用户提问时，必须输出 interactive block
 - 用户响应必须通过结构化 `BlockResponse` 回到系统
 - 不允许依赖裸文本问答维持关键状态机
+- extension 与 package 只声明任务类型，例如 `story.narration`、`story.choice-generation`、`story.image`、`story.tts`
 
 ## 6. V1 非目标
 
@@ -189,8 +197,9 @@ v1 明确不做：
 - 只读 `docs/architecture/specs/*` 就可以启动实现
 - 世界、会话、命令、package、记忆、存档、追踪都能通过统一语义协作
 - package 可以在不修改核心的情况下扩展上下文、命令和交互块
-- provider 更换不会改业务层接口
+- provider / model / fallback 更换不会改业务层接口
 - 记忆、RAG、存档、日志与 trace 都有清晰边界，不依赖临时脚本拼接
+- 文本、小模型选项生成、图片、TTS 等不同能力都统一经由 provider kernel 调用
 - 主界面可优先承载世界编辑与会话推进，复杂观测能力可通过 Langfuse 辅助承载
 - 在真实 `openai-compatible` provider 上，最小主链路可通过 live tests 跑通
 

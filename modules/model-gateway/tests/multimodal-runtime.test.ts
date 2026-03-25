@@ -7,6 +7,7 @@ import {
   type EmbeddingResult,
   type ImageGenerationParams,
   type ImageGenerationResult,
+  type ModelProfile,
   type ModelProviderAdapter,
   type ModelRequestContext,
   type ObjectGenerationParams,
@@ -117,7 +118,7 @@ describe("multimodal model gateway foundation", () => {
       contextWindow: 64_000,
       latencyClass: "medium",
       costClass: "medium",
-      supportedModes: ["text", "object", "stream", "image", "speech", "transcription"] as const
+      supportedModes: ["text", "object", "stream", "image", "speech", "transcription"] as ModelProfile["supportedModes"]
     },
     {
       id: "embed-default",
@@ -127,7 +128,7 @@ describe("multimodal model gateway foundation", () => {
       contextWindow: 8_000,
       latencyClass: "low",
       costClass: "low",
-      supportedModes: ["embed"] as const
+      supportedModes: ["embed"] as ModelProfile["supportedModes"]
     }
   ];
 

@@ -1,5 +1,5 @@
 import type { BlockEnvelope, BlockResponse, SseEnvelope } from "../../../modules/contracts/src/index.js";
-import type { TraceRecord } from "../../../modules/domain/src/index.js";
+import type { TaskBindings, TraceRecord } from "../../../modules/domain/src/index.js";
 
 export interface WorldRecord {
   id: string;
@@ -13,6 +13,8 @@ export interface SessionRecord {
   worldId: string;
   status: string;
   createdAt: string;
+  presetId?: string;
+  taskBindings?: TaskBindings;
 }
 
 export interface MessageRecord {
@@ -32,6 +34,16 @@ export interface ArchiveRecord {
 export interface PackageSummary {
   name: string;
   enabled: boolean;
+}
+
+export interface PresetSummary {
+  id: string;
+  name: string;
+  provider: string;
+  model: string;
+  enabled: boolean;
+  isDefault: boolean;
+  scope: string;
 }
 
 export interface TimelineItem {

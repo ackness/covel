@@ -24,11 +24,26 @@ These rules apply to the whole `covel` repository.
 - All model traffic must go through `modules/model-gateway`.
 - Business logic must not call OpenAI, Anthropic, DashScope, or other provider SDKs or HTTP APIs directly.
 - Protocol translation belongs in the custom provider layer.
+- Treat `modules/model-gateway` as a capability-first kernel, not a chat-only wrapper.
+- New model-facing features should fit the capability families below instead of inventing ad hoc call paths:
+  - `text`
+  - `object`
+  - `stream`
+  - `embed`
+  - `image`
+  - `speech`
+  - `transcription`
 - Route support currently targets:
   - `openai-chat-v1`
   - `openai-responses-v1`
   - `anthropic-messages-v1`
 - Preserve hook points for stats, tracing, and Langfuse integration.
+- User-facing model configuration should evolve toward:
+  - `Connection Profile`
+  - `Task Preset`
+  - `World / Session task bindings`
+- Extensions should request tasks or capabilities such as `story.narration` or `story.choice-generation`; they should not hardcode provider/model choices.
+- Do not hardcode fallback to any single vendor/model in business logic. Fallback belongs to preset/policy configuration.
 
 ## Runtime And Packages
 
@@ -41,12 +56,14 @@ These rules apply to the whole `covel` repository.
 - Keep repository interfaces stable.
 - Support both in-memory and PostgreSQL paths without changing domain APIs.
 - Do not store provider secrets in business-facing metadata responses.
+- If provider/profile metadata is persisted, store secret references or non-sensitive routing metadata only.
 
 ## Web Host
 
 - Preserve the three-column workspace structure unless the product direction explicitly changes.
 - Favor restrained, editor-like UI over decorative dashboard patterns.
 - Reuse shared web modules instead of duplicating request/reducer logic inside `App.tsx`.
+- Treat connection management, task preset editing, and session/world task bindings as first-class product surfaces, even if the earliest UI is minimal.
 
 ## i18n
 

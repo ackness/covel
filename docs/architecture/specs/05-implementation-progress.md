@@ -92,6 +92,11 @@
 - 多协议 adapter tests 已通过
 - live smoke tests 已通过
 
+补充说明：
+
+- 当前实现仍以 language-first 形态为主，正式能力面主要覆盖 `text / object / stream / embed`
+- 规范层已经收敛到 `Connection Profile + Task Preset + World/Session task bindings`，但当前仓库仍主要停留在更简单的 runtime preset / session preset 过渡形态
+
 ### 1.6 Flow Engine
 
 已完成：
@@ -350,10 +355,17 @@
 
 未完成：
 
+- 还没有正式落地 `Connection Profile + Task Preset + Binding Profile`
+- 当前仍未完成 `session.taskBindings` / `world.taskBindings`，仍偏向单一 preset 绑定
+- image / speech / transcription capability 仍未纳入统一 provider kernel
 - provider routing 策略仍偏简单，尚未达到 LiteLLM 那类完整路由器能力
 - 还没有正式 WebSocket provider transport
 - 还没有真正的 Langfuse adapter，只保留了 hooks / trace 接口位
 - 还没有 request-level cost accounting 与更完整统计聚合
+- provider policy 仍缺：
+  - capability-specific routing
+  - config-driven retry / fallback / timeout
+  - provider-level budgets / privacy policy
 
 ## 4. 当前判断
 
@@ -369,13 +381,15 @@
 - 完整第一方 package 能力
 - 完整调试与观测工作台
 - 完整 RAG / archive / runtime 装配
+- 规范中新的 capability-first provider / profile 架构
 
 ## 5. 下一优先级建议
 
 建议优先按下面顺序继续：
 
-1. 做正式 PostgreSQL migrations 与启动/bootstrap 管理
-2. 做 package 真实业务实现，先从 `core-guide / core-archive / core-presets` 开始
-3. 做完整 memory-rag pipeline
-4. 做完整 Web Host 的 package/preset/archive/trace 工作台
-5. 最后补 OpenTelemetry / Langfuse / Playwright E2E
+1. 先把 provider / preset / binding 结构收敛到规范中的 `Connection Profile + Task Preset + task bindings`
+2. 再做正式 PostgreSQL migrations 与启动/bootstrap 管理
+3. 做 package 真实业务实现，先从 `core-guide / core-archive / core-presets` 开始
+4. 做完整 memory-rag pipeline
+5. 做完整 Web Host 的 package/preset/archive/trace 工作台
+6. 最后补 OpenTelemetry / Langfuse / Playwright E2E

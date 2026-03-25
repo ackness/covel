@@ -8,7 +8,8 @@ export default defineConfig({
     ],
     include: [
       "modules/**/tests/**/*.test.ts",
-      "apps/**/tests/**/*.test.ts"
+      "apps/**/tests/**/*.test.ts",
+      "apps/**/tests/**/*.test.tsx"
     ]
   }
 });

@@ -36,6 +36,7 @@
 5. `04-development-testing-strategy.md`
 6. `05-implementation-progress.md`
 7. `06-content-package-migration.md`
+8. `07-provider-capability-profile-redesign.md`
 
 如果你只剩 10 分钟，至少先读：
 
@@ -46,6 +47,7 @@
 
 1. `05-implementation-progress.md`
 2. `06-content-package-migration.md`
+3. `07-provider-capability-profile-redesign.md`
 
 ## 3. 一页决策摘要
 
@@ -56,9 +58,10 @@ v1 已固定的高优先级决策：
 - 技术路线：TypeScript Monorepo、React、Node、PostgreSQL、Local Artifact Store
 - 前端基线：`Vite 8`、`shadcn/ui`
 - 主协议：`HTTP action + SSE streamed response`
-- 模型层：`ModelGateway + ProviderRegistry + ModelProfileRegistry`
-- profile：`small / medium / large + embed-default`
-- provider 策略：day-1 只实现 `openai-compatible`，并通过可编辑的 runtime preset 暴露给用户
+- 模型层：`Capability Gateway + ProviderRegistry + ModelProfileRegistry + PresetRegistry + BindingResolver`
+- 内部执行 profile：`small / medium / large + embed-default`
+- 用户配置结构：`Connection Profile + Task Preset + World/Session task bindings`
+- provider 策略：day-1 协议兼容优先从 `openai-compatible` 起步，但结构必须支持 text / object / stream / embed / image / speech / transcription 多能力统一接入
 - package 形态：`manifest.json + SKILL.md + optional TS code`
 - package v1 只开放：
   - context provider

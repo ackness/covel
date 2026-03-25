@@ -3,6 +3,7 @@ import type {
   BlockResponse,
   MessageRecord,
   PackageSummary,
+  PresetSummary,
   TraceRecord,
   SessionRecord,
   SseEnvelope,
@@ -65,11 +66,46 @@ export async function listPackages(): Promise<PackageSummary[]> {
   }));
 }
 
+export async function listPresets(): Promise<PresetSummary[]> {
+  return readJson(await fetch(`${API_BASE_URL}/presets`, {
+    headers: {
+      "accept-language": getStoredLocale()
+    }
+  }));
+}
+
 export async function listSessions(worldId: string): Promise<SessionRecord[]> {
   return readJson(await fetch(`${API_BASE_URL}/sessions?worldId=${encodeURIComponent(worldId)}`, {
     headers: {
       "accept-language": getStoredLocale()
     }
+  }));
+}
+
+export async function createSession(input: {
+  worldId: string;
+  taskBindings?: Record<string, string>;
+  presetId?: string;
+}): Promise<SessionRecord> {
+  return readJson(await fetch(`${API_BASE_URL}/sessions`, {
+    method: "POST",
+    headers: createJsonHeaders(),
+    body: JSON.stringify(input)
+  }));
+}
+
+export async function updateSession(input: {
+  sessionId: string;
+  taskBindings?: Record<string, string>;
+  presetId: string;
+}): Promise<SessionRecord> {
+  return readJson(await fetch(`${API_BASE_URL}/sessions/${encodeURIComponent(input.sessionId)}`, {
+    method: "PATCH",
+    headers: createJsonHeaders(),
+    body: JSON.stringify({
+      ...(input.taskBindings ? { taskBindings: input.taskBindings } : {}),
+      presetId: input.presetId
+    })
   }));
 }
 

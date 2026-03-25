@@ -7,8 +7,15 @@ type TranslationKey =
   | "app.archiveWorkingSummary"
   | "app.archives"
   | "app.composer"
+  | "app.createSession"
   | "app.createSnapshot"
+  | "app.createStarterWorld"
   | "app.createWorld"
+  | "app.emptySessionBody"
+  | "app.emptySessionTitle"
+  | "app.emptyTimelineTitle"
+  | "app.emptyWorldBody"
+  | "app.emptyWorldTitle"
   | "app.localeLabel"
   | "app.noSession"
   | "app.noSessionSelected"
@@ -21,6 +28,10 @@ type TranslationKey =
   | "app.role.user"
   | "app.send"
   | "app.session"
+  | "app.sessionPreset"
+  | "app.sessionPresetHint"
+  | "app.sessions"
+  | "app.sessionPresetUnbound"
   | "app.settingsDock"
   | "app.sessionStatus.active"
   | "app.sessionStatus.waiting_for_input"
@@ -28,6 +39,8 @@ type TranslationKey =
   | "app.status.idle"
   | "app.status.streaming"
   | "app.trace"
+  | "app.newSessionPreset"
+  | "app.worldPrimer"
   | "app.worldDescription"
   | "app.worldName"
   | "app.worlds"
@@ -59,8 +72,15 @@ const messages: Record<Locale, Record<TranslationKey, string>> = {
     "app.archiveWorkingSummary": "工作摘要",
     "app.archives": "归档",
     "app.composer": "输入",
+    "app.createSession": "开始新会话",
     "app.createSnapshot": "创建快照",
+    "app.createStarterWorld": "创建示例世界并开始",
     "app.createWorld": "创建世界",
+    "app.emptySessionBody": "这个世界已经就绪，现在创建一个会话并发送第一句话。",
+    "app.emptySessionTitle": "还没有会话",
+    "app.emptyTimelineTitle": "发送第一条消息",
+    "app.emptyWorldBody": "先生成一个示例世界，立刻进入可交互的试玩状态。",
+    "app.emptyWorldTitle": "先创建一个世界",
     "app.localeLabel": "语言",
     "app.noSession": "无会话",
     "app.noSessionSelected": "未选择会话",
@@ -73,6 +93,10 @@ const messages: Record<Locale, Record<TranslationKey, string>> = {
     "app.role.user": "你",
     "app.send": "发送",
     "app.session": "会话",
+    "app.sessionPreset": "当前会话预设",
+    "app.sessionPresetHint": "会话将始终通过这个预设调用模型，预设内部可以再定义自己的回退链。",
+    "app.sessionPresetUnbound": "未绑定预设",
+    "app.sessions": "会话列表",
     "app.settingsDock": "设置区",
     "app.sessionStatus.active": "进行中",
     "app.sessionStatus.waiting_for_input": "等待输入",
@@ -80,6 +104,8 @@ const messages: Record<Locale, Record<TranslationKey, string>> = {
     "app.status.idle": "空闲",
     "app.status.streaming": "生成中",
     "app.trace": "追踪",
+    "app.newSessionPreset": "新会话预设",
+    "app.worldPrimer": "世界概览",
     "app.worldDescription": "世界描述",
     "app.worldName": "世界名称",
     "app.worlds": "世界",
@@ -110,8 +136,15 @@ const messages: Record<Locale, Record<TranslationKey, string>> = {
     "app.archiveWorkingSummary": "Working summary",
     "app.archives": "Archives",
     "app.composer": "Composer",
+    "app.createSession": "Start New Session",
     "app.createSnapshot": "Create Snapshot",
+    "app.createStarterWorld": "Create Starter World",
     "app.createWorld": "Create World",
+    "app.emptySessionBody": "This world is ready. Create a session and send the first line.",
+    "app.emptySessionTitle": "No session yet",
+    "app.emptyTimelineTitle": "Send the first line",
+    "app.emptyWorldBody": "Spin up a starter world and drop straight into an interactive run.",
+    "app.emptyWorldTitle": "Create a world first",
     "app.localeLabel": "Language",
     "app.noSession": "No session",
     "app.noSessionSelected": "No session selected",
@@ -124,6 +157,10 @@ const messages: Record<Locale, Record<TranslationKey, string>> = {
     "app.role.user": "user",
     "app.send": "Send",
     "app.session": "Session",
+    "app.sessionPreset": "Session preset",
+    "app.sessionPresetHint": "This session always calls through the selected preset. The preset itself may define its own fallback chain.",
+    "app.sessionPresetUnbound": "No preset bound",
+    "app.sessions": "Sessions",
     "app.settingsDock": "Settings",
     "app.sessionStatus.active": "active",
     "app.sessionStatus.waiting_for_input": "waiting for input",
@@ -131,6 +168,8 @@ const messages: Record<Locale, Record<TranslationKey, string>> = {
     "app.status.idle": "Idle",
     "app.status.streaming": "Streaming",
     "app.trace": "Trace",
+    "app.newSessionPreset": "New session preset",
+    "app.worldPrimer": "World Primer",
     "app.worldDescription": "World Description",
     "app.worldName": "World Name",
     "app.worlds": "Worlds",

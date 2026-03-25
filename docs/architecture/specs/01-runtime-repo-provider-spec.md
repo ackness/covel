@@ -105,6 +105,7 @@ v1 推荐工具链固定为：
 - streamed response 消费
 - block 渲染
 - trace / retrieval / package 调试页
+- `Connection Profile` / `Task Preset` / task binding 编辑页
 
 M1 主界面推荐固定为三栏工作台：
 
@@ -259,6 +260,8 @@ v1 不开放任意 workflow 节点，但内部执行仍统一在 flow engine 中
 
 ### 5.1 职责
 
+`modules/model-gateway` 虽然沿用 `ModelGateway` 目录命名，但规范语义必须按 capability gateway 理解。
+
 `ModelGateway` 是业务层唯一允许调用的模型入口。
 
 它负责：
@@ -266,10 +269,15 @@ v1 不开放任意 workflow 节点，但内部执行仍统一在 flow engine 中
 - 文本生成
 - 结构化对象生成
 - 流式生成
-- tool calling
 - embeddings
+- 图片生成
+- 语音合成
+- 语音转录
+- language capability 内部的 tool calling
 - provider 统一错误格式
 - metrics / trace 埋点
+- fallback / retry / routing policy 执行
+- 记录最终命中的 provider / model / preset / fallback path
 
 业务层不得直接调用某家模型 SDK。
 
@@ -278,13 +286,15 @@ v1 不开放任意 workflow 节点，但内部执行仍统一在 flow engine 中
 `ProviderRegistry` 负责：
 
 - 注册 provider adapter
-- 管理 provider 配置
+- 管理 connection profile 级 provider 配置
 - 管理 endpoint、headers、认证方式
-- 将逻辑请求映射到具体 provider
+- 按能力解析到具体 adapter
+- 将逻辑请求映射到具体 provider / protocol / capability route
+- 为 observability、budget、fallback、Langfuse 等策略层保留 hook
 
 ### 5.3 ModelProfileRegistry
 
-v1 固定提供 3 档 profile：
+v1 内部固定提供 3 档 language execution profile：
 
 - `small`
 - `medium`
@@ -319,54 +329,147 @@ v1 固定提供 3 档 profile：
   - 简单 package 逻辑
   - 低成本辅助步骤
 
-### 5.3.1 Profile 与 Preset 的运行时语义
+补充规则：
 
-v1 中面向用户暴露的模型与 provider 选择，统一通过 preset 体验交付。
+- `ModelProfile` 是 runtime 内部执行画像，不等于用户在 UI 中直接编辑的 preset
+- `small / medium / large` 只约束 language family，不要求 image / speech / transcription 复用同一分档
+- image / speech / transcription 若引入 capability-specific profile family，仍应由 `ModelProfileRegistry` 统一解析
 
-约束：
+### 5.3.1 Connection Profile、Task Preset 与 Binding Profile 的运行时语义
 
-- Web Host 中允许编辑的是 preset metadata 与 profile 绑定关系
-- preset / profile 元数据必须可落库、可编辑
-- 项目和会话层只引用 preset / profile，不直接保存原始 provider 密钥
-- 第一方 `core-presets` package 负责提供默认 preset 作者体验
+v1 中面向用户暴露的模型与 provider 选择，不再用单一 `preset` 概念承载，而统一拆成三层：
+
+1. `ConnectionProfile`
+2. `TaskPreset`
+3. `BindingProfile`
+
+#### Connection Profile
+
+`ConnectionProfile` 只负责连接与路由，不负责任务语义。
 
 建议最小字段：
 
 - `id`
 - `name`
 - `provider`
-- `model`
-- `tier`
+- `protocol`
 - `baseUrl`
-- `supportedModes`
+- `authStrategy`
+- `defaultHeaders`
+- `providerOptions`
+- `enabled`
+- `scope`
+
+典型例子：
+
+- `dashscope-primary`
+- `openrouter-free`
+- `openai-images`
+- `story-tts-primary`
+
+#### Task Preset
+
+`TaskPreset` 只负责“某类任务如何调用能力”，不直接承载原始密钥。
+
+建议最小字段：
+
+- `id`
+- `name`
+- `capability`
+- `connectionProfileId`
+- `model`
+- `defaultParams`
+- `systemPrompt`
+- `outputMode`
+- `fallbackPresetIds`
 - `enabled`
 - `isDefault`
 - `scope`
 
+典型例子：
+
+- `story-narration`
+- `choice-generator-fast`
+- `scene-illustration`
+- `story-tts`
+
+#### Binding Profile
+
+`BindingProfile` 负责把任务映射到 preset。
+
+建议最小字段：
+
+- `id`
+- `scope`
+- `taskBindings`
+
+其中 `taskBindings` 的最小语义为：
+
+```json
+{
+  "story.narration": "story-narration",
+  "story.choice-generation": "choice-generator-fast",
+  "story.image": "scene-illustration",
+  "story.tts": "story-tts"
+}
+```
+
+约束：
+
+- Web Host 中允许编辑的是 connection profile metadata、task preset metadata 与 task binding 关系
+- world / session 保存的是 task binding override，不是裸 provider / model 选择
+- `TaskPreset` / `ConnectionProfile` 元数据必须可落库、可编辑
+- world / session / request 只引用 binding / preset / profile，不直接保存原始 provider 密钥
+- 第一方 `core-presets` package 只负责默认 preset 作者体验，不承担连接凭据生命周期
+
 运行时解析顺序固定为：
 
 1. runtime 内置默认值
-2. 数据库中的 preset / profile 记录
-3. project override
+2. 数据库中的 `ConnectionProfile` / `TaskPreset` / `BindingProfile`
+3. world override
 4. session override
+5. request override
+
+### 5.3.2 Task 命名与 extension 约束
+
+extension 与业务层不得直接声明原始 provider / model。
+
+它们只能声明任务与能力，例如：
+
+- `story.narration`
+- `story.choice-generation`
+- `story.image`
+- `story.tts`
+- `memory.summary`
+- `npc.dialogue.fast`
+
+规则：
+
+- extension 发起模型请求时，必须通过任务名与 capability 进入 `ModelGateway`
+- `TaskRouter + BindingResolver` 负责解析最终使用的 `TaskPreset`
+- 任何回退逻辑必须属于 provider / preset / policy 层，不属于 extension 本身
 
 ### 5.4 底层技术建议
 
-v1 优先使用：
+v1 优先借鉴并评估这些设计：
 
 - `Vercel AI SDK`
-
-原因：
-
-- 提供多 provider 抽象
-- 与 TypeScript/Node/streaming 组合较自然
-- 后续接 tracing 比较顺手
+  - 主要借 `capability-first interface + provider registry + middleware`
+- `LiteLLM`
+  - 主要借 `统一协议 + router + fallback / retry`
+- `Portkey`
+  - 主要借 `config-driven routing policy`
+- `OpenRouter`
+  - 主要借 `provider routing + model catalog + preset merge`
+- `SillyTavern`
+  - 主要借 `Connection Profile` 的产品层组织方式
 
 补充原则：
 
 - provider 相关依赖默认跟随最新稳定版
-- 若某个 provider 官方包更新频繁，优先通过 `ModelGateway` 做隔离，而不是把变动扩散到业务层
-- telemetry 与 tracing 也优先沿用 AI SDK 与 OpenTelemetry 兼容生态，避免自造 tracing 协议
+- 若某个 provider 官方包更新频繁，优先通过自定义 `ModelGateway` 做隔离，而不是把变动扩散到业务层
+- telemetry 与 tracing 优先沿用 AI SDK / OpenTelemetry 兼容生态，避免自造 tracing 协议
+- 不把任何外部 SDK 当作业务层主抽象；业务层只面向 `ModelGateway`
 
 核心原则不是绑定某个 SDK，而是保证上层只看见 `ModelGateway` 接口。
 
@@ -381,6 +484,8 @@ v1 优先使用：
 - `DashScope`、`OpenRouter`、本地 OpenAI-compatible 服务、其他兼容 OpenAI chat/completions 或 Responses 风格接口的服务，都先归入 `openai-compatible` adapter
 - v1 不为每个新平台单独写 adapter，除非它不兼容 `openai-compatible` 语义
 - 真实集成测试基线允许优先使用 `DashScope`
+- 即使某项 capability 暂未落地实现，image / speech / transcription 一旦引入，也必须走同一 provider kernel，不允许旁路调用
+- `OpenRouter` 可以作为普通 `ConnectionProfile` 接入，也可以在其内部继续使用 provider routing / model fallback
 
 ### 5.6 凭据与配置来源
 
@@ -388,13 +493,13 @@ v1 自部署模式下，provider 配置来源固定为：
 
 1. 运行时环境变量
 2. 本地 runtime 配置文件
-3. 数据库中的可编辑 preset / profile metadata
+3. 数据库中的可编辑 `ConnectionProfile` / `TaskPreset` / `BindingProfile` metadata
 
 项目和会话只允许保存：
 
-- `modelProfileId`
-- `presetId`
-- provider 选择结果
+- `bindingProfileId`
+- `taskBindings`
+- `taskPresetId`
 - 运行时覆盖引用
 
 项目和会话中不得直接存储原始 API key。
@@ -413,16 +518,19 @@ v1 不做：
 补充规则：
 
 - 原始 provider 密钥仍只来自运行时环境变量或本地配置文件
-- 数据库只保存 preset metadata、endpoint、model、scope 与 secret reference
-- Web Host 可以编辑 preset 的非敏感字段，但不能读取原始 provider 密钥明文
+- 数据库只保存 `ConnectionProfile` / `TaskPreset` / binding metadata、endpoint、model、scope 与 secret reference
+- Web Host 可以编辑 provider 的非敏感字段，但不能读取原始 provider 密钥明文
+- `ConnectionProfile` 允许保存 secret reference、virtual key reference、BYOK routing metadata，但不允许保存原始 secret 明文响应
 
-### 5.7 Embedding 配置
+### 5.7 任务绑定与 Embedding 规则
 
 规则：
 
 - retrieval 与 ingestion 默认只使用 `embed-default`
-- package 不直接选择 embedding provider
-- embedding provider 的切换只能通过 runtime 配置完成
+- package / extension 不直接选择 embedding provider
+- embedding provider 的切换只能通过 `ConnectionProfile + TaskPreset + BindingProfile` 完成
+- `story.choice-generation` 这类轻量辅助任务应优先允许绑定小模型 preset
+- `story.image`、`story.tts`、`story.transcription` 这类任务不得复用语言任务 preset
 
 ## 6. PostgreSQL 与存储边界
 
@@ -453,6 +561,10 @@ v1 主数据库为 `PostgreSQL`。
   - blocks
   - artifacts
   - packages
+- `config`
+  - connection profiles
+  - task presets
+  - world / session task bindings
 - `memory`
   - memory documents
   - chunks
