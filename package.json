@@ -5,6 +5,7 @@
   "packageManager": "pnpm@10.29.2",
   "type": "module",
   "scripts": {
+    "dev": "tsx scripts/dev.ts",
     "dev:web": "vite --config apps/web/vite.config.ts",
     "build:web": "vite build --config apps/web/vite.config.ts",
     "start:runtime": "tsx apps/runtime/src/main.ts",
