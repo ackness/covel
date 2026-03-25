@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Preset management package.",
   "scopes": ["world", "session"],
-  "permissions": ["read:world", "read:session"],
+  "permissions": ["read:world", "read:session", "read:preset"],
   "modelPolicy": {
     "preferredTier": "small"
   },

@@ -88,7 +88,7 @@ describe("apps/web PresetEditor", () => {
     fetchStub.restore();
   });
 
-  it("edits model, baseUrl, enabled, and isDefault fields without touching secret material", async () => {
+  it("edits model, enabled, and isDefault fields without touching routing or secret material", async () => {
     const { PresetEditor } = await loadWebModule<PresetEditorModule>("components/preset-editor.ts");
     const fetchStub = installFetchStub([
       {
@@ -115,7 +115,7 @@ describe("apps/web PresetEditor", () => {
             id: "story-alt",
             name: "Story alt",
             model: "qwen-max-latest",
-            baseUrl: "https://openrouter.example/api/v1",
+            baseUrl: "https://router.example/v1",
             enabled: false,
             isDefault: true,
             scope: "project"
@@ -133,19 +133,18 @@ describe("apps/web PresetEditor", () => {
     await user.click(screen.getByRole("button", { name: "编辑 Story alt" }));
     await user.clear(screen.getByLabelText("模型"));
     await user.type(screen.getByLabelText("模型"), "qwen-max-latest");
-    await user.clear(screen.getByLabelText("基础 URL"));
-    await user.type(screen.getByLabelText("基础 URL"), "https://openrouter.example/api/v1");
+    expect(screen.queryByLabelText("基础 URL")).toBeNull();
     await user.click(screen.getByLabelText("已启用"));
     await user.click(screen.getByLabelText("默认预设"));
     await user.click(screen.getByRole("button", { name: "保存预设" }));
 
     await expect(fetchStub.calls[1]?.json()).resolves.toMatchObject({
       model: "qwen-max-latest",
-      baseUrl: "https://openrouter.example/api/v1",
       enabled: false,
       isDefault: true
     });
     await expect(fetchStub.calls[1]?.json()).resolves.not.toHaveProperty("apiKey");
+    await expect(fetchStub.calls[1]?.json()).resolves.not.toHaveProperty("baseUrl");
 
     fetchStub.restore();
   });
@@ -156,7 +155,7 @@ describe("apps/web PresetEditor", () => {
       id: "story-alt",
       name: "Story alt",
       model: "qwen-max-latest",
-      baseUrl: "https://openrouter.example/api/v1",
+      baseUrl: "https://router.example/v1",
       enabled: false,
       isDefault: true,
       scope: "project"
@@ -194,15 +193,13 @@ describe("apps/web PresetEditor", () => {
     await user.click(screen.getByRole("button", { name: "编辑 Story alt" }));
     await user.clear(screen.getByLabelText("模型"));
     await user.type(screen.getByLabelText("模型"), updatedPreset.model);
-    await user.clear(screen.getByLabelText("基础 URL"));
-    await user.type(screen.getByLabelText("基础 URL"), updatedPreset.baseUrl ?? "");
+    expect(screen.queryByLabelText("基础 URL")).toBeNull();
     await user.click(screen.getByLabelText("已启用"));
     await user.click(screen.getByLabelText("默认预设"));
     await user.click(screen.getByRole("button", { name: "保存预设" }));
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("qwen-max-latest")).toBeTruthy();
-      expect(screen.getByDisplayValue("https://openrouter.example/api/v1")).toBeTruthy();
       expect(screen.getByText("已停用")).toBeTruthy();
       expect(screen.getAllByText("默认").length).toBeGreaterThan(0);
     });

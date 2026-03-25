@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 
 import { createArchiveService, createInMemoryArchiveLineageStore, createInMemoryReindexMarkStore } from "../../../modules/archive/src/index.js";
@@ -16,9 +17,19 @@ import {
 } from "./locale.js";
 
 function createIdFactory() {
-  let counter = 1;
-  return (kind: string) => `${kind}_${counter++}`;
+  return (kind: string) => `${kind}_${randomUUID()}`;
 }
+
+const DEFAULT_ENABLED_PACKAGE_NAMES = [
+  "core-archive",
+  "core-character-card",
+  "core-debug-commands",
+  "core-guide",
+  "core-memory-rag",
+  "core-persona",
+  "core-presets",
+  "core-worldbook"
+] as const;
 
 function createDemoAdapter() {
   return {
@@ -100,11 +111,23 @@ export async function createRuntimeComposition(input: {
       list(): Promise<PersistedPresetMetadata[]>;
     };
   }).presets;
+  const pendingBlockStore = (repositories as {
+    pendingBlocks?: {
+      save(input: { blockId: string; sessionId: string; flowId: string; turnId: string }): Promise<void>;
+      getByBlockId(blockId: string): Promise<{ blockId: string; sessionId: string; flowId: string; turnId: string } | null>;
+      delete(blockId: string): Promise<void>;
+    };
+  }).pendingBlocks;
   const packageRuntime = new PackageRuntime({
     packagesRoot: resolve(cwd, "extensions")
   });
   await packageRuntime.discover();
+  const approvedPackageNames = new Set(resolveEnabledPackageNames(env));
   for (const pkg of packageRuntime.listPackages()) {
+    if (!approvedPackageNames.has(pkg.name)) {
+      continue;
+    }
+
     await packageRuntime.enable(pkg.name);
   }
 
@@ -236,15 +259,20 @@ export async function createRuntimeComposition(input: {
         handler: registeredCommand.entry,
         resume: registeredCommand.resume,
         argsSchema: registeredCommand.argsSchema,
-        execute: async (args, context) =>
-          registeredCommand.execute(args, {
+        execute: async (args, context) => {
+          const manifestPermissions = new Set(
+            packageRuntime.getPackage(registeredCommand.packageName)?.manifest.permissions ?? []
+          );
+
+          return registeredCommand.execute(args, {
             ...context,
-            archiveService,
-            packageRuntime,
-            runtimePreset,
-            ingestionRegistry,
-            observability
-          }),
+            ...(manifestPermissions.has("read:archive") ? { archiveService } : {}),
+            ...(manifestPermissions.has("read:packages") ? { packageRuntime } : {}),
+            ...(manifestPermissions.has("read:preset") ? { runtimePreset } : {}),
+            ...(manifestPermissions.has("read:memory") ? { ingestionRegistry } : {}),
+            ...(manifestPermissions.has("write:observability") ? { observability } : {})
+          });
+        },
         help: registeredCommand.help,
         autocomplete: registeredCommand.autocomplete
       })
@@ -288,6 +316,7 @@ export async function createRuntimeComposition(input: {
   const flowEngine = new FlowEngine({
     sessions: repositories.sessions,
     messages: repositories.messages,
+    pendingBlockStore,
     modelGateway: {
       async generateText(input: {
         sessionId: string;
@@ -321,6 +350,18 @@ export async function createRuntimeComposition(input: {
             model: primaryModel
           },
           createdAt: new Date().toISOString()
+        });
+        await repositories.traceRecords.save({
+          traceId: `trace_${input.requestId}`,
+          spanId: createId("span"),
+          sessionId: input.sessionId,
+          turnId: input.flowId,
+          component: "model-gateway",
+          eventType: "model.completed",
+          payload: {
+            model: primaryModel
+          },
+          createdAt: new Date()
         });
 
         return {
@@ -368,4 +409,15 @@ export async function createRuntimeComposition(input: {
     runtimePreset,
     flowEngine
   };
+}
+
+function resolveEnabledPackageNames(env: Record<string, string | undefined>): string[] {
+  const configured = env.COVEL_ENABLED_PACKAGES
+    ?.split(",")
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0);
+
+  return configured && configured.length > 0
+    ? configured
+    : [...DEFAULT_ENABLED_PACKAGE_NAMES];
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createServer, type Server, type IncomingMessage } from "node:http";
 
 import { ActionRequestSchema, type SseEnvelope } from "../../../modules/contracts/src/index.js";
@@ -5,11 +6,33 @@ import { createSession, createWorld, type DomainRepositories } from "../../../mo
 import type { PersistedPresetMetadata, PersistedPresetRecord } from "../../../modules/storage/src/index.js";
 import { createRuntimeErrorPayload, resolveRequestLocale } from "./locale.js";
 
-async function readRequestBody(request: IncomingMessage): Promise<unknown> {
+const DEFAULT_MAX_REQUEST_BODY_BYTES = 1024 * 1024;
+
+class RuntimeRequestError extends Error {
+  readonly code: string;
+
+  constructor(code: string) {
+    super(code);
+    this.code = code;
+  }
+}
+
+async function readRequestBody(
+  request: IncomingMessage,
+  maxRequestBodyBytes = DEFAULT_MAX_REQUEST_BODY_BYTES
+): Promise<unknown> {
   const chunks: Buffer[] = [];
+  let totalBytes = 0;
 
   for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buffer.byteLength;
+
+    if (totalBytes > maxRequestBodyBytes) {
+      throw new RuntimeRequestError("PAYLOAD_TOO_LARGE");
+    }
+
+    chunks.push(buffer);
   }
 
   const rawBody = Buffer.concat(chunks).toString("utf8");
@@ -44,9 +67,11 @@ export function createRuntimeServer(dependencies: {
   };
   createId?(kind: string): string;
   now?(): Date;
+  maxRequestBodyBytes?: number;
 }): Server {
   return createServer(async (request, response) => {
     const requestUrl = new URL(request.url ?? "/", "http://runtime.local");
+    const readJsonBody = () => readRequestBody(request, dependencies.maxRequestBodyBytes);
 
     if (request.method === "GET" && request.url === "/health") {
       response.writeHead(200, {
@@ -68,7 +93,7 @@ export function createRuntimeServer(dependencies: {
     if (request.method === "POST" && requestUrl.pathname === "/worlds") {
       try {
         const repositories = requireRepositories(dependencies.repositories);
-        const body = (await readRequestBody(request)) as {
+        const body = (await readJsonBody()) as {
           name?: string;
           description?: string;
           locale?: string;
@@ -92,10 +117,10 @@ export function createRuntimeServer(dependencies: {
         const locale = resolveRequestLocale({
           header: request.headers["accept-language"]
         });
-        response.writeHead(400, {
+        response.writeHead(resolveRuntimeErrorStatus(error), {
           "content-type": "application/json"
         });
-        response.end(JSON.stringify(createRuntimeErrorPayload("INVALID_REQUEST", locale)));
+        response.end(JSON.stringify(createRuntimeErrorPayload(resolveRuntimeErrorCode(error), locale)));
       }
       return;
     }
@@ -116,7 +141,7 @@ export function createRuntimeServer(dependencies: {
     if (request.method === "POST" && requestUrl.pathname === "/sessions") {
       try {
         const repositories = requireRepositories(dependencies.repositories);
-        const body = (await readRequestBody(request)) as {
+        const body = (await readJsonBody()) as {
           worldId?: string;
           locale?: string;
         };
@@ -139,10 +164,10 @@ export function createRuntimeServer(dependencies: {
         const locale = resolveRequestLocale({
           header: request.headers["accept-language"]
         });
-        response.writeHead(400, {
+        response.writeHead(resolveRuntimeErrorStatus(error), {
           "content-type": "application/json"
         });
-        response.end(JSON.stringify(createRuntimeErrorPayload("INVALID_REQUEST", locale)));
+        response.end(JSON.stringify(createRuntimeErrorPayload(resolveRuntimeErrorCode(error), locale)));
       }
       return;
     }
@@ -158,10 +183,19 @@ export function createRuntimeServer(dependencies: {
     }
 
     if (request.method === "GET" && requestUrl.pathname === "/packages") {
+      const packages = (dependencies.packageRuntime?.listPackages() ?? []) as Array<{
+        name?: unknown;
+        enabled?: unknown;
+      }>;
       response.writeHead(200, {
         "content-type": "application/json"
       });
-      response.end(JSON.stringify(dependencies.packageRuntime?.listPackages() ?? []));
+      response.end(JSON.stringify(
+        packages.map((pkg) => ({
+          name: String(pkg.name ?? ""),
+          enabled: Boolean(pkg.enabled)
+        }))
+      ));
       return;
     }
 
@@ -178,8 +212,8 @@ export function createRuntimeServer(dependencies: {
       try {
         const presetMetadataStore = requirePresetMetadataStore(dependencies.presetMetadataStore);
         const presetId = requestUrl.pathname.split("/")[2] ?? "";
-        const body = (await readRequestBody(request)) as Partial<PersistedPresetRecord>;
-        const updated = await presetMetadataStore.patch(presetId, body);
+        const body = (await readJsonBody()) as Partial<PersistedPresetRecord>;
+        const updated = await presetMetadataStore.patch(presetId, sanitizePresetPatch(body));
         response.writeHead(200, {
           "content-type": "application/json"
         });
@@ -188,10 +222,10 @@ export function createRuntimeServer(dependencies: {
         const locale = resolveRequestLocale({
           header: request.headers["accept-language"]
         });
-        response.writeHead(400, {
+        response.writeHead(resolveRuntimeErrorStatus(error), {
           "content-type": "application/json"
         });
-        response.end(JSON.stringify(createRuntimeErrorPayload("INVALID_REQUEST", locale)));
+        response.end(JSON.stringify(createRuntimeErrorPayload(resolveRuntimeErrorCode(error), locale)));
       }
       return;
     }
@@ -235,7 +269,7 @@ export function createRuntimeServer(dependencies: {
     if (request.method === "POST" && requestUrl.pathname === "/archives") {
       try {
         const archiveService = requireArchiveService(dependencies.archiveService);
-        const body = (await readRequestBody(request)) as {
+        const body = (await readJsonBody()) as {
           sessionId?: string;
           turnCutoff?: number;
           stateSnapshot?: Record<string, unknown>;
@@ -262,10 +296,10 @@ export function createRuntimeServer(dependencies: {
         const locale = resolveRequestLocale({
           header: request.headers["accept-language"]
         });
-        response.writeHead(400, {
+        response.writeHead(resolveRuntimeErrorStatus(error), {
           "content-type": "application/json"
         });
-        response.end(JSON.stringify(createRuntimeErrorPayload("INVALID_REQUEST", locale)));
+        response.end(JSON.stringify(createRuntimeErrorPayload(resolveRuntimeErrorCode(error), locale)));
       }
       return;
     }
@@ -274,7 +308,7 @@ export function createRuntimeServer(dependencies: {
       try {
         const archiveService = requireArchiveService(dependencies.archiveService);
         const archiveVersionId = requestUrl.pathname.split("/")[2] ?? "";
-        const body = (await readRequestBody(request)) as {
+        const body = (await readJsonBody()) as {
           mode?: string;
           locale?: string;
         };
@@ -294,17 +328,17 @@ export function createRuntimeServer(dependencies: {
         const locale = resolveRequestLocale({
           header: request.headers["accept-language"]
         });
-        response.writeHead(400, {
+        response.writeHead(resolveRuntimeErrorStatus(error), {
           "content-type": "application/json"
         });
-        response.end(JSON.stringify(createRuntimeErrorPayload("INVALID_REQUEST", locale)));
+        response.end(JSON.stringify(createRuntimeErrorPayload(resolveRuntimeErrorCode(error), locale)));
       }
       return;
     }
 
     if (request.method === "POST" && requestUrl.pathname === "/actions") {
       try {
-        const body = await readRequestBody(request);
+        const body = await readJsonBody();
         const locale = resolveRequestLocale({
           header: request.headers["accept-language"],
           bodyLocale: (body as { locale?: string } | null | undefined)?.locale
@@ -333,10 +367,10 @@ export function createRuntimeServer(dependencies: {
           header: request.headers["accept-language"],
           bodyLocale: undefined
         });
-        response.writeHead(400, {
+        response.writeHead(resolveRuntimeErrorStatus(error), {
           "content-type": "application/json"
         });
-        response.end(JSON.stringify(createRuntimeErrorPayload("INVALID_REQUEST", locale)));
+        response.end(JSON.stringify(createRuntimeErrorPayload(resolveRuntimeErrorCode(error), locale)));
       }
       return;
     }
@@ -402,7 +436,7 @@ function createId(
   },
   kind: string
 ): string {
-  return dependencies.createId ? dependencies.createId(kind) : `${kind}_${Date.now()}`;
+  return dependencies.createId ? dependencies.createId(kind) : `${kind}_${randomUUID()}`;
 }
 
 function now(
@@ -411,4 +445,37 @@ function now(
   }
 ): Date {
   return dependencies.now ? dependencies.now() : new Date();
+}
+
+function sanitizePresetPatch(input: Partial<PersistedPresetRecord>): Partial<PersistedPresetRecord> {
+  const patch: Partial<PersistedPresetRecord> = {};
+
+  if (typeof input.name === "string") {
+    patch.name = input.name;
+  }
+  if (typeof input.model === "string") {
+    patch.model = input.model;
+  }
+  if (typeof input.enabled === "boolean") {
+    patch.enabled = input.enabled;
+  }
+  if (typeof input.isDefault === "boolean") {
+    patch.isDefault = input.isDefault;
+  }
+
+  return patch;
+}
+
+function resolveRuntimeErrorCode(error: unknown): string {
+  if (error instanceof RuntimeRequestError) {
+    return error.code;
+  }
+
+  return "INVALID_REQUEST";
+}
+
+function resolveRuntimeErrorStatus(error: unknown): number {
+  return error instanceof RuntimeRequestError && error.code === "PAYLOAD_TOO_LARGE"
+    ? 413
+    : 400;
 }

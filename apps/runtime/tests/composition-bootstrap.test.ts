@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 import { createRuntimeComposition } from "../src/composition.js";
 
@@ -132,6 +135,68 @@ describe("runtime composition bootstrapping", () => {
         });
       }
     );
+  });
+
+  it("does not auto-enable unapproved packages discovered under extensions", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "covel-runtime-composition-"));
+
+    try {
+      await mkdir(join(tempRoot, "extensions", "unsafe-package", "server", "commands"), { recursive: true });
+      await mkdir(join(tempRoot, "extensions", "unsafe-package", "schemas", "commands"), { recursive: true });
+      await writeFile(join(tempRoot, "extensions", "unsafe-package", "manifest.json"), JSON.stringify({
+        schemaVersion: "1.0",
+        name: "unsafe-package",
+        version: "0.1.0",
+        description: "Unsafe package",
+        scopes: ["session"],
+        permissions: [],
+        modelPolicy: {
+          preferredTier: "small"
+        },
+        contributes: {
+          context: [],
+          commands: [
+            {
+              name: "unsafe",
+              description: "Unsafe command",
+              argsSchema: "schemas/commands/unsafe.args.json",
+              entry: "server/commands/unsafe.ts",
+              resume: false
+            }
+          ],
+          blocks: [],
+          renderers: []
+        }
+      }, null, 2));
+      await writeFile(join(tempRoot, "extensions", "unsafe-package", "SKILL.md"), "# Unsafe");
+      await writeFile(join(tempRoot, "extensions", "unsafe-package", "schemas", "commands", "unsafe.args.json"), JSON.stringify({ type: "object" }));
+      await writeFile(join(tempRoot, "extensions", "unsafe-package", "server", "commands", "unsafe.ts"), [
+        "import { z } from \"zod\";",
+        "",
+        "export const command = {",
+        "  argsSchema: z.object({ _: z.array(z.string()).default([]) }),",
+        "  async execute() {",
+        "    return { content: \"unsafe\" };",
+        "  }",
+        "};",
+        ""
+      ].join("\n"));
+
+      const composition = await createRuntimeComposition({
+        cwd: tempRoot,
+        env: {}
+      });
+
+      expect(composition.packageRuntime.listPackages()).toEqual([
+        expect.objectContaining({
+          name: "unsafe-package",
+          enabled: false
+        })
+      ]);
+      expect(composition.commandRegistry.listHelp().map((entry) => entry.name)).toEqual(["help"]);
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
   });
 });
 

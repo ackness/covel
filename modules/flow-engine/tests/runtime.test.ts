@@ -25,6 +25,7 @@ function createHarness(options?: {
   const modelCalls: Array<{ sessionId: string; prompt: string; requestId: string; flowId: string; locale: string }> = [];
   const commandCalls: Array<{ commandText: string; sessionId: string; requestId: string; locale: string }> = [];
   let idCounter = 0;
+  const pendingBlocks = new Map<string, { blockId: string; sessionId: string; flowId: string; turnId: string }>();
 
   const modelGateway: ModelGateway = {
     async generateText(input) {
@@ -65,6 +66,17 @@ function createHarness(options?: {
     },
     modelGateway,
     commandBus,
+    pendingBlockStore: {
+      async save(entry) {
+        pendingBlocks.set(entry.blockId, entry);
+      },
+      async getByBlockId(blockId) {
+        return pendingBlocks.get(blockId) ?? null;
+      },
+      async delete(blockId) {
+        pendingBlocks.delete(blockId);
+      }
+    },
     createId(prefix) {
       idCounter += 1;
       return `${prefix}_${idCounter}`;
@@ -79,7 +91,8 @@ function createHarness(options?: {
     sessions,
     messages,
     modelCalls,
-    commandCalls
+    commandCalls,
+    pendingBlocks
   };
 }
 
@@ -162,6 +175,14 @@ describe("FlowEngine", () => {
       "block.emitted",
       "flow.completed"
     ]);
+    expect(events[2]?.payload.block).toMatchObject({
+      id: "block_4",
+      meta: {
+        requestId: "req_02",
+        sessionId: "session-1",
+        turnId: "turn_2"
+      }
+    });
     expect(harness.sessions.get("session-1")?.status).toBe("waiting_for_input");
   });
 
@@ -212,6 +233,7 @@ describe("FlowEngine", () => {
     });
 
     const initialFlowId = initialEvents[0]?.flowId;
+    const emittedBlock = initialEvents.find((event) => event.type === "block.emitted")?.payload.block as BlockEnvelope;
 
     const resumeEvents = await harness.engine.handle({
       requestId: "req_04",
@@ -219,10 +241,10 @@ describe("FlowEngine", () => {
       sessionId: "session-1",
       locale: "en",
       payload: {
-        blockId: "blk_01",
-        blockType: "choices",
+        blockId: emittedBlock.id,
+        blockType: emittedBlock.type,
         sessionId: "session-1",
-        turnId: "turn_resume",
+        turnId: emittedBlock.meta.turnId,
         response: {
           selected: "opt_a"
         }
@@ -237,6 +259,225 @@ describe("FlowEngine", () => {
     expect(harness.modelCalls.at(-1)?.locale).toBe("en");
     expect(resumeEvents.every((event) => event.flowId === initialFlowId)).toBe(true);
     expect(harness.sessions.get("session-1")?.status).toBe("active");
+  });
+
+  it("resumes a pending interactive block after engine recreation by loading it from the pending block store", async () => {
+    const choiceBlock: BlockEnvelope = {
+      id: "blk_restart",
+      type: "choices",
+      version: "1.0",
+      meta: {
+        package: "core-guide",
+        requestId: "req_restart",
+        traceId: "tr_restart",
+        sessionId: "session-1",
+        turnId: "turn_restart"
+      },
+      interaction: {
+        requiresResponse: true,
+        responseSchema: "schemas/blocks/choices.response.json",
+        submitAs: "block_response",
+        resumePolicy: "resume_current_flow"
+      },
+      data: {
+        title: "下一步",
+        options: [{ id: "opt_a", label: "继续前进" }]
+      }
+    };
+
+    const firstHarness = createHarness({
+      commandResult: {
+        blocks: [choiceBlock],
+        traceId: "trace_command"
+      }
+    });
+
+    const initialEvents = await firstHarness.engine.handle({
+      requestId: "req_06",
+      type: "execute_command",
+      sessionId: "session-1",
+      locale: "en",
+      payload: {
+        command: "/guide",
+        args: {}
+      }
+    });
+    const emittedBlock = initialEvents.find((event) => event.type === "block.emitted")?.payload.block as BlockEnvelope;
+
+    const resumedHarness = createHarness({
+      modelResult: {
+        content: "You step deeper into the ruins.",
+        traceId: "trace_model"
+      }
+    });
+    resumedHarness.pendingBlocks.set(emittedBlock.id, {
+      blockId: emittedBlock.id,
+      sessionId: "session-1",
+      flowId: initialEvents[0]!.flowId,
+      turnId: emittedBlock.meta.turnId
+    });
+
+    const resumeEvents = await resumedHarness.engine.handle({
+      requestId: "req_07",
+      type: "submit_block_response",
+      sessionId: "session-1",
+      locale: "en",
+      payload: {
+        blockId: emittedBlock.id,
+        blockType: emittedBlock.type,
+        sessionId: "session-1",
+        turnId: emittedBlock.meta.turnId,
+        response: {
+          selected: "opt_a"
+        }
+      }
+    });
+
+    expect(resumeEvents.map((event) => event.type)).toEqual([
+      "flow.phase.changed",
+      "message.completed",
+      "flow.completed"
+    ]);
+    expect(resumeEvents.every((event) => event.flowId === initialEvents[0]?.flowId)).toBe(true);
+  });
+
+  it("uses the persisted pending block turnId when resuming instead of trusting the client payload", async () => {
+    const choiceBlock: BlockEnvelope = {
+      id: "blk_turn_guard",
+      type: "choices",
+      version: "1.0",
+      meta: {
+        package: "core-guide",
+        requestId: "req_turn_guard",
+        traceId: "tr_turn_guard",
+        sessionId: "session-1",
+        turnId: "turn_turn_guard"
+      },
+      interaction: {
+        requiresResponse: true,
+        responseSchema: "schemas/blocks/choices.response.json",
+        submitAs: "block_response",
+        resumePolicy: "resume_current_flow"
+      },
+      data: {
+        title: "下一步",
+        options: [{ id: "opt_a", label: "继续前进" }]
+      }
+    };
+
+    const harness = createHarness({
+      commandResult: {
+        blocks: [choiceBlock],
+        traceId: "trace_command"
+      },
+      modelResult: {
+        content: "You step deeper into the ruins.",
+        traceId: "trace_model"
+      }
+    });
+
+    const initialEvents = await harness.engine.handle({
+      requestId: "req_08",
+      type: "execute_command",
+      sessionId: "session-1",
+      locale: "en",
+      payload: {
+        command: "/guide",
+        args: {}
+      }
+    });
+    const emittedBlock = initialEvents.find((event) => event.type === "block.emitted")?.payload.block as BlockEnvelope;
+
+    const resumeEvents = await harness.engine.handle({
+      requestId: "req_09",
+      type: "submit_block_response",
+      sessionId: "session-1",
+      locale: "en",
+      payload: {
+        blockId: emittedBlock.id,
+        blockType: emittedBlock.type,
+        sessionId: "session-1",
+        turnId: "turn_tampered",
+        response: {
+          selected: "opt_a"
+        }
+      }
+    });
+
+    expect(resumeEvents.every((event) => event.turnId === emittedBlock.meta.turnId)).toBe(true);
+  });
+
+  it("rejects block responses that try to resume a pending block from another session", async () => {
+    const choiceBlock: BlockEnvelope = {
+      id: "blk_session_guard",
+      type: "choices",
+      version: "1.0",
+      meta: {
+        package: "core-guide",
+        requestId: "req_session_guard",
+        traceId: "tr_session_guard",
+        sessionId: "session-1",
+        turnId: "turn_session_guard"
+      },
+      interaction: {
+        requiresResponse: true,
+        responseSchema: "schemas/blocks/choices.response.json",
+        submitAs: "block_response",
+        resumePolicy: "resume_current_flow"
+      },
+      data: {
+        title: "下一步",
+        options: [{ id: "opt_a", label: "继续前进" }]
+      }
+    };
+
+    const harness = createHarness({
+      commandResult: {
+        blocks: [choiceBlock],
+        traceId: "trace_command"
+      }
+    });
+    harness.sessions.set("session-2", createSession({
+      id: "session-2",
+      worldId: "world-1",
+      status: "active",
+      createdAt: new Date("2026-01-01T00:00:00.000Z")
+    }));
+
+    const initialEvents = await harness.engine.handle({
+      requestId: "req_10",
+      type: "execute_command",
+      sessionId: "session-1",
+      locale: "en",
+      payload: {
+        command: "/guide",
+        args: {}
+      }
+    });
+    const emittedBlock = initialEvents.find((event) => event.type === "block.emitted")?.payload.block as BlockEnvelope;
+
+    const resumeEvents = await harness.engine.handle({
+      requestId: "req_11",
+      type: "submit_block_response",
+      sessionId: "session-2",
+      locale: "en",
+      payload: {
+        blockId: emittedBlock.id,
+        blockType: emittedBlock.type,
+        sessionId: "session-2",
+        turnId: emittedBlock.meta.turnId,
+        response: {
+          selected: "opt_a"
+        }
+      }
+    });
+
+    expect(resumeEvents.map((event) => event.type)).toEqual(["flow.failed"]);
+    expect(resumeEvents[0]?.payload).toMatchObject({
+      code: "PENDING_BLOCK_NOT_FOUND",
+      message: "Pending block not found."
+    });
+    expect(harness.modelCalls).toHaveLength(0);
   });
 
   it("fails send_message when the session does not exist", async () => {

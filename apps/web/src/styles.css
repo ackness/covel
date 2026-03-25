@@ -41,9 +41,10 @@ textarea {
 .workspace-shell {
   display: grid;
   grid-template-columns: minmax(18rem, 22rem) minmax(24rem, 1fr) minmax(18rem, 22rem);
-  min-height: 100vh;
+  flex: 1;
+  min-height: 100%;
   gap: 1rem;
-  padding: 1rem;
+  align-items: stretch;
 }
 
 .workspace-panel,
@@ -59,6 +60,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  min-height: 0;
 }
 
 .workspace-main {
@@ -67,12 +69,38 @@ textarea {
   min-height: 0;
 }
 
-.workspace-header {
+.page-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.page-content {
+  min-height: 0;
   display: flex;
-  align-items: flex-start;
+}
+
+.page-header,
+.page-footer {
+  background: var(--panel);
+  backdrop-filter: blur(18px);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   padding: 1.25rem 1.5rem 1rem;
-  border-bottom: 1px solid var(--line);
+}
+
+.page-header-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
 }
 
 .brand {
@@ -88,6 +116,54 @@ textarea {
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.workspace-status {
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.locale-switcher {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.45rem 0.35rem 0.75rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.locale-switcher-label {
+  white-space: nowrap;
+}
+
+.locale-switcher-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.18rem;
+  background: rgba(23, 20, 17, 0.06);
+}
+
+.locale-button {
+  min-width: 3rem;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.42rem 0.7rem;
+  text-transform: none;
+  letter-spacing: 0.04em;
+}
+
+.locale-button:hover {
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.locale-button.active {
+  background: var(--accent);
+  color: #f4efe6;
+  box-shadow: 0 8px 18px rgba(35, 58, 55, 0.18);
 }
 
 .timeline {
@@ -167,8 +243,23 @@ textarea {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 1rem;
-  padding: 1rem 1.5rem 1.5rem;
-  border-top: 1px solid var(--line);
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+
+.page-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.5rem 1rem;
+  background: rgba(255, 252, 246, 0.45);
+}
+
+.page-footer-dock,
+.page-footer-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .composer-field textarea {
@@ -211,5 +302,37 @@ textarea {
 @media (max-width: 1024px) {
   .workspace-shell {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .page-shell {
+    padding: 0.75rem;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.9rem;
+  }
+
+  .page-header-tools {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .locale-switcher {
+    flex: 1;
+    justify-content: space-between;
+  }
+
+  .page-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .page-footer-tools {
+    width: 100%;
+    justify-content: flex-end;
   }
 }

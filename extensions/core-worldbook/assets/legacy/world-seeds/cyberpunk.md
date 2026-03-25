@@ -1,14 +1,17 @@
 ---
 id: legacy-cyberpunk-neon-abyss
-name: 霓虹深渊：2187
-description: 2187 年的新上海，五大企业垄断世界，神经链与义体改造重塑人的边界。
 genre: cyberpunk
 tags: [赛博朋克, 科幻, 反乌托邦, 近未来]
-language: zh
+defaultLocale: zh-CN
+metadataLocales: [zh-CN, en]
+contentLocales: [zh-CN]
 sourceProject: ../ai-gamestudio-dev
 sourcePath: templates/worlds/cyberpunk.md
-legacyPluginHints: [skill-check, combat, inventory, quest, faction, relationship, status-effect, codex]
-i18n:
+legacyCapabilityHints: [skill-check, combat, inventory, quest, faction, relationship, status-effect, codex]
+localizedMetadata:
+  zh-CN:
+    name: 霓虹深渊：2187
+    description: 2187 年的新上海，五大企业垄断世界，神经链与义体改造重塑人的边界。
   en:
     name: Neon Abyss: 2187
     description: In New Shanghai, megacorps divide the world while neural links and cybernetics rewrite fate.
@@ -69,6 +72,7 @@ ingestionHints:
 - 企业、区域、技术体系：归入 `worldbook`
 - 冷硬、克制、功利化主持语气：可归入 `persona`
 - NPC 声望、装备、义体状态：先作为 `MemoryDocument`，未来再升级到角色卡实体
+- 当前 staged asset 只有 `zh-CN` 正文；英文入口只切 metadata，不伪装正文已翻译
 
 ## 重要 NPC 种子
 

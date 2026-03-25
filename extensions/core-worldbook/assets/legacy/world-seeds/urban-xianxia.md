@@ -1,14 +1,17 @@
 ---
 id: legacy-urban-xianxia-qi-resurgence
-name: 灵气复苏：外卖小哥的修仙日常
-description: 现代都市与复苏灵气并存，普通人被卷入隐秘修真世界。
 genre: urban-xianxia
 tags: [现代修真, 都市奇幻, 日常喜剧, 跑团设定]
-language: zh
+defaultLocale: zh-CN
+metadataLocales: [zh-CN, en]
+contentLocales: [zh-CN]
 sourceProject: ../ai-gamestudio-dev
 sourcePath: templates/worlds/urban-xianxia.md
-legacyPluginHints: [skill-check, combat, inventory, quest, faction, relationship, status-effect, codex]
-i18n:
+legacyCapabilityHints: [skill-check, combat, inventory, quest, faction, relationship, status-effect, codex]
+localizedMetadata:
+  zh-CN:
+    name: 灵气复苏：外卖小哥的修仙日常
+    description: 现代都市与复苏灵气并存，普通人被卷入隐秘修真世界。
   en:
     name: Qi Resurgence: A Courier's Cultivation Life
     description: A delivery rider is pulled into hidden cultivation circles as spiritual energy returns to the modern city.
@@ -67,6 +70,7 @@ ingestionHints:
 - 灵气规则、地点、势力：归入 `worldbook`
 - 轻松但不轻浮的叙事节奏：可归入 `persona`
 - 觉醒者状态、物品、关系变化：先入 `MemoryDocument`
+- 当前 staged asset 只有 `zh-CN` 正文；英文入口只切 metadata，不伪装正文已翻译
 
 ## 重要 NPC 种子
 

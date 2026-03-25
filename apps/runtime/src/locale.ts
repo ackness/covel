@@ -49,6 +49,10 @@ export function translateRuntimeError(code: string, locale: SupportedLocale): st
       "zh-CN": "请求无效。",
       en: "Invalid request."
     },
+    PAYLOAD_TOO_LARGE: {
+      "zh-CN": "请求体过大。",
+      en: "Payload too large."
+    },
     NOT_FOUND: {
       "zh-CN": "资源不存在。",
       en: "Not found."

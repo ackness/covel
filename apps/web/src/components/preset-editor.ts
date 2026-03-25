@@ -15,12 +15,10 @@ export function PresetEditor(input: {
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
   const [formState, setFormState] = useState<{
     model: string;
-    baseUrl: string;
     enabled: boolean;
     isDefault: boolean;
   }>({
     model: "",
-    baseUrl: "",
     enabled: true,
     isDefault: false
   });
@@ -43,7 +41,6 @@ export function PresetEditor(input: {
     setEditingPresetId(preset.id);
     setFormState({
       model: preset.model,
-      baseUrl: preset.baseUrl ?? "",
       enabled: preset.enabled,
       isDefault: preset.isDefault
     });
@@ -63,7 +60,6 @@ export function PresetEditor(input: {
       },
       body: JSON.stringify({
         model: formState.model,
-        baseUrl: formState.baseUrl,
         enabled: formState.enabled,
         isDefault: formState.isDefault
       })
@@ -75,7 +71,6 @@ export function PresetEditor(input: {
     );
     setFormState({
       model: updatedPreset.model,
-      baseUrl: updatedPreset.baseUrl ?? "",
       enabled: updatedPreset.enabled,
       isDefault: updatedPreset.isDefault
     });
@@ -137,22 +132,6 @@ export function PresetEditor(input: {
                 setFormState((current) => ({
                   ...current,
                   model: value
-                }));
-              }
-            })
-          ),
-          createElement(
-            "label",
-            { className: "field" },
-            createElement("span", null, t("preset.baseUrl")),
-            createElement("input", {
-              "aria-label": t("preset.baseUrl"),
-              value: formState.baseUrl,
-              onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
-                const value = event.currentTarget.value;
-                setFormState((current) => ({
-                  ...current,
-                  baseUrl: value
                 }));
               }
             })

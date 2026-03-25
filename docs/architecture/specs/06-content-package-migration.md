@@ -119,7 +119,7 @@
 
 当前只能降级成：
 
-- `legacyPluginHints`
+- `legacyCapabilityHints`
 - capability hints
 - authoring metadata
 
@@ -145,19 +145,25 @@
 
 而不是急着扩张 core domain。
 
-## 6. i18n 相关延后项
+## 6. i18n 已收敛后的实现约束
 
-下面这些应该等当前 i18n 工作稳定后再继续：
+内容包与旧资产迁移现在统一遵循下面约束：
 
-- 模板 metadata 的最终 locale key 形状
-- 模板浏览与选择 UI 的双语展示
-- prompt-layer 的多语言切换策略
+- 默认 locale 固定为 `zh-CN`
+- 可选 locale 固定为 `en`
+- 不再使用旧项目里的 `zh` / `en` 松散语义作为最终 contract
+- 内容 metadata locale 与内容正文 locale 必须分开表达
+- 当英文 metadata 可用、但英文正文缺失时，允许正文 fallback 到 `zh-CN`
+- 但任何用户可见入口都必须显式暴露：
+  - `requestedLocale`
+  - `metadataLocale`
+  - `contentLocale`
 
-在此之前，可以先迁：
+这意味着：
 
-- 原始世界文档
-- 轻量 frontmatter
-- `legacyPluginHints`
+- 世界 seed 列表、详情、命令输出必须使用共享 locale helper
+- 包内静态资产 frontmatter 应统一改成 `defaultLocale + metadataLocales + contentLocales + localizedMetadata`
+- 后续 importer / Web Host / runtime 若发生 content fallback，不能假装内容已经被翻译
 
 ## 7. 当前已落地的迁移入口
 
@@ -169,9 +175,10 @@
 
 - 一份迁移后的 `WORLD-SPEC`
 - 三份代表性世界 seed
+- `core-worldbook` 的最小内容 catalog 与 `/world-seeds` command surface
 
 这些文件的职责是：
 
 - 给后续 importer 提供稳定输入
 - 给 `core-worldbook / core-persona / core-character-card` 提供真实内容样本
-- 在不碰 runtime/web/i18n 热区的前提下，先完成内容层迁移
+- 在不碰 runtime/web 热区的前提下，先完成内容层迁移并把 locale contract 固化下来

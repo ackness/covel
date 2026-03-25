@@ -49,11 +49,25 @@ interface MessageRepository {
   listBySessionId(sessionId: string): Promise<Message[]>;
 }
 
+export interface PendingBlockRecord {
+  blockId: string;
+  sessionId: string;
+  flowId: string;
+  turnId: string;
+}
+
+export interface PendingBlockStore {
+  save(record: PendingBlockRecord): Promise<void>;
+  getByBlockId(blockId: string): Promise<PendingBlockRecord | null>;
+  delete(blockId: string): Promise<void>;
+}
+
 export interface FlowDependencies {
   sessions: SessionRepository;
   messages: MessageRepository;
   modelGateway: ModelGateway;
   commandBus: CommandBus;
+  pendingBlockStore?: PendingBlockStore;
   createId(prefix: string): string;
   now(): Date;
 }
@@ -61,6 +75,7 @@ export interface FlowDependencies {
 interface PendingBlockContext {
   block: BlockEnvelope;
   flowId: string;
+  turnId: string;
 }
 
 export class FlowEngine {
@@ -137,12 +152,22 @@ export class FlowEngine {
 
     if (result.blocks) {
       for (const block of result.blocks) {
+        const emittedBlock = this.normalizeBlockEnvelope(block, {
+          requestId: action.requestId,
+          sessionId: action.sessionId,
+          turnId,
+          traceId: result.traceId
+        });
         events.push(this.createEvent("block.emitted", action.requestId, action.sessionId, turnId, flowId, seq++, {
-          block
+          block: emittedBlock
         }, result.traceId));
 
-        if (block.interaction.requiresResponse) {
-          this.pendingBlocks.set(block.id, { block, flowId });
+        if (emittedBlock.interaction.requiresResponse) {
+          await this.rememberPendingBlock({
+            block: emittedBlock,
+            flowId,
+            turnId
+          });
           await this.dependencies.sessions.save({
             ...session,
             status: "waiting_for_input"
@@ -203,12 +228,22 @@ export class FlowEngine {
 
     if (result.blocks) {
       for (const block of result.blocks) {
+        const emittedBlock = this.normalizeBlockEnvelope(block, {
+          requestId: action.requestId,
+          sessionId: action.sessionId,
+          turnId,
+          traceId: result.traceId
+        });
         events.push(this.createEvent("block.emitted", action.requestId, action.sessionId, turnId, flowId, seq++, {
-          block
+          block: emittedBlock
         }, result.traceId));
 
-        if (block.interaction.requiresResponse) {
-          this.pendingBlocks.set(block.id, { block, flowId });
+        if (emittedBlock.interaction.requiresResponse) {
+          await this.rememberPendingBlock({
+            block: emittedBlock,
+            flowId,
+            turnId
+          });
           await this.dependencies.sessions.save({
             ...session,
             status: "waiting_for_input"
@@ -228,34 +263,35 @@ export class FlowEngine {
     requestId: string,
     locale: SupportedLocale = DEFAULT_LOCALE
   ): Promise<SseEnvelope[]> {
-    const session = await this.dependencies.sessions.getById(response.sessionId);
-    if (!session) {
-      return [this.createTerminalEvent("flow.failed", requestId, response.sessionId, this.dependencies.createId("flow"), {
-        code: "SESSION_NOT_FOUND",
-        message: translateFlowError("SESSION_NOT_FOUND", locale)
-      })];
-    }
-
-    const pending = this.pendingBlocks.get(response.blockId);
-    if (!pending) {
+    const pending = await this.resolvePendingBlock(response.blockId);
+    if (!pending || pending.block.meta.sessionId !== response.sessionId) {
       return [this.createTerminalEvent("flow.failed", requestId, response.sessionId, this.dependencies.createId("flow"), {
         code: "PENDING_BLOCK_NOT_FOUND",
         message: translateFlowError("PENDING_BLOCK_NOT_FOUND", locale)
       })];
     }
 
+    const session = await this.dependencies.sessions.getById(pending.block.meta.sessionId);
+    if (!session) {
+      return [this.createTerminalEvent("flow.failed", requestId, pending.block.meta.sessionId, this.dependencies.createId("flow"), {
+        code: "SESSION_NOT_FOUND",
+        message: translateFlowError("SESSION_NOT_FOUND", locale)
+      })];
+    }
+
     const flowId = pending.flowId;
-    const turnId = response.turnId;
+    const turnId = pending.turnId;
+    const sessionId = pending.block.meta.sessionId;
     const events: SseEnvelope[] = [];
     let seq = 1;
 
-    events.push(this.createEvent("flow.phase.changed", requestId, response.sessionId, turnId, flowId, seq++, {
+    events.push(this.createEvent("flow.phase.changed", requestId, sessionId, turnId, flowId, seq++, {
       phase: "resume"
     }));
 
     const prompt = JSON.stringify(response.response);
     const result = await this.dependencies.modelGateway.generateText({
-      sessionId: response.sessionId,
+      sessionId,
       prompt,
       requestId,
       flowId,
@@ -263,26 +299,27 @@ export class FlowEngine {
     });
 
     const messageId = this.dependencies.createId("msg");
-    events.push(this.createEvent("message.completed", requestId, response.sessionId, turnId, flowId, seq++, {
+    events.push(this.createEvent("message.completed", requestId, sessionId, turnId, flowId, seq++, {
       messageId,
       content: result.content
     }, result.traceId));
 
     await this.dependencies.messages.save({
       id: messageId,
-      sessionId: response.sessionId,
+      sessionId,
       role: "assistant",
       content: result.content,
       createdAt: this.dependencies.now()
     });
 
     this.pendingBlocks.delete(response.blockId);
+    await this.dependencies.pendingBlockStore?.delete(response.blockId);
     await this.dependencies.sessions.save({
       ...session,
       status: "active"
     });
 
-    events.push(this.createTerminalEvent("flow.completed", requestId, response.sessionId, flowId, {
+    events.push(this.createTerminalEvent("flow.completed", requestId, sessionId, flowId, {
       turnId
     }, result.traceId, seq));
     return events;
@@ -322,6 +359,74 @@ export class FlowEngine {
   ): SseEnvelope {
     const turnId = typeof payload.turnId === "string" ? payload.turnId : this.dependencies.createId("turn");
     return this.createEvent(type, requestId, sessionId, turnId, flowId, seq, payload, traceId);
+  }
+
+  private normalizeBlockEnvelope(
+    block: BlockEnvelope,
+    metadata: {
+      requestId: string;
+      sessionId: string;
+      turnId: string;
+      traceId?: string;
+    }
+  ): BlockEnvelope {
+    return {
+      ...block,
+      id: this.dependencies.createId("block"),
+      meta: {
+        ...block.meta,
+        requestId: metadata.requestId,
+        traceId: metadata.traceId ?? "trace_local",
+        sessionId: metadata.sessionId,
+        turnId: metadata.turnId
+      }
+    };
+  }
+
+  private async rememberPendingBlock(input: PendingBlockContext): Promise<void> {
+    this.pendingBlocks.set(input.block.id, input);
+    await this.dependencies.pendingBlockStore?.save({
+      blockId: input.block.id,
+      sessionId: input.block.meta.sessionId,
+      flowId: input.flowId,
+      turnId: input.turnId
+    });
+  }
+
+  private async resolvePendingBlock(blockId: string): Promise<PendingBlockContext | null> {
+    const inMemory = this.pendingBlocks.get(blockId);
+    if (inMemory) {
+      return inMemory;
+    }
+
+    const persisted = await this.dependencies.pendingBlockStore?.getByBlockId(blockId);
+    if (!persisted) {
+      return null;
+    }
+
+    return {
+      block: {
+        id: persisted.blockId,
+        type: "pending",
+        version: "1.0",
+        meta: {
+          package: "runtime",
+          requestId: "restored",
+          traceId: "trace_local",
+          sessionId: persisted.sessionId,
+          turnId: persisted.turnId
+        },
+        interaction: {
+          requiresResponse: true,
+          responseSchema: "",
+          submitAs: "block_response",
+          resumePolicy: "resume_current_flow"
+        },
+        data: {}
+      },
+      flowId: persisted.flowId,
+      turnId: persisted.turnId
+    };
   }
 }
 

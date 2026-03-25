@@ -234,6 +234,8 @@
 - runtime 已优先从 first-party package command module 组装命令系统
 - `core-guide / core-memory-rag / core-worldbook / core-character-card / core-persona`
   - 已补 manifest 对应占位 `context.ts` / renderer 文件，避免目录结构与声明脱节
+- `core-worldbook`
+  - 已具备最小 world seed catalog 与 `/world-seeds` command surface
 - runtime 当前仍只真正消费 package command
 - `Preset` 当前主要由 `model-gateway + storage + runtime/web host` 承载
 - 其余 package 仍主要是 package runtime 可消费的最小壳
@@ -274,6 +276,7 @@
 
 - package manifest 虽已声明 `context` / `renderer` contribution，但 runtime 仍未执行 package-owned context provider，也未动态装载 package-owned renderer
 - 这意味着当前 package 层更接近“已建好承载位，但尚未接主链路”
+- `core-worldbook` 已经不再只是纯占位壳，但当前真实能力仍停留在 staged content discovery / import draft，不等于已接入会话上下文
 
 ### 3.2 Memory / RAG 仍未达到规范全文能力
 

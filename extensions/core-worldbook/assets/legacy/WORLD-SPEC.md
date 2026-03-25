@@ -8,13 +8,16 @@ current `covel` architecture.
 ```md
 ---
 id: legacy-steam-frontier
-name: 铁潮边境
-description: 三大城邦争夺蒸汽矿脉的边境世界
 genre: steampunk
 tags: [工业, 边境, 战争]
-language: zh
-legacyPluginHints: [combat, inventory, guide, codex]
-i18n:
+defaultLocale: zh-CN
+metadataLocales: [zh-CN, en]
+contentLocales: [zh-CN]
+legacyCapabilityHints: [combat, inventory, guide, codex]
+localizedMetadata:
+  zh-CN:
+    name: 铁潮边境
+    description: 三大城邦争夺蒸汽矿脉的边境世界
   en:
     name: Iron Tide Frontier
     description: A steam frontier where three city-states fight over mineral veins.
@@ -38,13 +41,13 @@ i18n:
 
 ## 2. Current mapping to `covel`
 
-- `name` / `description`
+- localized metadata
   - map to `World`
 - complete markdown
   - store as `Artifact`
 - heading-level sections
   - split into `MemoryDocument`
-- `legacyPluginHints`
+- `legacyCapabilityHints`
   - keep as migration metadata only
 
 Do not map old `plugins` directly to current package activation.
@@ -60,10 +63,9 @@ Prefer sections that split cleanly into retrievable units:
 - rule boundaries
 - narrative style guidance
 
-## 4. Deferred items
+## 4. Locale rules
 
-Wait for the current i18n work to settle before fixing:
-
-- final locale key shape
-- UI-facing template localization
-- prompt-layer locale switching
+- Only `zh-CN` and `en` are valid metadata locales.
+- `defaultLocale` is the canonical content locale.
+- `contentLocales` must describe actual body locales, not desired future locales.
+- If `en` metadata exists but body content still falls back to `zh-CN`, importer and UI must expose that fallback explicitly.

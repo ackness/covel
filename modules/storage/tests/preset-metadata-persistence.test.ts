@@ -43,6 +43,10 @@ interface PersistedPresetMetadata extends Omit<PersistedPresetRecord, "apiKey"> 
 
 interface PresetRepositoryLike {
   save(input: PersistedPresetRecord): Promise<void>;
+  patch(
+    presetId: string,
+    input: Partial<PersistedPresetRecord>
+  ): Promise<PersistedPresetMetadata>;
   getById(id: string): Promise<PersistedPresetMetadata | null>;
   list(): Promise<PersistedPresetMetadata[]>;
 }
@@ -83,6 +87,7 @@ function expectPresetRepository(repositories: unknown): PresetRepositoryLike {
 
   expect(presetRepository).toBeDefined();
   expect(presetRepository?.save).toBeTypeOf("function");
+  expect(presetRepository?.patch).toBeTypeOf("function");
   expect(presetRepository?.getById).toBeTypeOf("function");
   expect(presetRepository?.list).toBeTypeOf("function");
 
@@ -193,5 +198,54 @@ describe("preset metadata persistence", () => {
         scope: "global"
       }
     ]);
+  });
+
+  it("preserves the stored api key when patching only non-secret postgres preset fields", async () => {
+    const harness = createPgMemHarness();
+    const artifactRootDirectory = await mkdtemp(join(tmpdir(), "covel-storage-preset-pg-patch-"));
+    const pool = harness.createPool();
+
+    roots.push(artifactRootDirectory);
+    pools.push(pool);
+
+    const port = createConfiguredPostgresStoragePort({
+      pool,
+      artifactRootDirectory
+    });
+    const repositories = await port.createRepositories();
+    const presets = expectPresetRepository(repositories);
+    const preset = createPresetFixture();
+
+    await presets.save(preset);
+    await presets.patch(preset.id, {
+      model: "qwen-max",
+      enabled: false
+    });
+
+    await expect(presets.getById(preset.id)).resolves.toEqual({
+      id: "default-story",
+      name: "Default story",
+      provider: "openaiCompatible",
+      model: "qwen-max",
+      tier: "medium",
+      baseUrl: "https://persisted.example/v1",
+      supportedModes: ["text", "object", "stream"],
+      enabled: false,
+      isDefault: true,
+      scope: "global"
+    });
+
+    await expect(
+      pool.query<{ api_key: string | null }>(
+        "select api_key from preset_metadata where id = $1",
+        [preset.id]
+      )
+    ).resolves.toMatchObject({
+      rows: [
+        {
+          api_key: "persisted-secret"
+        }
+      ]
+    });
   });
 });

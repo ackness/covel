@@ -1,14 +1,17 @@
 ---
 id: legacy-wuxia-nine-provinces
-name: 九州江湖录
-description: 大梁末年，江湖风云再起。天机卷重现武林，正邪六门蠢蠢欲动。
 genre: wuxia
 tags: [武侠, 古风, 江湖, 中国风]
-language: zh
+defaultLocale: zh-CN
+metadataLocales: [zh-CN, en]
+contentLocales: [zh-CN]
 sourceProject: ../ai-gamestudio-dev
 sourcePath: templates/worlds/wuxia.md
-legacyPluginHints: [skill-check, combat, inventory, quest, faction, relationship, status-effect, codex]
-i18n:
+legacyCapabilityHints: [skill-check, combat, inventory, quest, faction, relationship, status-effect, codex]
+localizedMetadata:
+  zh-CN:
+    name: 九州江湖录
+    description: 大梁末年，江湖风云再起。天机卷重现武林，正邪六门蠢蠢欲动。
   en:
     name: Chronicle of the Nine Provinces
     description: Rival sects fight over the Heavenly Mechanism Scroll as the martial world descends into chaos.
@@ -70,6 +73,7 @@ ingestionHints:
 - 世界规则、门派与地点：归入 `worldbook`
 - 叙事语气与主持方式：后续可拆到 `persona`
 - NPC 属性、物品、关系：适合未来 `character-card` / `memory document`
+- 当前 staged asset 只有 `zh-CN` 正文；若 UI 或命令以 `en` 查看，应显式保留 `contentLocale: zh-CN`
 
 ## 重要 NPC 种子
 

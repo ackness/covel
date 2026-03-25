@@ -1,7 +1,8 @@
 import { createRuntimeServer } from "./server.js";
 import { createRuntimeComposition } from "./composition.js";
+import { resolveRuntimeListenConfig } from "./runtime-host.js";
 
-const port = Number(process.env.PORT ?? 8787);
+const { host, port } = resolveRuntimeListenConfig(process.env);
 
 const runtime = await createRuntimeComposition({
   env: process.env
@@ -15,6 +16,6 @@ const server = createRuntimeServer({
   archiveService: runtime.archiveService
 });
 
-server.listen(port, "0.0.0.0", () => {
-  console.log(`covel runtime listening on http://0.0.0.0:${port}`);
+server.listen(port, host, () => {
+  console.log(`covel runtime listening on http://${host}:${port}`);
 });

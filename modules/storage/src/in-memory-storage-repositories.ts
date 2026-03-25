@@ -9,11 +9,16 @@ import type {
   TraceRecord,
   World
 } from "../../domain/src/index.js";
+import type {
+  PersistedPendingBlockRecord,
+  StorageRepositoriesWithPendingBlocks
+} from "./pending-block-store.js";
 import type { PersistedPresetRecord, StorageRepositoriesWithPresets } from "./preset-metadata-store.js";
 import { stripPresetSecrets } from "./preset-metadata-store.js";
 
 export function createInMemoryStorageRepositories(): DomainRepositories &
-  StorageRepositoriesWithPresets {
+  StorageRepositoriesWithPresets &
+  StorageRepositoriesWithPendingBlocks {
   const worlds = new Map<string, World>();
   const sessions = new Map<string, Session>();
   const messages = new Map<string, Message>();
@@ -23,6 +28,7 @@ export function createInMemoryStorageRepositories(): DomainRepositories &
   const retrievalRuns = new Map<string, RetrievalRun>();
   const traceRecords = new Map<string, TraceRecord>();
   const presets = new Map<string, PersistedPresetRecord>();
+  const pendingBlocks = new Map<string, PersistedPendingBlockRecord>();
 
   return {
     worlds: {
@@ -101,6 +107,17 @@ export function createInMemoryStorageRepositories(): DomainRepositories &
       },
       async listByTraceId(traceId) {
         return Array.from(traceRecords.values()).filter((record) => record.traceId === traceId);
+      }
+    },
+    pendingBlocks: {
+      async save(input) {
+        pendingBlocks.set(input.blockId, { ...input });
+      },
+      async getByBlockId(blockId) {
+        return pendingBlocks.get(blockId) ?? null;
+      },
+      async delete(blockId) {
+        pendingBlocks.delete(blockId);
       }
     },
     presets: {

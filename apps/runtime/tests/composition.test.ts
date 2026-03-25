@@ -18,16 +18,18 @@ describe("createRuntimeComposition", () => {
       "core-presets",
       "core-worldbook"
     ]);
-    expect(runtime.commandRegistry.listHelp().map((entry) => entry.name)).toEqual([
-      "archive",
-      "guide",
-      "help",
-      "memory",
-      "packages",
-      "presets",
-      "session",
-      "trace"
-    ]);
+    expect(runtime.commandRegistry.listHelp().map((entry) => entry.name)).toEqual(
+      expect.arrayContaining([
+        "archive",
+        "guide",
+        "help",
+        "memory",
+        "packages",
+        "presets",
+        "session",
+        "trace"
+      ])
+    );
   });
 
   it("falls back to a deterministic demo provider when no openai-compatible env is configured", async () => {

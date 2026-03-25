@@ -17,7 +17,15 @@
         "writes": []
       }
     ],
-    "commands": [],
+    "commands": [
+      {
+        "name": "world-seeds",
+        "description": "Inspect staged world seed content.",
+        "argsSchema": "schemas/commands/world-seeds.args.json",
+        "entry": "server/commands/world-seeds.ts",
+        "resume": false
+      }
+    ],
     "blocks": [],
     "renderers": []
   }

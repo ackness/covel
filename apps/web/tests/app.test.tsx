@@ -305,7 +305,7 @@ describe("App", () => {
     const user = userEvent.setup();
 
     await screen.findByText("Northreach");
-    await user.selectOptions(screen.getByLabelText("语言"), "en");
+    await user.click(screen.getByRole("button", { name: "English" }));
 
     expect(screen.getByText("Worlds")).toBeTruthy();
     expect(screen.getByText("Packages")).toBeTruthy();

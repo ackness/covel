@@ -119,7 +119,7 @@ describe("runtime presets API", () => {
     expect(patch).not.toHaveBeenCalled();
   });
 
-  it("patches only non-sensitive preset fields and excludes secrets from PATCH /presets/:id responses", async () => {
+  it("patches only editable preset metadata and excludes routing + secret fields from PATCH /presets/:id responses", async () => {
     const patch = vi.fn<
       (presetId: string, input: Partial<PersistedPresetRecord>) => Promise<PublicPresetMetadata>
     >().mockImplementation(async (presetId, input) => ({
@@ -128,7 +128,7 @@ describe("runtime presets API", () => {
       provider: "openaiCompatible",
       model: String(input.model),
       tier: "medium",
-      baseUrl: String(input.baseUrl),
+      baseUrl: "https://persisted.example/v1",
       supportedModes: ["text", "object", "stream"],
       enabled: Boolean(input.enabled),
       isDefault: true,
@@ -161,6 +161,7 @@ describe("runtime presets API", () => {
         model: "qwen-max",
         baseUrl: "https://edited.example/v1",
         enabled: false,
+        isDefault: true,
         apiKey: "should-store-but-never-return"
       })
     });
@@ -171,9 +172,8 @@ describe("runtime presets API", () => {
     expect(patch).toHaveBeenCalledWith("default-story", {
       name: "Edited preset",
       model: "qwen-max",
-      baseUrl: "https://edited.example/v1",
       enabled: false,
-      apiKey: "should-store-but-never-return"
+      isDefault: true
     });
     expect(body).toEqual({
       id: "default-story",
@@ -181,7 +181,7 @@ describe("runtime presets API", () => {
       provider: "openaiCompatible",
       model: "qwen-max",
       tier: "medium",
-      baseUrl: "https://edited.example/v1",
+      baseUrl: "https://persisted.example/v1",
       supportedModes: ["text", "object", "stream"],
       enabled: false,
       isDefault: true,

@@ -127,6 +127,41 @@ describe("createRuntimeServer", () => {
     });
   });
 
+  it("returns 413 when a request body exceeds the configured size limit", async () => {
+    const server = createRuntimeServer({
+      flowEngine: {
+        async handle() {
+          return [];
+        }
+      },
+      maxRequestBodyBytes: 32
+    });
+    servers.add(server);
+    const baseUrl = await listen(server);
+
+    const response = await fetch(`${baseUrl}/actions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        requestId: "req_oversized",
+        type: "send_message",
+        sessionId: "ses_01",
+        payload: {
+          content: "This payload should exceed the tiny request body limit."
+        }
+      })
+    });
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: "PAYLOAD_TOO_LARGE"
+      }
+    });
+  });
+
   it("defaults runtime errors to Chinese when no locale is provided", async () => {
     const server = createRuntimeServer({
       flowEngine: {
@@ -328,7 +363,7 @@ describe("createRuntimeServer", () => {
     const messages = await messagesResponse.json() as Array<{ id: string }>;
 
     const packagesResponse = await fetch(`${baseUrl}/packages`);
-    const packages = await packagesResponse.json() as Array<{ name: string }>;
+    const packages = await packagesResponse.json() as Array<{ name: string; enabled: boolean }>;
 
     const archiveCreateResponse = await fetch(`${baseUrl}/archives`, {
       method: "POST",
@@ -364,7 +399,12 @@ describe("createRuntimeServer", () => {
     expect(sessionsResponse.status).toBe(200);
     expect(sessions.map((item) => item.id)).toEqual([session.id]);
     expect(messages.map((item) => item.id)).toEqual([userMessage.id, assistantMessage.id]);
-    expect(packages.map((item) => item.name)).toEqual(["core-guide"]);
+    expect(packages).toEqual([
+      {
+        name: "core-guide",
+        enabled: true
+      }
+    ]);
     expect(archiveCreateResponse.status).toBe(201);
     expect(archives.map((item) => item.id)).toEqual(["archive_01"]);
     expect(restoreResponse.status).toBe(200);

@@ -21,6 +21,7 @@ type TranslationKey =
   | "app.role.user"
   | "app.send"
   | "app.session"
+  | "app.settingsDock"
   | "app.sessionStatus.active"
   | "app.sessionStatus.waiting_for_input"
   | "app.sessionStatus.unknown"
@@ -72,6 +73,7 @@ const messages: Record<Locale, Record<TranslationKey, string>> = {
     "app.role.user": "你",
     "app.send": "发送",
     "app.session": "会话",
+    "app.settingsDock": "设置区",
     "app.sessionStatus.active": "进行中",
     "app.sessionStatus.waiting_for_input": "等待输入",
     "app.sessionStatus.unknown": "未知状态",
@@ -122,6 +124,7 @@ const messages: Record<Locale, Record<TranslationKey, string>> = {
     "app.role.user": "user",
     "app.send": "Send",
     "app.session": "Session",
+    "app.settingsDock": "Settings",
     "app.sessionStatus.active": "active",
     "app.sessionStatus.waiting_for_input": "waiting for input",
     "app.sessionStatus.unknown": "unknown",

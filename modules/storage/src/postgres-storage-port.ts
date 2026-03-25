@@ -7,6 +7,10 @@ import type { DomainRepositories } from "../../domain/src/index.js";
 import { createArtifactPathPolicy, type ArtifactPathPolicy } from "./artifact-path-policy.js";
 import { createLocalArtifactStore, type LocalArtifactStore } from "./local-artifact-store.js";
 import type {
+  PersistedPendingBlockRecord,
+  StorageRepositoriesWithPendingBlocks
+} from "./pending-block-store.js";
+import type {
   PersistedPresetRecord,
   StorageRepositoriesWithPresets
 } from "./preset-metadata-store.js";
@@ -181,7 +185,14 @@ async function bootstrapSchema(queryable: Queryable): Promise<void> {
       scope text,
       api_key text
     )`,
-    `create unique index if not exists preset_metadata_id_idx on preset_metadata(id)`
+    `create unique index if not exists preset_metadata_id_idx on preset_metadata(id)`,
+    `create table if not exists pending_blocks (
+      block_id text,
+      session_id text,
+      flow_id text,
+      turn_id text
+    )`,
+    `create unique index if not exists pending_blocks_block_id_idx on pending_blocks(block_id)`
   ];
 
   for (const statement of statements) {
@@ -190,7 +201,8 @@ async function bootstrapSchema(queryable: Queryable): Promise<void> {
 }
 
 function createRepositories(queryable: Queryable): DomainRepositories &
-  StorageRepositoriesWithPresets {
+  StorageRepositoriesWithPresets &
+  StorageRepositoriesWithPendingBlocks {
   return {
     worlds: {
       async save(world) {
@@ -552,6 +564,39 @@ function createRepositories(queryable: Queryable): DomainRepositories &
         return result.rows.map(mapTraceRecord);
       }
     },
+    pendingBlocks: {
+      async save(input: PersistedPendingBlockRecord) {
+        await queryable.query(
+          `insert into pending_blocks (block_id, session_id, flow_id, turn_id)
+           values ($1, $2, $3, $4)
+           on conflict (block_id) do update set
+             session_id = excluded.session_id,
+             flow_id = excluded.flow_id,
+             turn_id = excluded.turn_id`,
+          [input.blockId, input.sessionId, input.flowId, input.turnId]
+        );
+      },
+      async getByBlockId(blockId: string) {
+        const result = await queryable.query<{
+          block_id: string;
+          session_id: string;
+          flow_id: string;
+          turn_id: string;
+        }>("select * from pending_blocks where block_id = $1", [blockId]);
+        const row = result.rows[0];
+        return row
+          ? {
+              blockId: row.block_id,
+              sessionId: row.session_id,
+              flowId: row.flow_id,
+              turnId: row.turn_id
+            }
+          : null;
+      },
+      async delete(blockId: string) {
+        await queryable.query("delete from pending_blocks where block_id = $1", [blockId]);
+      }
+    },
     presets: {
       async save(input: PersistedPresetRecord) {
         await queryable.query(
@@ -587,7 +632,7 @@ function createRepositories(queryable: Queryable): DomainRepositories &
         presetId: string,
         input: Partial<PersistedPresetRecord>
       ) {
-        const existing = await this.getById(presetId);
+        const existing = await readPersistedPresetRecordById(queryable, presetId);
         const next: PersistedPresetRecord = {
           ...(existing ?? {
             id: presetId,
@@ -670,6 +715,41 @@ function createRepositories(queryable: Queryable): DomainRepositories &
       }
     }
   };
+}
+
+async function readPersistedPresetRecordById(
+  queryable: Queryable,
+  id: string
+): Promise<PersistedPresetRecord | null> {
+  const result = await queryable.query<{
+    id: string;
+    name: string;
+    provider: string;
+    model: string;
+    tier: "small" | "medium" | "large";
+    base_url: string;
+    supported_modes_json: string;
+    enabled: boolean;
+    is_default: boolean;
+    scope: string;
+    api_key: string | null;
+  }>("select * from preset_metadata where id = $1", [id]);
+  const row = result.rows[0];
+  return row
+    ? {
+        id: row.id,
+        name: row.name,
+        provider: row.provider,
+        model: row.model,
+        tier: row.tier,
+        baseUrl: row.base_url,
+        supportedModes: JSON.parse(row.supported_modes_json) as Array<"text" | "object" | "stream">,
+        enabled: row.enabled,
+        isDefault: row.is_default,
+        scope: row.scope,
+        apiKey: row.api_key ?? undefined
+      }
+    : null;
 }
 
 function mapArchiveVersion(row: {

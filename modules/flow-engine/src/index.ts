@@ -4,5 +4,7 @@ export {
   type CommandExecutionResult,
   type FlowDependencies,
   type ModelGateway,
-  type ModelTurnResult
+  type ModelTurnResult,
+  type PendingBlockRecord,
+  type PendingBlockStore
 } from "./runtime.js";

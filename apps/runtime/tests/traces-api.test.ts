@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { createTraceRecord } from "../../../modules/domain/src/index.js";
 import { createInMemoryStorageRepositories } from "../../../modules/storage/src/index.js";
-import { createRuntimeServer } from "../src/index.js";
+import { createRuntimeComposition, createRuntimeServer } from "../src/index.js";
 
 async function listen(server: ReturnType<typeof createRuntimeServer>): Promise<string> {
   server.listen(0, "127.0.0.1");
@@ -173,5 +173,67 @@ describe("runtime traces API", () => {
       "model-gateway/model.completed"
     ]);
     expect(body.every((entry) => entry.traceId === "trace_req_03")).toBe(true);
+  });
+
+  it("persists runtime-generated model traces so they are readable through /traces", async () => {
+    const runtime = await createRuntimeComposition({
+      env: {}
+    });
+    await runtime.repositories.worlds.save({
+      id: "world_trace_runtime",
+      name: "Trace world",
+      description: "Runtime trace integration",
+      createdAt: new Date("2026-03-24T12:20:00.000Z")
+    });
+    await runtime.repositories.sessions.save({
+      id: "session_trace_runtime",
+      worldId: "world_trace_runtime",
+      status: "active",
+      createdAt: new Date("2026-03-24T12:20:01.000Z")
+    });
+
+    const server = createRuntimeServer({
+      flowEngine: runtime.flowEngine,
+      repositories: runtime.repositories
+    });
+    servers.add(server);
+
+    const baseUrl = await listen(server);
+    const actionResponse = await fetch(`${baseUrl}/actions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        requestId: "req_trace_runtime",
+        type: "send_message",
+        sessionId: "session_trace_runtime",
+        payload: {
+          content: "Record this trace."
+        }
+      })
+    });
+
+    expect(actionResponse.status).toBe(200);
+
+    const traceResponse = await fetch(`${baseUrl}/traces/trace_req_trace_runtime`);
+    const traceEntries = await traceResponse.json() as Array<{
+      traceId: string;
+      component: string;
+      eventType: string;
+      payload: Record<string, unknown>;
+    }>;
+
+    expect(traceResponse.status).toBe(200);
+    expect(traceEntries).toEqual([
+      expect.objectContaining({
+        traceId: "trace_req_trace_runtime",
+        component: "model-gateway",
+        eventType: "model.completed",
+        payload: {
+          model: "qwen3.5-flash"
+        }
+      })
+    ]);
   });
 });
