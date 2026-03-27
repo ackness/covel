@@ -1,29 +1,37 @@
 // @vitest-environment jsdom
 
-import React, { type ComponentType, createElement } from "react";
+import React, { type ComponentType, createElement, useState } from "react";
 import {
   cleanup,
-  render,
   screen,
   waitFor
 } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { PresetMetadata } from "../../../modules/model-gateway/src/model-profile-registry.js";
-import {
-  createJsonResponse,
-  installFetchStub
-} from "./helpers/fetch-stub.js";
 import { loadWebModule } from "./helpers/load-web-module.js";
 import { renderWithI18n } from "./helpers/render-with-i18n.js";
 
-type PresetRecord = PresetMetadata & {
+interface PresetRecord {
+  id: string;
+  name: string;
+  provider: string;
+  model: string;
+  enabled: boolean;
+  isDefault: boolean;
+  scope: string;
+  baseUrl?: string;
   apiKey?: string;
-};
+}
 
 interface PresetEditorProps {
-  runtimeBaseUrl: string;
+  presets: PresetRecord[];
+  onSave(input: {
+    presetId: string;
+    model: string;
+    enabled: boolean;
+    isDefault: boolean;
+  }): Promise<void> | void;
 }
 
 interface PresetEditorModule {
@@ -36,9 +44,6 @@ function createPresetFixture(overrides: Partial<PresetRecord> = {}): PresetRecor
     name: "Default story",
     provider: "openaiCompatible",
     model: "qwen-plus",
-    tier: "medium",
-    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    supportedModes: ["text", "object", "stream"],
     enabled: true,
     isDefault: true,
     scope: "global",
@@ -52,81 +57,53 @@ afterEach(() => {
 });
 
 describe("apps/web PresetEditor", () => {
-  it("loads the preset list and never renders provider api keys in plaintext", async () => {
+  it("renders preset data without exposing provider api keys in plaintext", async () => {
     const { PresetEditor } = await loadWebModule<PresetEditorModule>("components/preset-editor.ts");
     const hiddenApiKey = "sk-live-super-secret";
-    const fetchStub = installFetchStub([
-      {
-        method: "GET",
-        url: "http://runtime.test/presets",
-        handler: async () => createJsonResponse([
-          createPresetFixture({
-            apiKey: hiddenApiKey
-          }),
-          createPresetFixture({
-            id: "story-alt",
-            name: "Story alt",
-            model: "qwen-turbo",
-            enabled: false,
-            isDefault: false,
-            scope: "project",
-            apiKey: hiddenApiKey
-          })
-        ])
-      }
-    ]);
 
     renderWithI18n(createElement(PresetEditor, {
-      runtimeBaseUrl: "http://runtime.test"
+      presets: [
+        createPresetFixture({
+          apiKey: hiddenApiKey
+        }),
+        createPresetFixture({
+          id: "story-alt",
+          name: "Story alt",
+          model: "qwen-turbo",
+          enabled: false,
+          isDefault: false,
+          scope: "project",
+          apiKey: hiddenApiKey
+        })
+      ],
+      onSave() {}
     }));
 
     await screen.findByText("Default story");
     expect(screen.getByText("Story alt")).toBeTruthy();
     expect(screen.queryByText(hiddenApiKey)).toBeNull();
     expect(screen.queryByDisplayValue(hiddenApiKey)).toBeNull();
-
-    fetchStub.restore();
   });
 
   it("edits model, enabled, and isDefault fields without touching routing or secret material", async () => {
     const { PresetEditor } = await loadWebModule<PresetEditorModule>("components/preset-editor.ts");
-    const fetchStub = installFetchStub([
-      {
-        method: "GET",
-        url: "http://runtime.test/presets",
-        handler: async () => createJsonResponse([
-          createPresetFixture(),
-          createPresetFixture({
-            id: "story-alt",
-            name: "Story alt",
-            model: "qwen-turbo",
-            baseUrl: "https://router.example/v1",
-            enabled: true,
-            isDefault: false,
-            scope: "project"
-          })
-        ])
-      },
-      {
-        method: "PUT",
-        url: "http://runtime.test/presets/story-alt",
-        handler: async () => createJsonResponse(
-          createPresetFixture({
-            id: "story-alt",
-            name: "Story alt",
-            model: "qwen-max-latest",
-            baseUrl: "https://router.example/v1",
-            enabled: false,
-            isDefault: true,
-            scope: "project"
-          })
-        )
-      }
-    ]);
+    const handleSave = vi.fn(async () => {});
     const user = userEvent.setup();
 
     renderWithI18n(createElement(PresetEditor, {
-      runtimeBaseUrl: "http://runtime.test"
+      presets: [
+        createPresetFixture(),
+        createPresetFixture({
+          id: "story-alt",
+          name: "Story alt",
+          model: "qwen-turbo",
+          baseUrl: "https://router.example/v1",
+          enabled: true,
+          isDefault: false,
+          scope: "project"
+        })
+      ],
+      onSave: handleSave
     }));
 
     await screen.findByText("Story alt");
@@ -138,15 +115,12 @@ describe("apps/web PresetEditor", () => {
     await user.click(screen.getByLabelText("默认预设"));
     await user.click(screen.getByRole("button", { name: "保存预设" }));
 
-    await expect(fetchStub.calls[1]?.json()).resolves.toMatchObject({
+    expect(handleSave).toHaveBeenCalledWith({
+      presetId: "story-alt",
       model: "qwen-max-latest",
       enabled: false,
       isDefault: true
     });
-    await expect(fetchStub.calls[1]?.json()).resolves.not.toHaveProperty("apiKey");
-    await expect(fetchStub.calls[1]?.json()).resolves.not.toHaveProperty("baseUrl");
-
-    fetchStub.restore();
   });
 
   it("refreshes the visible preset state after save completes", async () => {
@@ -160,34 +134,45 @@ describe("apps/web PresetEditor", () => {
       isDefault: true,
       scope: "project"
     });
-    const fetchStub = installFetchStub([
-      {
-        method: "GET",
-        url: "http://runtime.test/presets",
-        handler: async () => createJsonResponse([
-          createPresetFixture(),
-          createPresetFixture({
-            id: "story-alt",
-            name: "Story alt",
-            model: "qwen-turbo",
-            baseUrl: "https://router.example/v1",
-            enabled: true,
-            isDefault: false,
-            scope: "project"
-          })
-        ])
-      },
-      {
-        method: "PUT",
-        url: "http://runtime.test/presets/story-alt",
-        handler: async () => createJsonResponse(updatedPreset)
-      }
-    ]);
     const user = userEvent.setup();
 
-    renderWithI18n(createElement(PresetEditor, {
-      runtimeBaseUrl: "http://runtime.test"
-    }));
+    function TestHarness() {
+      const [presets, setPresets] = useState<PresetRecord[]>([
+        createPresetFixture(),
+        createPresetFixture({
+          id: "story-alt",
+          name: "Story alt",
+          model: "qwen-turbo",
+          baseUrl: "https://router.example/v1",
+          enabled: true,
+          isDefault: false,
+          scope: "project"
+        })
+      ]);
+
+      return createElement(PresetEditor, {
+        presets,
+        onSave: async (input) => {
+          setPresets((current) =>
+            current.map((preset) =>
+              preset.id === input.presetId
+                ? {
+                    ...preset,
+                    ...updatedPreset
+                  }
+                : updatedPreset.isDefault
+                  ? {
+                      ...preset,
+                      isDefault: false
+                    }
+                  : preset
+            )
+          );
+        }
+      });
+    }
+
+    renderWithI18n(createElement(TestHarness));
 
     await screen.findByText("Story alt");
     await user.click(screen.getByRole("button", { name: "编辑 Story alt" }));
@@ -203,7 +188,5 @@ describe("apps/web PresetEditor", () => {
       expect(screen.getByText("已停用")).toBeTruthy();
       expect(screen.getAllByText("默认").length).toBeGreaterThan(0);
     });
-
-    fetchStub.restore();
   });
 });

@@ -31,9 +31,44 @@ export interface ArchiveRecord {
   createdAt: string;
 }
 
+export interface PackageStateRecord {
+  scope: "world" | "session";
+  ownerId: string;
+  packageName: string;
+  collection: string;
+  key: string;
+  value: Record<string, unknown>;
+  updatedAt: string;
+}
+
+export interface WorkflowSnapshotRecord {
+  runId: string;
+  stepId: string;
+  sessionId: string;
+  status: "running" | "suspended" | "completed" | "failed";
+  suspendPayload?: Record<string, unknown>;
+  resumeData?: Record<string, unknown>;
+  updatedAt: string;
+}
+
 export interface PackageSummary {
   name: string;
   enabled: boolean;
+}
+
+export interface CommandFlagHint {
+  name: string;
+  description: string;
+  takesValue: boolean;
+}
+
+export interface CommandSummary {
+  name: string;
+  description: string;
+  usage: string;
+  examples?: string[];
+  positionalHints?: string[];
+  flagHints?: CommandFlagHint[];
 }
 
 export interface PresetSummary {
@@ -47,16 +82,55 @@ export interface PresetSummary {
 }
 
 export interface TimelineItem {
+  kind: "message";
   id: string;
   role: "assistant" | "user";
   content: string;
   streaming: boolean;
 }
 
+export interface TimelineBlockItem {
+  kind: "block";
+  id: string;
+  block: BlockEnvelope;
+  pending: boolean;
+}
+
+export interface RuntimeArtifactItem {
+  id: string;
+  kind: string;
+  mediaType?: string;
+  uri?: string;
+  title?: string;
+  status?: string;
+  traceId?: string | null;
+}
+
+export interface StatePatchEvent {
+  id: string;
+  target: string;
+  summary: string;
+  scopeLabel?: string;
+  traceId?: string | null;
+  packageName?: string;
+}
+
+export interface WorkflowRunItem {
+  id: string;
+  workflowId?: string;
+  status: "suspended" | "running" | "completed";
+  currentStep?: string;
+  summary: string;
+  traceId?: string | null;
+}
+
 export interface WorkspaceState {
-  timeline: TimelineItem[];
+  timeline: Array<TimelineItem | TimelineBlockItem>;
   pendingBlock: BlockEnvelope | null;
   lastTraceId: string | null;
+  recentArtifacts: RuntimeArtifactItem[];
+  recentStatePatches: StatePatchEvent[];
+  workflowRuns: WorkflowRunItem[];
 }
 
 export type { BlockEnvelope, BlockResponse, SseEnvelope, TraceRecord };

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import React, { type ComponentType, createElement } from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -56,6 +56,23 @@ describe("apps/web block renderer registry", () => {
     await user.click(screen.getByRole("button", { name: "继续前进" }));
 
     expect(onChoiceSelect).toHaveBeenCalledWith("opt_a");
+  });
+
+  it("loads a package-owned renderer for non-interactive package blocks", async () => {
+    const { BlockRenderer } = await loadWebModule<BlockRendererRegistryModule>(
+      "block-renderer-registry.tsx"
+    );
+    const view = renderWithI18n(createElement(BlockRenderer, {
+      block: createInteractiveBlock({
+        interaction: {
+          requiresResponse: false
+        }
+      })
+    }));
+
+    await waitFor(() => {
+      expect(view.container.querySelector('[data-package-renderer="core-guide/choices"]')).toBeTruthy();
+    });
   });
 
   it("renders dice result blocks as structured data rather than raw JSON only", async () => {

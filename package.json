@@ -20,7 +20,8 @@
   "dependencies": {
     "pg": "8.20.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "streamdown": "^2.5.0"
   },
   "devDependencies": {
     "@testing-library/react": "16.3.2",

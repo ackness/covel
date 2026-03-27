@@ -5,3 +5,4 @@ export * from "./package-state-store.js";
 export * from "./pending-block-store.js";
 export * from "./preset-metadata-store.js";
 export * from "./postgres-storage-port.js";
+export * from "./workflow-snapshot-store.js";

@@ -3,14 +3,19 @@ import {
   type ActionRequest,
   type BlockEnvelope,
   type BlockResponse,
+  type StatePatch,
   type SseEnvelope,
-  type SupportedLocale
+  type SupportedLocale,
+  type WorkflowSignal,
+  type WorkflowSnapshotRecord
 } from "../../contracts/src/index.js";
 import type { Message, Session } from "../../domain/src/index.js";
 
 export interface ModelTurnResult {
   content: string;
   blocks?: BlockEnvelope[];
+  statePatches?: StatePatch[];
+  workflowEvents?: WorkflowSignal[];
   traceId?: string;
 }
 
@@ -27,6 +32,8 @@ export interface ModelGateway {
 export interface CommandExecutionResult {
   content?: string;
   blocks?: BlockEnvelope[];
+  statePatches?: StatePatch[];
+  workflowEvents?: WorkflowSignal[];
   traceId?: string;
 }
 
@@ -50,6 +57,17 @@ export interface ResumeExecutor {
     turnId: string;
     locale: SupportedLocale;
   }): Promise<CommandExecutionResult>;
+}
+
+export interface BlockValidationResult {
+  ok: boolean;
+  code?: "BLOCK_DATA_SCHEMA_INVALID" | "BLOCK_RESPONSE_SCHEMA_INVALID";
+  details?: string;
+}
+
+export interface BlockValidator {
+  validateData(block: BlockEnvelope): Promise<BlockValidationResult>;
+  validateResponse(block: BlockEnvelope, response: BlockResponse): Promise<BlockValidationResult>;
 }
 
 interface SessionRepository {
@@ -78,6 +96,39 @@ export interface PendingBlockStore {
   delete(blockId: string): Promise<void>;
 }
 
+export interface PackageStateStore {
+  save(record: {
+    scope: "world" | "session";
+    ownerId: string;
+    packageName: string;
+    collection: string;
+    key: string;
+    value: Record<string, unknown>;
+    updatedAt: Date;
+  }): Promise<void>;
+  get(input: {
+    scope: "world" | "session";
+    ownerId: string;
+    packageName: string;
+    collection: string;
+    key: string;
+  }): Promise<{
+    scope: "world" | "session";
+    ownerId: string;
+    packageName: string;
+    collection: string;
+    key: string;
+    value: Record<string, unknown>;
+    updatedAt: Date;
+  } | null>;
+}
+
+export interface WorkflowSnapshotStore {
+  save(record: WorkflowSnapshotRecord): Promise<void>;
+  getByRunId(runId: string): Promise<WorkflowSnapshotRecord | null>;
+  listBySessionId(sessionId: string): Promise<WorkflowSnapshotRecord[]>;
+}
+
 export interface FlowDependencies {
   sessions: SessionRepository;
   messages: MessageRepository;
@@ -85,6 +136,9 @@ export interface FlowDependencies {
   commandBus: CommandBus;
   resumeExecutor?: ResumeExecutor;
   pendingBlockStore?: PendingBlockStore;
+  packageStateStore?: PackageStateStore;
+  workflowSnapshotStore?: WorkflowSnapshotStore;
+  blockValidator?: BlockValidator;
   createId(prefix: string): string;
   now(): Date;
 }
@@ -129,10 +183,17 @@ export class FlowEngine {
     const assistantMessageId = this.dependencies.createId("msg");
     const events: SseEnvelope[] = [];
     let seq = 1;
+    let suspendedBlockId: string | null = null;
 
     events.push(this.createEvent("flow.phase.changed", action.requestId, action.sessionId, turnId, flowId, seq++, {
       phase: "model"
     }));
+    await this.saveWorkflowSnapshot({
+      runId: flowId,
+      stepId: turnId,
+      sessionId: action.sessionId,
+      status: "running"
+    });
 
     await this.dependencies.messages.save({
       id: userMessageId,
@@ -175,11 +236,25 @@ export class FlowEngine {
           turnId,
           traceId: result.traceId
         });
+        const blockValidation = await this.dependencies.blockValidator?.validateData(emittedBlock);
+        if (blockValidation && !blockValidation.ok) {
+          events.push(this.createTerminalEvent("flow.failed", action.requestId, action.sessionId, flowId, {
+            turnId,
+            code: blockValidation.code ?? "BLOCK_DATA_SCHEMA_INVALID",
+            message: translateFlowError(
+              blockValidation.code ?? "BLOCK_DATA_SCHEMA_INVALID",
+              locale,
+              blockValidation.details
+            )
+          }, result.traceId, seq));
+          return events;
+        }
         events.push(this.createEvent("block.emitted", action.requestId, action.sessionId, turnId, flowId, seq++, {
           block: emittedBlock
         }, result.traceId));
 
         if (emittedBlock.interaction.requiresResponse) {
+          suspendedBlockId = emittedBlock.id;
           await this.rememberPendingBlock({
             block: emittedBlock,
             flowId,
@@ -191,6 +266,61 @@ export class FlowEngine {
           });
         }
       }
+    }
+
+    if (result.statePatches) {
+      for (const patch of result.statePatches) {
+        const applied = await this.applyStatePatch(patch);
+        events.push(this.createEvent("state.patch.applied", action.requestId, action.sessionId, turnId, flowId, seq++, {
+          patch,
+          value: applied?.value ?? patch.value
+        }, result.traceId));
+      }
+    }
+
+    if (result.workflowEvents) {
+      for (const workflowEvent of result.workflowEvents) {
+        await this.saveWorkflowSnapshot({
+          runId: workflowEvent.runId,
+          stepId: workflowEvent.stepId,
+          sessionId: action.sessionId,
+          status: workflowEvent.type === "workflow.suspended" ? "suspended" : "running",
+          ...(workflowEvent.type === "workflow.suspended"
+            ? { suspendPayload: workflowEvent.payload ?? {} }
+            : { resumeData: workflowEvent.payload ?? {} })
+        });
+        events.push(this.createEvent(workflowEvent.type, action.requestId, action.sessionId, turnId, flowId, seq++, {
+          runId: workflowEvent.runId,
+          stepId: workflowEvent.stepId,
+          ...(workflowEvent.payload ? { ...workflowEvent.payload } : {})
+        }, result.traceId));
+      }
+    }
+
+    if (suspendedBlockId) {
+      await this.saveWorkflowSnapshot({
+        runId: flowId,
+        stepId: turnId,
+        sessionId: action.sessionId,
+        status: "suspended",
+        suspendPayload: {
+          blockId: suspendedBlockId,
+          reason: "await-block-response"
+        }
+      });
+      events.push(this.createEvent("workflow.suspended", action.requestId, action.sessionId, turnId, flowId, seq++, {
+        runId: flowId,
+        stepId: turnId,
+        status: "suspended",
+        blockId: suspendedBlockId
+      }, result.traceId));
+    } else {
+      await this.saveWorkflowSnapshot({
+        runId: flowId,
+        stepId: turnId,
+        sessionId: action.sessionId,
+        status: "completed"
+      });
     }
 
     events.push(this.createTerminalEvent("flow.completed", action.requestId, action.sessionId, flowId, {
@@ -215,10 +345,17 @@ export class FlowEngine {
     const turnId = this.dependencies.createId("turn");
     const events: SseEnvelope[] = [];
     let seq = 1;
+    let suspendedBlockId: string | null = null;
 
     events.push(this.createEvent("flow.phase.changed", action.requestId, action.sessionId, turnId, flowId, seq++, {
       phase: "command"
     }));
+    await this.saveWorkflowSnapshot({
+      runId: flowId,
+      stepId: turnId,
+      sessionId: action.sessionId,
+      status: "running"
+    });
 
     const result = await this.dependencies.commandBus.execute({
       commandText: action.payload.command,
@@ -251,11 +388,25 @@ export class FlowEngine {
           turnId,
           traceId: result.traceId
         });
+        const blockValidation = await this.dependencies.blockValidator?.validateData(emittedBlock);
+        if (blockValidation && !blockValidation.ok) {
+          events.push(this.createTerminalEvent("flow.failed", action.requestId, action.sessionId, flowId, {
+            turnId,
+            code: blockValidation.code ?? "BLOCK_DATA_SCHEMA_INVALID",
+            message: translateFlowError(
+              blockValidation.code ?? "BLOCK_DATA_SCHEMA_INVALID",
+              locale,
+              blockValidation.details
+            )
+          }, result.traceId, seq));
+          return events;
+        }
         events.push(this.createEvent("block.emitted", action.requestId, action.sessionId, turnId, flowId, seq++, {
           block: emittedBlock
         }, result.traceId));
 
         if (emittedBlock.interaction.requiresResponse) {
+          suspendedBlockId = emittedBlock.id;
           await this.rememberPendingBlock({
             block: emittedBlock,
             flowId,
@@ -267,6 +418,61 @@ export class FlowEngine {
           });
         }
       }
+    }
+
+    if (result.statePatches) {
+      for (const patch of result.statePatches) {
+        const applied = await this.applyStatePatch(patch);
+        events.push(this.createEvent("state.patch.applied", action.requestId, action.sessionId, turnId, flowId, seq++, {
+          patch,
+          value: applied?.value ?? patch.value
+        }, result.traceId));
+      }
+    }
+
+    if (result.workflowEvents) {
+      for (const workflowEvent of result.workflowEvents) {
+        await this.saveWorkflowSnapshot({
+          runId: workflowEvent.runId,
+          stepId: workflowEvent.stepId,
+          sessionId: action.sessionId,
+          status: workflowEvent.type === "workflow.suspended" ? "suspended" : "running",
+          ...(workflowEvent.type === "workflow.suspended"
+            ? { suspendPayload: workflowEvent.payload ?? {} }
+            : { resumeData: workflowEvent.payload ?? {} })
+        });
+        events.push(this.createEvent(workflowEvent.type, action.requestId, action.sessionId, turnId, flowId, seq++, {
+          runId: workflowEvent.runId,
+          stepId: workflowEvent.stepId,
+          ...(workflowEvent.payload ? { ...workflowEvent.payload } : {})
+        }, result.traceId));
+      }
+    }
+
+    if (suspendedBlockId) {
+      await this.saveWorkflowSnapshot({
+        runId: flowId,
+        stepId: turnId,
+        sessionId: action.sessionId,
+        status: "suspended",
+        suspendPayload: {
+          blockId: suspendedBlockId,
+          reason: "await-block-response"
+        }
+      });
+      events.push(this.createEvent("workflow.suspended", action.requestId, action.sessionId, turnId, flowId, seq++, {
+        runId: flowId,
+        stepId: turnId,
+        status: "suspended",
+        blockId: suspendedBlockId
+      }, result.traceId));
+    } else {
+      await this.saveWorkflowSnapshot({
+        runId: flowId,
+        stepId: turnId,
+        sessionId: action.sessionId,
+        status: "completed"
+      });
     }
 
     events.push(this.createTerminalEvent("flow.completed", action.requestId, action.sessionId, flowId, {
@@ -307,6 +513,34 @@ export class FlowEngine {
       phase: "resume"
     }));
 
+    const responseValidation = await this.dependencies.blockValidator?.validateResponse(pending.block, response);
+    if (responseValidation && !responseValidation.ok) {
+      events.push(this.createTerminalEvent("flow.failed", requestId, sessionId, flowId, {
+        turnId,
+        code: responseValidation.code ?? "BLOCK_RESPONSE_SCHEMA_INVALID",
+        message: translateFlowError(
+          responseValidation.code ?? "BLOCK_RESPONSE_SCHEMA_INVALID",
+          locale,
+          responseValidation.details
+        )
+      }, terminalTraceId, seq));
+      return events;
+    }
+
+    await this.saveWorkflowSnapshot({
+      runId: flowId,
+      stepId: turnId,
+      sessionId,
+      status: "running",
+      resumeData: response.response
+    });
+    events.push(this.createEvent("workflow.resumed", requestId, sessionId, turnId, flowId, seq++, {
+      runId: flowId,
+      stepId: turnId,
+      status: "running",
+      blockId: response.blockId
+    }));
+
     const resumeHandler = pending.block.interaction.resumeHandler ?? pending.block.meta.handler;
     if (resumeHandler && this.dependencies.resumeExecutor) {
       const result = await this.dependencies.resumeExecutor.execute({
@@ -321,15 +555,20 @@ export class FlowEngine {
       });
       terminalTraceId = result.traceId ?? terminalTraceId;
 
-      seq = await this.appendExecutionResultEvents({
+      const nextSeq = await this.appendExecutionResultEvents({
         events,
         result,
         requestId,
         sessionId,
         turnId,
         flowId,
-        nextSeq: seq
+        nextSeq: seq,
+        locale
       });
+      if (nextSeq === null) {
+        return events;
+      }
+      seq = nextSeq;
     } else {
       const prompt = JSON.stringify({
         blockType: pending.block.type,
@@ -365,6 +604,13 @@ export class FlowEngine {
     await this.dependencies.sessions.save({
       ...session,
       status: "active"
+    });
+    await this.saveWorkflowSnapshot({
+      runId: flowId,
+      stepId: turnId,
+      sessionId,
+      status: "completed",
+      resumeData: response.response
     });
 
     events.push(this.createTerminalEvent("flow.completed", requestId, sessionId, flowId, {
@@ -498,7 +744,8 @@ export class FlowEngine {
     turnId: string;
     flowId: string;
     nextSeq: number;
-  }): Promise<number> {
+    locale: SupportedLocale;
+  }): Promise<number | null> {
     let seq = input.nextSeq;
 
     if (input.result.content) {
@@ -534,6 +781,27 @@ export class FlowEngine {
           turnId: input.turnId,
           traceId: input.result.traceId
         });
+        const blockValidation = await this.dependencies.blockValidator?.validateData(emittedBlock);
+        if (blockValidation && !blockValidation.ok) {
+          input.events.push(this.createTerminalEvent(
+            "flow.failed",
+            input.requestId,
+            input.sessionId,
+            input.flowId,
+            {
+              turnId: input.turnId,
+              code: blockValidation.code ?? "BLOCK_DATA_SCHEMA_INVALID",
+              message: translateFlowError(
+                blockValidation.code ?? "BLOCK_DATA_SCHEMA_INVALID",
+                input.locale,
+                blockValidation.details
+              )
+            },
+            input.result.traceId,
+            seq
+          ));
+          return null;
+        }
         input.events.push(this.createEvent(
           "block.emitted",
           input.requestId,
@@ -549,19 +817,142 @@ export class FlowEngine {
       }
     }
 
+    if (input.result.statePatches) {
+      for (const patch of input.result.statePatches) {
+        const applied = await this.applyStatePatch(patch);
+        input.events.push(this.createEvent(
+          "state.patch.applied",
+          input.requestId,
+          input.sessionId,
+          input.turnId,
+          input.flowId,
+          seq++,
+          {
+            patch,
+            value: applied?.value ?? patch.value
+          },
+          input.result.traceId
+        ));
+      }
+    }
+
+    if (input.result.workflowEvents) {
+      for (const workflowEvent of input.result.workflowEvents) {
+        await this.saveWorkflowSnapshot({
+          runId: workflowEvent.runId,
+          stepId: workflowEvent.stepId,
+          sessionId: input.sessionId,
+          status: workflowEvent.type === "workflow.suspended" ? "suspended" : "running",
+          ...(workflowEvent.type === "workflow.suspended"
+            ? { suspendPayload: workflowEvent.payload ?? {} }
+            : { resumeData: workflowEvent.payload ?? {} })
+        });
+        input.events.push(this.createEvent(
+          workflowEvent.type,
+          input.requestId,
+          input.sessionId,
+          input.turnId,
+          input.flowId,
+          seq++,
+          {
+            runId: workflowEvent.runId,
+            stepId: workflowEvent.stepId,
+            ...(workflowEvent.payload ? { ...workflowEvent.payload } : {})
+          },
+          input.result.traceId
+        ));
+      }
+    }
+
     return seq;
+  }
+
+  private async applyStatePatch(patch: StatePatch): Promise<{
+    scope: "world" | "session";
+    ownerId: string;
+    packageName: string;
+    collection: string;
+    key: string;
+    value: Record<string, unknown>;
+    updatedAt: Date;
+  } | null> {
+    if (!this.dependencies.packageStateStore) {
+      return null;
+    }
+
+    const existing = await this.dependencies.packageStateStore.get({
+      scope: patch.scope,
+      ownerId: patch.ownerId,
+      packageName: patch.packageName,
+      collection: patch.collection,
+      key: patch.key
+    });
+    const nextValue = patch.op === "merge"
+      ? {
+          ...(existing?.value ?? {}),
+          ...patch.value
+        }
+      : patch.value;
+    const nextRecord = {
+      scope: patch.scope,
+      ownerId: patch.ownerId,
+      packageName: patch.packageName,
+      collection: patch.collection,
+      key: patch.key,
+      value: nextValue,
+      updatedAt: this.dependencies.now()
+    };
+
+    await this.dependencies.packageStateStore.save(nextRecord);
+    return nextRecord;
+  }
+
+  private async saveWorkflowSnapshot(record: {
+    runId: string;
+    stepId: string;
+    sessionId: string;
+    status: WorkflowSnapshotRecord["status"];
+    suspendPayload?: Record<string, unknown>;
+    resumeData?: Record<string, unknown>;
+  }): Promise<void> {
+    await this.dependencies.workflowSnapshotStore?.save({
+      runId: record.runId,
+      stepId: record.stepId,
+      sessionId: record.sessionId,
+      status: record.status,
+      ...(record.suspendPayload ? { suspendPayload: record.suspendPayload } : {}),
+      ...(record.resumeData ? { resumeData: record.resumeData } : {}),
+      updatedAt: this.dependencies.now().toISOString()
+    });
   }
 }
 
 function translateFlowError(
-  code: "SESSION_NOT_FOUND" | "PENDING_BLOCK_NOT_FOUND",
-  locale: SupportedLocale
+  code:
+    | "SESSION_NOT_FOUND"
+    | "PENDING_BLOCK_NOT_FOUND"
+    | "BLOCK_DATA_SCHEMA_INVALID"
+    | "BLOCK_RESPONSE_SCHEMA_INVALID",
+  locale: SupportedLocale,
+  details?: string
 ): string {
   if (code === "SESSION_NOT_FOUND") {
     return locale === "en" ? "Session not found." : "未找到会话。";
   }
 
-  return locale === "en" ? "Pending block not found." : "未找到待响应的交互块。";
+  if (code === "PENDING_BLOCK_NOT_FOUND") {
+    return locale === "en" ? "Pending block not found." : "未找到待响应的交互块。";
+  }
+
+  if (code === "BLOCK_DATA_SCHEMA_INVALID") {
+    return locale === "en"
+      ? `Interactive block data did not match schema.${details ? ` ${details}` : ""}`
+      : `交互块数据未通过 schema 校验。${details ? ` ${details}` : ""}`;
+  }
+
+  return locale === "en"
+    ? `Block response did not match schema.${details ? ` ${details}` : ""}`
+    : `交互块响应未通过 schema 校验。${details ? ` ${details}` : ""}`;
 }
 
 function isBlockEnvelopeLike(value: Record<string, unknown>): value is BlockEnvelope {

@@ -9,6 +9,7 @@ import {
   type PackageStateRecord,
   type TaskBindings
 } from "../../domain/src/index.js";
+import type { WorkflowSnapshotRecord } from "../../contracts/src/index.js";
 
 import { createArtifactPathPolicy, type ArtifactPathPolicy } from "./artifact-path-policy.js";
 import { createLocalArtifactStore, type LocalArtifactStore } from "./local-artifact-store.js";
@@ -22,6 +23,7 @@ import type {
   StorageRepositoriesWithPresets
 } from "./preset-metadata-store.js";
 import { stripPresetSecrets } from "./preset-metadata-store.js";
+import type { StorageRepositoriesWithWorkflowSnapshots } from "./workflow-snapshot-store.js";
 
 type Queryable = {
   query<Row>(text: string, values?: unknown[]): Promise<{ rows: Row[] }>;
@@ -34,7 +36,8 @@ export interface PostgresStoragePort {
     DomainRepositories &
     StorageRepositoriesWithPresets &
     StorageRepositoriesWithPendingBlocks &
-    StorageRepositoriesWithPackageStateAndJobs
+    StorageRepositoriesWithPackageStateAndJobs &
+    StorageRepositoriesWithWorkflowSnapshots
   >;
   createArtifactStore(): Promise<LocalArtifactStore>;
 }
@@ -214,6 +217,16 @@ async function bootstrapSchema(queryable: Queryable): Promise<void> {
       completed_at text
     )`,
     `create unique index if not exists jobs_id_idx on jobs(id)`,
+    `create table if not exists workflow_snapshots (
+      run_id text,
+      step_id text,
+      session_id text,
+      status text,
+      suspend_payload_json text,
+      resume_data_json text,
+      updated_at text
+    )`,
+    `create unique index if not exists workflow_snapshots_run_id_idx on workflow_snapshots(run_id)`,
     `create table if not exists preset_metadata (
       id text,
       name text,
@@ -253,7 +266,8 @@ async function bootstrapSchema(queryable: Queryable): Promise<void> {
 function createRepositories(queryable: Queryable): DomainRepositories &
   StorageRepositoriesWithPresets &
   StorageRepositoriesWithPendingBlocks &
-  StorageRepositoriesWithPackageStateAndJobs {
+  StorageRepositoriesWithPackageStateAndJobs &
+  StorageRepositoriesWithWorkflowSnapshots {
   return {
     worlds: {
       async save(world) {
@@ -780,6 +794,58 @@ function createRepositories(queryable: Queryable): DomainRepositories &
         return result.rows.map(mapJobRecord);
       }
     },
+    workflowSnapshots: {
+      async save(record) {
+        await queryable.query(
+          `insert into workflow_snapshots (run_id, step_id, session_id, status, suspend_payload_json, resume_data_json, updated_at)
+           values ($1, $2, $3, $4, $5, $6, $7)
+           on conflict (run_id) do update set
+             step_id = excluded.step_id,
+             session_id = excluded.session_id,
+             status = excluded.status,
+             suspend_payload_json = excluded.suspend_payload_json,
+             resume_data_json = excluded.resume_data_json,
+             updated_at = excluded.updated_at`,
+          [
+            record.runId,
+            record.stepId,
+            record.sessionId,
+            record.status,
+            record.suspendPayload ? JSON.stringify(record.suspendPayload) : null,
+            record.resumeData ? JSON.stringify(record.resumeData) : null,
+            record.updatedAt
+          ]
+        );
+      },
+      async getByRunId(runId) {
+        const result = await queryable.query<{
+          run_id: string;
+          step_id: string;
+          session_id: string;
+          status: WorkflowSnapshotRecord["status"];
+          suspend_payload_json: string | null;
+          resume_data_json: string | null;
+          updated_at: string;
+        }>("select * from workflow_snapshots where run_id = $1", [runId]);
+        const row = result.rows[0];
+        return row ? mapWorkflowSnapshotRecord(row) : null;
+      },
+      async listBySessionId(sessionId) {
+        const result = await queryable.query<{
+          run_id: string;
+          step_id: string;
+          session_id: string;
+          status: WorkflowSnapshotRecord["status"];
+          suspend_payload_json: string | null;
+          resume_data_json: string | null;
+          updated_at: string;
+        }>(
+          "select * from workflow_snapshots where session_id = $1 order by updated_at asc",
+          [sessionId]
+        );
+        return result.rows.map(mapWorkflowSnapshotRecord);
+      }
+    },
     pendingBlocks: {
       async save(input: PersistedPendingBlockRecord) {
         await queryable.query(
@@ -1183,6 +1249,30 @@ function mapJobRecord(row: {
     createdAt: new Date(row.created_at),
     ...(row.started_at ? { startedAt: new Date(row.started_at) } : {}),
     ...(row.completed_at ? { completedAt: new Date(row.completed_at) } : {})
+  };
+}
+
+function mapWorkflowSnapshotRecord(row: {
+  run_id: string;
+  step_id: string;
+  session_id: string;
+  status: WorkflowSnapshotRecord["status"];
+  suspend_payload_json: string | null;
+  resume_data_json: string | null;
+  updated_at: string;
+}): WorkflowSnapshotRecord {
+  return {
+    runId: row.run_id,
+    stepId: row.step_id,
+    sessionId: row.session_id,
+    status: row.status,
+    ...(row.suspend_payload_json
+      ? { suspendPayload: JSON.parse(row.suspend_payload_json) as Record<string, unknown> }
+      : {}),
+    ...(row.resume_data_json
+      ? { resumeData: JSON.parse(row.resume_data_json) as Record<string, unknown> }
+      : {}),
+    updatedAt: row.updated_at
   };
 }
 

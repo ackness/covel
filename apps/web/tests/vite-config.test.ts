@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createRuntimeProxyConfig, resolveRuntimeProxyTarget } from "../vite.config.ts";
+import { createRuntimeProxyConfig, resolveRuntimeProxyTarget } from "../vite.config.js";
 
 describe("apps/web vite config", () => {
   it("proxies runtime API routes to the local runtime server during development", () => {
@@ -9,6 +9,9 @@ describe("apps/web vite config", () => {
         target: "http://127.0.0.1:8787"
       },
       "/archives": {
+        target: "http://127.0.0.1:8787"
+      },
+      "/commands": {
         target: "http://127.0.0.1:8787"
       },
       "/packages": {

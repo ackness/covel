@@ -20,6 +20,17 @@ export {
 } from "./manifest.js";
 export { resolvePackageRelativePath } from "./path.js";
 export {
+  parseJsonSchema,
+  validateJsonSchemaValue,
+  type JsonSchemaNode
+} from "./json-schema.js";
+export {
+  type PackageContextFragment,
+  type PackageContextProviderExecutionContext,
+  type PackageContextProviderInput,
+  type PackageContextRepositories
+} from "./context.js";
+export {
   type PackageCapabilityModule,
   type PackageContextProviderModule,
   PackageRuntime,

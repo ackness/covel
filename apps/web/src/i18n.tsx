@@ -5,8 +5,12 @@ export type Locale = "zh-CN" | "en";
 type TranslationKey =
   | "app.archiveSummary"
   | "app.archiveWorkingSummary"
+  | "app.activeWorkspace"
   | "app.archives"
   | "app.composer"
+  | "app.commandSuggestions"
+  | "app.contextPanel"
+  | "app.contextPanelSummary"
   | "app.createSession"
   | "app.createSnapshot"
   | "app.createStarterWorld"
@@ -28,6 +32,7 @@ type TranslationKey =
   | "app.role.user"
   | "app.send"
   | "app.session"
+  | "app.sessionControls"
   | "app.sessionPreset"
   | "app.sessionPresetHint"
   | "app.sessions"
@@ -37,8 +42,11 @@ type TranslationKey =
   | "app.sessionStatus.waiting_for_input"
   | "app.sessionStatus.unknown"
   | "app.status.idle"
+  | "app.statusLabel"
   | "app.status.streaming"
   | "app.trace"
+  | "app.worldNavigator"
+  | "app.worldNavigatorSummary"
   | "app.newSessionPreset"
   | "app.worldPrimer"
   | "app.worldDescription"
@@ -61,6 +69,39 @@ type TranslationKey =
   | "preset.save"
   | "trace.recent"
   | "trace.none"
+  | "runtime.activity"
+  | "runtime.workflow"
+  | "runtime.statePatch"
+  | "runtime.artifacts"
+  | "runtime.noWorkflow"
+  | "runtime.noStatePatch"
+  | "runtime.noArtifact"
+  | "runtime.status.suspended"
+  | "runtime.status.running"
+  | "runtime.status.completed"
+  | "sidePanel.characters"
+  | "sidePanel.charactersEmpty"
+  | "sidePanel.debug"
+  | "sidePanel.debugSummary"
+  | "sidePanel.events"
+  | "sidePanel.eventsEmpty"
+  | "sidePanel.guideTopic"
+  | "sidePanel.guideLatestChoice"
+  | "sidePanel.guideStateEmpty"
+  | "sidePanel.guideUpdatedAt"
+  | "sidePanel.packages"
+  | "sidePanel.packagesEmpty"
+  | "sidePanel.pendingInteraction"
+  | "sidePanel.quests"
+  | "sidePanel.session"
+  | "sidePanel.sessionSummary"
+  | "sidePanel.settings"
+  | "sidePanel.settingsSummary"
+  | "sidePanel.traceCount"
+  | "sidePanel.world"
+  | "sidePanel.worldSummary"
+  | "sidePanel.workflowSnapshots"
+  | "sidePanel.workflowSnapshotsEmpty"
   | "worlds.createWorld"
   | "worlds.openAria"
   | "worlds.worldDescription"
@@ -70,8 +111,12 @@ const messages: Record<Locale, Record<TranslationKey, string>> = {
   "zh-CN": {
     "app.archiveSummary": "归档摘要",
     "app.archiveWorkingSummary": "工作摘要",
+    "app.activeWorkspace": "当前工作区",
     "app.archives": "归档",
     "app.composer": "输入",
+    "app.commandSuggestions": "命令建议",
+    "app.contextPanel": "上下文与调试",
+    "app.contextPanelSummary": "右侧只保留当前会话、世界上下文和运行诊断。",
     "app.createSession": "开始新会话",
     "app.createSnapshot": "创建快照",
     "app.createStarterWorld": "创建示例世界并开始",
@@ -93,6 +138,7 @@ const messages: Record<Locale, Record<TranslationKey, string>> = {
     "app.role.user": "你",
     "app.send": "发送",
     "app.session": "会话",
+    "app.sessionControls": "会话控制",
     "app.sessionPreset": "当前会话预设",
     "app.sessionPresetHint": "会话将始终通过这个预设调用模型，预设内部可以再定义自己的回退链。",
     "app.sessionPresetUnbound": "未绑定预设",
@@ -102,10 +148,13 @@ const messages: Record<Locale, Record<TranslationKey, string>> = {
     "app.sessionStatus.waiting_for_input": "等待输入",
     "app.sessionStatus.unknown": "未知状态",
     "app.status.idle": "空闲",
+    "app.statusLabel": "状态",
     "app.status.streaming": "生成中",
     "app.trace": "追踪",
+    "app.worldNavigator": "世界导航",
+    "app.worldNavigatorSummary": "先选择一个世界，再在中栏继续当前会话或创建新的入口。",
     "app.newSessionPreset": "新会话预设",
-    "app.worldPrimer": "世界概览",
+    "app.worldPrimer": "当前世界",
     "app.worldDescription": "世界描述",
     "app.worldName": "世界名称",
     "app.worlds": "世界",
@@ -126,6 +175,39 @@ const messages: Record<Locale, Record<TranslationKey, string>> = {
     "preset.save": "保存预设",
     "trace.recent": "最近追踪",
     "trace.none": "暂无追踪",
+    "runtime.activity": "运行时活动",
+    "runtime.workflow": "工作流",
+    "runtime.statePatch": "状态变更",
+    "runtime.artifacts": "工件",
+    "runtime.noWorkflow": "暂无工作流状态",
+    "runtime.noStatePatch": "暂无状态变更",
+    "runtime.noArtifact": "暂无工件更新",
+    "runtime.status.suspended": "已挂起",
+    "runtime.status.running": "运行中",
+    "runtime.status.completed": "已完成",
+    "sidePanel.characters": "角色",
+    "sidePanel.charactersEmpty": "还没有结构化角色数据。当前由 core-character-card 提供角色连续性约束，后续角色资产或记忆写入后会出现在这里。",
+    "sidePanel.debug": "调试",
+    "sidePanel.debugSummary": "追踪、工作流和最近运行时活动。",
+    "sidePanel.events": "事件",
+    "sidePanel.eventsEmpty": "还没有可展示的事件流。",
+    "sidePanel.guideTopic": "主题",
+    "sidePanel.guideLatestChoice": "最近引导选择",
+    "sidePanel.guideStateEmpty": "当前还没有 guide 状态记录。",
+    "sidePanel.guideUpdatedAt": "更新时间",
+    "sidePanel.packages": "扩展",
+    "sidePanel.packagesEmpty": "当前没有可展示的扩展信息。",
+    "sidePanel.pendingInteraction": "等待交互",
+    "sidePanel.quests": "任务",
+    "sidePanel.session": "会话",
+    "sidePanel.sessionSummary": "会话、快照与预设绑定。",
+    "sidePanel.settings": "设置",
+    "sidePanel.settingsSummary": "语言、模型预设和运行状态。",
+    "sidePanel.traceCount": "追踪条目",
+    "sidePanel.world": "世界",
+    "sidePanel.worldSummary": "当前世界概览与会话上下文。",
+    "sidePanel.workflowSnapshots": "工作流快照",
+    "sidePanel.workflowSnapshotsEmpty": "当前没有持久化工作流快照。",
     "worlds.createWorld": "创建世界",
     "worlds.openAria": "打开 {name}",
     "worlds.worldDescription": "世界描述",
@@ -134,8 +216,12 @@ const messages: Record<Locale, Record<TranslationKey, string>> = {
   en: {
     "app.archiveSummary": "Archive summary",
     "app.archiveWorkingSummary": "Working summary",
+    "app.activeWorkspace": "Active workspace",
     "app.archives": "Archives",
     "app.composer": "Composer",
+    "app.commandSuggestions": "Command suggestions",
+    "app.contextPanel": "Context and debug",
+    "app.contextPanelSummary": "Keep session context, world state, and runtime diagnostics on the right.",
     "app.createSession": "Start New Session",
     "app.createSnapshot": "Create Snapshot",
     "app.createStarterWorld": "Create Starter World",
@@ -157,6 +243,7 @@ const messages: Record<Locale, Record<TranslationKey, string>> = {
     "app.role.user": "user",
     "app.send": "Send",
     "app.session": "Session",
+    "app.sessionControls": "Session controls",
     "app.sessionPreset": "Session preset",
     "app.sessionPresetHint": "This session always calls through the selected preset. The preset itself may define its own fallback chain.",
     "app.sessionPresetUnbound": "No preset bound",
@@ -166,10 +253,13 @@ const messages: Record<Locale, Record<TranslationKey, string>> = {
     "app.sessionStatus.waiting_for_input": "waiting for input",
     "app.sessionStatus.unknown": "unknown",
     "app.status.idle": "Idle",
+    "app.statusLabel": "Status",
     "app.status.streaming": "Streaming",
     "app.trace": "Trace",
+    "app.worldNavigator": "World navigator",
+    "app.worldNavigatorSummary": "Pick a world first, then continue the active session or open a new one in the main workspace.",
     "app.newSessionPreset": "New session preset",
-    "app.worldPrimer": "World Primer",
+    "app.worldPrimer": "Current world",
     "app.worldDescription": "World Description",
     "app.worldName": "World Name",
     "app.worlds": "Worlds",
@@ -190,6 +280,39 @@ const messages: Record<Locale, Record<TranslationKey, string>> = {
     "preset.save": "Save preset",
     "trace.recent": "Recent trace",
     "trace.none": "No trace",
+    "runtime.activity": "Runtime Activity",
+    "runtime.workflow": "Workflow",
+    "runtime.statePatch": "State Patches",
+    "runtime.artifacts": "Artifacts",
+    "runtime.noWorkflow": "No workflow activity yet",
+    "runtime.noStatePatch": "No state patches yet",
+    "runtime.noArtifact": "No artifact updates yet",
+    "runtime.status.suspended": "suspended",
+    "runtime.status.running": "running",
+    "runtime.status.completed": "completed",
+    "sidePanel.characters": "Characters",
+    "sidePanel.charactersEmpty": "No structured character data yet. core-character-card is still providing continuity guidance, and character assets or memory writes will appear here later.",
+    "sidePanel.debug": "Debug",
+    "sidePanel.debugSummary": "Trace, workflow, and recent runtime activity.",
+    "sidePanel.events": "Events",
+    "sidePanel.eventsEmpty": "No event stream to show yet.",
+    "sidePanel.guideTopic": "Topic",
+    "sidePanel.guideLatestChoice": "Latest guide choice",
+    "sidePanel.guideStateEmpty": "No persisted guide state yet.",
+    "sidePanel.guideUpdatedAt": "Updated",
+    "sidePanel.packages": "Packages",
+    "sidePanel.packagesEmpty": "No package information to show.",
+    "sidePanel.pendingInteraction": "Pending interaction",
+    "sidePanel.quests": "Quests",
+    "sidePanel.session": "Session",
+    "sidePanel.sessionSummary": "Session, snapshots, and preset bindings.",
+    "sidePanel.settings": "Settings",
+    "sidePanel.settingsSummary": "Locale, model presets, and runtime status.",
+    "sidePanel.traceCount": "Trace entries",
+    "sidePanel.world": "World",
+    "sidePanel.worldSummary": "Current world overview and session context.",
+    "sidePanel.workflowSnapshots": "Workflow snapshots",
+    "sidePanel.workflowSnapshotsEmpty": "No persisted workflow snapshots yet.",
     "worlds.createWorld": "Create world",
     "worlds.openAria": "Open {name}",
     "worlds.worldDescription": "World description",

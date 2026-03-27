@@ -35,7 +35,8 @@ export const command = {
             requiresResponse: true,
             responseSchema: "schemas/blocks/choices.response.json",
             submitAs: "block_response",
-            resumePolicy: "resume_current_flow"
+            resumePolicy: "resume_current_flow",
+            resumeHandler: "core-guide.resume-choice"
           },
           data: {
             title: pickLocalizedText(locale, {

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 
 import { newDb } from "pg-mem";
 import { afterEach, describe, expect, it } from "vitest";
+import type { WorkflowSnapshotRecord } from "../../contracts/src/index.js";
 
 import {
   createArchiveVersion,
@@ -284,9 +285,20 @@ describe("createPostgresStoragePort", () => {
       attempt: 0,
       createdAt: new Date("2026-01-01T00:00:11.000Z")
     });
+    const workflowSnapshot: WorkflowSnapshotRecord = {
+      runId: "flow-1",
+      stepId: "turn-1",
+      sessionId: "session-1",
+      status: "suspended",
+      suspendPayload: {
+        blockId: "blk_01"
+      },
+      updatedAt: "2026-01-01T00:00:12.000Z"
+    };
 
     await firstRepositories.packageState.save(packageState);
     await firstRepositories.jobs.save(job);
+    await firstRepositories.workflowSnapshots.save(workflowSnapshot);
     await firstRepositories.pendingBlocks.save({
       blockId: "blk_01",
       sessionId: "session-1",
@@ -312,6 +324,8 @@ describe("createPostgresStoragePort", () => {
     })).resolves.toEqual(packageState);
     await expect(secondRepositories.jobs.getById("job-1")).resolves.toEqual(job);
     await expect(secondRepositories.jobs.listBySessionId("session-1")).resolves.toEqual([job]);
+    await expect(secondRepositories.workflowSnapshots.getByRunId("flow-1")).resolves.toEqual(workflowSnapshot);
+    await expect(secondRepositories.workflowSnapshots.listBySessionId("session-1")).resolves.toEqual([workflowSnapshot]);
     await expect(secondRepositories.pendingBlocks.getByBlockId("blk_01")).resolves.toEqual({
       blockId: "blk_01",
       sessionId: "session-1",

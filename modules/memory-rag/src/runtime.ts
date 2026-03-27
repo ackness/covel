@@ -30,6 +30,13 @@ export interface RetrievedChunk {
   };
 }
 
+export interface EntityEdgeCandidate {
+  entity: string;
+  fromChunkId: string;
+  toChunkId: string;
+  weight: number;
+}
+
 export interface HybridCandidate extends RetrievedChunk {
   fusedScore: number;
   provenance: {
@@ -87,6 +94,195 @@ export function chunkMemoryDocument(document: MemoryDocument): ChunkedMemory[] {
       }
     };
   });
+}
+
+export function buildRetrievedChunksFromDocuments(
+  documents: MemoryDocument[]
+): RetrievedChunk[] {
+  return documents.flatMap((document) =>
+    chunkMemoryDocument(document).map((chunk) => ({
+      chunkId: chunk.chunkId,
+      documentId: document.id,
+      scope: document.scope,
+      sourceType: document.sourceType,
+      text: chunk.text,
+      provenance: {
+        sourceType: document.sourceType,
+        documentId: document.id,
+        chunkId: chunk.chunkId,
+        scope: document.scope
+      }
+    }))
+  );
+}
+
+export function lexicalSearchRetrievedChunks(input: {
+  query: string;
+  chunks: RetrievedChunk[];
+  limit?: number;
+}): RetrievedChunk[] {
+  const tokens = tokenizeSearchText(input.query);
+  if (tokens.length === 0) {
+    return [];
+  }
+
+  const ranked = input.chunks
+    .map((chunk) => {
+      const haystack = normalizeSearchText(chunk.text);
+      let score = 0;
+
+      for (const token of tokens) {
+        if (haystack.includes(token)) {
+          score += token.length;
+        }
+      }
+
+      return score > 0
+        ? {
+            ...chunk,
+            lexicalScore: score
+          }
+        : null;
+    });
+
+  return ranked
+    .filter((chunk): chunk is RetrievedChunk & { lexicalScore: number } => chunk !== null)
+    .sort((left, right) =>
+      (right.lexicalScore ?? 0) - (left.lexicalScore ?? 0) ||
+      left.chunkId.localeCompare(right.chunkId)
+    )
+    .slice(0, input.limit ?? 8);
+}
+
+export function buildEntityEdgeCandidates(chunks: RetrievedChunk[]): EntityEdgeCandidate[] {
+  const edges: EntityEdgeCandidate[] = [];
+
+  for (let index = 0; index < chunks.length; index += 1) {
+    const left = chunks[index];
+    if (!left) {
+      continue;
+    }
+
+    const leftEntities = extractComparableTerms(left.text);
+    for (let inner = index + 1; inner < chunks.length; inner += 1) {
+      const right = chunks[inner];
+      if (!right) {
+        continue;
+      }
+
+      const rightEntities = extractComparableTerms(right.text);
+      const shared = leftEntities.filter((entity) => rightEntities.includes(entity));
+      for (const entity of shared) {
+        edges.push({
+          entity,
+          fromChunkId: left.chunkId,
+          toChunkId: right.chunkId,
+          weight: entity.length
+        });
+      }
+    }
+  }
+
+  return edges;
+}
+
+export function expandRetrievedChunksByEntities(input: {
+  selected: RetrievedChunk[];
+  allChunks: RetrievedChunk[];
+  maxAdditional?: number;
+}): Array<RetrievedChunk & {
+  graphWeight?: number;
+}> {
+  const selectedIds = new Set(input.selected.map((chunk) => chunk.chunkId));
+  const edges = buildEntityEdgeCandidates(input.allChunks);
+  const ranked = new Map<string, RetrievedChunk & { graphWeight?: number }>();
+
+  for (const edge of edges) {
+    const leftSelected = selectedIds.has(edge.fromChunkId);
+    const rightSelected = selectedIds.has(edge.toChunkId);
+    if (leftSelected === rightSelected) {
+      continue;
+    }
+
+    const targetId = leftSelected ? edge.toChunkId : edge.fromChunkId;
+    const target = input.allChunks.find((chunk) => chunk.chunkId === targetId);
+    if (!target) {
+      continue;
+    }
+
+    const existing = ranked.get(targetId);
+    if (existing) {
+      existing.graphWeight = (existing.graphWeight ?? 0) + edge.weight;
+      continue;
+    }
+
+    ranked.set(targetId, {
+      ...target,
+      graphWeight: edge.weight
+    });
+  }
+
+  const selectedDocumentIds = new Set(input.selected.map((chunk) => chunk.documentId));
+  for (const chunk of input.allChunks) {
+    if (
+      selectedIds.has(chunk.chunkId) ||
+      !selectedDocumentIds.has(chunk.documentId)
+    ) {
+      continue;
+    }
+
+    const existing = ranked.get(chunk.chunkId);
+    if (existing) {
+      existing.graphWeight = (existing.graphWeight ?? 0) + 0.5;
+      continue;
+    }
+
+    ranked.set(chunk.chunkId, {
+      ...chunk,
+      graphWeight: 0.5
+    });
+  }
+
+  return Array.from(ranked.values())
+    .sort((left, right) =>
+      (right.graphWeight ?? 0) - (left.graphWeight ?? 0) ||
+      left.chunkId.localeCompare(right.chunkId)
+    )
+    .slice(0, input.maxAdditional ?? 4);
+}
+
+export async function retrieveEntityAware(input: {
+  query: string;
+  documents: MemoryDocument[];
+  vectorSearch?: () => Promise<RetrievedChunk[]>;
+  lexicalLimit?: number;
+}): Promise<{
+  mode: "hybrid" | "fts-only" | "vector-only";
+  candidates: HybridCandidate[];
+  expanded: Array<RetrievedChunk & { graphWeight?: number }>;
+}> {
+  const allChunks = buildRetrievedChunksFromDocuments(input.documents);
+  const result = await retrieveHybrid({
+    query: input.query,
+    lexicalSearch: async () => lexicalSearchRetrievedChunks({
+      query: input.query,
+      chunks: allChunks,
+      limit: input.lexicalLimit ?? 2
+    }),
+    vectorSearch: input.vectorSearch ?? (async () => {
+      throw new Error("vector search unavailable");
+    })
+  });
+
+  const expanded = expandRetrievedChunksByEntities({
+    selected: result.candidates,
+    allChunks
+  });
+
+  return {
+    ...result,
+    expanded
+  };
 }
 
 export async function retrieveHybrid(input: {
@@ -240,4 +436,47 @@ function upsertFusedCandidate(
 
 function estimateTokenCount(text: string): number {
   return text.split(/\s+/).filter(Boolean).length * 20;
+}
+
+function extractComparableTerms(text: string): string[] {
+  const parts = text
+    .split(/\n+/)
+    .flatMap((line) => line.split(/[，。；：,.!?()[\]【】]/g))
+    .map((part) => normalizeSearchText(part))
+    .filter((part) => part.length >= 2 && part.length <= 64);
+  const tokenHints = parts.flatMap((part) => tokenizeComparablePart(part));
+
+  return Array.from(new Set([...parts, ...tokenHints]));
+}
+
+function tokenizeSearchText(text: string): string[] {
+  return Array.from(new Set(
+    text
+      .split(/[\s，。；：,.!?()[\]【】]+/g)
+      .map((part) => normalizeSearchText(part))
+      .filter((part) => part.length >= 2)
+  ));
+}
+
+function normalizeSearchText(text: string): string {
+  return text.toLowerCase().trim();
+}
+
+function tokenizeComparablePart(text: string): string[] {
+  const words = text
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter((word) => word.length >= 2);
+  const phrases = [...words];
+
+  for (let index = 0; index < words.length; index += 1) {
+    if (index + 1 < words.length) {
+      phrases.push(`${words[index]} ${words[index + 1]}`);
+    }
+    if (index + 2 < words.length) {
+      phrases.push(`${words[index]} ${words[index + 1]} ${words[index + 2]}`);
+    }
+  }
+
+  return phrases;
 }

@@ -12,6 +12,11 @@ import type {
   SlashCommandAutocompleteMetadata,
   SlashCommandHelpMetadata
 } from "../../command-system/src/index.js";
+import type {
+  PackageContextFragment,
+  PackageContextProviderExecutionContext,
+  PackageContextProviderInput
+} from "./context.js";
 import { PackageRuntimeError } from "./error.js";
 import {
   type ArtifactTypeContribution,
@@ -47,7 +52,10 @@ export interface PackageRuntimeOptions {
 
 export interface RegisteredContextProvider extends ContextProviderContribution {
   packageName: string;
-  build: (input?: unknown, context?: CommandExecutionContext) => Promise<unknown> | unknown;
+  build: (
+    input: PackageContextProviderInput,
+    context: PackageContextProviderExecutionContext
+  ) => Promise<PackageContextFragment[]> | PackageContextFragment[];
 }
 
 export interface RegisteredCommand extends Omit<CommandContribution, "argsSchema"> {
@@ -60,6 +68,8 @@ export interface RegisteredCommand extends Omit<CommandContribution, "argsSchema
 
 export interface RegisteredBlock extends BlockContribution {
   packageName: string;
+  dataSchemaPath: string;
+  responseSchemaPath: string;
 }
 
 export interface RegisteredHook extends HookContribution {
@@ -102,9 +112,12 @@ export interface PackageCommandModule<
 }
 
 export interface PackageContextProviderModule<
-  TContext extends CommandExecutionContext = CommandExecutionContext
+  TContext extends PackageContextProviderExecutionContext = PackageContextProviderExecutionContext
 > {
-  build(input?: unknown, context?: TContext): Promise<unknown> | unknown;
+  build(
+    input: PackageContextProviderInput,
+    context: TContext
+  ): Promise<PackageContextFragment[]> | PackageContextFragment[];
 }
 
 export interface PackageHookModule<
@@ -263,6 +276,10 @@ export class PackageRuntime {
     return this.#contexts.get(id);
   }
 
+  listContextProviders(): RegisteredContextProvider[] {
+    return Array.from(this.#contexts.values()).sort((left, right) => left.id.localeCompare(right.id));
+  }
+
   getCommand(name: string): RegisteredCommand | undefined {
     return this.#commands.get(name);
   }
@@ -390,11 +407,13 @@ export class PackageRuntime {
       }
 
       for (const block of pkg.manifest.contributes.blockTypes) {
-        resolvePackageRelativePath(pkg.rootDir, block.dataSchema);
-        resolvePackageRelativePath(pkg.rootDir, block.responseSchema);
+        const dataSchemaPath = resolvePackageRelativePath(pkg.rootDir, block.dataSchema);
+        const responseSchemaPath = resolvePackageRelativePath(pkg.rootDir, block.responseSchema);
         this.#registerUnique(this.#blocks, block.type, {
           ...block,
-          packageName: pkg.name
+          packageName: pkg.name,
+          dataSchemaPath,
+          responseSchemaPath
         }, "block");
         nextRegistrations.blockTypes.push(block.type);
       }

@@ -32,9 +32,27 @@ export {
   type PackageStateScope
 } from "./package-state.js";
 export {
+  StatePatchOperationSchema,
+  StatePatchSchema,
+  StatePatchScopeSchema,
+  type StatePatch,
+  type StatePatchOperation,
+  type StatePatchScope
+} from "./state-patch.js";
+export {
   TraceRecordSchema,
   type TraceRecord
 } from "./trace.js";
+export {
+  WorkflowRunStatusSchema,
+  WorkflowSignalSchema,
+  WorkflowSignalTypeSchema,
+  WorkflowSnapshotRecordSchema,
+  type WorkflowRunStatus,
+  type WorkflowSignal,
+  type WorkflowSignalType,
+  type WorkflowSnapshotRecord
+} from "./workflow.js";
 export {
   RetrievalRunSchema,
   type RetrievalRun

@@ -27,12 +27,24 @@ afterEach(() => {
 });
 
 describe("apps/web TraceSummary", () => {
-  it("renders the latest trace id with a component/eventType summary list", async () => {
+  it("renders the latest trace id with a component/eventType summary list and latest payload detail", async () => {
     const { TraceSummary } = await loadWebModule<TraceSummaryModule>("components/trace-summary.ts");
 
     renderWithI18n(createElement(TraceSummary, {
       traceId: "trace_req_03",
       entries: [
+        {
+          traceId: "trace_req_03",
+          spanId: "span_seed_02",
+          sessionId: "session_03",
+          turnId: "turn_02",
+          component: "prompt-graph",
+          eventType: "prompt.selected",
+          payload: {
+            preset: "seed"
+          },
+          createdAt: "2026-03-24T12:09:59.000Z"
+        },
         {
           traceId: "trace_req_03",
           spanId: "span_flow_03",
@@ -62,7 +74,12 @@ describe("apps/web TraceSummary", () => {
 
     expect(screen.getByText("最近追踪")).toBeTruthy();
     expect(screen.getByText("trace_req_03")).toBeTruthy();
+    expect(screen.getByText("turn_03 · 2")).toBeTruthy();
+    expect(screen.getByText("turn_02 · 1")).toBeTruthy();
     expect(screen.getByText("flow-engine / flow.started")).toBeTruthy();
-    expect(screen.getByText("model-gateway / model.completed")).toBeTruthy();
+    expect(screen.getAllByText("model-gateway / model.completed").length).toBeGreaterThan(0);
+    expect(screen.getByText(/qwen-plus/)).toBeTruthy();
+    expect(screen.getByText("span_flow_03")).toBeTruthy();
+    expect(screen.getByText("span_model_03")).toBeTruthy();
   });
 });

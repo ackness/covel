@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildEntityEdgeCandidates,
+  buildRetrievedChunksFromDocuments,
   chunkMemoryDocument,
   createIngestionRegistry,
+  expandRetrievedChunksByEntities,
+  lexicalSearchRetrievedChunks,
+  retrieveEntityAware,
   retrieveHybrid,
   tagRetrievedChunks,
   type MemoryDocument,
@@ -163,6 +168,119 @@ describe("retrieveHybrid", () => {
     expect(lexicalFallback.candidates.map((candidate) => candidate.chunkId)).toEqual(["chunk-a"]);
     expect(vectorFallback.mode).toBe("vector-only");
     expect(vectorFallback.candidates.map((candidate) => candidate.chunkId)).toEqual(["chunk-b"]);
+  });
+});
+
+describe("entity-aware retrieval foundations", () => {
+  it("builds retrieved chunks from documents and ranks lexical hits", () => {
+    const documents = [
+      createDocument({
+        id: "world-doc",
+        sourceType: "world",
+        scope: "world:northreach",
+        title: "Northreach",
+        content: [
+          "# Captain Mire",
+          "Captain Mire commands the harbor watch.",
+          "",
+          "## Frostharbor",
+          "Frostharbor answers to Captain Mire."
+        ].join("\n")
+      }),
+      createDocument({
+        id: "event-doc",
+        sourceType: "archive",
+        scope: "session:01",
+        title: "Latest events",
+        content: [
+          "user: Ask about Captain Mire.",
+          "assistant: Captain Mire distrusts the Lantern Wardens."
+        ].join("\n")
+      })
+    ];
+
+    const chunks = buildRetrievedChunksFromDocuments(documents);
+    const lexical = lexicalSearchRetrievedChunks({
+      query: "Captain Mire",
+      chunks
+    });
+
+    expect(chunks.length).toBeGreaterThanOrEqual(3);
+    expect(lexical.map((chunk) => chunk.chunkId)).toEqual(
+      expect.arrayContaining(["world-doc:0", "event-doc:0"])
+    );
+  });
+
+  it("expands selected chunks through lightweight shared-entity edges", () => {
+    const chunks: RetrievedChunk[] = [
+      {
+        chunkId: "chunk-a",
+        documentId: "doc-a",
+        scope: "world:1",
+        sourceType: "world",
+        text: "Captain Mire commands the harbor watch."
+      },
+      {
+        chunkId: "chunk-b",
+        documentId: "doc-b",
+        scope: "world:1",
+        sourceType: "world",
+        text: "Frostharbor answers to Captain Mire and the harbor watch."
+      },
+      {
+        chunkId: "chunk-c",
+        documentId: "doc-c",
+        scope: "world:1",
+        sourceType: "world",
+        text: "The Lantern Wardens patrol the northern pass."
+      }
+    ];
+
+    const edges = buildEntityEdgeCandidates(chunks);
+    const expanded = expandRetrievedChunksByEntities({
+      selected: [chunks[0]!],
+      allChunks: chunks
+    });
+
+    expect(edges.some((edge) => edge.entity.includes("captain mire"))).toBe(true);
+    expect(expanded.map((chunk) => chunk.chunkId)).toContain("chunk-b");
+  });
+
+  it("runs entity-aware retrieval as hybrid selection plus graph expansion", async () => {
+    const documents = [
+      createDocument({
+        id: "world-doc",
+        sourceType: "world",
+        scope: "world:northreach",
+        title: "Northreach",
+        content: [
+          "# Captain Mire",
+          "Captain Mire commands the harbor watch.",
+          "",
+          "## Harbor Watch",
+          "The harbor watch reports to Captain Mire."
+        ].join("\n")
+      }),
+      createDocument({
+        id: "event-doc",
+        sourceType: "archive",
+        scope: "session:01",
+        title: "Latest events",
+        content: [
+          "user: Ask about Captain Mire.",
+          "assistant: Captain Mire distrusts the Lantern Wardens."
+        ].join("\n")
+      })
+    ];
+
+    const result = await retrieveEntityAware({
+      query: "Captain Mire",
+      documents
+    });
+
+    expect(result.mode).toBe("fts-only");
+    expect(result.candidates.length).toBeGreaterThan(0);
+    expect(result.expanded.length).toBeGreaterThan(0);
   });
 });
 

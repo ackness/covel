@@ -69,12 +69,72 @@ describe("createRuntimeComposition package-owned resume", () => {
 
     expect(resumeEvents.map((event) => event.type)).toEqual([
       "flow.phase.changed",
+      "workflow.resumed",
       "message.completed",
       "flow.completed"
     ]);
-    expect(resumeEvents[1]?.payload).toMatchObject({
+    expect(resumeEvents[2]?.payload).toMatchObject({
       content: "handled:opt_a"
     });
+  });
+
+  it("rejects package-owned block responses that fail the registered response schema", async () => {
+    const root = await createTempRoot();
+    await writeResumePackage(root);
+
+    const runtime = await createRuntimeComposition({
+      cwd: root,
+      env: {
+        COVEL_ENABLED_PACKAGES: "resume-package"
+      }
+    });
+
+    await runtime.repositories.sessions.save(createSession({
+      id: "session_resume",
+      worldId: "world_resume",
+      status: "active",
+      createdAt: new Date("2026-03-25T00:00:00.000Z")
+    }));
+
+    const initialEvents = await runtime.flowEngine.handle({
+      requestId: "req_resume_invalid_01",
+      type: "execute_command",
+      sessionId: "session_resume",
+      locale: "en",
+      payload: {
+        command: "/choose",
+        args: {}
+      }
+    });
+
+    const emittedBlock = initialEvents.find((event) => event.type === "block.emitted")?.payload.block as {
+      id: string;
+      type: string;
+      meta: { turnId: string };
+    };
+
+    const resumeEvents = await runtime.flowEngine.handle({
+      requestId: "req_resume_invalid_02",
+      type: "submit_block_response",
+      sessionId: "session_resume",
+      locale: "en",
+      payload: {
+        blockId: emittedBlock.id,
+        blockType: emittedBlock.type,
+        sessionId: "session_resume",
+        turnId: emittedBlock.meta.turnId,
+        response: {}
+      }
+    });
+
+    expect(resumeEvents.map((event) => event.type)).toEqual([
+      "flow.phase.changed",
+      "flow.failed"
+    ]);
+    expect(resumeEvents[1]?.payload).toMatchObject({
+      code: "BLOCK_RESPONSE_SCHEMA_INVALID"
+    });
+    expect(String(resumeEvents[1]?.payload.message ?? "")).toContain("$.selected is required.");
   });
 });
 
@@ -150,8 +210,42 @@ async function writeResumePackage(root: string) {
   await writeFile(join(packageRoot, "schemas", "commands", "choose.args.json"), JSON.stringify({ type: "object" }, null, 2), "utf8");
   await writeFile(join(packageRoot, "schemas", "capabilities", "resume-choice.input.json"), JSON.stringify({ type: "object" }, null, 2), "utf8");
   await writeFile(join(packageRoot, "schemas", "capabilities", "resume-choice.output.json"), JSON.stringify({ type: "object" }, null, 2), "utf8");
-  await writeFile(join(packageRoot, "schemas", "blocks", "choice-set.data.json"), JSON.stringify({ type: "object" }, null, 2), "utf8");
-  await writeFile(join(packageRoot, "schemas", "blocks", "choice-set.response.json"), JSON.stringify({ type: "object" }, null, 2), "utf8");
+  await writeFile(join(packageRoot, "schemas", "blocks", "choice-set.data.json"), JSON.stringify({
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      title: {
+        type: "string"
+      },
+      options: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            id: {
+              type: "string"
+            },
+            label: {
+              type: "string"
+            }
+          },
+          required: ["id", "label"]
+        }
+      }
+    },
+    required: ["title", "options"]
+  }, null, 2), "utf8");
+  await writeFile(join(packageRoot, "schemas", "blocks", "choice-set.response.json"), JSON.stringify({
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      selected: {
+        type: "string"
+      }
+    },
+    required: ["selected"]
+  }, null, 2), "utf8");
 
   await writeFile(join(packageRoot, "server", "commands", "choose.ts"), [
     "export const command = {",

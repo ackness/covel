@@ -2,9 +2,9 @@ import { once } from "node:events";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { SseEnvelope } from "../../../modules/contracts/src/index.js";
+import type { SseEnvelope, WorkflowSnapshotRecord } from "../../../modules/contracts/src/index.js";
 import { createArchiveService, createInMemoryArchiveLineageStore, createInMemoryReindexMarkStore } from "../../../modules/archive/src/index.js";
-import { createArtifact, createMessage, createSession, createWorld } from "../../../modules/domain/src/index.js";
+import { createArtifact, createMessage, createPackageStateRecord, createSession, createWorld } from "../../../modules/domain/src/index.js";
 import { createInMemoryStorageRepositories } from "../../../modules/storage/src/index.js";
 import { createRuntimeServer } from "../src/index.js";
 
@@ -182,6 +182,77 @@ describe("createRuntimeServer", () => {
         message: "资源不存在。"
       }
     });
+  });
+
+  it("exposes merged command help and autocomplete metadata through /commands", async () => {
+    const server = createRuntimeServer({
+      flowEngine: {
+        async handle() {
+          return [];
+        }
+      },
+      commandRegistry: {
+        listHelp() {
+          return [
+            {
+              name: "world-seeds",
+              description: "Inspect staged world seed content.",
+              usage: "/world-seeds [seedId]",
+              examples: ["/world-seeds", "/world-seeds --seed legacy-wuxia-nine-provinces"]
+            }
+          ];
+        },
+        listAutocomplete() {
+          return [
+            {
+              name: "world-seeds",
+              positionalHints: ["seedId"],
+              flagHints: [
+                {
+                  name: "--seed",
+                  description: "Inspect a staged world seed by id.",
+                  takesValue: true
+                }
+              ]
+            }
+          ];
+        }
+      }
+    });
+    servers.add(server);
+    const baseUrl = await listen(server);
+
+    const response = await fetch(`${baseUrl}/commands`);
+    const body = await response.json() as Array<{
+      name: string;
+      description: string;
+      usage: string;
+      examples?: string[];
+      positionalHints?: string[];
+      flagHints?: Array<{
+        name: string;
+        description: string;
+        takesValue: boolean;
+      }>;
+    }>;
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual([
+      {
+        name: "world-seeds",
+        description: "Inspect staged world seed content.",
+        usage: "/world-seeds [seedId]",
+        examples: ["/world-seeds", "/world-seeds --seed legacy-wuxia-nine-provinces"],
+        positionalHints: ["seedId"],
+        flagHints: [
+          {
+            name: "--seed",
+            description: "Inspect a staged world seed by id.",
+            takesValue: true
+          }
+        ]
+      }
+    ]);
   });
 
   it("creates and lists worlds and sessions through the runtime host", async () => {
@@ -362,6 +433,38 @@ describe("createRuntimeServer", () => {
     const messagesResponse = await fetch(`${baseUrl}/sessions/${session.id}/messages`);
     const messages = await messagesResponse.json() as Array<{ id: string }>;
 
+    const packageState = createPackageStateRecord({
+      scope: "session",
+      ownerId: session.id,
+      packageName: "core-guide",
+      collection: "quest_state",
+      key: "quest-01",
+      value: {
+        stage: "started"
+      },
+      updatedAt: new Date("2026-03-24T12:00:05.000Z")
+    });
+    await repositories.packageState.save(packageState);
+    const workflowSnapshot: WorkflowSnapshotRecord = {
+      runId: "flow_01",
+      stepId: "turn_01",
+      sessionId: session.id,
+      status: "suspended",
+      suspendPayload: {
+        blockId: "blk_01"
+      },
+      updatedAt: "2026-03-24T12:00:06.000Z"
+    };
+    await repositories.workflowSnapshots.save(workflowSnapshot);
+
+    const packageStateResponse = await fetch(
+      `${baseUrl}/sessions/${session.id}/package-state?packageName=core-guide&collection=quest_state`
+    );
+    const packageStateRecords = await packageStateResponse.json() as Array<{ key: string }>;
+
+    const workflowResponse = await fetch(`${baseUrl}/sessions/${session.id}/workflow-snapshots`);
+    const workflowSnapshots = await workflowResponse.json() as Array<{ runId: string; status: string }>;
+
     const packagesResponse = await fetch(`${baseUrl}/packages`);
     const packages = await packagesResponse.json() as Array<{ name: string; enabled: boolean }>;
 
@@ -399,6 +502,13 @@ describe("createRuntimeServer", () => {
     expect(sessionsResponse.status).toBe(200);
     expect(sessions.map((item) => item.id)).toEqual([session.id]);
     expect(messages.map((item) => item.id)).toEqual([userMessage.id, assistantMessage.id]);
+    expect(packageStateRecords.map((item) => item.key)).toEqual(["quest-01"]);
+    expect(workflowSnapshots).toEqual([
+      expect.objectContaining({
+        runId: "flow_01",
+        status: "suspended"
+      })
+    ]);
     expect(packages).toEqual([
       {
         name: "core-guide",

@@ -6,17 +6,25 @@ interface ChoicesRendererProps {
       label: string;
     }>;
   };
+  onChoiceSelect?(optionId: string): void;
 }
 
-// Placeholder renderer that keeps the manifest honest until the Web Host
-// starts loading package-owned renderers dynamically.
-export default function ChoicesRenderer({ data }: ChoicesRendererProps) {
+export default function ChoicesRenderer({ data, onChoiceSelect }: ChoicesRendererProps) {
   return (
     <section data-package-renderer="core-guide/choices">
       <h3>{data?.title ?? "Choices"}</h3>
-      <ul>
+      <ul className="choice-grid">
         {(data?.options ?? []).map((option) => (
-          <li key={option.id}>{option.label}</li>
+          <li key={option.id}>
+            <button
+              className="choice-button"
+              type="button"
+              disabled={!onChoiceSelect}
+              onClick={() => onChoiceSelect?.(option.id)}
+            >
+              {option.label}
+            </button>
+          </li>
         ))}
       </ul>
     </section>

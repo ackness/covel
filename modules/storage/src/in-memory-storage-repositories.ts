@@ -19,11 +19,14 @@ import type {
 import type { StorageRepositoriesWithPackageStateAndJobs } from "./package-state-store.js";
 import type { PersistedPresetRecord, StorageRepositoriesWithPresets } from "./preset-metadata-store.js";
 import { stripPresetSecrets } from "./preset-metadata-store.js";
+import type { StorageRepositoriesWithWorkflowSnapshots } from "./workflow-snapshot-store.js";
+import type { WorkflowSnapshotRecord } from "../../contracts/src/index.js";
 
 export function createInMemoryStorageRepositories(): DomainRepositories &
   StorageRepositoriesWithPresets &
   StorageRepositoriesWithPendingBlocks &
-  StorageRepositoriesWithPackageStateAndJobs {
+  StorageRepositoriesWithPackageStateAndJobs &
+  StorageRepositoriesWithWorkflowSnapshots {
   const worlds = new Map<string, World>();
   const sessions = new Map<string, Session>();
   const messages = new Map<string, Message>();
@@ -36,6 +39,7 @@ export function createInMemoryStorageRepositories(): DomainRepositories &
   const pendingBlocks = new Map<string, PersistedPendingBlockRecord>();
   const packageState = new Map<string, PackageStateRecord>();
   const jobs = new Map<string, JobRecord>();
+  const workflowSnapshots = new Map<string, WorkflowSnapshotRecord>();
 
   return {
     worlds: {
@@ -155,6 +159,17 @@ export function createInMemoryStorageRepositories(): DomainRepositories &
       },
       async listByStatus(status) {
         return Array.from(jobs.values()).filter((record) => record.status === status);
+      }
+    },
+    workflowSnapshots: {
+      async save(record) {
+        workflowSnapshots.set(record.runId, { ...record });
+      },
+      async getByRunId(runId) {
+        return workflowSnapshots.get(runId) ?? null;
+      },
+      async listBySessionId(sessionId) {
+        return Array.from(workflowSnapshots.values()).filter((record) => record.sessionId === sessionId);
       }
     },
     presets: {

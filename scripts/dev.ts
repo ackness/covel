@@ -1,8 +1,11 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessByStdio } from "node:child_process";
 import { createServer } from "node:net";
 import process from "node:process";
 import readline from "node:readline";
+import type { Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
+
+import { loadProjectEnvFile } from "../apps/runtime/src/load-env-file.js";
 
 const PNPM_COMMAND = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const DEFAULT_RUNTIME_HOST = "127.0.0.1";
@@ -89,8 +92,9 @@ export async function resolveAvailableDevEnvironmentConfig(
 }
 
 export async function runDevEnvironment(env: Record<string, string | undefined> = process.env) {
-  const requestedConfig = resolveDevEnvironmentConfig(env);
-  const resolvedConfig = await resolveAvailableDevEnvironmentConfig(env);
+  const runtimeEnv = prepareRuntimeEnvironment(env);
+  const requestedConfig = resolveDevEnvironmentConfig(runtimeEnv);
+  const resolvedConfig = await resolveAvailableDevEnvironmentConfig(runtimeEnv);
 
   if (requestedConfig.runtimePort !== resolvedConfig.runtimePort) {
     console.log(
@@ -98,7 +102,7 @@ export async function runDevEnvironment(env: Record<string, string | undefined> 
     );
   }
 
-  const commands = createDevCommandSpecsFromConfig(resolvedConfig, env);
+  const commands = createDevCommandSpecsFromConfig(resolvedConfig, runtimeEnv);
   const children = commands.map((command) => spawnManagedProcess(command));
   let isShuttingDown = false;
 
@@ -168,6 +172,21 @@ export async function runDevEnvironment(env: Record<string, string | undefined> 
   process.on("SIGTERM", handleSignal);
 }
 
+export function prepareRuntimeEnvironment(
+  env: Record<string, string | undefined> = process.env,
+  cwd = process.cwd()
+): Record<string, string | undefined> {
+  if (env === process.env) {
+    loadProjectEnvFile({
+      cwd,
+      preserveShellDatabaseUrl: true
+    });
+    return process.env;
+  }
+
+  return env;
+}
+
 async function findAvailablePort(
   host: string,
   startingPort: number,
@@ -231,7 +250,7 @@ async function checkPortAvailability(host: string, port: number): Promise<boolea
   });
 }
 
-function spawnManagedProcess(command: DevCommandSpec): ChildProcessWithoutNullStreams {
+function spawnManagedProcess(command: DevCommandSpec): ChildProcessByStdio<null, Readable, Readable> {
   const child = spawn(PNPM_COMMAND, command.args, {
     env: command.env,
     stdio: ["inherit", "pipe", "pipe"]

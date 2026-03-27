@@ -1,14 +1,38 @@
 import { describe, expect, it } from "vitest";
 
-import type { BlockEnvelope } from "../../contracts/src/index.js";
+import type {
+  BlockEnvelope,
+  StatePatch,
+  WorkflowSignal
+} from "../../contracts/src/index.js";
 import type { Session } from "../../domain/src/index.js";
 import { createSession } from "../../domain/src/index.js";
 import { FlowEngine, type CommandBus, type ModelGateway, type ResumeExecutor } from "../src/index.js";
 
 function createHarness(options?: {
-  modelResult?: { content: string; blocks?: BlockEnvelope[]; traceId?: string };
-  commandResult?: { content?: string; blocks?: BlockEnvelope[]; traceId?: string };
-  resumeResult?: { content?: string; blocks?: BlockEnvelope[]; traceId?: string };
+  modelResult?: {
+    content: string;
+    blocks?: BlockEnvelope[];
+    statePatches?: StatePatch[];
+    workflowEvents?: WorkflowSignal[];
+    traceId?: string;
+  };
+  commandResult?: {
+    content?: string;
+    blocks?: BlockEnvelope[];
+    statePatches?: StatePatch[];
+    workflowEvents?: WorkflowSignal[];
+    traceId?: string;
+  };
+  resumeResult?: {
+    content?: string;
+    blocks?: BlockEnvelope[];
+    statePatches?: StatePatch[];
+    workflowEvents?: WorkflowSignal[];
+    traceId?: string;
+  };
+  dataValidationResult?: { ok: boolean; code?: "BLOCK_DATA_SCHEMA_INVALID"; details?: string };
+  responseValidationResult?: { ok: boolean; code?: "BLOCK_RESPONSE_SCHEMA_INVALID"; details?: string };
   session?: Session | null;
 }) {
   const session = options?.session ?? createSession({
@@ -50,6 +74,24 @@ function createHarness(options?: {
     blockEnvelope?: Record<string, unknown>;
     packageName?: string;
     resumeHandler?: string;
+  }>();
+  const packageState = new Map<string, {
+    scope: "world" | "session";
+    ownerId: string;
+    packageName: string;
+    collection: string;
+    key: string;
+    value: Record<string, unknown>;
+    updatedAt: Date;
+  }>();
+  const workflowSnapshots = new Map<string, {
+    runId: string;
+    stepId: string;
+    sessionId: string;
+    status: "running" | "suspended" | "completed" | "failed";
+    suspendPayload?: Record<string, unknown>;
+    resumeData?: Record<string, unknown>;
+    updatedAt: string;
   }>();
 
   const modelGateway: ModelGateway = {
@@ -102,6 +144,14 @@ function createHarness(options?: {
     modelGateway,
     commandBus,
     resumeExecutor,
+    blockValidator: {
+      async validateData() {
+        return options?.dataValidationResult ?? { ok: true };
+      },
+      async validateResponse() {
+        return options?.responseValidationResult ?? { ok: true };
+      }
+    },
     pendingBlockStore: {
       async save(entry) {
         pendingBlocks.set(entry.blockId, entry);
@@ -111,6 +161,30 @@ function createHarness(options?: {
       },
       async delete(blockId) {
         pendingBlocks.delete(blockId);
+      }
+    },
+    packageStateStore: {
+      async save(record) {
+        packageState.set(
+          `${record.scope}:${record.ownerId}:${record.packageName}:${record.collection}:${record.key}`,
+          record
+        );
+      },
+      async get(input) {
+        return packageState.get(
+          `${input.scope}:${input.ownerId}:${input.packageName}:${input.collection}:${input.key}`
+        ) ?? null;
+      }
+    },
+    workflowSnapshotStore: {
+      async save(record) {
+        workflowSnapshots.set(record.runId, record);
+      },
+      async getByRunId(runId) {
+        return workflowSnapshots.get(runId) ?? null;
+      },
+      async listBySessionId(sessionId) {
+        return Array.from(workflowSnapshots.values()).filter((record) => record.sessionId === sessionId);
       }
     },
     createId(prefix) {
@@ -129,7 +203,9 @@ function createHarness(options?: {
     modelCalls,
     commandCalls,
     resumeCalls,
-    pendingBlocks
+    pendingBlocks,
+    packageState,
+    workflowSnapshots
   };
 }
 
@@ -157,6 +233,76 @@ describe("FlowEngine", () => {
     expect(harness.messages).toHaveLength(2);
     expect(harness.messages[0]?.role).toBe("user");
     expect(harness.messages[1]?.role).toBe("assistant");
+  });
+
+  it("emits model-produced interactive blocks during send_message", async () => {
+    const harness = createHarness({
+      modelResult: {
+        content: "The wind shifts and offers a decision.",
+        traceId: "trace_model",
+        blocks: [
+          {
+            id: "blk_model_choice",
+            type: "choice_set",
+            version: "1.0",
+            meta: {
+              package: "runtime",
+              requestId: "req_model_choice",
+              traceId: "tr_model_choice",
+              sessionId: "session-1",
+              turnId: "turn_model_choice"
+            },
+            interaction: {
+              requiresResponse: true,
+              responseSchema: "runtime://choice_set.response",
+              submitAs: "block_response",
+              resumePolicy: "resume_current_flow"
+            },
+            data: {
+              title: "Choose the next move",
+              options: [
+                { id: "opt_a", label: "Advance" },
+                { id: "opt_b", label: "Observe" }
+              ]
+            }
+          }
+        ]
+      }
+    });
+
+    const events = await harness.engine.handle({
+      requestId: "req_01b",
+      type: "send_message",
+      sessionId: "session-1",
+      payload: {
+        content: "Give me a choice."
+      }
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      "flow.phase.changed",
+      "message.delta",
+      "message.completed",
+      "block.emitted",
+      "workflow.suspended",
+      "flow.completed"
+    ]);
+    const emittedBlock = events[3]?.payload.block as BlockEnvelope;
+    expect(emittedBlock).toMatchObject({
+      type: "choice_set",
+      meta: {
+        package: "runtime",
+        requestId: "req_01b",
+        sessionId: "session-1"
+      }
+    });
+    expect(harness.pendingBlocks.get(emittedBlock.id)).toMatchObject({
+      packageName: "runtime",
+      blockEnvelope: expect.objectContaining({
+        type: "choice_set"
+      })
+    });
+    expect(harness.sessions.get("session-1")?.status).toBe("waiting_for_input");
   });
 
   it("routes execute_command through the command bus", async () => {
@@ -210,6 +356,7 @@ describe("FlowEngine", () => {
       "flow.phase.changed",
       "message.completed",
       "block.emitted",
+      "workflow.suspended",
       "flow.completed"
     ]);
     expect(events[2]?.payload.block).toMatchObject({
@@ -227,6 +374,70 @@ describe("FlowEngine", () => {
         id: "block_4",
         type: "choices"
       })
+    });
+    expect(harness.workflowSnapshots.get("flow_1")).toMatchObject({
+      status: "suspended",
+      sessionId: "session-1",
+      suspendPayload: {
+        blockId: "block_4",
+        reason: "await-block-response"
+      }
+    });
+  });
+
+  it("applies package-scoped state patches emitted by command execution", async () => {
+    const harness = createHarness({
+      commandResult: {
+        content: "State updated.",
+        statePatches: [
+          {
+            scope: "session",
+            ownerId: "session-1",
+            packageName: "core-guide",
+            collection: "quest_state",
+            key: "quest-01",
+            op: "replace",
+            value: {
+              status: "discovered"
+            }
+          },
+          {
+            scope: "session",
+            ownerId: "session-1",
+            packageName: "core-guide",
+            collection: "quest_state",
+            key: "quest-01",
+            op: "merge",
+            value: {
+              progress: 0.4
+            }
+          }
+        ],
+        traceId: "trace_command"
+      }
+    });
+
+    const events = await harness.engine.handle({
+      requestId: "req_state_01",
+      type: "execute_command",
+      sessionId: "session-1",
+      payload: {
+        command: "/guide"
+      }
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      "flow.phase.changed",
+      "message.completed",
+      "state.patch.applied",
+      "state.patch.applied",
+      "flow.completed"
+    ]);
+    expect(harness.packageState.get("session:session-1:core-guide:quest_state:quest-01")).toMatchObject({
+      value: {
+        status: "discovered",
+        progress: 0.4
+      }
     });
   });
 
@@ -297,9 +508,16 @@ describe("FlowEngine", () => {
 
     expect(resumeEvents.map((event) => event.type)).toEqual([
       "flow.phase.changed",
+      "workflow.resumed",
       "message.completed",
       "flow.completed"
     ]);
+    expect(harness.workflowSnapshots.get("flow_1")).toMatchObject({
+      status: "completed",
+      resumeData: {
+        selected: "opt_a"
+      }
+    });
     expect(harness.modelCalls.at(-1)?.locale).toBe("en");
     expect(resumeEvents.every((event) => event.flowId === initialFlowId)).toBe(true);
     expect(harness.sessions.get("session-1")?.status).toBe("active");
@@ -381,6 +599,7 @@ describe("FlowEngine", () => {
 
     expect(resumeEvents.map((event) => event.type)).toEqual([
       "flow.phase.changed",
+      "workflow.resumed",
       "message.completed",
       "flow.completed"
     ]);
@@ -447,6 +666,7 @@ describe("FlowEngine", () => {
 
     expect(resumeEvents.map((event) => event.type)).toEqual([
       "flow.phase.changed",
+      "workflow.resumed",
       "message.completed",
       "flow.completed"
     ]);
@@ -516,6 +736,7 @@ describe("FlowEngine", () => {
 
     expect(resumeEvents.map((event) => event.type)).toEqual([
       "flow.phase.changed",
+      "workflow.resumed",
       "message.completed",
       "flow.completed"
     ]);
@@ -602,12 +823,13 @@ describe("FlowEngine", () => {
 
     expect(resumeEvents.map((event) => event.type)).toEqual([
       "flow.phase.changed",
+      "workflow.resumed",
       "message.completed",
       "block.emitted",
       "flow.completed"
     ]);
     expect(harness.modelCalls).toHaveLength(0);
-    expect(resumeEvents[2]?.payload.block).toMatchObject({
+    expect(resumeEvents.find((event) => event.type === "block.emitted")?.payload.block).toMatchObject({
       type: "choices"
     });
   });
@@ -749,6 +971,82 @@ describe("FlowEngine", () => {
       message: "Pending block not found."
     });
     expect(harness.modelCalls).toHaveLength(0);
+  });
+
+  it("rejects block responses that fail package response schema validation", async () => {
+    const choiceBlock: BlockEnvelope = {
+      id: "blk_schema_guard",
+      type: "choices",
+      version: "1.0",
+      meta: {
+        package: "core-guide",
+        requestId: "req_schema_guard",
+        traceId: "tr_schema_guard",
+        sessionId: "session-1",
+        turnId: "turn_schema_guard"
+      },
+      interaction: {
+        requiresResponse: true,
+        responseSchema: "schemas/blocks/choices.response.json",
+        submitAs: "block_response",
+        resumePolicy: "resume_current_flow"
+      },
+      data: {
+        title: "下一步",
+        options: [{ id: "opt_a", label: "继续前进" }]
+      }
+    };
+
+    const harness = createHarness({
+      commandResult: {
+        blocks: [choiceBlock],
+        traceId: "trace_command"
+      },
+      responseValidationResult: {
+        ok: false,
+        code: "BLOCK_RESPONSE_SCHEMA_INVALID",
+        details: "$.selected is required."
+      }
+    });
+
+    const initialEvents = await harness.engine.handle({
+      requestId: "req_12",
+      type: "execute_command",
+      sessionId: "session-1",
+      locale: "en",
+      payload: {
+        command: "/guide",
+        args: {}
+      }
+    });
+    const emittedBlock = initialEvents.find((event) => event.type === "block.emitted")?.payload.block as BlockEnvelope;
+
+    const resumeEvents = await harness.engine.handle({
+      requestId: "req_13",
+      type: "submit_block_response",
+      sessionId: "session-1",
+      locale: "en",
+      payload: {
+        blockId: emittedBlock.id,
+        blockType: emittedBlock.type,
+        sessionId: "session-1",
+        turnId: emittedBlock.meta.turnId,
+        response: {}
+      }
+    });
+
+    expect(resumeEvents.map((event) => event.type)).toEqual([
+      "flow.phase.changed",
+      "flow.failed"
+    ]);
+    expect(resumeEvents[1]?.payload).toMatchObject({
+      code: "BLOCK_RESPONSE_SCHEMA_INVALID"
+    });
+    expect(String(resumeEvents[1]?.payload.message ?? "")).toContain("$.selected is required.");
+    expect(harness.resumeCalls).toHaveLength(0);
+    expect(harness.modelCalls).toHaveLength(0);
+    expect(harness.pendingBlocks.has(emittedBlock.id)).toBe(true);
+    expect(harness.sessions.get("session-1")?.status).toBe("waiting_for_input");
   });
 
   it("fails send_message when the session does not exist", async () => {

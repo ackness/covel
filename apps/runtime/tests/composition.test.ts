@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { createSession } from "../../../modules/domain/src/index.js";
 import { createRuntimeComposition } from "../src/composition.js";
 
 describe("createRuntimeComposition", () => {
@@ -49,6 +50,7 @@ describe("createRuntimeComposition", () => {
 
     expect(result.text).toContain("demo");
     expect(runtime.runtimePreset.baseUrl).toBe("in-memory://demo-provider");
+    expect(runtime.runtimePreset.model).toBe("deepseek/deepseek-chat");
   });
 
   it("uses DashScope/openai-compatible env when configured", async () => {
@@ -65,6 +67,30 @@ describe("createRuntimeComposition", () => {
       baseUrl: "https://dashscope.example/compatible-mode/v1",
       model: "qwen3.5-flash"
     });
+  });
+
+  it("adds the legacy OpenRouter free fallback preset when only an OpenRouter key is configured", async () => {
+    const runtime = await createRuntimeComposition({
+      env: {
+        OPENROUTER_API_KEY: "openrouter-key"
+      }
+    });
+
+    await expect(runtime.presetMetadataStore?.list()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "default-story",
+          fallbackPresetIds: ["openrouter-free"]
+        }),
+        expect.objectContaining({
+          id: "openrouter-free",
+          provider: "openrouter",
+          model: "openrouter/openrouter/free",
+          baseUrl: "https://openrouter.ai/api/v1",
+          isDefault: false
+        })
+      ])
+    );
   });
 
   it("executes the package-backed guide command and returns an interactive block", async () => {
@@ -147,5 +173,55 @@ describe("createRuntimeComposition", () => {
     expect(zhResult.content).toContain("列出可用命令");
     expect(enResult.content).toContain("Generate a guide block.");
     expect(enResult.content).toContain("List available commands.");
+  });
+
+  it("routes model turns through structured object generation and emits host blocks", async () => {
+    const runtime = await createRuntimeComposition({
+      env: {}
+    });
+
+    await runtime.repositories.sessions.save(createSession({
+      id: "session_model_blocks",
+      worldId: "world_model_blocks",
+      status: "active",
+      createdAt: new Date("2026-03-26T00:00:00.000Z")
+    }));
+
+    const events = await runtime.flowEngine.handle({
+      requestId: "req_model_blocks",
+      type: "send_message",
+      sessionId: "session_model_blocks",
+      locale: "en",
+      payload: {
+        content: "Offer a choice for what I should do next."
+      }
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      "flow.phase.changed",
+      "message.delta",
+      "message.completed",
+      "block.emitted",
+      "workflow.suspended",
+      "flow.completed"
+    ]);
+    expect(events[3]?.payload.block).toMatchObject({
+      type: "choice_set",
+      data: {
+        title: "Choose the next move",
+        options: [
+          { id: "opt_a", label: "Advance" },
+          { id: "opt_b", label: "Observe" }
+        ]
+      },
+      meta: {
+        package: "runtime",
+        requestId: "req_model_blocks",
+        sessionId: "session_model_blocks"
+      }
+    });
+    expect(events[4]?.payload).toMatchObject({
+      status: "suspended"
+    });
   });
 });

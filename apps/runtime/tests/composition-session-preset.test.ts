@@ -10,8 +10,11 @@ describe("runtime composition session task binding routing", () => {
   });
 
   it("uses session.taskBindings.story.narration when dispatching model calls", async () => {
-    const generateText = vi.fn().mockResolvedValue({
-      text: "session preset response",
+    const generateObject = vi.fn().mockResolvedValue({
+      object: {
+        content: "session preset response",
+        blocks: []
+      },
       finishReason: "stop",
       usage: {
         inputTokens: 1,
@@ -75,8 +78,8 @@ describe("runtime composition session task binding routing", () => {
       },
       createModelGateway() {
         return {
-          generateText,
-          generateObject: vi.fn(),
+          generateText: vi.fn(),
+          generateObject,
           streamText: vi.fn(),
           embed: vi.fn()
         };
@@ -113,7 +116,7 @@ describe("runtime composition session task binding routing", () => {
       }
     });
 
-    expect(generateText).toHaveBeenCalledWith(
+    expect(generateObject).toHaveBeenCalledWith(
       expect.objectContaining({
         presetId: "story-override"
       })

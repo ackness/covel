@@ -225,15 +225,22 @@ describe("runtime traces API", () => {
     }>;
 
     expect(traceResponse.status).toBe(200);
-    expect(traceEntries).toEqual([
-      expect.objectContaining({
-        traceId: "trace_req_trace_runtime",
-        component: "model-gateway",
-        eventType: "model.completed",
-        payload: {
-          model: "qwen3.5-flash"
-        }
-      })
-    ]);
+    expect(traceEntries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          traceId: "trace_req_trace_runtime",
+          component: "package-context",
+          eventType: "context.assembled"
+        }),
+        expect.objectContaining({
+          traceId: "trace_req_trace_runtime",
+          component: "model-gateway",
+          eventType: "model.completed",
+          payload: {
+            model: runtime.runtimePreset.model
+          }
+        })
+      ])
+    );
   });
 });

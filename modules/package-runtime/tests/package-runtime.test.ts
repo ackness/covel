@@ -297,6 +297,12 @@ describe("PackageRuntime", () => {
       packageName: "core-guide"
     });
     expect(runtime.getContextProvider("guide-context")?.build).toBeTypeOf("function");
+    expect(runtime.listContextProviders()).toEqual([
+      expect.objectContaining({
+        id: "guide-context",
+        packageName: "core-guide"
+      })
+    ]);
     expect(runtime.getCommand("guide")).toMatchObject({
       name: "guide",
       packageName: "core-guide"

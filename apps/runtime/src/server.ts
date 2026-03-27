@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type Server, type IncomingMessage } from "node:http";
 
-import { ActionRequestSchema, type SseEnvelope } from "../../../modules/contracts/src/index.js";
+import {
+  ActionRequestSchema,
+  type SseEnvelope,
+  type WorkflowSnapshotRecord
+} from "../../../modules/contracts/src/index.js";
 import { STORY_NARRATION_TASK, createSession, createWorld, type DomainRepositories, type TaskBindings } from "../../../modules/domain/src/index.js";
 import type { PersistedPresetMetadata, PersistedPresetRecord } from "../../../modules/storage/src/index.js";
 import { createRuntimeErrorPayload, resolveRequestLocale } from "./locale.js";
@@ -42,6 +46,23 @@ async function readRequestBody(
 export function createRuntimeServer(dependencies: {
   flowEngine: {
     handle(action: ReturnType<typeof ActionRequestSchema.parse>): Promise<SseEnvelope[]>;
+  };
+  commandRegistry?: {
+    listHelp(): Array<{
+      name: string;
+      description: string;
+      usage: string;
+      examples?: string[];
+    }>;
+    listAutocomplete(): Array<{
+      name: string;
+      positionalHints?: string[];
+      flagHints?: Array<{
+        name: string;
+        description: string;
+        takesValue: boolean;
+      }>;
+    }>;
   };
   repositories?: DomainRepositories;
   packageRuntime?: {
@@ -225,6 +246,37 @@ export function createRuntimeServer(dependencies: {
       return;
     }
 
+    if (request.method === "GET" && /^\/sessions\/[^/]+\/workflow-snapshots$/.test(requestUrl.pathname)) {
+      const repositories = requireRepositoriesWithWorkflowSnapshots(dependencies.repositories);
+      const sessionId = requestUrl.pathname.split("/")[2] ?? "";
+      response.writeHead(200, {
+        "content-type": "application/json"
+      });
+      response.end(JSON.stringify(await repositories.workflowSnapshots.listBySessionId(sessionId)));
+      return;
+    }
+
+    if (request.method === "GET" && /^\/sessions\/[^/]+\/package-state$/.test(requestUrl.pathname)) {
+      const repositories = requireRepositoriesWithPackageState(dependencies.repositories);
+      const sessionId = requestUrl.pathname.split("/")[2] ?? "";
+      const packageName = requestUrl.searchParams.get("packageName");
+      const collection = requestUrl.searchParams.get("collection");
+      const records =
+        packageName && collection
+          ? await repositories.packageState.listByCollection({
+              scope: "session",
+              ownerId: sessionId,
+              packageName,
+              collection
+            })
+          : [];
+      response.writeHead(200, {
+        "content-type": "application/json"
+      });
+      response.end(JSON.stringify(records));
+      return;
+    }
+
     if (request.method === "GET" && requestUrl.pathname === "/packages") {
       const packages = (dependencies.packageRuntime?.listPackages() ?? []) as Array<{
         name?: unknown;
@@ -237,6 +289,28 @@ export function createRuntimeServer(dependencies: {
         packages.map((pkg) => ({
           name: String(pkg.name ?? ""),
           enabled: Boolean(pkg.enabled)
+        }))
+      ));
+      return;
+    }
+
+    if (request.method === "GET" && requestUrl.pathname === "/commands") {
+      const helpEntries = dependencies.commandRegistry?.listHelp() ?? [];
+      const autocompleteEntries = new Map(
+        (dependencies.commandRegistry?.listAutocomplete() ?? []).map((entry) => [entry.name, entry] as const)
+      );
+      response.writeHead(200, {
+        "content-type": "application/json"
+      });
+      response.end(JSON.stringify(
+        helpEntries.map((entry) => ({
+          ...entry,
+          ...(autocompleteEntries.get(entry.name)?.positionalHints
+            ? { positionalHints: autocompleteEntries.get(entry.name)?.positionalHints }
+            : {}),
+          ...(autocompleteEntries.get(entry.name)?.flagHints
+            ? { flagHints: autocompleteEntries.get(entry.name)?.flagHints }
+            : {})
         }))
       ));
       return;
@@ -433,6 +507,65 @@ function requireRepositories(repositories: DomainRepositories | undefined): Doma
   }
 
   return repositories;
+}
+
+function requireRepositoriesWithPackageState(
+  repositories: DomainRepositories | undefined
+): DomainRepositories & {
+  packageState: {
+    listByCollection(input: {
+      scope: "world" | "session";
+      ownerId: string;
+      packageName: string;
+      collection: string;
+    }): Promise<unknown[]>;
+  };
+} {
+  const resolved = requireRepositories(repositories) as DomainRepositories & {
+    packageState?: {
+      listByCollection(input: {
+        scope: "world" | "session";
+        ownerId: string;
+        packageName: string;
+        collection: string;
+      }): Promise<unknown[]>;
+    };
+  };
+  if (!resolved.packageState) {
+    throw new Error("Runtime package state store is not configured.");
+  }
+  return resolved as DomainRepositories & {
+    packageState: {
+      listByCollection(input: {
+        scope: "world" | "session";
+        ownerId: string;
+        packageName: string;
+        collection: string;
+      }): Promise<unknown[]>;
+    };
+  };
+}
+
+function requireRepositoriesWithWorkflowSnapshots(
+  repositories: DomainRepositories | undefined
+): DomainRepositories & {
+  workflowSnapshots: {
+    listBySessionId(sessionId: string): Promise<WorkflowSnapshotRecord[]>;
+  };
+} {
+  const resolved = requireRepositories(repositories) as DomainRepositories & {
+    workflowSnapshots?: {
+      listBySessionId(sessionId: string): Promise<WorkflowSnapshotRecord[]>;
+    };
+  };
+  if (!resolved.workflowSnapshots) {
+    throw new Error("Runtime workflow snapshot store is not configured.");
+  }
+  return resolved as DomainRepositories & {
+    workflowSnapshots: {
+      listBySessionId(sessionId: string): Promise<WorkflowSnapshotRecord[]>;
+    };
+  };
 }
 
 function requirePresetMetadataStore(

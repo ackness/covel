@@ -1,18 +1,32 @@
-import React, { createElement, useEffect, useState } from "react";
+import React, { createElement, useState } from "react";
 
-import type { PresetMetadata } from "../../../../modules/model-gateway/src/index.js";
-import { getStoredLocale, useI18n } from "../i18n.js";
+import { useI18n } from "../i18n.js";
 
-type EditablePreset = PresetMetadata & {
+export interface PresetEditorPreset {
+  id: string;
+  name: string;
+  provider: string;
+  model: string;
+  enabled: boolean;
+  isDefault: boolean;
+  scope: string;
+  baseUrl?: string;
+  fallbackPresetIds?: string[];
   apiKey?: string;
-};
+}
 
 export function PresetEditor(input: {
-  runtimeBaseUrl: string;
+  presets: PresetEditorPreset[];
+  onSave(input: {
+    presetId: string;
+    model: string;
+    enabled: boolean;
+    isDefault: boolean;
+  }): Promise<void> | void;
 }) {
   const { t } = useI18n();
-  const [presets, setPresets] = useState<EditablePreset[]>([]);
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [formState, setFormState] = useState<{
     model: string;
     enabled: boolean;
@@ -23,21 +37,7 @@ export function PresetEditor(input: {
     isDefault: false
   });
 
-  useEffect(() => {
-    void loadPresets();
-  }, []);
-
-  async function loadPresets() {
-    const response = await fetch(`${input.runtimeBaseUrl}/presets`, {
-      headers: {
-        "accept-language": getStoredLocale()
-      }
-    });
-    const payload = await response.json() as EditablePreset[];
-    setPresets(payload);
-  }
-
-  function beginEdit(preset: EditablePreset) {
+  function beginEdit(preset: PresetEditorPreset) {
     setEditingPresetId(preset.id);
     setFormState({
       model: preset.model,
@@ -52,28 +52,17 @@ export function PresetEditor(input: {
       return;
     }
 
-    const response = await fetch(`${input.runtimeBaseUrl}/presets/${editingPresetId}`, {
-      method: "PUT",
-      headers: {
-        "accept-language": getStoredLocale(),
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({
+    setIsSaving(true);
+    try {
+      await input.onSave({
+        presetId: editingPresetId,
         model: formState.model,
         enabled: formState.enabled,
         isDefault: formState.isDefault
-      })
-    });
-    const updatedPreset = await response.json() as EditablePreset;
-
-    setPresets((current) =>
-      current.map((preset) => (preset.id === editingPresetId ? updatedPreset : preset))
-    );
-    setFormState({
-      model: updatedPreset.model,
-      enabled: updatedPreset.enabled,
-      isDefault: updatedPreset.isDefault
-    });
+      });
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return createElement(
@@ -83,7 +72,7 @@ export function PresetEditor(input: {
     createElement(
       "ul",
       { className: "stack-list" },
-      ...presets.map((preset) =>
+      ...input.presets.map((preset) =>
         createElement(
           "li",
           {
@@ -119,7 +108,7 @@ export function PresetEditor(input: {
     editingPresetId
       ? createElement(
           "form",
-          { className: "form-stack", onSubmit: savePreset },
+          { className: "form-stack", onSubmit: (event: React.FormEvent<HTMLFormElement>) => void savePreset(event) },
           createElement(
             "label",
             { className: "field" },
@@ -174,7 +163,8 @@ export function PresetEditor(input: {
             "button",
             {
               className: "primary-button",
-              type: "submit"
+              type: "submit",
+              disabled: isSaving
             },
             t("preset.save")
           )

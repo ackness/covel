@@ -84,6 +84,28 @@ describe("App", () => {
         scope: "global"
       }
     ];
+    const commands = [
+      {
+        name: "guide",
+        description: "Generate a guide block.",
+        usage: "/guide [topic]",
+        positionalHints: ["topic"]
+      },
+      {
+        name: "world-seeds",
+        description: "Inspect staged world seed content.",
+        usage: "/world-seeds [seedId]",
+        examples: ["/world-seeds", "/world-seeds --seed legacy-wuxia-nine-provinces"],
+        positionalHints: ["seedId"],
+        flagHints: [
+          {
+            name: "--seed",
+            description: "Inspect a staged world seed by id.",
+            takesValue: true
+          }
+        ]
+      }
+    ];
     const messagesBySession = new Map<string, Array<{
       id: string;
       role: "assistant" | "user";
@@ -112,11 +134,65 @@ describe("App", () => {
     ]);
     const tracesById = new Map<string, Array<{
       traceId: string;
+      spanId: string;
       component: string;
       eventType: string;
       payload: Record<string, unknown>;
       createdAt: string;
     }>>();
+    const packageStateBySession = new Map<string, Array<{
+      scope: "session" | "world";
+      ownerId: string;
+      packageName: string;
+      collection: string;
+      key: string;
+      value: Record<string, unknown>;
+      updatedAt: string;
+    }>>([
+      [
+        "session_01",
+        [
+          {
+            scope: "session",
+            ownerId: "session_01",
+            packageName: "core-guide",
+            collection: "guide_state",
+            key: "latest-choice",
+            value: {
+              selected: "opt_a",
+              label: "Advance",
+              topic: "Northreach gatehouse"
+            },
+            updatedAt: "2026-03-24T12:00:04.000Z"
+          }
+        ]
+      ]
+    ]);
+    const workflowSnapshotsBySession = new Map<string, Array<{
+      runId: string;
+      stepId: string;
+      sessionId: string;
+      status: "running" | "suspended" | "completed" | "failed";
+      suspendPayload?: Record<string, unknown>;
+      resumeData?: Record<string, unknown>;
+      updatedAt: string;
+    }>>([
+      [
+        "session_01",
+        [
+          {
+            runId: "workflow_01",
+            stepId: "await-choice",
+            sessionId: "session_01",
+            status: "suspended",
+            suspendPayload: {
+              blockId: "blk_guide_01"
+            },
+            updatedAt: "2026-03-24T12:00:05.000Z"
+          }
+        ]
+      ]
+    ]);
     let worldCounter = 1;
     let sessionCounter = 1;
     let messageCounter = 1;
@@ -137,6 +213,10 @@ describe("App", () => {
             enabled: true
           }
         ]);
+      }
+
+      if (url.pathname === "/commands") {
+        return Response.json(commands);
       }
 
       if (url.pathname === "/presets") {
@@ -163,6 +243,8 @@ describe("App", () => {
         sessionsByWorld.set(session.worldId, [...currentSessions, session]);
         messagesBySession.set(session.id, []);
         archivesBySession.set(session.id, []);
+        packageStateBySession.set(session.id, []);
+        workflowSnapshotsBySession.set(session.id, []);
         return Response.json(session, { status: 201 });
       }
 
@@ -196,6 +278,23 @@ describe("App", () => {
         return Response.json(messagesBySession.get(sessionId) ?? []);
       }
 
+      if (/^\/sessions\/[^/]+\/workflow-snapshots$/.test(url.pathname)) {
+        const sessionId = url.pathname.split("/")[2] ?? "";
+        return Response.json(workflowSnapshotsBySession.get(sessionId) ?? []);
+      }
+
+      if (/^\/sessions\/[^/]+\/package-state$/.test(url.pathname)) {
+        const sessionId = url.pathname.split("/")[2] ?? "";
+        const packageName = url.searchParams.get("packageName");
+        const collection = url.searchParams.get("collection");
+        return Response.json(
+          (packageStateBySession.get(sessionId) ?? []).filter((record) =>
+            (!packageName || record.packageName === packageName) &&
+            (!collection || record.collection === collection)
+          )
+        );
+      }
+
       if (url.pathname === "/archives" && (!init || init.method === undefined)) {
         return Response.json(archivesBySession.get(url.searchParams.get("sessionId") ?? "") ?? []);
       }
@@ -224,12 +323,14 @@ describe("App", () => {
           sessionId: string;
           payload: {
             content?: string;
+            command?: string;
             response?: {
               selected?: string;
             };
           };
         };
         if (body.type === "send_message") {
+          const isStarterOpening = String(body.payload.content ?? "").includes("雾港十三号");
           const userMessage = {
             id: `msg_${String(++messageCounter).padStart(2, "0")}`,
             role: "user" as const,
@@ -239,7 +340,9 @@ describe("App", () => {
           const assistantMessage = {
             id: `msg_${String(++messageCounter).padStart(2, "0")}`,
             role: "assistant" as const,
-            content: "The snow parts.",
+            content: isStarterOpening
+              ? "潮雾拍在栈桥护栏上，灯塔的鲸油味顺着风灌进来。"
+              : "The snow parts.",
             createdAt: "2026-03-24T12:00:03.000Z"
           };
           messagesBySession.set(body.sessionId, [
@@ -250,6 +353,7 @@ describe("App", () => {
           tracesById.set("tr_01", [
             {
               traceId: "tr_01",
+              spanId: "span_01",
               component: "model-gateway",
               eventType: "model.completed",
               payload: {
@@ -258,7 +362,7 @@ describe("App", () => {
               createdAt: "2026-03-24T12:00:03.000Z"
             }
           ]);
-          return createSseResponse([
+          const events: unknown[] = [
             {
               type: "message.delta",
               requestId: "req_01",
@@ -270,7 +374,7 @@ describe("App", () => {
               timestamp: "2026-03-24T12:00:00.000Z",
               payload: {
                 messageId: assistantMessage.id,
-                delta: "The snow parts."
+                delta: assistantMessage.content
               }
             },
             {
@@ -284,10 +388,26 @@ describe("App", () => {
               timestamp: "2026-03-24T12:00:01.000Z",
               payload: {
                 messageId: assistantMessage.id,
-                content: "The snow parts."
+                content: assistantMessage.content
               }
             },
             {
+              type: "flow.completed",
+              requestId: "req_01",
+              traceId: "tr_01",
+              sessionId: body.sessionId,
+              turnId: "turn_01",
+              flowId: "flow_01",
+              seq: isStarterOpening ? 3 : 4,
+              timestamp: "2026-03-24T12:00:02.000Z",
+              payload: {
+                turnId: "turn_01"
+              }
+            }
+          ];
+
+          if (!isStarterOpening) {
+            events.splice(2, 0, {
               type: "block.emitted",
               requestId: "req_01",
               traceId: "tr_01",
@@ -323,18 +443,134 @@ describe("App", () => {
                   }
                 }
               }
+            });
+          }
+
+          return createSseResponse(events);
+        }
+
+        if (body.type === "execute_command") {
+          if (String(body.payload.command ?? "").startsWith("/guide")) {
+            workflowSnapshotsBySession.set(body.sessionId, [
+              {
+                runId: "flow_guide_01",
+                stepId: "await-choice",
+                sessionId: body.sessionId,
+                status: "suspended",
+                suspendPayload: {
+                  blockId: "blk_guide"
+                },
+                updatedAt: "2026-03-24T12:00:03.500Z"
+              }
+            ]);
+
+            return createSseResponse([
+              {
+                type: "message.completed",
+                requestId: "req_guide",
+                traceId: "tr_guide",
+                sessionId: body.sessionId,
+                turnId: "turn_guide",
+                flowId: "flow_guide_01",
+                seq: 1,
+                timestamp: "2026-03-24T12:00:03.000Z",
+                payload: {
+                  messageId: `msg_${String(++messageCounter).padStart(2, "0")}`,
+                  content: "引导扩展已准备好选项。"
+                }
+              },
+              {
+                type: "block.emitted",
+                requestId: "req_guide",
+                traceId: "tr_guide",
+                sessionId: body.sessionId,
+                turnId: "turn_guide",
+                flowId: "flow_guide_01",
+                seq: 2,
+                timestamp: "2026-03-24T12:00:03.100Z",
+                payload: {
+                  block: {
+                    id: "blk_guide",
+                    type: "choices",
+                    version: "1.0",
+                    meta: {
+                      package: "core-guide",
+                      requestId: "req_guide",
+                      traceId: "tr_guide",
+                      sessionId: body.sessionId,
+                      turnId: "turn_guide"
+                    },
+                    interaction: {
+                      requiresResponse: true,
+                      responseSchema: "schemas/blocks/choices.response.json",
+                      submitAs: "block_response",
+                      resumePolicy: "resume_current_flow"
+                    },
+                    data: {
+                      title: "雾港十三号 的下一步",
+                      options: [
+                        { id: "opt_a", label: "继续前进" },
+                        { id: "opt_b", label: "观察周围" }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                type: "workflow.suspended",
+                requestId: "req_guide",
+                traceId: "tr_guide",
+                sessionId: body.sessionId,
+                turnId: "turn_guide",
+                flowId: "flow_guide_01",
+                seq: 3,
+                timestamp: "2026-03-24T12:00:03.200Z",
+                payload: {
+                  runId: "flow_guide_01",
+                  workflowId: "core-guide",
+                  currentStep: "await-choice",
+                  reason: "waiting for player input"
+                }
+              }
+            ]);
+          }
+
+          const assistantMessage = {
+            id: `msg_${String(++messageCounter).padStart(2, "0")}`,
+            role: "assistant" as const,
+            content: "已暂存 3 个世界种子：\n- 九州江湖录 (legacy-wuxia-nine-provinces) [元数据 zh-CN / 内容 zh-CN]",
+            createdAt: "2026-03-24T12:00:03.000Z"
+          };
+          messagesBySession.set(body.sessionId, [
+            ...(messagesBySession.get(body.sessionId) ?? []),
+            assistantMessage
+          ]);
+          return createSseResponse([
+            {
+              type: "message.completed",
+              requestId: "req_03",
+              traceId: "tr_cmd_01",
+              sessionId: body.sessionId,
+              turnId: "turn_03",
+              flowId: "flow_03",
+              seq: 1,
+              timestamp: "2026-03-24T12:00:03.000Z",
+              payload: {
+                messageId: assistantMessage.id,
+                content: assistantMessage.content
+              }
             },
             {
               type: "flow.completed",
-              requestId: "req_01",
-              traceId: "tr_01",
+              requestId: "req_03",
+              traceId: "tr_cmd_01",
               sessionId: body.sessionId,
-              turnId: "turn_01",
-              flowId: "flow_01",
-              seq: 4,
-              timestamp: "2026-03-24T12:00:02.000Z",
+              turnId: "turn_03",
+              flowId: "flow_03",
+              seq: 2,
+              timestamp: "2026-03-24T12:00:03.500Z",
               payload: {
-                turnId: "turn_01"
+                turnId: "turn_03"
               }
             }
           ]);
@@ -353,12 +589,40 @@ describe("App", () => {
         tracesById.set("tr_02", [
           {
             traceId: "tr_02",
+            spanId: "span_02",
             component: "flow-engine",
             eventType: "resume.completed",
             payload: {
               selected: body.payload.response?.selected ?? null
             },
             createdAt: "2026-03-24T12:00:04.000Z"
+          }
+        ]);
+        packageStateBySession.set(body.sessionId, [
+          {
+            scope: "session",
+            ownerId: body.sessionId,
+            packageName: "core-guide",
+            collection: "guide_state",
+            key: "latest-choice",
+            value: {
+              selected: body.payload.response?.selected ?? null,
+              label: body.payload.response?.selected ?? null,
+              topic: "雾港十三号"
+            },
+            updatedAt: "2026-03-24T12:00:04.000Z"
+          }
+        ]);
+        workflowSnapshotsBySession.set(body.sessionId, [
+          {
+            runId: "flow_01",
+            stepId: "resume",
+            sessionId: body.sessionId,
+            status: "completed",
+            resumeData: {
+              selected: body.payload.response?.selected ?? null
+            },
+            updatedAt: "2026-03-24T12:00:04.000Z"
           }
         ]);
         return createSseResponse([
@@ -431,6 +695,8 @@ describe("App", () => {
         ]);
         messagesBySession.set(restoredSession.id, [...(messagesBySession.get(originalArchive?.sessionId ?? "") ?? [])]);
         archivesBySession.set(restoredSession.id, []);
+        packageStateBySession.set(restoredSession.id, [...(packageStateBySession.get(originalArchive?.sessionId ?? "") ?? [])]);
+        workflowSnapshotsBySession.set(restoredSession.id, [...(workflowSnapshotsBySession.get(originalArchive?.sessionId ?? "") ?? [])]);
         return Response.json({
           session: restoredSession
         });
@@ -451,16 +717,75 @@ describe("App", () => {
     renderWithI18n(<App />);
 
     await screen.findAllByText("Northreach");
-    expect(screen.getByText("世界")).toBeTruthy();
-    expect(screen.getByText("扩展包")).toBeTruthy();
-    expect(screen.getByText("空闲")).toBeTruthy();
-    expect(screen.getByText("core-guide")).toBeTruthy();
+    await screen.findByText("The gatehouse is silent.");
+    expect(screen.getByLabelText("世界导航")).toBeTruthy();
+    expect(screen.getByLabelText("当前工作区")).toBeTruthy();
+    expect(screen.getByLabelText("上下文与调试")).toBeTruthy();
+    expect(screen.getByText("预设")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "会话" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "任务" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "调试" })).toBeTruthy();
+    expect(screen.getAllByText("空闲").length).toBeGreaterThan(0);
+    expect(screen.queryByText("运行时活动")).toBeNull();
     expect((screen.getByLabelText("当前会话预设") as HTMLSelectElement).value).toBe("default-story");
-    expect(await screen.findByText("The gatehouse is silent.")).toBeTruthy();
+  });
+
+  it("keeps the debug tab collapsed by default and only reveals runtime details on demand", async () => {
+    renderWithI18n(<App />);
+    const user = userEvent.setup();
+
+    await screen.findAllByText("Northreach");
+    expect(screen.queryByText("运行时活动")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "调试" }));
+
+    expect(screen.getByText("运行时活动")).toBeTruthy();
+    expect(screen.getAllByText("工作流快照").length).toBeGreaterThan(0);
+    expect(screen.getByText("core-guide")).toBeTruthy();
+  });
+
+  it("auto-sends the opener when creating a starter world and surfaces the pending guide block above the composer", async () => {
+    renderWithI18n(<App />);
+    const user = userEvent.setup();
+
+    await screen.findAllByText("Northreach");
+    await user.click(screen.getAllByRole("button", { name: "创建示例世界并开始" })[0]!);
+
+    await screen.findAllByText("雾港十三号");
+    await screen.findByText("我刚抵达雾港十三号的北栈桥，先告诉我眼前最值得注意的三件事。");
+    await screen.findByText("潮雾拍在栈桥护栏上，灯塔的鲸油味顺着风灌进来。");
+    const pendingRegion = await screen.findByLabelText("等待交互");
+    expect(pendingRegion).toBeTruthy();
+    expect(screen.getByText("雾港十三号 的下一步")).toBeTruthy();
+
+    const actionCalls = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter((call) => new URL(String(call[0]), "http://runtime.local").pathname === "/actions")
+      .map((call) => JSON.parse(String((call[1] as RequestInit | undefined)?.body)) as {
+        type: string;
+        payload?: {
+          content?: string;
+          command?: string;
+        };
+      });
+
+    expect(actionCalls.slice(-2)).toEqual([
+      expect.objectContaining({
+        type: "send_message",
+        payload: {
+          content: "我刚抵达雾港十三号的北栈桥，先告诉我眼前最值得注意的三件事。"
+        }
+      }),
+      expect.objectContaining({
+        type: "execute_command",
+        payload: {
+          command: expect.stringMatching(/^\/guide\b/)
+        }
+      })
+    ]);
   });
 
   it("creates a world, auto-creates a session, sends a message, renders a pending block, and submits the response", async () => {
-    renderWithI18n(<App />);
+    const view = renderWithI18n(<App />);
     const user = userEvent.setup();
 
     await screen.findAllByText("Northreach");
@@ -479,11 +804,13 @@ describe("App", () => {
     await screen.findByText("Advance through the drift");
     await screen.findByText("The snow parts.");
     await screen.findByText("Choose");
+    expect(view.container.querySelector(".pending-block")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Advance" }));
 
     await screen.findByText("You advance into the drift.");
     await waitFor(() => {
-      expect(screen.queryByText("Choose")).toBeNull();
+      expect((screen.getByRole("button", { name: "Advance" }) as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByRole("button", { name: "Wait" }) as HTMLButtonElement).disabled).toBe(true);
     });
   });
 
@@ -494,6 +821,7 @@ describe("App", () => {
     await screen.findAllByText("Northreach");
 
     await user.click(screen.getAllByRole("button", { name: "创建快照" })[0]!);
+    await user.click(screen.getByRole("button", { name: "会话" }));
     await screen.findByText("archive_01");
 
     await user.click(screen.getAllByRole("button", { name: "以分支恢复" })[0]!);
@@ -526,17 +854,58 @@ describe("App", () => {
     });
   });
 
+  it("routes slash-prefixed input through execute_command", async () => {
+    renderWithI18n(<App />);
+    const user = userEvent.setup();
+
+    await screen.findAllByText("Northreach");
+    await screen.findByLabelText("输入");
+
+    await user.clear(screen.getByLabelText("输入"));
+    await user.type(screen.getByLabelText("输入"), "/wo");
+    await screen.findByText("/world-seeds [seedId]");
+    await user.keyboard("{Tab}");
+    expect((screen.getByLabelText("输入") as HTMLTextAreaElement).value).toBe("/world-seeds ");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    await screen.findByText("已暂存 3 个世界种子：", { exact: false });
+
+    const actionCalls = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter((call) => new URL(String(call[0]), "http://runtime.local").pathname === "/actions");
+    const latestActionBody = JSON.parse(String((actionCalls.at(-1)?.[1] as RequestInit | undefined)?.body)) as {
+      type: string;
+      payload: {
+        command?: string;
+        content?: string;
+      };
+    };
+
+    expect(latestActionBody).toMatchObject({
+      type: "execute_command",
+      payload: {
+        command: "/world-seeds"
+      }
+    });
+  });
+
   it("allows switching chrome text to English without translating runtime content", async () => {
     renderWithI18n(<App />);
     const user = userEvent.setup();
 
     await screen.findAllByText("Northreach");
+    await screen.findByText("The gatehouse is silent.");
     await user.click(screen.getAllByRole("button", { name: "English" })[0]!);
 
+    expect(screen.getByLabelText("World navigator")).toBeTruthy();
+    expect(screen.getByLabelText("Active workspace")).toBeTruthy();
+    expect(screen.getByLabelText("Context and debug")).toBeTruthy();
     expect(screen.getByText("Worlds")).toBeTruthy();
-    expect(screen.getByText("Packages")).toBeTruthy();
-    expect(screen.getByText("Idle")).toBeTruthy();
+    expect(screen.getAllByText("Idle").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Session preset")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Debug" })).toBeTruthy();
     expect(screen.getByText("The gatehouse is silent.")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Debug" }));
+    expect(screen.getAllByText("Packages").length).toBeGreaterThan(0);
   });
 });

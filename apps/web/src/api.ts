@@ -1,12 +1,15 @@
 import type {
   ArchiveRecord,
   BlockResponse,
+  CommandSummary,
   MessageRecord,
+  PackageStateRecord,
   PackageSummary,
   PresetSummary,
   TraceRecord,
   SessionRecord,
   SseEnvelope,
+  WorkflowSnapshotRecord,
   WorldRecord
 } from "./types.js";
 import { getStoredLocale } from "./i18n.js";
@@ -66,11 +69,36 @@ export async function listPackages(): Promise<PackageSummary[]> {
   }));
 }
 
+export async function listCommands(): Promise<CommandSummary[]> {
+  return readJson(await fetch(`${API_BASE_URL}/commands`, {
+    headers: {
+      "accept-language": getStoredLocale()
+    }
+  }));
+}
+
 export async function listPresets(): Promise<PresetSummary[]> {
   return readJson(await fetch(`${API_BASE_URL}/presets`, {
     headers: {
       "accept-language": getStoredLocale()
     }
+  }));
+}
+
+export async function updatePreset(input: {
+  presetId: string;
+  model: string;
+  enabled: boolean;
+  isDefault: boolean;
+}): Promise<PresetSummary> {
+  return readJson(await fetch(`${API_BASE_URL}/presets/${encodeURIComponent(input.presetId)}`, {
+    method: "PATCH",
+    headers: createJsonHeaders(),
+    body: JSON.stringify({
+      model: input.model,
+      enabled: input.enabled,
+      isDefault: input.isDefault
+    })
   }));
 }
 
@@ -115,6 +143,34 @@ export async function listMessages(sessionId: string): Promise<MessageRecord[]> 
       "accept-language": getStoredLocale()
     }
   }));
+}
+
+export async function listWorkflowSnapshots(sessionId: string): Promise<WorkflowSnapshotRecord[]> {
+  return readJson(await fetch(`${API_BASE_URL}/sessions/${encodeURIComponent(sessionId)}/workflow-snapshots`, {
+    headers: {
+      "accept-language": getStoredLocale()
+    }
+  }));
+}
+
+export async function listPackageState(input: {
+  sessionId: string;
+  packageName: string;
+  collection: string;
+}): Promise<PackageStateRecord[]> {
+  const search = new URLSearchParams({
+    packageName: input.packageName,
+    collection: input.collection
+  });
+
+  return readJson(await fetch(
+    `${API_BASE_URL}/sessions/${encodeURIComponent(input.sessionId)}/package-state?${search.toString()}`,
+    {
+      headers: {
+        "accept-language": getStoredLocale()
+      }
+    }
+  ));
 }
 
 export async function listArchives(sessionId: string): Promise<ArchiveRecord[]> {
@@ -171,6 +227,21 @@ export async function sendMessage(input: {
     locale: getStoredLocale(),
     payload: {
       content: input.content
+    }
+  });
+}
+
+export async function executeCommand(input: {
+  sessionId: string;
+  command: string;
+}): Promise<SseEnvelope[]> {
+  return postAction({
+    requestId: `req_${Date.now()}`,
+    type: "execute_command",
+    sessionId: input.sessionId,
+    locale: getStoredLocale(),
+    payload: {
+      command: input.command
     }
   });
 }

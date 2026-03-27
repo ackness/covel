@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { sendMessage, submitBlockResponse } from "../src/api.js";
+import { executeCommand, sendMessage, submitBlockResponse } from "../src/api.js";
 import {
   createSseResponse,
   installFetchStub
@@ -64,6 +64,33 @@ describe("apps/web api i18n transport", () => {
     await expect(fetchStub.calls[0]?.json()).resolves.toMatchObject({
       type: "submit_block_response",
       locale: "en"
+    });
+
+    fetchStub.restore();
+  });
+
+  it("uses the selected locale for execute_command payloads", async () => {
+    window.localStorage.setItem("covel.locale", "en");
+    const fetchStub = installFetchStub([
+      {
+        method: "POST",
+        url: "http://localhost/actions",
+        handler: async () => createSseResponse([])
+      }
+    ]);
+
+    await executeCommand({
+      sessionId: "session_01",
+      command: "/world-seeds"
+    });
+
+    expect(fetchStub.calls[0]?.headers.get("accept-language")).toBe("en");
+    await expect(fetchStub.calls[0]?.json()).resolves.toMatchObject({
+      type: "execute_command",
+      locale: "en",
+      payload: {
+        command: "/world-seeds"
+      }
     });
 
     fetchStub.restore();
