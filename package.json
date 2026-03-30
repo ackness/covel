@@ -1,0 +1,23 @@
+{
+  "name": "covel",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "clean": "turbo clean",
+    "db:up": "docker compose -f docker/docker-compose.yml up -d",
+    "db:down": "docker compose -f docker/docker-compose.yml down",
+    "db:migrate": "turbo db:migrate --filter=@covel/server",
+    "db:generate": "turbo db:generate --filter=@covel/server",
+    "db:studio": "turbo db:studio --filter=@covel/server"
+  },
+  "packageManager": "pnpm@10.7.0",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "devDependencies": {
+    "turbo": "^2.8.21"
+  }
+}

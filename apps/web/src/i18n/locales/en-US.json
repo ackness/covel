@@ -1,0 +1,40 @@
+{
+  "app": {
+    "title": "Covel",
+    "description": "AI RPG Plugin Framework"
+  },
+  "nav": {
+    "home": "Home",
+    "play": "Play",
+    "worlds": "Worlds",
+    "plugins": "Plugins",
+    "settings": "Settings",
+    "studio": "Studio",
+    "debug": "Debugger",
+    "getStarted": "Get Started"
+  },
+  "session": {
+    "config": "Studio Config",
+    "status": "Session Status",
+    "providers": "Active Providers",
+    "plugins": "Loaded Plugins",
+    "editConfig": "Edit Configuration",
+    "executionStream": "Execution Stream",
+    "inputPlaceholder": "Enter action or command...",
+    "state": "State",
+    "world": "World",
+    "lore": "Lore"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "search": "Search",
+    "execute": "Execute"
+  }
+}

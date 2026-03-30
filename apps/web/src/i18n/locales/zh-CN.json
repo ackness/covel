@@ -1,0 +1,40 @@
+{
+  "app": {
+    "title": "Covel",
+    "description": "AI RPG 插件式框架"
+  },
+  "nav": {
+    "home": "首页",
+    "play": "游玩",
+    "worlds": "世界观",
+    "plugins": "插件",
+    "settings": "设置",
+    "studio": "工作室",
+    "debug": "调试",
+    "getStarted": "开始使用"
+  },
+  "session": {
+    "config": "工作室配置",
+    "status": "会话状态",
+    "providers": "激活的模型",
+    "plugins": "加载的插件",
+    "editConfig": "编辑配置",
+    "executionStream": "执行流",
+    "inputPlaceholder": "输入动作或命令...",
+    "state": "状态",
+    "world": "世界观",
+    "lore": "知识库"
+  },
+  "common": {
+    "loading": "加载中...",
+    "error": "出错了",
+    "save": "保存",
+    "cancel": "取消",
+    "confirm": "确认",
+    "delete": "删除",
+    "edit": "编辑",
+    "create": "创建",
+    "search": "搜索",
+    "execute": "执行"
+  }
+}

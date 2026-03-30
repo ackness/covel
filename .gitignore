@@ -1,5 +1,7 @@
 .codex/
 .claude/
+.windsurf/
+skills-lock.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -213,6 +215,13 @@ node_modules/
 coverage/
 playwright-report/
 test-results/
+dist/
+
+# Generated files
+apps/web/src/routeTree.gen.ts
+
+# Drizzle
+apps/server/drizzle/
 
 # Marimo
 marimo/_static/
