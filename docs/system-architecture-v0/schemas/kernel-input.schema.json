@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:covel:schema:kernel-input:v0alpha1",
+  "title": "Covel Kernel Input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "branchId", "actorId", "type", "payload"],
+  "properties": {
+    "runId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "branchId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "actorId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "user.input",
+        "system.event",
+        "system.session_start",
+        "system.manual_action",
+        "system.interval_tick",
+        "system.threshold_reached"
+      ]
+    },
+    "locale": {
+      "type": "string",
+      "minLength": 1
+    },
+    "eventType": {
+      "description": "For system events, bridges to RuntimeTriggerEvent.type so the router can produce typed trigger events without inspecting payload.",
+      "type": "string",
+      "minLength": 1
+    },
+    "payload": {
+      "type": "object"
+    }
+  }
+}

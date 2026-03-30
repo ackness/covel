@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:covel:schema:kernel-proposal-envelope:v0alpha1",
+  "title": "Covel Kernel Proposal Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "proposalId",
+    "runId",
+    "branchId",
+    "turnId",
+    "runtimeId",
+    "pluginId",
+    "traceId",
+    "items"
+  ],
+  "properties": {
+    "proposalId": { "type": "string", "minLength": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "branchId": { "type": "string", "minLength": 1 },
+    "turnId": { "type": "string", "minLength": 1 },
+    "runtimeId": { "type": "string", "minLength": 1 },
+    "pluginId": { "type": "string", "minLength": 1 },
+    "traceId": { "type": "string", "minLength": 1 },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "payload"],
+            "properties": {
+              "kind": { "const": "narrative.append" },
+              "payload": {
+                "type": "object",
+                "required": ["content"],
+                "properties": {
+                  "content": { "type": "string", "minLength": 1 },
+                  "format": { "type": "string", "enum": ["plain", "markdown"], "default": "plain" }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "payload"],
+            "properties": {
+              "kind": { "const": "state.patch" },
+              "payload": {
+                "type": "object",
+                "required": ["scope", "patch"],
+                "properties": {
+                  "scope": { "type": "string", "minLength": 1 },
+                  "patch": { "type": "object" }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "payload"],
+            "properties": {
+              "kind": { "const": "event.emit" },
+              "payload": {
+                "type": "object",
+                "required": ["eventType"],
+                "properties": {
+                  "eventType": { "type": "string", "minLength": 1 },
+                  "data": { "type": "object" }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "payload"],
+            "properties": {
+              "kind": { "const": "record.upsert" },
+              "payload": {
+                "type": "object",
+                "required": ["recordType", "fields"],
+                "properties": {
+                  "recordId": { "type": "string", "minLength": 1 },
+                  "recordType": { "type": "string", "minLength": 1 },
+                  "fields": { "type": "object" }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "payload"],
+            "properties": {
+              "kind": { "const": "ui.render" },
+              "payload": {
+                "type": "object",
+                "required": ["slot"],
+                "properties": {
+                  "slot": { "type": "string", "minLength": 1 },
+                  "component": { "type": "string", "minLength": 1 },
+                  "props": { "type": "object" }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "payload"],
+            "properties": {
+              "kind": { "const": "asset.generate" },
+              "payload": {
+                "type": "object",
+                "required": ["assetKind"],
+                "properties": {
+                  "assetKind": { "type": "string", "minLength": 1 },
+                  "prompt": { "type": "string" },
+                  "params": { "type": "object" }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

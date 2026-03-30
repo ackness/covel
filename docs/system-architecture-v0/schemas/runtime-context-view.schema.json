@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:covel:schema:runtime-context-view:v0alpha1",
+  "title": "Covel Runtime Context View",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["run", "locale", "runtime"],
+  "properties": {
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runId", "branchId", "turnId"],
+      "properties": {
+        "runId": { "type": "string", "minLength": 1 },
+        "worldId": { "type": "string", "minLength": 1 },
+        "branchId": { "type": "string", "minLength": 1 },
+        "turnId": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "minLength": 1 },
+        "phase": { "type": "string", "minLength": 1 },
+        "defaultLocale": { "type": "string", "minLength": 1 },
+        "activeBranchId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "locale": {
+      "type": "string",
+      "minLength": 1
+    },
+    "world": {
+      "type": "object"
+    },
+    "chat": {
+      "type": "object"
+    },
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "state": {
+      "type": "object"
+    },
+    "record": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:covel:schema:runtime-trigger-event:v0alpha1"
+      }
+    },
+    "runtimeSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "flat": {
+          "type": "object"
+        },
+        "byPlugin": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "narrative": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["content"],
+      "properties": {
+        "content": { "type": "string" },
+        "messageId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "archive": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "activeVersion": { "type": "integer", "minimum": 0 },
+        "latestVersion": { "type": "integer", "minimum": 0 },
+        "summary": { "type": "string" }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtimeId", "pluginId", "kind", "phase", "allowedTools"],
+      "properties": {
+        "runtimeId": { "type": "string", "minLength": 1 },
+        "pluginId": { "type": "string", "minLength": 1 },
+        "kind": {
+          "type": "string",
+          "enum": ["story", "plugin", "background", "verifier"]
+        },
+        "phase": {
+          "type": "string",
+          "enum": ["pre_story", "story", "post_story", "background"]
+        },
+        "allowedTools": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "providerBinding": {
+          "type": "string",
+          "minLength": 1
+        },
+        "budget": {
+          "type": "object"
+        },
+        "isolation": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}
