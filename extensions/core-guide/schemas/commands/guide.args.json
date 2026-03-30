@@ -1,9 +1,0 @@
-{
-  "type": "object",
-  "additionalProperties": false,
-  "properties": {
-    "topic": {
-      "type": "string"
-    }
-  }
-}

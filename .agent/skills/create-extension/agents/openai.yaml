@@ -1,4 +1,0 @@
-interface:
-  display_name: "Create Extension"
-  short_description: "Design and scaffold covel extensions against host contracts"
-  default_prompt: "Use this skill to design, create, or update a covel extension/package so it fits the current host contracts: manifest v1, package-runtime registration, host-routed model access, command/context/capability/block surfaces, and trusted frontend/backend integration."
