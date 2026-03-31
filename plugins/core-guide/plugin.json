@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "1.0",
+  "id": "core-guide",
+  "displayName": {
+    "zh-CN": "引导选择",
+    "en-US": "Guide & Choices"
+  },
+  "version": "0.1.0",
+  "author": "covel",
+  "description": {
+    "zh-CN": "当玩家需要结构化的下一步引导时，生成选择面板。",
+    "en-US": "When the player would benefit from structured next-step guidance, emit a choices block."
+  },
+  "defaultLocale": "zh-CN",
+  "supportedLocales": ["zh-CN", "en-US"],
+  "loadingOrder": 20,
+  "runtimes": [
+    {
+      "id": "guide",
+      "pluginId": "core-guide",
+      "kind": "plugin",
+      "phase": "post_story",
+      "trigger": { "mode": "always" },
+      "tools": ["core-guide:generate-choices"],
+      "hooks": []
+    }
+  ],
+  "tools": [
+    {
+      "id": "generate-choices",
+      "kind": "render",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "topic": { "type": "string", "description": "The topic to generate choices for" }
+        }
+      }
+    }
+  ]
+}

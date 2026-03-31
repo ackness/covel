@@ -1,0 +1,165 @@
+import type { ModelProfile, PresetConfig, ResolvedTarget } from "./types.js";
+
+/**
+ * Create a preset registry that resolves preset IDs to model targets.
+ *
+ * Supports:
+ * - Runtime and persisted profiles/presets (merged by ID)
+ * - Default preset selection
+ * - Fallback chain traversal
+ * - Project/session overrides
+ * - Embedding target resolution
+ */
+export function createPresetRegistry(options: {
+  profiles: ModelProfile[];
+  presets: PresetConfig[];
+}) {
+  const profiles = new Map<string, ModelProfile>();
+  const presets = new Map<string, PresetConfig>();
+
+  for (const p of options.profiles) profiles.set(p.id, p);
+  for (const p of options.presets) presets.set(p.id, p);
+
+  /** List all registered profiles. */
+  function listProfiles(): ModelProfile[] {
+    return Array.from(profiles.values());
+  }
+
+  /** List all registered presets. */
+  function listPresets(): PresetConfig[] {
+    return Array.from(presets.values());
+  }
+
+  /** Resolve a single preset by ID (or find the default). */
+  function resolvePreset(presetId?: string): PresetConfig | null {
+    if (!presetId) {
+      return (
+        Array.from(presets.values()).find((p) => p.isDefault) ?? null
+      );
+    }
+
+    const preset = presets.get(presetId) ?? null;
+    if (!preset) {
+      throw new Error(`Preset registry: preset "${presetId}" not found.`);
+    }
+    if (!preset.enabled) {
+      throw new Error(`Preset registry: preset "${presetId}" is disabled.`);
+    }
+    return preset;
+  }
+
+  /**
+   * Resolve the primary text target (profile + preset).
+   * Applies optional project/session overrides.
+   */
+  function resolveTextTarget(input: {
+    presetId?: string;
+    projectOverride?: {
+      preset?: Partial<PresetConfig>;
+      profile?: Partial<ModelProfile> & Pick<ModelProfile, "id">;
+    };
+    sessionOverride?: {
+      preset?: Partial<PresetConfig>;
+      profile?: Partial<ModelProfile> & Pick<ModelProfile, "id">;
+    };
+  }): ResolvedTarget {
+    const basePreset = resolvePreset(input.presetId);
+    const preset = basePreset
+      ? {
+          ...basePreset,
+          ...input.projectOverride?.preset,
+          ...input.sessionOverride?.preset,
+        }
+      : null;
+
+    const targetProfileId =
+      input.sessionOverride?.profile?.id ??
+      input.projectOverride?.profile?.id ??
+      preset?.tier;
+
+    if (!targetProfileId) {
+      throw new Error("Preset registry: no text profile target resolved.");
+    }
+
+    const baseProfile = profiles.get(targetProfileId);
+
+    // If no profile exists but we have a preset, synthesize a profile from it
+    const effectiveProfile: ModelProfile = baseProfile
+      ? {
+          ...baseProfile,
+          ...input.projectOverride?.profile,
+          ...input.sessionOverride?.profile,
+        }
+      : preset
+        ? {
+            id: preset.tier,
+            tier: preset.tier,
+            provider: preset.provider,
+            model: preset.model,
+            contextWindow: 64_000,
+            latencyClass: "medium",
+            costClass: "medium",
+            supportedModes: preset.supportedModes,
+            ...input.projectOverride?.profile,
+            ...input.sessionOverride?.profile,
+          }
+        : (() => {
+            throw new Error(
+              `Preset registry: profile "${targetProfileId}" not found.`
+            );
+          })();
+
+    return { profile: effectiveProfile, preset };
+  }
+
+  /** Resolve the embedding target (always embed-default profile). */
+  function resolveEmbeddingTarget(): ResolvedTarget {
+    const profile = profiles.get("embed-default");
+    if (!profile) {
+      throw new Error(
+        'Preset registry: profile "embed-default" not found.'
+      );
+    }
+    return { profile, preset: null };
+  }
+
+  /**
+   * Build an ordered fallback chain for a preset.
+   * Used by the gateway for retry routing.
+   */
+  function resolveTextTargetChain(input: {
+    presetId?: string;
+  }): ResolvedTarget[] {
+    const primary = resolveTextTarget({ presetId: input.presetId });
+    const chain: ResolvedTarget[] = [primary];
+    const visited = new Set<string>();
+
+    if (primary.preset?.id) visited.add(primary.preset.id);
+
+    collectFallbacks(primary.preset?.fallbackPresetIds ?? []);
+    return chain;
+
+    function collectFallbacks(ids: string[]) {
+      for (const id of ids) {
+        if (visited.has(id)) continue;
+        visited.add(id);
+        try {
+          const target = resolveTextTarget({ presetId: id });
+          chain.push(target);
+          collectFallbacks(target.preset?.fallbackPresetIds ?? []);
+        } catch {
+          // Skip invalid fallback presets
+        }
+      }
+    }
+  }
+
+  return {
+    listProfiles,
+    listPresets,
+    resolvePreset,
+    resolveTextTarget,
+    resolveEmbeddingTarget,
+    resolveTextTargetChain,
+  };
+}

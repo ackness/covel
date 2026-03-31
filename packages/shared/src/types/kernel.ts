@@ -9,7 +9,7 @@ export interface KernelInput {
   runId: string;
   branchId: string;
   actorId: string;
-  type: "user.input" | "system.event";
+  type: "user.input" | "system.event" | "session_start" | "manual_action" | "interval_tick" | (string & {});
   locale?: string;
   payload: Record<string, unknown>;
 }

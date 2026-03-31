@@ -1,0 +1,92 @@
+import { readFile } from "node:fs/promises";
+import type { RuntimeContextView } from "@covel/shared";
+import type {
+  RegisteredRuntime,
+  ToolRegistry,
+  HookRegistry,
+} from "@covel/plugin-runtime";
+import type { GatewayLike, RuntimeExecutorInput } from "@covel/runtime";
+import { createRuntimeExecutor } from "@covel/runtime";
+import { executeTool } from "../tools/tool-executor.js";
+
+export interface RuntimeRunnerDeps {
+  gateway: GatewayLike;
+  toolRegistry: ToolRegistry;
+  hookRegistry: HookRegistry;
+}
+
+export interface RuntimeRunResult {
+  text: string;
+  proposals: Array<{ kind: string; payload: unknown }>;
+  usage: { inputTokens: number; outputTokens: number };
+}
+
+/**
+ * Drive a single runtime's execution.
+ *
+ * If the runtime has a registered handler, use it directly (no LLM).
+ * Otherwise, call the LLM via the gateway.
+ */
+export async function runRuntime(
+  deps: RuntimeRunnerDeps,
+  runtime: RegisteredRuntime,
+  context: RuntimeContextView,
+  options: { apiKeys?: Record<string, string>; traceId?: string }
+): Promise<RuntimeRunResult> {
+  // Load instructions if available
+  let instructions: string | undefined;
+  if (runtime.instructionsPath) {
+    try {
+      instructions = await readFile(runtime.instructionsPath, "utf-8");
+    } catch {
+      // Instructions file not readable, continue without
+    }
+  }
+
+  // ── Custom handler path (no LLM) ───────────────────────────────
+  if (runtime.handler) {
+    const result = await runtime.handler({
+      runtimeId: runtime.spec.id,
+      pluginId: runtime.pluginId,
+      locale: context.locale,
+      context,
+      instructions,
+    });
+
+    return {
+      text: "",
+      proposals: result.proposals,
+      usage: { inputTokens: 0, outputTokens: 0 },
+    };
+  }
+
+  // ── LLM path ───────────────────────────────────────────────────
+  const executor = createRuntimeExecutor(deps.gateway);
+
+  const executorInput: RuntimeExecutorInput = {
+    context,
+    instructions,
+    presetId: runtime.spec.providerBinding,
+    apiKeys: options.apiKeys,
+    traceId: options.traceId,
+  };
+
+  const result = await executor.execute(executorInput);
+
+  // Collect proposals from the narrative output
+  const proposals: Array<{ kind: string; payload: unknown }> = [];
+
+  // The primary runtime output is treated as a narrative.append proposal
+  if (result.text) {
+    proposals.push({
+      kind: "narrative.append",
+      payload: { text: result.text },
+    });
+  }
+
+  return {
+    text: result.text,
+    proposals,
+    usage: result.usage,
+  };
+}
