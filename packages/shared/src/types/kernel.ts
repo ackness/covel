@@ -3,6 +3,9 @@ import type {
   RuntimeIsolationSpec,
   RuntimeTriggerEvent,
 } from "./common.js";
+import type { CharacterCard } from "./character.js";
+
+export type SessionPhase = "init" | "character_creation" | "playing" | "ended";
 
 /** Kernel input contract */
 export interface KernelInput {
@@ -95,7 +98,7 @@ export interface RuntimeContextView {
   locale: string;
   world?: unknown;
   chat?: unknown;
-  characters?: unknown[];
+  characters?: CharacterCard[];
   state?: unknown;
   record?: unknown[];
   events?: RuntimeTriggerEvent[];

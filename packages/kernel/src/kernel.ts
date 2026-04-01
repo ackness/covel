@@ -1,4 +1,4 @@
-import type { KernelInput, KernelTurnResult } from "@covel/shared";
+import type { CharacterCard, KernelInput, KernelTurnResult } from "@covel/shared";
 import type { PluginHost } from "@covel/plugin-runtime";
 import type { GatewayLike } from "@covel/runtime";
 import { routeTrigger } from "./router/trigger-router.js";
@@ -6,6 +6,7 @@ import { buildExecutionPlan } from "./scheduler/runtime-scheduler.js";
 import { assembleContext } from "./context/context-assembler.js";
 import { runRuntime } from "./runner/runtime-runner.js";
 import { gatherContextFragments } from "./context/context-provider-bridge.js";
+import { createPluginDataAccess } from "./data-access/plugin-data-access.js";
 import { createProposalCollector } from "./proposals/proposal-collector.js";
 import { validateProposals } from "./proposals/proposal-validator.js";
 import { commitProposals } from "./commit/commit-service.js";
@@ -23,7 +24,7 @@ export interface KernelContext {
   /** World data. */
   world?: unknown;
   /** Characters. */
-  characters?: unknown[];
+  characters?: CharacterCard[];
   /** Chat history. */
   chat?: unknown;
   /** Runtime settings. */
@@ -132,7 +133,17 @@ export function createKernel(deps: KernelDeps) {
             }
           );
 
-          // 5. Run the runtime
+          // 5. Create data access scoped to this runtime
+          const dataAccess = createPluginDataAccess({
+            turnState,
+            characters: kernelContext.characters ?? [],
+            events: turnState.events.map((e) => ({
+              eventType: (e as Record<string, unknown>).eventType as string,
+              data: (e as Record<string, unknown>).data as Record<string, unknown> | undefined,
+            })),
+          });
+
+          // 6. Run the runtime
           const result = await runRuntime(
             {
               gateway: deps.gateway,
@@ -145,10 +156,11 @@ export function createKernel(deps: KernelDeps) {
               apiKeys: options.apiKeys,
               traceId,
               contextFragments,
+              dataAccess,
             }
           );
 
-          // 6. Collect proposals
+          // 7. Collect proposals
           collector.addFromRuntime(
             scheduled.registered.spec.id,
             scheduled.registered.pluginId,

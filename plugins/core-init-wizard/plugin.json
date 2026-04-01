@@ -14,6 +14,42 @@
   "defaultLocale": "zh-CN",
   "supportedLocales": ["zh-CN", "en-US"],
   "loadingOrder": 30,
+  "blockSchemas": [
+    {
+      "type": "character_creation",
+      "interactive": true,
+      "meta": {
+        "displayName": { "zh-CN": "角色创建", "en-US": "Character Creation" },
+        "description": "Dynamic character creation form"
+      },
+      "dataSchema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": { "type": "string" },
+                "label": { "type": "string" },
+                "type": { "type": "string", "enum": ["text", "select", "textarea", "number"] },
+                "placeholder": { "type": "string" },
+                "options": { "type": "array", "items": { "type": "string" } },
+                "required": { "type": "boolean" }
+              },
+              "required": ["key", "label", "type"]
+            }
+          }
+        }
+      },
+      "submitSchema": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    }
+  ],
   "runtimes": [
     {
       "id": "init-wizard",
@@ -24,6 +60,7 @@
         "mode": "event",
         "onEvents": ["session_start"]
       },
+      "providerBinding": "fast",
       "tools": [],
       "hooks": []
     }

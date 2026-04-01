@@ -1,5 +1,6 @@
 import type { PluginRegistrar } from "@covel/plugin-runtime";
 import type { RuntimeHandlerContext, RuntimeHandlerResult } from "@covel/plugin-runtime";
+import type { CharacterCreateInput } from "@covel/shared";
 
 export default function register(registrar: PluginRegistrar) {
   registrar.addRuntimeHandler("init-wizard", initWizardHandler);
@@ -7,7 +8,12 @@ export default function register(registrar: PluginRegistrar) {
 
 /**
  * On session_start, emit a character_creation UI block
- * prompting the player to enter their character name.
+ * prompting the player to create their character.
+ *
+ * The submitted form data maps to CharacterCreateInput:
+ *   character_name  -> name
+ *   character_desc  -> description
+ *   character_type  -> type (default: "player")
  */
 async function initWizardHandler(
   ctx: RuntimeHandlerContext
@@ -33,8 +39,19 @@ async function initWizardHandler(
                 placeholder: isZh ? "请输入角色名..." : "Enter character name...",
                 required: true,
               },
+              {
+                id: "character_desc",
+                type: "textarea",
+                label: isZh ? "角色描述" : "Character Description",
+                placeholder: isZh ? "简单描述你的角色（可选）..." : "Briefly describe your character (optional)...",
+                required: false,
+              },
             ],
             submitLabel: isZh ? "开始冒险" : "Begin Adventure",
+            submitMapping: {
+              character_name: "name",
+              character_desc: "description",
+            } satisfies Record<string, keyof CharacterCreateInput>,
           },
         },
       },

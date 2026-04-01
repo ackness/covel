@@ -104,17 +104,27 @@ function SessionPage() {
               {t("session.status", "Session Status")}
             </h3>
             <Card>
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full shrink-0 ${state.session ? "bg-green-500 animate-pulse" : "bg-muted-foreground"}`} />
-                  <span className="text-sm font-medium truncate">
-                    {state.session ? state.session.status : t("common.loading", "Loading...")}
-                  </span>
+              <CardContent className="p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full shrink-0 ${state.session ? "bg-green-500 animate-pulse" : "bg-muted-foreground"}`} />
+                    <span className="text-sm font-medium truncate">
+                      {state.session ? state.session.status : t("common.loading", "Loading...")}
+                    </span>
+                  </div>
+                  {state.session && (
+                    <Badge variant="outline" className="shrink-0 font-mono text-[10px]">
+                      {state.session.id.slice(0, 12)}
+                    </Badge>
+                  )}
                 </div>
                 {state.session && (
-                  <Badge variant="outline" className="shrink-0 font-mono text-[10px]">
-                    {state.session.id.slice(0, 12)}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Phase:</span>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {state.phase}
+                    </Badge>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -563,7 +573,12 @@ function SessionPage() {
               {state.session && state.messages.length === 0 && !state.executing && (
                 <div className="flex flex-col items-center justify-center py-12 text-center space-y-3">
                   <MessageSquare className="w-8 h-8 text-muted-foreground/50" />
-                  <p className="text-sm text-muted-foreground">Preparing your adventure...</p>
+                  <p className="text-sm text-muted-foreground">
+                    {state.phase === "init" && "Preparing your adventure..."}
+                    {state.phase === "character_creation" && "Creating your character..."}
+                    {state.phase === "playing" && "Your adventure awaits. Type a message to continue."}
+                    {state.phase === "ended" && "This session has ended."}
+                  </p>
                 </div>
               )}
 
@@ -590,27 +605,38 @@ function SessionPage() {
             </div>
           </ScrollArea>
 
-          {/* Input */}
-          <div className="p-3 md:p-4 border-t border-border bg-muted/5 shrink-0">
-            <div className="flex gap-2 max-w-4xl mx-auto">
-              <input
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={t("session.inputPlaceholder", "Enter action or command...")}
-                disabled={!state.session || state.executing}
-                className="flex-1 min-w-0 bg-background border border-border px-3 md:px-4 py-2 md:py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary transition-all disabled:opacity-50"
-              />
-              <Button
-                onClick={handleSubmit}
-                disabled={!state.session || state.executing || !inputValue.trim()}
-                className="rounded-none px-4 md:px-8 uppercase tracking-widest font-semibold text-xs h-auto shrink-0"
-              >
-                {state.executing ? <Loader2 className="w-4 h-4 animate-spin" /> : t("common.execute", "Execute")}
-              </Button>
+          {/* Input — only visible during playing phase */}
+          {state.phase === "playing" && (
+            <div className="p-3 md:p-4 border-t border-border bg-muted/5 shrink-0">
+              <div className="flex gap-2 max-w-4xl mx-auto">
+                <input
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={t("session.inputPlaceholder", "Enter action or command...")}
+                  disabled={!state.session || state.executing}
+                  className="flex-1 min-w-0 bg-background border border-border px-3 md:px-4 py-2 md:py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary transition-all disabled:opacity-50"
+                />
+                <Button
+                  onClick={handleSubmit}
+                  disabled={!state.session || state.executing || !inputValue.trim()}
+                  className="rounded-none px-4 md:px-8 uppercase tracking-widest font-semibold text-xs h-auto shrink-0"
+                >
+                  {state.executing ? <Loader2 className="w-4 h-4 animate-spin" /> : t("common.execute", "Execute")}
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Ended phase indicator */}
+          {state.phase === "ended" && (
+            <div className="p-3 md:p-4 border-t border-border bg-muted/5 shrink-0">
+              <p className="text-center text-sm text-muted-foreground">
+                {t("session.ended", "This session has ended.")}
+              </p>
+            </div>
+          )}
         </ResizablePanel>
 
         {/* Desktop: Right panel */}

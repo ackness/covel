@@ -1,18 +1,28 @@
 import type { PluginRegistrar, RuntimeHandlerContext, RuntimeHandlerResult } from "@covel/plugin-runtime";
-import type { RuntimeContextView } from "@covel/shared";
+import type { CharacterCard, CharacterType, RuntimeContextView } from "@covel/shared";
 
 export default function register(registrar: PluginRegistrar) {
   registrar.addRuntimeHandler("char-tracker", charTrackerHandler);
+}
+
+const PLUGIN_ID = "core-char-tracker";
+
+interface TrackerExtension {
+  firstSeenTurn: string;
+  lastSeenTurn: string;
+  mood?: string;
+  mentionCount: number;
 }
 
 /**
  * Analyze the narrative from the current turn and extract character mentions.
  *
  * Uses simple heuristics:
- * - Chinese: quoted names 「」, or patterns like X说/X道/X笑
- * - English: capitalized proper nouns
+ * - Chinese: quoted names, or patterns like X said/X laughed
+ * - English: capitalized proper nouns with speech verbs
  *
- * Emits record.upsert for each new character and a state.patch with the full character list.
+ * Emits record.upsert for each new/updated character and a state.patch with the full character list.
+ * Structures records to match CharacterCard and tracks relationships.
  */
 async function charTrackerHandler(
   ctx: RuntimeHandlerContext
@@ -22,50 +32,108 @@ async function charTrackerHandler(
   if (!narrative) return { proposals: [] };
 
   const isZh = ctx.locale.startsWith("zh");
+  const turnId = context.run.turnId;
 
-  // Get existing characters from state
-  const existingChars = (context.state as Record<string, unknown>)?.characters as
-    | Record<string, CharRecord>
-    | undefined;
-  const known = new Set(Object.keys(existingChars ?? {}));
+  const existingCards = (context.characters ?? []) as CharacterCard[];
+  const knownByName = new Map<string, CharacterCard>();
+  for (const card of existingCards) {
+    knownByName.set(card.name, card);
+  }
 
-  // Extract character names from narrative
   const extracted = isZh
     ? extractChineseNames(narrative)
     : extractEnglishNames(narrative);
 
-  // Filter to new characters only
-  const newChars = extracted.filter((name) => !known.has(name));
-  if (newChars.length === 0) return { proposals: [] };
+  if (extracted.length === 0) return { proposals: [] };
 
   const proposals: Array<{ kind: string; payload: unknown }> = [];
-  const turnId = context.run.turnId;
-
-  // Build updated character map
-  const updatedChars: Record<string, CharRecord> = { ...(existingChars ?? {}) };
-
-  for (const name of newChars) {
-    const role = inferRole(name, narrative, isZh);
-    const record: CharRecord = {
-      name,
-      role,
-      description: inferDescription(name, narrative, isZh),
-      firstSeenTurn: turnId,
-    };
-
-    updatedChars[name] = record;
-
-    // Emit record.upsert for each new character
-    proposals.push({
-      kind: "record.upsert",
-      payload: {
-        key: `character:${name}`,
-        value: record,
-      },
-    });
+  const updatedChars: Record<string, CharacterCard> = {};
+  for (const card of existingCards) {
+    updatedChars[card.name] = card;
   }
 
-  // Emit state.patch with full character list
+  for (const name of extracted) {
+    const existing = knownByName.get(name);
+    if (existing) {
+      const ext = (existing.extensions[PLUGIN_ID] ?? {}) as TrackerExtension;
+      const updatedExt: TrackerExtension = {
+        ...ext,
+        lastSeenTurn: turnId,
+        mentionCount: (ext.mentionCount ?? 0) + 1,
+      };
+      const updatedCard: CharacterCard = {
+        ...existing,
+        extensions: {
+          ...existing.extensions,
+          [PLUGIN_ID]: updatedExt,
+        },
+        version: existing.version + 1,
+      };
+      updatedChars[name] = updatedCard;
+
+      proposals.push({
+        kind: "record.upsert",
+        payload: {
+          key: `character:${name}`,
+          recordType: "character",
+          value: updatedCard,
+        },
+      });
+    } else {
+      const charType: CharacterType = inferRole(name, narrative, isZh) === "protagonist" ? "companion" : "npc";
+      const trackerExt: TrackerExtension = {
+        firstSeenTurn: turnId,
+        lastSeenTurn: turnId,
+        mentionCount: 1,
+      };
+      const card: CharacterCard = {
+        id: "",
+        worldId: context.run.worldId ?? "",
+        runId: context.run.runId,
+        name,
+        type: charType,
+        description: inferDescription(name, narrative, isZh),
+        fields: {},
+        extensions: {
+          [PLUGIN_ID]: trackerExt,
+        },
+        createdAt: new Date().toISOString(),
+        version: 1,
+      };
+      updatedChars[name] = card;
+
+      proposals.push({
+        kind: "record.upsert",
+        payload: {
+          key: `character:${name}`,
+          recordType: "character",
+          value: card,
+        },
+      });
+    }
+  }
+
+  // Detect co-occurrence relationships between characters mentioned in same narrative
+  if (extracted.length > 1) {
+    for (let i = 0; i < extracted.length; i++) {
+      for (let j = i + 1; j < extracted.length; j++) {
+        proposals.push({
+          kind: "record.upsert",
+          payload: {
+            key: `rel:${extracted[i]}:${extracted[j]}`,
+            recordType: "character_relationship",
+            value: {
+              fromCharacterName: extracted[i],
+              toCharacterName: extracted[j],
+              type: "acquaintance",
+              lastInteractionTurnId: turnId,
+            },
+          },
+        });
+      }
+    }
+  }
+
   proposals.push({
     kind: "state.patch",
     payload: {
@@ -76,46 +144,24 @@ async function charTrackerHandler(
   return { proposals };
 }
 
-interface CharRecord {
-  name: string;
-  role: "protagonist" | "npc" | "unknown";
-  description: string;
-  firstSeenTurn: string;
-}
-
-/**
- * Extract Chinese character names from narrative text.
- * Matches patterns like: X说, X道, X问, X笑, 「X」, "X" in dialogue attribution.
- */
 function extractChineseNames(text: string): string[] {
   const names = new Set<string>();
 
-  // Pattern: 2-4 char name followed by speech/action verb
   const speechPattern = /([^\s，。！？、：""''（）\n]{2,4})(说|道|问|答|笑|叹|喊|叫|低声|冷声|沉声|点头|摇头|看向)/g;
   let match;
   while ((match = speechPattern.exec(text)) !== null) {
     const name = match[1];
-    // Filter common non-name patterns
     if (!isCommonPhrase(name)) {
       names.add(name);
     }
   }
 
-  // Pattern: quoted name in 「」or ""
-  const quotedPattern = /[「"]([\u4e00-\u9fff]{2,4})[」"]/g;
-  // This catches names in quotes but may have false positives, skip for now
-
   return Array.from(names);
 }
 
-/**
- * Extract English character names from narrative text.
- * Matches capitalized words that appear with speech verbs.
- */
 function extractEnglishNames(text: string): string[] {
   const names = new Set<string>();
 
-  // Pattern: Capitalized name + speech verb
   const speechPattern = /([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s+(said|asked|replied|whispered|shouted|laughed|nodded|shook|looked|turned|smiled)/g;
   let match;
   while ((match = speechPattern.exec(text)) !== null) {
@@ -130,9 +176,7 @@ function inferRole(
   narrative: string,
   isZh: boolean
 ): "protagonist" | "npc" | "unknown" {
-  // Check if the player character name appears in "你" patterns (Chinese)
   if (isZh && narrative.includes("你")) {
-    // Player is addressed as "你", named characters are NPCs
     return "npc";
   }
   if (!isZh && /\byou\b/i.test(narrative)) {
@@ -142,7 +186,6 @@ function inferRole(
 }
 
 function inferDescription(name: string, narrative: string, isZh: boolean): string {
-  // Try to find a sentence mentioning the character
   const sentences = narrative.split(/[。.!！？?]/);
   for (const sentence of sentences) {
     if (sentence.includes(name) && sentence.length > 10 && sentence.length < 100) {

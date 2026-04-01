@@ -1,5 +1,6 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, type ReactNode } from "react";
 import * as api from "@/services/api";
+import { setBlockSchemas } from "@/components/blocks/block-renderer.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -25,6 +26,7 @@ interface SessionState {
   // Active session
   world: api.WorldRecord | null;
   session: api.SessionRecord | null;
+  phase: api.SessionPhase;
   messages: StreamMessage[];
 
   // Execution
@@ -45,6 +47,7 @@ type Action =
   | { type: "SET_EXECUTION_ERROR"; error: string | null }
   | { type: "ADD_STATE_PATCH"; patch: { id: string; summary: string; packageName: string } }
   | { type: "LOAD_MESSAGES"; messages: StreamMessage[] }
+  | { type: "SET_PHASE"; phase: api.SessionPhase }
   | { type: "RESET_SESSION" };
 
 const initialState: SessionState = {
@@ -56,6 +59,7 @@ const initialState: SessionState = {
   bootError: null,
   world: null,
   session: null,
+  phase: "init",
   messages: [],
   executing: false,
   executionError: null,
@@ -71,7 +75,7 @@ function reducer(state: SessionState, action: Action): SessionState {
     case "SET_WORLD":
       return { ...state, world: action.world };
     case "SET_SESSION":
-      return { ...state, session: action.session };
+      return { ...state, session: action.session, phase: action.session.phase ?? "init" };
     case "ADD_MESSAGE":
       return { ...state, messages: [...state.messages, action.message] };
     case "SET_EXECUTING":
@@ -82,8 +86,10 @@ function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, statePatches: [...state.statePatches, action.patch] };
     case "LOAD_MESSAGES":
       return { ...state, messages: action.messages };
+    case "SET_PHASE":
+      return { ...state, phase: action.phase };
     case "RESET_SESSION":
-      return { ...state, session: null, messages: [], statePatches: [], executing: false, executionError: null };
+      return { ...state, session: null, phase: "init", messages: [], statePatches: [], executing: false, executionError: null };
     default:
       return state;
   }
@@ -107,12 +113,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const boot = useCallback(async () => {
     try {
-      const [presets, packages, commands, worlds] = await Promise.all([
+      const [presets, packages, commands, worlds, schemas] = await Promise.all([
         api.listPresets(),
         api.listPackages(),
         api.listCommands(),
         api.listWorlds(),
+        api.fetchBlockSchemas().catch(() => ({})),
       ]);
+      setBlockSchemas(schemas as Record<string, any>);
       dispatch({ type: "BOOT_SUCCESS", presets, packages, commands, worlds });
     } catch (err) {
       dispatch({ type: "BOOT_ERROR", error: (err as Error).message });
@@ -160,6 +168,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const patch = payload.patch as { id: string; summary: string; packageName: string };
         if (patch) {
           dispatch({ type: "ADD_STATE_PATCH", patch });
+        }
+        break;
+      }
+      case "phase_change": {
+        const phase = payload.phase as api.SessionPhase;
+        if (phase) {
+          dispatch({ type: "SET_PHASE", phase });
         }
         break;
       }

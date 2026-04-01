@@ -1,4 +1,5 @@
 import type {
+  CharacterCard,
   RuntimeContextView,
   RuntimeTriggerEvent,
 } from "@covel/shared";
@@ -17,7 +18,7 @@ export interface ContextAssemblyInput {
   /** Global game state snapshot at turn start. */
   worldState?: unknown;
   /** Characters data. */
-  characters?: unknown[];
+  characters?: CharacterCard[];
   /** Chat history. */
   chat?: unknown;
   /** Runtime settings. */

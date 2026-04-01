@@ -1,15 +1,16 @@
 /**
- * Block Renderer Registry
+ * Block Renderer — Three-Tier Resolution
  *
- * Extensible rendering system for plugin-emitted UI blocks.
- * Each block type (choice_set, character_creation, etc.) has a dedicated
- * renderer component. New plugin block types can be added by registering
- * a renderer in the BLOCK_RENDERERS map below.
+ * Tier 1: Custom Renderer — hand-written React component (highest quality)
+ * Tier 2: Schema Renderer — auto-generated from plugin blockSchemas
+ * Tier 3: Raw Fallback — JSON display (development/debug)
  */
 
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { SchemaBlockRenderer } from "./schema-block-renderer.js";
+import type { BlockSchemaDeclaration } from "@covel/shared";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -24,23 +25,69 @@ export interface BlockRendererProps {
 
 type BlockRendererComponent = React.ComponentType<BlockRendererProps>;
 
-// ── Registry ───────────────────────────────────────────────────────
+// ── Tier 1: Custom Renderers ──────────────────────────────────────
 
-/**
- * Map of block type → renderer component.
- * To add a new plugin block type, add an entry here.
- */
-const BLOCK_RENDERERS: Record<string, BlockRendererComponent> = {
+const CUSTOM_RENDERERS: Record<string, BlockRendererComponent> = {
   choice_set: ChoiceSetBlock,
   character_creation: CharacterCreationBlock,
 };
 
+// ── Tier 2: Schema Registry ──────────────────────────────────────
+
+let blockSchemas: Record<string, BlockSchemaDeclaration> = {};
+
+export function setBlockSchemas(schemas: Record<string, BlockSchemaDeclaration>) {
+  blockSchemas = schemas;
+}
+
+export function getBlockSchemas(): Record<string, BlockSchemaDeclaration> {
+  return blockSchemas;
+}
+
+// ── Resolution ────────────────────────────────────────────────────
+
+export interface BlockResolution {
+  mode: "custom" | "schema" | "raw";
+  component?: BlockRendererComponent;
+  schema?: BlockSchemaDeclaration;
+}
+
+export function resolveBlockRenderer(blockType: string): BlockResolution {
+  if (CUSTOM_RENDERERS[blockType]) {
+    return { mode: "custom", component: CUSTOM_RENDERERS[blockType] };
+  }
+  if (blockSchemas[blockType]) {
+    return { mode: "schema", schema: blockSchemas[blockType] };
+  }
+  return { mode: "raw" };
+}
+
 /**
- * Resolve the renderer for a given block type.
- * Returns null if no renderer is registered (caller should use fallback).
+ * Legacy API — resolve to a renderable component.
+ * Returns null only if no custom renderer AND no schema available (raw fallback).
  */
 export function getBlockRenderer(blockType: string): BlockRendererComponent | null {
-  return BLOCK_RENDERERS[blockType] ?? null;
+  const resolution = resolveBlockRenderer(blockType);
+
+  if (resolution.mode === "custom" && resolution.component) {
+    return resolution.component;
+  }
+
+  if (resolution.mode === "schema" && resolution.schema) {
+    const schema = resolution.schema;
+    return function SchemaBlock(props: BlockRendererProps) {
+      return (
+        <SchemaBlockRenderer
+          schema={schema}
+          data={props.data}
+          onSubmit={props.onSubmit}
+          disabled={props.disabled}
+        />
+      );
+    };
+  }
+
+  return null;
 }
 
 // ── choice_set ─────────────────────────────────────────────────────
@@ -92,9 +139,6 @@ function CharacterCreationBlock({ data, onSubmit, disabled }: BlockRendererProps
   };
 
   const handleSubmit = () => {
-    // Collect field values and send as message
-    // For single-field forms (like character name), send the value directly
-    // For multi-field forms, send as structured text
     if (fields.length === 1) {
       const value = values[fields[0].id]?.trim();
       if (value) onSubmit(value);

@@ -25,6 +25,10 @@ export { runRuntime, type RuntimeRunnerDeps, type RuntimeRunResult } from "./run
 
 // ── Tools ───────────────────────────────────────────────────────────
 export { executeTool, type ToolCallRequest, type ToolCallResult } from "./tools/tool-executor.js";
+export { createBuiltinDataTools, type BuiltinToolEntry, type BuiltinToolDeps } from "./tools/builtin-data-tools.js";
+
+// ── Data Access ────────────────────────────────────────────────────
+export { createPluginDataAccess, type DataAccessSources } from "./data-access/plugin-data-access.js";
 
 // ── Proposals ───────────────────────────────────────────────────────
 export { createProposalCollector, type ProposalCollector } from "./proposals/proposal-collector.js";

@@ -33,6 +33,7 @@ export interface PluginManifest {
   runtimeSettings?: RuntimeSettingField[];
   permissions?: string[];
   providers?: PublicProviderBinding[];
+  blockSchemas?: BlockSchemaDeclaration[];
 }
 
 /** Public runtime spec */
@@ -132,6 +133,19 @@ export interface RuntimeSettingField {
   default?: unknown;
   options?: Array<{ label: I18nText; value: string | number | boolean }>;
   affects?: string[];
+}
+
+/** Block schema declaration for schema-driven rendering */
+export interface BlockSchemaDeclaration {
+  type: string;
+  interactive: boolean;
+  meta: {
+    displayName: I18nText;
+    description: string;
+    icon?: string;
+  };
+  dataSchema: Record<string, unknown>;
+  submitSchema?: Record<string, unknown>;
 }
 
 /** Proposal output contract */

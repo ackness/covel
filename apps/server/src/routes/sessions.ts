@@ -32,11 +32,19 @@ export function createSessionsRoute(store: MemoryStore) {
   route.patch("/:sessionId", async (c) => {
     const sessionId = c.req.param("sessionId");
     const body = await c.req.json<Record<string, unknown>>();
-    // Whitelist: only allow specific fields to be updated
     const VALID_STATUSES = ["active", "waiting_for_input", "archived"] as const;
-    const patch: { status?: "active" | "waiting_for_input" | "archived"; presetId?: string; taskBindings?: Record<string, string> } = {};
+    const VALID_PHASES = ["init", "character_creation", "playing", "ended"] as const;
+    const patch: {
+      status?: "active" | "waiting_for_input" | "archived";
+      phase?: "init" | "character_creation" | "playing" | "ended";
+      presetId?: string;
+      taskBindings?: Record<string, string>;
+    } = {};
     if (typeof body.status === "string" && (VALID_STATUSES as readonly string[]).includes(body.status)) {
       patch.status = body.status as "active" | "waiting_for_input" | "archived";
+    }
+    if (typeof body.phase === "string" && (VALID_PHASES as readonly string[]).includes(body.phase)) {
+      patch.phase = body.phase as "init" | "character_creation" | "playing" | "ended";
     }
     if (typeof body.presetId === "string") patch.presetId = body.presetId;
     if (body.taskBindings && typeof body.taskBindings === "object") {
@@ -53,9 +61,18 @@ export function createSessionsRoute(store: MemoryStore) {
     const sessionId = c.req.param("sessionId");
     const body = await c.req.json<Record<string, unknown>>();
     const VALID_STATUSES = ["active", "waiting_for_input", "archived"] as const;
-    const patch: { status?: "active" | "waiting_for_input" | "archived"; presetId?: string; taskBindings?: Record<string, string> } = {};
+    const VALID_PHASES = ["init", "character_creation", "playing", "ended"] as const;
+    const patch: {
+      status?: "active" | "waiting_for_input" | "archived";
+      phase?: "init" | "character_creation" | "playing" | "ended";
+      presetId?: string;
+      taskBindings?: Record<string, string>;
+    } = {};
     if (typeof body.status === "string" && (VALID_STATUSES as readonly string[]).includes(body.status)) {
       patch.status = body.status as "active" | "waiting_for_input" | "archived";
+    }
+    if (typeof body.phase === "string" && (VALID_PHASES as readonly string[]).includes(body.phase)) {
+      patch.phase = body.phase as "init" | "character_creation" | "playing" | "ended";
     }
     if (typeof body.presetId === "string") patch.presetId = body.presetId;
     if (body.taskBindings && typeof body.taskBindings === "object") {

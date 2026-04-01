@@ -1,14 +1,19 @@
-import { pgTable, text, timestamp, jsonb, uuid } from "drizzle-orm/pg-core";
-import { branches } from "./branches.js";
+import { pgTable, text, timestamp, jsonb, uuid, integer } from "drizzle-orm/pg-core";
+import { runs } from "./runs.js";
 
 export const characters = pgTable("characters", {
   id: uuid("id").primaryKey().defaultRandom(),
-  branchId: uuid("branch_id")
+  worldId: text("world_id"),
+  runId: uuid("run_id")
     .notNull()
-    .references(() => branches.id),
+    .references(() => runs.id),
   name: text("name").notNull(),
-  locale: text("locale"),
-  fields: jsonb("fields"),
+  type: text("type").notNull().default("npc"),
+  description: text("description").notNull().default(""),
+  portrait: text("portrait"),
+  fields: jsonb("fields").notNull().default({}),
+  extensions: jsonb("extensions").notNull().default({}),
+  version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

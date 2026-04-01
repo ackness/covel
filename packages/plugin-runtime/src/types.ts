@@ -1,5 +1,6 @@
 import type {
   PluginManifest,
+  PluginDataAccess,
   PublicRuntimeSpec,
   PublicToolDefinition,
   PublicHookDefinition,
@@ -148,6 +149,8 @@ export interface RuntimeHandlerContext {
   context: unknown;
   /** PLUGIN.md content, if available. */
   instructions?: string;
+  /** Unified data access interface for reads and proposal helpers. */
+  data?: PluginDataAccess;
 }
 
 /** Result from a custom runtime handler. */

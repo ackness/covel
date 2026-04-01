@@ -9,6 +9,7 @@ import { createStreamRoute } from "./routes/ai/stream.js";
 import { createPresetsRoute } from "./routes/config/presets.js";
 import { createTurnRoute } from "./routes/kernel/turn.js";
 import { createPluginsRoute } from "./routes/plugins/list.js";
+import { createBlockSchemasRoute } from "./routes/plugins/block-schemas.js";
 import { createCommandsListRoute } from "./routes/commands/list.js";
 import { createCommandExecuteRoute } from "./routes/commands/execute.js";
 import { createWorldsRoute } from "./routes/worlds.js";
@@ -17,6 +18,7 @@ import { createActionsRoute } from "./routes/actions.js";
 import { createCompatPackagesRoute } from "./routes/compat/packages.js";
 import { createCompatPresetsRoute } from "./routes/compat/presets.js";
 import { createCompatCommandsRoute } from "./routes/compat/commands.js";
+import { createCharactersRoute } from "./routes/characters.js";
 import { initKernelStack } from "./kernel-setup.js";
 import { createMemoryStore } from "./store/memory-store.js";
 
@@ -48,6 +50,7 @@ app.route("/api/ai/stream", createStreamRoute(ai));
 app.route("/api/config/presets", createPresetsRoute(ai));
 app.route("/api/kernel/turn", createTurnRoute(kernelStack.kernel));
 app.route("/api/plugins", createPluginsRoute(kernelStack.pluginHost));
+app.route("/api/block-schemas", createBlockSchemasRoute(kernelStack.pluginHost));
 app.route("/api/commands", createCommandsListRoute(kernelStack.pluginHost.commandRegistry));
 app.route("/api/commands/execute", createCommandExecuteRoute(kernelStack.commandBus));
 
@@ -59,9 +62,12 @@ app.route("/actions", createActionsRoute({
   commandBus: kernelStack.commandBus,
   store,
 }));
+app.route("/characters", createCharactersRoute(store));
 app.route("/commands", createCompatCommandsRoute(kernelStack.pluginHost.commandRegistry));
 app.route("/packages", createCompatPackagesRoute(kernelStack.pluginHost));
 app.route("/presets", createCompatPresetsRoute(ai));
+
+app.route("/block-schemas", createBlockSchemasRoute(kernelStack.pluginHost));
 
 // Health check at root too
 app.route("/health", healthRoute);

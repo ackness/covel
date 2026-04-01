@@ -235,6 +235,22 @@ export function createActionsRoute(deps: {
           }
         }
 
+        // Phase transitions
+        const hasCharCreationBlock = turnResult.render.blocks.some(
+          (b) => b.type === "character_creation"
+        );
+
+        if (type === "start_session" && hasCharCreationBlock) {
+          store.updateSessionPhase(sessionId, "character_creation");
+          await emit("phase_change", turnId, traceId, { phase: "character_creation" });
+        } else if (type === "submit_block_response") {
+          const currentSession = store.getSession(sessionId);
+          if (currentSession?.phase === "character_creation") {
+            store.updateSessionPhase(sessionId, "playing");
+            await emit("phase_change", turnId, traceId, { phase: "playing" });
+          }
+        }
+
         // flow.completed
         await emit("flow.completed", turnId, traceId, { flowId });
       } catch (err: unknown) {

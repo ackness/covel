@@ -4,6 +4,7 @@
  * Provides worlds, sessions, and messages storage.
  * All data lives in process memory — lost on restart.
  */
+import type { CharacterCard, CharacterCreateInput, CharacterType, SessionPhase } from "@covel/shared";
 import { SEED_WORLDS } from "./seed-worlds.js";
 
 export interface WorldRecord {
@@ -20,6 +21,7 @@ export interface SessionRecord {
   id: string;
   worldId: string;
   status: "active" | "waiting_for_input" | "archived";
+  phase: SessionPhase;
   presetId?: string;
   taskBindings?: Record<string, string>;
   createdAt: string;
@@ -41,6 +43,7 @@ export function createMemoryStore() {
   const worlds = new Map<string, WorldRecord>();
   const sessions = new Map<string, SessionRecord>();
   const messages = new Map<string, MessageRecord[]>(); // sessionId → messages
+  const characters = new Map<string, CharacterCard>();
 
   // ── Worlds ──────────────────────────────────────────────────────
 
@@ -84,6 +87,7 @@ export function createMemoryStore() {
       id: uid("session"),
       worldId: opts.worldId,
       status: "active",
+      phase: "init",
       presetId: opts.presetId,
       taskBindings: opts.taskBindings,
       createdAt: new Date().toISOString(),
@@ -99,14 +103,21 @@ export function createMemoryStore() {
 
   function updateSession(
     id: string,
-    patch: Partial<Pick<SessionRecord, "status" | "presetId" | "taskBindings">>
+    patch: Partial<Pick<SessionRecord, "status" | "phase" | "presetId" | "taskBindings">>
   ): SessionRecord | undefined {
     const session = sessions.get(id);
     if (!session) return undefined;
-    // Whitelist: only apply known mutable fields
     if (patch.status !== undefined) session.status = patch.status;
+    if (patch.phase !== undefined) session.phase = patch.phase;
     if (patch.presetId !== undefined) session.presetId = patch.presetId;
     if (patch.taskBindings !== undefined) session.taskBindings = patch.taskBindings;
+    return session;
+  }
+
+  function updateSessionPhase(id: string, phase: SessionPhase): SessionRecord | undefined {
+    const session = sessions.get(id);
+    if (!session) return undefined;
+    session.phase = phase;
     return session;
   }
 
@@ -137,6 +148,47 @@ export function createMemoryStore() {
     return msg;
   }
 
+  // ── Characters ──────────────────────────────────────────────────
+
+  function createCharacter(sessionId: string, input: CharacterCreateInput): CharacterCard {
+    const session = sessions.get(sessionId);
+    const card: CharacterCard = {
+      id: uid("char"),
+      worldId: session?.worldId ?? "",
+      runId: sessionId,
+      name: input.name,
+      type: input.type ?? "player",
+      description: input.description ?? "",
+      fields: input.fields ?? {},
+      extensions: {},
+      createdAt: new Date().toISOString(),
+      version: 1,
+    };
+    characters.set(card.id, card);
+    return card;
+  }
+
+  function getCharacter(id: string): CharacterCard | undefined {
+    return characters.get(id);
+  }
+
+  function getSessionCharacters(sessionId: string): CharacterCard[] {
+    return Array.from(characters.values()).filter((c) => c.runId === sessionId);
+  }
+
+  function updateCharacter(id: string, patch: Partial<CharacterCard>): CharacterCard | undefined {
+    const card = characters.get(id);
+    if (!card) return undefined;
+    if (patch.name !== undefined) card.name = patch.name;
+    if (patch.type !== undefined) card.type = patch.type;
+    if (patch.description !== undefined) card.description = patch.description;
+    if (patch.portrait !== undefined) card.portrait = patch.portrait;
+    if (patch.fields !== undefined) card.fields = patch.fields;
+    if (patch.extensions !== undefined) card.extensions = patch.extensions;
+    card.version += 1;
+    return card;
+  }
+
   // ── Seed preset worlds ──────────────────────────────────────────
   for (const seed of SEED_WORLDS) {
     createWorld(seed.name, seed.description, { lore: seed.lore, tags: seed.tags });
@@ -150,8 +202,13 @@ export function createMemoryStore() {
     createSession,
     getSession,
     updateSession,
+    updateSessionPhase,
     listMessages,
     addMessage,
+    createCharacter,
+    getCharacter,
+    getSessionCharacters,
+    updateCharacter,
   };
 }
 

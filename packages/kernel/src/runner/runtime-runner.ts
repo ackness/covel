@@ -1,11 +1,12 @@
 import { readFile } from "node:fs/promises";
-import type { RuntimeContextView } from "@covel/shared";
+import type { RuntimeContextView, PluginDataAccess } from "@covel/shared";
 import type {
   RegisteredRuntime,
   ToolRegistry,
   HookRegistry,
 } from "@covel/plugin-runtime";
 import type { GatewayLike, RuntimeExecutorInput } from "@covel/runtime";
+import type { SlotRegistry } from "@covel/ai-provider";
 import { createRuntimeExecutor } from "@covel/runtime";
 import { executeTool } from "../tools/tool-executor.js";
 import type { ContextFragment } from "../context/context-provider-bridge.js";
@@ -14,6 +15,7 @@ export interface RuntimeRunnerDeps {
   gateway: GatewayLike;
   toolRegistry: ToolRegistry;
   hookRegistry: HookRegistry;
+  slotRegistry?: SlotRegistry;
 }
 
 export interface RuntimeRunResult {
@@ -40,6 +42,7 @@ export async function runRuntime(
     apiKeys?: Record<string, string>;
     traceId?: string;
     contextFragments?: ContextFragment[];
+    dataAccess?: PluginDataAccess;
   }
 ): Promise<RuntimeRunResult> {
   // Load instructions if available
@@ -70,6 +73,7 @@ export async function runRuntime(
       locale: context.locale,
       context,
       instructions,
+      data: options.dataAccess,
     });
 
     return {
@@ -82,12 +86,29 @@ export async function runRuntime(
   // ── LLM path ───────────────────────────────────────────────────
   const executor = createRuntimeExecutor(deps.gateway);
 
+  // Resolve providerBinding through slot registry if available
+  const binding = runtime.spec.providerBinding;
+  let presetId: string | undefined = binding;
+  let providerRequestMetadata: Record<string, unknown> | undefined;
+
+  if (binding && deps.slotRegistry) {
+    const resolved = deps.slotRegistry.resolveSlot(binding);
+    if (resolved) {
+      presetId = resolved;
+    }
+    const overrides = deps.slotRegistry.getParameterOverrides(binding);
+    if (overrides) {
+      providerRequestMetadata = { parameterOverrides: overrides };
+    }
+  }
+
   const executorInput: RuntimeExecutorInput = {
     context,
     instructions,
-    presetId: runtime.spec.providerBinding,
+    presetId,
     apiKeys: options.apiKeys,
     traceId: options.traceId,
+    providerRequestMetadata,
   };
 
   const result = await executor.execute(executorInput);

@@ -24,6 +24,7 @@
         "mode": "event",
         "onEvents": ["user.input"]
       },
+      "providerBinding": "fast",
       "tools": [],
       "hooks": []
     }

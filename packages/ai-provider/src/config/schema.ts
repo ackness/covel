@@ -48,6 +48,7 @@ export const presetConfigSchema = z.object({
   enabled: z.boolean().default(true),
   isDefault: z.boolean().optional(),
   scope: z.string().optional(),
+  defaultSlot: z.string().optional(),
   providerRequestMetadata: z.record(z.unknown()).optional(),
 });
 

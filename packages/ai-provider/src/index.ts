@@ -27,6 +27,10 @@ export type {
   ResolvedTarget,
   ProviderLifecycleHook,
   AiConfig,
+  ModelSlotId,
+  ModelSlotConfig,
+  ModelParameterOverrides,
+  ModelSlotMap,
 } from "./types.js";
 
 // Errors
@@ -45,6 +49,7 @@ export { createAnthropicMessagesAdapter } from "./adapters/anthropic-messages.js
 // Registries
 export { createProviderRegistry } from "./provider-registry.js";
 export { createPresetRegistry } from "./preset-registry.js";
+export { createSlotRegistry, type SlotRegistry } from "./slot-registry.js";
 
 // Gateway
 export { createGateway, type GatewayOptions } from "./gateway.js";

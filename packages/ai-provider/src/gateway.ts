@@ -2,9 +2,11 @@ import type { ZodType } from "zod";
 
 import { AiProviderError } from "./errors.js";
 import type { ProviderResolution } from "./provider-registry.js";
+import type { SlotRegistry } from "./slot-registry.js";
 import type {
   EmbeddingResult,
   ImageGenerationResult,
+  ModelParameterOverrides,
   OperationMode,
   PresetConfig,
   ProviderLifecycleHook,
@@ -34,6 +36,7 @@ interface GatewayDependencies {
     resolveEmbeddingTarget(): ResolvedTarget;
     resolveTextTargetChain(input: { presetId?: string }): ResolvedTarget[];
   };
+  slotRegistry?: SlotRegistry;
 }
 
 export interface GatewayOptions {
@@ -41,6 +44,8 @@ export interface GatewayOptions {
   apiKeys?: Record<string, string>;
   /** Trace ID for observability. */
   traceId?: string;
+  /** Slot-level parameter overrides resolved from the slot registry. */
+  parameterOverrides?: ModelParameterOverrides;
 }
 
 /**
@@ -305,6 +310,21 @@ export function createGateway(deps: GatewayDependencies) {
     );
   }
 
+  /**
+   * Resolve a slot ID to a preset ID via the slot registry.
+   * Returns undefined if no slot registry is configured or slot cannot be resolved.
+   */
+  function resolveSlotToPresetId(slotId: string): string | undefined {
+    return deps.slotRegistry?.resolveSlot(slotId);
+  }
+
+  /**
+   * Get parameter overrides for a given slot ID.
+   */
+  function getSlotParameterOverrides(slotId: string): ModelParameterOverrides | undefined {
+    return deps.slotRegistry?.getParameterOverrides(slotId);
+  }
+
   return {
     generateText,
     generateObject,
@@ -313,6 +333,8 @@ export function createGateway(deps: GatewayDependencies) {
     generateImage,
     synthesizeSpeech,
     transcribeAudio,
+    resolveSlotToPresetId,
+    getSlotParameterOverrides,
   };
 
   // ── Internal helpers ─────────────────────────────────────────────

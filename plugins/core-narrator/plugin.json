@@ -22,6 +22,7 @@
       "kind": "story",
       "phase": "story",
       "trigger": { "mode": "always" },
+      "providerBinding": "heavy",
       "tools": [],
       "hooks": []
     }

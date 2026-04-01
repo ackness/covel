@@ -15,6 +15,34 @@
   "supportedLocales": ["zh-CN", "en-US"],
   "loadingOrder": 50,
   "requires": ["core-char-tracker"],
+  "blockSchemas": [
+    {
+      "type": "choice_set",
+      "interactive": true,
+      "meta": {
+        "displayName": { "zh-CN": "选择面板", "en-US": "Choice Panel" },
+        "description": "Player choice options"
+      },
+      "dataSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": { "type": "string" },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "label": { "type": "string" },
+                "hint": { "type": "string" }
+              },
+              "required": ["id", "label"]
+            }
+          }
+        }
+      }
+    }
+  ],
   "runtimes": [
     {
       "id": "guide",
@@ -25,6 +53,7 @@
         "mode": "event",
         "onEvents": ["user.input"]
       },
+      "providerBinding": "fast",
       "tools": ["core-guide:generate-choices"],
       "hooks": []
     }

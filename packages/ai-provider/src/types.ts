@@ -66,6 +66,7 @@ export interface PresetConfig {
   enabled: boolean;
   isDefault?: boolean;
   scope?: string;
+  defaultSlot?: ModelSlotId;
   providerRequestMetadata?: Record<string, unknown>;
 }
 
@@ -217,6 +218,30 @@ export interface ProviderLifecycleHook {
     durationMs: number;
     traceId?: string;
   }): void | Promise<void>;
+}
+
+// ── Model Slot ────────────────────────────────────────────────────
+
+export type ModelSlotId = "heavy" | "fast" | "balance" | "image" | (string & {});
+
+export interface ModelSlotConfig {
+  slotId: ModelSlotId;
+  presetId: string;
+  parameterOverrides?: ModelParameterOverrides;
+}
+
+export interface ModelParameterOverrides {
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  maxOutputTokens?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+}
+
+export interface ModelSlotMap {
+  slots: Record<string, ModelSlotConfig>;
+  defaultSlot: string;
 }
 
 // ── AI Config (parsed from TOML) ───────────────────────────────────

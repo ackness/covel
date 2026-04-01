@@ -13,10 +13,13 @@ export interface WorldRecord {
   createdAt: string;
 }
 
+export type SessionPhase = "init" | "character_creation" | "playing" | "ended";
+
 export interface SessionRecord {
   id: string;
   worldId: string;
   status: "active" | "waiting_for_input" | "archived";
+  phase: SessionPhase;
   presetId?: string;
   taskBindings?: Record<string, string>;
   createdAt: string;
@@ -67,6 +70,12 @@ export interface SseEnvelope {
   payload: Record<string, unknown>;
 }
 
+// ── Storage Keys ──────────────────────────────────────────────────
+
+const SLOT_CONFIG_KEY = "covel:slotConfig";
+const CUSTOM_PRESETS_KEY = "covel:customPresets";
+const PARAM_OVERRIDES_KEY = "covel:paramOverrides";
+
 // ── Helpers ────────────────────────────────────────────────────────
 
 /** Routes that need the provider API keys header. */
@@ -78,13 +87,36 @@ function needsProviderKeys(url: string): boolean {
 
 function buildProviderKeysHeader(): Record<string, string> {
   const stored = localStorage.getItem("covel:providerKeys");
-  if (!stored) return {};
-  try {
-    const keys = JSON.parse(stored);
-    return { "X-Provider-Keys": btoa(JSON.stringify(keys)) };
-  } catch {
-    return {};
+  const headers: Record<string, string> = {};
+  if (stored) {
+    try {
+      const keys = JSON.parse(stored);
+      headers["X-Provider-Keys"] = btoa(JSON.stringify(keys));
+    } catch {
+      // skip
+    }
   }
+  return headers;
+}
+
+function buildAiHeaders(): Record<string, string> {
+  return {
+    ...buildProviderKeysHeader(),
+    ...buildSlotConfigHeaderInternal(),
+  };
+}
+
+function buildSlotConfigHeaderInternal(): Record<string, string> {
+  const slotConfig = localStorage.getItem(SLOT_CONFIG_KEY);
+  const paramOverrides = localStorage.getItem(PARAM_OVERRIDES_KEY);
+  const slots = slotConfig ? JSON.parse(slotConfig) : {};
+  const overrides = paramOverrides ? JSON.parse(paramOverrides) : {};
+  const hasSlots = Object.keys(slots).length > 0;
+  const hasOverrides = Object.keys(overrides).length > 0;
+  if (!hasSlots && !hasOverrides) return {};
+  return {
+    "X-Slot-Config": btoa(JSON.stringify({ slots, paramOverrides: overrides })),
+  };
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -92,8 +124,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      // Only attach provider keys to routes that actually need LLM access
-      ...(needsProviderKeys(url) ? buildProviderKeysHeader() : {}),
+      ...(needsProviderKeys(url) ? buildAiHeaders() : {}),
       ...init?.headers,
     },
   });
@@ -158,6 +189,13 @@ export async function listCommands(): Promise<CommandSummary[]> {
   return request<CommandSummary[]>("/commands");
 }
 
+// ── Block Schemas ─────────────────────────────────────────────────
+
+export async function fetchBlockSchemas(): Promise<Record<string, unknown>> {
+  const res = await request<{ schemas: Record<string, unknown> }>("/block-schemas");
+  return res.schemas;
+}
+
 // ── Actions (SSE) ──────────────────────────────────────────────────
 
 export type ActionType = "send_message" | "execute_command" | "submit_block_response" | "start_session";
@@ -188,7 +226,7 @@ export function sendAction(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...buildProviderKeysHeader(),
+          ...buildAiHeaders(),
         },
         body: JSON.stringify(req),
         signal: controller.signal,
@@ -254,6 +292,88 @@ export function getProviderKeys(): Record<string, string> {
 export function setProviderKeys(keys: Record<string, string>) {
   localStorage.setItem("covel:providerKeys", JSON.stringify(keys));
 }
+
+// ── Slot Config (localStorage) ────────────────────────────────────
+
+export interface SlotConfigEntry {
+  presetId: string;
+}
+
+export function getSlotConfig(): Record<string, SlotConfigEntry> {
+  const stored = localStorage.getItem(SLOT_CONFIG_KEY);
+  if (!stored) return {};
+  try {
+    return JSON.parse(stored);
+  } catch {
+    return {};
+  }
+}
+
+export function setSlotConfig(config: Record<string, SlotConfigEntry>): void {
+  localStorage.setItem(SLOT_CONFIG_KEY, JSON.stringify(config));
+}
+
+// ── Custom Presets (localStorage) ─────────────────────────────────
+
+export interface CustomPreset {
+  id: string;
+  name: string;
+  provider: string;
+  baseUrl: string;
+  model: string;
+  protocol?: string;
+}
+
+export function getCustomPresets(): CustomPreset[] {
+  const stored = localStorage.getItem(CUSTOM_PRESETS_KEY);
+  if (!stored) return [];
+  try {
+    return JSON.parse(stored);
+  } catch {
+    return [];
+  }
+}
+
+export function setCustomPresets(presets: CustomPreset[]): void {
+  localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(presets));
+}
+
+export function addCustomPreset(preset: CustomPreset): void {
+  const presets = getCustomPresets();
+  presets.push(preset);
+  setCustomPresets(presets);
+}
+
+export function removeCustomPreset(id: string): void {
+  const presets = getCustomPresets().filter((p) => p.id !== id);
+  setCustomPresets(presets);
+}
+
+// ── Parameter Overrides (localStorage) ────────────────────────────
+
+export interface ModelParameterOverrides {
+  temperature?: number;
+  topP?: number;
+  maxOutputTokens?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+}
+
+export function getParamOverrides(): Record<string, ModelParameterOverrides> {
+  const stored = localStorage.getItem(PARAM_OVERRIDES_KEY);
+  if (!stored) return {};
+  try {
+    return JSON.parse(stored);
+  } catch {
+    return {};
+  }
+}
+
+export function setParamOverrides(overrides: Record<string, ModelParameterOverrides>): void {
+  localStorage.setItem(PARAM_OVERRIDES_KEY, JSON.stringify(overrides));
+}
+
+// ── Helpers ───────────────────────────────────────────────────────
 
 export function uid(): string {
   return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;

@@ -7,6 +7,7 @@ import { createToolRegistry, type ToolRegistry } from "../registry/tool-registry
 import { createHookRegistry, type HookRegistry } from "../registry/hook-registry.js";
 import { createRuntimeRegistry, type RuntimeRegistry } from "../registry/runtime-registry.js";
 import { createCommandRegistry, type CommandRegistry } from "../command/command-registry.js";
+import type { BlockSchemaDeclaration } from "@covel/shared";
 import type { LoadedPlugin, RegisteredContextProvider, ContextProvider } from "../types.js";
 
 export interface PluginHost {
@@ -16,9 +17,13 @@ export interface PluginHost {
   runtimeRegistry: RuntimeRegistry;
   commandRegistry: CommandRegistry;
   contextProviders: Map<string, RegisteredContextProvider>;
+  blockSchemas: Map<string, BlockSchemaDeclaration>;
 
   /** Scan, validate, load, and register all plugins from a directory. */
   loadFromDirectory(baseDir: string): Promise<LoadedPlugin[]>;
+
+  /** Look up a block schema by block type. */
+  getBlockSchema(blockType: string): BlockSchemaDeclaration | undefined;
 }
 
 /**
@@ -32,6 +37,7 @@ export function createPluginHost(): PluginHost {
   const runtimeRegistry = createRuntimeRegistry();
   const commandRegistry = createCommandRegistry();
   const contextProviders = new Map<string, RegisteredContextProvider>();
+  const blockSchemas = new Map<string, BlockSchemaDeclaration>();
 
   async function loadFromDirectory(baseDir: string): Promise<LoadedPlugin[]> {
     const scanned = await scanPluginDirectory(baseDir);
@@ -55,6 +61,13 @@ export function createPluginHost(): PluginHost {
 
       // Register the plugin
       const plugin = pluginRegistry.add(manifest, dir);
+
+      // Register block schemas from manifest
+      if (manifest.blockSchemas) {
+        for (const schema of manifest.blockSchemas) {
+          blockSchemas.set(schema.type, schema);
+        }
+      }
 
       // Register runtimes from manifest
       if (manifest.runtimes) {
@@ -158,6 +171,10 @@ export function createPluginHost(): PluginHost {
     return loaded;
   }
 
+  function getBlockSchema(blockType: string): BlockSchemaDeclaration | undefined {
+    return blockSchemas.get(blockType);
+  }
+
   return {
     pluginRegistry,
     toolRegistry,
@@ -165,6 +182,8 @@ export function createPluginHost(): PluginHost {
     runtimeRegistry,
     commandRegistry,
     contextProviders,
+    blockSchemas,
     loadFromDirectory,
+    getBlockSchema,
   };
 }
