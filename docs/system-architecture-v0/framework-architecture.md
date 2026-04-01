@@ -353,6 +353,102 @@ flowchart TD
 - 角色卡的结构化字段应尽量保持语言无关
 - 角色卡的展示性文本允许按 locale 做本地化扩展
 
+#### 8.2.1 角色卡数据模型
+
+角色卡设计参考 SillyTavern Character Card V2/V3 规范，但核心区别在于：**角色卡不是静态模板，而是通过核心插件（core-char-tracker）动态维护的活数据**。
+
+**基础字段（所有角色卡必须具备）：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 唯一标识 |
+| `worldId` | string | 所属世界 |
+| `runId` | string | 所属 run |
+| `name` | I18nText | 角色名 |
+| `type` | enum | `player` / `npc` / `companion` |
+| `description` | string | 角色描述（可由 LLM 动态生成） |
+| `portrait` | string? | 头像资产引用 |
+| `createdAt` | timestamp | 创建时间 |
+| `version` | number | 版本号（每次 commit 递增） |
+
+**动态字段（由 world schema + 插件共同定义）：**
+
+- `fields: Record<string, unknown>` — 受 world `characterSchema` 约束
+- 典型字段示例：`personality`、`background`、`stats`、`inventory`、`skills`、`relationships`
+- 字段集合不固定，由世界观包声明，插件通过 `state.patch` 更新
+
+**扩展字段（由插件命名空间管理）：**
+
+- `extensions: Record<string, unknown>` — 按 pluginId 命名空间隔离
+- 示例：`extensions["core-char-tracker"].mood`、`extensions["combat"].combatStats`
+- 插件不得读写其他插件的 extension namespace
+
+#### 8.2.2 角色卡生命周期
+
+```text
+1. 创建阶段
+   init-wizard 插件通过 ui.render 输出动态创建表单
+   → 玩家填写 → submit_block_response → char-tracker 创建角色 record
+
+2. 成长阶段
+   每个 turn 中，char-tracker 读取叙事和事件
+   → 通过 state.patch + record.upsert 更新角色数据
+   → 角色卡字段随游戏推进自然演化
+
+3. 回溯阶段
+   通过 snapshot 恢复到任意时间点的角色状态
+   → 角色卡版本历史可追踪
+   → fork restore 时角色状态随分支分叉
+```
+
+#### 8.2.3 角色卡创建的动态性
+
+角色创建表单不是固定模板，而是由插件 runtime（LLM）根据当前上下文动态生成：
+
+- init-wizard 读取 narrative context（开场叙事）和 world characterSchema
+- LLM 根据故事背景决定需要收集哪些角色信息
+- 输出 `ui.render` block，data 结构符合 `character_creation` block schema
+- 前端根据 schema 或 custom renderer 渲染表单
+- 表单字段、选项、placeholder 都可以根据叙事语境动态调整
+
+示例：如果开场叙事是"你醒来在一艘漂泊的帆船上"，角色创建可能会问"你在船上的职务是什么？"而非通用的"选择你的职业"。
+
+#### 8.2.4 角色间关系追踪
+
+首轮通过 `Record` 对象存储角色间关系：
+
+```typescript
+// record.upsert 示例
+{
+  recordType: "character_relationship",
+  fields: {
+    fromCharacterId: "char_player",
+    toCharacterId: "char_npc_blacksmith",
+    type: "acquaintance",
+    affinity: 30,
+    notes: "帮助过锻造武器",
+    lastInteractionTurnId: "turn_42"
+  }
+}
+```
+
+后续增强路线：
+
+- `record_edges` 表构建关系图
+- 接入 Graph RAG 实现跨 session 的关系推理
+- 关系网络可视化（通过 UI slot 扩展）
+- NPC 记忆系统：NPC 对玩家的印象随交互演化
+
+#### 8.2.5 角色卡导出与分享
+
+角色卡作为内容资产支持独立导出：
+
+- **导出格式**：JSON（结构化数据）+ 可选头像图片
+- **导出内容**：基础字段 + fields + extensions（可选择性包含）
+- **版本快照**：可导出特定版本的角色卡
+- **导入兼容**：导入时根据目标 world 的 characterSchema 做字段映射和校验
+- **分享场景**：玩家可导出角色卡分享给其他玩家在相同世界观下使用
+
 ### 8.3 Plugin Package
 
 推荐目录：
@@ -569,6 +665,80 @@ flowchart TD
 - quest 插件可在条件满足后触发检查
 - image / TTS 插件可由按钮触发，也可在设置中改为自动触发
 
+### 9.12 开局引导流程
+
+玩家选择世界观并点击"开始游戏"后，系统自动执行 Turn 1 引导流程。
+
+#### 9.12.1 完整时序
+
+```text
+前端                           后端 / 内核
+──────                        ──────────
+玩家点击"开始游戏"
+  ↓
+创建 Session (POST /sessions)
+  ↓
+发送 start_session action  ──→  Kernel 收到 session_start 事件
+                                  ↓
+                               Trigger Router 筛选候选 runtime
+                               - core-persona (pre_story, always) ✓
+                               - core-narrator (story, always) ✓
+                               - core-init-wizard (post_story, event: session_start) ✓
+                               - core-guide (post_story, event: user.input) ✗
+                               - core-char-tracker (post_story, event: user.input) ✗
+                                  ↓
+                               Runtime Scheduler 按 phase 排序执行
+                                  ↓
+                               ┌─ pre_story: core-persona (no-op handler)
+                               │  → 不调用 LLM，通过 context provider 注入人设
+                               │
+                               ├─ story: core-narrator
+                               │  → LLM 读取 world + persona context
+                               │  → 生成开场叙事 (narrative.append)
+                               │  → 2-4 段第二人称背景描写
+                               │
+                               └─ post_story: core-init-wizard
+                                  → LLM 读取 narrative context + world characterSchema
+                                  → 根据开场叙事动态生成角色创建表单
+                                  → 输出 ui.render (character_creation block)
+                                  ↓
+                               Proposal → Validate → Commit → Render
+                                  ↓
+                        ←── SSE 事件流：
+                            1. message.completed (开场叙事)
+                            2. block.emitted (角色创建表单)
+                            3. flow.completed
+  ↓
+前端渲染：
+  叙事文字逐步显示
+  角色创建表单出现在叙事下方
+  Phase: init → character_creation
+```
+
+#### 9.12.2 Turn 2：角色创建
+
+```text
+玩家填写角色信息并提交
+  ↓
+发送 submit_block_response action
+  ↓
+Trigger Router 筛选：
+  - core-narrator (always) ✓ → 读取玩家输入，继续叙事
+  - core-char-tracker (event: user.input) ✓ → 创建角色 record
+  - core-guide (event: user.input) ✓ → 生成首个引导选择
+  - core-init-wizard (event: session_start) ✗ → 不再触发
+  ↓
+叙事继续 + 角色建立 + 引导选择面板
+Phase: character_creation → playing
+```
+
+#### 9.12.3 设计原则
+
+- **叙事优先**：先让玩家沉浸在故事中，再引导创建角色
+- **语境适配**：角色创建表单的内容根据开场叙事动态调整，不是通用模板
+- **Phase 驱动**：UI 根据 session phase 控制显示（init 阶段只显示开始按钮，character_creation 显示表单，playing 显示完整界面）
+- **插件协作**：narrator 负责叙事，init-wizard 负责表单，char-tracker 负责持久化，三者通过 phase 排序和 context 共享协作
+
 ## 10. 国际化架构
 
 ### 10.1 目标
@@ -708,28 +878,101 @@ Budget 说明：
 - `maxTokens` 为 best-effort 约束：runner 在每次 LLM 调用后累加 token 消耗，接近上限时截断循环，但不保证精确限制
 - 首轮优先依赖 `maxSteps` 和 `timeoutMs`
 
-### 11.1 主模型与辅助模型
+### 11.1 Model Slot 系统
 
-首轮建议区分两类模型角色：
+系统通过命名 Model Slot 实现模型路由，而非简单的主/辅二分。
 
-- `primary narrative model`
-  用于主叙事 runtime
-- `auxiliary plugin model`
-  用于插件/机制 runtime
+#### 11.1.1 内置 Slot 定义
 
-默认策略：
+首轮定义以下 Model Slot：
 
-- 若未提供辅助模型配置，插件 runtime 回退到主模型
-- 若提供辅助模型配置，插件 runtime 默认共享同一辅助模型
-- 后续可扩展到 runtime 级 providerBinding 覆盖
+| Slot ID    | 用途                           | 典型模型特征        |
+|------------|-------------------------------|-------------------|
+| `heavy`    | 主叙事、复杂推理               | 高质量、高 token 成本 |
+| `fast`     | 插件默认、轻量判断              | 低延迟、低成本       |
+| `balance`  | 裁判插件、复杂逻辑 agent        | 质量与速度平衡       |
+| `image`    | 图片生成                       | 图像模型            |
 
-建议优先级：
+#### 11.1.2 Slot 绑定规则
 
-1. request overrides
-2. run overrides
-3. runtime providerBinding
-4. project model preset
-5. app default model
+- 玩家至少必须配置一个 LLM 主模型（绑定到 `heavy` slot）
+- 未单独配置的 slot 回退到 `heavy` slot 的模型
+- `image` slot 为可选；未配置时图片生成功能不可用
+- runtime 通过 `providerBinding` 引用 slot ID（如 `"providerBinding": "fast"`）
+- 自定义 slot 允许后续扩展（如 `embed`、`tts`）
+
+#### 11.1.3 解析优先级
+
+当 runtime 需要解析实际模型时，按以下顺序：
+
+1. request-level overrides（单次请求覆盖）
+2. run-level overrides（会话级覆盖）
+3. runtime `providerBinding`（manifest 中声明的 slot ID）
+4. 默认 slot 回退链（`fast` → `heavy`，`balance` → `heavy`）
+5. 玩家配置的主模型
+
+#### 11.1.4 Preset 模板系统
+
+Preset 是预填充的模型配置模板，降低玩家配置门槛。
+
+**Preset 包含的预设字段：**
+
+- `provider`：提供商标识（如 `deepseek`、`openai`、`anthropic`、`openrouter`）
+- `baseUrl`：API 端点地址
+- `model`：模型名称
+- `protocol`：协议类型（如 `openai-chat-v1`）
+- `tier`：模型定位（`small` / `medium` / `large`）
+- `supportedModes`：支持的操作模式
+- `defaultSlot`：建议绑定的 slot（如 DeepSeek Chat 建议为 `fast`）
+- `fallbackPresetIds`：故障回退链
+
+**需要玩家填写的字段：**
+
+- `apiKey`：必填，仅存储在浏览器 localStorage，不上传服务器
+
+**玩家可选覆盖的字段：**
+
+- `baseUrl`：自定义 API 端点（适配自部署或代理）
+- `model`：自定义模型名称
+
+**自定义 Preset：**
+
+- 玩家可完全手动填写所有字段，保存为自定义 Preset
+- 自定义 Preset 存储在浏览器 localStorage
+- 可导出为 JSON 文件分享给其他玩家（不含 API key）
+- 导入时自动识别并加入 Preset 列表
+
+#### 11.1.5 高级模型参数
+
+模型参数采用"合理默认 + 可选覆盖"策略：
+
+**默认不暴露的参数（使用 provider 默认值）：**
+
+- `temperature`（OpenAI/Anthropic 默认 1.0）
+- `topP`
+- `topK`
+- `maxOutputTokens`
+- `frequencyPenalty`
+- `presencePenalty`
+
+**覆盖方式：**
+
+- 前端提供高级参数面板，按 slot 分别配置
+- 参数存储在浏览器 localStorage，随请求通过 header 传递
+- 未设置的参数不传递，完全依赖 provider 默认值
+- 参数通过 Vercel AI SDK 的 `defaultSettingsMiddleware` 注入模型实例
+
+**参数作用域：**
+
+- 全局默认参数 → slot 级覆盖 → runtime 级覆盖（未来）
+
+#### 11.1.6 API Key 安全策略
+
+- API key 仅存储在玩家浏览器的 localStorage 中
+- 每次请求通过 `X-Provider-Keys` header 以 base64 编码传递
+- 服务端在请求结束后不保留 key
+- Preset 导出时自动剥离 API key
+- 前端显示 key 时做掩码处理（仅显示前后几位）
 
 ### 11.2 插件启用集解析
 
@@ -850,6 +1093,109 @@ hook 排序规则：
 - UI 扩展仅作为体验层补充能力
 - UI 扩展应通过 locale-aware 文本源输出用户可见文本
 
+### 14.1 Schema-Driven Block 渲染系统
+
+插件通过 `ui.render` proposal 输出 UI block。前端采用三层渲染策略，实现"已知类型高质量、未知类型自动降级"。
+
+#### 14.1.1 三层渲染策略
+
+```text
+Block 到达前端
+  ↓
+1. Custom Renderer（手写 React 组件，最高质量）
+  ↓ 未命中
+2. Schema Renderer（根据 block schema 自动生成 UI）
+  ↓ 未命中
+3. Raw Fallback（JSON 原始展示）
+```
+
+| 层级 | 来源 | 质量 | 适用场景 |
+|------|------|------|---------|
+| Custom | 插件 `client/` 中注册的 React 组件 | 高 | 核心交互（角色创建、选择面板、战斗界面） |
+| Schema | 插件 `plugin.json` 中声明的 block schema | 中 | 新插件快速出 UI、长尾 block 类型 |
+| Raw | 无需声明 | 低 | 开发调试、未适配的 block |
+
+#### 14.1.2 Block Schema 声明
+
+插件在 `plugin.json` 的 `blockSchemas` 字段中声明 block 类型及其 schema：
+
+```json
+{
+  "blockSchemas": [
+    {
+      "type": "character_creation",
+      "interactive": true,
+      "meta": {
+        "displayName": { "zh-CN": "角色创建", "en-US": "Character Creation" },
+        "description": "Character creation form"
+      },
+      "dataSchema": "schemas/character-creation.json",
+      "submitSchema": "schemas/character-creation-submit.json"
+    }
+  ]
+}
+```
+
+`dataSchema` 使用 JSON Schema（可从 Zod 通过 `zod-to-json-schema` 导出），定义 block data payload 的结构。
+
+`submitSchema` 定义交互式 block 的提交值结构（可选）。
+
+#### 14.1.3 Schema Renderer 行为
+
+当 block type 命中 schema 层时：
+
+- **展示型字段**：根据 schema type 自动选择渲染组件（string → text、number → 数值、array → 列表、enum → tag）
+- **交互型 block**（`interactive: true`）：自动生成表单，字段类型由 schema 决定
+- **提交行为**：表单数据经 `submitSchema` 校验后序列化为 JSON，通过 `submit_block_response` action 发送
+
+首轮 schema renderer 基于 JSON Schema 生成 UI，不引入重型表单库。  
+后续可扩展为支持 UI Schema（字段排序、widget 选择、条件显示等）。
+
+#### 14.1.4 LLM 输出与 Block Schema 的关系
+
+插件 runtime 的 LLM 在调用 `ui.render` tool 时，tool schema 应约束输出格式。
+
+流程：
+
+1. 插件声明 `blockSchemas`，定义允许输出的 block 类型和格式
+2. 内核将 block schema 转换为 tool 的 `inputSchema`（或注入 PLUGIN.md 作为约束说明）
+3. LLM 输出结构化 JSON，conforming to schema
+4. proposal validator 校验 block data 是否符合声明的 schema
+5. 前端根据 block type + data 选择渲染层级
+
+关键原则：**LLM 决定 block 内容，schema 约束 block 结构，renderer 负责 block 展示**。
+
+#### 14.1.5 Custom Renderer 注册
+
+插件通过 `client/` 目录提供自定义 renderer（首轮为静态注册，后续支持动态加载）：
+
+```tsx
+// plugins/core-init-wizard/client/index.ts
+import { blockRegistry } from "@covel/web/blocks";
+import { CharacterCreationBlock } from "./components/character-creation";
+
+blockRegistry.registerRenderer("character_creation", CharacterCreationBlock);
+```
+
+Custom renderer 接收标准 `BlockRendererProps`：
+
+```typescript
+interface BlockRendererProps {
+  data: Record<string, unknown>;   // Block data payload
+  onSubmit: (value: string) => void; // 提交回调
+  disabled?: boolean;               // 执行中禁用交互
+}
+```
+
+#### 14.1.6 首轮内置 Custom Renderer
+
+| Block Type | 来源插件 | 说明 |
+|-----------|---------|------|
+| `choice_set` | core-guide | 选择面板 |
+| `character_creation` | core-init-wizard | 角色创建表单 |
+
+其他插件的 block（如 quest、combat、item_update 等）首轮通过 schema renderer 自动生成。
+
 ## 15. Public Plugin API
 
 插件只能依赖公开契约。
@@ -956,7 +1302,7 @@ Public Plugin API 是未来最重要的稳定边界之一。
 
 ### 19.1 Run / Session 管理
 
-首轮玩家可见的“会话切换”应映射为 `Run` 切换。  
+首轮玩家可见的”会话切换”应映射为 `Run` 切换。  
 一个项目可以拥有多个 run，每个 run 有自己的：
 
 - turn 历史
@@ -965,7 +1311,35 @@ Public Plugin API 是未来最重要的稳定边界之一。
 - runtime settings 覆盖
 - 归档与恢复记录
 
-### 19.2 存档版本与恢复模式
+### 19.2 Session Phase 状态机
+
+Run 具有显式的 phase 状态，控制 UI 行为和插件触发条件：
+
+```text
+init → character_creation → playing → ended
+  ↑         ↑                  ↑
+  │         │                  └── 玩家可主动结束或归档
+  │         └── 角色创建完成后自动转入
+  └── session 创建后的初始状态
+```
+
+| Phase | UI 行为 | 可触发的插件 |
+|-------|--------|------------|
+| `init` | 显示开始按钮、世界观预览 | 无 |
+| `character_creation` | 显示叙事 + 角色创建表单 | core-narrator（开场叙事）、core-init-wizard（角色创建） |
+| `playing` | 完整游戏界面（输入框、选择面板、状态面板） | 所有已启用插件按正常触发规则 |
+| `ended` | 只读回顾、可 fork | 无 |
+
+Phase 转换规则：
+
+- `init → character_creation`：玩家点击”开始游戏”，系统发出 `session_start` 事件
+- `character_creation → playing`：角色创建完成（char-tracker 确认角色 record 已创建）
+- `playing → ended`：玩家主动结束 或 world 结局条件触发
+- 任意 phase 均可 fork 为新 branch
+
+Phase 字段存储在 `RunDescriptor.phase` 中，每次 phase 变更通过 `event.emit` 记录。
+
+### 19.3 存档版本与恢复模式
 
 首轮建议同时支持两类恢复模式：
 
@@ -976,7 +1350,7 @@ Public Plugin API 是未来最重要的稳定边界之一。
 
 默认推荐 `fork restore`，因为它更适合叙事探索和回滚安全。
 
-### 19.3 归档摘要
+### 19.4 归档摘要
 
 除结构化 snapshot 外，首轮还应支持可选的归档摘要能力，用于：
 
@@ -985,6 +1359,68 @@ Public Plugin API 是未来最重要的稳定边界之一。
 - restore 列表的人类可读标题与摘要
 
 归档摘要不替代 snapshot，只是 snapshot 的可读视图。
+
+### 19.5 Session 导出与分享
+
+玩家可以完整备份 session 内容，随时继续、导出和分享。
+
+#### 19.5.1 导出内容
+
+完整导出包含：
+
+| 数据 | 说明 |
+|------|------|
+| `RunDescriptor` | session 元数据（phase、locale、创建时间等） |
+| `Branch[]` | 所有分支（含分支关系树） |
+| `Snapshot[]` | 所有快照点 |
+| `State` | 每个 branch 的当前状态 |
+| `Event[]` | 完整事件流（append-only 审计日志） |
+| `Record[]` | 长期知识记录（角色卡、关系、百科等） |
+| `ChatHistory` | 对话消息历史 |
+| `PluginSet` | 启用的插件列表及版本 |
+| `RuntimeSettings` | 运行时配置覆盖 |
+
+**不包含：**
+
+- API key（安全原因）
+- provider 配置（由导入方自行配置）
+- 二进制资产（图片等通过引用，首轮可选内联 base64）
+
+#### 19.5.2 导出格式
+
+```json
+{
+  “format”: “covel-session-export”,
+  “version”: “1.0”,
+  “exportedAt”: “2026-04-01T...”,
+  “worldId”: “...”,
+  “worldName”: “...”,
+  “run”: { /* RunDescriptor */ },
+  “branches”: [ /* Branch[] */ ],
+  “snapshots”: [ /* Snapshot[] */ ],
+  “state”: { /* current state entries */ },
+  “events”: [ /* Event[] */ ],
+  “records”: [ /* Record[] */ ],
+  “messages”: [ /* ChatMessage[] */ ],
+  “plugins”: { /* plugin set + versions */ },
+  “settings”: { /* runtime settings overrides */ }
+}
+```
+
+#### 19.5.3 导入与兼容
+
+- 导入时检查 world 兼容性（worldId 或 world schema 匹配）
+- 导入时检查所需插件是否已安装
+- 缺失插件给出警告但允许继续（功能降级）
+- 导入创建新 Run，不覆盖已有数据
+- 版本迁移：导出格式携带 version，导入时按需执行迁移脚本
+
+#### 19.5.4 分享场景
+
+- **存档分享**：玩家导出 session JSON，其他玩家导入继续游玩
+- **分支分享**：仅导出特定 branch 及其依赖的 snapshot 和 state
+- **回放分享**：导出事件流，其他玩家可回放观看（只读模式）
+- **Fork 分享**：从分享的 snapshot 创建新 branch，各自独立演化
 
 ## 20. 持久化底座
 
