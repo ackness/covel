@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "1.0",
+  "id": "core-char-tracker",
+  "displayName": {
+    "zh-CN": "角色追踪器",
+    "en-US": "Character Tracker"
+  },
+  "version": "0.1.0",
+  "author": "covel",
+  "description": {
+    "zh-CN": "分析叙事文本，自动识别和跟踪出场角色。",
+    "en-US": "Analyze narrative text to automatically identify and track characters."
+  },
+  "defaultLocale": "zh-CN",
+  "supportedLocales": ["zh-CN", "en-US"],
+  "loadingOrder": 40,
+  "runtimes": [
+    {
+      "id": "char-tracker",
+      "pluginId": "core-char-tracker",
+      "kind": "plugin",
+      "phase": "post_story",
+      "trigger": {
+        "mode": "event",
+        "onEvents": ["user.input"]
+      },
+      "tools": [],
+      "hooks": []
+    }
+  ]
+}

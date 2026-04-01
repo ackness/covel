@@ -58,6 +58,12 @@ pnpm db:migrate
 
 # Start dev servers (web + server)
 pnpm dev
+
+# Start only the web app
+pnpm dev:web
+
+# Start only the API server
+pnpm dev:server
 ```
 
 ### Ports

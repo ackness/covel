@@ -1,5 +1,10 @@
 import { resolve } from "node:path";
-import { createPluginHost, type PluginHost } from "@covel/plugin-runtime";
+import {
+  createPluginHost,
+  createCommandBus,
+  type PluginHost,
+  type CommandBus,
+} from "@covel/plugin-runtime";
 import { createKernel, type Kernel } from "@covel/kernel";
 import type { GatewayLike } from "@covel/runtime";
 
@@ -9,6 +14,7 @@ import type { GatewayLike } from "@covel/runtime";
 export async function initKernelStack(gateway: GatewayLike): Promise<{
   pluginHost: PluginHost;
   kernel: Kernel;
+  commandBus: CommandBus;
 }> {
   const pluginHost = createPluginHost();
 
@@ -25,6 +31,7 @@ export async function initKernelStack(gateway: GatewayLike): Promise<{
   }
 
   const kernel = createKernel({ pluginHost, gateway });
+  const commandBus = createCommandBus(pluginHost.commandRegistry);
 
-  return { pluginHost, kernel };
+  return { pluginHost, kernel, commandBus };
 }

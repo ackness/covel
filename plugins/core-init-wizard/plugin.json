@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "1.0",
+  "id": "core-init-wizard",
+  "displayName": {
+    "zh-CN": "角色初始化向导",
+    "en-US": "Character Init Wizard"
+  },
+  "version": "0.1.0",
+  "author": "covel",
+  "description": {
+    "zh-CN": "在 session_start 时弹出角色创建表单，引导用户创建角色。",
+    "en-US": "On session_start, emit a character creation form to guide the player through character setup."
+  },
+  "defaultLocale": "zh-CN",
+  "supportedLocales": ["zh-CN", "en-US"],
+  "loadingOrder": 30,
+  "runtimes": [
+    {
+      "id": "init-wizard",
+      "pluginId": "core-init-wizard",
+      "kind": "plugin",
+      "phase": "post_story",
+      "trigger": {
+        "mode": "event",
+        "onEvents": ["session_start"]
+      },
+      "tools": [],
+      "hooks": []
+    }
+  ]
+}

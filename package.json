@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "turbo dev",
+    "dev:web": "turbo dev --filter=@covel/web",
+    "dev:server": "turbo dev --filter=@covel/server",
     "build": "turbo build",
     "lint": "turbo lint",
     "clean": "turbo clean",

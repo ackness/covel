@@ -35,6 +35,7 @@
     "edit": "编辑",
     "create": "创建",
     "search": "搜索",
-    "execute": "执行"
+    "execute": "执行",
+    "newSession": "新建会话"
   }
 }

@@ -8,6 +8,7 @@ import type {
   HookHandler,
   ContextProvider,
   RuntimeHandler,
+  CommandRegistration,
 } from "../types.js";
 
 /**
@@ -22,6 +23,7 @@ function createRegistrar(): {
     hooks: new Map(),
     contextProviders: new Map(),
     runtimeHandlers: new Map(),
+    commands: [],
   };
 
   const registrar: PluginRegistrar = {
@@ -36,6 +38,9 @@ function createRegistrar(): {
     },
     addRuntimeHandler(runtimeId: string, handler: RuntimeHandler) {
       contributions.runtimeHandlers.set(runtimeId, handler);
+    },
+    addCommand(registration: CommandRegistration) {
+      contributions.commands.push(registration);
     },
   };
 

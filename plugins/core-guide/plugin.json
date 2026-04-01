@@ -2,25 +2,29 @@
   "schemaVersion": "1.0",
   "id": "core-guide",
   "displayName": {
-    "zh-CN": "引导选择",
-    "en-US": "Guide & Choices"
+    "zh-CN": "故事引导",
+    "en-US": "Story Guide"
   },
   "version": "0.1.0",
   "author": "covel",
   "description": {
-    "zh-CN": "当玩家需要结构化的下一步引导时，生成选择面板。",
-    "en-US": "When the player would benefit from structured next-step guidance, emit a choices block."
+    "zh-CN": "在用户输入后，生成结构化的下一步选择面板。依赖角色追踪器的输出。",
+    "en-US": "After user input, generate structured next-step choice panels. Depends on char-tracker output."
   },
   "defaultLocale": "zh-CN",
   "supportedLocales": ["zh-CN", "en-US"],
-  "loadingOrder": 20,
+  "loadingOrder": 50,
+  "requires": ["core-char-tracker"],
   "runtimes": [
     {
       "id": "guide",
       "pluginId": "core-guide",
       "kind": "plugin",
       "phase": "post_story",
-      "trigger": { "mode": "always" },
+      "trigger": {
+        "mode": "event",
+        "onEvents": ["user.input"]
+      },
       "tools": ["core-guide:generate-choices"],
       "hooks": []
     }
@@ -32,7 +36,19 @@
       "schema": {
         "type": "object",
         "properties": {
-          "topic": { "type": "string", "description": "The topic to generate choices for" }
+          "topic": { "type": "string", "description": "A concise description of the decision point" },
+          "options": {
+            "type": "array",
+            "description": "Custom choice options. If omitted, defaults will be used.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string", "description": "Unique option ID" },
+                "label": { "type": "string", "description": "Display text for this option" }
+              },
+              "required": ["label"]
+            }
+          }
         }
       }
     }

@@ -11,7 +11,11 @@ import { createRuntimeExecutor } from "@covel/runtime";
  * Initialize AI provider stack from TOML config.
  * Called once at server startup after dotenv is loaded.
  */
-export function createAiStack() {
+export function createAiStack(): AiStack {
+  // Ensure provider base URLs have defaults
+  process.env.DEEPSEEK_BASE_URL ??= "https://api.deepseek.com";
+  process.env.DASHSCOPE_BASE_URL ??= "https://dashscope.aliyuncs.com/compatible-mode";
+
   const config = loadAiConfig(
     resolve(import.meta.dirname, "../../../packages/ai-provider/presets/default.toml")
   );
@@ -37,4 +41,10 @@ export function createAiStack() {
   };
 }
 
-export type AiStack = ReturnType<typeof createAiStack>;
+export interface AiStack {
+  config: ReturnType<typeof loadAiConfig>;
+  providerRegistry: ReturnType<typeof createProviderRegistry>;
+  presetRegistry: ReturnType<typeof createPresetRegistry>;
+  gateway: ReturnType<typeof createGateway>;
+  executor: ReturnType<typeof createRuntimeExecutor>;
+}

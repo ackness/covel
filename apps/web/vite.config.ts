@@ -22,6 +22,34 @@ export default defineConfig({
         target: "http://localhost:3001",
         changeOrigin: true,
       },
+      "/worlds": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+      "/sessions": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+      "/actions": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+      "/commands": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+      "/packages": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+      "/presets": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+      "/health": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
     },
   },
 });

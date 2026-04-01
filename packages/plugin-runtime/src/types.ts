@@ -92,6 +92,25 @@ export interface RegisteredContextProvider {
   handler: ContextProvider;
 }
 
+/** Command handler function for slash commands. */
+export type CommandHandlerFn = (
+  args: unknown,
+  context: Record<string, unknown>
+) => unknown | Promise<unknown>;
+
+/** Command registration info from a plugin. */
+export interface CommandRegistration {
+  name: string;
+  description: string;
+  handler: CommandHandlerFn;
+  argsSchema?: { safeParse(data: unknown): unknown };
+  help?: { usage: string; examples?: string[] };
+  autocomplete?: {
+    positionalHints?: string[];
+    flagHints?: Array<{ name: string; description: string; takesValue: boolean }>;
+  };
+}
+
 /**
  * Interface injected into plugin server/index.ts register() function.
  * Plugins use this to register their contributions.
@@ -101,6 +120,7 @@ export interface PluginRegistrar {
   addHook(id: string, handler: HookHandler): void;
   addContextProvider(id: string, handler: ContextProvider): void;
   addRuntimeHandler(runtimeId: string, handler: RuntimeHandler): void;
+  addCommand(registration: CommandRegistration): void;
 }
 
 /** Contribution map collected from a plugin's register() call. */
@@ -109,6 +129,7 @@ export interface ContributionMap {
   hooks: Map<string, HookHandler>;
   contextProviders: Map<string, ContextProvider>;
   runtimeHandlers: Map<string, RuntimeHandler>;
+  commands: CommandRegistration[];
 }
 
 /** Plugin server module default export signature. */

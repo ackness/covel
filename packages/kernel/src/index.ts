@@ -18,6 +18,7 @@ export { buildExecutionPlan } from "./scheduler/runtime-scheduler.js";
 
 // ── Context ─────────────────────────────────────────────────────────
 export { assembleContext, type ContextAssemblyInput } from "./context/context-assembler.js";
+export { gatherContextFragments, type ContextFragment } from "./context/context-provider-bridge.js";
 
 // ── Runner ──────────────────────────────────────────────────────────
 export { runRuntime, type RuntimeRunnerDeps, type RuntimeRunResult } from "./runner/runtime-runner.js";

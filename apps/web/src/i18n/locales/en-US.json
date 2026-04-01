@@ -35,6 +35,7 @@
     "edit": "Edit",
     "create": "Create",
     "search": "Search",
-    "execute": "Execute"
+    "execute": "Execute",
+    "newSession": "New Session"
   }
 }

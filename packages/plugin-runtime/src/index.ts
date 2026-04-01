@@ -17,6 +17,8 @@ export type {
   RuntimeHandler,
   RuntimeHandlerContext,
   RuntimeHandlerResult,
+  CommandHandlerFn,
+  CommandRegistration,
 } from "./types.js";
 
 // ── Loader ─────────────────────────────────────────────────────────
@@ -33,6 +35,22 @@ export {
   type RuntimeRegistry,
   type RegisteredRuntime,
 } from "./registry/runtime-registry.js";
+
+// ── Commands ───────────────────────────────────────────────────────
+export {
+  createCommandRegistry,
+  type CommandRegistry,
+  type RegisteredCommand,
+  type CommandSummary,
+  type CommandExecutionContext,
+  type CommandHandler,
+  type CommandHelpMeta,
+  type CommandAutocompleteMeta,
+  type CommandFlagHint,
+} from "./command/command-registry.js";
+export { createCommandBus, type CommandBus, type CommandResult } from "./command/command-bus.js";
+export { parseSlashCommand, type ParsedSlashCommand, type ParsedSlashArgs } from "./command/parser.js";
+export { CommandError, type CommandErrorCode, type CommandIssue } from "./command/error.js";
 
 // ── Host ───────────────────────────────────────────────────────────
 export { createPluginHost, type PluginHost } from "./host/plugin-host.js";

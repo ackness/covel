@@ -5,6 +5,7 @@ import { routeTrigger } from "./router/trigger-router.js";
 import { buildExecutionPlan } from "./scheduler/runtime-scheduler.js";
 import { assembleContext } from "./context/context-assembler.js";
 import { runRuntime } from "./runner/runtime-runner.js";
+import { gatherContextFragments } from "./context/context-provider-bridge.js";
 import { createProposalCollector } from "./proposals/proposal-collector.js";
 import { validateProposals } from "./proposals/proposal-validator.js";
 import { commitProposals } from "./commit/commit-service.js";
@@ -85,7 +86,7 @@ export function createKernel(deps: KernelDeps) {
     }
     const plan = buildExecutionPlan(candidates, pluginDeps);
 
-    // 3-5. Execute groups sequentially, runtimes within a group in parallel
+    // 3-6. Execute groups sequentially, runtimes within a group in parallel
     const collector = createProposalCollector({
       runId: input.runId,
       branchId: input.branchId,
@@ -118,7 +119,20 @@ export function createKernel(deps: KernelDeps) {
             archive: kernelContext.archive,
           });
 
-          // 4. Run the runtime
+          // 4. Gather context fragments from registered providers
+          const contextFragments = await gatherContextFragments(
+            deps.pluginHost.contextProviders,
+            {
+              pluginId: scheduled.registered.pluginId,
+              runtimeId: scheduled.registered.spec.id,
+              locale,
+              state: turnState.state,
+              world: kernelContext.world,
+              characters: kernelContext.characters,
+            }
+          );
+
+          // 5. Run the runtime
           const result = await runRuntime(
             {
               gateway: deps.gateway,
@@ -130,10 +144,11 @@ export function createKernel(deps: KernelDeps) {
             {
               apiKeys: options.apiKeys,
               traceId,
+              contextFragments,
             }
           );
 
-          // 5. Collect proposals
+          // 6. Collect proposals
           collector.addFromRuntime(
             scheduled.registered.spec.id,
             scheduled.registered.pluginId,
@@ -179,7 +194,7 @@ export function createKernel(deps: KernelDeps) {
       }
     }
 
-    // 6. Validate proposals
+    // 7. Validate proposals
     const allProposals = collector.getAll();
     const { valid, rejected } = validateProposals(allProposals);
 
@@ -190,7 +205,7 @@ export function createKernel(deps: KernelDeps) {
       );
     }
 
-    // 7. Commit — reset eagerly-applied state and rebuild from validated proposals
+    // 8. Commit — reset eagerly-applied state and rebuild from validated proposals
     turnState.narrativeSegments = [];
     turnState.state = { ...kernelContext.state };
     turnState.records = new Map();
@@ -205,7 +220,7 @@ export function createKernel(deps: KernelDeps) {
     // Update kernel state with committed changes
     kernelContext.state = { ...turnState.state };
 
-    // 8. Render
+    // 9. Render
     const render = buildRenderResult(turnState);
 
     return {

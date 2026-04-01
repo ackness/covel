@@ -6,6 +6,7 @@ import { createPluginRegistry, type PluginRegistry } from "../registry/plugin-re
 import { createToolRegistry, type ToolRegistry } from "../registry/tool-registry.js";
 import { createHookRegistry, type HookRegistry } from "../registry/hook-registry.js";
 import { createRuntimeRegistry, type RuntimeRegistry } from "../registry/runtime-registry.js";
+import { createCommandRegistry, type CommandRegistry } from "../command/command-registry.js";
 import type { LoadedPlugin, RegisteredContextProvider, ContextProvider } from "../types.js";
 
 export interface PluginHost {
@@ -13,6 +14,7 @@ export interface PluginHost {
   toolRegistry: ToolRegistry;
   hookRegistry: HookRegistry;
   runtimeRegistry: RuntimeRegistry;
+  commandRegistry: CommandRegistry;
   contextProviders: Map<string, RegisteredContextProvider>;
 
   /** Scan, validate, load, and register all plugins from a directory. */
@@ -28,6 +30,7 @@ export function createPluginHost(): PluginHost {
   const toolRegistry = createToolRegistry();
   const hookRegistry = createHookRegistry();
   const runtimeRegistry = createRuntimeRegistry();
+  const commandRegistry = createCommandRegistry();
   const contextProviders = new Map<string, RegisteredContextProvider>();
 
   async function loadFromDirectory(baseDir: string): Promise<LoadedPlugin[]> {
@@ -130,6 +133,23 @@ export function createPluginHost(): PluginHost {
             // Runtime not registered in manifest, skip
           }
         }
+
+        // Register commands
+        for (const cmdReg of contributions.commands) {
+          try {
+            commandRegistry.register({
+              name: cmdReg.name,
+              pluginId: manifest.id,
+              description: cmdReg.description,
+              handler: cmdReg.handler,
+              argsSchema: cmdReg.argsSchema as any,
+              help: cmdReg.help,
+              autocomplete: cmdReg.autocomplete,
+            });
+          } catch {
+            // Duplicate command name, skip
+          }
+        }
       }
 
       loaded.push(plugin);
@@ -143,6 +163,7 @@ export function createPluginHost(): PluginHost {
     toolRegistry,
     hookRegistry,
     runtimeRegistry,
+    commandRegistry,
     contextProviders,
     loadFromDirectory,
   };

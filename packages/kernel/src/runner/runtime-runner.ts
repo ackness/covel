@@ -8,6 +8,7 @@ import type {
 import type { GatewayLike, RuntimeExecutorInput } from "@covel/runtime";
 import { createRuntimeExecutor } from "@covel/runtime";
 import { executeTool } from "../tools/tool-executor.js";
+import type { ContextFragment } from "../context/context-provider-bridge.js";
 
 export interface RuntimeRunnerDeps {
   gateway: GatewayLike;
@@ -26,12 +27,20 @@ export interface RuntimeRunResult {
  *
  * If the runtime has a registered handler, use it directly (no LLM).
  * Otherwise, call the LLM via the gateway.
+ *
+ * Context fragments from providers are prepended to the instructions
+ * so plugins like core-persona can inject narrator persona and world
+ * context into the LLM prompt.
  */
 export async function runRuntime(
   deps: RuntimeRunnerDeps,
   runtime: RegisteredRuntime,
   context: RuntimeContextView,
-  options: { apiKeys?: Record<string, string>; traceId?: string }
+  options: {
+    apiKeys?: Record<string, string>;
+    traceId?: string;
+    contextFragments?: ContextFragment[];
+  }
 ): Promise<RuntimeRunResult> {
   // Load instructions if available
   let instructions: string | undefined;
@@ -41,6 +50,16 @@ export async function runRuntime(
     } catch {
       // Instructions file not readable, continue without
     }
+  }
+
+  // Prepend context fragments from providers (sorted by priority)
+  if (options.contextFragments && options.contextFragments.length > 0) {
+    const fragmentText = options.contextFragments
+      .map((f) => f.content)
+      .join("\n\n");
+    instructions = instructions
+      ? `${fragmentText}\n\n${instructions}`
+      : fragmentText;
   }
 
   // ── Custom handler path (no LLM) ───────────────────────────────
