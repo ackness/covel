@@ -1,5 +1,24 @@
 // ── Kernel ──────────────────────────────────────────────────────────
-export { createKernel, type Kernel, type KernelDeps, type KernelContext } from "./kernel.js";
+export {
+  bootstrapKernel,
+  createKernel,
+  type KernelBootstrapConfig,
+  type KernelInstance,
+  type KernelSession,
+  type Kernel,
+  type KernelDeps,
+  type KernelContext,
+} from "./kernel.js";
+
+// ── Trust ──────────────────────────────────────────────────────────
+export {
+  createPermissiveTrustPolicy,
+  type TrustPolicy,
+  type TrustDecision,
+  type RuntimeTrustContext,
+  type ToolTrustContext,
+  type ProposalTrustContext,
+} from "./trust/trust-policy.js";
 
 // ── Types ───────────────────────────────────────────────────────────
 export type {

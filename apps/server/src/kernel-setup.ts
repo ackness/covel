@@ -5,17 +5,27 @@ import {
   type PluginHost,
   type CommandBus,
 } from "@covel/plugin-runtime";
-import { createKernel, type Kernel } from "@covel/kernel";
+import {
+  bootstrapKernel,
+  type Kernel,
+  type KernelInstance,
+  type KernelSession,
+} from "@covel/kernel";
 import type { GatewayLike } from "@covel/runtime";
 
-/**
- * Initialize the kernel stack: load plugins and create the kernel.
- */
-export async function initKernelStack(gateway: GatewayLike): Promise<{
+export interface KernelStack {
   pluginHost: PluginHost;
+  /** Bootstrap-level kernel instance (shared infra). */
+  instance: KernelInstance;
+  /** Default session (backward-compat — used by routes that don't manage sessions). */
   kernel: Kernel;
   commandBus: CommandBus;
-}> {
+}
+
+/**
+ * Initialize the kernel stack: load plugins and bootstrap the kernel.
+ */
+export async function initKernelStack(gateway: GatewayLike): Promise<KernelStack> {
   const pluginHost = createPluginHost();
 
   // Load plugins from the plugins/ directory
@@ -30,8 +40,17 @@ export async function initKernelStack(gateway: GatewayLike): Promise<{
     console.warn("[kernel-setup] Failed to load plugins:", err);
   }
 
-  const kernel = createKernel({ pluginHost, gateway });
+  // Bootstrap kernel instance (shared infra)
+  const instance = bootstrapKernel({ pluginHost, gateway });
+
+  // Create a default session for backward-compat routes
+  const defaultSession = instance.createSession();
+  const kernel: Kernel = {
+    executeTurn: defaultSession.executeTurn,
+    setContext: defaultSession.setContext,
+  };
+
   const commandBus = createCommandBus(pluginHost.commandRegistry);
 
-  return { pluginHost, kernel, commandBus };
+  return { pluginHost, instance, kernel, commandBus };
 }
