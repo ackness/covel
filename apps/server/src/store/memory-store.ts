@@ -47,11 +47,28 @@ function humanSessionId(): string {
   return `${words}-${hex}`;
 }
 
+/** A recorded SSE event for trace inspection. */
+export interface TraceEvent {
+  type: string;
+  requestId: string;
+  traceId: string;
+  sessionId: string;
+  turnId: string;
+  flowId: string;
+  seq: number;
+  timestamp: string;
+  payload: Record<string, unknown>;
+}
+
+/** Max trace events kept per session (ring buffer). */
+const MAX_TRACE_EVENTS_PER_SESSION = 2000;
+
 export function createMemoryStore() {
   const worlds = new Map<string, WorldRecord>();
   const sessions = new Map<string, SessionRecord>();
   const messages = new Map<string, MessageRecord[]>(); // sessionId → messages
   const characters = new Map<string, CharacterCard>();
+  const traceEvents = new Map<string, TraceEvent[]>(); // sessionId → events
 
   // ── Worlds ──────────────────────────────────────────────────────
 
@@ -202,6 +219,22 @@ export function createMemoryStore() {
     return updated;
   }
 
+  // ── Trace Events ────────────────────────────────────────────────
+
+  function addTraceEvent(sessionId: string, event: TraceEvent): void {
+    const list = traceEvents.get(sessionId) ?? [];
+    list.push(event);
+    // Ring buffer: drop oldest when exceeding max
+    if (list.length > MAX_TRACE_EVENTS_PER_SESSION) {
+      list.splice(0, list.length - MAX_TRACE_EVENTS_PER_SESSION);
+    }
+    traceEvents.set(sessionId, list);
+  }
+
+  function listTraceEvents(sessionId: string): TraceEvent[] {
+    return traceEvents.get(sessionId) ?? [];
+  }
+
   // ── Seed preset worlds ──────────────────────────────────────────
   for (const seed of SEED_WORLDS) {
     createWorld(seed.name, seed.description, { lore: seed.lore, tags: seed.tags });
@@ -222,6 +255,8 @@ export function createMemoryStore() {
     getCharacter,
     getSessionCharacters,
     updateCharacter,
+    addTraceEvent,
+    listTraceEvents,
   };
 }
 

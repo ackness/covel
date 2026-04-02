@@ -632,6 +632,38 @@ export function removeWorldOverlay(worldId: string): void {
   localStorage.removeItem(`${WORLD_OVERLAY_KEY_PREFIX}${worldId}`);
 }
 
+// ── Trace API ────────────────────────────────────────────────────
+
+export interface TraceEvent {
+  type: string;
+  requestId: string;
+  traceId: string;
+  sessionId: string;
+  turnId: string;
+  flowId: string;
+  seq: number;
+  timestamp: string;
+  payload: Record<string, unknown>;
+}
+
+export interface TurnTrace {
+  turnId: string;
+  flowId: string;
+  traceId: string;
+  startedAt: string;
+  completedAt: string;
+  eventCount: number;
+  events: TraceEvent[];
+}
+
+export async function fetchTraceEvents(sessionId: string): Promise<{ sessionId: string; count: number; events: TraceEvent[] }> {
+  return request(`/api/traces/${encodeURIComponent(sessionId)}`);
+}
+
+export async function fetchTraceTurns(sessionId: string): Promise<{ sessionId: string; turnCount: number; turns: TurnTrace[] }> {
+  return request(`/api/traces/${encodeURIComponent(sessionId)}/turns`);
+}
+
 // ── Helpers ───────────────────────────────────────────────────────
 
 export function uid(): string {

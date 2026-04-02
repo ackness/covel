@@ -96,8 +96,11 @@ app.route("/api/model-db", createModelDbRoute(ai.modelDb));
 // Health check at root too
 app.route("/health", healthRoute);
 
-// Stubs for endpoints the frontend may call
-app.get("/traces", (c) => c.json([]));
+// Trace event inspection API
+import { createTracesRoute } from "./routes/traces.js";
+app.route("/api/traces", createTracesRoute(store));
+
+// Stubs for legacy endpoints
 app.get("/archives", (c) => c.json([]));
 
 // ── Static file serving (production) ───────────────────────────────

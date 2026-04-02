@@ -131,6 +131,8 @@ export function createActionsRoute(deps: {
 
       async function emit(eventType: string, turnId: string, traceId: string, eventPayload: Record<string, unknown>) {
         const env = envelope(eventType, turnId, traceId, eventPayload);
+        // Record to trace event log for debug inspection
+        store.addTraceEvent(sessionId, env);
         await stream.writeSSE({
           data: JSON.stringify(env),
           event: env.type,
