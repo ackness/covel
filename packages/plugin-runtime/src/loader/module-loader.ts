@@ -79,7 +79,13 @@ export async function loadPluginModule(
     return null;
   }
 
-  const mod = (await import(modulePath)) as PluginServerModule;
+  let mod: PluginServerModule;
+  try {
+    mod = (await import(modulePath)) as PluginServerModule;
+  } catch (err) {
+    console.warn(`[module-loader] Failed to import plugin module at ${modulePath}:`, err);
+    return null;
+  }
 
   if (typeof mod.default !== "function") {
     throw new Error(

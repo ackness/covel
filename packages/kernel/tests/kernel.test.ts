@@ -14,12 +14,12 @@ function createStubGateway(): GatewayLike {
       };
     },
     async *streamText() {
-      yield { type: "text-delta" as const, textDelta: "Hello " };
-      yield { type: "text-delta" as const, textDelta: "world" };
+      yield { type: "text-delta" as const, textDelta: "The hero bravely " };
+      yield { type: "text-delta" as const, textDelta: "stepped forward." };
       yield {
         type: "done" as const,
         finishReason: "stop",
-        usage: { inputTokens: 10, outputTokens: 5 },
+        usage: { inputTokens: 50, outputTokens: 20 },
       };
     },
   };

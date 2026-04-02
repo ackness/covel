@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "turbo dev",
-    "dev:web": "turbo dev --filter=@covel/web",
-    "dev:server": "turbo dev --filter=@covel/server",
+    "dev": "node ./scripts/dev-supervisor.mjs turbo dev",
+    "dev:web": "node ./scripts/dev-supervisor.mjs turbo dev --filter=@covel/web",
+    "dev:server": "node ./scripts/dev-supervisor.mjs turbo dev --filter=@covel/server",
     "build": "turbo build",
     "lint": "turbo lint",
     "clean": "turbo clean",

@@ -1,5 +1,14 @@
 import type { KernelProposalEnvelope, KernelProposalItem } from "@covel/shared";
 
+const VALID_KINDS: ReadonlySet<KernelProposalItem["kind"]> = new Set([
+  "narrative.append",
+  "state.patch",
+  "event.emit",
+  "record.upsert",
+  "ui.render",
+  "asset.generate",
+]);
+
 /**
  * Collect and normalize proposals from runtime executions into envelopes.
  */
@@ -21,10 +30,21 @@ export function createProposalCollector(turnContext: {
   ): void {
     if (proposals.length === 0) return;
 
-    const items: KernelProposalItem[] = proposals.map((p) => ({
-      kind: p.kind as KernelProposalItem["kind"],
-      payload: p.payload,
-    }));
+    const items: KernelProposalItem[] = [];
+    for (const p of proposals) {
+      if (!VALID_KINDS.has(p.kind as KernelProposalItem["kind"])) {
+        console.warn(
+          `[proposal-collector] Skipping proposal with invalid kind "${p.kind}" from runtime "${runtimeId}" (plugin "${pluginId}")`
+        );
+        continue;
+      }
+      items.push({
+        kind: p.kind as KernelProposalItem["kind"],
+        payload: p.payload,
+      });
+    }
+
+    if (items.length === 0) return;
 
     envelopes.push({
       proposalId: `prop-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,

@@ -1,10 +1,17 @@
 import type { CharacterCard, KernelInput, KernelTurnResult } from "@covel/shared";
 import type { PluginHost } from "@covel/plugin-runtime";
+import {
+  createSessionPluginScope,
+  createScopedRuntimeRegistry,
+  createScopedToolRegistry,
+  createScopedHookRegistry,
+  createScopedContextProviders,
+  type SessionPluginScope,
+} from "@covel/plugin-runtime";
 import type { GatewayLike } from "@covel/runtime";
 import {
   createTurnContextStore,
   buildContextView,
-  assemblePrompt,
   type RuntimeInfo,
   type ContextFragment,
 } from "@covel/context";
@@ -17,7 +24,9 @@ import { createProposalCollector } from "./proposals/proposal-collector.js";
 import { validateProposals } from "./proposals/proposal-validator.js";
 import { commitProposals } from "./commit/commit-service.js";
 import { buildRenderResult } from "./render/render-builder.js";
+import { executeHooks } from "./hooks/hook-executor.js";
 import type { TurnState, KernelExecuteOptions, KernelProgressEvent, BackgroundTask } from "./types.js";
+import { DEFAULT_RUNTIME_PRIORITY, DEFAULT_BACKGROUND_THRESHOLD } from "./types.js";
 import { createBackgroundTaskManager } from "./background/background-task-manager.js";
 import {
   createPermissiveTrustPolicy,
@@ -67,14 +76,33 @@ export interface KernelContext {
  * (plugin registries, gateway, trust policy). Call `createSession()`
  * on the returned instance for per-session state.
  */
+export interface CreateSessionOptions {
+  /** Initial kernel context (game state, world, etc.). */
+  initialContext?: Partial<KernelContext>;
+  /** Plugin IDs to activate. Defaults to all enabled plugins. */
+  activePlugins?: readonly string[];
+  /**
+   * Per-runtime priority overrides keyed by qualified runtime ID
+   * ("pluginId:runtimeId"). Allows users to adjust runtime execution
+   * order without modifying plugin manifests.
+   */
+  runtimePriorityOverrides?: Record<string, number>;
+}
+
 export function bootstrapKernel(config: KernelBootstrapConfig): KernelInstance {
   const { pluginHost, gateway } = config;
   const trustPolicy = config.trustPolicy ?? createPermissiveTrustPolicy();
 
-  function createSession(initialContext?: Partial<KernelContext>): KernelSession {
+  function createSession(optionsOrContext?: CreateSessionOptions | Partial<KernelContext>): KernelSession {
+    // Backward-compat: accept plain context object
+    const opts: CreateSessionOptions =
+      optionsOrContext && ("initialContext" in optionsOrContext || "activePlugins" in optionsOrContext)
+        ? optionsOrContext as CreateSessionOptions
+        : { initialContext: optionsOrContext as Partial<KernelContext> | undefined };
+
     return createKernelSession(
       { pluginHost, gateway, trustPolicy },
-      initialContext,
+      opts,
     );
   }
 
@@ -87,8 +115,8 @@ export function bootstrapKernel(config: KernelBootstrapConfig): KernelInstance {
 }
 
 export interface KernelInstance {
-  /** Create a new session with isolated context. */
-  createSession(initialContext?: Partial<KernelContext>): KernelSession;
+  /** Create a new session with isolated context and optional plugin scope. */
+  createSession(options?: CreateSessionOptions | Partial<KernelContext>): KernelSession;
   /** Shared plugin host (read-only access to registries). */
   readonly pluginHost: PluginHost;
   /** Shared AI gateway. */
@@ -104,6 +132,16 @@ export interface KernelSession {
   setContext(ctx: Partial<KernelContext>): void;
   /** Read current session context (snapshot). */
   getContext(): Readonly<KernelContext>;
+  /** Enable a plugin for this session. Takes effect on next turn. */
+  enablePlugin(pluginId: string): void;
+  /** Disable a plugin for this session. Takes effect on next turn. */
+  disablePlugin(pluginId: string): void;
+  /** List active plugin IDs in this session. */
+  listActivePlugins(): readonly string[];
+  /** List all available (globally loaded) plugin IDs. */
+  listAvailablePlugins(): readonly string[];
+  /** The underlying plugin scope for this session. */
+  readonly pluginScope: SessionPluginScope;
 }
 
 // ── Backward-compat wrapper ────────────────────────────────────────
@@ -126,6 +164,28 @@ export type Kernel = {
   setContext: KernelSession["setContext"];
 };
 
+// ── Locale resolution ─────────────────────────────────────────────
+
+/** Resolve locale with 4-level fallback: input → run → world → app default */
+function resolveLocale(
+  inputLocale: string | undefined,
+  ctx: KernelContext
+): string {
+  if (inputLocale) return inputLocale;
+
+  // Try run.defaultLocale from runtimeSettings
+  const runLocale = ctx.runtimeSettings?.flat?.defaultLocale;
+  if (typeof runLocale === "string" && runLocale) return runLocale;
+
+  // Try world.defaultLocale
+  if (ctx.world && typeof ctx.world === "object" && "defaultLocale" in ctx.world) {
+    const worldLocale = (ctx.world as Record<string, unknown>).defaultLocale;
+    if (typeof worldLocale === "string" && worldLocale) return worldLocale;
+  }
+
+  return "zh-CN";
+}
+
 // ── Session implementation ─────────────────────────────────────────
 
 interface ResolvedDeps {
@@ -136,9 +196,25 @@ interface ResolvedDeps {
 
 function createKernelSession(
   deps: ResolvedDeps,
-  initialContext?: Partial<KernelContext>,
+  opts?: CreateSessionOptions,
 ): KernelSession {
-  let kernelContext: KernelContext = { ...initialContext };
+  let kernelContext: KernelContext = { ...opts?.initialContext };
+
+  // Turn counter for interval-based runtime gating
+  let turnCounter = 0;
+
+  // Per-runtime priority overrides (user-adjustable execution order)
+  const priorityOverrides: Record<string, number> = { ...opts?.runtimePriorityOverrides };
+
+  // Session-scoped plugin activation
+  const scope = createSessionPluginScope(
+    deps.pluginHost.pluginRegistry,
+    opts?.activePlugins,
+  );
+  const scopedRuntimes = createScopedRuntimeRegistry(deps.pluginHost.runtimeRegistry, scope);
+  const scopedTools = createScopedToolRegistry(deps.pluginHost.toolRegistry, scope);
+  const scopedHooks = createScopedHookRegistry(deps.pluginHost.hookRegistry, scope);
+  const scopedContextProviders = createScopedContextProviders(deps.pluginHost.contextProviders, scope);
 
   function setContext(ctx: Partial<KernelContext>): void {
     kernelContext = { ...kernelContext, ...ctx };
@@ -166,7 +242,10 @@ function createKernelSession(
   ): Promise<KernelTurnResult> {
     const turnId = `turn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const traceId = options.traceId ?? `trace-${Date.now()}`;
-    const locale = input.locale ?? "zh-CN";
+    const locale = resolveLocale(input.locale, kernelContext);
+
+    // Increment session-level turn counter for interval gating
+    turnCounter += 1;
 
     // Initialize TurnContextStore
     const contextStore = createTurnContextStore();
@@ -192,16 +271,40 @@ function createKernelSession(
       renderBlocks: [],
     };
 
-    // 1. Trigger routing
-    const allRuntimes = deps.pluginHost.runtimeRegistry.listAll();
-    const { candidates } = routeTrigger(input, allRuntimes);
-
-    // 2. Build execution plan (priority-based)
-    const pluginDeps = new Map<string, string[]>();
-    for (const plugin of deps.pluginHost.pluginRegistry.listEnabled()) {
-      pluginDeps.set(plugin.manifest.id, plugin.manifest.requires ?? []);
+    // ── TurnStart hooks ──────────────────────────────────────────
+    const turnStartResult = await executeHooks(scopedHooks, {
+      event: "TurnStart",
+      turnId,
+      runId: input.runId,
+      branchId: input.branchId,
+      locale,
+    });
+    if (!turnStartResult.allowed) {
+      return {
+        runId: input.runId,
+        branchId: input.branchId,
+        turnId,
+        traceId,
+        locale,
+        proposals: [],
+        render: { blocks: [] },
+        followUpEvents: [],
+      };
     }
-    const plan = buildExecutionPlan(candidates, pluginDeps);
+
+    // 1. Trigger routing (scoped to active plugins)
+    const allRuntimes = scopedRuntimes.listAll();
+    const { candidates } = routeTrigger(input, allRuntimes, turnCounter);
+
+    // 2. Build execution plan (priority-based, scoped deps)
+    const pluginDeps = new Map<string, string[]>();
+    for (const pluginId of scope.listActive()) {
+      const plugin = deps.pluginHost.pluginRegistry.get(pluginId);
+      if (plugin) {
+        pluginDeps.set(plugin.manifest.id, plugin.manifest.requires ?? []);
+      }
+    }
+    const plan = buildExecutionPlan(candidates, pluginDeps, priorityOverrides);
 
     // 3-6. Execute groups sequentially, runtimes within a group in parallel
     const collector = createProposalCollector({
@@ -217,7 +320,7 @@ function createKernelSession(
       }
     };
 
-    const backgroundThreshold = options.backgroundThreshold ?? 800;
+    const backgroundThreshold = Math.max(0, Math.min(1000, options.backgroundThreshold ?? DEFAULT_BACKGROUND_THRESHOLD));
     const backgroundManager = createBackgroundTaskManager(options.onBackgroundTaskDone);
     const backgroundTasks: BackgroundTask[] = [];
 
@@ -247,6 +350,12 @@ function createKernelSession(
             continue;
           }
 
+          // Snapshot mutable turn state at enqueue time so the background
+          // closure does not read stale/reset data after foreground completes.
+          const snapshotState = { ...turnState.state };
+          const snapshotEvents = [...turnState.events];
+          const snapshotRecords = new Map(turnState.records);
+
           const task = backgroundManager.enqueue(
             spec.id,
             runtime.pluginId,
@@ -256,7 +365,7 @@ function createKernelSession(
                 runtimeId: spec.id,
                 pluginId: runtime.pluginId,
                 kind: spec.kind,
-                priority: spec.priority ?? 500,
+                priority: spec.priority ?? DEFAULT_RUNTIME_PRIORITY,
                 allowedTools: spec.tools,
                 providerBinding: spec.providerBinding,
                 budget: spec.budget,
@@ -265,7 +374,7 @@ function createKernelSession(
 
               const context = buildContextView(contextStore, runtimeInfo);
               const contextFragments = await gatherContextFragments(
-                deps.pluginHost.contextProviders,
+                scopedContextProviders,
                 {
                   pluginId: runtime.pluginId,
                   runtimeId: spec.id,
@@ -283,10 +392,18 @@ function createKernelSession(
                 priority: f.priority,
               }));
 
+              const snapshotTurnState: TurnState = {
+                state: snapshotState,
+                events: snapshotEvents,
+                records: snapshotRecords,
+                narrativeSegments: [...turnState.narrativeSegments],
+                renderBlocks: [...turnState.renderBlocks],
+              };
+
               const dataAccess = createPluginDataAccess({
-                turnState,
+                turnState: snapshotTurnState,
                 characters: kernelContext.characters ?? [],
-                events: turnState.events.map((e) => ({
+                events: snapshotEvents.map((e) => ({
                   eventType: (e as Record<string, unknown>).eventType as string,
                   data: (e as Record<string, unknown>).data as Record<string, unknown> | undefined,
                 })),
@@ -300,8 +417,8 @@ function createKernelSession(
               const result = await runRuntime(
                 {
                   gateway: deps.gateway,
-                  toolRegistry: deps.pluginHost.toolRegistry,
-                  hookRegistry: deps.pluginHost.hookRegistry,
+                  toolRegistry: scopedTools,
+                  hookRegistry: scopedHooks,
                 },
                 runtime,
                 context,
@@ -311,6 +428,7 @@ function createKernelSession(
                   contextFragments: fragments,
                   dataAccess,
                   resolvedPresetId,
+                  onProgress: emitProgress,
                 }
               );
 
@@ -348,7 +466,7 @@ function createKernelSession(
               type: "runtime.failed",
               runtimeId: spec.id,
               pluginId: runtime.pluginId,
-              label: spec.kind,
+              label: `${runtime.pluginId}/${spec.kind}`,
               detail: `Blocked by trust policy: ${decision.reason ?? "denied"}`,
             });
             return;
@@ -358,7 +476,7 @@ function createKernelSession(
             type: "runtime.started",
             runtimeId: spec.id,
             pluginId: runtime.pluginId,
-            label: spec.kind,
+            label: `${runtime.pluginId}/${spec.kind}`,
             detail: spec.providerBinding,
           });
 
@@ -367,7 +485,7 @@ function createKernelSession(
             runtimeId: spec.id,
             pluginId: runtime.pluginId,
             kind: spec.kind,
-            priority: spec.priority ?? 500,
+            priority: spec.priority ?? DEFAULT_RUNTIME_PRIORITY,
             allowedTools: spec.tools,
             providerBinding: spec.providerBinding,
             budget: spec.budget,
@@ -376,7 +494,7 @@ function createKernelSession(
 
           // Gather context fragments from registered providers
           const contextFragments = await gatherContextFragments(
-            deps.pluginHost.contextProviders,
+            scopedContextProviders,
             {
               pluginId: runtime.pluginId,
               runtimeId: spec.id,
@@ -421,7 +539,7 @@ function createKernelSession(
               type: "llm.calling",
               runtimeId: spec.id,
               pluginId: runtime.pluginId,
-              label: spec.kind,
+              label: `${runtime.pluginId}/${spec.kind}`,
               detail: resolvedPresetId ?? spec.providerBinding,
             });
           }
@@ -430,8 +548,8 @@ function createKernelSession(
           const result = await runRuntime(
             {
               gateway: deps.gateway,
-              toolRegistry: deps.pluginHost.toolRegistry,
-              hookRegistry: deps.pluginHost.hookRegistry,
+              toolRegistry: scopedTools,
+              hookRegistry: scopedHooks,
             },
             runtime,
             context,
@@ -441,6 +559,7 @@ function createKernelSession(
               contextFragments: fragments,
               dataAccess,
               resolvedPresetId,
+              onProgress: emitProgress,
             }
           );
 
@@ -448,7 +567,7 @@ function createKernelSession(
             type: "runtime.completed",
             runtimeId: spec.id,
             pluginId: runtime.pluginId,
-            label: spec.kind,
+            label: `${runtime.pluginId}/${spec.kind}`,
           });
 
           // Collect proposals
@@ -471,7 +590,7 @@ function createKernelSession(
                 break;
               }
               case "state.patch": {
-                Object.assign(turnState.state, item.payload as Record<string, unknown>);
+                turnState.state = { ...turnState.state, ...(item.payload as Record<string, unknown>) };
                 break;
               }
               case "record.upsert": {
@@ -495,7 +614,7 @@ function createKernelSession(
               type: "runtime.failed",
               runtimeId: failedScheduled.registered.spec.id,
               pluginId: failedScheduled.registered.pluginId,
-              label: failedScheduled.registered.spec.kind,
+              label: `${failedScheduled.registered.pluginId}/${failedScheduled.registered.spec.kind}`,
               detail: result.reason instanceof Error ? result.reason.message : String(result.reason),
             });
           }
@@ -514,6 +633,16 @@ function createKernelSession(
       );
     }
 
+    // ── PreStateCommit hooks ────────────────────────────────────
+    const preCommitResult = await executeHooks(scopedHooks, {
+      event: "PreStateCommit",
+      turnId,
+      runId: input.runId,
+      branchId: input.branchId,
+      locale,
+      proposals: valid,
+    });
+
     // 8. Commit — reset eagerly-applied state and rebuild from validated proposals
     turnState.narrativeSegments = [];
     turnState.state = { ...kernelContext.state };
@@ -521,16 +650,40 @@ function createKernelSession(
     turnState.events = [];
     turnState.renderBlocks = [];
 
-    const commitResult = commitProposals(turnState, valid, {
-      turnId,
-      branchId: input.branchId,
-    });
+    let commitResult;
+    if (preCommitResult.allowed) {
+      commitResult = commitProposals(turnState, valid, {
+        turnId,
+        branchId: input.branchId,
+      });
 
-    // Update kernel state with committed changes
-    kernelContext.state = { ...turnState.state };
+      // Update kernel state with committed changes
+      kernelContext.state = { ...turnState.state };
+
+      // ── PostStateCommit hooks ───────────────────────────────────
+      await executeHooks(scopedHooks, {
+        event: "PostStateCommit",
+        turnId,
+        runId: input.runId,
+        branchId: input.branchId,
+        locale,
+        proposals: valid,
+      });
+    } else {
+      console.warn(`[kernel] PreStateCommit hook blocked commit: ${preCommitResult.reason}`);
+    }
 
     // 9. Render
     const render = buildRenderResult(turnState);
+
+    // ── TurnStop hooks ────────────────────────────────────────────
+    await executeHooks(scopedHooks, {
+      event: "TurnStop",
+      turnId,
+      runId: input.runId,
+      branchId: input.branchId,
+      locale,
+    });
 
     return {
       runId: input.runId,
@@ -546,5 +699,14 @@ function createKernelSession(
     };
   }
 
-  return { executeTurn, setContext, getContext };
+  return {
+    executeTurn,
+    setContext,
+    getContext,
+    enablePlugin: (pluginId: string) => scope.enable(pluginId),
+    disablePlugin: (pluginId: string) => scope.disable(pluginId),
+    listActivePlugins: () => scope.listActive(),
+    listAvailablePlugins: () => scope.listAvailable(),
+    pluginScope: scope,
+  };
 }

@@ -48,7 +48,7 @@
       "id": "guide",
       "pluginId": "core-guide",
       "kind": "plugin",
-      "phase": "post_story",
+      "priority": 600,
       "trigger": {
         "mode": "event",
         "onEvents": ["user.input"]

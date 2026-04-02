@@ -1,0 +1,164 @@
+{
+  "schemaVersion": "1.0",
+  "id": "core-combat",
+  "displayName": {
+    "zh-CN": "战斗系统",
+    "en-US": "Combat System"
+  },
+  "version": "0.1.0",
+  "author": "covel",
+  "description": {
+    "zh-CN": "结构化战斗系统，提供叙事驱动的回合制战斗，支持攻击、防御、技能等行动，依赖 core-dice 进行随机判定。",
+    "en-US": "Structured combat system providing narrative-driven turn-based combat with attack, defend, and skill actions, backed by core-dice for randomness."
+  },
+  "defaultLocale": "zh-CN",
+  "supportedLocales": ["zh-CN", "en-US"],
+  "loadingOrder": 42,
+  "requires": ["core-dice"],
+  "runtimes": [
+    {
+      "id": "combat-engine",
+      "pluginId": "core-combat",
+      "kind": "plugin",
+      "priority": 420,
+      "trigger": {
+        "mode": "event",
+        "onEvents": ["user.input", "combat_started"]
+      },
+      "providerBinding": "heavy",
+      "tools": [
+        "core-combat:start-combat",
+        "core-combat:attack",
+        "core-combat:defend",
+        "core-combat:use-skill",
+        "core-combat:end-combat",
+        "core-dice:roll-check"
+      ],
+      "hooks": [],
+      "budget": {
+        "maxSteps": 8,
+        "timeoutMs": 60000
+      }
+    }
+  ],
+  "tools": [
+    {
+      "id": "start-combat",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "participants": {
+            "type": "array",
+            "description": "List of combat participants",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string", "description": "Unique participant ID" },
+                "name": { "type": "string", "description": "Display name" },
+                "type": { "type": "string", "enum": ["player", "ally", "enemy"], "description": "Participant alignment" },
+                "hp": { "type": "number", "description": "Current hit points" },
+                "maxHp": { "type": "number", "description": "Maximum hit points" }
+              },
+              "required": ["id", "name", "type", "hp", "maxHp"]
+            }
+          }
+        },
+        "required": ["participants"]
+      }
+    },
+    {
+      "id": "attack",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "attackerId": { "type": "string", "description": "ID of the attacking participant" },
+          "targetId": { "type": "string", "description": "ID of the target participant" },
+          "rollResult": { "type": "number", "description": "Dice roll result from core-dice:roll-check" }
+        },
+        "required": ["attackerId", "targetId", "rollResult"]
+      }
+    },
+    {
+      "id": "defend",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "participantId": { "type": "string", "description": "ID of the defending participant" }
+        },
+        "required": ["participantId"]
+      }
+    },
+    {
+      "id": "use-skill",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "actorId": { "type": "string", "description": "ID of the skill user" },
+          "targetId": { "type": "string", "description": "ID of the target (self for buffs/heals)" },
+          "skillName": { "type": "string", "description": "Name of the skill" },
+          "skillType": { "type": "string", "enum": ["damage", "heal", "buff", "debuff"], "description": "Type of skill effect" },
+          "rollResult": { "type": "number", "description": "Dice roll result from core-dice:roll-check" },
+          "magnitude": { "type": "number", "description": "Base magnitude of the skill effect (damage, heal amount, etc.)" }
+        },
+        "required": ["actorId", "targetId", "skillName", "skillType", "rollResult"]
+      }
+    },
+    {
+      "id": "end-combat",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "reason": { "type": "string", "enum": ["victory", "defeat", "retreat", "narrative"], "description": "Reason for ending combat" }
+        },
+        "required": ["reason"]
+      }
+    }
+  ],
+  "blockSchemas": [
+    {
+      "type": "combat_status",
+      "interactive": false,
+      "meta": {
+        "displayName": { "zh-CN": "战斗状态", "en-US": "Combat Status" },
+        "description": "Combat status display showing participants, HP, turn order, and status effects"
+      },
+      "dataSchema": {
+        "type": "object",
+        "properties": {
+          "roundNumber": { "type": "number" },
+          "currentActor": { "type": "string" },
+          "participants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "type": { "type": "string", "enum": ["player", "ally", "enemy"] },
+                "hp": { "type": "number" },
+                "maxHp": { "type": "number" },
+                "initiative": { "type": "number" },
+                "isDefeated": { "type": "boolean" },
+                "statusEffects": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": { "type": "string" },
+                      "duration": { "type": "number" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

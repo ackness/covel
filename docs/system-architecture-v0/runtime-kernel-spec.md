@@ -43,7 +43,7 @@
 - 接收用户输入和系统事件
 - 将输入转为触发事件
 - 根据 trigger 规则选择 runtime
-- 按 phase、priority 和 budget 调度 runtime
+- 按 priority 和 budget 调度 runtime
 - 组装 runtime 需要的 context
 - 驱动 runtime 的 tool / hook 循环
 - 收集 proposal
@@ -56,6 +56,16 @@
 - 直接暴露数据库给插件
 - 直接持有某个具体 world 的业务逻辑
 - 让插件绕过提交链写状态
+
+### 3.3 Session-scoped Plugin Activation
+
+所有插件在服务器启动时加载到全局注册表。每个 `KernelSession` 拥有独立的 `SessionPluginScope`，一个记录活跃插件 ID 的集合。
+
+session 通过 scoped registry view（`ScopedRuntimeRegistry`、`ScopedToolRegistry`、`ScopedHookRegistry`）包装全局注册表，按活跃集合过滤。
+
+- 插件可在 session 中途启用/禁用，变更在下一个 turn 生效
+- world manifest 的 `requiredPlugins` / `recommendedPlugins` 用于初始化 session 的插件集合
+- `KernelSession` 暴露 `enablePlugin()`、`disablePlugin()`、`listActivePlugins()`、`listAvailablePlugins()` 方法
 
 ## 4. 系统级执行链
 
@@ -75,10 +85,11 @@ flowchart TD
 
 首轮默认 gameplay profile：
 
-- `story` phase 由主模型负责 narrative
-- `post_story` phase 常作为 gameplay / mechanics runtime 的默认触发时机
-- 资产类 runtime 默认采用 `manual` 触发
-- `background` phase 负责 memory、archive、索引和异步任务
+- priority 400: 主叙事 runtime（heavy slot），负责 narrative 生成
+- priority 500: 通用插件默认优先级
+- priority 600: gameplay / mechanics 类插件（如 guide、char-tracker）
+- priority 800+: 后台 runtime（memory、archive、索引），不阻塞主响应
+- `manual` 触发型 runtime 仅在显式事件下进入调度
 
 ## 5. 核心模块
 
@@ -113,30 +124,35 @@ flowchart TD
 
 职责：
 
-- 根据 phase 和排序规则选择执行顺序
-- 应用 budget、priority、去重规则
+- 根据 priority 排序规则选择执行顺序
+- 应用 budget、去重规则
 - 将后台任务与同步任务分流
 
-首轮排序规则：
+排序规则：
 
-1. `phase`
-2. dependency topology layer
-3. `plugin.loadingOrder`
-4. runtime explicit priority
-5. runtime id 稳定排序
+1. `priority`（0-1000，升序；0 = 最高优先级 = 最先执行）
+2. 同 priority 内按插件依赖拓扑分层
+3. 层内并行执行
+4. `plugin.loadingOrder` 作为稳定排序 tiebreaker
 
-首轮 phase：
+依赖拓扑分组：
 
-- `pre_story`
-- `story`
-- `post_story`
-- `background`
+- 同一 priority 组内，若存在插件声明了 `requires` 依赖关系，使用 Kahn 算法进行拓扑分层
+- 被依赖的插件的 runtime 先执行
+- 无依赖关系的 runtime 并行执行
 
 规则：
 
-- 同一拓扑层的 plugin runtime 可并行执行
-- `post_story` 是常见默认时机，但不是唯一时机
+- 同一 priority 组内无依赖关系的 runtime 并行执行
 - `manual` 触发型 runtime 仅在显式触发事件下进入调度
+
+后台任务分流：
+
+- runtime 的 priority 达到 `backgroundThreshold`（默认 800）时，scheduler 将其分流为后台任务
+- 后台任务不阻塞主响应，异步执行
+- 后台任务结果通过 `onBackgroundTaskDone` 回调通知调用方
+- 后台任务必须保留完整 trace（runtimeId、pluginId、traceId）
+- `backgroundThreshold` 可由调用方配置覆盖
 
 ### 5.3 Context Assembly
 
@@ -180,15 +196,34 @@ flowchart TD
 - 绑定 provider binding、tools、hooks、budget
 - 驱动 tool calling 循环
 
-首轮支持：
+首轮支持的 RuntimeKind：
 
-- `story`
-- `plugin`
-- `background`
+- `story` — 主叙事类 runtime
+- `plugin` — 通用插件类 runtime
+- `background` — 后台异步类 runtime
 
-首轮保留但不执行：
+首轮保留但不执行的 RuntimeKind：
 
 - `verifier`
+
+#### 5.4.1 Model Slot
+
+runtime 通过 `providerBinding` 字段引用命名 model slot，而非直接指定具体模型。
+
+首轮预定义 slot：
+
+| Slot | 用途 | 典型场景 |
+|------|------|----------|
+| `heavy` | 主叙事、复杂推理 | core-narrator |
+| `fast` | 轻量判断、插件默认 | core-guide, core-char-tracker |
+| `balance` | 裁判类插件、复杂逻辑代理 | 未来扩展 |
+| `image` | 图片生成（可选） | 未来扩展 |
+
+回退链：请求 slot → `heavy` slot → 第一个可用 slot。
+
+未配置的 slot 自动回退到 `heavy`。用户可通过前端配置面板为每个 slot 绑定不同的 provider preset。
+
+runtime 只声明 slot 名称，不直接引用 provider SDK 或 API key。
 
 ### 5.5 Tool / Hook Loop
 
@@ -369,7 +404,7 @@ export interface RuntimeContextView {
     runtimeId: string;
     pluginId: string;
     kind: string;
-    phase: string;
+    priority: number;
     allowedTools: string[];
     providerBinding?: string;
     budget?: RuntimeBudget;
@@ -424,7 +459,7 @@ kernel 必须明确处理 locale，而不是把语言选择交给 runtime 或 pr
 3. 单 runtime 的 tool calling 次数必须有上限。
 4. `background` 不阻塞主响应，但必须有 trace。
 5. 所有写操作统一进入 `proposal -> validate -> commit`。
-6. 同一阶段先按依赖拓扑分层，再在层内并行执行。
+6. 同一优先级先按依赖拓扑分层，再在层内并行执行。
 7. `manual` 触发的 runtime 不得在未收到显式事件时自动调度。
 8. `budget.maxTokens` 为 best-effort 约束：runner 应在每次 LLM 调用后累加 token 消耗，在接近上限时截断循环，但不保证精确限制（尤其在流式输出场景下）。首轮优先依赖 `maxSteps` 和 `timeoutMs` 作为硬性限制。
 
@@ -456,25 +491,51 @@ kernel 必须明确处理 locale，而不是把语言选择交给 runtime 或 pr
 
 ## 12. 可观测性
 
-kernel 全链路必须保留：
+### 12.1 追踪字段链
 
-- `traceId`
-- `runId`
-- `branchId`
-- `turnId`
-- `runtimeId`
-- `pluginId`
+kernel 全链路必须保留：`traceId → runId → branchId → turnId → runtimeId → pluginId`
 
-首轮必须追踪：
+### 12.2 Trace 采集点
 
-- runtime 调度
-- tool 调用
-- hook 决策
-- provider 请求
-- DB 提交
-- locale 解析结果
-- 依赖拓扑层结果
-- 触发原因（hook / event / interval / manual）
+kernel 在 `executeTurn` 中通过 `TraceCollector`（来自 `@covel/trace` 包）采集结构化 trace：
+
+| 采集点 | 数据 | 归属 |
+|--------|------|------|
+| Trigger Router | triggerEvent、candidateRuntimeIds | TurnTrace |
+| Scheduler | executionPlan（priority groups） | TurnTrace |
+| Context Assembly | fragments、instructionsPreview、newChatMessageCount | RuntimeTrace |
+| Provider Binding | slotId、presetId、provider、model | RuntimeTrace |
+| LLM Call (每次) | delta messages、response、toolCalls、usage、duration | RuntimeTrace.llmCalls[] |
+| Tool Execution (每次) | input、output、proposals、blocked、duration | RuntimeTrace.toolCalls[] |
+| Hook Execution | hookId、event、allowed、reason | RuntimeTrace.hooks[] |
+| Proposal Collection | kind、source、validated、rejected | RuntimeTrace.proposals[] |
+| Commit | commitId、proposalCount、rejectedCount | TurnTrace |
+| Locale 解析 | 最终 locale 和 fallback 路径 | TurnTrace |
+| 依赖拓扑层 | Kahn 算法输出的 layer 结构 | TurnTrace.executionPlan |
+| 触发原因 | triggerMode (always/event/interval/manual) | RuntimeTrace |
+
+### 12.3 Delta 记录策略
+
+LLM 无状态，prompt 由历史拼接。Trace 采用 delta 策略避免重复存储：
+
+- **Turn 内**（tool-calling loop）：`LlmCallTrace.newMessages` 只存本次新增的 messages
+- **Turn 间**（跨 turn 同 runtime）：记录 `newChatMessageCount` 和本轮 fragments 列表
+- **完整快照**：可选 `promptSnapshot` 字段（`COVEL_TRACE_FULL_PROMPT=true` 开启）
+
+### 12.4 消费通道
+
+- **REST API**：`GET /api/trace/*` 供前端调试页查询
+- **SSE 推送**：`trace.*` 事件类型，调试页可选订阅实时 trace
+- **Langfuse**：`TraceExporter` 接口映射 trace 层级到 Langfuse Span 模型
+- **JSON 导出**：玩家可下载 session 完整 trace
+
+### 12.5 存储
+
+首轮使用 `MemoryTraceCollector`（内存），保留最近 N 个 turn 的 trace（默认 50）。后续可扩展为持久化存储。
+
+### 12.6 非 Runtime 日志
+
+runtime trace 之外的基础设施日志（server 启动、plugin 加载、DB 操作、SSE 连接）使用 pino 结构化日志库，通过 child logger 携带 context 字段。
 
 ## 13. 首轮建议目录
 
@@ -494,7 +555,7 @@ kernel/
 
 ## 14. 首轮明确延期项
 
-- 更多公开 phase
+- 更细粒度的 priority 区间规范
 - verifier runtime 调度
 - 复杂并行 runtime 编排
 - 跨小时 durable workflow

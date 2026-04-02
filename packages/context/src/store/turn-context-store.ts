@@ -1,0 +1,147 @@
+import type { CharacterCard } from "@covel/shared";
+import type {
+  TurnContextInit,
+  RuntimeOutput,
+  ProposalItem,
+} from "../types.js";
+
+export interface TurnContextStore {
+  /** Initialize with static context at turn start */
+  init(input: TurnContextInit): void;
+
+  /** Ingest output from a completed runtime */
+  ingest(output: RuntimeOutput): void;
+
+  /** Get turn metadata */
+  getRunId(): string;
+  getBranchId(): string;
+  getTurnId(): string;
+  getLocale(): string;
+
+  /** Get static context */
+  getWorld(): unknown;
+  getCharacters(): CharacterCard[];
+  getChat(): unknown;
+  getArchive():
+    | { activeVersion?: number; latestVersion?: number; summary?: string }
+    | undefined;
+  getRuntimeSettings():
+    | {
+        flat?: Record<string, unknown>;
+        byPlugin?: Record<string, Record<string, unknown>>;
+      }
+    | undefined;
+
+  /** Get accumulated dynamic context */
+  getNarrative(): string;
+  getState(): Record<string, unknown>;
+  getProposals(): ProposalItem[];
+  getCompletedRuntimeIds(): string[];
+}
+
+export function createTurnContextStore(): TurnContextStore {
+  let runId = "";
+  let branchId = "";
+  let turnId = "";
+  let locale = "";
+  let world: unknown = undefined;
+  let characters: CharacterCard[] = [];
+  let chat: unknown = undefined;
+  let initialState: Record<string, unknown> = {};
+  let archive:
+    | { activeVersion?: number; latestVersion?: number; summary?: string }
+    | undefined;
+  let runtimeSettings:
+    | {
+        flat?: Record<string, unknown>;
+        byPlugin?: Record<string, Record<string, unknown>>;
+      }
+    | undefined;
+
+  // Dynamic accumulation
+  const narrativeSegments: string[] = [];
+  const accumulatedPatches: Record<string, unknown>[] = [];
+  const allProposals: ProposalItem[] = [];
+  const completedRuntimes: string[] = [];
+
+  return {
+    init(input: TurnContextInit): void {
+      runId = input.runId;
+      branchId = input.branchId;
+      turnId = input.turnId;
+      locale = input.locale;
+      world = input.world;
+      characters = input.characters ?? [];
+      chat = input.chat;
+      initialState = { ...input.state };
+      archive = input.archive;
+      runtimeSettings = input.runtimeSettings;
+
+      // Reset dynamic state
+      narrativeSegments.length = 0;
+      accumulatedPatches.length = 0;
+      allProposals.length = 0;
+      completedRuntimes.length = 0;
+    },
+
+    ingest(output: RuntimeOutput): void {
+      completedRuntimes.push(output.runtimeId);
+
+      if (output.narrative) {
+        narrativeSegments.push(output.narrative);
+      }
+
+      for (const proposal of output.proposals) {
+        allProposals.push(proposal);
+
+        // Eagerly apply state patches and narrative
+        switch (proposal.kind) {
+          case "narrative.append": {
+            const p = proposal.payload as { text: string };
+            if (p.text && !output.narrative) {
+              // Only add if not already captured in output.narrative
+              narrativeSegments.push(p.text);
+            }
+            break;
+          }
+          case "state.patch": {
+            accumulatedPatches.push(
+              proposal.payload as Record<string, unknown>
+            );
+            break;
+          }
+        }
+      }
+    },
+
+    getRunId: () => runId,
+    getBranchId: () => branchId,
+    getTurnId: () => turnId,
+    getLocale: () => locale,
+    getWorld: () => world,
+    getCharacters: () => characters,
+    getChat: () => chat,
+    getArchive: () => archive,
+    getRuntimeSettings: () => runtimeSettings,
+
+    getNarrative(): string {
+      return narrativeSegments.join("");
+    },
+
+    getState(): Record<string, unknown> {
+      const merged = { ...initialState };
+      for (const patch of accumulatedPatches) {
+        Object.assign(merged, patch);
+      }
+      return merged;
+    },
+
+    getProposals(): ProposalItem[] {
+      return [...allProposals];
+    },
+
+    getCompletedRuntimeIds(): string[] {
+      return [...completedRuntimes];
+    },
+  };
+}

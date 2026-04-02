@@ -27,7 +27,7 @@ export function commitProposals(
         }
         case "state.patch": {
           const patch = item.payload as Record<string, unknown>;
-          Object.assign(turnState.state, patch);
+          turnState.state = { ...turnState.state, ...patch };
           break;
         }
         case "event.emit": {
@@ -58,6 +58,7 @@ export function commitProposals(
         }
         case "asset.generate":
           // First-round: no-op
+          console.warn("[kernel] asset.generate is not implemented in first round, proposal ignored");
           break;
       }
     }

@@ -8,7 +8,12 @@ import type { ContextProviderInput } from "@covel/plugin-runtime";
  * 2. World-specific narration style
  * 3. World lore (if available) as authoritative reference
  */
-export async function personaContextProvider(input: ContextProviderInput) {
+export async function personaContextProvider(input: ContextProviderInput): Promise<{
+  id: string;
+  title: string;
+  content: string;
+  priority: number;
+}> {
   const world = input.world as {
     name?: string;
     description?: string;

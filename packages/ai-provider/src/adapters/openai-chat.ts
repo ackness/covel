@@ -11,9 +11,43 @@ import {
   readOpenAiChatText,
   readOpenAiChatFinishReason,
   readOpenAiChatUsage,
+  readOpenAiChatToolCalls,
   readOpenAiChatStreamDelta,
+  readOpenAiChatStreamReasoningDelta,
   readOpenAiChatStreamFinishReason,
 } from "./http.js";
+
+import type { TextMessage } from "../types.js";
+
+/**
+ * Serialize TextMessage[] to OpenAI wire format.
+ * Handles assistant messages with tool_calls and tool role messages.
+ */
+function serializeMessages(
+  messages: TextMessage[]
+): Record<string, unknown>[] {
+  return messages.map((msg) => {
+    if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
+      return {
+        role: "assistant",
+        content: msg.content || null,
+        tool_calls: msg.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: "function",
+          function: { name: tc.name, arguments: tc.arguments },
+        })),
+      };
+    }
+    if (msg.role === "tool" && msg.toolCallId) {
+      return {
+        role: "tool",
+        content: msg.content,
+        tool_call_id: msg.toolCallId,
+      };
+    }
+    return { role: msg.role, content: msg.content };
+  });
+}
 
 /**
  * OpenAI Chat Completions v1 adapter.
@@ -22,32 +56,44 @@ import {
 export function createOpenAiChatAdapter(): ModelProviderAdapter {
   return {
     async generateText(config, params) {
-      const response = await postJson(config, "/chat/completions", {
+      const body: Record<string, unknown> = {
         model: params.model,
-        messages: params.messages,
+        messages: serializeMessages(params.messages),
         ...params.providerRequestMetadata,
-      });
+      };
+      if (params.tools && params.tools.length > 0) {
+        body.tools = params.tools;
+      }
+
+      const response = await postJson(config, "/chat/completions", body);
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-chat");
 
+      const toolCalls = readOpenAiChatToolCalls(payload);
       return {
         text: readOpenAiChatText(payload),
         finishReason: readOpenAiChatFinishReason(payload),
         usage: readOpenAiChatUsage(payload),
+        ...(toolCalls ? { toolCalls } : {}),
       };
     },
 
     async generateObject(config, params) {
       const response = await postJson(config, "/chat/completions", {
         model: params.model,
-        messages: params.messages,
+        messages: serializeMessages(params.messages),
         response_format: { type: "json_object" },
         ...params.providerRequestMetadata,
       });
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-chat");
 
-      const rawObject = JSON.parse(readOpenAiChatText(payload));
+      let rawObject: unknown;
+      try {
+        rawObject = JSON.parse(readOpenAiChatText(payload));
+      } catch {
+        throw createStructuredOutputError("openai-chat");
+      }
       const validation = params.schema.safeParse(rawObject);
       if (!validation.success) {
         throw createStructuredOutputError("openai-chat");
@@ -63,7 +109,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
     async *streamText(config, params) {
       const response = await postJson(config, "/chat/completions", {
         model: params.model,
-        messages: params.messages,
+        messages: serializeMessages(params.messages),
         stream: true,
         ...params.providerRequestMetadata,
       });
@@ -72,15 +118,21 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       let finishReason = "stop";
 
       for await (const payload of iterateSsePayloads(response)) {
+        const reasoningDelta = readOpenAiChatStreamReasoningDelta(payload);
+        if (reasoningDelta) {
+          yield { type: "reasoning-delta", reasoningDelta };
+        }
+
         const delta = readOpenAiChatStreamDelta(payload);
         if (delta) {
           yield { type: "text-delta", textDelta: delta };
         }
 
         if (payload.usage && typeof payload.usage === "object") {
+          const usageObj = payload.usage as Record<string, unknown>;
           usage = {
-            inputTokens: Number(payload.usage.prompt_tokens ?? 0),
-            outputTokens: Number(payload.usage.completion_tokens ?? 0),
+            inputTokens: Number(usageObj.prompt_tokens ?? 0),
+            outputTokens: Number(usageObj.completion_tokens ?? 0),
           };
         }
 
@@ -106,7 +158,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
           (entry: { embedding: number[] }) => entry.embedding
         ),
         usage: {
-          inputTokens: Number(payload.usage?.prompt_tokens ?? 0),
+          inputTokens: Number((payload.usage as Record<string, unknown> | undefined)?.prompt_tokens ?? 0),
           outputTokens: 0,
         },
       };
@@ -124,7 +176,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       const data = Array.isArray(payload.data) ? payload.data : [];
       return {
         images: data
-          .map((entry: any) => ({
+          .map((entry: { b64_json?: string; url?: string; revised_prompt?: string; mime_type?: string }) => ({
             mimeType:
               typeof entry.mime_type === "string" ? entry.mime_type : "image/png",
             ...(typeof entry.b64_json === "string"
@@ -183,15 +235,18 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-chat");
 
+      const transcriptionUsage =
+        payload.usage && typeof payload.usage === "object"
+          ? (payload.usage as Record<string, unknown>)
+          : null;
       return {
         text: String(payload.text ?? ""),
-        usage:
-          payload.usage && typeof payload.usage === "object"
-            ? {
-                inputTokens: Number(payload.usage.prompt_tokens ?? 0),
-                outputTokens: Number(payload.usage.completion_tokens ?? 0),
-              }
-            : null,
+        usage: transcriptionUsage
+          ? {
+              inputTokens: Number(transcriptionUsage.prompt_tokens ?? 0),
+              outputTokens: Number(transcriptionUsage.completion_tokens ?? 0),
+            }
+          : null,
       };
     },
   };

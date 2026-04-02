@@ -23,8 +23,12 @@ export const apiKeyInjection = createMiddleware<ApiKeyEnv>(async (c, next) => {
     try {
       const decoded = atob(header);
       const parsed = JSON.parse(decoded);
-      if (typeof parsed === "object" && parsed !== null) {
-        apiKeys = parsed;
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        const validated: Record<string, string> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+          if (typeof v === "string") validated[k] = v;
+        }
+        apiKeys = validated;
       }
     } catch {
       return c.json({ error: "Invalid X-Provider-Keys header" }, 400);

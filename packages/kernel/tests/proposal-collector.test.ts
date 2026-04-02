@@ -60,16 +60,14 @@ describe("proposal-validator", () => {
     expect(valid[0].validatedAt).toBeTruthy();
   });
 
-  it("rejects proposals with invalid kinds", () => {
+  it("skips proposals with invalid kinds at collection time", () => {
     const collector = createProposalCollector(turnContext);
     collector.addFromRuntime("rt1", "p1", [
       { kind: "invalid.kind", payload: {} },
     ]);
 
-    const { valid, rejected } = validateProposals(collector.getAll());
-    expect(valid).toHaveLength(0);
-    expect(rejected).toHaveLength(1);
-    expect(rejected[0].reason).toContain("Invalid proposal kind");
+    // Invalid kinds are filtered out by the collector, so no envelopes are created
+    expect(collector.getAll()).toHaveLength(0);
   });
 
   it("rejects proposals with null payload", () => {

@@ -27,13 +27,13 @@ export function createPluginRegistry() {
   function enable(pluginId: string): void {
     const plugin = plugins.get(pluginId);
     if (!plugin) throw new Error(`Plugin "${pluginId}" not found.`);
-    plugin.enabled = true;
+    plugins.set(pluginId, { ...plugin, enabled: true });
   }
 
   function disable(pluginId: string): void {
     const plugin = plugins.get(pluginId);
     if (!plugin) throw new Error(`Plugin "${pluginId}" not found.`);
-    plugin.enabled = false;
+    plugins.set(pluginId, { ...plugin, enabled: false });
   }
 
   function list(): LoadedPlugin[] {

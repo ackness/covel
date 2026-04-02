@@ -23,6 +23,9 @@ export interface BuiltinToolEntry {
   handler: (ctx: ToolExecutionContext) => Promise<ToolExecutionResult>;
 }
 
+const DEFAULT_QUERY_LIMIT = 20;
+const DEFAULT_FIND_LIMIT = 10;
+
 export function createBuiltinDataTools(
   deps: BuiltinToolDeps
 ): BuiltinToolEntry[] {
@@ -59,14 +62,14 @@ export function createBuiltinDataTools(
           type: "object",
           properties: {
             recordType: { type: "string", description: "Record type filter (e.g. 'character', 'quest')" },
-            limit: { type: "number", description: "Max results (default 20)" },
+            limit: { type: "number", description: `Max results (default ${DEFAULT_QUERY_LIMIT})` },
           },
         },
       },
       handler: async (ctx) => {
         const { recordType, limit } = (ctx.input ?? {}) as { recordType?: string; limit?: number };
         const results = da().records.list(recordType);
-        return { output: results.slice(0, limit ?? 20) };
+        return { output: results.slice(0, limit ?? DEFAULT_QUERY_LIMIT) };
       },
     },
 
@@ -136,7 +139,7 @@ export function createBuiltinDataTools(
         schema: {
           type: "object",
           properties: {
-            limit: { type: "number", description: "Number of recent events (default 20)" },
+            limit: { type: "number", description: `Number of recent events (default ${DEFAULT_QUERY_LIMIT})` },
             eventType: { type: "string", description: "Filter by event type" },
           },
         },

@@ -52,7 +52,7 @@ export function createProviderRegistry(options?: {
     for (const [name, defaults] of Object.entries(options.providerDefaults)) {
       const existing = providers.get(name);
       if (existing) {
-        existing.defaults = { ...defaults, ...existing.defaults };
+        providers.set(name, { ...existing, defaults: { ...defaults, ...existing.defaults } });
       } else {
         providers.set(name, { defaults });
       }
@@ -74,7 +74,7 @@ export function createProviderRegistry(options?: {
       );
     }
 
-    const protocol = resolveProtocol(target, opts.mode);
+    const protocol = resolveProtocol(target);
     const protocolRoute = registered.protocols?.[protocol];
     const adapter =
       protocolRoute?.adapter ??
@@ -121,8 +121,7 @@ export function createProviderRegistry(options?: {
 }
 
 function resolveProtocol(
-  target: { provider: string; protocol?: ProviderProtocol },
-  mode: OperationMode
+  target: { provider: string; protocol?: ProviderProtocol }
 ): ProviderProtocol {
   if (target.protocol) return target.protocol;
   if (target.provider === "anthropic") return "anthropic-messages-v1";

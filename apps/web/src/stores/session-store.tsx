@@ -1,6 +1,8 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, type ReactNode } from "react";
+import i18n from "i18next";
 import * as api from "@/services/api";
 import { setBlockSchemas } from "@/components/blocks/block-renderer.js";
+import type { BlockSchemaDeclaration } from "@covel/shared";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -12,6 +14,16 @@ export interface StreamMessage {
   turnId?: string;
   /** For UI blocks (choice_set, etc.) */
   block?: Record<string, unknown>;
+}
+
+/** A single step in the execution timeline, streamed from the kernel. */
+export interface ExecutionStep {
+  type: "runtime.started" | "runtime.completed" | "runtime.failed" | "llm.calling" | "tool.calling" | "tool.completed";
+  runtimeId: string;
+  pluginId: string;
+  label?: string;
+  detail?: string;
+  timestamp: string;
 }
 
 interface SessionState {
@@ -29,12 +41,20 @@ interface SessionState {
   phase: api.SessionPhase;
   messages: StreamMessage[];
 
+  /** All sessions for the current world (for switching). */
+  worldSessions: api.SessionRecord[];
+
   // Execution
   executing: boolean;
   executionError: string | null;
+  /** Real-time execution progress steps from kernel. */
+  executionSteps: ExecutionStep[];
 
   // State patches from kernel
-  statePatches: Array<{ id: string; summary: string; packageName: string }>;
+  statePatches: Array<{ id: string; summary: string; packageName: string; data?: unknown }>;
+
+  /** Accumulated game state from state.patch events. */
+  gameState: Record<string, unknown>;
 }
 
 type Action =
@@ -42,13 +62,18 @@ type Action =
   | { type: "BOOT_ERROR"; error: string }
   | { type: "SET_WORLD"; world: api.WorldRecord }
   | { type: "SET_SESSION"; session: api.SessionRecord }
+  | { type: "SET_WORLD_SESSIONS"; sessions: api.SessionRecord[] }
   | { type: "ADD_MESSAGE"; message: StreamMessage }
+  | { type: "APPEND_DELTA"; turnId: string; runtimeId: string; pluginId: string; delta: string }
   | { type: "SET_EXECUTING"; value: boolean }
   | { type: "SET_EXECUTION_ERROR"; error: string | null }
-  | { type: "ADD_STATE_PATCH"; patch: { id: string; summary: string; packageName: string } }
+  | { type: "ADD_STATE_PATCH"; patch: { id: string; summary: string; packageName: string; data?: unknown } }
   | { type: "LOAD_MESSAGES"; messages: StreamMessage[] }
   | { type: "SET_PHASE"; phase: api.SessionPhase }
-  | { type: "RESET_SESSION" };
+  | { type: "ADD_EXECUTION_STEP"; step: ExecutionStep }
+  | { type: "CLEAR_EXECUTION_STEPS" }
+  | { type: "RESET_SESSION" }
+  | { type: "RESET_TO_WORLD_SELECT" };
 
 const initialState: SessionState = {
   presets: [],
@@ -61,10 +86,20 @@ const initialState: SessionState = {
   session: null,
   phase: "init",
   messages: [],
+  worldSessions: [],
   executing: false,
   executionError: null,
+  executionSteps: [],
   statePatches: [],
+  gameState: {},
 };
+
+function shallowMerge(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  return { ...target, ...source };
+}
 
 function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
@@ -76,20 +111,60 @@ function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, world: action.world };
     case "SET_SESSION":
       return { ...state, session: action.session, phase: action.session.phase ?? "init" };
+    case "SET_WORLD_SESSIONS":
+      return { ...state, worldSessions: action.sessions };
     case "ADD_MESSAGE":
       return { ...state, messages: [...state.messages, action.message] };
+    case "APPEND_DELTA": {
+      // Find existing streaming message for this runtime, or create one
+      const streamId = `stream_${action.turnId}_${action.runtimeId}`;
+      const idx = state.messages.findIndex((m) => m.id === streamId);
+      if (idx >= 0) {
+        const updated = [...state.messages];
+        updated[idx] = { ...updated[idx], content: updated[idx].content + action.delta };
+        return { ...state, messages: updated };
+      }
+      // Create new streaming message
+      return {
+        ...state,
+        messages: [
+          ...state.messages,
+          {
+            id: streamId,
+            role: "assistant",
+            content: action.delta,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      };
+    }
     case "SET_EXECUTING":
       return { ...state, executing: action.value };
     case "SET_EXECUTION_ERROR":
       return { ...state, executionError: action.error };
-    case "ADD_STATE_PATCH":
-      return { ...state, statePatches: [...state.statePatches, action.patch] };
+    case "ADD_STATE_PATCH": {
+      const patchData = action.patch.data as Record<string, unknown> | undefined;
+      const newGameState = patchData
+        ? shallowMerge(state.gameState, patchData)
+        : state.gameState;
+      return {
+        ...state,
+        statePatches: [...state.statePatches, action.patch],
+        gameState: newGameState,
+      };
+    }
     case "LOAD_MESSAGES":
       return { ...state, messages: action.messages };
     case "SET_PHASE":
       return { ...state, phase: action.phase };
+    case "ADD_EXECUTION_STEP":
+      return { ...state, executionSteps: [...state.executionSteps, action.step] };
+    case "CLEAR_EXECUTION_STEPS":
+      return { ...state, executionSteps: [] };
     case "RESET_SESSION":
-      return { ...state, session: null, phase: "init", messages: [], statePatches: [], executing: false, executionError: null };
+      return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, executing: false, executionError: null, executionSteps: [] };
+    case "RESET_TO_WORLD_SELECT":
+      return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, executing: false, executionError: null, executionSteps: [] };
     default:
       return state;
   }
@@ -100,10 +175,18 @@ function reducer(state: SessionState, action: Action): SessionState {
 interface SessionContextValue {
   state: SessionState;
   boot: () => Promise<void>;
-  initSession: (worldId?: string) => Promise<void>;
+  selectWorld: (worldId: string) => void;
+  startGame: () => Promise<void>;
+  /** Resume a previously created session. */
+  resumeSession: (session: api.SessionRecord) => Promise<void>;
+  /** Load all sessions for the current world. */
+  loadWorldSessions: () => Promise<void>;
   sendMessage: (content: string) => void;
   executeCommand: (command: string) => void;
+  /** Reset session but keep world (back to prep screen). */
   resetSession: () => void;
+  /** Reset everything including world (back to world selection). */
+  backToWorldSelect: () => void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -120,10 +203,27 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         api.listWorlds(),
         api.fetchBlockSchemas().catch(() => ({})),
       ]);
-      setBlockSchemas(schemas as Record<string, any>);
+      setBlockSchemas(schemas as Record<string, BlockSchemaDeclaration>);
       dispatch({ type: "BOOT_SUCCESS", presets, packages, commands, worlds });
+
+      // Auto-load dev provider keys in development mode
+      if (import.meta.env.DEV) {
+        try {
+          const res = await fetch("/api/dev/provider-keys");
+          if (res.ok) {
+            const { keys } = await res.json();
+            // Only fill if user hasn't manually configured keys
+            const existing = api.getProviderKeys();
+            if (Object.keys(existing).length === 0 && Object.keys(keys).length > 0) {
+              api.setProviderKeys(keys);
+            }
+          }
+        } catch {
+          // Dev keys endpoint not available, skip
+        }
+      }
     } catch (err) {
-      dispatch({ type: "BOOT_ERROR", error: (err as Error).message });
+      dispatch({ type: "BOOT_ERROR", error: err instanceof Error ? err.message : String(err) });
     }
   }, []);
 
@@ -131,7 +231,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const { type, payload, turnId } = envelope;
 
     switch (type) {
+      case "message.delta": {
+        const delta = (payload.delta as string) ?? "";
+        const runtimeId = (payload.runtimeId as string) ?? "unknown";
+        const pluginId = (payload.pluginId as string) ?? "";
+        if (delta) {
+          dispatch({ type: "APPEND_DELTA", turnId: turnId ?? "unknown", runtimeId, pluginId, delta });
+        }
+        break;
+      }
       case "message.completed": {
+        // When streaming is active, message.completed may duplicate streamed content.
+        // Only add if no streaming message exists for this turn.
         const content = (payload.content as string) ?? "";
         if (content) {
           dispatch({
@@ -165,7 +276,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         break;
       }
       case "state.patch.applied": {
-        const patch = payload.patch as { id: string; summary: string; packageName: string };
+        const patch = payload.patch as { id: string; summary: string; packageName: string; data?: unknown };
         if (patch) {
           dispatch({ type: "ADD_STATE_PATCH", patch });
         }
@@ -176,6 +287,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (phase) {
           dispatch({ type: "SET_PHASE", phase });
         }
+        break;
+      }
+      case "runtime.progress": {
+        const step: ExecutionStep = {
+          type: payload.type as ExecutionStep["type"],
+          runtimeId: payload.runtimeId as string,
+          pluginId: payload.pluginId as string,
+          label: payload.label as string | undefined,
+          detail: payload.detail as string | undefined,
+          timestamp: payload.timestamp as string,
+        };
+        dispatch({ type: "ADD_EXECUTION_STEP", step });
         break;
       }
       case "flow.failed": {
@@ -190,37 +313,38 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const initSession = useCallback(async (worldId?: string) => {
-    try {
-      // Reset current session
-      dispatch({ type: "RESET_SESSION" });
-
-      // Find the world
-      const worlds = await api.listWorlds();
-      let world = worldId
-        ? worlds.find((w) => w.id === worldId)
-        : worlds[0];
-      if (!world) {
-        world = await api.createWorld("Custom World", "A new adventure begins.");
-      }
+  const selectWorld = useCallback((worldId: string) => {
+    dispatch({ type: "RESET_SESSION" });
+    const world = state.worlds.find((w) => w.id === worldId);
+    if (world) {
       dispatch({ type: "SET_WORLD", world });
+    }
+  }, [state.worlds]);
 
-      // Create a new session
-      const defaultPreset = state.presets.find((p) => p.isDefault) ?? state.presets[0];
-      const session = await api.createSession(world.id, defaultPreset?.id);
+  const startGame = useCallback(async () => {
+    if (!state.world) return;
+    try {
+      // Use user's slot config (heavy slot) if configured, else fall back to server default
+      const slotConfig = api.getSlotConfig();
+      const heavyPresetId = slotConfig.heavy?.presetId;
+      const presetId = heavyPresetId
+        ?? state.presets.find((p) => p.isDefault)?.id
+        ?? state.presets[0]?.id;
+      const session = await api.createSession(state.world.id, presetId);
       dispatch({ type: "SET_SESSION", session });
 
-      // Automatically fire session_start to trigger Turn 1:
-      // - story narrator generates opening narrative
-      // - init-wizard emits character creation form
+      const overlay = api.getWorldOverlay(state.world.id);
+      const loreOverride = overlay?.lore;
+
+      dispatch({ type: "CLEAR_EXECUTION_STEPS" });
       dispatch({ type: "SET_EXECUTING", value: true });
       api.sendAction(
         {
           requestId: api.uid(),
           type: "start_session",
           sessionId: session.id,
-          locale: "zh-CN",
-          payload: {},
+          locale: i18n.language,
+          payload: { ...(loreOverride ? { loreOverride } : {}) },
         },
         handleSseEvent,
         (err) => {
@@ -234,7 +358,40 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       dispatch({ type: "SET_EXECUTION_ERROR", error: (err as Error).message });
     }
-  }, [state.presets, handleSseEvent]);
+  }, [state.world, state.presets, handleSseEvent]);
+
+  const resumeSession = useCallback(async (session: api.SessionRecord) => {
+    // Set the world context
+    const world = state.worlds.find((w) => w.id === session.worldId);
+    if (world) {
+      dispatch({ type: "SET_WORLD", world });
+    }
+    dispatch({ type: "SET_SESSION", session });
+
+    // Load existing messages
+    try {
+      const messages = await api.listMessages(session.id);
+      const streamMessages: StreamMessage[] = messages.map((m) => ({
+        id: m.id,
+        role: m.role as "system" | "user" | "assistant",
+        content: m.content,
+        timestamp: m.createdAt,
+      }));
+      dispatch({ type: "LOAD_MESSAGES", messages: streamMessages });
+    } catch (err) {
+      console.warn('[session] Failed to load messages:', err instanceof Error ? err.message : err);
+    }
+  }, [state.worlds]);
+
+  const loadWorldSessions = useCallback(async () => {
+    if (!state.world) return;
+    try {
+      const sessions = await api.listSessions(state.world.id);
+      dispatch({ type: "SET_WORLD_SESSIONS", sessions });
+    } catch {
+      // silently fail — non-critical
+    }
+  }, [state.world]);
 
   const sendMessage = useCallback((content: string) => {
     if (!state.session || state.executing) return;
@@ -250,6 +407,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       },
     });
 
+    dispatch({ type: "CLEAR_EXECUTION_STEPS" });
     dispatch({ type: "SET_EXECUTING", value: true });
     dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
@@ -260,7 +418,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         requestId: api.uid(),
         type: isCommand ? "execute_command" : "send_message",
         sessionId: state.session.id,
-        locale: "zh-CN",
+        locale: i18n.language,
         payload: isCommand ? { command: content } : { content },
       },
       handleSseEvent,
@@ -277,6 +435,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const executeCommand = useCallback((command: string) => {
     if (!state.session || state.executing) return;
 
+    dispatch({ type: "CLEAR_EXECUTION_STEPS" });
     dispatch({ type: "SET_EXECUTING", value: true });
     dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
@@ -285,7 +444,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         requestId: api.uid(),
         type: "execute_command",
         sessionId: state.session.id,
-        locale: "zh-CN",
+        locale: i18n.language,
         payload: { command },
       },
       handleSseEvent,
@@ -310,13 +469,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "RESET_SESSION" });
   }, []);
 
+  const backToWorldSelect = useCallback(() => {
+    dispatch({ type: "RESET_TO_WORLD_SELECT" });
+  }, []);
+
   const value: SessionContextValue = {
     state,
     boot,
-    initSession,
+    selectWorld,
+    startGame,
+    resumeSession,
+    loadWorldSessions,
     sendMessage,
     executeCommand,
     resetSession,
+    backToWorldSelect,
   };
 
   return (

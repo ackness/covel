@@ -1,11 +1,13 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { healthRoute } from "./routes/health.js";
 import { apiKeyInjection } from "./middleware/api-key-injection.js";
 import { createAiStack } from "./ai-setup.js";
 import { createGenerateRoute } from "./routes/ai/generate.js";
 import { createStreamRoute } from "./routes/ai/stream.js";
+import { createPingRoute } from "./routes/ai/ping.js";
 import { createPresetsRoute } from "./routes/config/presets.js";
 import { createTurnRoute } from "./routes/kernel/turn.js";
 import { createPluginsRoute } from "./routes/plugins/list.js";
@@ -19,6 +21,7 @@ import { createCompatPackagesRoute } from "./routes/compat/packages.js";
 import { createCompatPresetsRoute } from "./routes/compat/presets.js";
 import { createCompatCommandsRoute } from "./routes/compat/commands.js";
 import { createCharactersRoute } from "./routes/characters.js";
+import { createSessionPluginsRoute } from "./routes/session-plugins.js";
 import { initKernelStack } from "./kernel-setup.js";
 import { createMemoryStore } from "./store/memory-store.js";
 
@@ -47,6 +50,7 @@ const store = createMemoryStore();
 app.route("/api/health", healthRoute);
 app.route("/api/ai/generate", createGenerateRoute(ai));
 app.route("/api/ai/stream", createStreamRoute(ai));
+app.route("/api/ai/ping", createPingRoute(ai));
 app.route("/api/config/presets", createPresetsRoute(ai));
 app.route("/api/kernel/turn", createTurnRoute(kernelStack.kernel));
 app.route("/api/plugins", createPluginsRoute(kernelStack.pluginHost));
@@ -58,16 +62,26 @@ app.route("/api/commands/execute", createCommandExecuteRoute(kernelStack.command
 app.route("/worlds", createWorldsRoute(store));
 app.route("/sessions", createSessionsRoute(store));
 app.route("/actions", createActionsRoute({
-  kernel: kernelStack.kernel,
+  getOrCreateSession: (sessionId) => kernelStack.getOrCreateSession(sessionId),
   commandBus: kernelStack.commandBus,
   store,
 }));
 app.route("/characters", createCharactersRoute(store));
+app.route("/sessions", createSessionPluginsRoute({
+  pluginHost: kernelStack.pluginHost,
+  getOrCreateSession: (sessionId) => kernelStack.getOrCreateSession(sessionId),
+}));
 app.route("/commands", createCompatCommandsRoute(kernelStack.pluginHost.commandRegistry));
 app.route("/packages", createCompatPackagesRoute(kernelStack.pluginHost));
 app.route("/presets", createCompatPresetsRoute(ai));
 
 app.route("/block-schemas", createBlockSchemasRoute(kernelStack.pluginHost));
+
+// DEV-ONLY: provider key exposure for frontend auto-load
+if (process.env.NODE_ENV !== "production") {
+  const { createDevKeysRoute } = await import("./routes/dev-keys.js");
+  app.route("/api/dev/provider-keys", createDevKeysRoute());
+}
 
 // Health check at root too
 app.route("/health", healthRoute);
@@ -75,5 +89,14 @@ app.route("/health", healthRoute);
 // Stubs for endpoints the frontend may call
 app.get("/traces", (c) => c.json([]));
 app.get("/archives", (c) => c.json([]));
+
+// ── Static file serving (production) ───────────────────────────────
+// Serve the built web frontend from /app/web-dist when SERVE_STATIC is set
+if (process.env.SERVE_STATIC === "true") {
+  const root = process.env.STATIC_DIR ?? "./web-dist";
+  app.use("/*", serveStatic({ root }));
+  // SPA fallback: serve index.html for non-API routes
+  app.get("*", serveStatic({ root, path: "/index.html" }));
+}
 
 export { app };

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { bootstrapKernel, createPermissiveTrustPolicy } from "../src/index.js";
 import { createPluginHost } from "@covel/plugin-runtime";
 import type { KernelInput } from "@covel/shared";

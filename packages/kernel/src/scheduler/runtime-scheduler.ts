@@ -1,47 +1,53 @@
-import type { RuntimePhase } from "@covel/shared";
 import type { CandidateRuntime, ScheduledRuntime, ExecutionPlan } from "../types.js";
-
-/** Phase execution order. */
-const PHASE_ORDER: RuntimePhase[] = [
-  "pre_story",
-  "story",
-  "post_story",
-  "background",
-];
+import { DEFAULT_RUNTIME_PRIORITY } from "../types.js";
 
 /**
- * Build an execution plan from candidate runtimes.
+ * Build an execution plan from candidate runtimes using priority-based scheduling.
  *
- * 1. Group by phase
- * 2. Within each phase, compute topological layers based on plugin `requires`
- * 3. Same layer executes in parallel; layers execute sequentially
+ * 1. Resolve each runtime's effective priority (override ?? spec.priority ?? 500)
+ * 2. Sort all candidates by priority ascending (0 = highest = runs first)
+ * 3. Group candidates with the same priority into parallel execution groups
+ * 4. Within same-priority groups, split by plugin dependencies (dependent runs after)
+ *
+ * @param priorityOverrides Optional per-runtime priority overrides keyed by
+ *   qualified runtime ID ("pluginId:runtimeId").
  */
 export function buildExecutionPlan(
   candidates: CandidateRuntime[],
-  pluginDeps: Map<string, string[]>
+  pluginDeps: Map<string, string[]>,
+  priorityOverrides?: Readonly<Record<string, number>>
 ): ExecutionPlan {
-  const groups: ScheduledRuntime[][] = [];
+  if (candidates.length === 0) return { groups: [] };
 
-  // Group candidates by phase
-  const byPhase = new Map<RuntimePhase, CandidateRuntime[]>();
-  for (const c of candidates) {
-    const phase = c.registered.spec.phase;
-    if (!byPhase.has(phase)) byPhase.set(phase, []);
-    byPhase.get(phase)!.push(c);
+  // Resolve effective priority for each candidate (override > spec > default)
+  const withPriority = candidates.map((c) => {
+    const qualifiedId = `${c.registered.pluginId}:${c.registered.spec.id}`;
+    const override = priorityOverrides?.[qualifiedId];
+    return {
+      candidate: c,
+      priority: override ?? c.registered.spec.priority ?? DEFAULT_RUNTIME_PRIORITY,
+    };
+  });
+
+  // Sort by priority ascending
+  withPriority.sort((a, b) => a.priority - b.priority);
+
+  // Group by priority
+  const priorityGroups = new Map<number, CandidateRuntime[]>();
+  for (const { candidate, priority } of withPriority) {
+    if (!priorityGroups.has(priority)) priorityGroups.set(priority, []);
+    priorityGroups.get(priority)!.push(candidate);
   }
 
-  // Process phases in order
-  for (const phase of PHASE_ORDER) {
-    const phaseCandidates = byPhase.get(phase);
-    if (!phaseCandidates || phaseCandidates.length === 0) continue;
+  // Process each priority group, splitting by deps within the group
+  const groups: ScheduledRuntime[][] = [];
+  const sortedPriorities = Array.from(priorityGroups.keys()).sort((a, b) => a - b);
 
-    // Compute topological layers for this phase
-    const layered = computeTopoLayers(phaseCandidates, pluginDeps);
-
-    for (const layer of layered) {
-      if (layer.length > 0) {
-        groups.push(layer);
-      }
+  for (const priority of sortedPriorities) {
+    const groupCandidates = priorityGroups.get(priority)!;
+    const subGroups = splitByDependencies(groupCandidates, pluginDeps, priority);
+    for (const sub of subGroups) {
+      if (sub.length > 0) groups.push(sub);
     }
   }
 
@@ -49,16 +55,16 @@ export function buildExecutionPlan(
 }
 
 /**
- * Compute topological layers using Kahn's algorithm variant.
- *
- * Runtimes with no dependencies go to layer 0.
- * Runtimes depending on layer-N plugins go to layer N+1.
+ * Within a same-priority group, split candidates into sub-groups
+ * based on plugin dependencies using topological layering.
+ * Independent runtimes run in parallel; dependent ones run after.
  */
-function computeTopoLayers(
+function splitByDependencies(
   candidates: CandidateRuntime[],
-  pluginDeps: Map<string, string[]>
+  pluginDeps: Map<string, string[]>,
+  priority: number
 ): ScheduledRuntime[][] {
-  // Build a map from pluginId to candidates in this group
+  // Build map from pluginId to candidates
   const pluginCandidates = new Map<string, CandidateRuntime[]>();
   for (const c of candidates) {
     const pid = c.registered.pluginId;
@@ -66,8 +72,29 @@ function computeTopoLayers(
     pluginCandidates.get(pid)!.push(c);
   }
 
-  // Compute in-degree based on plugin dependencies within this group
   const presentPlugins = new Set(pluginCandidates.keys());
+
+  // Check if there are any relevant dependencies within this group
+  let hasDeps = false;
+  for (const pid of presentPlugins) {
+    const deps = pluginDeps.get(pid) ?? [];
+    if (deps.some((d) => presentPlugins.has(d))) {
+      hasDeps = true;
+      break;
+    }
+  }
+
+  // Fast path: no deps within group, all run in parallel
+  if (!hasDeps) {
+    const layer: ScheduledRuntime[] = candidates.map((c) => ({
+      registered: c.registered,
+      triggerEvent: c.triggerEvent,
+      priority,
+    }));
+    return [layer];
+  }
+
+  // Compute in-degree for topological layering
   const inDegree = new Map<string, number>();
   const dependents = new Map<string, Set<string>>();
 
@@ -92,8 +119,6 @@ function computeTopoLayers(
     (pid) => (inDegree.get(pid) ?? 0) === 0
   );
 
-  let layerIndex = 0;
-
   while (currentQueue.length > 0) {
     const layer: ScheduledRuntime[] = [];
     const nextQueue: string[] = [];
@@ -107,12 +132,10 @@ function computeTopoLayers(
         layer.push({
           registered: c.registered,
           triggerEvent: c.triggerEvent,
-          phase: c.registered.spec.phase,
-          topoLayer: layerIndex,
+          priority,
         });
       }
 
-      // Reduce in-degree of dependents
       for (const depId of dependents.get(pid) ?? []) {
         const deg = (inDegree.get(depId) ?? 1) - 1;
         inDegree.set(depId, deg);
@@ -120,12 +143,8 @@ function computeTopoLayers(
       }
     }
 
-    if (layer.length > 0) {
-      layers.push(layer);
-    }
-
+    if (layer.length > 0) layers.push(layer);
     currentQueue = nextQueue;
-    layerIndex++;
   }
 
   // Remaining candidates with unresolved deps go to last layer
@@ -139,14 +158,11 @@ function computeTopoLayers(
       remaining.push({
         registered: c.registered,
         triggerEvent: c.triggerEvent,
-        phase: c.registered.spec.phase,
-        topoLayer: layerIndex,
+        priority,
       });
     }
   }
-  if (remaining.length > 0) {
-    layers.push(remaining);
-  }
+  if (remaining.length > 0) layers.push(remaining);
 
   return layers;
 }

@@ -14,7 +14,7 @@ const dummyEvent: RuntimeTriggerEvent = {
 function makeCandidate(
   pluginId: string,
   runtimeId: string,
-  phase: "pre_story" | "story" | "post_story" | "background"
+  priority?: number
 ): CandidateRuntime {
   return {
     registered: {
@@ -23,10 +23,10 @@ function makeCandidate(
         id: runtimeId,
         pluginId,
         kind: "plugin",
-        phase,
         trigger: { mode: "always" },
         tools: [],
         hooks: [],
+        priority,
       },
     },
     triggerEvent: dummyEvent,
@@ -34,37 +34,67 @@ function makeCandidate(
 }
 
 describe("runtime-scheduler", () => {
-  it("groups runtimes by phase in correct order", () => {
+  it("sorts runtimes by priority ascending (lower priority number runs first)", () => {
     const candidates = [
-      makeCandidate("p1", "bg", "background"),
-      makeCandidate("p2", "pre", "pre_story"),
-      makeCandidate("p3", "main", "story"),
+      makeCandidate("p1", "low", 900),
+      makeCandidate("p2", "high", 100),
+      makeCandidate("p3", "mid", 500),
     ];
 
     const plan = buildExecutionPlan(candidates, new Map());
 
     expect(plan.groups).toHaveLength(3);
-    expect(plan.groups[0][0].phase).toBe("pre_story");
-    expect(plan.groups[1][0].phase).toBe("story");
-    expect(plan.groups[2][0].phase).toBe("background");
+    expect(plan.groups[0][0].priority).toBe(100);
+    expect(plan.groups[1][0].priority).toBe(500);
+    expect(plan.groups[2][0].priority).toBe(900);
   });
 
-  it("puts same-phase runtimes without deps in the same group", () => {
+  it("groups same-priority runtimes into the same parallel group", () => {
     const candidates = [
-      makeCandidate("p1", "r1", "post_story"),
-      makeCandidate("p2", "r2", "post_story"),
+      makeCandidate("p1", "r1", 300),
+      makeCandidate("p2", "r2", 300),
     ];
 
     const plan = buildExecutionPlan(candidates, new Map());
 
     expect(plan.groups).toHaveLength(1);
     expect(plan.groups[0]).toHaveLength(2);
+    expect(plan.groups[0][0].priority).toBe(300);
+    expect(plan.groups[0][1].priority).toBe(300);
   });
 
-  it("separates dependent runtimes into different layers", () => {
+  it("creates separate groups for different priorities", () => {
     const candidates = [
-      makeCandidate("base", "r1", "post_story"),
-      makeCandidate("dependent", "r2", "post_story"),
+      makeCandidate("p1", "r1", 100),
+      makeCandidate("p2", "r2", 200),
+      makeCandidate("p3", "r3", 300),
+    ];
+
+    const plan = buildExecutionPlan(candidates, new Map());
+
+    expect(plan.groups).toHaveLength(3);
+    expect(plan.groups[0]).toHaveLength(1);
+    expect(plan.groups[1]).toHaveLength(1);
+    expect(plan.groups[2]).toHaveLength(1);
+  });
+
+  it("defaults to priority 500 when not specified", () => {
+    const candidates = [
+      makeCandidate("p1", "r1"), // no priority => 500
+      makeCandidate("p2", "r2", 100),
+    ];
+
+    const plan = buildExecutionPlan(candidates, new Map());
+
+    expect(plan.groups).toHaveLength(2);
+    expect(plan.groups[0][0].priority).toBe(100);
+    expect(plan.groups[1][0].priority).toBe(500);
+  });
+
+  it("splits same-priority dependent runtimes into sub-groups", () => {
+    const candidates = [
+      makeCandidate("base", "r1", 500),
+      makeCandidate("dependent", "r2", 500),
     ];
 
     const deps = new Map([["dependent", ["base"]]]);
@@ -73,13 +103,13 @@ describe("runtime-scheduler", () => {
 
     expect(plan.groups.length).toBeGreaterThanOrEqual(2);
     // base should be in earlier group
-    const baseGroup = plan.groups.find((g) =>
+    const baseGroupIdx = plan.groups.findIndex((g) =>
       g.some((s) => s.registered.pluginId === "base")
-    )!;
-    const depGroup = plan.groups.find((g) =>
+    );
+    const depGroupIdx = plan.groups.findIndex((g) =>
       g.some((s) => s.registered.pluginId === "dependent")
-    )!;
-    expect(baseGroup[0].topoLayer).toBeLessThan(depGroup[0].topoLayer);
+    );
+    expect(baseGroupIdx).toBeLessThan(depGroupIdx);
   });
 
   it("handles empty candidates", () => {
@@ -87,19 +117,19 @@ describe("runtime-scheduler", () => {
     expect(plan.groups).toHaveLength(0);
   });
 
-  it("handles multiple phases with dependencies", () => {
+  it("handles mixed priorities with dependencies", () => {
     const candidates = [
-      makeCandidate("p1", "pre", "pre_story"),
-      makeCandidate("p2", "main", "story"),
-      makeCandidate("p3", "combat", "post_story"),
-      makeCandidate("p4", "quest", "post_story"),
+      makeCandidate("p1", "pre", 100),
+      makeCandidate("p2", "main", 200),
+      makeCandidate("p3", "combat", 500),
+      makeCandidate("p4", "quest", 500),
     ];
 
     const deps = new Map([["p4", ["p3"]]]);
 
     const plan = buildExecutionPlan(candidates, deps);
 
-    // Should have: pre_story group, story group, post_story layer 0 (combat), post_story layer 1 (quest)
+    // Should have: priority 100, priority 200, priority 500 layer 0 (combat), priority 500 layer 1 (quest)
     expect(plan.groups.length).toBe(4);
   });
 });

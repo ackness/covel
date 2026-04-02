@@ -55,12 +55,12 @@
       "id": "init-wizard",
       "pluginId": "core-init-wizard",
       "kind": "plugin",
-      "phase": "post_story",
+      "priority": 450,
       "trigger": {
         "mode": "event",
         "onEvents": ["session_start"]
       },
-      "providerBinding": "fast",
+      "providerBinding": "heavy",
       "tools": [],
       "hooks": []
     }

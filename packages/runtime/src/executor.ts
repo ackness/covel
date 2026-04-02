@@ -3,6 +3,7 @@ import type {
   StreamEvent,
   TextGenerationResult,
   TextMessage,
+  ToolDefinition,
   GatewayOptions,
 } from "@covel/ai-provider";
 
@@ -18,6 +19,7 @@ export interface GatewayLike {
     input: {
       presetId?: string;
       messages: TextMessage[];
+      tools?: ToolDefinition[];
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: GatewayOptions
@@ -77,6 +79,7 @@ export function createRuntimeExecutor(gateway: GatewayLike) {
       const gatewayOptions: GatewayOptions = {
         apiKeys: input.apiKeys,
         traceId: input.traceId,
+        signal: budget.signal(),
       };
 
       const result = await gateway.generateText(
@@ -118,6 +121,7 @@ export function createRuntimeExecutor(gateway: GatewayLike) {
       const gatewayOptions: GatewayOptions = {
         apiKeys: input.apiKeys,
         traceId: input.traceId,
+        signal: budget.signal(),
       };
 
       for await (const event of gateway.streamText(

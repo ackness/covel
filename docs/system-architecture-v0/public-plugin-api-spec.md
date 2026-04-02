@@ -374,6 +374,28 @@ export interface PublicProviderBinding {
 - 首轮建议区分 narrative model binding 与 plugin model binding
 - 未声明 plugin 侧 binding 时，默认回退到 narrative binding
 
+### 13.1 Model Slot
+
+runtime 通过 `providerBinding` 引用命名 model slot（如 `"heavy"`、`"fast"`），而非具体 provider。slot 是一层抽象，将 runtime 的模型需求与具体 provider 配置解耦。
+
+首轮预定义 slot：
+
+| Slot | 用途 | 典型场景 |
+|------|------|----------|
+| `heavy` | 主叙事、复杂推理 | core-narrator |
+| `fast` | 轻量判断、插件默认 | core-guide, core-char-tracker |
+| `balance` | 裁判类插件、复杂逻辑代理 | 未来扩展 |
+| `image` | 图片生成（可选） | 未来扩展 |
+
+回退链：请求 slot → `heavy` slot → 第一个可用 slot。
+
+规则：
+
+- 插件在 manifest 或 runtime spec 中声明 slot 名称，不直接引用 provider SDK 或 API key
+- 用户通过前端配置面板为每个 slot 绑定不同的 provider preset
+- 未配置的 slot 自动回退到 `heavy`
+- slot 名称属于公开合同，插件可稳定依赖
+
 ## 14. Proposal Output Contract
 
 ```ts

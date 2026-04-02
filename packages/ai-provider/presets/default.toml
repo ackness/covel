@@ -13,7 +13,7 @@ protocol = "openai-chat-v1"
 # ── Presets ──────────────────────────────────────────────────────
 
 [[presets]]
-id = "default"
+id = "deepseek-chat"
 name = "DeepSeek Chat"
 provider = "deepseek"
 model = "deepseek-chat"
@@ -22,10 +22,10 @@ defaultSlot = "heavy"
 supportedModes = ["text", "object", "stream"]
 enabled = true
 isDefault = true
-fallbackPresetIds = ["fallback-dashscope"]
+fallbackPresetIds = ["dashscope-qwen-flash"]
 
 [[presets]]
-id = "fallback-dashscope"
+id = "dashscope-qwen-flash"
 name = "DashScope Qwen 3.5 Flash"
 provider = "dashscope"
 model = "qwen3.5-flash"

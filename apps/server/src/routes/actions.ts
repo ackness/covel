@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import type { Kernel } from "@covel/kernel";
+import type { KernelSession } from "@covel/kernel";
 import type { CommandBus } from "@covel/plugin-runtime";
 import type { KernelTurnResult, RenderBlock } from "@covel/shared";
+import type { ApiKeyEnv } from "../middleware/api-key-injection.js";
 import type { MemoryStore } from "../store/memory-store.js";
 
 /**
@@ -28,11 +29,11 @@ interface SseEnvelope {
 }
 
 export function createActionsRoute(deps: {
-  kernel: Kernel;
+  getOrCreateSession: (sessionId: string) => KernelSession;
   commandBus: CommandBus;
   store: MemoryStore;
 }) {
-  const { kernel, commandBus, store } = deps;
+  const { getOrCreateSession, commandBus, store } = deps;
 
   // Per-session run tracking
   const sessionRuns = new Map<string, { runId: string; branchId: string }>();
@@ -46,7 +47,7 @@ export function createActionsRoute(deps: {
     return info;
   }
 
-  const route = new Hono();
+  const route = new Hono<ApiKeyEnv>();
 
   route.post("/", async (c) => {
     const body = await c.req.json<{
@@ -71,7 +72,23 @@ export function createActionsRoute(deps: {
       return c.json({ code: "SESSION_NOT_FOUND", message: "Session not found" }, 404);
     }
 
-    const apiKeys = ((c as any).get("apiKeys") as Record<string, string>) ?? {};
+    const apiKeys = c.get("apiKeys") ?? {};
+
+    // Parse X-Slot-Config header for per-request slot overrides
+    let slotOverrides: Record<string, { presetId: string }> | undefined;
+    const slotConfigHeader = c.req.header("x-slot-config");
+    if (slotConfigHeader) {
+      try {
+        const decoded = JSON.parse(atob(slotConfigHeader)) as {
+          slots?: Record<string, { presetId: string }>;
+        };
+        if (decoded.slots && Object.keys(decoded.slots).length > 0) {
+          slotOverrides = decoded.slots;
+        }
+      } catch {
+        // Invalid header, skip
+      }
+    }
 
     return streamSSE(c, async (stream) => {
       let seq = 0;
@@ -163,26 +180,50 @@ export function createActionsRoute(deps: {
           store.addMessage(sessionId, "user", userContent);
         }
 
+        // Resolve per-session kernel session
+        const kernelSession = getOrCreateSession(sessionId);
+
         // Build kernel context from session state
         const chatHistory = store.listMessages(sessionId).map((m) => ({
           role: m.role,
           content: m.content,
         }));
         const world = store.getWorld(session.worldId);
+        const loreOverride = payload?.loreOverride as string | undefined;
 
-        kernel.setContext({
+        kernelSession.setContext({
           world: world
             ? {
                 name: world.name,
                 description: world.description,
-                ...(world.lore ? { lore: world.lore } : {}),
+                ...(loreOverride || world.lore
+                  ? { lore: loreOverride ?? world.lore }
+                  : {}),
               }
             : undefined,
           chat: chatHistory,
         });
 
-        // Execute kernel turn
-        const turnResult = await kernel.executeTurn(
+        // Provisional IDs for progress events emitted before turn completes
+        const provTurnId = `turn_${Date.now().toString(36)}`;
+        const provTraceId = `trace_${Date.now().toString(36)}`;
+
+        await emit("flow.phase.changed", provTurnId, provTraceId, { phase: "model" });
+
+        // Track which runtimes had their narrative streamed via message.delta
+        const streamedRuntimeIds = new Set<string>();
+
+        // Track background task completion for SSE streaming.
+        // Resolved when all background tasks finish (or immediately if none).
+        let resolveBackgroundDone: (() => void) | undefined;
+        let backgroundTaskCount = 0;
+        let backgroundTaskDoneCount = 0;
+        const backgroundDonePromise = new Promise<void>((resolve) => {
+          resolveBackgroundDone = resolve;
+        });
+
+        // Execute kernel turn with progress callback for real-time SSE
+        const turnResult = await kernelSession.executeTurn(
           {
             runId: runInfo.runId,
             branchId: runInfo.branchId,
@@ -191,23 +232,114 @@ export function createActionsRoute(deps: {
             locale: locale ?? "zh-CN",
             payload: type === "submit_block_response" ? payload : { text: userContent },
           },
-          { apiKeys }
+          {
+            apiKeys,
+            slotOverrides,
+            onProgress: async (evt) => {
+              if (evt.type === "message.delta") {
+                streamedRuntimeIds.add(evt.runtimeId);
+                await emit("message.delta", provTurnId, provTraceId, {
+                  runtimeId: evt.runtimeId,
+                  pluginId: evt.pluginId,
+                  delta: evt.detail ?? "",
+                });
+              } else {
+                await emit("runtime.progress", provTurnId, provTraceId, { ...evt });
+              }
+            },
+            onBackgroundTaskDone: async (task) => {
+              const { turnId: tid, traceId: trid } = turnResult;
+              try {
+                if (task.status === "completed" && task.result) {
+                  // Emit narrative from background runtime
+                  if (task.result.text) {
+                    store.addMessage(sessionId, "assistant", task.result.text);
+                    const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+                    await emit("message.completed", tid, trid, {
+                      messageId: msgId,
+                      content: task.result.text,
+                      background: true,
+                      runtimeId: task.runtimeId,
+                      pluginId: task.pluginId,
+                    });
+                  }
+                  // Emit state patches from background proposals
+                  for (const item of task.result.proposals) {
+                    if (item.kind === "state.patch") {
+                      await emit("state.patch.applied", tid, trid, {
+                        patch: {
+                          id: `patch_${seq}`,
+                          target: "state",
+                          summary: `${task.pluginId} background state update`,
+                          packageName: task.pluginId,
+                          data: item.payload,
+                        },
+                      });
+                    } else if (item.kind === "ui.render") {
+                      const payload = item.payload as { type: string; content: unknown };
+                      const blockEnvelope = toBlockEnvelope(
+                        {
+                          type: payload.type,
+                          content: payload.content,
+                          source: { runtimeId: task.runtimeId, pluginId: task.pluginId },
+                        },
+                        { turnId: tid, sessionId, requestId, traceId: trid }
+                      );
+                      await emit("block.emitted", tid, trid, { block: blockEnvelope });
+                    }
+                  }
+                } else if (task.status === "failed") {
+                  console.warn(`[actions] Background task failed: ${task.runtimeId}`, task.error);
+                  await emit("runtime.progress", tid, trid, {
+                    type: "runtime.failed",
+                    runtimeId: task.runtimeId,
+                    pluginId: task.pluginId,
+                    label: `${task.pluginId}/background`,
+                    detail: task.error ?? "Unknown error",
+                  });
+                }
+              } finally {
+                backgroundTaskDoneCount++;
+                if (backgroundTaskDoneCount >= backgroundTaskCount) {
+                  resolveBackgroundDone?.();
+                }
+              }
+            },
+          }
         );
 
         const { turnId, traceId } = turnResult;
 
-        // Emit phase
-        await emit("flow.phase.changed", turnId, traceId, { phase: "model" });
+        // Build a list of runtimeIds for each narrative block by scanning proposals.
+        // The commit-service appends narrative.append items in proposal order,
+        // which matches the order of narrative blocks in turnResult.render.blocks.
+        const narrativeSourceRuntimeIds: string[] = [];
+        for (const proposal of turnResult.proposals) {
+          for (const item of proposal.items) {
+            if (item.kind === "narrative.append") {
+              narrativeSourceRuntimeIds.push(proposal.runtimeId);
+            }
+          }
+        }
 
         // Emit render blocks as SSE events
+        let narrativeIndex = 0;
         for (const block of turnResult.render.blocks) {
           if (block.type === "narrative") {
-            const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
             store.addMessage(sessionId, "assistant", block.content as string);
-            await emit("message.completed", turnId, traceId, {
-              messageId: msgId,
-              content: block.content,
-            });
+            // Check if THIS specific runtime's narrative was already streamed via message.delta.
+            // Only suppress message.completed for runtimes that streamed their content.
+            const sourceRuntimeId = block.source?.runtimeId
+              ?? narrativeSourceRuntimeIds[narrativeIndex]
+              ?? "";
+            narrativeIndex++;
+            if (!streamedRuntimeIds.has(sourceRuntimeId)) {
+              const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+              await emit("message.completed", turnId, traceId, {
+                messageId: msgId,
+                content: block.content,
+              });
+            }
           } else {
             const blockEnvelope = toBlockEnvelope(block, {
               turnId,
@@ -229,6 +361,7 @@ export function createActionsRoute(deps: {
                   target: "state",
                   summary: `${proposal.pluginId} state update`,
                   packageName: proposal.pluginId,
+                  data: item.payload,
                 },
               });
             }
@@ -249,6 +382,17 @@ export function createActionsRoute(deps: {
             store.updateSessionPhase(sessionId, "playing");
             await emit("phase_change", turnId, traceId, { phase: "playing" });
           }
+        }
+
+        // Wait for background tasks to complete before closing the stream
+        backgroundTaskCount = turnResult.backgroundTasks?.length ?? 0;
+        if (backgroundTaskCount === 0) {
+          // No background tasks — resolve immediately
+          resolveBackgroundDone?.();
+        }
+        if (backgroundTaskCount > 0) {
+          await emit("flow.phase.changed", turnId, traceId, { phase: "background" });
+          await backgroundDonePromise;
         }
 
         // flow.completed

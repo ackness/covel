@@ -1,5 +1,8 @@
 import type { ModelProfile, PresetConfig, ResolvedTarget } from "./types.js";
 
+/** Fallback context window size when synthesizing a profile from a preset. */
+const SYNTHETIC_CONTEXT_WINDOW = 64_000;
+
 /**
  * Create a preset registry that resolves preset IDs to model targets.
  *
@@ -84,30 +87,30 @@ export function createPresetRegistry(options: {
     const baseProfile = profiles.get(targetProfileId);
 
     // If no profile exists but we have a preset, synthesize a profile from it
+    if (!baseProfile && !preset) {
+      throw new Error(
+        `Preset registry: profile "${targetProfileId}" not found.`
+      );
+    }
+
     const effectiveProfile: ModelProfile = baseProfile
       ? {
           ...baseProfile,
           ...input.projectOverride?.profile,
           ...input.sessionOverride?.profile,
         }
-      : preset
-        ? {
-            id: preset.tier,
-            tier: preset.tier,
-            provider: preset.provider,
-            model: preset.model,
-            contextWindow: 64_000,
-            latencyClass: "medium",
-            costClass: "medium",
-            supportedModes: preset.supportedModes,
-            ...input.projectOverride?.profile,
-            ...input.sessionOverride?.profile,
-          }
-        : (() => {
-            throw new Error(
-              `Preset registry: profile "${targetProfileId}" not found.`
-            );
-          })();
+      : {
+          id: preset!.tier,
+          tier: preset!.tier,
+          provider: preset!.provider,
+          model: preset!.model,
+          contextWindow: SYNTHETIC_CONTEXT_WINDOW,
+          latencyClass: "medium",
+          costClass: "medium",
+          supportedModes: preset!.supportedModes,
+          ...input.projectOverride?.profile,
+          ...input.sessionOverride?.profile,
+        };
 
     return { profile: effectiveProfile, preset };
   }
@@ -147,8 +150,8 @@ export function createPresetRegistry(options: {
           const target = resolveTextTarget({ presetId: id });
           chain.push(target);
           collectFallbacks(target.preset?.fallbackPresetIds ?? []);
-        } catch {
-          // Skip invalid fallback presets
+        } catch (err) {
+          console.warn(`[ai-provider] Failed to resolve fallback preset "${id}":`, err instanceof Error ? err.message : err);
         }
       }
     }

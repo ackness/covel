@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Covel is an AI RPG plugin-based framework (modular monolith architecture). The core philosophy: **plugins carry gameplay logic, the kernel provides primitives and orchestration**. The system provides a workbench UI for interactive storytelling/gameplay, backed by a plugin-driven kernel that orchestrates LLM calls, context assembly, and turn execution.
+Covel is an AI RPG plugin-based framework (modular monolith architecture). Core philosophy: **plugins carry gameplay logic, the kernel provides primitives and orchestration**. The system provides a workbench UI for interactive storytelling/gameplay, backed by a plugin-driven kernel that orchestrates LLM calls, context assembly, and turn execution.
 
-Detailed architecture docs live in `docs/system-architecture-v0/` (read order: framework-architecture -> execution-flow -> runtime-kernel-spec -> public-plugin-api-spec).
+Detailed architecture docs: `docs/system-architecture-v0/` (read order: framework-architecture → execution-flow → runtime-kernel-spec → public-plugin-api-spec).
 
 ## Commands
 
@@ -17,6 +17,7 @@ pnpm dev:web              # Start only web frontend
 pnpm dev:server           # Start only API server
 pnpm build                # Build all packages
 pnpm lint                 # Lint all packages (tsc --noEmit)
+pnpm clean                # Clean all dist directories
 
 # Database (PostgreSQL via Docker)
 pnpm db:up                # Start PostgreSQL container
@@ -26,205 +27,181 @@ pnpm db:migrate           # Run Drizzle migrations
 pnpm db:studio            # Open Drizzle Studio
 
 # Tests (vitest)
-pnpm --filter @covel/kernel test        # Run kernel tests
-pnpm --filter @covel/plugin-runtime test  # Run plugin-runtime tests
-pnpm --filter @covel/runtime test       # Run runtime tests
-pnpm --filter @covel/ai-provider test   # Run ai-provider tests
-# Add --watch for watch mode in any package
+pnpm --filter @covel/kernel test           # Run kernel tests
+pnpm --filter @covel/plugin-runtime test   # Run plugin-runtime tests
+pnpm --filter @covel/runtime test          # Run runtime tests
+pnpm --filter @covel/ai-provider test      # Run ai-provider tests
+pnpm --filter @covel/store test            # Run store tests
+# Add --watch for watch mode, --run for single run
 ```
 
 ## Monorepo Structure
 
-- **pnpm workspaces** with **Turborepo** for task orchestration
+- **pnpm workspaces** + **Turborepo** for task orchestration
 - Package manager: `pnpm@10.7.0`, Node.js `>=20.19.0`
 - ESM-only (`"type": "module"`), TypeScript strict mode, target ES2022
+- All packages use direct TypeScript source exports (`"import": "./src/index.ts"` — no build step for dev)
+- Use `.js` extensions in TypeScript imports (NodeNext module resolution)
 
 ### Workspace Layout
 
 ```
 apps/
-  web/        @covel/web       — React 19 + Vite 8 + TailwindCSS v4 + TanStack Router
-  server/     @covel/server    — Hono API server + Drizzle ORM + pg-boss
+  web/        @covel/web              — React 19 + Vite 8 + TailwindCSS v4 + TanStack Router
+  server/     @covel/server           — Hono API server + Drizzle ORM + pg-boss
 
 packages/
-  shared/         @covel/shared          — Shared types and contracts
-  ai-provider/    @covel/ai-provider     — Multi-provider LLM abstraction (preset-based routing)
-  runtime/        @covel/runtime         — Turn runtime execution engine
-  kernel/         @covel/kernel          — Orchestration kernel (scheduling, context assembly, tool execution, proposals, rendering)
-  plugin-runtime/ @covel/plugin-runtime  — Plugin loader, registries (tool/hook/runtime/command), host
+  shared/           @covel/shared           — Shared types and contracts (character, kernel, plugin, world, data-access)
+  ai-provider/      @covel/ai-provider      — Multi-provider LLM abstraction (OpenAI/Anthropic/DeepSeek/Qwen, preset-based routing)
+  runtime/          @covel/runtime          — Turn runtime execution engine (LLM tool-calling loop + budget enforcement)
+  context/          @covel/context          — Unified context builder (TurnContextStore + PromptAssembler + Compactor)
+  kernel/           @covel/kernel           — Orchestration kernel (scheduling, tool execution, proposals, rendering)
+  plugin-runtime/   @covel/plugin-runtime   — Plugin loader, registries (tool/hook/runtime/command), host
+  store/            @covel/store            — Data abstraction with 3 backends: MemoryStore, IdbStore (IndexedDB), PgStore (PostgreSQL)
+  trace/            @covel/trace            — Structured runtime trace collection (TurnTrace/RuntimeTrace hierarchy, delta recording, Langfuse export)
+  plugin-test-utils/ @covel/plugin-test-utils — Testing utilities for plugin authors
 
 plugins/
-  core-guide/         — Story guidance and next-step choice panels
-  core-persona/       — Narrator/AI persona configuration
-  core-char-tracker/  — Character tracking
-  core-init-wizard/   — Onboarding wizard
+  core-persona/       — Narrator/AI persona configuration (priority 100)
+  core-narrator/      — Main narrative generation (priority 400)
+  core-combat/        — Structured turn-based combat (priority 420)
+  core-init-wizard/   — Onboarding wizard (priority 450)
+  core-char-tracker/  — Character identification (priority 600)
+  core-guide/         — Story guidance and choice panels (priority 600)
+  core-inventory/     — Item/equipment management (priority 600)
+  core-quest/         — Quest tracking + tools (priority 600)
+  core-dice/          — Randomness/dice rolls
+  core-memory/        — Memory summarizer
+  core-world-state/   — World state tracking
 ```
 
 ### Dependency Flow
 
 ```
-@covel/shared  <-  @covel/ai-provider  <-  @covel/runtime  <-  @covel/kernel
-                   @covel/plugin-runtime ->                     ->
-                                               @covel/server (composes all)
+@covel/shared  ←  @covel/ai-provider  ←  @covel/runtime  ←  @covel/context  ←  @covel/kernel
+                  @covel/plugin-runtime →                                        →
+                  @covel/store →                               @covel/server (composes all)
 ```
 
 ## Architecture
 
 ### Core Execution Primitives
 
-The system's first-class execution primitives are **Runtime, Tool, Hook, Context, Proposal** — not plugins. A Plugin Package is only a distribution/packaging unit that declares and bundles these primitives.
+First-class execution primitives: **Runtime, Tool, Hook, Context, Proposal** — not plugins. A Plugin Package is a distribution/packaging unit that declares and bundles these primitives.
+
+### Kernel Lifecycle
+
+Two-phase initialization: `bootstrapKernel()` creates the kernel instance with global registries, then `createSession()` creates per-session scoped views. `createKernel()` is a compat wrapper combining both steps.
 
 ### Kernel Execution Pipeline
 
-The kernel (`packages/kernel`) orchestrates each turn through a fixed pipeline:
+Each turn follows a fixed pipeline (`packages/kernel`):
 
 ```
-Input/Event -> Trigger Router -> Runtime Scheduler -> Context Assembly
--> Runtime Runner -> Tool/Hook Loop -> Proposal Collector
--> Validation/Policy -> Commit Service -> Render/Side Effects
--> Follow-up Events (may re-enter Router)
+Input/Event → Trigger Router → Priority Scheduler → [For each priority group:]
+  → TurnContextStore.init() → PromptAssembler.build() → Runtime Runner
+  → Tool/Hook Loop → Proposal Collector → TurnContextStore.ingest()
+→ Validation/Policy → Commit Service → Render/Side Effects
+→ Follow-up Events (may re-enter Router)
 ```
 
-1. **Trigger Router** — identifies event type, generates `RuntimeTriggerEvent`, filters candidate runtimes by trigger rules (modes: `always`, `interval`, `manual`, `event`)
-2. **Runtime Scheduler** — orders runtimes by: phase -> dependency topology layer -> `plugin.loadingOrder` -> explicit priority -> stable id sort. Phases: `pre_story` -> `story` -> `post_story` -> `background`. Same-layer runtimes run in parallel.
-3. **Context Assembly** — builds minimal read-only context per runtime's `readScopes`. 10 slices: `chat`, `world`, `characters`, `state`, `record`, `events`, `runtime`, `runtimeSettings`, `narrative`, `archive`. Resolves locale explicitly (not by guessing).
-4. **Runtime Runner** — loads instructions (PLUGIN.md), binds provider/tools/hooks/budget, drives LLM tool-calling loop. Budget: `maxSteps`/`timeoutMs` are hard limits, `maxTokens` is best-effort.
-5. **Tool/Hook Loop** — executes whitelisted tools, hooks can guard/rewrite/audit/block at lifecycle points (`TurnStart`, `PreToolUse`, `PostToolUse`, `PreStateCommit`, `PostStateCommit`, `TurnStop`)
-6. **Proposal Collector** — normalizes outputs into `KernelProposalEnvelope` with typed items: `narrative.append`, `state.patch`, `event.emit`, `record.upsert`, `ui.render`, `asset.generate`
-7. **Validation/Policy** — schema + permission + policy checks, parallel conflict detection (scope isolation preferred, same-key conflicts rejected by default)
-8. **Commit** — writes State, appends Event, updates Record, generates Snapshot
-9. **Render** — maps commit results to message blocks, panel updates, side effects
-
-### The Commit Chain Invariant
-
-**All writes go through `proposal -> validate -> commit`.** Plugins never write directly to the database or bypass this chain. This is the foundation for auditing, replay, diffing, and migration.
+Key stages:
+1. **Trigger Router** — event type identification, `RuntimeTriggerEvent` generation, candidate filtering by trigger rules (modes: `always`, `interval`, `manual`, `event`)
+2. **Priority Scheduler** — sort by `priority` (0-1000, default 500). 0 = highest = first. Same priority = parallel group
+3. **Context Assembly** — `TurnContextStore` accumulates turn context; `PromptAssembler` builds per-runtime prompts (instructions + sections + previous outputs); `Compactor` handles long-session history compaction
+4. **Runtime Runner** — loads PLUGIN.md, binds provider/tools/hooks/budget, drives LLM tool-calling loop. `maxSteps`/`timeoutMs` = hard limits, `maxTokens` = best-effort
+5. **Tool/Hook Loop** — whitelisted tools; hooks at lifecycle points: `TurnStart`, `PreToolUse`, `PostToolUse`, `PreStateCommit`, `PostStateCommit`, `TurnStop`
+6. **Proposal Collector** — normalizes to `KernelProposalEnvelope`: `narrative.append`, `state.patch`, `event.emit`, `record.upsert`, `ui.render`, `asset.generate`
+7. **Commit Chain** — `proposal → validate → commit`. All writes go through this chain. Plugins never write directly to DB.
 
 ### Plugin System
 
-Plugins declare capabilities in `plugin.json` manifests (schema version 1.0). Recommended plugin structure:
+Plugins declare capabilities in `plugin.json` manifests. Structure:
 
 ```
 plugin/
-  plugin.json      — Manifest: capabilities, metadata, i18n
-  PLUGIN.md        — Runtime instructions (= agent skill prompt for the LLM)
+  plugin.json      — Manifest: capabilities, metadata, i18n, blockSchemas
+  PLUGIN.md        — Runtime instructions (= LLM agent skill prompt)
   schemas/         — Input/output schemas
   server/          — Runtime / tool / hook implementations
   client/          — UI slot extensions
-  scripts/         — Deterministic scripts (dice roll, formulas — avoid LLM for math)
-  references/      — Rule materials (RAG sources, lore supplements)
 ```
 
-The `PluginHost` (`plugin-runtime`) scans the `plugins/` directory, validates manifests, loads modules, and populates registries. The `CommandBus` dispatches slash commands to registered handlers.
+**Session-scoped activation**: Global pool loaded at startup; each `KernelSession` has a `SessionPluginScope` (Set of active plugin IDs). Scoped registry views (`ScopedRuntimeRegistry`, `ScopedToolRegistry`, `ScopedHookRegistry`) filter by active set. Enable/disable mid-session; changes apply on next turn. World manifest `requiredPlugins`/`recommendedPlugins` seed initial set.
 
-**Runtime** is a complete, independently-callable LLM execution unit (not just code attached to a chat turn). Each runtime has its own provider binding, context contract, tool whitelist, hook set, and budget.
+**Default gameplay loop**: core-persona (100, context) → core-narrator (400, narrative) → core-combat (420, if triggered) → core-init-wizard (450, turn 1) → guide/tracker/inventory/quest (600, parallel) → background (900+).
 
-**Default gameplay loop**: story runtime runs first (narrative only), then `post_story` plugin runtimes read the narrative + state and produce proposals, then `validate -> commit -> render`. Background runtimes (memory, archive) run after without blocking.
-
-**Plugin trigger timing**: "after main narrative" is the default profile, NOT the only option. Plugins can trigger on: session start, every N turns, context threshold, goal achievement, manual button press, explicit events.
+**Trigger modes**: `always`, `interval` (every N turns), `manual` (button press), `event` (context threshold, goal achievement, session start, explicit events).
 
 ### Model Slot System
 
-Named model slots for provider routing (not simple primary/auxiliary split):
-- `heavy` — main narrative, complex reasoning (required, minimum 1 LLM)
+Named slots for provider routing:
+- `heavy` — main narrative, complex reasoning (required)
 - `fast` — plugin default, lightweight judgment
-- `balance` — referee plugins, complex logic agents
+- `balance` — referee plugins, complex logic
 - `image` — image generation (optional)
 
-Unconfigured slots fall back to `heavy`. Runtime references slots via `providerBinding` field.
+Unconfigured slots fall back to `heavy`. Config in `packages/ai-provider/presets/default.toml`. Supports OpenAI, Anthropic, DeepSeek, Qwen (Aliyun DashScope) protocols.
 
-**Preset system**: Presets are pre-filled templates (provider, baseUrl, model, protocol). Only API key requires user input. Users can create custom presets (saved in browser localStorage, exportable as JSON without API key). Advanced model parameters (temperature, topP, etc.) use provider defaults unless explicitly overridden via settings panel.
-
-**API key security**: Keys stored only in browser localStorage, passed per-request via `X-Provider-Keys` header (base64), never persisted server-side.
+**API key security**: Keys in browser localStorage only, passed per-request via `X-Provider-Keys` header (base64), never persisted server-side.
 
 ### Schema-Driven Block Rendering
 
-Three-tier resolution for plugin UI blocks:
-1. **Custom Renderer** — hand-written React component (highest quality, for core interactions)
-2. **Schema Renderer** — auto-generated from plugin's `blockSchemas` in `plugin.json` (JSON Schema → dynamic form/display)
-3. **Raw Fallback** — JSON display (development/debug)
+Three-tier resolution for plugin UI:
+1. **Custom Renderer** — hand-written React component
+2. **Schema Renderer** — auto-generated from `blockSchemas` in plugin.json (JSON Schema → dynamic form/display)
+3. **Raw Fallback** — JSON display (dev/debug)
 
-Plugins declare `blockSchemas` with `dataSchema` (JSON Schema) and optional `submitSchema`. LLM generates structured content conforming to schema; proposal validator checks compliance; renderer resolves by tier.
+### State & Persistence
 
-### Character Card System
+Core runtime objects (never collapse into single JSON):
+- **Run** — session root, phase: `init` → `character_creation` → `playing` → `ended`
+- **Branch** — world-line branch
+- **Snapshot** — restorable state point
+- **State** — current structured facts
+- **Event** — append-only business events
+- **Record** — searchable long-term knowledge
 
-Dynamic, plugin-driven character cards (inspired by SillyTavern V2/V3 but mutable during play):
-- Base fields: `id`, `worldId`, `runId`, `name`, `type` (player/npc/companion), `description`, `version`
-- Dynamic fields: `fields: Record<string, unknown>` constrained by world `characterSchema`
-- Extension fields: `extensions: Record<string, unknown>` namespaced by pluginId
-- Character creation is context-aware: init-wizard LLM reads opening narrative to generate contextual creation form
-- Relationships tracked via `Record` objects (`record.upsert`), future Graph RAG integration planned
-- Characters exportable as JSON, importable with world schema validation
-
-### Content Assets
-
-Three content asset types with stable local-first formats (not tied to any platform):
-- **World Package** — Markdown + YAML frontmatter, declares character schema, required/recommended plugins
-- **Character Pack** — Dynamic character cards with initial definition, growth, and retrospection
-- **Plugin Package** — As described above
-
-### State & Persistence Model
-
-Core runtime objects (never collapse into a single JSON blob):
-- **Run** — Long-lived gameplay session root, has explicit phase: `init` → `character_creation` → `playing` → `ended`
-- **Branch** — World-line branch
-- **Snapshot** — Restorable state point
-- **State** — Current structured facts
-- **Event** — Append-only business events
-- **Record** — Searchable long-term knowledge
-
-Supports `fork restore` (branch from snapshot, default) and `hard restore` (overwrite current branch).
-
-**Session export/import**: Full session exportable as JSON (run + branches + snapshots + state + events + records + messages + plugin set). No API keys included. Import creates new Run, checks world/plugin compatibility. Supports branch-level export and read-only replay sharing.
-
-### Opening Flow
-
-Turn 1 sequence when player clicks "Start Game":
-1. `pre_story`: core-persona (no-op, injects persona via context provider)
-2. `story`: core-narrator (LLM generates opening narrative)
-3. `post_story`: core-init-wizard (LLM reads narrative + world schema, generates contextual character creation form)
-4. SSE streams: narrative text → character creation block → flow complete
-5. Phase transitions: `init` → `character_creation` → (after char submit) → `playing`
+Store backends (`@covel/store`): MemoryStore (dev/test), IdbStore (browser IndexedDB), PgStore (production PostgreSQL via Drizzle ORM).
 
 ### Server Route Layout
 
-The server exposes two route sets:
-- `/api/*` — internal programmatic API (AI generate/stream, kernel turn, plugin listing, command execution)
-- Root-level routes (`/worlds`, `/sessions`, `/actions`, `/commands`, `/packages`, `/presets`) — frontend-facing, proxied by Vite dev server
+Two route sets:
+- `/api/*` — internal programmatic API: `ai/generate`, `ai/stream`, `ai/ping`, `kernel/turn`, `plugins`, `block-schemas`, `commands`, `commands/execute`, `config/presets`, `health`
+- Root-level routes (frontend-facing, proxied by Vite): `/worlds`, `/sessions`, `/actions`, `/characters`, `/commands`, `/packages`, `/presets`, `/block-schemas`
+- Session plugin routes: `GET /sessions/:id/plugins`, `POST /sessions/:id/plugins/enable`, `POST /sessions/:id/plugins/disable`
 
 ### Frontend
 
-- Three-panel workbench layout (left rail for navigation, main content area, side panel for settings)
-- `@` path alias resolves to `apps/web/src/`
-- i18n via i18next with `zh-CN` (default) and `en-US` locales
+- Three-panel workbench: left rail (navigation), main content, side panel (settings)
+- Routes: `/` (landing), `/session` (game workbench), `/debug` (debugger)
+- `@` path alias → `apps/web/src/`
+- i18n via i18next: `zh-CN` (default) + `en-US`
 
 ## Conventions
 
-- All packages use direct TypeScript source exports (no build step needed for dev — `"import": "./src/index.ts"`)
-- Use `.js` extensions in TypeScript imports (NodeNext module resolution)
 - Validation uses Zod schemas throughout
-- Database access via Drizzle ORM (PostgreSQL); in-memory store available for dev/testing
-
-### i18n Rules
-
-Locale is an **explicit system capability**, not just UI chrome:
-- Default language: `zh-CN`. Minimum supported set: `zh-CN` + `en-US`
-- Locale enters the execution chain explicitly via `KernelInput.locale` -> `RuntimeContextView.locale`
-- Resolution order: request locale -> run locale -> world default locale -> app default (`zh-CN`)
-- Resource fallback: frontend language -> settings default -> asset's own default language
-- Plugin manifests use `I18nText` (`string | Record<string, string>`) for `displayName`/`description`
-- Frontend UI, core plugin metadata, and kernel-visible user text must provide both `zh-CN` and `en-US`
-- PLUGIN.md and world content may maintain only default locale in v1, but must declare locale coverage
+- Database access via Drizzle ORM (PostgreSQL)
+- Locale is a **system capability**: enters execution chain via `KernelInput.locale` → `RuntimeContextView.locale`. Resolution: request → run → world default → app default (`zh-CN`)
+- Plugin manifests use `I18nText` (`string | Record<string, string>`) for display fields
 
 ### Plugin Authoring Rules
 
-- Plugins depend ONLY on Public Plugin API (manifest/runtime/tool/hook/UI slot/provider binding/proposal contracts)
-- Plugins must NOT depend on: database table names, ORM models, kernel internal scheduling, frontend component tree, internal helpers
-- All tool writes go through proposals, never direct DB access
-- Tools must have schemas; high-risk tools must declare permissions
-- Hooks guard/rewrite/audit — they do NOT carry main gameplay logic
-- UI extensions inject only through standard slots: `settings_panel`, `message_block`, `world_panel`, `action_panel`
-- Provider access is through binding declarations, never direct SDK usage
+- Depend ONLY on Public Plugin API (manifest/runtime/tool/hook/UI slot/provider binding/proposal contracts)
+- Must NOT depend on: DB table names, ORM models, kernel internals, frontend components
+- All tool writes through proposals; tools must have schemas; high-risk tools declare permissions
+- Hooks guard/rewrite/audit — do NOT carry main gameplay logic
+- UI slots: `settings_panel`, `message_block`, `world_panel`, `action_panel`
+- Provider access through binding declarations, never direct SDK usage
 
 ### Observability
 
-Full chain tracing with: `traceId` -> `runId` -> `branchId` -> `turnId` -> `runtimeId` -> `pluginId`. Track runtime scheduling, tool calls, hook decisions, provider requests, DB commits, locale resolution.
+**Trace chain**: `traceId` → `runId` → `branchId` → `turnId` → `runtimeId` → `pluginId`.
+
+**Dual-channel design**:
+- **Runtime trace** (`@covel/trace` package): structured `TurnTrace` → `RuntimeTrace` hierarchy. Captures LLM calls (delta messages + response), tool calls (input/output), proposals, hooks, provider binding, context fragments. Uses delta recording to avoid storing duplicate prompt history.
+- **Infrastructure logging** (pino): server startup, plugin loading, DB operations, SSE connections.
+
+**Trace consumption**: REST API (`/api/trace/*`), SSE push (`trace.*` events), Langfuse export (`TraceExporter` interface), JSON export for player download.
+
+**Frontend debug page** (`/debug`): Session Timeline, Runtime Inspector (LLM call chain + tool calls), Prompt Viewer (full prompt reconstruction with diff), Data Explorer.

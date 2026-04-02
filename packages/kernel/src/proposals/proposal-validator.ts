@@ -28,8 +28,8 @@ export function validateProposals(
   const valid: ValidatedProposalEnvelope[] = [];
   const rejected: Array<{ envelope: KernelProposalEnvelope; reason: string }> = [];
 
-  // Track state.patch keys for conflict detection
-  const patchKeys = new Map<string, string>(); // key → first proposalId
+  // Track state.patch keys for conflict detection: full key → { runtimeId, proposalId }
+  const patchKeys = new Map<string, { runtimeId: string; proposalId: string }>();
 
   for (const envelope of envelopes) {
     let isValid = true;
@@ -51,16 +51,18 @@ export function validateProposals(
       }
 
       // Conflict detection for state.patch
+      // Scope isolation: different scopes never conflict.
+      // Same full key from different runtimes = conflict (same runtime can patch same key multiple times).
       if (item.kind === "state.patch") {
         const payload = item.payload as Record<string, unknown>;
         for (const key of Object.keys(payload)) {
           const existing = patchKeys.get(key);
-          if (existing && existing !== envelope.proposalId) {
+          if (existing && existing.runtimeId !== envelope.runtimeId) {
             isValid = false;
-            rejectReason = `State key "${key}" conflict with proposal "${existing}"`;
+            rejectReason = `State key "${key}" conflict: runtime "${envelope.runtimeId}" vs "${existing.runtimeId}" (proposal "${existing.proposalId}")`;
             break;
           }
-          patchKeys.set(key, envelope.proposalId);
+          patchKeys.set(key, { runtimeId: envelope.runtimeId, proposalId: envelope.proposalId });
         }
         if (!isValid) break;
       }

@@ -11,6 +11,16 @@ import {
   toAnthropicMessages,
 } from "./http.js";
 
+const ANTHROPIC_DEFAULT_MAX_TOKENS = 1024;
+
+function readAnthropicUsage(payload: Record<string, unknown>): UsageSummary {
+  const usage = payload.usage as Record<string, unknown> | undefined;
+  return {
+    inputTokens: Number(usage?.input_tokens ?? 0),
+    outputTokens: Number(usage?.output_tokens ?? 0),
+  };
+}
+
 /**
  * Anthropic Messages v1 adapter.
  * Handles the Anthropic-specific streaming format and message structure.
@@ -18,10 +28,12 @@ import {
 export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
   return {
     async generateText(config, params) {
+      const { system, messages } = toAnthropicMessages(params.messages);
       const response = await postJson(config, "/messages", {
         model: params.model,
-        max_tokens: 1024,
-        messages: toAnthropicMessages(params.messages),
+        max_tokens: ANTHROPIC_DEFAULT_MAX_TOKENS,
+        ...(system ? { system } : {}),
+        messages,
         ...params.providerRequestMetadata,
       });
       const payload = await parseJson(response);
@@ -30,25 +42,29 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       return {
         text: readAnthropicText(payload),
         finishReason: String(payload.stop_reason ?? "stop"),
-        usage: {
-          inputTokens: Number(payload.usage?.input_tokens ?? 0),
-          outputTokens: Number(payload.usage?.output_tokens ?? 0),
-        },
+        usage: readAnthropicUsage(payload),
       };
     },
 
     async generateObject(config, params) {
+      const { system, messages } = toAnthropicMessages(params.messages);
+      const systemPrompt = [system, "Respond with JSON only."].filter(Boolean).join("\n\n");
       const response = await postJson(config, "/messages", {
         model: params.model,
-        max_tokens: 1024,
-        system: "Respond with JSON only.",
-        messages: toAnthropicMessages(params.messages),
+        max_tokens: ANTHROPIC_DEFAULT_MAX_TOKENS,
+        system: systemPrompt,
+        messages,
         ...params.providerRequestMetadata,
       });
       const payload = await parseJson(response);
       assertSuccess(response, payload, "anthropic");
 
-      const rawObject = JSON.parse(readAnthropicText(payload));
+      let rawObject: unknown;
+      try {
+        rawObject = JSON.parse(readAnthropicText(payload));
+      } catch {
+        throw createStructuredOutputError("anthropic");
+      }
       const validation = params.schema.safeParse(rawObject);
       if (!validation.success) {
         throw createStructuredOutputError("anthropic");
@@ -57,19 +73,18 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       return {
         object: validation.data,
         finishReason: String(payload.stop_reason ?? "stop"),
-        usage: {
-          inputTokens: Number(payload.usage?.input_tokens ?? 0),
-          outputTokens: Number(payload.usage?.output_tokens ?? 0),
-        },
+        usage: readAnthropicUsage(payload),
       };
     },
 
     async *streamText(config, params) {
+      const { system, messages } = toAnthropicMessages(params.messages);
       const response = await postJson(config, "/messages", {
         model: params.model,
-        max_tokens: 1024,
+        max_tokens: ANTHROPIC_DEFAULT_MAX_TOKENS,
         stream: true,
-        messages: toAnthropicMessages(params.messages),
+        ...(system ? { system } : {}),
+        messages,
         ...params.providerRequestMetadata,
       });
 
@@ -77,22 +92,24 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       let finishReason = "stop";
 
       for await (const payload of iterateSsePayloads(response)) {
+        const delta = payload.delta as Record<string, unknown> | undefined;
         if (
           payload.type === "content_block_delta" &&
-          payload.delta?.type === "text_delta" &&
-          typeof payload.delta.text === "string"
+          delta?.type === "text_delta" &&
+          typeof delta.text === "string"
         ) {
-          yield { type: "text-delta", textDelta: payload.delta.text };
+          yield { type: "text-delta", textDelta: delta.text };
         }
 
         if (payload.type === "message_delta") {
           finishReason = String(
-            payload.delta?.stop_reason ?? finishReason
+            delta?.stop_reason ?? finishReason
           );
+          const usageObj = payload.usage as Record<string, unknown> | undefined;
           usage = {
             inputTokens: usage.inputTokens,
             outputTokens: Number(
-              payload.usage?.output_tokens ?? usage.outputTokens
+              usageObj?.output_tokens ?? usage.outputTokens
             ),
           };
         }

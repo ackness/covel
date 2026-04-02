@@ -10,8 +10,19 @@ import type { AiConfig } from "../types.js";
  * Interpolates `${VAR_NAME}` patterns from process.env.
  */
 export function loadAiConfig(filePath: string): AiConfig {
+  if (!filePath) {
+    throw new Error("AI config: filePath must be a non-empty string.");
+  }
+
   const absolutePath = resolve(filePath);
-  const raw = readFileSync(absolutePath, "utf-8");
+  let raw: string;
+  try {
+    raw = readFileSync(absolutePath, "utf-8");
+  } catch (err) {
+    throw new Error(
+      `AI config: failed to read file "${absolutePath}": ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
   const interpolated = interpolateEnv(raw);
   const parsed = parseToml(interpolated);
   const validated = aiConfigSchema.parse(parsed);

@@ -1,9 +1,9 @@
 import type { ToolExecutionContext, ToolExecutionResult } from "@covel/shared";
-import type { ToolRegistry, HookRegistry, RegisteredTool } from "@covel/plugin-runtime";
+import type { ScopedToolRegistry, ScopedHookRegistry, RegisteredTool } from "@covel/plugin-runtime";
 
 export interface ToolExecutorDeps {
-  toolRegistry: ToolRegistry;
-  hookRegistry: HookRegistry;
+  toolRegistry: ScopedToolRegistry;
+  hookRegistry: ScopedHookRegistry;
 }
 
 export interface ToolCallRequest {

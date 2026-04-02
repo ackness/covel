@@ -16,8 +16,8 @@ export interface PluginHost {
   hookRegistry: HookRegistry;
   runtimeRegistry: RuntimeRegistry;
   commandRegistry: CommandRegistry;
-  contextProviders: Map<string, RegisteredContextProvider>;
-  blockSchemas: Map<string, BlockSchemaDeclaration>;
+  contextProviders: ReadonlyMap<string, RegisteredContextProvider>;
+  blockSchemas: ReadonlyMap<string, BlockSchemaDeclaration>;
 
   /** Scan, validate, load, and register all plugins from a directory. */
   loadFromDirectory(baseDir: string): Promise<LoadedPlugin[]>;
@@ -142,8 +142,8 @@ export function createPluginHost(): PluginHost {
         for (const [rtId, handler] of contributions.runtimeHandlers) {
           try {
             runtimeRegistry.setHandler(manifest.id, rtId, handler);
-          } catch {
-            // Runtime not registered in manifest, skip
+          } catch (err) {
+            console.warn(`[plugin-host] Failed to set runtime handler "${manifest.id}:${rtId}":`, err);
           }
         }
 
@@ -155,12 +155,12 @@ export function createPluginHost(): PluginHost {
               pluginId: manifest.id,
               description: cmdReg.description,
               handler: cmdReg.handler,
-              argsSchema: cmdReg.argsSchema as any,
+              argsSchema: cmdReg.argsSchema,
               help: cmdReg.help,
               autocomplete: cmdReg.autocomplete,
             });
-          } catch {
-            // Duplicate command name, skip
+          } catch (err) {
+            console.warn(`[plugin-host] Failed to register command "${cmdReg.name}" from "${manifest.id}":`, err);
           }
         }
       }

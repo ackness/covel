@@ -2,14 +2,16 @@ import { serve } from "@hono/node-server";
 import dotenv from "dotenv";
 
 dotenv.config({ path: "../../.env" });
+dotenv.config({ path: "../../.env.llm", override: true });
 
 import { app } from "./app.js";
+import { registerGracefulShutdown } from "./graceful-shutdown.js";
 
 const port = Number(process.env.SERVER_PORT) || 3001;
 
 console.log(`Starting server on port ${port}...`);
 
-serve(
+const server = serve(
   {
     fetch: app.fetch,
     port,
@@ -18,3 +20,5 @@ serve(
     console.log(`Server running at http://localhost:${info.port}`);
   },
 );
+
+registerGracefulShutdown(server);

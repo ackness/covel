@@ -104,7 +104,7 @@ export interface CommandRegistration {
   name: string;
   description: string;
   handler: CommandHandlerFn;
-  argsSchema?: { safeParse(data: unknown): unknown };
+  argsSchema?: { safeParse(data: unknown): { success: true; data: unknown } | { success: false; error: { issues: Array<{ path: Array<string | number>; message: string }> } } };
   help?: { usage: string; examples?: string[] };
   autocomplete?: {
     positionalHints?: string[];
@@ -151,6 +151,8 @@ export interface RuntimeHandlerContext {
   instructions?: string;
   /** Unified data access interface for reads and proposal helpers. */
   data?: PluginDataAccess;
+  /** Optional LLM text generation (injected by kernel when gateway is available). */
+  generateText?: (prompt: string) => Promise<string>;
 }
 
 /** Result from a custom runtime handler. */

@@ -28,12 +28,13 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-responses");
 
+      const genTextUsage = payload.usage as Record<string, unknown> | undefined;
       return {
         text: readResponsesOutputText(payload),
         finishReason: "stop",
         usage: {
-          inputTokens: Number(payload.usage?.input_tokens ?? 0),
-          outputTokens: Number(payload.usage?.output_tokens ?? 0),
+          inputTokens: Number(genTextUsage?.input_tokens ?? 0),
+          outputTokens: Number(genTextUsage?.output_tokens ?? 0),
         },
       };
     },
@@ -48,18 +49,24 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-responses");
 
-      const rawObject = JSON.parse(readResponsesOutputText(payload));
+      let rawObject: unknown;
+      try {
+        rawObject = JSON.parse(readResponsesOutputText(payload));
+      } catch {
+        throw createStructuredOutputError("openai-responses");
+      }
       const validation = params.schema.safeParse(rawObject);
       if (!validation.success) {
         throw createStructuredOutputError("openai-responses");
       }
 
+      const genObjUsage = payload.usage as Record<string, unknown> | undefined;
       return {
         object: validation.data,
         finishReason: "stop",
         usage: {
-          inputTokens: Number(payload.usage?.input_tokens ?? 0),
-          outputTokens: Number(payload.usage?.output_tokens ?? 0),
+          inputTokens: Number(genObjUsage?.input_tokens ?? 0),
+          outputTokens: Number(genObjUsage?.output_tokens ?? 0),
         },
       };
     },
@@ -79,17 +86,15 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
           payload.type === "response.output_text.delta" &&
           typeof payload.delta === "string"
         ) {
-          yield { type: "text-delta", textDelta: payload.delta };
+          yield { type: "text-delta", textDelta: payload.delta as string };
         }
 
         if (payload.type === "response.completed") {
+          const responseObj = payload.response as Record<string, unknown> | undefined;
+          const responseUsage = responseObj?.usage as Record<string, unknown> | undefined;
           usage = {
-            inputTokens: Number(
-              payload.response?.usage?.input_tokens ?? 0
-            ),
-            outputTokens: Number(
-              payload.response?.usage?.output_tokens ?? 0
-            ),
+            inputTokens: Number(responseUsage?.input_tokens ?? 0),
+            outputTokens: Number(responseUsage?.output_tokens ?? 0),
           };
         }
       }

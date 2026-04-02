@@ -41,7 +41,7 @@ export function createRuntimeRegistry() {
     if (!rt) {
       throw new Error(`Runtime "${qid}" not found, cannot set handler.`);
     }
-    rt.handler = handler;
+    runtimes.set(qid, { ...rt, handler });
   }
 
   function get(

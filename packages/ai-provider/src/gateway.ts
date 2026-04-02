@@ -9,12 +9,14 @@ import type {
   ModelParameterOverrides,
   OperationMode,
   PresetConfig,
+  ProviderConfig,
   ProviderLifecycleHook,
   ProviderProtocol,
   ResolvedTarget,
   SpeechSynthesisResult,
   StreamEvent,
   TextMessage,
+  ToolDefinition,
   TranscriptionResult,
   UsageSummary,
 } from "./types.js";
@@ -46,6 +48,8 @@ export interface GatewayOptions {
   traceId?: string;
   /** Slot-level parameter overrides resolved from the slot registry. */
   parameterOverrides?: ModelParameterOverrides;
+  /** Abort signal for cancellation (e.g. budget timeout). */
+  signal?: AbortSignal;
 }
 
 /**
@@ -58,6 +62,7 @@ export function createGateway(deps: GatewayDependencies) {
     input: {
       presetId?: string;
       messages: TextMessage[];
+      tools?: ToolDefinition[];
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: GatewayOptions
@@ -68,10 +73,11 @@ export function createGateway(deps: GatewayDependencies) {
       options,
       async (target, resolved) =>
         resolved.adapter.generateText(
-          resolved.config,
+          configWithSignal(resolved.config, options),
           {
             model: targetModel(target),
             messages: input.messages,
+            tools: input.tools,
             providerRequestMetadata: input.providerRequestMetadata,
           },
           { profile: target.profile, preset: target.preset, mode: "text" }
@@ -95,7 +101,7 @@ export function createGateway(deps: GatewayDependencies) {
       options,
       async (target, resolved) => {
         const result = await resolved.adapter.generateObject(
-          resolved.config,
+          configWithSignal(resolved.config, options),
           {
             model: targetModel(target),
             schema: input.schema,
@@ -149,7 +155,7 @@ export function createGateway(deps: GatewayDependencies) {
         let finalUsage: UsageSummary | null = null;
 
         for await (const event of resolved.adapter.streamText(
-          resolved.config,
+          configWithSignal(resolved.config, options),
           {
             model: targetModel(target),
             messages: input.messages,
@@ -157,7 +163,10 @@ export function createGateway(deps: GatewayDependencies) {
           },
           { profile: target.profile, preset: target.preset, mode: "stream" }
         )) {
-          if (event.type === "text-delta" && event.textDelta.length > 0) {
+          if (
+            (event.type === "text-delta" && event.textDelta.length > 0) ||
+            (event.type === "reasoning-delta" && event.reasoningDelta.length > 0)
+          ) {
             emittedDelta = true;
           }
           if (event.type === "done") finalUsage = event.usage;
@@ -192,11 +201,21 @@ export function createGateway(deps: GatewayDependencies) {
     },
     options?: GatewayOptions
   ): Promise<EmbeddingResult> {
+    if (!input.values?.length) {
+      throw new AiProviderError({
+        code: "CONFIG_ERROR",
+        message: "embed() requires at least one value",
+        provider: "unknown",
+        retriable: false,
+      });
+    }
+
     const target = deps.presetRegistry.resolveEmbeddingTarget();
     // Use text target's provider config for embed routing
     const textTarget = deps.presetRegistry.resolveTextTarget({
       presetId: input.presetId,
     });
+    const resolvedProvider = targetProvider(textTarget);
     let resolved = deps.providerRegistry.resolve(
       textTarget.preset ?? target.profile,
       { mode: "embed" }
@@ -205,7 +224,7 @@ export function createGateway(deps: GatewayDependencies) {
       resolved = deps.providerRegistry.withApiKeys(
         resolved,
         options.apiKeys,
-        target.profile.provider
+        resolvedProvider
       );
     }
 
@@ -216,7 +235,7 @@ export function createGateway(deps: GatewayDependencies) {
       options,
       async () =>
         resolved.adapter.embed(
-          resolved.config,
+          configWithSignal(resolved.config, options),
           {
             model: target.profile.model,
             values: input.values,
@@ -241,7 +260,7 @@ export function createGateway(deps: GatewayDependencies) {
       options,
       (target, resolved) =>
         resolved.adapter.generateImage(
-          resolved.config,
+          configWithSignal(resolved.config, options),
           {
             model: targetModel(target),
             prompt: input.prompt,
@@ -268,7 +287,7 @@ export function createGateway(deps: GatewayDependencies) {
       options,
       (target, resolved) =>
         resolved.adapter.synthesizeSpeech(
-          resolved.config,
+          configWithSignal(resolved.config, options),
           {
             model: targetModel(target),
             text: input.text,
@@ -295,7 +314,7 @@ export function createGateway(deps: GatewayDependencies) {
       options,
       (target, resolved) =>
         resolved.adapter.transcribeAudio(
-          resolved.config,
+          configWithSignal(resolved.config, options),
           {
             model: targetModel(target),
             audio: input.audio,
@@ -338,6 +357,14 @@ export function createGateway(deps: GatewayDependencies) {
   };
 
   // ── Internal helpers ─────────────────────────────────────────────
+
+  /** Merge abort signal from gateway options into provider config. */
+  function configWithSignal(
+    config: ProviderConfig,
+    options?: GatewayOptions
+  ): ProviderConfig {
+    return options?.signal ? { ...config, signal: options.signal } : config;
+  }
 
   async function runWithFallback<TResult>(
     input: { presetId?: string },
@@ -508,7 +535,11 @@ async function notifyStart(
   traceId?: string
 ) {
   for (const hook of hooks) {
-    await hook.onRequestStart?.({ provider, protocol, mode, model, traceId });
+    try {
+      await hook.onRequestStart?.({ provider, protocol, mode, model, traceId });
+    } catch (err) {
+      console.warn(`[ai-provider] Hook onRequestStart failed:`, err instanceof Error ? err.message : err);
+    }
   }
 }
 
@@ -523,15 +554,19 @@ async function notifySuccess(
   traceId?: string
 ) {
   for (const hook of hooks) {
-    await hook.onRequestSuccess?.({
-      provider,
-      protocol,
-      mode,
-      model,
-      usage,
-      durationMs,
-      traceId,
-    });
+    try {
+      await hook.onRequestSuccess?.({
+        provider,
+        protocol,
+        mode,
+        model,
+        usage,
+        durationMs,
+        traceId,
+      });
+    } catch (err) {
+      console.warn(`[ai-provider] Hook onRequestSuccess failed:`, err instanceof Error ? err.message : err);
+    }
   }
 }
 
@@ -546,14 +581,18 @@ async function notifyError(
   traceId?: string
 ) {
   for (const hook of hooks) {
-    await hook.onRequestError?.({
-      provider,
-      protocol,
-      mode,
-      model,
-      error,
-      durationMs,
-      traceId,
-    });
+    try {
+      await hook.onRequestError?.({
+        provider,
+        protocol,
+        mode,
+        model,
+        error,
+        durationMs,
+        traceId,
+      });
+    } catch (err) {
+      console.warn(`[ai-provider] Hook onRequestError failed:`, err instanceof Error ? err.message : err);
+    }
   }
 }

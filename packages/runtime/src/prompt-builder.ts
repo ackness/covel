@@ -1,6 +1,9 @@
 import type { RuntimeContextView } from "@covel/shared";
 import type { TextMessage } from "@covel/ai-provider";
 
+/** Default max characters for context sections to prevent overflow. */
+const DEFAULT_MAX_CONTEXT_CHARS = 32_000;
+
 export interface PromptBuilderOptions {
   /** System instructions (e.g. from PLUGIN.md). */
   instructions?: string;
@@ -23,7 +26,7 @@ export function buildPrompt(
   options: PromptBuilderOptions = {}
 ): TextMessage[] {
   const messages: TextMessage[] = [];
-  const maxCtx = options.maxContextChars ?? 32_000;
+  const maxCtx = options.maxContextChars ?? DEFAULT_MAX_CONTEXT_CHARS;
 
   // ── System message ─────────────────────────────────────────────
   const systemParts: string[] = [];

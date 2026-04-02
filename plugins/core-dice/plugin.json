@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "1.0",
+  "id": "core-dice",
+  "displayName": {
+    "zh-CN": "判定引擎",
+    "en-US": "Dice Engine"
+  },
+  "version": "0.1.0",
+  "author": "covel",
+  "description": {
+    "zh-CN": "提供骰子判定和技能检定机制。支持 d20、百分比和自定义骰子表达式，结果注入叙事上下文。",
+    "en-US": "Provides dice rolling and skill check mechanics. Supports d20, percentage, and custom dice expressions. Results are injected into narrator context."
+  },
+  "defaultLocale": "zh-CN",
+  "supportedLocales": ["zh-CN", "en-US"],
+  "loadingOrder": 25,
+  "runtimes": [],
+  "tools": [
+    {
+      "id": "roll-check",
+      "kind": "script",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "skill": {
+            "type": "string",
+            "description": "Name of the skill being checked (e.g. 'stealth', 'persuasion')"
+          },
+          "modifier": {
+            "type": "number",
+            "description": "Numeric modifier to add to the roll (default: 0)"
+          },
+          "difficulty": {
+            "type": "string",
+            "enum": ["easy", "medium", "hard", "very_hard", "legendary"],
+            "description": "Difficulty class preset (default: 'medium')"
+          },
+          "system": {
+            "type": "string",
+            "enum": ["d20", "percentage", "custom"],
+            "description": "Dice system to use (default: 'd20')"
+          },
+          "expression": {
+            "type": "string",
+            "description": "Custom dice expression (e.g. '2d6+3'). Required when system is 'custom'."
+          },
+          "successRate": {
+            "type": "number",
+            "description": "Success rate for percentage system (0-100). Required when system is 'percentage'."
+          }
+        }
+      }
+    },
+    {
+      "id": "roll-dice",
+      "kind": "script",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "Dice expression to roll (e.g. '2d6+3', '1d20', '3d8-2')"
+          }
+        },
+        "required": ["expression"]
+      }
+    }
+  ],
+  "blockSchemas": [
+    {
+      "type": "dice_result",
+      "interactive": false,
+      "meta": {
+        "displayName": { "zh-CN": "判定结果", "en-US": "Dice Result" },
+        "description": "Displays dice roll and check results"
+      },
+      "dataSchema": {
+        "type": "object",
+        "properties": {
+          "skill": { "type": "string" },
+          "outcome": {
+            "type": "string",
+            "enum": ["critical_success", "success", "failure", "critical_failure"]
+          },
+          "roll": {
+            "type": "object",
+            "properties": {
+              "total": { "type": "number" },
+              "rolls": { "type": "array", "items": { "type": "number" } },
+              "modifier": { "type": "number" },
+              "expression": { "type": "string" }
+            }
+          },
+          "dc": { "type": "number" },
+          "total": { "type": "number" },
+          "margin": { "type": "number" }
+        }
+      }
+    }
+  ]
+}

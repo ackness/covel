@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "1.0",
+  "id": "core-world-state",
+  "displayName": {
+    "zh-CN": "世界状态",
+    "en-US": "World State"
+  },
+  "version": "0.1.0",
+  "author": "covel",
+  "description": {
+    "zh-CN": "追踪世界基础事实：玩家位置、时间、天气、环境状况，为叙事提供一致的时空感知。",
+    "en-US": "Track fundamental world facts: player location, time of day, weather, and environment conditions for consistent spatial/temporal awareness."
+  },
+  "defaultLocale": "zh-CN",
+  "supportedLocales": ["zh-CN", "en-US"],
+  "loadingOrder": 35,
+  "runtimes": [
+    {
+      "id": "world-state-tracker",
+      "pluginId": "core-world-state",
+      "kind": "plugin",
+      "priority": 550,
+      "trigger": {
+        "mode": "event",
+        "onEvents": ["user.input"]
+      },
+      "providerBinding": "fast",
+      "tools": [
+        "core-world-state:update-location",
+        "core-world-state:advance-time",
+        "core-world-state:set-weather"
+      ],
+      "hooks": []
+    }
+  ],
+  "tools": [
+    {
+      "id": "update-location",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "The main location name (e.g., 'Forest of Echoes', '回声森林')"
+          },
+          "subLocation": {
+            "type": "string",
+            "description": "Optional sub-location within the main location (e.g., 'clearing', '空地')"
+          }
+        },
+        "required": ["location"]
+      }
+    },
+    {
+      "id": "advance-time",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "type": "string",
+            "enum": ["dawn", "morning", "noon", "afternoon", "dusk", "evening", "night", "midnight"],
+            "description": "The current time period after advancement"
+          },
+          "elapsed": {
+            "type": "string",
+            "description": "Human-readable description of how much time passed (e.g., 'several hours', '数小时')"
+          }
+        }
+      }
+    },
+    {
+      "id": "set-weather",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "weather": {
+            "type": "string",
+            "description": "Weather condition (e.g., 'rain', 'clear', '雨', '晴')"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["mild", "moderate", "severe"],
+            "description": "Intensity of the weather condition"
+          }
+        }
+      }
+    }
+  ]
+}

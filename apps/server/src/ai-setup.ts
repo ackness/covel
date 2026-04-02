@@ -16,7 +16,7 @@ import { createRuntimeExecutor } from "@covel/runtime";
 export function createAiStack(): AiStack {
   // Ensure provider base URLs have defaults
   process.env.DEEPSEEK_BASE_URL ??= "https://api.deepseek.com";
-  process.env.DASHSCOPE_BASE_URL ??= "https://dashscope.aliyuncs.com/compatible-mode";
+  process.env.DASHSCOPE_BASE_URL ??= "https://dashscope.aliyuncs.com/compatible-mode/v1";
 
   const config = loadAiConfig(
     resolve(import.meta.dirname, "../../../packages/ai-provider/presets/default.toml")

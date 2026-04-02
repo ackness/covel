@@ -52,5 +52,18 @@ export { createCommandBus, type CommandBus, type CommandResult } from "./command
 export { parseSlashCommand, type ParsedSlashCommand, type ParsedSlashArgs } from "./command/parser.js";
 export { CommandError, type CommandErrorCode, type CommandIssue } from "./command/error.js";
 
+// ── Scope (session-level plugin activation) ──────────────────────
+export {
+  createSessionPluginScope,
+  createScopedRuntimeRegistry,
+  createScopedToolRegistry,
+  createScopedHookRegistry,
+  createScopedContextProviders,
+  type SessionPluginScope,
+  type ScopedRuntimeRegistry,
+  type ScopedToolRegistry,
+  type ScopedHookRegistry,
+} from "./scope/session-plugin-scope.js";
+
 // ── Host ───────────────────────────────────────────────────────────
 export { createPluginHost, type PluginHost } from "./host/plugin-host.js";

@@ -29,9 +29,7 @@ export function createSessionsRoute(store: MemoryStore) {
     return c.json(session, 201);
   });
 
-  route.patch("/:sessionId", async (c) => {
-    const sessionId = c.req.param("sessionId");
-    const body = await c.req.json<Record<string, unknown>>();
+  function parseSessionPatch(body: Record<string, unknown>) {
     const VALID_STATUSES = ["active", "waiting_for_input", "archived"] as const;
     const VALID_PHASES = ["init", "character_creation", "playing", "ended"] as const;
     const patch: {
@@ -50,6 +48,13 @@ export function createSessionsRoute(store: MemoryStore) {
     if (body.taskBindings && typeof body.taskBindings === "object") {
       patch.taskBindings = body.taskBindings as Record<string, string>;
     }
+    return patch;
+  }
+
+  route.patch("/:sessionId", async (c) => {
+    const sessionId = c.req.param("sessionId");
+    const body = await c.req.json<Record<string, unknown>>();
+    const patch = parseSessionPatch(body);
     const session = store.updateSession(sessionId, patch);
     if (!session) {
       return c.json({ code: "NOT_FOUND", message: "Session not found" }, 404);
@@ -60,24 +65,7 @@ export function createSessionsRoute(store: MemoryStore) {
   route.put("/:sessionId", async (c) => {
     const sessionId = c.req.param("sessionId");
     const body = await c.req.json<Record<string, unknown>>();
-    const VALID_STATUSES = ["active", "waiting_for_input", "archived"] as const;
-    const VALID_PHASES = ["init", "character_creation", "playing", "ended"] as const;
-    const patch: {
-      status?: "active" | "waiting_for_input" | "archived";
-      phase?: "init" | "character_creation" | "playing" | "ended";
-      presetId?: string;
-      taskBindings?: Record<string, string>;
-    } = {};
-    if (typeof body.status === "string" && (VALID_STATUSES as readonly string[]).includes(body.status)) {
-      patch.status = body.status as "active" | "waiting_for_input" | "archived";
-    }
-    if (typeof body.phase === "string" && (VALID_PHASES as readonly string[]).includes(body.phase)) {
-      patch.phase = body.phase as "init" | "character_creation" | "playing" | "ended";
-    }
-    if (typeof body.presetId === "string") patch.presetId = body.presetId;
-    if (body.taskBindings && typeof body.taskBindings === "object") {
-      patch.taskBindings = body.taskBindings as Record<string, string>;
-    }
+    const patch = parseSessionPatch(body);
     const session = store.updateSession(sessionId, patch);
     if (!session) {
       return c.json({ code: "NOT_FOUND", message: "Session not found" }, 404);

@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   KeyRound, Check, Settings2, Cpu, SlidersHorizontal, Plus, Trash2,
   Download, Upload, Eye, EyeOff, ChevronDown, Info,
+  Loader2, Zap, XCircle, CheckCircle2,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog.js";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs.js";
@@ -14,8 +15,10 @@ import {
   getSlotConfig, setSlotConfig,
   getCustomPresets, setCustomPresets, addCustomPreset, removeCustomPreset,
   getParamOverrides, setParamOverrides,
+  pingPreset,
   uid,
   type SlotConfigEntry, type CustomPreset, type ModelParameterOverrides, type PresetSummary,
+  type PingResult,
 } from "@/services/api.js";
 import { useSession } from "@/stores/session-store.js";
 
@@ -53,6 +56,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     name: "", provider: "", baseUrl: "", model: "",
   });
 
+  // Ping test state: keyed by presetId
+  const [pingResults, setPingResults] = useState<Record<string, PingResult & { testing?: boolean }>>({});
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -63,8 +69,29 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       setParamOverridesLocal(getParamOverrides());
       setSaved(false);
       setVisibleKeys({});
+      setPingResults({});
     }
   }, [open]);
+
+  const handlePing = async (presetId: string) => {
+    setPingResults((prev) => ({ ...prev, [presetId]: { ok: false, latencyMs: 0, testing: true } }));
+    // Temporarily save keys so the ping request uses the latest values
+    const cleanedKeys: Record<string, string> = {};
+    for (const [k, v] of Object.entries(keys)) {
+      if (v.trim()) cleanedKeys[k] = v.trim();
+    }
+    setProviderKeys(cleanedKeys);
+
+    try {
+      const result = await pingPreset(presetId);
+      setPingResults((prev) => ({ ...prev, [presetId]: result }));
+    } catch (err) {
+      setPingResults((prev) => ({
+        ...prev,
+        [presetId]: { ok: false, latencyMs: 0, error: err instanceof Error ? err.message : "Network error" },
+      }));
+    }
+  };
 
   const allPresets: Array<{ id: string; name: string; provider: string; model: string; isCustom?: boolean }> = [
     ...state.presets.map((p) => ({ id: p.id, name: p.name, provider: p.provider, model: p.model })),
@@ -113,7 +140,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     const a = document.createElement("a");
     a.href = url;
     a.download = "covel-custom-presets.json";
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
@@ -125,7 +154,17 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       try {
         const imported = JSON.parse(reader.result as string) as CustomPreset[];
         if (!Array.isArray(imported)) return;
-        const valid = imported.filter((p) => p.id && p.name && p.provider && p.model);
+        const valid = imported
+          .filter((p) => p.id && p.name && p.provider && p.model)
+          .map((p) => ({
+            ...p,
+            name: typeof p.name === "string" ? p.name.slice(0, 100) : "",
+            baseUrl:
+              typeof p.baseUrl === "string" &&
+              (p.baseUrl.startsWith("http://") || p.baseUrl.startsWith("https://"))
+                ? p.baseUrl
+                : "",
+          }));
         setCustomPresetsLocal([...customPresets, ...valid]);
       } catch {
         // invalid JSON
@@ -262,20 +301,28 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             <TabsContent value="keys" className="space-y-3 mt-0">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Info className="w-3 h-3" />
-                <span>Keys are stored only in your browser localStorage.</span>
+                <span>密钥仅存储在浏览器 localStorage 中，不会发送至服务器存储。</span>
               </div>
               {PROVIDERS.map((provider) => {
                 const inUse = activeProviders.has(provider.id);
+                const hasKey = !!(keys[provider.id]?.trim());
                 const visible = visibleKeys[provider.id] ?? false;
+                // Find presets that use this provider (for test buttons)
+                const providerPresets = allPresets.filter((p) => p.provider === provider.id);
+
                 return (
-                  <div key={provider.id} className="space-y-1.5">
-                    <Label htmlFor={`key-${provider.id}`} className="text-xs flex items-center gap-2">
-                      {provider.name}
-                      {inUse && <Badge variant="default" className="text-[10px]">in use</Badge>}
-                      {!inUse && state.presets.some((p) => p.provider === provider.id) && (
-                        <Badge variant="secondary" className="text-[10px]">available</Badge>
-                      )}
-                    </Label>
+                  <div key={provider.id} className="border border-border p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor={`key-${provider.id}`} className="text-xs flex items-center gap-2">
+                        {provider.name}
+                        {hasKey ? (
+                          <Badge variant="default" className="text-[10px]">已配置</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px]">未配置</Badge>
+                        )}
+                        {inUse && <Badge variant="secondary" className="text-[10px]">使用中</Badge>}
+                      </Label>
+                    </div>
                     <div className="flex gap-1">
                       <input
                         id={`key-${provider.id}`}
@@ -294,6 +341,55 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                         {visible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                       </Button>
                     </div>
+
+                    {/* Test buttons for each preset under this provider */}
+                    {hasKey && providerPresets.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-widest">连通测试</span>
+                        {providerPresets.map((preset) => {
+                          const ping = pingResults[preset.id];
+                          const isTesting = ping?.testing;
+                          return (
+                            <div key={preset.id} className="flex items-center gap-2 text-xs">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-[11px] px-2.5 shrink-0"
+                                disabled={isTesting}
+                                onClick={() => handlePing(preset.id)}
+                              >
+                                {isTesting ? (
+                                  <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                                ) : (
+                                  <Zap className="w-3 h-3 mr-1" />
+                                )}
+                                测试
+                              </Button>
+                              <span className="truncate text-muted-foreground">{preset.name}</span>
+                              <span className="text-[10px] text-muted-foreground">({preset.model})</span>
+                              {ping && !isTesting && (
+                                <span className="flex items-center gap-1 ml-auto shrink-0">
+                                  {ping.ok ? (
+                                    <>
+                                      <CheckCircle2 className="w-3 h-3 text-green-500" />
+                                      <span className="text-green-600 font-mono">{ping.ttfbMs ?? ping.latencyMs}ms</span>
+                                      <span className="text-[10px] text-muted-foreground">TTFB</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <XCircle className="w-3 h-3 text-destructive" />
+                                      <span className="text-destructive truncate max-w-[120px]" title={ping.error}>
+                                        {ping.error?.slice(0, 30)}
+                                      </span>
+                                    </>
+                                  )}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}

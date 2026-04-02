@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0",
+  "id": "core-memory",
+  "displayName": {
+    "zh-CN": "记忆管理",
+    "en-US": "Memory Manager"
+  },
+  "version": "0.1.0",
+  "author": "covel",
+  "description": {
+    "zh-CN": "长期记忆管理与上下文摘要，定期将叙事历史压缩为滚动摘要，确保长时间会话不丢失关键上下文。",
+    "en-US": "Long-term memory management and context summarization. Periodically compresses narrative history into rolling summaries, ensuring long sessions retain critical context."
+  },
+  "defaultLocale": "zh-CN",
+  "supportedLocales": ["zh-CN", "en-US"],
+  "loadingOrder": 90,
+  "requires": [],
+  "runtimes": [
+    {
+      "id": "memory-summarizer",
+      "pluginId": "core-memory",
+      "kind": "background",
+      "priority": 900,
+      "trigger": {
+        "mode": "interval",
+        "intervalTurns": 5
+      },
+      "providerBinding": "fast",
+      "tools": [],
+      "hooks": []
+    }
+  ]
+}

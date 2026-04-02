@@ -182,11 +182,43 @@ function createStoryGateway(): GatewayLike {
       };
     },
 
-    async *streamText() {
+    async *streamText(input) {
+      // The narrator runtime (no handler, no tools) uses the streaming path.
+      // Replicate the generateText narrator logic for streamText.
+      const lastUserMsg =
+        input.messages?.filter((m: any) => m.role === "user").pop()?.content ?? "";
+
+      let text: string;
+      let usage = { inputTokens: 200, outputTokens: 150 };
+
+      if (!lastUserMsg) {
+        // Turn 1: 开局
+        text =
+          "雾港，一座建在悬崖与海峡之间的老城。三百年来，灯塔从未熄灭——" +
+          "直到上周。守护者沈老失踪了，港口陷入混乱。\n\n" +
+          "你拖着行李走下跳板，一个穿着油污围裙的中年男子拦住了你。" +
+          "「外来人？」赵铁匠上下打量你。";
+      } else if (lastUserMsg.includes("李云")) {
+        // Turn 2: 输入名字后
+        text =
+          "赵铁匠点了点头：「李云？」他压低声音，" +
+          "「沈老失踪后雾越来越浓。昨晚有人在暗巷看到了影子。」" +
+          "他指向码头尽头一条漆黑的小巷。";
+        usage = { inputTokens: 300, outputTokens: 180 };
+      } else {
+        // Turn 3: 选择后
+        text =
+          "你转身走入暗巷。雾在这里更加浓密。巷子深处，一扇半掩的木门透出灯光。" +
+          "你推开门——一个头发花白的妇人正在整理航海图。" +
+          "王寡妇抬头看你：「你是谁？」桌上散落着沈老的笔记。";
+        usage = { inputTokens: 350, outputTokens: 200 };
+      }
+
+      yield { type: "text-delta" as const, textDelta: text };
       yield {
         type: "done" as const,
         finishReason: "stop",
-        usage: { inputTokens: 0, outputTokens: 0 },
+        usage,
       };
     },
   };
@@ -224,6 +256,7 @@ function setupGameSession() {
     pluginId: "story-narrator",
     kind: "story",
     phase: "story",
+    priority: 400,
     trigger: { mode: "always" },
     providerBinding: "default",
     tools: [],
@@ -250,6 +283,7 @@ function setupGameSession() {
     pluginId: "init-wizard",
     kind: "plugin",
     phase: "post_story",
+    priority: 450,
     trigger: { mode: "event", onEvents: ["session_start"] },
     tools: [],
     hooks: [],
@@ -299,6 +333,7 @@ function setupGameSession() {
     pluginId: "char-tracker",
     kind: "plugin",
     phase: "post_story",
+    priority: 600,
     trigger: { mode: "event", onEvents: ["user.input"] },
     tools: [],
     hooks: [],
@@ -374,6 +409,7 @@ function setupGameSession() {
     pluginId: "story-guide",
     kind: "plugin",
     phase: "post_story",
+    priority: 600,
     trigger: { mode: "event", onEvents: ["user.input"] },
     tools: [],
     hooks: [],

@@ -43,9 +43,20 @@ export interface PresetSummary {
   scope: string;
 }
 
+export interface RuntimeSummary {
+  id: string;
+  kind: string;
+  priority: number;
+  trigger: { mode: string; onEvents?: string[] };
+  providerBinding?: string;
+}
+
 export interface PackageSummary {
   name: string;
+  displayName?: string | Record<string, string>;
+  description?: string | Record<string, string>;
   enabled: boolean;
+  runtimes?: RuntimeSummary[];
 }
 
 export interface CommandSummary {
@@ -107,10 +118,20 @@ function buildAiHeaders(): Record<string, string> {
 }
 
 function buildSlotConfigHeaderInternal(): Record<string, string> {
-  const slotConfig = localStorage.getItem(SLOT_CONFIG_KEY);
-  const paramOverrides = localStorage.getItem(PARAM_OVERRIDES_KEY);
-  const slots = slotConfig ? JSON.parse(slotConfig) : {};
-  const overrides = paramOverrides ? JSON.parse(paramOverrides) : {};
+  const slotConfigRaw = localStorage.getItem(SLOT_CONFIG_KEY);
+  const paramOverridesRaw = localStorage.getItem(PARAM_OVERRIDES_KEY);
+  let slots: Record<string, unknown> = {};
+  let overrides: Record<string, unknown> = {};
+  try {
+    slots = slotConfigRaw ? JSON.parse(slotConfigRaw) : {};
+  } catch {
+    slots = {};
+  }
+  try {
+    overrides = paramOverridesRaw ? JSON.parse(paramOverridesRaw) : {};
+  } catch {
+    overrides = {};
+  }
   const hasSlots = Object.keys(slots).length > 0;
   const hasOverrides = Object.keys(overrides).length > 0;
   if (!hasSlots && !hasOverrides) return {};
@@ -196,6 +217,33 @@ export async function fetchBlockSchemas(): Promise<Record<string, unknown>> {
   return res.schemas;
 }
 
+// ── AI Ping ───────────────────────────────────────────────────────
+
+export interface PingResult {
+  ok: boolean;
+  latencyMs: number;
+  ttfbMs?: number;
+  text?: string;
+  usage?: { inputTokens: number; outputTokens: number };
+  error?: string;
+}
+
+/**
+ * Send a minimal "hi" to a specific preset to test connectivity and latency.
+ * Requires API keys in localStorage.
+ */
+export async function pingPreset(presetId: string): Promise<PingResult> {
+  const res = await fetch("/api/ai/ping", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...buildProviderKeysHeader(),
+    },
+    body: JSON.stringify({ presetId }),
+  });
+  return res.json() as Promise<PingResult>;
+}
+
 // ── Actions (SSE) ──────────────────────────────────────────────────
 
 export type ActionType = "send_message" | "execute_command" | "submit_block_response" | "start_session";
@@ -269,7 +317,7 @@ export function sendAction(
       onDone?.();
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
-        onError?.(err as Error);
+        onError?.(err instanceof Error ? err : new Error(String(err)));
       }
     }
   })();
@@ -371,6 +419,51 @@ export function getParamOverrides(): Record<string, ModelParameterOverrides> {
 
 export function setParamOverrides(overrides: Record<string, ModelParameterOverrides>): void {
   localStorage.setItem(PARAM_OVERRIDES_KEY, JSON.stringify(overrides));
+}
+
+// ── Runtime Priority Config (localStorage) ───────────────────────
+
+const RUNTIME_PRIORITY_KEY = "covel:runtimePriority";
+
+export function getRuntimePriorityOverrides(): Record<string, number> {
+  const stored = localStorage.getItem(RUNTIME_PRIORITY_KEY);
+  if (!stored) return {};
+  try {
+    return JSON.parse(stored);
+  } catch {
+    return {};
+  }
+}
+
+export function setRuntimePriorityOverrides(overrides: Record<string, number>): void {
+  localStorage.setItem(RUNTIME_PRIORITY_KEY, JSON.stringify(overrides));
+}
+
+// ── World Overlay (localStorage) ────────────────────────────────
+
+const WORLD_OVERLAY_KEY_PREFIX = "covel:worldOverlay:";
+
+export interface WorldOverlay {
+  lore?: string;
+  updatedAt: string;
+}
+
+export function getWorldOverlay(worldId: string): WorldOverlay | null {
+  const stored = localStorage.getItem(`${WORLD_OVERLAY_KEY_PREFIX}${worldId}`);
+  if (!stored) return null;
+  try {
+    return JSON.parse(stored);
+  } catch {
+    return null;
+  }
+}
+
+export function setWorldOverlay(worldId: string, overlay: WorldOverlay): void {
+  localStorage.setItem(`${WORLD_OVERLAY_KEY_PREFIX}${worldId}`, JSON.stringify(overlay));
+}
+
+export function removeWorldOverlay(worldId: string): void {
+  localStorage.removeItem(`${WORLD_OVERLAY_KEY_PREFIX}${worldId}`);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────

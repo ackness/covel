@@ -37,7 +37,7 @@ describe.skipIf(!LIVE)("live: dashscope", () => {
       const { gateway, apiKeys } = setup();
       const result = await gateway.generateText(
         {
-          presetId: "fallback-dashscope",
+          presetId: "dashscope-qwen-flash",
           messages: [
             { role: "user", content: "Say hello in one word." },
           ],
@@ -59,7 +59,7 @@ describe.skipIf(!LIVE)("live: dashscope", () => {
 
       for await (const event of gateway.streamText(
         {
-          presetId: "fallback-dashscope",
+          presetId: "dashscope-qwen-flash",
           messages: [{ role: "user", content: "Count to 3." }],
         },
         { apiKeys }

@@ -8,6 +8,7 @@ export {
   type Kernel,
   type KernelDeps,
   type KernelContext,
+  type CreateSessionOptions,
 } from "./kernel.js";
 
 // ── Trust ──────────────────────────────────────────────────────────
@@ -27,6 +28,13 @@ export type {
   ExecutionPlan,
   TurnState,
   KernelExecuteOptions,
+} from "./types.js";
+
+export {
+  DEFAULT_RUNTIME_PRIORITY,
+  DEFAULT_BACKGROUND_THRESHOLD,
+  DEFAULT_MAX_STEPS,
+  DEFAULT_MAX_STEPS_NO_TOOLS,
 } from "./types.js";
 
 // ── Router ──────────────────────────────────────────────────────────
@@ -55,6 +63,9 @@ export { validateProposals, type ValidationResult } from "./proposals/proposal-v
 
 // ── Commit ──────────────────────────────────────────────────────────
 export { commitProposals } from "./commit/commit-service.js";
+
+// ── Hooks ───────────────────────────────────────────────────────────
+export { executeHooks, type HookContext, type HookExecutionResult } from "./hooks/hook-executor.js";
 
 // ── Render ──────────────────────────────────────────────────────────
 export { buildRenderResult } from "./render/render-builder.js";

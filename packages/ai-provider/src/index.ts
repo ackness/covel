@@ -7,6 +7,8 @@ export type {
   ProviderDefaults,
   ModelProfile,
   PresetConfig,
+  ToolDefinition,
+  ToolCallPart,
   TextGenerationParams,
   TextMessage,
   UsageSummary,

@@ -20,6 +20,15 @@ export interface KernelStack {
   /** Default session (backward-compat — used by routes that don't manage sessions). */
   kernel: Kernel;
   commandBus: CommandBus;
+  /**
+   * Get or create a KernelSession for the given session ID.
+   * Each session has its own plugin scope (subset of globally loaded plugins).
+   */
+  getOrCreateSession(sessionId: string, options?: {
+    activePlugins?: readonly string[];
+  }): KernelSession;
+  /** Remove a cached KernelSession (e.g. when session is archived). */
+  removeSession(sessionId: string): void;
 }
 
 /**
@@ -52,5 +61,26 @@ export async function initKernelStack(gateway: GatewayLike): Promise<KernelStack
 
   const commandBus = createCommandBus(pluginHost.commandRegistry);
 
-  return { pluginHost, instance, kernel, commandBus };
+  // Per-session KernelSession cache
+  const sessionMap = new Map<string, KernelSession>();
+
+  function getOrCreateSession(
+    sessionId: string,
+    options?: { activePlugins?: readonly string[] },
+  ): KernelSession {
+    let session = sessionMap.get(sessionId);
+    if (!session) {
+      session = instance.createSession({
+        activePlugins: options?.activePlugins,
+      });
+      sessionMap.set(sessionId, session);
+    }
+    return session;
+  }
+
+  function removeSession(sessionId: string): void {
+    sessionMap.delete(sessionId);
+  }
+
+  return { pluginHost, instance, kernel, commandBus, getOrCreateSession, removeSession };
 }

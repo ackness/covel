@@ -3,7 +3,12 @@ import type { ContextProviderInput } from "@covel/plugin-runtime";
 /**
  * Inject guidance instructions telling the LLM when and how to use the choices tool.
  */
-export async function guideContextProvider(input: ContextProviderInput) {
+export async function guideContextProvider(input: ContextProviderInput): Promise<{
+  id: string;
+  title: string;
+  content: string;
+  priority: number;
+}> {
   const isZh = input.locale.startsWith("zh");
 
   return {

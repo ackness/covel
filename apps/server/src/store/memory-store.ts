@@ -5,6 +5,7 @@
  * All data lives in process memory — lost on restart.
  */
 import type { CharacterCard, CharacterCreateInput, CharacterType, SessionPhase } from "@covel/shared";
+import { humanId } from "human-id";
 import { SEED_WORLDS } from "./seed-worlds.js";
 
 export interface WorldRecord {
@@ -37,6 +38,13 @@ export interface MessageRecord {
 
 function uid(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Generate a human-readable session ID: "word-word-word-xxxx" */
+function humanSessionId(): string {
+  const words = humanId({ separator: "-", capitalize: false });
+  const hex = Math.random().toString(16).slice(2, 6);
+  return `${words}-${hex}`;
 }
 
 export function createMemoryStore() {
@@ -84,7 +92,7 @@ export function createMemoryStore() {
     taskBindings?: Record<string, string>;
   }): SessionRecord {
     const session: SessionRecord = {
-      id: uid("session"),
+      id: humanSessionId(),
       worldId: opts.worldId,
       status: "active",
       phase: "init",
@@ -107,18 +115,22 @@ export function createMemoryStore() {
   ): SessionRecord | undefined {
     const session = sessions.get(id);
     if (!session) return undefined;
-    if (patch.status !== undefined) session.status = patch.status;
-    if (patch.phase !== undefined) session.phase = patch.phase;
-    if (patch.presetId !== undefined) session.presetId = patch.presetId;
-    if (patch.taskBindings !== undefined) session.taskBindings = patch.taskBindings;
-    return session;
+    const validPatch: Partial<SessionRecord> = {};
+    if (patch.status !== undefined) validPatch.status = patch.status;
+    if (patch.phase !== undefined) validPatch.phase = patch.phase;
+    if (patch.presetId !== undefined) validPatch.presetId = patch.presetId;
+    if (patch.taskBindings !== undefined) validPatch.taskBindings = patch.taskBindings;
+    const updated = { ...session, ...validPatch };
+    sessions.set(id, updated);
+    return updated;
   }
 
   function updateSessionPhase(id: string, phase: SessionPhase): SessionRecord | undefined {
     const session = sessions.get(id);
     if (!session) return undefined;
-    session.phase = phase;
-    return session;
+    const updated = { ...session, phase };
+    sessions.set(id, updated);
+    return updated;
   }
 
   // ── Messages ────────────────────────────────────────────────────
@@ -139,12 +151,8 @@ export function createMemoryStore() {
       content,
       createdAt: new Date().toISOString(),
     };
-    let list = messages.get(sessionId);
-    if (!list) {
-      list = [];
-      messages.set(sessionId, list);
-    }
-    list.push(msg);
+    const list = messages.get(sessionId) ?? [];
+    messages.set(sessionId, [...list, msg]);
     return msg;
   }
 
@@ -152,9 +160,10 @@ export function createMemoryStore() {
 
   function createCharacter(sessionId: string, input: CharacterCreateInput): CharacterCard {
     const session = sessions.get(sessionId);
+    if (!session) throw new Error("Session not found: " + sessionId);
     const card: CharacterCard = {
       id: uid("char"),
-      worldId: session?.worldId ?? "",
+      worldId: session.worldId,
       runId: sessionId,
       name: input.name,
       type: input.type ?? "player",
@@ -179,14 +188,18 @@ export function createMemoryStore() {
   function updateCharacter(id: string, patch: Partial<CharacterCard>): CharacterCard | undefined {
     const card = characters.get(id);
     if (!card) return undefined;
-    if (patch.name !== undefined) card.name = patch.name;
-    if (patch.type !== undefined) card.type = patch.type;
-    if (patch.description !== undefined) card.description = patch.description;
-    if (patch.portrait !== undefined) card.portrait = patch.portrait;
-    if (patch.fields !== undefined) card.fields = patch.fields;
-    if (patch.extensions !== undefined) card.extensions = patch.extensions;
-    card.version += 1;
-    return card;
+    const updated: CharacterCard = {
+      ...card,
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.type !== undefined ? { type: patch.type } : {}),
+      ...(patch.description !== undefined ? { description: patch.description } : {}),
+      ...(patch.portrait !== undefined ? { portrait: patch.portrait } : {}),
+      ...(patch.fields !== undefined ? { fields: patch.fields } : {}),
+      ...(patch.extensions !== undefined ? { extensions: patch.extensions } : {}),
+      version: card.version + 1,
+    };
+    characters.set(id, updated);
+    return updated;
   }
 
   // ── Seed preset worlds ──────────────────────────────────────────

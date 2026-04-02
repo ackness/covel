@@ -41,7 +41,10 @@ export interface PublicRuntimeSpec {
   id: string;
   pluginId: string;
   kind: RuntimeKind;
-  phase: RuntimePhase;
+  /** @deprecated Use `priority` instead. Kept for backward compatibility. */
+  phase?: RuntimePhase;
+  /** Execution priority (0-1000). 0 = highest = runs first. Default: 500. */
+  priority?: number;
   trigger: RuntimeTriggerSpec;
   providerBinding?: string;
   instructionsRef?: string;
@@ -80,6 +83,8 @@ export interface ToolExecutionContext<I = unknown> {
   runtimeId: string;
   pluginId: string;
   locale: string;
+  /** Current plugin-scoped state injected by the kernel. */
+  state?: Record<string, unknown>;
 }
 
 /** Tool execution result */

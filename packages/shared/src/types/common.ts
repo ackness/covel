@@ -54,7 +54,7 @@ export type ProposalKind =
 /** Runtime kind */
 export type RuntimeKind = "story" | "plugin" | "background" | "verifier";
 
-/** Runtime phase */
+/** Runtime phase @deprecated Use priority-based scheduling instead. Kept for backward compatibility. */
 export type RuntimePhase = "pre_story" | "story" | "post_story" | "background";
 
 /** Failure policy */

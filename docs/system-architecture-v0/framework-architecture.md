@@ -148,24 +148,25 @@ locale 必须作为显式字段进入输入、run 设置、runtime context 和 U
 
 它必须可以被单独调用，而不是只能附着在某个主回合流程里被动执行。
 
-### A8. 主叙事后触发是默认 profile，不是唯一时机
+### A8. 统一优先级调度取代固定阶段
 
-首轮默认 gameplay profile 采用：
+所有 runtime 通过 `priority`（0-1000）统一排序执行，取代原有的 `pre_story / story / post_story / background` 四阶段系统。
 
-- 主叙事 runtime 先执行
-- 其他 gameplay 插件 runtime 默认在其后执行
+- 0 = 最高优先级 = 最先执行，1000 = 最低优先级
+- 相同优先级的 runtime 并行执行
+- 默认优先级 500
+- 用户可在设置面板中调整 runtime 优先级
 
-但插件也可以在其他时机执行，例如：
+这使得执行顺序完全由优先级决定：主叙事 runtime（默认 400）先于一般插件（默认 500），但用户可自由调整。不再需要理解"阶段"概念。
 
-- `pre_story`
-- `background`
-- 手动按钮触发
-- 显式事件触发
+### A9. 统一 Context 构建器管理所有提示词
 
-### A9. 插件默认并行，依赖先做拓扑排序
+系统中所有 prompt 组装、上下文分发、前序输出注入统一由 `@covel/context` 包管理。
 
-同一阶段内的插件 runtime 默认并行执行。  
-若存在依赖，则必须先做依赖拓扑排序，再按拓扑层并行调度。
+- 硬编码 prompt 不应散落在各处，而应集中在 context 构建器中
+- 每个 runtime 执行前，context 构建器根据其 readScopes 和当前累积上下文构建完整 prompt
+- 前序 runtime 的输出（narrative 文本 + 全部 proposals）通过 context 构建器注入给后续 runtime
+- 构建器早期可以简单（全量拼接），但接口设计必须支持未来的精细控制（按 scope 裁剪、token 预算、优先级排序等）
 
 ## 5. 系统上下文
 
@@ -493,15 +494,18 @@ plugin/
 ```mermaid
 flowchart TD
     A["Input / Event"] --> B["Trigger Router"]
-    B --> C["Runtime Scheduler"]
-    C --> D["Context Assembly"]
-    D --> E["Runtime Runner"]
-    E --> F["Tool / Hook Loop"]
-    F --> G["Proposal Collector"]
-    G --> H["Validation / Policy"]
-    H --> I["Commit Service"]
-    I --> J["Render / Side Effects"]
-    J --> K["Follow-up Events / Background Jobs"]
+    B --> C["Priority Scheduler\n(0-1000, 相同并行)"]
+    C --> D["TurnContextStore.init()"]
+    D --> E["For each priority group:"]
+    E --> F["PromptAssembler.build()\n(per runtime)"]
+    F --> G["Runtime Runner\n+ Tool / Hook Loop"]
+    G --> H["Proposal Collector"]
+    H --> I["TurnContextStore.ingest()\n(前序输出可见给后续 runtime)"]
+    I --> E
+    E --> J["Validation / Policy"]
+    J --> K["Commit Service"]
+    K --> L["Render / Side Effects"]
+    L --> M["Follow-up Events"]
 ```
 
 ### 9.1 Trigger Router
@@ -514,57 +518,219 @@ flowchart TD
 - 识别事件类型
 - 根据 trigger 规则筛选候选 runtime
 
-### 9.2 Runtime Scheduler
+**注意**：Trigger Router、Scheduler、Context Assembly、Runtime Runner、Tool/Hook Loop 均通过会话级 Scoped Registry View 查询注册表，仅看到当前会话已激活插件的 runtime/tool/hook/context provider。详见 §11.2.1。
 
-职责：
+### 9.2 Runtime Scheduler（优先级调度）
 
-- 按 phase、order、priority、budget 调度 runtime
-- 避免重复执行
-- 区分同步链与后台链
+所有 runtime 统一通过 `priority`（0-1000）排序调度，取代原有的固定阶段系统。
 
-首轮 phase：
+#### 9.2.1 调度规则
 
-- `pre_story`
-- `story`
-- `post_story`
-- `background`
+1. **排序**：所有候选 runtime 按 priority 升序排列（0 最先执行）
+2. **分组**：相同 priority 的 runtime 组成一个并行执行组
+3. **执行**：组间顺序执行，组内并行执行
+4. **默认值**：未声明 priority 的 runtime 默认为 500
 
-默认 plugin timing：
+#### 9.2.2 推荐优先级区间
 
-- gameplay / mechanics plugins 默认进入 `post_story`
-- image / TTS / asset plugins 默认采用手动触发，可在插件设置中切换为自动触发
-- 其他插件可根据功能绑定到 `pre_story`、`background` 或显式事件时机
+| 区间 | 用途 | 典型 runtime |
+|------|------|-------------|
+| 0-199 | 系统初始化 | persona 注入、session 初始化检查 |
+| 200-399 | 预处理 | 条件判断、上下文预加载、审计前置 |
+| 400-599 | 核心叙事 | 主叙事 narrator（400）、默认插件（500） |
+| 600-799 | 后处理 | 角色追踪、选项面板、状态分析 |
+| 800-999 | 后台任务 | 记忆归档、摘要生成 |
+| 1000 | 清理/审计 | 审计日志、清理任务 |
 
-### 9.3 Context Assembly
+#### 9.2.3 优先级来源与覆盖
 
-职责：
+解析顺序（后者覆盖前者）：
 
-- 按 runtime 需要组装最小上下文
-- 根据 read scope 裁剪数据
-- 控制 token 和 payload 规模
-- 解析并注入当前 turn 的目标 locale
+1. runtime spec 中的 `priority` 字段（插件作者声明的默认值）
+2. 用户设置：`runtimeSettings.byRuntime[runtimeId].priority`（用户在设置面板中调整）
 
-首轮 context slices：
+#### 9.2.4 与 trigger 的关系
 
-- `chat`
-- `world`
-- `characters`
-- `state`
-- `record`
-- `events`
-- `runtime`
-- `runtimeSettings`
-- `narrative`
-- `archive`
+priority 控制**执行顺序**，trigger 控制**是否执行**。两者正交：
 
-规则：
+- trigger router 先筛选出本轮应执行的候选 runtime
+- scheduler 再按 priority 对候选 runtime 排序分组
 
-- locale 必须显式进入 runtime context，而不是依赖 prompt 猜测
-- 默认 gameplay loop 中，插件阶段可以额外看到主叙事 runtime 的 narrative 输出和当前状态快照
-- scheduler 需要先计算依赖拓扑层，再在层内并行调度
-- runtime 的触发时间取决于 hook 和 trigger 条件，而不只取决于某次对话后
+#### 9.2.5 默认插件优先级
+
+| 插件 | Runtime | 默认 Priority |
+|------|---------|--------------|
+| core-persona | persona-context | 100 |
+| core-narrator | narrator | 400 |
+| core-init-wizard | init-wizard | 450 |
+| core-guide | guide | 600 |
+| core-char-tracker | char-tracker | 600 |
+| (未来) memory | memory-summarizer | 900 |
+| (未来) archive | archiver | 950 |
+
+### 9.3 Context Assembly（统一 Context 构建器）
+
+Context 构建器（`@covel/context`）是系统中所有 prompt 组装和上下文分发的中心。
+
+#### 9.3.1 职责
+
+1. **积累**：维护 turn 级上下文存储（TurnContextStore），记录静态上下文和运行过程中的动态输出
+2. **构建**：为每个 runtime 构建完整 prompt（PromptAssembler），包括系统指令、结构化上下文、对话历史
+3. **注入**：将前序 runtime 的输出（narrative 文本 + 全部 proposals）注入给后续 runtime
+4. **格式化**：将各类上下文数据渲染为 LLM 可理解的 prompt 文本
+
+#### 9.3.2 TurnContextStore
+
+turn 级上下文存储，生命周期为一个完整 turn。
+
+```typescript
+interface TurnContextStore {
+  /** 初始化静态上下文（turn 开始时调用一次） */
+  init(input: TurnContextInit): void;
+
+  /** 注入已完成 runtime 的输出（每个优先级组执行完后调用） */
+  ingest(runtimeId: string, output: RuntimeOutput): void;
+
+  /** 获取当前累积的 narrative 文本 */
+  getNarrative(): string;
+
+  /** 获取当前累积的 state（已应用所有 patches） */
+  getState(): Record<string, unknown>;
+
+  /** 获取所有已完成 runtime 的 proposals */
+  getProposals(): ProposalItem[];
+
+  /** 获取所有已发出的 events */
+  getEvents(): EventEntry[];
+
+  /** 获取所有已更新的 records */
+  getRecords(): Map<string, unknown>;
+}
+
+interface TurnContextInit {
+  runId: string;
+  branchId: string;
+  turnId: string;
+  locale: string;
+  world: unknown;
+  characters: CharacterCard[];
+  chat: unknown;
+  state: Record<string, unknown>;
+  archive?: { activeVersion?: number; latestVersion?: number; summary?: string };
+  runtimeSettings?: RuntimeSettingsMap;
+}
+
+interface RuntimeOutput {
+  narrative?: string;
+  proposals: ProposalItem[];
+  usage?: { inputTokens: number; outputTokens: number };
+}
+```
+
+#### 9.3.3 PromptAssembler
+
+为单个 runtime 构建完整 prompt。
+
+```typescript
+interface PromptAssembler {
+  /** 构建 runtime 的完整 prompt */
+  build(store: TurnContextStore, runtime: RegisteredRuntime): PromptResult;
+}
+
+interface PromptResult {
+  /** 最终消息序列，直接传给 LLM */
+  messages: TextMessage[];
+  /** token 估算值（用于预算检查） */
+  tokenEstimate: number;
+  /** 各 section 元信息（用于可观测性） */
+  sections: SectionMeta[];
+}
+```
+
+构建流程：
+
+1. 加载 runtime 的 instructions（PLUGIN.md 文件内容）
+2. 收集 context provider fragments（按 priority 排序）
+3. 从 TurnContextStore 读取上下文数据
+4. 按 runtime 的 readScopes 过滤（首轮可全量给出）
+5. 组装结构化 prompt sections（XML 标签包裹）
+6. 注入前序 runtime 的 narrative + proposals（如果本 runtime 不是最先执行的）
+7. 拼接对话历史
+8. 应用 token 预算裁剪
+
+#### 9.3.4 Prompt 结构
+
+每个 runtime 收到的 prompt 结构如下：
+
+```
+System Message:
+  ┌─ Context Provider Fragments（按 priority 降序）
+  │   例如：persona 风格指令、guide 选项生成指令
+  ├─ Runtime Instructions（PLUGIN.md 内容）
+  ├─ [Locale: zh-CN]
+  ├─ <world>...</world>
+  ├─ <characters>...</characters>
+  ├─ <state>...</state>
+  ├─ <records>...</records>
+  ├─ <archive>...</archive>
+  ├─ <settings>...</settings>
+  └─ <previous_outputs>
+       前序 runtime 的 narrative 文本和 proposals
+     </previous_outputs>
+
+Chat History:
+  ┌─ 对话消息序列
+  └─ 当前 turn 累积的 narrative（作为最近一条 assistant 消息）
+```
+
+#### 9.3.5 前序输出注入
+
+当一个 runtime 执行时，所有更高优先级（更小 priority 数值）的 runtime 的输出都可见：
+
+- **narrative 文本**：完整的叙事文本，按执行顺序拼接
+- **proposals**：所有 proposal 条目（`narrative.append`, `state.patch`, `event.emit`, `record.upsert`, `ui.render` 等）
+- **state patches**：已经 eager-apply 到 TurnContextStore 的 state 中
+
+这确保了低优先级 runtime 能够基于高优先级 runtime 的输出做出决策。
+
+#### 9.3.6 执行时序
+
+```
+Turn Start
+  │
+  ├─ TurnContextStore.init(world, characters, chat, state, ...)
+  │
+  ├─ Priority Group 100 (e.g., core-persona)
+  │   ├─ PromptAssembler.build(store, persona) → prompt
+  │   ├─ Execute → output
+  │   └─ store.ingest("persona", output)
+  │
+  ├─ Priority Group 400 (e.g., core-narrator)
+  │   ├─ PromptAssembler.build(store, narrator) → prompt
+  │   │   (prompt 中包含 persona 的 context fragment 输出)
+  │   ├─ Execute → narrative + proposals
+  │   └─ store.ingest("narrator", output)
+  │
+  ├─ Priority Group 600 (e.g., tracker + guide, 并行)
+  │   ├─ PromptAssembler.build(store, tracker) → prompt ┐
+  │   ├─ PromptAssembler.build(store, guide) → prompt   ├─ 均可见 narrator 输出
+  │   ├─ Parallel execute → proposals                    ┘
+  │   └─ store.ingest(each output)
+  │
+  └─ Priority Group 900 (background)
+      └─ ...
+
+Post-Turn:
+  Proposal Collector → Validation → Commit → Render
+```
+
+#### 9.3.7 设计原则
+
+- locale 必须显式进入 runtime context，不依赖 prompt 猜测
 - prompt 组装必须同步前端当前选择的语言
-- 若 world / plugin / prompt 资源缺失对应语言版本，则回退到设置中的默认语言
+- 若 world / plugin / prompt 资源缺失对应语言版本，回退到设置中的默认语言
+- 首轮 context builder 实现可以简单（全量拼接），但接口必须支持后续精细化
+- 未来扩展方向：按 readScopes 裁剪、token 预算分配、section 优先级排序、agent 专用上下文模板
 
 ### 9.4 Runtime Runner
 
@@ -627,15 +793,15 @@ flowchart TD
 
 ### 9.9 默认 gameplay loop
 
-首轮默认 gameplay loop 应采用如下编排剖面：
+首轮默认 gameplay loop 的优先级编排：
 
-1. 应用层构建本轮 turn 输入
-2. kernel 组装主叙事 runtime 的最小上下文
-3. 主模型仅生成 narrative，不直接承担结构化机制输出
-4. narrative 完成后，调度默认位于 `post_story` 的插件 runtime
-5. 插件阶段读取 narrative、状态快照和启用配置，产出 proposal
-6. 统一走 `validate -> commit -> render`
-7. turn 结束后，可选触发 memory、archive 和其他 background runtime
+1. **Priority 100** — core-persona：context provider 注入叙事风格和世界观指令（无 LLM 调用）
+2. **Priority 400** — core-narrator：基于完整上下文生成 narrative（主模型，仅负责叙事，不承担结构化输出）
+3. **Priority 600** — core-guide + core-char-tracker（并行）：读取 narrator 输出的 narrative + state，分别产出选项面板和角色追踪 proposal
+4. **Priority 900+** — 后台 runtime（memory、archive 等）：不阻塞主流程
+5. **Post-turn** — 统一走 `validate -> commit -> render`
+
+用户可通过设置面板调整任意 runtime 的优先级，改变执行顺序。例如将 guide 调到 400 使其与 narrator 并行，或将自定义审计插件调到 200 使其在叙事前执行。
 
 ### 9.10 手动触发型插件
 
@@ -681,23 +847,23 @@ flowchart TD
 发送 start_session action  ──→  Kernel 收到 session_start 事件
                                   ↓
                                Trigger Router 筛选候选 runtime
-                               - core-persona (pre_story, always) ✓
-                               - core-narrator (story, always) ✓
-                               - core-init-wizard (post_story, event: session_start) ✓
-                               - core-guide (post_story, event: user.input) ✗
-                               - core-char-tracker (post_story, event: user.input) ✗
+                               - core-persona (priority 100, always) ✓
+                               - core-narrator (priority 400, always) ✓
+                               - core-init-wizard (priority 450, event: session_start) ✓
+                               - core-guide (priority 600, event: user.input) ✗
+                               - core-char-tracker (priority 600, event: user.input) ✗
                                   ↓
-                               Runtime Scheduler 按 phase 排序执行
+                               Runtime Scheduler 按 priority 排序执行
                                   ↓
-                               ┌─ pre_story: core-persona (no-op handler)
+                               ┌─ Priority 100: core-persona (no-op handler)
                                │  → 不调用 LLM，通过 context provider 注入人设
                                │
-                               ├─ story: core-narrator
+                               ├─ Priority 400: core-narrator
                                │  → LLM 读取 world + persona context
                                │  → 生成开场叙事 (narrative.append)
                                │  → 2-4 段第二人称背景描写
                                │
-                               └─ post_story: core-init-wizard
+                               └─ Priority 450: core-init-wizard
                                   → LLM 读取 narrative context + world characterSchema
                                   → 根据开场叙事动态生成角色创建表单
                                   → 输出 ui.render (character_creation block)
@@ -992,6 +1158,41 @@ Preset 是预填充的模型配置模板，降低玩家配置门槛。
 - 依赖关系先在启用集解析阶段补全
 - 调度阶段按依赖拓扑分层
 - 同层 runtime 可并行执行
+
+### 11.2.1 Session-Scoped Plugin Activation（会话级插件激活）
+
+插件加载与激活分离：
+
+- **全局加载**：服务端启动时，`PluginHost` 扫描 `plugins/` 目录，加载所有插件到全局注册表（RuntimeRegistry、ToolRegistry、HookRegistry、ContextProviderRegistry）。此过程不变。
+- **会话级激活**：每个 `KernelSession` 持有一个 `SessionPluginScope`（本质是 `Set<string>` 存储已激活的 pluginId）。所有注册表查询通过 Scoped View 过滤：
+
+| Scoped View | 全局注册表 | 过滤逻辑 |
+|---|---|---|
+| `ScopedRuntimeRegistry` | `RuntimeRegistry` | 仅返回 pluginId 在 scope 内的 runtime |
+| `ScopedToolRegistry` | `ToolRegistry` | 仅返回 pluginId 在 scope 内的 tool |
+| `ScopedHookRegistry` | `HookRegistry` | 仅返回 pluginId 在 scope 内的 hook |
+| Scoped context providers | `ContextProviderRegistry` | 仅返回 pluginId 在 scope 内的 provider |
+
+设计要点：
+
+- **无数据复制**：Scoped View 不复制注册表数据，每次调用实时委托到全局注册表并过滤。
+- **即时生效**：`enablePlugin` / `disablePlugin` 仅操作 `Set<string>`，下一轮 turn 的 trigger routing、scheduling、context assembly、runtime execution、tool execution、hook execution 均自动感知。
+- **生命周期**：scope 在 session 创建时构建，与 session 共存亡。
+- **初始种子**：session 创建时，world manifest 的 `requiredPlugins` 和 `recommendedPlugins` 用于种子化初始激活集。
+
+`KernelSession` 接口新增：
+
+- `enablePlugin(pluginId: string)` — 激活插件（下一轮生效）
+- `disablePlugin(pluginId: string)` — 停用插件（下一轮生效）
+- `listActivePlugins()` — 返回当前会话已激活的插件列表
+- `listAvailablePlugins()` — 返回全局已加载但当前未激活的插件列表
+- `pluginScope: SessionPluginScope` — 直接访问 scope 对象
+
+API 端点：
+
+- `GET /sessions/:id/plugins` — 查询当前会话的插件状态（激活/可用）
+- `POST /sessions/:id/plugins/enable` — 激活指定插件
+- `POST /sessions/:id/plugins/disable` — 停用指定插件
 
 ### 11.3 Runtime Settings 合并
 
@@ -1501,24 +1702,102 @@ Phase 字段存储在 `RunDescriptor.phase` 中，每次 phase 变更通过 `eve
 
 ## 24. 可观测性与审计架构
 
+### 24.1 设计原则
+
+1. **玩家数据主权**：所有 LLM 交互数据（prompt、response、tool calls）对玩家完全透明，可在前端调试页查看和导出。
+2. **Runtime 为核心粒度**：每个 runtime 执行产生一条 `RuntimeTrace`，是最小可观测单元。Turn 级别聚合为 `TurnTrace`，Session 级别聚合为时间线。
+3. **Delta 记录**：LLM 无状态，prompt 由历史拼接。Trace 只记录本轮新增的 context 部分（新 instructions、新 fragments、新 chat messages），不重复存储完整 prompt 历史。可选开启 `promptSnapshot` 存完整快照。
+4. **双通道**：runtime trace 走结构化 trace 系统（`@covel/trace`），非 runtime 部分（server 启动、plugin 加载、DB 操作）走传统日志库（pino）。
+5. **外部平台集成**：trace 数据结构与 Langfuse span 模型对齐，可选上报。
+
+### 24.2 追踪字段链
+
 核心对象和执行链必须保留以下追踪字段：
 
-- `traceId`
-- `runId`
-- `branchId`
-- `turnId`
-- `runtimeId`
-- `pluginId`
+```
+traceId → runId → branchId → turnId → runtimeId → pluginId
+```
 
-首轮至少追踪：
+### 24.3 Trace 层级模型
 
-- runtime 调度
-- tool 调用
-- hook 决策
-- provider 请求
-- DB 提交
+```
+SessionTimeline (session 维度)
+  └── TurnTrace (每轮)
+        ├── meta: { turnId, traceId, runId, branchId, turnNumber, locale, inputType }
+        ├── triggerResult: { event, candidateCount, candidateRuntimeIds[] }
+        ├── executionPlan: { groups: [{ priority, runtimeIds[] }] }
+        └── runtimeTraces: RuntimeTrace[] (按执行顺序)
+              ├── meta: { runtimeId, pluginId, priority, kind, triggerMode, isBackground }
+              ├── provider: { presetId, provider, model, slotId }
+              ├── context: { fragments[], instructionsPreview, newChatMessageCount, priorRuntimeOutputCount }
+              ├── llmCalls: LlmCallTrace[] (每次 LLM 请求，记录 delta messages)
+              ├── toolCalls: ToolCallTrace[] (input/output/duration/blocked)
+              ├── proposals: ProposalTrace[] (kind/source/validated/rejected)
+              ├── hooks: HookTrace[] (hookId/event/allowed)
+              ├── usage: { inputTokens, outputTokens, durationMs, llmCallCount, toolCallCount }
+              └── result: { status, text, error? }
+```
 
-这不是未来平台需求，而是当前开发期可调试性的基本要求。
+### 24.4 采集架构
+
+`@covel/trace` 包提供 `TraceCollector` 接口，kernel 在 executeTurn 中注入 trace 采集：
+
+- Turn 开始时创建 `TurnTraceHandle`，记录调度结果和执行计划
+- 每个 runtime 执行时创建 `RuntimeTraceHandle`，记录 provider 绑定、context delta、LLM 调用链、工具调用、提案产出
+- Runtime runner 在 tool-calling loop 中通过 handle 记录每次 LLM call（delta messages + response）和每次 tool call（input/output）
+- Turn 结束时记录 commit 结果并归档
+
+首轮实现使用内存存储（`MemoryTraceCollector`），保留最近 N 个 turn 的 trace。
+
+### 24.5 消费通道
+
+| 通道 | 协议 | 用途 |
+|------|------|------|
+| REST API | `GET /api/trace/*` | 前端调试页查询历史 trace |
+| SSE 推送 | `trace.*` 事件类型 | 前端调试页实时更新（可选订阅） |
+| Langfuse | TraceExporter 接口 | 外部 trace 平台上报 |
+| JSON 导出 | `GET /api/trace/sessions/:id/export` | 玩家下载完整 trace |
+
+### 24.6 Prompt Delta 策略
+
+- **Turn 内**（同一 runtime 的 tool-calling loop）：`LlmCallTrace.newMessages` 只存新增的 messages
+- **Turn 间**（同一 runtime 跨 turn）：记录 `newChatMessageCount`、本轮 fragments 列表、`priorRuntimeOutputCount`
+- **完整快照**：可选 `promptSnapshot` 字段，通过 `COVEL_TRACE_FULL_PROMPT=true` 或前端设置开启
+
+### 24.7 Langfuse Span 映射
+
+```
+Langfuse Trace (traceId)
+  └── Span: "turn" (turnId)
+        ├── Span: "runtime:{runtimeId}"
+        │     ├── Generation: "llm-call-{n}" (input=delta messages, output=response, model, usage)
+        │     ├── Span: "tool:{qualifiedToolId}" (input, output, duration)
+        │     └── ...
+        └── Span: "commit" (proposalCount, rejectedCount)
+```
+
+现有的 `ProviderLifecycleHook`（gateway 级 LLM 请求追踪）保持兼容，`TraceExporter` 是更高层的 kernel 级接口。
+
+### 24.8 日志双通道边界
+
+| 场景 | 通道 | 说明 |
+|------|------|------|
+| Runtime 执行（LLM、工具、提案） | Trace | 结构化，前端可查 |
+| Turn 调度（trigger、scheduler） | Trace | 属于 TurnTrace |
+| Hook 执行 | Trace | 属于 RuntimeTrace |
+| Server 请求处理 | Logger (pino) | Hono middleware |
+| Plugin 加载/卸载 | Logger | 启动阶段 |
+| DB 读写（非 commit） | Logger | 基础设施层 |
+| SSE 连接管理 | Logger | 连接生命周期 |
+
+### 24.9 前端调试页面
+
+`/debug` 页面提供四个视图：
+
+1. **Session Timeline** — 选择 session，查看 turn 时间线（turnNumber、inputType、runtime 数量、tokens、耗时），点击展开 execution plan
+2. **Runtime Inspector** — 选中 runtime 的详细 LLM 交互流（每次 call 的 delta messages、response、tool calls）、工具调用列表（input/output/duration）、proposals 列表
+3. **Prompt Viewer** — 完整 prompt 重建（System Prompt / Fragments / Instructions / Chat History / Tools），支持与上一轮 diff 高亮
+4. **Data Explorer** — State diff viewer、Event log、Record browser
 
 ## 25. 首轮部署架构
 
@@ -1542,48 +1821,55 @@ Phase 字段存储在 `RunDescriptor.phase` 中，每次 phase 变更通过 `eve
 
 ```text
 app/
-  web/
-  api/
-kernel/
-  router/
-  scheduler/
-  context/
-  runner/
-  tools/
-  hooks/
-  proposals/
-  validation/
-  commit/
-  render/
-domain/
-  world/
-  character/
-  run/
-  branch/
-  snapshot/
-  state/
-  event/
-  record/
+  web/                  — React 前端
+  server/               — Hono API 服务
+
+packages/
+  shared/               — 共享类型与契约
+  ai-provider/          — 多 provider LLM 抽象、preset、slot 注册
+  runtime/              — Runtime 执行引擎、prompt builder
+  kernel/               — 调度、proposal、commit、render
+  context/              — 统一 Context 构建器（TurnContextStore + PromptAssembler）
+  plugin-runtime/       — 插件加载、注册表（tool/hook/runtime/command）、host
+
 plugins/
-  loader/
-  registry/
-  permissions/
-  ui/
-providers/
-  llm/
-  image/
-  tts/
+  core-*/               — 核心插件包
+
+domain/                 — (当前在 shared/types 中，未来可独立)
+  world/ character/ run/ branch/ snapshot/
+  state/ event/ record/
+
 infra/
-  db/
-  queue/
-  tracing/
-  storage/
+  db/ queue/ tracing/ storage/
+```
+
+`@covel/context` 包的内部结构：
+
+```text
+packages/context/
+  src/
+    store/
+      turn-context-store.ts     — Turn 级上下文积累器
+    assembler/
+      prompt-assembler.ts       — Prompt 组装器
+    sections/
+      system-section.ts         — 系统指令格式化
+      world-section.ts          — 世界数据格式化
+      character-section.ts      — 角色卡格式化
+      state-section.ts          — 游戏状态格式化
+      narrative-section.ts      — 前序叙事格式化
+      chat-section.ts           — 对话历史格式化
+      previous-output-section.ts — 前序 runtime 输出（proposals）格式化
+      directive-section.ts      — Locale 和格式指令
+    types.ts                    — 共享类型
+    index.ts                    — 公共导出
 ```
 
 目的：
 
 - 为首轮实现提供清晰边界
 - 为未来服务拆分提供自然演进路径
+- `@covel/context` 作为独立包，集中管理所有 prompt 组装逻辑
 
 ## 27. 首轮必须固定的架构不变量
 
@@ -1599,8 +1885,8 @@ infra/
 8. UI 扩展只能通过标准 slot 注入。
 9. locale 必须作为显式上下文在资产、run、runtime、UI 之间传播。
 10. runtime 是完整的独立 LLM 运行时单元，可被单独调用。
-11. 主叙事后触发只是默认 profile，不是插件唯一时机。
-12. 同阶段插件默认并行，但必须先满足依赖拓扑。
+11. **runtime 通过 priority（0-1000）统一调度，相同优先级并行执行。**
+12. **所有 prompt 组装通过统一 context 构建器（`@covel/context`），不在各处硬编码。**
 
 ## 28. 首轮明确延期的能力
 
@@ -1608,14 +1894,14 @@ infra/
 
 - 微服务拆分
 - 复杂平台治理
-- 大量额外 runtime phase
+- context 构建器的精细 readScope 过滤和 token 预算分配
 - 过宽的工具域公开
 - 复杂 UI slot 体系
 - 重型工作流引擎
 - 细粒度历史编辑器
 - 完整多语言正文编辑工具链
 - 大规模多 runtime 插件包作者模型
-- 插件级生命周期钩子（onInstall / onEnable / onDisable / onUninstall）
+- 插件级生命周期钩子（onInstall / onUninstall）（注：会话级 enable/disable 已通过 SessionPluginScope 实现，见 §11.2.1）
 
 ## 29. 结论
 

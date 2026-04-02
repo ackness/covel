@@ -17,5 +17,23 @@ services:
       timeout: 5s
       retries: 5
 
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: covel-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3001}:3001"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-covel}:${POSTGRES_PASSWORD:-covel_dev}@postgres:5432/${POSTGRES_DB:-covel}
+      SERVER_PORT: "3001"
+      NODE_ENV: production
+      SERVE_STATIC: "true"
+      STATIC_DIR: ./web-dist
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   pgdata:

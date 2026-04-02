@@ -37,7 +37,7 @@ export async function generateChoicesTool(
           ];
 
   const choices = {
-    title: isZh ? `${topic}` : `${topic}`,
+    title: topic,
     options,
   };
 
@@ -51,7 +51,7 @@ export async function generateChoicesTool(
       {
         kind: "ui.render",
         payload: {
-          type: "choices",
+          type: "choice_set",
           content: choices,
         },
       },

@@ -1,6 +1,10 @@
 # core-init-wizard
 
-Emits a character creation form on session_start. Only fires once per session.
+Character creation wizard that fires on session_start. Uses LLM to generate
+a narrative transition from the opening story into the character name prompt.
 
-The wizard renders a `character_creation` UI block with a name input field.
-After the player submits their name, subsequent turns use `user.input` which does not trigger this plugin.
+The handler reads the narrator's opening narrative from context, asks the LLM
+to write 1-2 sentences of story-integrated transition, then emits a minimal
+inline character_creation block (name only, no description).
+
+If LLM is unavailable, falls back to a static transition line.

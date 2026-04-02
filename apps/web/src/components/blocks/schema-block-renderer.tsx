@@ -219,10 +219,6 @@ function InteractiveSchemaBlock({
           const items = data[key] as Array<Record<string, unknown>> | undefined;
           if (!items || !Array.isArray(items)) return null;
           const itemSchema = (propSchema.items ?? {}) as Record<string, unknown>;
-          const itemProps = (itemSchema.properties ?? {}) as Record<
-            string,
-            Record<string, unknown>
-          >;
 
           return (
             <div key={key} className="space-y-3">

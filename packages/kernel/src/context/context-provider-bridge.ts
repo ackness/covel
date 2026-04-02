@@ -19,7 +19,7 @@ export interface ContextFragment {
  * prepended to the runtime's instructions in the correct order.
  */
 export async function gatherContextFragments(
-  providers: Map<string, RegisteredContextProvider>,
+  providers: ReadonlyMap<string, RegisteredContextProvider>,
   input: ContextProviderInput
 ): Promise<ContextFragment[]> {
   const fragments: ContextFragment[] = [];
@@ -42,12 +42,12 @@ export async function gatherContextFragments(
     } catch (err) {
       console.warn(
         `[context-provider-bridge] Provider ${provider.pluginId}:${provider.id} failed:`,
-        err
+        err instanceof Error ? err.message : String(err)
       );
     }
   });
 
-  await Promise.allSettled(tasks);
+  await Promise.all(tasks);
 
   // Sort by priority descending (highest priority = first in prompt)
   fragments.sort((a, b) => b.priority - a.priority);

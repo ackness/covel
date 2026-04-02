@@ -18,14 +18,14 @@ export interface CommandBus {
    * @param input - Raw input string, e.g. `/guide --topic foo`
    * @param context - Execution context (sessionId, locale, etc.)
    */
-  dispatch(input: string, context?: CommandExecutionContext): Promise<unknown>;
+  dispatch(input: string, context?: CommandExecutionContext): Promise<CommandResult>;
 }
 
 export function createCommandBus(registry: CommandRegistry): CommandBus {
   async function dispatch(
     input: string,
     context: CommandExecutionContext = {}
-  ): Promise<unknown> {
+  ): Promise<CommandResult> {
     const parsed = parseSlashCommand(input);
     const cmd = registry.getOrThrow(parsed.name);
 
@@ -47,7 +47,7 @@ export function createCommandBus(registry: CommandRegistry): CommandBus {
       validatedArgs = result.data;
     }
 
-    return cmd.handler(validatedArgs, context);
+    return cmd.handler(validatedArgs, context) as Promise<CommandResult>;
   }
 
   return { dispatch };

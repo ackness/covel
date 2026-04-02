@@ -20,7 +20,7 @@
       "id": "narrator",
       "pluginId": "core-narrator",
       "kind": "story",
-      "phase": "story",
+      "priority": 400,
       "trigger": { "mode": "always" },
       "providerBinding": "heavy",
       "tools": [],

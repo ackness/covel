@@ -17,6 +17,15 @@ export interface KernelInput {
   payload: Record<string, unknown>;
 }
 
+/** Background task info included in turn result */
+export interface BackgroundTaskInfo {
+  taskId: string;
+  runtimeId: string;
+  pluginId: string;
+  status: "pending" | "running" | "completed" | "failed";
+  description: string;
+}
+
 /** Kernel turn result */
 export interface KernelTurnResult {
   runId: string;
@@ -28,6 +37,8 @@ export interface KernelTurnResult {
   commit?: CommitResult;
   render: RenderResult;
   followUpEvents: RuntimeTriggerEvent[];
+  /** Background tasks that were spawned but not awaited during this turn. */
+  backgroundTasks?: BackgroundTaskInfo[];
 }
 
 /** Kernel proposal envelope */
@@ -119,7 +130,7 @@ export interface RuntimeContextView {
     runtimeId: string;
     pluginId: string;
     kind: string;
-    phase: string;
+    priority: number;
     allowedTools: string[];
     providerBinding?: string;
     budget?: RuntimeBudget;

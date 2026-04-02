@@ -1,0 +1,150 @@
+{
+  "schemaVersion": "1.0",
+  "id": "core-inventory",
+  "displayName": {
+    "zh-CN": "物品管理",
+    "en-US": "Inventory"
+  },
+  "version": "0.1.0",
+  "author": "covel",
+  "description": {
+    "zh-CN": "追踪和管理玩家的物品、装备和货币。自动从叙事中识别物品获取和消耗事件。",
+    "en-US": "Track and manage player items, equipment, and currency. Automatically detects item acquisition and consumption from narrative."
+  },
+  "defaultLocale": "zh-CN",
+  "supportedLocales": ["zh-CN", "en-US"],
+  "loadingOrder": 45,
+  "blockSchemas": [
+    {
+      "type": "inventory_panel",
+      "interactive": false,
+      "meta": {
+        "displayName": { "zh-CN": "物品面板", "en-US": "Inventory Panel" },
+        "description": "Displays the player's current inventory"
+      },
+      "dataSchema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "description": { "type": "string" },
+                "category": {
+                  "type": "string",
+                  "enum": ["weapon", "armor", "consumable", "quest", "material", "misc"]
+                },
+                "quantity": { "type": "number" },
+                "equipped": { "type": "boolean" }
+              },
+              "required": ["id", "name", "category", "quantity"]
+            }
+          },
+          "currency": {
+            "type": "object",
+            "additionalProperties": { "type": "number" }
+          },
+          "capacity": { "type": "number" },
+          "usedSlots": { "type": "number" }
+        },
+        "required": ["items", "currency"]
+      }
+    }
+  ],
+  "runtimes": [
+    {
+      "id": "inventory-tracker",
+      "pluginId": "core-inventory",
+      "kind": "plugin",
+      "priority": 600,
+      "trigger": {
+        "mode": "event",
+        "onEvents": ["user.input"]
+      },
+      "providerBinding": "fast",
+      "tools": [
+        "core-inventory:add-item",
+        "core-inventory:remove-item",
+        "core-inventory:use-item",
+        "core-inventory:equip-item",
+        "core-inventory:modify-currency"
+      ],
+      "hooks": []
+    }
+  ],
+  "tools": [
+    {
+      "id": "add-item",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Item name" },
+          "description": { "type": "string", "description": "Brief item description" },
+          "category": {
+            "type": "string",
+            "enum": ["weapon", "armor", "consumable", "quest", "material", "misc"],
+            "description": "Item category"
+          },
+          "quantity": { "type": "number", "description": "Number of items to add (default: 1)", "default": 1 },
+          "properties": {
+            "type": "object",
+            "description": "Optional item properties (damage, defense, effect, etc.)",
+            "additionalProperties": true
+          }
+        },
+        "required": ["name", "category"]
+      }
+    },
+    {
+      "id": "remove-item",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "itemId": { "type": "string", "description": "ID of the item to remove" },
+          "itemName": { "type": "string", "description": "Name of the item to remove (used if itemId not known)" },
+          "quantity": { "type": "number", "description": "Number to remove (default: all)", "default": 0 }
+        }
+      }
+    },
+    {
+      "id": "use-item",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "itemId": { "type": "string", "description": "ID of the item to use" },
+          "itemName": { "type": "string", "description": "Name of the item to use (used if itemId not known)" }
+        }
+      }
+    },
+    {
+      "id": "equip-item",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "itemId": { "type": "string", "description": "ID of the item to equip/unequip" },
+          "itemName": { "type": "string", "description": "Name of the item (used if itemId not known)" },
+          "equip": { "type": "boolean", "description": "True to equip, false to unequip (default: toggle)", "default": true }
+        }
+      }
+    },
+    {
+      "id": "modify-currency",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "currency": { "type": "string", "description": "Currency type (e.g. 'gold', 'silver')" },
+          "amount": { "type": "number", "description": "Amount to add (positive) or subtract (negative)" }
+        },
+        "required": ["currency", "amount"]
+      }
+    }
+  ]
+}

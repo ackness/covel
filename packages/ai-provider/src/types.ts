@@ -28,6 +28,8 @@ export interface ProviderConfig {
   baseUrl?: string;
   apiKey?: string;
   headers?: Record<string, string>;
+  /** Abort signal for request cancellation. */
+  signal?: AbortSignal;
 }
 
 // ── Provider Defaults (from TOML [providers.*]) ────────────────────
@@ -70,17 +72,44 @@ export interface PresetConfig {
   providerRequestMetadata?: Record<string, unknown>;
 }
 
+// ── Tool Calling ──────────────────────────────────────────────────
+
+/** OpenAI-compatible function tool definition. */
+export interface ToolDefinition {
+  type: "function";
+  function: {
+    name: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+  };
+}
+
+/** A tool call returned by the model. */
+export interface ToolCallPart {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
 // ── Text Generation ────────────────────────────────────────────────
 
 export interface TextGenerationParams {
   model: string;
   messages: TextMessage[];
+  /** Tool definitions to pass to the model (OpenAI function calling format). */
+  tools?: ToolDefinition[];
   providerRequestMetadata?: Record<string, unknown>;
 }
 
 export interface TextMessage {
   role: string;
-  content: string;
+  content: string | null;
+  /** Prompt cache hint for providers that support it (e.g. Anthropic cache_control) */
+  cacheControl?: { type: "ephemeral" };
+  /** Tool calls made by assistant (present when role === "assistant" and model invoked tools). */
+  toolCalls?: ToolCallPart[];
+  /** Tool call ID this message responds to (present when role === "tool"). */
+  toolCallId?: string;
 }
 
 export interface UsageSummary {
@@ -92,6 +121,8 @@ export interface TextGenerationResult {
   text: string;
   finishReason: string;
   usage: UsageSummary;
+  /** Tool calls requested by the model (present when finishReason involves tool use). */
+  toolCalls?: ToolCallPart[];
 }
 
 // ── Object Generation ──────────────────────────────────────────────
@@ -111,6 +142,7 @@ export interface ObjectGenerationResult<TObject = unknown> {
 
 export type StreamEvent =
   | { type: "text-delta"; textDelta: string }
+  | { type: "reasoning-delta"; reasoningDelta: string }
   | { type: "done"; finishReason: string; usage: UsageSummary };
 
 // ── Embedding ──────────────────────────────────────────────────────

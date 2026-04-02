@@ -19,7 +19,7 @@
       "id": "persona",
       "pluginId": "core-persona",
       "kind": "plugin",
-      "phase": "pre_story",
+      "priority": 100,
       "trigger": { "mode": "always" },
       "tools": [],
       "hooks": []

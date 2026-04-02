@@ -24,8 +24,8 @@ export function createCompatPresetsRoute(ai: AiStack) {
   route.patch("/:presetId", async (c) => {
     // Stub — frontend may call this but we don't persist preset changes yet
     const presetId = c.req.param("presetId");
-    const body = await c.req.json();
-    return c.json({ id: presetId, ...body });
+    await c.req.json<Record<string, unknown>>();
+    return c.json({ id: presetId, updated: true });
   });
 
   return route;

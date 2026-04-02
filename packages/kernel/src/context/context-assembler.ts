@@ -5,6 +5,7 @@ import type {
 } from "@covel/shared";
 import type { RegisteredRuntime } from "@covel/plugin-runtime";
 import type { TurnState } from "../types.js";
+import { DEFAULT_RUNTIME_PRIORITY } from "../types.js";
 
 export interface ContextAssemblyInput {
   runId: string;
@@ -59,7 +60,7 @@ export function assembleContext(input: ContextAssemblyInput): RuntimeContextView
       runtimeId: spec.id,
       pluginId: runtime.pluginId,
       kind: spec.kind,
-      phase: spec.phase,
+      priority: spec.priority ?? DEFAULT_RUNTIME_PRIORITY,
       allowedTools: spec.tools,
       providerBinding: spec.providerBinding,
       budget: spec.budget,
