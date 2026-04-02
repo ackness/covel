@@ -56,7 +56,7 @@ pnpm dev
 一键启动前端 + 后端 + 数据库：
 
 ```bash
-# 1. 配置环境变量
+# 1. 配置环境变量（必须，Docker Compose 会读取这两个文件）
 cp .env.example .env
 cp .env.llm.example .env.llm
 # 编辑 .env.llm，填入 API key

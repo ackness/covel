@@ -40,7 +40,10 @@ FROM deps AS build-web
 COPY tsconfig.json turbo.json ./
 COPY packages/ packages/
 COPY apps/web/ apps/web/
-RUN pnpm --filter @covel/web build
+# TanStack Router generates routeTree.gen.ts during vite build,
+# but tsc -b runs first and fails without it. Skip tsc in Docker
+# (the dev workflow already catches type errors).
+RUN cd apps/web && pnpm exec vite build
 
 # ── Stage 3: Production runtime ─────────────────────────────────────
 FROM deps AS production
