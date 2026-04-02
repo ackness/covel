@@ -4,7 +4,7 @@
  * Provides worlds, sessions, and messages storage.
  * All data lives in process memory — lost on restart.
  */
-import type { CharacterCard, CharacterCreateInput, CharacterType, SessionPhase } from "@covel/shared";
+import type { CharacterCard, CharacterCreateInput, CharacterType, SessionPhase, WorldDimensions } from "@covel/shared";
 import { humanId } from "human-id";
 import { SEED_WORLDS } from "./seed-worlds.js";
 
@@ -14,8 +14,12 @@ export interface WorldRecord {
   description: string;
   /** Extended world lore for system prompt context. */
   lore?: string;
+  locale?: string;
   tags?: string[];
+  /** Structured world-building dimensions. */
+  dimensions?: WorldDimensions;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface SessionRecord {
@@ -78,13 +82,19 @@ export function createMemoryStore() {
     );
   }
 
-  function createWorld(name: string, description: string, opts?: { lore?: string; tags?: string[] }): WorldRecord {
+  function createWorld(
+    name: string,
+    description: string,
+    opts?: { lore?: string; locale?: string; tags?: string[]; dimensions?: WorldDimensions },
+  ): WorldRecord {
     const world: WorldRecord = {
       id: uid("world"),
       name,
       description,
       lore: opts?.lore,
+      locale: opts?.locale,
       tags: opts?.tags,
+      dimensions: opts?.dimensions,
       createdAt: new Date().toISOString(),
     };
     worlds.set(world.id, world);
@@ -93,6 +103,21 @@ export function createMemoryStore() {
 
   function getWorld(id: string): WorldRecord | undefined {
     return worlds.get(id);
+  }
+
+  function updateWorld(
+    id: string,
+    patch: Partial<Omit<WorldRecord, "id" | "createdAt">>,
+  ): WorldRecord | undefined {
+    const world = worlds.get(id);
+    if (!world) return undefined;
+    const updated: WorldRecord = {
+      ...world,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    worlds.set(id, updated);
+    return updated;
   }
 
   // ── Sessions ────────────────────────────────────────────────────
@@ -237,13 +262,19 @@ export function createMemoryStore() {
 
   // ── Seed preset worlds ──────────────────────────────────────────
   for (const seed of SEED_WORLDS) {
-    createWorld(seed.name, seed.description, { lore: seed.lore, tags: seed.tags });
+    createWorld(seed.name, seed.description, {
+      lore: seed.lore,
+      locale: seed.locale,
+      tags: seed.tags,
+      dimensions: seed.dimensions,
+    });
   }
 
   return {
     listWorlds,
     createWorld,
     getWorld,
+    updateWorld,
     listSessions,
     createSession,
     getSession,

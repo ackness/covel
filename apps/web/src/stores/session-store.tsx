@@ -68,6 +68,7 @@ type Action =
   | { type: "BOOT_SUCCESS"; presets: api.PresetSummary[]; packages: api.PackageSummary[]; commands: api.CommandSummary[]; worlds: api.WorldRecord[]; llmConfig: api.LlmConfigResponse | null }
   | { type: "BOOT_ERROR"; error: string }
   | { type: "SET_WORLD"; world: api.WorldRecord }
+  | { type: "UPDATE_WORLD"; world: api.WorldRecord }
   | { type: "SET_SESSION"; session: api.SessionRecord }
   | { type: "SET_WORLD_SESSIONS"; sessions: api.SessionRecord[] }
   | { type: "ADD_MESSAGE"; message: StreamMessage }
@@ -120,6 +121,12 @@ function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, bootError: action.error };
     case "SET_WORLD":
       return { ...state, world: action.world };
+    case "UPDATE_WORLD":
+      return {
+        ...state,
+        worlds: state.worlds.map((w) => w.id === action.world.id ? action.world : w),
+        world: state.world?.id === action.world.id ? action.world : state.world,
+      };
     case "SET_SESSION":
       return { ...state, session: action.session, phase: action.session.phase ?? "init" };
     case "SET_WORLD_SESSIONS":
@@ -217,6 +224,8 @@ interface SessionContextValue {
   resetSession: () => void;
   /** Reset everything including world (back to world selection). */
   backToWorldSelect: () => void;
+  /** Update a world record in the local worlds list (after server-side edit). */
+  updateWorldLocal: (world: api.WorldRecord) => void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -551,6 +560,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "RESET_TO_WORLD_SELECT" });
   }, []);
 
+  const updateWorldLocal = useCallback((world: api.WorldRecord) => {
+    dispatch({ type: "UPDATE_WORLD", world });
+  }, []);
+
   const value: SessionContextValue = {
     state,
     boot,
@@ -564,6 +577,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     retryRuntime,
     resetSession,
     backToWorldSelect,
+    updateWorldLocal,
   };
 
   return (

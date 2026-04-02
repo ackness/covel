@@ -1,4 +1,5 @@
 import type { I18nText, LocaleCode, PluginId } from "./common.types";
+import type { WorldDimensions } from "@covel/shared";
 
 export interface WorldContentVariant {
   locale: LocaleCode;
@@ -33,4 +34,6 @@ export interface WorldPackage {
    * At least one zh-CN variant must exist; other locale variants are optional.
    */
   contentVariants: WorldContentVariant[];
+  /** Structured world-building dimensions (geography, factions, power system, etc.) */
+  dimensions?: WorldDimensions;
 }

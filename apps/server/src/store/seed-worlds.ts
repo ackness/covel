@@ -1,6 +1,13 @@
 /**
  * Preset seed worlds for out-of-the-box gameplay.
  */
+import type { WorldDimensions } from "@covel/shared";
+import {
+  MISTPORT_DIMENSIONS,
+  NEONRIDGE_DIMENSIONS,
+  CLOUDMERE_DIMENSIONS,
+  MISTPORT_EN_DIMENSIONS,
+} from "./seed-world-dimensions.js";
 
 export interface SeedWorld {
   name: string;
@@ -9,6 +16,8 @@ export interface SeedWorld {
   lore: string;
   locale: "zh-CN" | "en-US";
   tags: string[];
+  /** Structured world-building dimensions. */
+  dimensions?: WorldDimensions;
 }
 
 export const SEED_WORLDS: SeedWorld[] = [
@@ -17,6 +26,7 @@ export const SEED_WORLDS: SeedWorld[] = [
     description: "一座被永恒浓雾包裹的港口城市。潮汐带来远古遗物，也带来危险。",
     locale: "zh-CN",
     tags: ["港", "雾", "冒险"],
+    dimensions: MISTPORT_DIMENSIONS,
     lore: `# 雾港・裂潮纪
 
 ## 世界设定
@@ -43,6 +53,7 @@ export const SEED_WORLDS: SeedWorld[] = [
     description: "赛博朋克城市，义体改造与企业战争是日常。你是街头的无名小卒。",
     locale: "zh-CN",
     tags: ["赛博", "义体", "霓虹"],
+    dimensions: NEONRIDGE_DIMENSIONS,
     lore: `# 霓虹脊・2087
 
 ## 世界设定
@@ -70,6 +81,7 @@ export const SEED_WORLDS: SeedWorld[] = [
     description: "修仙世界，灵气复苏，宗门林立。你是偏僻小宗的外门弟子。",
     locale: "zh-CN",
     tags: ["修仙", "灵气", "宗门"],
+    dimensions: CLOUDMERE_DIMENSIONS,
     lore: `# 九州・云梦泽
 
 ## 世界设定
@@ -97,6 +109,7 @@ export const SEED_WORLDS: SeedWorld[] = [
     description: "A fog-shrouded port city where each tide reveals ancient ruins. Adventure awaits.",
     locale: "en-US",
     tags: ["fog", "harbor", "adventure"],
+    dimensions: MISTPORT_EN_DIMENSIONS,
     lore: `# Mistport Chronicles
 
 ## World Setting

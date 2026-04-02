@@ -9,8 +9,11 @@ export interface WorldRecord {
   name: string;
   description: string;
   lore?: string;
+  locale?: string;
   tags?: string[];
+  dimensions?: import("@covel/shared").WorldDimensions;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export type SessionPhase = "init" | "character_creation" | "playing" | "ended";
@@ -191,10 +194,24 @@ export async function listWorlds(): Promise<WorldRecord[]> {
   return request<WorldRecord[]>("/worlds");
 }
 
+export async function getWorld(id: string): Promise<WorldRecord> {
+  return request<WorldRecord>(`/worlds/${encodeURIComponent(id)}`);
+}
+
 export async function createWorld(name: string, description: string): Promise<WorldRecord> {
   return request<WorldRecord>("/worlds", {
     method: "POST",
     body: JSON.stringify({ name, description }),
+  });
+}
+
+export async function updateWorld(
+  id: string,
+  patch: Partial<Pick<WorldRecord, "name" | "description" | "lore" | "locale" | "tags" | "dimensions">>,
+): Promise<WorldRecord> {
+  return request<WorldRecord>(`/worlds/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
   });
 }
 

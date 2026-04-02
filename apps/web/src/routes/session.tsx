@@ -23,6 +23,7 @@ function SessionPage() {
     retryRuntime,
     resetSession,
     backToWorldSelect,
+    updateWorldLocal,
   } = useSession();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { resolvedSlots } = useSlotConfig(state.presets);
@@ -100,6 +101,7 @@ function SessionPage() {
       settingsOpen={settingsOpen}
       onSettingsOpenChange={setSettingsOpen}
       onSelectWorld={selectWorld}
+      onWorldUpdated={updateWorldLocal}
     />
   );
 }

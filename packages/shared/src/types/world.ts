@@ -1,4 +1,5 @@
 import type { I18nText, Locale } from "./common.js";
+import type { WorldDimensions } from "./world-dimensions.js";
 
 /** World package metadata */
 export interface WorldPackageMeta {
@@ -13,6 +14,8 @@ export interface WorldPackageMeta {
   requiredPlugins?: string[];
   recommendedPlugins?: string[];
   contentVariants: WorldContentVariant[];
+  /** Structured world-building dimensions */
+  dimensions?: WorldDimensions;
 }
 
 /** World content variant */

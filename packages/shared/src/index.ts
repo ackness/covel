@@ -4,4 +4,6 @@ export * from "./types/data-access.js";
 export * from "./types/kernel.js";
 export * from "./types/plugin.js";
 export * from "./types/world.js";
+export * from "./types/world-dimensions.js";
 export * from "./types/field-schema.js";
+export * from "./schemas/world.js";

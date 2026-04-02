@@ -1,13 +1,18 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Globe, Sparkles, Loader2, KeyRound, Cpu } from "lucide-react";
+import { Globe, Sparkles, Loader2, KeyRound, Cpu, Eye } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { SettingsDialog } from "@/components/settings-dialog.js";
 import { SessionBreadcrumb } from "./session-breadcrumb.js";
-import type { WorldRecord, PackageSummary, PresetSummary } from "@/services/api.js";
+import { WorldDetailView } from "@/components/world/world-detail-view.js";
+import { WorldEditor } from "@/components/world/world-editor.js";
+import type { WorldRecord, PackageSummary } from "@/services/api.js";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
+
+type ViewMode = "list" | "detail" | "edit";
 
 interface WorldSelectScreenProps {
   worlds: WorldRecord[];
@@ -16,6 +21,7 @@ interface WorldSelectScreenProps {
   settingsOpen: boolean;
   onSettingsOpenChange: (v: boolean) => void;
   onSelectWorld: (worldId: string) => void;
+  onWorldUpdated?: (world: WorldRecord) => void;
 }
 
 export function WorldSelectScreen({
@@ -25,10 +31,60 @@ export function WorldSelectScreen({
   settingsOpen,
   onSettingsOpenChange,
   onSelectWorld,
+  onWorldUpdated,
 }: WorldSelectScreenProps) {
   const { t } = useTranslation();
   const defaultSlot = resolvedSlots.find((s) => s.slotId === "default");
 
+  const [mode, setMode] = useState<ViewMode>("list");
+  const [selectedWorldId, setSelectedWorldId] = useState<string | null>(null);
+
+  const selectedWorld = selectedWorldId
+    ? worlds.find((w) => w.id === selectedWorldId) ?? null
+    : null;
+
+  function handleViewDetails(e: React.MouseEvent, worldId: string) {
+    e.stopPropagation();
+    setSelectedWorldId(worldId);
+    setMode("detail");
+  }
+
+  function handleBack() {
+    setMode("list");
+    setSelectedWorldId(null);
+  }
+
+  function handleEditFromDetail() {
+    setMode("edit");
+  }
+
+  function handleSave(updated: WorldRecord) {
+    onWorldUpdated?.(updated);
+    setMode("detail");
+  }
+
+  // ── Detail / Edit view ───────────────────────────────────
+  if (mode === "detail" && selectedWorld) {
+    return (
+      <WorldDetailView
+        world={selectedWorld}
+        onClose={handleBack}
+        onEdit={handleEditFromDetail}
+      />
+    );
+  }
+
+  if (mode === "edit" && selectedWorld) {
+    return (
+      <WorldEditor
+        world={selectedWorld}
+        onSave={handleSave}
+        onCancel={() => setMode("detail")}
+      />
+    );
+  }
+
+  // ── World list ───────────────────────────────────────────
   return (
     <div className="flex h-full w-full overflow-hidden">
       <SettingsDialog open={settingsOpen} onOpenChange={onSettingsOpenChange} />
@@ -74,7 +130,18 @@ export function WorldSelectScreen({
                         </div>
                       )}
                     </div>
-                    <Sparkles className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors shrink-0 mt-1" />
+                    <div className="flex items-center gap-1 shrink-0 mt-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => handleViewDetails(e, world.id)}
+                        title={t("world.viewDetails")}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Sparkles className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
