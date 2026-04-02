@@ -356,10 +356,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const startGame = useCallback(async () => {
     if (!state.world) return;
     try {
-      // Use user's slot config (heavy slot) if configured, else fall back to server default
+      // Use user's slot config (default slot) if configured, else fall back to server default
       const slotConfig = api.getSlotConfig();
-      const heavyPresetId = slotConfig.heavy?.presetId;
-      const presetId = heavyPresetId
+      const defaultPresetId = slotConfig.default?.presetId;
+      const presetId = defaultPresetId
         ?? state.presets.find((p) => p.isDefault)?.id
         ?? state.presets[0]?.id;
       const session = await api.createSession(state.world.id, presetId);

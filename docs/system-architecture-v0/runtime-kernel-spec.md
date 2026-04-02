@@ -210,18 +210,18 @@ flowchart TD
 
 runtime 通过 `providerBinding` 字段引用命名 model slot，而非直接指定具体模型。
 
-首轮预定义 slot：
+预定义 slot（llm.toml 中第一个定义的 slot 自动成为 `default`，原始名称也可访问）：
 
 | Slot | 用途 | 典型场景 |
 |------|------|----------|
-| `heavy` | 主叙事、复杂推理 | core-narrator |
+| `default` | 主叙事、复杂推理（自动别名） | core-narrator |
 | `fast` | 轻量判断、插件默认 | core-guide, core-char-tracker |
 | `balance` | 裁判类插件、复杂逻辑代理 | 未来扩展 |
 | `image` | 图片生成（可选） | 未来扩展 |
 
-回退链：请求 slot → `heavy` slot → 第一个可用 slot。
+回退链：请求 slot → `default` slot → 第一个可用 slot。
 
-未配置的 slot 自动回退到 `heavy`。用户可通过前端配置面板为每个 slot 绑定不同的 provider preset。
+未配置的 slot 自动回退到 `default`。用户可通过前端配置面板为每个 slot 绑定不同的 provider preset。
 
 runtime 只声明 slot 名称，不直接引用 provider SDK 或 API key。
 
@@ -493,7 +493,9 @@ kernel 必须明确处理 locale，而不是把语言选择交给 runtime 或 pr
 4. **拓扑层优先级**：若冲突双方处于不同拓扑层，低层（先执行）的 proposal 优先。
 5. **后续可扩展**：未来可引入 merge function、last-write-wins 或 OT 策略，但首轮不做。
 
-## 11. 错误处理
+## 11. 错误处理与重试
+
+### 11.1 Failure Policy
 
 首轮 failure policy：
 
@@ -508,6 +510,40 @@ kernel 必须明确处理 locale，而不是把语言选择交给 runtime 或 pr
 - 未通过 validation 的 proposal 不得进入 commit
 - background runtime 失败应记录 trace 和审计
 - 因 locale 缺失导致的语言决策不得回退为隐式猜测，应使用明确 fallback
+
+### 11.2 Turn-level Retry（用户触发）
+
+支持用户从指定 runtime 开始重新执行一个 turn，实现**优先级级联重试**：
+
+**机制**：
+- Kernel 在每次 turn 完成后缓存 `TurnCache`（包含每个 runtime 的 narrative/proposals 结果）
+- 用户指定 `retryFromRuntimeId`，kernel 找到该 runtime 的 priority 作为阈值
+- priority < 阈值的 group：从缓存回放（inject to contextStore + collector），不重新执行 LLM
+- priority >= 阈值的 group：正常重新执行（使用最新的上下文）
+- 缓存回放的 runtime 在 SSE 中标记 `detail: "[cached]"`
+
+**数据结构**：
+```typescript
+interface TurnCache {
+  turnId: string;
+  input: KernelInput;
+  runtimeResults: CachedRuntimeResult[];
+  apiKeys?: Record<string, string>;
+  slotOverrides?: Record<string, { presetId: string }>;
+}
+
+interface CachedRuntimeResult {
+  runtimeId: string;
+  pluginId: string;
+  priority: number;
+  narrative: NarrativeAppendProposal[];
+  proposals: KernelProposalEnvelope[];
+}
+```
+
+**API**：`POST /actions` with `type: "retry_runtime"`, `payload.runtimeId` 指定重试起点。
+
+**前端**：ExecutionTimeline 组件提供每个 runtime 的单独重试按钮和全部重试按钮，触发时清除该 turn 的后续消息并重新执行。
 
 ## 12. 可观测性
 

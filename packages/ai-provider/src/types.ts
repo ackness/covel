@@ -324,7 +324,7 @@ export interface ProviderLifecycleHook {
 
 // ── Model Slot ────────────────────────────────────────────────────
 
-export type ModelSlotId = "heavy" | "fast" | "balance" | "image" | (string & {});
+export type ModelSlotId = "default" | "fast" | "balance" | "image" | (string & {});
 
 export interface ModelSlotConfig {
   slotId: ModelSlotId;

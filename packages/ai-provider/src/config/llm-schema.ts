@@ -28,7 +28,7 @@ const pricingSchema = z.object({
  *
  * Example:
  * ```toml
- * [slots.heavy]
+ * [slots.main]
  * provider = "deepseek"
  * model    = "deepseek-chat"
  * baseUrl  = "https://api.deepseek.com"
@@ -42,7 +42,7 @@ const pricingSchema = z.object({
  * contextWindow   = 131072
  * maxOutputTokens = 8192
  *
- * [slots.heavy.pricing]
+ * [slots.main.pricing]
  * inputPerMToken  = 0.27
  * outputPerMToken = 1.1
  * ```
@@ -81,7 +81,7 @@ export type SlotDefinition = z.infer<typeof slotDefinitionSchema>;
  * Root schema for llm.toml.
  *
  * ```toml
- * [slots.heavy]
+ * [slots.main]
  * provider = "deepseek"
  * ...
  *

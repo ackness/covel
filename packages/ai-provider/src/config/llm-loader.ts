@@ -51,7 +51,7 @@ export function parseLlmConfig(toml: string): { llmConfig: LlmConfig; aiConfig: 
 function convertToAiConfig(llm: LlmConfig): AiConfig {
   const providers: Record<string, ProviderDefaults> = {};
   const presets: PresetConfig[] = [];
-  const hasHeavy = "heavy" in llm.slots;
+  const slotNames = Object.keys(llm.slots);
 
   for (const [slotName, _def] of Object.entries(llm.slots)) {
     const def = _def as SlotDefinition;
@@ -85,6 +85,9 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
     const presetId = `slot-${slotName}`;
     const fallbackIds = def.fallback ? [`slot-${def.fallback}`] : [];
 
+    // First slot in llm.toml is the default — mark it as isDefault
+    const isFirstSlot = presets.length === 0;
+
     presets.push({
       id: presetId,
       name: formatPresetName(slotName, def),
@@ -96,7 +99,7 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
       defaultSlot: slotName,
       supportedModes,
       enabled: true,
-      isDefault: slotName === "heavy" || (!hasHeavy && presets.length === 0),
+      isDefault: isFirstSlot,
       fallbackPresetIds: fallbackIds.length > 0 ? fallbackIds : undefined,
       capability,
     });

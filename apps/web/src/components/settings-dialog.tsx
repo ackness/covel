@@ -30,7 +30,7 @@ interface SettingsDialogProps {
 }
 
 const MODEL_SLOTS = [
-  { id: "heavy", label: "Heavy", labelZh: "主力模型", desc: "主叙事、复杂推理", required: true },
+  { id: "default", label: "Default", labelZh: "默认模型", desc: "主叙事、复杂推理", required: true },
   { id: "fast", label: "Fast", labelZh: "快速模型", desc: "插件默认、轻量判断", required: false },
   { id: "balance", label: "Balance", labelZh: "均衡模型", desc: "裁判插件、复杂逻辑", required: false },
   { id: "image", label: "Image", labelZh: "图像模型", desc: "图像生成（可选）", required: false },
@@ -46,7 +46,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [slotConfig, setSlotConfigLocal] = useState<Record<string, SlotConfigEntry>>({});
   const [customPresets, setCustomPresetsLocal] = useState<CustomPreset[]>([]);
   const [paramOverrides, setParamOverridesLocal] = useState<Record<string, ModelParameterOverrides>>({});
-  const [selectedOverrideSlot, setSelectedOverrideSlot] = useState("heavy");
+  const [selectedOverrideSlot, setSelectedOverrideSlot] = useState("default");
 
   const [newPreset, setNewPreset] = useState<Omit<CustomPreset, "id">>({
     name: "", provider: "", baseUrl: "", model: "", protocol: "openai-chat-v1", apiKey: "",
@@ -467,7 +467,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 {MODEL_SLOTS.map((slot) => {
                   const selectedPresetId = slotConfig[slot.id]?.presetId ?? "";
                   const selectedPreset = allPresets.find((p) => p.id === selectedPresetId);
-                  const isFallback = !selectedPresetId && slot.id !== "heavy";
+                  const isFallback = !selectedPresetId && slot.id !== "default";
                   return (
                     <div key={slot.id} className="border border-border p-3 space-y-2">
                       <div className="flex items-center justify-between">
@@ -479,7 +479,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                           {slot.required && <Badge variant="default" className="text-[10px]">required</Badge>}
                           {isFallback && (
                             <Badge variant="secondary" className="text-[10px]">
-                              fallback: heavy
+                              fallback: default
                             </Badge>
                           )}
                         </div>

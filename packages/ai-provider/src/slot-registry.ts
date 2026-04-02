@@ -21,10 +21,10 @@ export interface SlotRegistry {
 /**
  * Create a slot registry that maps named model slots to preset IDs.
  *
- * Fallback chain: requested slot -> "heavy" slot -> first available preset.
+ * Fallback chain: requested slot -> "default" slot -> first available preset.
  */
 export function createSlotRegistry(deps: SlotRegistryDeps): SlotRegistry {
-  let slotMap: ModelSlotMap = { slots: {}, defaultSlot: "heavy" };
+  let slotMap: ModelSlotMap = { slots: {}, defaultSlot: "default" };
 
   function configure(map: ModelSlotMap): void {
     slotMap = map;

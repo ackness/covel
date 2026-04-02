@@ -135,13 +135,13 @@ plugin/
 
 ### Model Slot System
 
-Named slots for provider routing:
-- `heavy` — main narrative, complex reasoning (required)
+Named slots for provider routing. The first slot defined in `llm.toml` automatically becomes `default`; its original name is also accessible:
+- `default` — main narrative, complex reasoning (auto-aliased to first slot)
 - `fast` — plugin default, lightweight judgment
 - `balance` — referee plugins, complex logic
 - `image` — image generation (optional)
 
-Unconfigured slots fall back to `heavy`. Primary config via `llm.toml` (slot-centric), legacy fallback to `packages/ai-provider/presets/default.toml`. Supports OpenAI, Anthropic, DeepSeek, Qwen (Aliyun DashScope) protocols.
+Unconfigured slots fall back to `default`. Primary config via `llm.toml` (slot-centric), legacy fallback to `packages/ai-provider/presets/default.toml`. Supports OpenAI, Anthropic, DeepSeek, Qwen (Aliyun DashScope) protocols.
 
 **API key security**: Keys in browser localStorage only, passed per-request via `X-Provider-Keys` header (base64), never persisted server-side.
 

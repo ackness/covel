@@ -1048,23 +1048,27 @@ Budget 说明：
 
 系统通过命名 Model Slot 实现模型路由，而非简单的主/辅二分。
 
-#### 11.1.1 内置 Slot 定义
+#### 11.1.1 Slot 定义与命名
 
-首轮定义以下 Model Slot：
+系统采用**动态默认 slot** 机制：`llm.toml` 中第一个定义的 slot 自动成为 `default` slot，其原始名称同样可用。
+
+预定义 Slot 语义：
 
 | Slot ID    | 用途                           | 典型模型特征        |
 |------------|-------------------------------|-------------------|
-| `heavy`    | 主叙事、复杂推理               | 高质量、高 token 成本 |
+| `default`  | 主叙事、复杂推理（自动别名）     | 高质量、高 token 成本 |
 | `fast`     | 插件默认、轻量判断              | 低延迟、低成本       |
 | `balance`  | 裁判插件、复杂逻辑 agent        | 质量与速度平衡       |
 | `image`    | 图片生成                       | 图像模型            |
 
+**示例**：若 `llm.toml` 中只定义了 `[slots.fast]`，则 `"default"` 和 `"fast"` 均解析到该模型。
+
 #### 11.1.2 Slot 绑定规则
 
-- 玩家至少必须配置一个 LLM 主模型（绑定到 `heavy` slot）
-- 未单独配置的 slot 回退到 `heavy` slot 的模型
+- 玩家至少必须配置一个 LLM 模型（第一个 slot 自动成为 `default`）
+- 未单独配置的 slot 回退到 `default` slot 的模型
 - `image` slot 为可选；未配置时图片生成功能不可用
-- runtime 通过 `providerBinding` 引用 slot ID（如 `"providerBinding": "fast"`）
+- runtime 通过 `providerBinding` 引用 slot ID（如 `"providerBinding": "fast"` 或 `"providerBinding": "default"`）
 - 自定义 slot 允许后续扩展（如 `embed`、`tts`）
 
 #### 11.1.3 解析优先级
@@ -1074,8 +1078,8 @@ Budget 说明：
 1. request-level overrides（单次请求覆盖）
 2. run-level overrides（会话级覆盖）
 3. runtime `providerBinding`（manifest 中声明的 slot ID）
-4. 默认 slot 回退链（`fast` → `heavy`，`balance` → `heavy`）
-5. 玩家配置的主模型
+4. 默认 slot 回退链（`fast` → `default`，`balance` → `default`）
+5. 玩家配置的默认模型
 
 #### 11.1.4 Preset 模板系统
 

@@ -27,7 +27,7 @@ export function WorldSelectScreen({
   onSelectWorld,
 }: WorldSelectScreenProps) {
   const { t } = useTranslation();
-  const heavySlot = resolvedSlots.find((s) => s.slotId === "heavy");
+  const defaultSlot = resolvedSlots.find((s) => s.slotId === "default");
 
   return (
     <div className="flex h-full w-full overflow-hidden">
@@ -96,10 +96,10 @@ export function WorldSelectScreen({
                 {packages.filter((p) => p.enabled).length} plugins loaded
               </span>
             )}
-            {heavySlot?.preset && (
+            {defaultSlot?.preset && (
               <span className="flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5" />
-                {heavySlot.preset.name} ({heavySlot.preset.model})
+                {defaultSlot.preset.name} ({defaultSlot.preset.model})
               </span>
             )}
           </div>

@@ -15,7 +15,7 @@ export interface ResolvedSlot {
 }
 
 const SLOT_LABELS: Record<string, string> = {
-  heavy: "主力",
+  default: "默认",
   fast: "快速",
   balance: "均衡",
   image: "图像",
@@ -71,10 +71,10 @@ export function useSlotConfig(serverPresets: PresetSummary[]) {
   const resolvedSlots = useMemo((): ResolvedSlot[] => {
     const entries = Object.entries(slotConfig);
     if (entries.length === 0) {
-      // No user config — synthesize a default heavy slot
+      // No user config — synthesize a default slot
       const defaultPreset = serverPresets.find((p) => p.isDefault) ?? serverPresets[0] ?? null;
       return defaultPreset
-        ? [{ slotId: "heavy", presetId: defaultPreset.id, preset: defaultPreset, label: SLOT_LABELS.heavy }]
+        ? [{ slotId: "default", presetId: defaultPreset.id, preset: defaultPreset, label: SLOT_LABELS.default }]
         : [];
     }
     return entries.map(([slotId, entry]) => ({

@@ -64,7 +64,8 @@ export function createAiStack(): AiStack {
 
   const slotRegistry = createSlotRegistry({ presetRegistry });
 
-  // Build slot map from preset defaultSlot hints
+  // Build slot map from preset defaultSlot hints.
+  // First defined slot becomes "default"; original name is also an alias.
   const defaultPreset = config.presets.find((p) => p.isDefault && p.enabled);
   if (defaultPreset) {
     const slots: Record<string, { slotId: string; presetId: string }> = {};
@@ -78,11 +79,12 @@ export function createAiStack(): AiStack {
       }
     }
 
-    if (!slots["heavy"]) {
-      slots["heavy"] = { slotId: "heavy", presetId: defaultPreset.id };
+    // Always ensure a "default" alias pointing to the first/default preset
+    if (!slots["default"]) {
+      slots["default"] = { slotId: "default", presetId: defaultPreset.id };
     }
 
-    slotRegistry.configure({ slots, defaultSlot: "heavy" });
+    slotRegistry.configure({ slots, defaultSlot: "default" });
   }
 
   const gateway = createGateway({ providerRegistry, presetRegistry, slotRegistry });

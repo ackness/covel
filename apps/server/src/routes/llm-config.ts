@@ -13,7 +13,7 @@ import type { LlmConfig, PresetConfig, ModelCapability } from "@covel/ai-provide
  * {
  *   "configured": true,
  *   "slots": {
- *     "heavy": {
+ *     "main": {
  *       "provider": "deepseek",
  *       "model": "deepseek-chat",
  *       "protocol": "openai-chat-v1",

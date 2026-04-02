@@ -88,7 +88,8 @@ Covel 使用两个文件管理 LLM 配置：
 **`llm.toml`** — 模型、协议、端点配置（按 slot 组织）
 
 ```toml
-[slots.heavy]
+# 第一个定义的 slot 自动成为 "default"，原始名称也可访问
+[slots.main]
 provider = "deepseek"
 model    = "deepseek-chat"
 baseUrl  = "https://api.deepseek.com"
@@ -99,7 +100,7 @@ provider = "dashscope"
 model    = "qwen3.5-flash"
 baseUrl  = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 protocol = "openai-chat-v1"
-fallback = "heavy"
+fallback = "main"
 
 # 可选：能力覆盖（不填则自动识别）
 # input    = ["text", "image"]           # 模型接受的输入
@@ -120,12 +121,12 @@ DASHSCOPE_API_KEY=sk-xxx
 ```
 
 Slot 说明：
-- `heavy` — 主叙事、复杂推理（必需）
+- `default` — 第一个 slot 自动成为默认模型（主叙事、复杂推理）
 - `fast` — 插件默认、轻量判断
 - `balance` — 裁判、复杂逻辑
 - `image` — 图像生成（可选）
 
-未配置的 slot 自动回退到 `heavy`。
+未配置的 slot 自动回退到 `default`（即第一个定义的 slot）。
 
 支持的协议：`openai-chat-v1` / `openai-responses-v1` / `anthropic-messages-v1`
 

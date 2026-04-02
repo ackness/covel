@@ -22,7 +22,7 @@
       "kind": "story",
       "priority": 400,
       "trigger": { "mode": "always" },
-      "providerBinding": "heavy",
+      "providerBinding": "default",
       "tools": [],
       "hooks": []
     }
