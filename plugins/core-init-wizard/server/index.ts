@@ -3,6 +3,7 @@ import type {
   RuntimeHandlerContext,
   RuntimeHandlerResult,
 } from "@covel/plugin-runtime";
+import type { DynamicFieldSchema } from "@covel/shared";
 import {
   buildTransitionPrompt,
   buildFallbackTransition,
@@ -59,8 +60,10 @@ async function initWizardHandler(
     payload: { text: transitionText },
   });
 
-  // 2. Character creation block (name only, minimal)
-  proposals.push(buildCharacterCreationBlock(ctx.locale));
+  // 2. Character creation block — enriched with schema bio fields if available
+  const stateObj = view.state as Record<string, unknown> | undefined;
+  const schema = stateObj?.characterFieldSchema as DynamicFieldSchema | undefined;
+  proposals.push(buildCharacterCreationBlock(ctx.locale, schema));
 
   return { proposals };
 }

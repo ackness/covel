@@ -40,7 +40,9 @@
     "statePatchesTitle": "State Patches",
     "noStatePatches": "No state changes yet.",
     "recordsTitle": "Records",
-    "noRecords": "Long-term records will appear here as the story progresses."
+    "noRecords": "Long-term records will appear here as the story progresses.",
+    "npcInitComplete": "NPC initialization complete",
+    "npcInitCount": "{{count}} NPC created"
   },
   "common": {
     "loading": "Loading...",

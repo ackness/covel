@@ -70,6 +70,14 @@ export const addItemTool: ToolHandler = async (
           payload: { path: "inventory", value: result.inventory },
         },
         {
+          kind: "record.upsert",
+          payload: {
+            key: "inventory:current",
+            recordType: "inventory",
+            value: result.inventory,
+          },
+        },
+        {
           kind: "event.emit",
           payload: {
             type: "item_acquired",
@@ -135,6 +143,14 @@ export const removeItemTool: ToolHandler = async (
           payload: { path: "inventory", value: result.inventory },
         },
         {
+          kind: "record.upsert",
+          payload: {
+            key: "inventory:current",
+            recordType: "inventory",
+            value: result.inventory,
+          },
+        },
+        {
           kind: "event.emit",
           payload: {
             type: "item_removed",
@@ -192,6 +208,14 @@ export const useItemTool: ToolHandler = async (
         {
           kind: "state.patch",
           payload: { path: "inventory", value: result.inventory },
+        },
+        {
+          kind: "record.upsert",
+          payload: {
+            key: "inventory:current",
+            recordType: "inventory",
+            value: result.inventory,
+          },
         },
         {
           kind: "event.emit",
@@ -261,6 +285,14 @@ export const equipItemTool: ToolHandler = async (
           payload: { path: "inventory", value: result.inventory },
         },
         {
+          kind: "record.upsert",
+          payload: {
+            key: "inventory:current",
+            recordType: "inventory",
+            value: result.inventory,
+          },
+        },
+        {
           kind: "event.emit",
           payload: {
             type: "item_equipped",
@@ -312,6 +344,14 @@ export const modifyCurrencyTool: ToolHandler = async (
         {
           kind: "state.patch",
           payload: { path: "inventory", value: result },
+        },
+        {
+          kind: "record.upsert",
+          payload: {
+            key: "inventory:current",
+            recordType: "inventory",
+            value: result,
+          },
         },
         {
           kind: "event.emit",

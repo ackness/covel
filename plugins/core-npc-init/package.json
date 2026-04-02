@@ -1,0 +1,24 @@
+{
+  "name": "@covel/plugin-core-npc-init",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./server/index.ts",
+      "import": "./server/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@covel/shared": "workspace:*",
+    "@covel/plugin-runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0"
+  }
+}

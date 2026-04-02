@@ -1,5 +1,5 @@
 import type { RuntimeHandlerContext, RuntimeHandlerResult } from "@covel/plugin-runtime";
-import type { CharacterCard, RuntimeContextView } from "@covel/shared";
+import type { CharacterCard, RuntimeContextView, DynamicFieldSchema } from "@covel/shared";
 import {
   PLUGIN_ID,
   extractChineseNames,
@@ -7,6 +7,8 @@ import {
   buildUpdatedCard,
   buildNewCard,
   buildRelationshipProposals,
+  buildFieldExtractionPrompt,
+  parseFieldExtractionResponse,
 } from "./logic.js";
 
 /**
@@ -35,11 +37,48 @@ export async function charTrackerHandler(
     knownByName.set(card.name, card);
   }
 
+  // Read schema from state (set by core-npc-init)
+  const stateObj = context.state as Record<string, unknown> | undefined;
+  let schema = stateObj?.characterFieldSchema as DynamicFieldSchema | undefined;
+
+  // Fallback: read schema from records if not in session state
+  if (!schema && ctx.data) {
+    try {
+      const rec = ctx.data.records.get("schema:character-fields");
+      if (rec) {
+        schema = (rec as Record<string, unknown>).fields as DynamicFieldSchema | undefined;
+      }
+    } catch {
+      // Records unavailable — continue without schema
+    }
+  }
+
+  // Extract character names via regex (always needed for name discovery)
   const extracted = isZh
     ? extractChineseNames(narrative)
     : extractEnglishNames(narrative);
 
-  if (extracted.length === 0) return { proposals: [] };
+  // Schema-aware: use LLM to extract field updates
+  let fieldUpdatesByName: Record<string, Record<string, unknown>> = {};
+  if (schema && ctx.generateText) {
+    try {
+      const prompt = buildFieldExtractionPrompt(narrative, schema, existingCards, isZh);
+      const response = await ctx.generateText(prompt);
+      if (response) {
+        fieldUpdatesByName = parseFieldExtractionResponse(response);
+      }
+    } catch {
+      // LLM extraction failed — continue with regex-only path
+    }
+  }
+
+  // Merge LLM-discovered names with regex-discovered names
+  const allNames = new Set(extracted);
+  for (const name of Object.keys(fieldUpdatesByName)) {
+    allNames.add(name);
+  }
+
+  if (allNames.size === 0) return { proposals: [] };
 
   const proposals: Array<{ kind: string; payload: unknown }> = [];
   const updatedChars: Record<string, CharacterCard> = {};
@@ -47,10 +86,12 @@ export async function charTrackerHandler(
     updatedChars[card.name] = card;
   }
 
-  for (const name of extracted) {
+  for (const name of allNames) {
     const existing = knownByName.get(name);
+    const fieldUpdates = fieldUpdatesByName[name];
+
     if (existing) {
-      const updatedCard = buildUpdatedCard(existing, turnId);
+      const updatedCard = buildUpdatedCard(existing, turnId, fieldUpdates);
       updatedChars[name] = updatedCard;
 
       proposals.push({
@@ -68,7 +109,8 @@ export async function charTrackerHandler(
         isZh,
         turnId,
         context.run.runId,
-        context.run.worldId ?? ""
+        context.run.worldId ?? "",
+        fieldUpdates,
       );
       updatedChars[name] = card;
 
@@ -84,8 +126,9 @@ export async function charTrackerHandler(
   }
 
   // Detect co-occurrence relationships between characters mentioned in same narrative
-  if (extracted.length > 1) {
-    proposals.push(...buildRelationshipProposals(extracted, turnId));
+  const nameArray = Array.from(allNames);
+  if (nameArray.length > 1) {
+    proposals.push(...buildRelationshipProposals(nameArray, turnId));
   }
 
   proposals.push({

@@ -57,6 +57,14 @@ export async function updateLocationTool(
         },
       },
       {
+        kind: "record.upsert",
+        payload: {
+          key: "world-state:current",
+          recordType: "world_state",
+          value: { location: locationPatch },
+        },
+      },
+      {
         kind: "event.emit",
         payload: {
           type: "location_changed",
@@ -120,6 +128,14 @@ export async function advanceTimeTool(
         },
       },
       {
+        kind: "record.upsert",
+        payload: {
+          key: "world-state:current",
+          recordType: "world_state",
+          value: { time: timePatch },
+        },
+      },
+      {
         kind: "event.emit",
         payload: {
           type: "time_advanced",
@@ -171,6 +187,14 @@ export async function setWeatherTool(
           worldState: {
             weather: weatherPatch,
           },
+        },
+      },
+      {
+        kind: "record.upsert",
+        payload: {
+          key: "world-state:current",
+          recordType: "world_state",
+          value: { weather: weatherPatch },
         },
       },
     ],

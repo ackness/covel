@@ -75,6 +75,14 @@ export async function startCombatTool(
         payload: { combat },
       },
       {
+        kind: "record.upsert",
+        payload: {
+          key: "combat:active",
+          recordType: "combat_state",
+          value: combat,
+        },
+      },
+      {
         kind: "event.emit",
         payload: { type: "combat_started", data: { participantCount: participants.length } },
       },
@@ -447,6 +455,14 @@ export async function endCombatTool(
       {
         kind: "state.patch",
         payload: { combat: clearedCombat },
+      },
+      {
+        kind: "record.upsert",
+        payload: {
+          key: "combat:active",
+          recordType: "combat_state",
+          value: clearedCombat,
+        },
       },
       {
         kind: "event.emit",

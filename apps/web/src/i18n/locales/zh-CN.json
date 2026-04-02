@@ -40,7 +40,9 @@
     "statePatchesTitle": "状态变更",
     "noStatePatches": "暂无状态变更。",
     "recordsTitle": "记录",
-    "noRecords": "随着故事推进，长期记录将在此显示。"
+    "noRecords": "随着故事推进，长期记录将在此显示。",
+    "npcInitComplete": "NPC 初始化完成",
+    "npcInitCount": "已创建 {{count}} 个 NPC"
   },
   "common": {
     "loading": "加载中...",

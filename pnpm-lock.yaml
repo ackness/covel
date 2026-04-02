@@ -453,6 +453,22 @@ importers:
         specifier: ^3.0.0
         version: 3.2.4(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)
 
+  plugins/core-npc-init:
+    dependencies:
+      '@covel/plugin-runtime':
+        specifier: workspace:*
+        version: link:../../packages/plugin-runtime
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+    devDependencies:
+      typescript:
+        specifier: ^5.8.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.4(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)
+
   plugins/core-persona:
     dependencies:
       '@covel/plugin-runtime':

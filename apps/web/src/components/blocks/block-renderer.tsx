@@ -7,9 +7,11 @@
  */
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { SchemaBlockRenderer } from "./schema-block-renderer.js";
 import type { BlockSchemaDeclaration } from "@covel/shared";
 import {
@@ -27,6 +29,8 @@ import {
   Coins,
   Square,
   SquareCheckBig,
+  Users,
+  CheckCircle2,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -51,6 +55,7 @@ const CUSTOM_RENDERERS: Record<string, BlockRendererComponent> = {
   combat_status: CombatStatusBlock,
   quest_log: QuestLogBlock,
   inventory_panel: InventoryPanelBlock,
+  npc_init_summary: NpcInitSummaryBlock,
 };
 
 // ── Tier 2: Schema Registry ──────────────────────────────────────
@@ -141,24 +146,59 @@ function ChoiceSetBlock({ data, onSubmit, disabled }: BlockRendererProps) {
 
 // ── character_creation ─────────────────────────────────────────────
 
-function CharacterCreationBlock({ data, onSubmit, disabled }: BlockRendererProps) {
-  const [values, setValues] = useState<Record<string, string>>({});
+interface CharacterField {
+  id: string;
+  type: string;
+  label: string;
+  placeholder?: string;
+  required?: boolean;
+  options?: string[];
+  min?: number;
+  max?: number;
+  defaultValue?: unknown;
+}
 
-  const fields = (data.fields as Array<{
-    id: string;
-    type: string;
-    label: string;
-    placeholder?: string;
-    required?: boolean;
-  }>) ?? [];
+function CharacterCreationBlock({ data, onSubmit, disabled }: BlockRendererProps) {
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    const initFields = (data.fields as CharacterField[]) ?? [];
+    for (const f of initFields) {
+      if (f.defaultValue != null) {
+        initial[f.id] = String(f.defaultValue);
+      }
+    }
+    return initial;
+  });
+
+  const fields = (data.fields as CharacterField[]) ?? [];
   const submitLabel = (data.submitLabel as string) ?? "确认";
+  const submitMapping = (data.submitMapping as Record<string, string>) ?? {};
 
   const handleFieldChange = (fieldId: string, value: string) => {
     setValues((prev) => ({ ...prev, [fieldId]: value }));
   };
 
   const handleSubmit = () => {
-    if (fields.length === 1) {
+    // When submitMapping is present, build a structured JSON payload
+    if (Object.keys(submitMapping).length > 0) {
+      const payload: Record<string, unknown> = {};
+      for (const [fieldId, path] of Object.entries(submitMapping)) {
+        const raw = values[fieldId]?.trim() ?? "";
+        if (!raw) continue;
+        // Support dot-path notation (e.g. "fields.occupation")
+        const segments = path.split(".");
+        let target: Record<string, unknown> = payload;
+        for (let i = 0; i < segments.length - 1; i++) {
+          const seg = segments[i];
+          if (!(seg in target) || typeof target[seg] !== "object") {
+            target[seg] = {};
+          }
+          target = target[seg] as Record<string, unknown>;
+        }
+        target[segments[segments.length - 1]] = raw;
+      }
+      onSubmit(JSON.stringify(payload));
+    } else if (fields.length === 1) {
       const value = values[fields[0].id]?.trim();
       if (value) onSubmit(value);
     } else {
@@ -173,35 +213,165 @@ function CharacterCreationBlock({ data, onSubmit, disabled }: BlockRendererProps
     .filter((f) => f.required)
     .every((f) => values[f.id]?.trim());
 
-  // Inline style: no card wrapper, just input + button in a row
+  const hasMultipleFields = fields.length > 1;
+
+  // Single field: inline row layout (original style)
+  if (!hasMultipleFields) {
+    return (
+      <div className="flex items-center gap-2 max-w-md">
+        {fields.map((field) => (
+          <input
+            key={field.id}
+            id={`block-field-${field.id}`}
+            type="text"
+            placeholder={field.placeholder ?? field.label}
+            value={values[field.id] ?? ""}
+            onChange={(e) => handleFieldChange(field.id, e.target.value)}
+            disabled={disabled}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && canSubmit && !disabled) {
+                e.preventDefault();
+                handleSubmit();
+              }
+            }}
+            className="flex-1 bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary transition-all disabled:opacity-50"
+          />
+        ))}
+        <Button
+          size="sm"
+          className="rounded-none uppercase tracking-widest text-xs font-semibold shrink-0 px-6"
+          disabled={disabled || !canSubmit}
+          onClick={handleSubmit}
+        >
+          {submitLabel}
+        </Button>
+      </div>
+    );
+  }
+
+  // Multiple fields: stacked form layout
   return (
-    <div className="flex items-center gap-2 max-w-md">
-      {fields.map((field) => (
-        <input
-          key={field.id}
+    <Card className="max-w-md">
+      <CardContent className="p-4 space-y-3">
+        {fields.map((field) => (
+          <CharacterFieldInput
+            key={field.id}
+            field={field}
+            value={values[field.id] ?? ""}
+            disabled={disabled}
+            onChange={(v) => handleFieldChange(field.id, v)}
+          />
+        ))}
+        <Button
+          size="sm"
+          className="w-full rounded-none uppercase tracking-widest text-xs font-semibold px-6"
+          disabled={disabled || !canSubmit}
+          onClick={handleSubmit}
+        >
+          {submitLabel}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CharacterFieldInput({
+  field,
+  value,
+  disabled,
+  onChange,
+}: {
+  field: CharacterField;
+  value: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const fieldType = field.type;
+
+  const baseInputClass =
+    "w-full bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary transition-all disabled:opacity-50";
+
+  if (fieldType === "select" && field.options) {
+    return (
+      <div className="space-y-1">
+        <Label htmlFor={`block-field-${field.id}`} className="text-xs">
+          {field.label}
+          {field.required && <span className="text-red-500 ml-0.5">*</span>}
+        </Label>
+        <select
           id={`block-field-${field.id}`}
-          type="text"
-          placeholder={field.placeholder ?? field.label}
-          value={values[field.id] ?? ""}
-          onChange={(e) => handleFieldChange(field.id, e.target.value)}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && canSubmit && !disabled) {
-              e.preventDefault();
-              handleSubmit();
-            }
-          }}
-          className="flex-1 bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary transition-all disabled:opacity-50"
+          className={baseInputClass}
+        >
+          <option value="">{field.placeholder ?? field.label}</option>
+          {field.options.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  if (fieldType === "number") {
+    return (
+      <div className="space-y-1">
+        <Label htmlFor={`block-field-${field.id}`} className="text-xs">
+          {field.label}
+          {field.required && <span className="text-red-500 ml-0.5">*</span>}
+        </Label>
+        <input
+          id={`block-field-${field.id}`}
+          type="number"
+          min={field.min}
+          max={field.max}
+          placeholder={field.placeholder ?? field.label}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          className={baseInputClass}
         />
-      ))}
-      <Button
-        size="sm"
-        className="rounded-none uppercase tracking-widest text-xs font-semibold shrink-0 px-6"
-        disabled={disabled || !canSubmit}
-        onClick={handleSubmit}
-      >
-        {submitLabel}
-      </Button>
+      </div>
+    );
+  }
+
+  if (fieldType === "boolean") {
+    return (
+      <div className="flex items-center gap-2">
+        <input
+          id={`block-field-${field.id}`}
+          type="checkbox"
+          checked={value === "true"}
+          onChange={(e) => onChange(e.target.checked ? "true" : "false")}
+          disabled={disabled}
+          className="h-4 w-4 accent-primary"
+        />
+        <Label htmlFor={`block-field-${field.id}`} className="text-xs">
+          {field.label}
+        </Label>
+      </div>
+    );
+  }
+
+  // Default: text / string
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={`block-field-${field.id}`} className="text-xs">
+        {field.label}
+        {field.required && <span className="text-red-500 ml-0.5">*</span>}
+      </Label>
+      <input
+        id={`block-field-${field.id}`}
+        type="text"
+        placeholder={field.placeholder ?? field.label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className={baseInputClass}
+      />
     </div>
   );
 }
@@ -432,6 +602,43 @@ function QuestLogBlock({ data }: BlockRendererProps) {
         ))}
       </CardContent>
     </Card>
+  );
+}
+
+// ── npc_init_summary ─────────────────────────────────────────────
+
+function NpcInitSummaryBlock({ data }: BlockRendererProps) {
+  const { t } = useTranslation();
+
+  const npcCount = (data.npcCount as number) ?? 0;
+  const summary = (data.summary as string) ?? "";
+  const completedAt = data.completedAt as string | undefined;
+
+  return (
+    <div className="inline-flex items-center gap-3 rounded border border-border px-3 py-2 bg-green-500/10 dark:bg-green-500/15 animate-in fade-in duration-300">
+      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-500/15 dark:bg-green-500/20">
+        <Users className="h-4 w-4 text-green-600 dark:text-green-400" />
+      </div>
+      <div className="flex flex-col gap-0.5">
+        <div className="flex items-center gap-2">
+          <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+          <span className="text-sm font-medium text-green-700 dark:text-green-300">
+            {t("session.npcInitComplete")}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>{t("session.npcInitCount", { count: npcCount })}</span>
+          {completedAt && (
+            <span className="opacity-60">
+              {new Date(completedAt).toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+        {summary && (
+          <p className="text-xs text-muted-foreground mt-0.5">{summary}</p>
+        )}
+      </div>
+    </div>
   );
 }
 

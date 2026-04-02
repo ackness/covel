@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { Badge } from "@/components/ui/badge.js";
+import { CharacterTablePanel } from "./character-table-panel.js";
 
 interface GameStatusPanelProps {
   gameState: Record<string, unknown>;
@@ -23,10 +24,24 @@ export function GameStatusPanel({ gameState }: GameStatusPanelProps) {
     );
   }
 
+  // Schema-driven character table when core-npc-init has defined a schema
+  const schema = gameState.characterFieldSchema as
+    | { version: number; worldId: string; fields: Array<Record<string, unknown>>; createdAt: string }
+    | undefined;
+  const chars = gameState.characters;
+  const charArray = Array.isArray(chars)
+    ? chars
+    : chars && typeof chars === "object"
+      ? Object.values(chars as Record<string, unknown>)
+      : [];
+
   return (
     <div className="space-y-4">
       <WorldStateSection data={gameState.worldState} />
-      <CharactersSection data={gameState.characters} />
+      {schema
+        ? <CharacterTablePanel schema={schema as never} characters={charArray as Record<string, unknown>[]} />
+        : <CharactersSection data={gameState.characters} />
+      }
       <QuestsSection data={gameState.quests} />
       <InventorySection data={gameState.inventory} />
       <CombatSection data={gameState.combat} />
@@ -436,7 +451,7 @@ function MemorySection({ data }: { data: unknown }) {
 
 // ── Unknown Sections (catch-all for plugin data not handled above) ─
 
-const KNOWN_KEYS = new Set(["worldState", "characters", "quests", "inventory", "combat", "memoryArchive"]);
+const KNOWN_KEYS = new Set(["worldState", "characters", "quests", "inventory", "combat", "memoryArchive", "characterFieldSchema", "core-npc-init"]);
 
 function UnknownSections({ gameState }: { gameState: Record<string, unknown> }) {
   const unknownEntries = Object.entries(gameState).filter(([k]) => !KNOWN_KEYS.has(k));
