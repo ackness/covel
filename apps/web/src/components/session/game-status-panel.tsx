@@ -1,5 +1,8 @@
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   MapPin, Clock, Cloud, Users, Target, Backpack, Swords, Brain,
+  ChevronDown, ChevronRight, User, Shield, Heart, Zap,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { Badge } from "@/components/ui/badge.js";
@@ -9,12 +12,13 @@ interface GameStatusPanelProps {
 }
 
 export function GameStatusPanel({ gameState }: GameStatusPanelProps) {
+  const { t } = useTranslation();
   const isEmpty = Object.keys(gameState).length === 0;
 
   if (isEmpty) {
     return (
       <p className="text-xs text-muted-foreground italic">
-        No game state yet. State will appear as the story progresses.
+        {t("session.noGameState")}
       </p>
     );
   }
@@ -46,6 +50,7 @@ function SectionHeader({ icon: Icon, label }: { icon: React.ComponentType<{ clas
 // ── World State ───────────────────────────────────────────────────
 
 function WorldStateSection({ data }: { data: unknown }) {
+  const { t } = useTranslation();
   if (!data || typeof data !== "object") return null;
   const ws = data as Record<string, unknown>;
 
@@ -56,7 +61,7 @@ function WorldStateSection({ data }: { data: unknown }) {
   return (
     <Card>
       <CardContent className="p-3 space-y-1.5">
-        <SectionHeader icon={MapPin} label="World State" />
+        <SectionHeader icon={MapPin} label={t("session.worldState")} />
         {location && (
           <div className="flex items-center gap-1.5 text-xs">
             <MapPin className="w-3 h-3 text-muted-foreground shrink-0" />
@@ -97,25 +102,161 @@ function WorldStateSection({ data }: { data: unknown }) {
 
 // ── Characters ────────────────────────────────────────────────────
 
+const TYPE_STYLES: Record<string, string> = {
+  player: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30",
+  npc:    "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30",
+  ally:   "bg-green-500/15 text-green-600 dark:text-green-400 border-green-500/30",
+  enemy:  "bg-red-500/15 text-red-500 dark:text-red-400 border-red-500/30",
+};
+
+function CharacterCard({ char }: { char: Record<string, unknown> }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const name = String(char.name ?? "???");
+  const type = char.type as string | undefined;
+  const description = char.description as string | undefined;
+  const traits = Array.isArray(char.traits) ? char.traits.map(String) : [];
+  const status = char.status as string | undefined;
+  const hp = char.hp as number | undefined;
+  const maxHp = char.maxHp as number | undefined;
+  const level = char.level as number | undefined;
+  const role = char.role as string | undefined;
+  const relationship = char.relationship as string | undefined;
+  const location = char.location as string | undefined;
+
+  // Collect extra fields not explicitly handled
+  const handledKeys = new Set([
+    "id", "name", "type", "description", "traits", "status",
+    "hp", "maxHp", "level", "role", "relationship", "location",
+  ]);
+  const extraEntries = Object.entries(char).filter(([k]) => !handledKeys.has(k));
+
+  const hasDetail = description || traits.length > 0 || extraEntries.length > 0;
+
+  return (
+    <div className="border border-border">
+      {/* Header — always visible */}
+      <button
+        type="button"
+        className="w-full text-left px-3 py-2 flex items-center gap-2 hover:bg-muted/30 transition-colors"
+        onClick={() => hasDetail && setExpanded((v) => !v)}
+        disabled={!hasDetail}
+      >
+        <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        <span className="text-xs font-medium flex-1 min-w-0 truncate">{name}</span>
+        {level != null && (
+          <span className="text-[10px] font-mono text-muted-foreground shrink-0">Lv.{level}</span>
+        )}
+        {type && (
+          <Badge variant="outline" className={`text-[9px] shrink-0 rounded-none ${TYPE_STYLES[type] ?? ""}`}>
+            {type}
+          </Badge>
+        )}
+        {status && (
+          <Badge variant="secondary" className="text-[9px] shrink-0 rounded-none">
+            {status}
+          </Badge>
+        )}
+        {hasDetail && (
+          expanded
+            ? <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+            : <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
+        )}
+      </button>
+
+      {/* Detail — expandable */}
+      {expanded && (
+        <div className="px-3 pb-2.5 pt-0.5 space-y-2 border-t border-border bg-muted/10">
+          {/* HP bar */}
+          {hp != null && maxHp != null && maxHp > 0 && (
+            <div className="space-y-0.5">
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1"><Heart className="w-3 h-3" /> HP</span>
+                <span className="font-mono">{hp}/{maxHp}</span>
+              </div>
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    hp / maxHp > 0.5 ? "bg-green-500" : hp / maxHp > 0.25 ? "bg-yellow-500" : "bg-red-500"
+                  }`}
+                  style={{ width: `${Math.max(0, Math.min(100, (hp / maxHp) * 100))}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Role / Relationship / Location */}
+          {(role || relationship || location) && (
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+              {role && (
+                <span className="flex items-center gap-1">
+                  <Shield className="w-3 h-3" /> {role}
+                </span>
+              )}
+              {relationship && (
+                <span className="flex items-center gap-1">
+                  <Zap className="w-3 h-3" /> {relationship}
+                </span>
+              )}
+              {location && (
+                <span className="flex items-center gap-1">
+                  <MapPin className="w-3 h-3" /> {location}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Description */}
+          {description && (
+            <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
+              {description}
+            </p>
+          )}
+
+          {/* Traits */}
+          {traits.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {traits.map((trait) => (
+                <Badge key={trait} variant="outline" className="text-[9px] rounded-none">
+                  {trait}
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          {/* Extra fields */}
+          {extraEntries.length > 0 && (
+            <div className="space-y-1 pt-1 border-t border-border">
+              {extraEntries.map(([k, v]) => (
+                <div key={k} className="text-[11px] text-muted-foreground">
+                  <span className="font-medium text-foreground">{k}:</span>{" "}
+                  {typeof v === "object" ? JSON.stringify(v) : String(v)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CharactersSection({ data }: { data: unknown }) {
+  const { t } = useTranslation();
   if (!data) return null;
   const chars = Array.isArray(data) ? data : typeof data === "object" ? Object.values(data as Record<string, unknown>) : [];
   if (chars.length === 0) return null;
 
   return (
     <Card>
-      <CardContent className="p-3 space-y-2">
-        <SectionHeader icon={Users} label="Characters" />
-        {chars.map((char, i) => {
-          const c = char as Record<string, unknown>;
-          return (
-            <div key={String(c.id ?? i)} className="flex items-start gap-2 text-xs">
-              <span className="font-medium shrink-0">{String(c.name ?? "Unknown")}</span>
-              {!!c.type && <Badge variant="outline" className="text-[9px] shrink-0">{String(c.type)}</Badge>}
-              {!!c.description && <span className="text-muted-foreground truncate">{String(c.description)}</span>}
-            </div>
-          );
-        })}
+      <CardContent className="p-3 space-y-1.5">
+        <SectionHeader icon={Users} label={t("session.characters")} />
+        <div className="space-y-1">
+          {chars.map((char, i) => {
+            const c = char as Record<string, unknown>;
+            return <CharacterCard key={String(c.id ?? i)} char={c} />;
+          })}
+        </div>
       </CardContent>
     </Card>
   );
@@ -124,6 +265,7 @@ function CharactersSection({ data }: { data: unknown }) {
 // ── Quests ────────────────────────────────────────────────────────
 
 function QuestsSection({ data }: { data: unknown }) {
+  const { t } = useTranslation();
   if (!data) return null;
   const quests = Array.isArray(data) ? data : typeof data === "object" ? Object.values(data as Record<string, unknown>) : [];
   if (quests.length === 0) return null;
@@ -131,7 +273,7 @@ function QuestsSection({ data }: { data: unknown }) {
   return (
     <Card>
       <CardContent className="p-3 space-y-2">
-        <SectionHeader icon={Target} label="Quests" />
+        <SectionHeader icon={Target} label={t("session.quests")} />
         {quests.map((q, i) => {
           const quest = q as Record<string, unknown>;
           const objectives = Array.isArray(quest.objectives) ? quest.objectives : [];
@@ -148,6 +290,9 @@ function QuestsSection({ data }: { data: unknown }) {
                   </Badge>
                 )}
               </div>
+              {!!quest.description && (
+                <p className="text-[11px] text-muted-foreground leading-relaxed">{String(quest.description)}</p>
+              )}
               {objectives.length > 0 && (
                 <ul className="ml-4 space-y-0.5">
                   {objectives.map((obj, j) => {
@@ -173,6 +318,7 @@ function QuestsSection({ data }: { data: unknown }) {
 // ── Inventory ─────────────────────────────────────────────────────
 
 function InventorySection({ data }: { data: unknown }) {
+  const { t } = useTranslation();
   if (!data || typeof data !== "object") return null;
   const inv = data as Record<string, unknown>;
   const items = Array.isArray(inv.items) ? inv.items : [];
@@ -182,7 +328,7 @@ function InventorySection({ data }: { data: unknown }) {
   return (
     <Card>
       <CardContent className="p-3 space-y-2">
-        <SectionHeader icon={Backpack} label="Inventory" />
+        <SectionHeader icon={Backpack} label={t("session.inventory")} />
         {items.map((item, i) => {
           const it = item as Record<string, unknown>;
           return (
@@ -211,6 +357,7 @@ function InventorySection({ data }: { data: unknown }) {
 // ── Combat ────────────────────────────────────────────────────────
 
 function CombatSection({ data }: { data: unknown }) {
+  const { t } = useTranslation();
   if (!data || typeof data !== "object") return null;
   const combat = data as Record<string, unknown>;
   if (!combat.active && !combat.participants) return null;
@@ -220,7 +367,7 @@ function CombatSection({ data }: { data: unknown }) {
   return (
     <Card className="border-destructive/30">
       <CardContent className="p-3 space-y-2">
-        <SectionHeader icon={Swords} label="Combat" />
+        <SectionHeader icon={Swords} label={t("session.combat")} />
         {combat.round != null && (
           <div className="text-[11px] text-muted-foreground">
             Round {String(combat.round)}
@@ -259,15 +406,16 @@ function CombatSection({ data }: { data: unknown }) {
 // ── Memory ────────────────────────────────────────────────────────
 
 function MemorySection({ data }: { data: unknown }) {
+  const { t } = useTranslation();
   if (!data || typeof data !== "object") return null;
   const memory = data as Record<string, unknown>;
 
   return (
     <Card>
       <CardContent className="p-3 space-y-1.5">
-        <SectionHeader icon={Brain} label="Memory Archive" />
+        <SectionHeader icon={Brain} label={t("session.memoryArchive")} />
         {!!memory.summary && (
-          <p className="text-xs text-muted-foreground leading-relaxed">{String(memory.summary)}</p>
+          <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">{String(memory.summary)}</p>
         )}
         {memory.version != null && (
           <span className="text-[10px] text-muted-foreground">v{String(memory.version)}</span>

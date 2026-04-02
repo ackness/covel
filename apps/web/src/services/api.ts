@@ -411,7 +411,7 @@ export async function pingPreset(presetId: string): Promise<PingResult> {
 
 // ── Actions (SSE) ──────────────────────────────────────────────────
 
-export type ActionType = "send_message" | "execute_command" | "submit_block_response" | "start_session";
+export type ActionType = "send_message" | "execute_command" | "submit_block_response" | "start_session" | "retry_runtime";
 
 export interface ActionRequest {
   requestId: string;

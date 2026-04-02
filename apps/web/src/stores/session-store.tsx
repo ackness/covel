@@ -12,6 +12,8 @@ export interface StreamMessage {
   content: string;
   timestamp: string;
   turnId?: string;
+  /** Source runtime ID for retry tracking. */
+  runtimeId?: string;
   /** For UI blocks (choice_set, etc.) */
   block?: Record<string, unknown>;
 }
@@ -79,7 +81,8 @@ type Action =
   | { type: "CLEAR_EXECUTION_STEPS" }
   | { type: "RESET_SESSION" }
   | { type: "SUBMIT_BLOCK"; blockId: string }
-  | { type: "RESET_TO_WORLD_SELECT" };
+  | { type: "RESET_TO_WORLD_SELECT" }
+  | { type: "REMOVE_MESSAGES_FROM_TURN"; turnId: string; keepRuntimeIds: ReadonlySet<string> };
 
 const initialState: SessionState = {
   presets: [],
@@ -175,6 +178,15 @@ function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>() };
     case "RESET_TO_WORLD_SELECT":
       return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>() };
+    case "REMOVE_MESSAGES_FROM_TURN": {
+      // Remove messages from a specific turn, except those from cached runtimes
+      const filtered = state.messages.filter((m) => {
+        if (m.turnId !== action.turnId) return true;
+        if (m.runtimeId && action.keepRuntimeIds.has(m.runtimeId)) return true;
+        return false;
+      });
+      return { ...state, messages: filtered };
+    }
     default:
       return state;
   }
@@ -195,6 +207,12 @@ interface SessionContextValue {
   /** Mark a block as submitted (permanently locks it). */
   submitBlock: (blockId: string) => void;
   executeCommand: (command: string) => void;
+  /**
+   * Retry the last turn from a specific runtime.
+   * Pass undefined to retry the entire turn.
+   * Removes affected messages and re-executes.
+   */
+  retryRuntime: (runtimeId?: string) => void;
   /** Reset session but keep world (back to prep screen). */
   resetSession: () => void;
   /** Reset everything including world (back to world selection). */
@@ -264,6 +282,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               content,
               timestamp: envelope.timestamp,
               turnId,
+              runtimeId: (payload.runtimeId as string) || undefined,
             },
           });
         }
@@ -272,6 +291,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       case "block.emitted": {
         const block = payload.block as Record<string, unknown>;
         if (block) {
+          const blockMeta = block.meta as Record<string, unknown> | undefined;
           dispatch({
             type: "ADD_MESSAGE",
             message: {
@@ -280,6 +300,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               content: "",
               timestamp: envelope.timestamp,
               turnId,
+              runtimeId: (blockMeta?.runtimeId as string) || undefined,
               block,
             },
           });
@@ -473,6 +494,48 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     );
   }, [state.session, state.executing, handleSseEvent]);
 
+  const retryRuntime = useCallback((runtimeId?: string) => {
+    if (!state.session || state.executing) return;
+
+    // Find the last turn's messages and determine which runtimes' results to keep
+    // When retrying from a specific runtime, messages from that runtime and later
+    // should be removed. For "retry all", remove all assistant messages from the last turn.
+    const lastTurnId = state.messages.length > 0
+      ? [...state.messages].reverse().find((m) => m.turnId)?.turnId
+      : undefined;
+
+    if (lastTurnId) {
+      // For retry from specific runtime: find its priority from execution steps.
+      // We keep messages from runtimes that completed before the target.
+      // For simplicity, we remove all messages from the last turn and let new ones stream in.
+      // The kernel will replay cached results for earlier runtimes (they'll send runtime.progress
+      // with [cached] but not message.delta/completed for cached narrative).
+      dispatch({ type: "REMOVE_MESSAGES_FROM_TURN", turnId: lastTurnId, keepRuntimeIds: new Set<string>() });
+    }
+
+    dispatch({ type: "CLEAR_EXECUTION_STEPS" });
+    dispatch({ type: "SET_EXECUTING", value: true });
+    dispatch({ type: "SET_EXECUTION_ERROR", error: null });
+
+    api.sendAction(
+      {
+        requestId: api.uid(),
+        type: "retry_runtime",
+        sessionId: state.session.id,
+        locale: i18n.language,
+        payload: runtimeId ? { runtimeId } : {},
+      },
+      handleSseEvent,
+      (err) => {
+        dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
+        dispatch({ type: "SET_EXECUTING", value: false });
+      },
+      () => {
+        dispatch({ type: "SET_EXECUTING", value: false });
+      }
+    );
+  }, [state.session, state.executing, state.messages, handleSseEvent]);
+
   // Boot on mount
   useEffect(() => {
     if (!state.booted && !state.bootError) {
@@ -498,6 +561,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     sendMessage,
     submitBlock,
     executeCommand,
+    retryRuntime,
     resetSession,
     backToWorldSelect,
   };

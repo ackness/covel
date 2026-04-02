@@ -1,4 +1,4 @@
-import type { RuntimeTriggerEvent } from "@covel/shared";
+import type { KernelInput, RuntimeTriggerEvent } from "@covel/shared";
 import type { RegisteredRuntime } from "@covel/plugin-runtime";
 
 /** Default runtime priority (midpoint of 0-1000 scale). */
@@ -93,4 +93,30 @@ export interface KernelExecuteOptions {
   backgroundThreshold?: number;
   /** Called when a background task completes or fails. */
   onBackgroundTaskDone?: (task: BackgroundTask) => void | Promise<void>;
+  /**
+   * Retry from a specific runtime. All runtimes with priority < this runtime's
+   * priority group will replay cached results; runtimes at >= this priority re-execute.
+   * Requires a previous turn's cache (populated automatically after each executeTurn).
+   */
+  retryFromRuntimeId?: string;
+}
+
+/** Cached result of a single runtime execution (for retry). */
+export interface CachedRuntimeResult {
+  runtimeId: string;
+  pluginId: string;
+  priority: number;
+  narrative: string;
+  proposals: Array<{ kind: string; payload: unknown }>;
+}
+
+/** Cache of a complete turn execution (for retry). */
+export interface TurnCache {
+  turnId: string;
+  input: KernelInput;
+  /** Runtime results ordered by execution sequence. */
+  runtimeResults: CachedRuntimeResult[];
+  /** The original execution options (minus callbacks). */
+  apiKeys?: Record<string, string>;
+  slotOverrides?: Record<string, SlotOverride>;
 }

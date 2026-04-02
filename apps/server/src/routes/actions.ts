@@ -57,7 +57,7 @@ export function createActionsRoute(deps: {
   route.post("/", async (c) => {
     const body = await c.req.json<{
       requestId: string;
-      type: "send_message" | "execute_command" | "submit_block_response" | "start_session";
+      type: "send_message" | "execute_command" | "submit_block_response" | "start_session" | "retry_runtime";
       sessionId: string;
       locale?: string;
       payload: Record<string, unknown>;
@@ -195,6 +195,148 @@ export function createActionsRoute(deps: {
           }
 
           await emit("flow.completed", turnId, traceId, { flowId });
+          return;
+        }
+
+        // ── retry_runtime → re-execute from specific runtime ──────────
+        if (type === "retry_runtime") {
+          const retryRuntimeId = (payload.runtimeId as string) || undefined;
+          const kernelSession = getOrCreateSession(sessionId);
+
+          // Rebuild context (same as normal turn)
+          const chatHistory = store.listMessages(sessionId).map((m) => ({
+            role: m.role,
+            content: m.content,
+          }));
+          const world = store.getWorld(session.worldId);
+          kernelSession.setContext({
+            world: world
+              ? { name: world.name, description: world.description, ...(world.lore ? { lore: world.lore } : {}) }
+              : undefined,
+            chat: chatHistory,
+          });
+
+          const provTurnId = `turn_${Date.now().toString(36)}`;
+          const provTraceId = `trace_${Date.now().toString(36)}`;
+
+          await emit("flow.phase.changed", provTurnId, provTraceId, { phase: "model" });
+          await emit("runtime.progress", provTurnId, provTraceId, {
+            type: "runtime.started" as const,
+            runtimeId: "kernel",
+            pluginId: "kernel",
+            label: "retry",
+            detail: retryRuntimeId ?? "all",
+            timestamp: new Date().toISOString(),
+          });
+
+          const streamedRuntimeIds = new Set<string>();
+          let resolveBackgroundDone: (() => void) | undefined;
+          let backgroundTaskCount = 0;
+          let backgroundTaskDoneCount = 0;
+          const backgroundDonePromise = new Promise<void>((resolve) => {
+            resolveBackgroundDone = resolve;
+          });
+
+          const turnResult = await kernelSession.retryTurn(retryRuntimeId, {
+            apiKeys,
+            slotOverrides,
+            onProgress: async (evt) => {
+              if (evt.type === "message.delta") {
+                // Only forward deltas for non-cached runtimes
+                if (evt.detail !== "[cached]") {
+                  streamedRuntimeIds.add(evt.runtimeId);
+                  await emit("message.delta", provTurnId, provTraceId, {
+                    runtimeId: evt.runtimeId,
+                    pluginId: evt.pluginId,
+                    delta: evt.detail ?? "",
+                  });
+                }
+              } else {
+                await emit("runtime.progress", provTurnId, provTraceId, { ...evt });
+              }
+            },
+            onBackgroundTaskDone: async (task) => {
+              try {
+                const { turnId: tid, traceId: trid } = turnResult;
+                if (task.status === "completed" && task.result?.text) {
+                  const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+                  await emit("message.completed", tid, trid, {
+                    messageId: msgId,
+                    content: task.result.text,
+                    background: true,
+                    runtimeId: task.runtimeId,
+                    pluginId: task.pluginId,
+                  });
+                }
+              } finally {
+                backgroundTaskDoneCount++;
+                if (backgroundTaskDoneCount >= backgroundTaskCount) {
+                  resolveBackgroundDone?.();
+                }
+              }
+            },
+          });
+
+          const { turnId, traceId } = turnResult;
+
+          // Emit render blocks — skip cached narrative blocks
+          const narrativeSourceRuntimeIds: string[] = [];
+          for (const proposal of turnResult.proposals) {
+            for (const item of proposal.items) {
+              if (item.kind === "narrative.append") {
+                narrativeSourceRuntimeIds.push(proposal.runtimeId);
+              }
+            }
+          }
+
+          let narrativeIndex = 0;
+          for (const block of turnResult.render.blocks) {
+            if (block.type === "narrative") {
+              const sourceRuntimeId = block.source?.runtimeId
+                ?? narrativeSourceRuntimeIds[narrativeIndex]
+                ?? "";
+              narrativeIndex++;
+              // For retry: emit all non-cached, non-streamed narrative
+              if (!streamedRuntimeIds.has(sourceRuntimeId)) {
+                store.addMessage(sessionId, "assistant", block.content as string);
+                const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+                await emit("message.completed", turnId, traceId, {
+                  messageId: msgId,
+                  content: block.content,
+                  runtimeId: sourceRuntimeId,
+                });
+              }
+            } else {
+              const blockEnvelope = toBlockEnvelope(block, { turnId, sessionId, requestId, traceId });
+              await emit("block.emitted", turnId, traceId, { block: blockEnvelope });
+            }
+          }
+
+          // Emit state patches
+          for (const proposal of turnResult.proposals) {
+            for (const item of proposal.items) {
+              if (item.kind === "state.patch") {
+                await emit("state.patch.applied", turnId, traceId, {
+                  patch: {
+                    id: `patch_${seq}`,
+                    target: "state",
+                    summary: `${proposal.pluginId} state update`,
+                    packageName: proposal.pluginId,
+                    data: item.payload,
+                  },
+                });
+              }
+            }
+          }
+
+          backgroundTaskCount = turnResult.backgroundTasks?.length ?? 0;
+          if (backgroundTaskCount === 0) resolveBackgroundDone?.();
+          if (backgroundTaskCount > 0) {
+            await emit("flow.phase.changed", turnId, traceId, { phase: "background" });
+            await backgroundDonePromise;
+          }
+
+          await emit("flow.completed", turnId, traceId, { flowId, retry: true, retryFromRuntimeId: retryRuntimeId ?? null });
           return;
         }
 

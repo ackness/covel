@@ -28,6 +28,8 @@ export type {
   ExecutionPlan,
   TurnState,
   KernelExecuteOptions,
+  TurnCache,
+  CachedRuntimeResult,
 } from "./types.js";
 
 export {

@@ -25,7 +25,7 @@ import { validateProposals } from "./proposals/proposal-validator.js";
 import { commitProposals } from "./commit/commit-service.js";
 import { buildRenderResult } from "./render/render-builder.js";
 import { executeHooks } from "./hooks/hook-executor.js";
-import type { TurnState, KernelExecuteOptions, KernelProgressEvent, BackgroundTask } from "./types.js";
+import type { TurnState, KernelExecuteOptions, KernelProgressEvent, BackgroundTask, TurnCache, CachedRuntimeResult } from "./types.js";
 import { DEFAULT_RUNTIME_PRIORITY, DEFAULT_BACKGROUND_THRESHOLD } from "./types.js";
 import { createBackgroundTaskManager } from "./background/background-task-manager.js";
 import {
@@ -128,6 +128,18 @@ export interface KernelInstance {
 export interface KernelSession {
   /** Execute a complete turn within this session. */
   executeTurn(input: KernelInput, options?: KernelExecuteOptions): Promise<KernelTurnResult>;
+  /**
+   * Retry the last turn from a specific runtime.
+   *
+   * All runtimes with priority < the target's priority group replay cached
+   * results (injected into TurnContextStore without LLM calls). The target
+   * runtime and all subsequent ones re-execute normally.
+   *
+   * Pass `fromRuntimeId = undefined` to retry the entire turn.
+   */
+  retryTurn(fromRuntimeId: string | undefined, options?: KernelExecuteOptions): Promise<KernelTurnResult>;
+  /** Get the last turn's cached runtime results (for UI display). */
+  getLastTurnCache(): TurnCache | null;
   /** Update session-level context (game state, world, etc.). */
   setContext(ctx: Partial<KernelContext>): void;
   /** Read current session context (snapshot). */
@@ -205,6 +217,9 @@ function createKernelSession(
 
   // Per-runtime priority overrides (user-adjustable execution order)
   const priorityOverrides: Record<string, number> = { ...opts?.runtimePriorityOverrides };
+
+  // Cache of the last turn's execution for retry support
+  let lastTurnCache: TurnCache | null = null;
 
   // Session-scoped plugin activation
   const scope = createSessionPluginScope(
@@ -324,6 +339,24 @@ function createKernelSession(
     const backgroundManager = createBackgroundTaskManager(options.onBackgroundTaskDone);
     const backgroundTasks: BackgroundTask[] = [];
 
+    // ── Retry support: determine which groups to skip ──────────────
+    const retryFromRuntimeId = options.retryFromRuntimeId;
+    let retryFromPriority: number | null = null;
+
+    if (retryFromRuntimeId && lastTurnCache) {
+      // Find the priority of the target runtime in the cached results
+      const cachedTarget = lastTurnCache.runtimeResults.find(
+        (r) => r.runtimeId === retryFromRuntimeId
+      );
+      if (cachedTarget) {
+        retryFromPriority = cachedTarget.priority;
+      }
+      // If target not found in cache, re-execute everything (retryFromPriority stays null)
+    }
+
+    // Collect runtime results for caching (populated during execution)
+    const turnRuntimeResults: CachedRuntimeResult[] = [];
+
     for (const group of plan.groups) {
       // Check if this group should run in background (all members >= threshold)
       const isBackground = group.every(
@@ -442,6 +475,66 @@ function createKernelSession(
           backgroundTasks.push(task);
         }
         continue;
+      }
+
+      // ── Retry: replay cached results for groups before the retry point ──
+      const groupPriority = group[0]?.priority ?? DEFAULT_RUNTIME_PRIORITY;
+      if (retryFromPriority !== null && groupPriority < retryFromPriority && lastTurnCache) {
+        // Inject cached results without re-executing
+        for (const scheduled of group) {
+          const runtimeId = scheduled.registered.spec.id;
+          const cached = lastTurnCache.runtimeResults.find((r) => r.runtimeId === runtimeId);
+          if (!cached) continue;
+
+          emitProgress({
+            type: "runtime.started",
+            runtimeId,
+            pluginId: scheduled.registered.pluginId,
+            label: `${scheduled.registered.pluginId}/${scheduled.registered.spec.kind}`,
+            detail: "[cached]",
+          });
+
+          // Inject into context store for downstream runtimes
+          contextStore.ingest({
+            runtimeId,
+            pluginId: scheduled.registered.pluginId,
+            narrative: cached.narrative || undefined,
+            proposals: cached.proposals,
+          });
+
+          // Apply to turnState (same as normal execution)
+          collector.addFromRuntime(runtimeId, scheduled.registered.pluginId, cached.proposals);
+          for (const item of cached.proposals) {
+            switch (item.kind) {
+              case "narrative.append": {
+                const p = item.payload as { text: string };
+                turnState.narrativeSegments.push(p.text);
+                break;
+              }
+              case "state.patch": {
+                turnState.state = { ...turnState.state, ...(item.payload as Record<string, unknown>) };
+                break;
+              }
+              case "record.upsert": {
+                const r = item.payload as { key: string; value: unknown };
+                turnState.records.set(r.key, r.value);
+                break;
+              }
+            }
+          }
+
+          // Cache the replayed result
+          turnRuntimeResults.push({ ...cached });
+
+          emitProgress({
+            type: "runtime.completed",
+            runtimeId,
+            pluginId: scheduled.registered.pluginId,
+            label: `${scheduled.registered.pluginId}/${scheduled.registered.spec.kind}`,
+            detail: "[cached]",
+          });
+        }
+        continue; // Skip to next group
       }
 
       // Foreground execution (existing logic)
@@ -581,6 +674,15 @@ function createKernelSession(
             proposals: result.proposals,
           });
 
+          // Cache runtime result for retry support
+          turnRuntimeResults.push({
+            runtimeId: spec.id,
+            pluginId: runtime.pluginId,
+            priority: spec.priority ?? DEFAULT_RUNTIME_PRIORITY,
+            narrative: result.text || "",
+            proposals: result.proposals,
+          });
+
           // Also apply to turnState for proposal tracking
           for (const item of result.proposals) {
             switch (item.kind) {
@@ -685,6 +787,15 @@ function createKernelSession(
       locale,
     });
 
+    // Cache turn results for retry support
+    lastTurnCache = {
+      turnId,
+      input,
+      runtimeResults: turnRuntimeResults,
+      apiKeys: options.apiKeys,
+      slotOverrides: options.slotOverrides,
+    };
+
     return {
       runId: input.runId,
       branchId: input.branchId,
@@ -699,8 +810,47 @@ function createKernelSession(
     };
   }
 
+  /**
+   * Retry the last turn from a specific runtime.
+   *
+   * Runtimes before the target's priority group replay cached results
+   * (no LLM calls). The target and all subsequent runtimes re-execute.
+   *
+   * If fromRuntimeId is undefined, retries the entire turn.
+   */
+  async function retryTurn(
+    fromRuntimeId: string | undefined,
+    options: KernelExecuteOptions = {}
+  ): Promise<KernelTurnResult> {
+    if (!lastTurnCache) {
+      throw new Error("[kernel] No previous turn to retry. Execute at least one turn first.");
+    }
+
+    // Revert kernel state to before the last turn's commit
+    // (The last turn's commit updated kernelContext.state — we need to undo it
+    //  so that the retry re-applies from the same baseline.)
+    // Note: For simplicity, we re-execute with the same input. The context
+    // is set externally by the server before each turn, so it should be correct.
+
+    const retryInput = lastTurnCache.input;
+    const retryOptions: KernelExecuteOptions = {
+      ...options,
+      apiKeys: options.apiKeys ?? lastTurnCache.apiKeys,
+      slotOverrides: options.slotOverrides ?? lastTurnCache.slotOverrides,
+      retryFromRuntimeId: fromRuntimeId,
+    };
+
+    return executeTurn(retryInput, retryOptions);
+  }
+
+  function getLastTurnCache(): TurnCache | null {
+    return lastTurnCache;
+  }
+
   return {
     executeTurn,
+    retryTurn,
+    getLastTurnCache,
     setContext,
     getContext,
     enablePlugin: (pluginId: string) => scope.enable(pluginId),

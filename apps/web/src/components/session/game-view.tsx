@@ -236,10 +236,10 @@ function RightPanel({ world, gameState, statePatches, onToggleRightPanel }: Righ
         </TabsContent>
         <TabsContent value="state" className="p-4 m-0 space-y-4">
           <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <Database className="w-4 h-4 shrink-0" /> State Patches
+            <Database className="w-4 h-4 shrink-0" /> {t("session.statePatchesTitle", "State Patches")}
           </h3>
           {statePatches.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">No state changes yet.</p>
+            <p className="text-xs text-muted-foreground italic">{t("session.noStatePatches", "No state changes yet.")}</p>
           ) : (
             statePatches.map((patch) => (
               <Card key={patch.id}>
@@ -253,7 +253,7 @@ function RightPanel({ world, gameState, statePatches, onToggleRightPanel }: Righ
         </TabsContent>
         <TabsContent value="world" className="p-4 m-0">
           <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <MapIcon className="w-4 h-4 shrink-0" /> World
+            <MapIcon className="w-4 h-4 shrink-0" /> {t("session.world", "World")}
           </h3>
           {world ? (
             <Card>
@@ -269,9 +269,9 @@ function RightPanel({ world, gameState, statePatches, onToggleRightPanel }: Righ
         </TabsContent>
         <TabsContent value="records" className="p-4 m-0">
           <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <BookOpen className="w-4 h-4 shrink-0" /> Records
+            <BookOpen className="w-4 h-4 shrink-0" /> {t("session.recordsTitle", "Records")}
           </h3>
-          <p className="text-xs text-muted-foreground italic">Long-term records will appear here as the story progresses.</p>
+          <p className="text-xs text-muted-foreground italic">{t("session.noRecords", "Long-term records will appear here as the story progresses.")}</p>
         </TabsContent>
       </ScrollArea>
     </Tabs>
@@ -299,6 +299,8 @@ interface GameViewProps {
   onSendMessage: (content: string) => void;
   /** Mark a block as submitted (permanently locks it). */
   onSubmitBlock: (blockId: string) => void;
+  /** Retry from a specific runtime (undefined = retry all). */
+  onRetryRuntime?: (runtimeId?: string) => void;
   onResetSession: () => void;
   onBackToWorldSelect: () => void;
   onSwitchSession: (session: SessionRecord) => void;
@@ -322,6 +324,7 @@ export function GameView({
   submittedBlockIds,
   onSendMessage,
   onSubmitBlock,
+  onRetryRuntime,
   onResetSession,
   onBackToWorldSelect,
   onSwitchSession,
@@ -598,7 +601,12 @@ export function GameView({
               {messages.map(renderMessage)}
 
               {executionSteps.length > 0 && (
-                <ExecutionTimeline steps={executionSteps} executing={executing} />
+                <ExecutionTimeline
+                  steps={executionSteps}
+                  executing={executing}
+                  onRetryRuntime={onRetryRuntime ? (id) => onRetryRuntime(id) : undefined}
+                  onRetryAll={onRetryRuntime ? () => onRetryRuntime(undefined) : undefined}
+                />
               )}
 
               {executionError && (

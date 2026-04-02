@@ -1,4 +1,4 @@
-import { Loader2, CheckCircle2, XCircle, Zap, Wrench, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Zap, Wrench, ChevronDown, ChevronUp, RotateCw } from "lucide-react";
 import { useState } from "react";
 import type { ExecutionStep } from "@/stores/session-store.js";
 
@@ -87,12 +87,12 @@ function StatusIcon({ status }: { status: RuntimeStatus["status"] }) {
   }
 }
 
-function RuntimeChip({ rt }: { rt: RuntimeStatus }) {
+function RuntimeChip({ rt, canRetry, onRetry }: { rt: RuntimeStatus; canRetry?: boolean; onRetry?: (runtimeId: string) => void }) {
   const isActive = rt.status === "running" || rt.status === "llm" || rt.status === "tool";
 
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] border transition-colors ${
+      className={`group inline-flex items-center gap-1 px-2 py-0.5 text-[11px] border transition-colors ${
         isActive
           ? "border-primary/30 bg-primary/5 text-foreground"
           : rt.status === "failed"
@@ -102,10 +102,22 @@ function RuntimeChip({ rt }: { rt: RuntimeStatus }) {
     >
       <StatusIcon status={rt.status} />
       <span className="font-medium truncate max-w-[120px]">{rt.label}</span>
-      {rt.detail && (
+      {rt.detail && rt.detail !== "[cached]" && (
         <span className="text-[10px] text-muted-foreground truncate max-w-[100px]">
           {rt.detail}
         </span>
+      )}
+      {rt.detail === "[cached]" && (
+        <span className="text-[10px] text-muted-foreground/60 italic">cached</span>
+      )}
+      {canRetry && onRetry && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onRetry(rt.runtimeId); }}
+          className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 p-0.5 hover:text-primary"
+          title={`从 ${rt.label} 开始重试`}
+        >
+          <RotateCw className="w-2.5 h-2.5" />
+        </button>
       )}
     </span>
   );
@@ -114,9 +126,15 @@ function RuntimeChip({ rt }: { rt: RuntimeStatus }) {
 export function ExecutionTimeline({
   steps,
   executing,
+  onRetryRuntime,
+  onRetryAll,
 }: {
   steps: ExecutionStep[];
   executing: boolean;
+  /** Called to retry from a specific runtime (and all subsequent ones). */
+  onRetryRuntime?: (runtimeId: string) => void;
+  /** Called to retry the entire turn. */
+  onRetryAll?: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const statuses = deriveStatuses(steps);
@@ -136,27 +154,45 @@ export function ExecutionTimeline({
     (r) => r.status === "running" || r.status === "llm" || r.status === "tool"
   );
   const allDone = !executing && !active;
+  const canRetry = allDone && !!onRetryRuntime;
 
   return (
-    <div className={`space-y-1 py-1 ${allDone ? "opacity-70" : ""}`}>
+    <div className={`space-y-1 py-1 ${allDone ? "opacity-70 hover:opacity-100 transition-opacity" : ""}`}>
       {/* Header (clickable to collapse when done) */}
       {allDone && (
-        <button
-          onClick={() => setCollapsed((v) => !v)}
-          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {collapsed ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
-          <span className="uppercase tracking-wider">
-            Execution · {statuses.length} runtimes
-          </span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setCollapsed((v) => !v)}
+            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {collapsed ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
+            <span className="uppercase tracking-wider">
+              Execution · {statuses.length} runtimes
+            </span>
+          </button>
+          {onRetryAll && (
+            <button
+              onClick={onRetryAll}
+              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+              title="重新执行所有 runtime"
+            >
+              <RotateCw className="w-3 h-3" />
+              <span>重试全部</span>
+            </button>
+          )}
+        </div>
       )}
 
       {/* Chips row */}
       {!collapsed && (
         <div className="flex items-center gap-1.5 flex-wrap">
           {statuses.map((rt) => (
-            <RuntimeChip key={rt.runtimeId} rt={rt} />
+            <RuntimeChip
+              key={rt.runtimeId}
+              rt={rt}
+              canRetry={canRetry}
+              onRetry={onRetryRuntime}
+            />
           ))}
         </div>
       )}
