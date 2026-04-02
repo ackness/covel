@@ -508,14 +508,20 @@ function normalizeError(error: unknown, provider: string): AiProviderError {
         provider?: string;
         retriable?: boolean;
         statusCode?: number;
+        details?: Record<string, unknown>;
       };
       if (parsed.code && parsed.provider) {
+        // Build a human-readable message that includes API error details
+        const detailMsg = parsed.details
+          ? ` — ${typeof parsed.details.message === "string" ? parsed.details.message : JSON.stringify(parsed.details)}`
+          : "";
         return new AiProviderError({
           code: parsed.code as AiProviderError["code"],
-          message: error.message,
+          message: `[${parsed.provider}] HTTP ${parsed.statusCode ?? "?"}${detailMsg}`,
           provider: parsed.provider,
           retriable: Boolean(parsed.retriable),
           statusCode: parsed.statusCode,
+          details: parsed.details,
         });
       }
     } catch {

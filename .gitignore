@@ -6,6 +6,7 @@
 skills-lock.json
 debugs/
 audits/
+plans/
 
 # Cursor
 .cursorignore

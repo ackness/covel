@@ -63,7 +63,7 @@ export function createActionsRoute(deps: {
       payload: Record<string, unknown>;
     }>();
 
-    const { requestId, type, sessionId, locale, payload } = body;
+    const { requestId, type, sessionId, locale, payload = {} } = body;
 
     if (!requestId || !type || !sessionId) {
       return c.json(

@@ -88,6 +88,11 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         ...params.providerRequestMetadata,
       });
 
+      if (!response.ok) {
+        const payload = await parseJson(response);
+        assertSuccess(response, payload, "anthropic-messages");
+      }
+
       let usage: UsageSummary = { inputTokens: 0, outputTokens: 0 };
       let finishReason = "stop";
 

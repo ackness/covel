@@ -114,6 +114,12 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         ...params.providerRequestMetadata,
       });
 
+      // Check HTTP status before parsing SSE — a non-2xx response won't be SSE
+      if (!response.ok) {
+        const payload = await parseJson(response);
+        assertSuccess(response, payload, "openai-chat");
+      }
+
       let usage: UsageSummary = { inputTokens: 0, outputTokens: 0 };
       let finishReason = "stop";
 

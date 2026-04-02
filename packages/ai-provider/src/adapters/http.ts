@@ -144,6 +144,12 @@ export function assertSuccess(
 
   const errorObj = payload.error as Record<string, unknown> | undefined;
   const errorType = errorObj?.type;
+  const errorMessage =
+    typeof errorObj?.message === "string"
+      ? errorObj.message
+      : typeof payload.message === "string"
+        ? payload.message
+        : undefined;
   const isRateLimit =
     response.status === 429 || errorType === "rate_limit_error";
 
@@ -154,6 +160,9 @@ export function assertSuccess(
       provider,
       retriable: isRateLimit || response.status >= 500,
       statusCode: response.status,
+      details: errorMessage
+        ? { message: errorMessage, type: errorType }
+        : errorObj ?? undefined,
     })
   );
 }

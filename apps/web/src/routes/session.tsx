@@ -19,6 +19,7 @@ function SessionPage() {
     resumeSession,
     loadWorldSessions,
     sendMessage,
+    submitBlock,
     resetSession,
     backToWorldSelect,
   } = useSession();
@@ -61,7 +62,9 @@ function SessionPage() {
         gameState={state.gameState}
         executionSteps={state.executionSteps}
         worldSessions={state.worldSessions}
+        submittedBlockIds={state.submittedBlockIds}
         onSendMessage={sendMessage}
+        onSubmitBlock={submitBlock}
         onResetSession={resetSession}
         onBackToWorldSelect={backToWorldSelect}
         onSwitchSession={resumeSession}

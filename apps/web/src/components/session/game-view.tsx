@@ -294,7 +294,11 @@ interface GameViewProps {
   gameState: Record<string, unknown>;
   executionSteps: ExecutionStep[];
   worldSessions: SessionRecord[];
+  /** Block IDs that have been submitted (permanently locked). */
+  submittedBlockIds: ReadonlySet<string>;
   onSendMessage: (content: string) => void;
+  /** Mark a block as submitted (permanently locks it). */
+  onSubmitBlock: (blockId: string) => void;
   onResetSession: () => void;
   onBackToWorldSelect: () => void;
   onSwitchSession: (session: SessionRecord) => void;
@@ -315,7 +319,9 @@ export function GameView({
   gameState,
   executionSteps,
   worldSessions,
+  submittedBlockIds,
   onSendMessage,
+  onSubmitBlock,
   onResetSession,
   onBackToWorldSelect,
   onSwitchSession,
@@ -414,6 +420,13 @@ export function GameView({
     const Renderer = getBlockRenderer(blockType);
 
     const hasCustomRenderer = viewMode === "parsed" && Renderer && data;
+    const isSubmitted = submittedBlockIds.has(msg.id);
+    const blockDisabled = executing || isSubmitted;
+
+    const handleBlockSubmit = (value: string) => {
+      onSubmitBlock(msg.id);
+      onSendMessage(value);
+    };
 
     return (
       <div key={msg.id} className="flex flex-col gap-1.5">
@@ -424,7 +437,7 @@ export function GameView({
           </span>
         )}
         {hasCustomRenderer ? (
-          <Renderer data={data} onSubmit={onSendMessage} disabled={executing} />
+          <Renderer data={data} onSubmit={handleBlockSubmit} disabled={blockDisabled} />
         ) : (
           <RawJsonBlock content={JSON.stringify(block, null, 2)} />
         )}

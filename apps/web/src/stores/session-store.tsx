@@ -57,6 +57,9 @@ interface SessionState {
 
   /** Accumulated game state from state.patch events. */
   gameState: Record<string, unknown>;
+
+  /** Block IDs that have been submitted by the player (permanently locked). */
+  submittedBlockIds: ReadonlySet<string>;
 }
 
 type Action =
@@ -75,6 +78,7 @@ type Action =
   | { type: "ADD_EXECUTION_STEP"; step: ExecutionStep }
   | { type: "CLEAR_EXECUTION_STEPS" }
   | { type: "RESET_SESSION" }
+  | { type: "SUBMIT_BLOCK"; blockId: string }
   | { type: "RESET_TO_WORLD_SELECT" };
 
 const initialState: SessionState = {
@@ -95,6 +99,7 @@ const initialState: SessionState = {
   executionSteps: [],
   statePatches: [],
   gameState: {},
+  submittedBlockIds: new Set<string>(),
 };
 
 function shallowMerge(
@@ -164,10 +169,12 @@ function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, executionSteps: [...state.executionSteps, action.step] };
     case "CLEAR_EXECUTION_STEPS":
       return { ...state, executionSteps: [] };
+    case "SUBMIT_BLOCK":
+      return { ...state, submittedBlockIds: new Set([...state.submittedBlockIds, action.blockId]) };
     case "RESET_SESSION":
-      return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, executing: false, executionError: null, executionSteps: [] };
+      return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>() };
     case "RESET_TO_WORLD_SELECT":
-      return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, executing: false, executionError: null, executionSteps: [] };
+      return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>() };
     default:
       return state;
   }
@@ -185,6 +192,8 @@ interface SessionContextValue {
   /** Load all sessions for the current world. */
   loadWorldSessions: () => Promise<void>;
   sendMessage: (content: string) => void;
+  /** Mark a block as submitted (permanently locks it). */
+  submitBlock: (blockId: string) => void;
   executeCommand: (command: string) => void;
   /** Reset session but keep world (back to prep screen). */
   resetSession: () => void;
@@ -434,6 +443,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     );
   }, [state.session, state.executing, handleSseEvent]);
 
+  const submitBlock = useCallback((blockId: string) => {
+    dispatch({ type: "SUBMIT_BLOCK", blockId });
+  }, []);
+
   const executeCommand = useCallback((command: string) => {
     if (!state.session || state.executing) return;
 
@@ -483,6 +496,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     resumeSession,
     loadWorldSessions,
     sendMessage,
+    submitBlock,
     executeCommand,
     resetSession,
     backToWorldSelect,

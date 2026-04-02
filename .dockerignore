@@ -19,3 +19,4 @@ apps/server/drizzle
 apps/web/src/routeTree.gen.ts
 audits
 debugs
+plans

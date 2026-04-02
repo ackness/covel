@@ -79,6 +79,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         ...params.providerRequestMetadata,
       });
 
+      if (!response.ok) {
+        const payload = await parseJson(response);
+        assertSuccess(response, payload, "openai-responses");
+      }
+
       let usage: UsageSummary = { inputTokens: 0, outputTokens: 0 };
 
       for await (const payload of iterateSsePayloads(response)) {
