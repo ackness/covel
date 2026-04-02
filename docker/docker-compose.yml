@@ -31,6 +31,11 @@ services:
       NODE_ENV: production
       SERVE_STATIC: "true"
       STATIC_DIR: ./web-dist
+    env_file:
+      - path: ../.env
+        required: false
+      - path: ../.env.llm
+        required: false
     depends_on:
       postgres:
         condition: service_healthy
