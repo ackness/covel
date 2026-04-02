@@ -65,6 +65,7 @@ app.route("/actions", createActionsRoute({
   getOrCreateSession: (sessionId) => kernelStack.getOrCreateSession(sessionId),
   commandBus: kernelStack.commandBus,
   store,
+  presetRegistry: ai.presetRegistry,
 }));
 app.route("/characters", createCharactersRoute(store));
 app.route("/sessions", createSessionPluginsRoute({
@@ -77,11 +78,20 @@ app.route("/presets", createCompatPresetsRoute(ai));
 
 app.route("/block-schemas", createBlockSchemasRoute(kernelStack.pluginHost));
 
-// DEV-ONLY: provider key exposure for frontend auto-load
-if (process.env.NODE_ENV !== "production") {
-  const { createDevKeysRoute } = await import("./routes/dev-keys.js");
-  app.route("/api/dev/provider-keys", createDevKeysRoute());
-}
+// Expose server-configured provider keys to frontend for auto-fill.
+// Available in all environments — when .env.llm has keys, frontend
+// auto-fills them so users don't need manual configuration.
+// When no keys configured, returns empty object → frontend shows blank form.
+import { createDevKeysRoute } from "./routes/dev-keys.js";
+app.route("/api/provider-keys", createDevKeysRoute(ai.llmConfig));
+
+// Expose llm.toml slot configuration to frontend (with capability data).
+import { createLlmConfigRoute } from "./routes/llm-config.js";
+app.route("/api/llm-config", createLlmConfigRoute(ai.llmConfig, ai.presetRegistry.listPresets()));
+
+// Model database API (search, lookup, refresh from GitHub).
+import { createModelDbRoute } from "./routes/model-db.js";
+app.route("/api/model-db", createModelDbRoute(ai.modelDb));
 
 // Health check at root too
 app.route("/health", healthRoute);

@@ -32,6 +32,11 @@ export function createActionsRoute(deps: {
   getOrCreateSession: (sessionId: string) => KernelSession;
   commandBus: CommandBus;
   store: MemoryStore;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  presetRegistry?: {
+    addPreset: (preset: any) => void;
+    removePreset: (id: string) => void;
+  };
 }) {
   const { getOrCreateSession, commandBus, store } = deps;
 
@@ -74,16 +79,27 @@ export function createActionsRoute(deps: {
 
     const apiKeys = c.get("apiKeys") ?? {};
 
-    // Parse X-Slot-Config header for per-request slot overrides
+    // Parse X-Slot-Config header for per-request slot overrides and custom presets
     let slotOverrides: Record<string, { presetId: string }> | undefined;
+    let customPresetDefs: Array<{
+      id: string; name: string; provider: string;
+      baseUrl: string; model: string; protocol?: string;
+    }> | undefined;
     const slotConfigHeader = c.req.header("x-slot-config");
     if (slotConfigHeader) {
       try {
         const decoded = JSON.parse(atob(slotConfigHeader)) as {
           slots?: Record<string, { presetId: string }>;
+          customPresets?: Array<{
+            id: string; name: string; provider: string;
+            baseUrl: string; model: string; protocol?: string;
+          }>;
         };
         if (decoded.slots && Object.keys(decoded.slots).length > 0) {
           slotOverrides = decoded.slots;
+        }
+        if (decoded.customPresets && decoded.customPresets.length > 0) {
+          customPresetDefs = decoded.customPresets;
         }
       } catch {
         // Invalid header, skip
@@ -120,6 +136,25 @@ export function createActionsRoute(deps: {
           event: env.type,
           id: String(env.seq),
         });
+      }
+
+      // Register custom presets from frontend (ephemeral, for this request)
+      const registeredCustomIds: string[] = [];
+      if (customPresetDefs && deps.presetRegistry) {
+        for (const def of customPresetDefs) {
+          deps.presetRegistry.addPreset({
+            id: def.id,
+            name: def.name,
+            provider: def.provider,
+            model: def.model,
+            baseUrl: def.baseUrl || undefined,
+            protocol: def.protocol,
+            tier: "heavy",
+            supportedModes: ["text"],
+            enabled: true,
+          });
+          registeredCustomIds.push(def.id);
+        }
       }
 
       try {
@@ -401,6 +436,13 @@ export function createActionsRoute(deps: {
         const msg = err instanceof Error ? err.message : "Internal error";
         console.error("[actions] Error:", err);
         await emit("flow.failed", "", "", { code: "EXECUTION_ERROR", message: msg });
+      } finally {
+        // Clean up ephemeral custom presets
+        if (registeredCustomIds.length > 0 && deps.presetRegistry) {
+          for (const id of registeredCustomIds) {
+            deps.presetRegistry.removePreset(id);
+          }
+        }
       }
     });
   });

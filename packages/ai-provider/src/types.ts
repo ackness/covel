@@ -18,6 +18,74 @@ export type OperationMode =
   | "speech"
   | "transcription";
 
+// ── Model Capability ──────────────────────────────────────────────
+
+/** What a model can accept as input. */
+export type InputModality = "text" | "image" | "audio" | "video" | "file";
+
+/** What a model can produce as output. */
+export type OutputModality = "text" | "image" | "audio" | "embedding";
+
+/** Feature flags for model capabilities beyond basic I/O. */
+export type ModelFeature =
+  | "function_calling"
+  | "structured_output"
+  | "streaming"
+  | "reasoning"
+  | "vision"
+  | "prompt_caching"
+  | "web_search"
+  | "computer_use";
+
+/**
+ * Pricing information per million tokens (USD).
+ *
+ * Separate fields for text vs multimodal I/O to reflect real provider pricing.
+ */
+export interface ModelPricing {
+  /** Cost per 1M text input tokens (USD) */
+  inputPerMToken?: number;
+  /** Cost per 1M text output tokens (USD) */
+  outputPerMToken?: number;
+  /** Cost per 1M image input tokens (USD) — vision models */
+  imageInputPerMToken?: number;
+  /** Cost per 1M audio input tokens (USD) — audio understanding */
+  audioInputPerMToken?: number;
+  /** Cost per 1M audio output tokens (USD) — speech synthesis */
+  audioOutputPerMToken?: number;
+  /** Cost per generated image (USD) — image generation models */
+  perImage?: number;
+}
+
+/**
+ * Describes a model's multimodal capabilities.
+ *
+ * Follows OpenRouter's directional modality taxonomy:
+ * - `input` = what the model ACCEPTS (e.g. vision model accepts image)
+ * - `output` = what the model PRODUCES (e.g. image gen model produces image)
+ *
+ * "image" in input ≠ "image" in output. Same for audio/video.
+ *
+ * Data sources (priority order):
+ * 1. Manual override in llm.toml
+ * 2. Known model database (curated from LiteLLM/OpenRouter)
+ * 3. Protocol-based defaults
+ */
+export interface ModelCapability {
+  /** Accepted input types (e.g. ["text", "image"] for vision model) */
+  input: InputModality[];
+  /** Produced output types (e.g. ["text"] for chat, ["image"] for image gen) */
+  output: OutputModality[];
+  /** Feature flags beyond basic I/O */
+  features?: ModelFeature[];
+  /** Maximum input context window (tokens) */
+  contextWindow?: number;
+  /** Maximum output tokens the model can produce */
+  maxOutputTokens?: number;
+  /** Pricing info (per million tokens, USD) */
+  pricing?: ModelPricing;
+}
+
 // ── Model Tier ─────────────────────────────────────────────────────
 
 export type ModelTier = "small" | "medium" | "large" | "embed-default";
@@ -70,6 +138,8 @@ export interface PresetConfig {
   scope?: string;
   defaultSlot?: ModelSlotId;
   providerRequestMetadata?: Record<string, unknown>;
+  /** Multimodal capability descriptor. Auto-inferred or manually set. */
+  capability?: ModelCapability;
 }
 
 // ── Tool Calling ──────────────────────────────────────────────────

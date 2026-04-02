@@ -58,6 +58,12 @@ export interface GatewayOptions {
  * Provides 7 operations with automatic fallback routing for text operations.
  */
 export function createGateway(deps: GatewayDependencies) {
+  /** Resolve a slot name to its preset ID, or return the input unchanged. */
+  function resolveSlotOrPassthrough(presetId: string | undefined): string | undefined {
+    if (!presetId || !deps.slotRegistry) return presetId;
+    return deps.slotRegistry.resolveSlot(presetId) ?? presetId;
+  }
+
   async function generateText(
     input: {
       presetId?: string;
@@ -129,7 +135,7 @@ export function createGateway(deps: GatewayDependencies) {
     options?: GatewayOptions
   ): AsyncIterable<StreamEvent> {
     const targets = deps.presetRegistry.resolveTextTargetChain({
-      presetId: input.presetId,
+      presetId: resolveSlotOrPassthrough(input.presetId),
     });
     let lastError: AiProviderError | null = null;
 
@@ -213,7 +219,7 @@ export function createGateway(deps: GatewayDependencies) {
     const target = deps.presetRegistry.resolveEmbeddingTarget();
     // Use text target's provider config for embed routing
     const textTarget = deps.presetRegistry.resolveTextTarget({
-      presetId: input.presetId,
+      presetId: resolveSlotOrPassthrough(input.presetId),
     });
     const resolvedProvider = targetProvider(textTarget);
     let resolved = deps.providerRegistry.resolve(
@@ -376,7 +382,7 @@ export function createGateway(deps: GatewayDependencies) {
     ) => Promise<TResult>,
     resolveUsage: (result: TResult) => UsageSummary | null
   ): Promise<TResult> {
-    const targets = deps.presetRegistry.resolveTextTargetChain(input);
+    const targets = deps.presetRegistry.resolveTextTargetChain({ presetId: resolveSlotOrPassthrough(input.presetId) });
     let lastError: AiProviderError | null = null;
 
     for (const [index, target] of targets.entries()) {
@@ -432,7 +438,7 @@ export function createGateway(deps: GatewayDependencies) {
     ) => Promise<TResult>
   ): Promise<TResult> {
     const target = deps.presetRegistry.resolveTextTarget({
-      presetId,
+      presetId: resolveSlotOrPassthrough(presetId),
     });
     let resolved = deps.providerRegistry.resolve(
       target.preset ?? target.profile,

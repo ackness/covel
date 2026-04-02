@@ -52,7 +52,7 @@ apps/
 
 packages/
   shared/           @covel/shared           — Shared types and contracts (character, kernel, plugin, world, data-access)
-  ai-provider/      @covel/ai-provider      — Multi-provider LLM abstraction (OpenAI/Anthropic/DeepSeek/Qwen, preset-based routing)
+  ai-provider/      @covel/ai-provider      — Multi-provider LLM abstraction (preset routing, model capability auto-detection, 2597-model LiteLLM database)
   runtime/          @covel/runtime          — Turn runtime execution engine (LLM tool-calling loop + budget enforcement)
   context/          @covel/context          — Unified context builder (TurnContextStore + PromptAssembler + Compactor)
   kernel/           @covel/kernel           — Orchestration kernel (scheduling, tool execution, proposals, rendering)
@@ -141,9 +141,30 @@ Named slots for provider routing:
 - `balance` — referee plugins, complex logic
 - `image` — image generation (optional)
 
-Unconfigured slots fall back to `heavy`. Config in `packages/ai-provider/presets/default.toml`. Supports OpenAI, Anthropic, DeepSeek, Qwen (Aliyun DashScope) protocols.
+Unconfigured slots fall back to `heavy`. Primary config via `llm.toml` (slot-centric), legacy fallback to `packages/ai-provider/presets/default.toml`. Supports OpenAI, Anthropic, DeepSeek, Qwen (Aliyun DashScope) protocols.
 
 **API key security**: Keys in browser localStorage only, passed per-request via `X-Provider-Keys` header (base64), never persisted server-side.
+
+### Model Capability System
+
+Each slot's model capabilities (multimodal support, features, token limits, pricing) are auto-detected via multi-source resolution:
+
+1. **Frontend user overrides** (localStorage `covel:capabilityOverrides`) — highest priority
+2. **`llm.toml` manual fields** (`input`/`output`/`features`/`contextWindow`/`maxOutputTokens`/`pricing`)
+3. **Hand-curated known models** (`capability/known-models.ts`, ~60 common models)
+4. **LiteLLM full database** (`data/model-db.json`, 2597 models, updatable from GitHub)
+5. **Protocol defaults** — lowest priority
+
+**Directional modality design** (follows OpenRouter taxonomy):
+- `input: InputModality[]` = what the model ACCEPTS (e.g. `["text", "image"]` = vision)
+- `output: OutputModality[]` = what the model PRODUCES (e.g. `["image"]` = image generation)
+- `"image"` in input ≠ `"image"` in output. Same for audio (transcription vs synthesis).
+
+Types: `InputModality` = `text | image | audio | video | file`; `OutputModality` = `text | image | audio | embedding`; `ModelFeature` = `function_calling | structured_output | streaming | reasoning | vision | prompt_caching | web_search | computer_use`.
+
+**Server API**: `GET /api/model-db` (info), `GET /api/model-db/search?q=...` (search), `GET /api/model-db/lookup?model=...` (lookup), `POST /api/model-db/refresh` (fetch latest from GitHub).
+
+**Update command**: `pnpm --filter @covel/ai-provider update-model-db` refreshes the bundled `data/model-db.json`.
 
 ### Schema-Driven Block Rendering
 
@@ -167,7 +188,7 @@ Store backends (`@covel/store`): MemoryStore (dev/test), IdbStore (browser Index
 ### Server Route Layout
 
 Two route sets:
-- `/api/*` — internal programmatic API: `ai/generate`, `ai/stream`, `ai/ping`, `kernel/turn`, `plugins`, `block-schemas`, `commands`, `commands/execute`, `config/presets`, `health`
+- `/api/*` — internal programmatic API: `ai/generate`, `ai/stream`, `ai/ping`, `kernel/turn`, `plugins`, `block-schemas`, `commands`, `commands/execute`, `config/presets`, `llm-config`, `model-db`, `model-db/search`, `model-db/lookup`, `model-db/refresh`, `provider-keys`, `health`
 - Root-level routes (frontend-facing, proxied by Vite): `/worlds`, `/sessions`, `/actions`, `/characters`, `/commands`, `/packages`, `/presets`, `/block-schemas`
 - Session plugin routes: `GET /sessions/:id/plugins`, `POST /sessions/:id/plugins/enable`, `POST /sessions/:id/plugins/disable`
 

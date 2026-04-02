@@ -225,6 +225,26 @@ runtime 通过 `providerBinding` 字段引用命名 model slot，而非直接指
 
 runtime 只声明 slot 名称，不直接引用 provider SDK 或 API key。
 
+#### 5.4.2 Model Capability
+
+每个 slot 绑定的模型附带 `ModelCapability` 描述符，包含：
+
+- **方向性模态**：`input: InputModality[]`（模型接受什么）、`output: OutputModality[]`（模型产出什么）
+  - `InputModality`: `text | image | audio | video | file`
+  - `OutputModality`: `text | image | audio | embedding`
+  - 注意：`image` 在 input = 视觉理解，`image` 在 output = 图片生成。audio 同理。
+- **功能标签**：`features: ModelFeature[]`（`function_calling | structured_output | streaming | reasoning | vision | prompt_caching | web_search | computer_use`）
+- **Token 限制**：`contextWindow`（最大输入 token）、`maxOutputTokens`（最大输出 token）—— 供 Compactor 和记忆插件自动调用
+- **价格信息**：`ModelPricing`（输入/输出/音频/图片每百万 token 单价 USD）—— 供前端成本控制
+
+能力数据通过多源合并解析：
+1. `llm.toml` 手动覆盖（最高优先级）
+2. 手工精选已知模型库（~60 常见模型，总是可用）
+3. LiteLLM 完整数据库（2597 模型，内置静态 JSON + 在线更新）
+4. 协议默认值（兜底）
+
+前端用户可在设置面板覆盖任意字段，存入 localStorage。
+
 ### 5.5 Tool / Hook Loop
 
 职责：

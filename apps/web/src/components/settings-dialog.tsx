@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   KeyRound, Check, Settings2, Cpu, SlidersHorizontal, Plus, Trash2,
-  Download, Upload, Eye, EyeOff, ChevronDown, Info,
+  Download, Upload, Eye, EyeOff, Info, Pencil, RotateCw, Database,
   Loader2, Zap, XCircle, CheckCircle2,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog.js";
@@ -15,10 +15,12 @@ import {
   getSlotConfig, setSlotConfig,
   getCustomPresets, setCustomPresets, addCustomPreset, removeCustomPreset,
   getParamOverrides, setParamOverrides,
-  pingPreset,
+  getCapabilityOverrides, setCapabilityOverrides, mergeCapability,
+  pingPreset, refreshModelDb, fetchModelDbInfo,
   uid,
   type SlotConfigEntry, type CustomPreset, type ModelParameterOverrides, type PresetSummary,
-  type PingResult,
+  type PingResult, type LlmConfigResponse, type ModelCapabilityInfo, type ModelDbInfo,
+  type InputModality, type OutputModality, type ModelFeature,
 } from "@/services/api.js";
 import { useSession } from "@/stores/session-store.js";
 
@@ -27,17 +29,11 @@ interface SettingsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const PROVIDERS = [
-  { id: "deepseek", name: "DeepSeek", placeholder: "sk-..." },
-  { id: "dashscope", name: "DashScope (Qwen)", placeholder: "sk-..." },
-  { id: "openai", name: "OpenAI", placeholder: "sk-..." },
-] as const;
-
 const MODEL_SLOTS = [
-  { id: "heavy", label: "Heavy", labelZh: "主力模型", desc: "主叙事、复杂推理", required: true, optional: false },
-  { id: "fast", label: "Fast", labelZh: "快速模型", desc: "插件默认、轻量判断", required: false, optional: false },
-  { id: "balance", label: "Balance", labelZh: "均衡模型", desc: "裁判插件、复杂逻辑", required: false, optional: false },
-  { id: "image", label: "Image", labelZh: "图像模型", desc: "图像生成（可选）", required: false, optional: true },
+  { id: "heavy", label: "Heavy", labelZh: "主力模型", desc: "主叙事、复杂推理", required: true },
+  { id: "fast", label: "Fast", labelZh: "快速模型", desc: "插件默认、轻量判断", required: false },
+  { id: "balance", label: "Balance", labelZh: "均衡模型", desc: "裁判插件、复杂逻辑", required: false },
+  { id: "image", label: "Image", labelZh: "图像模型", desc: "图像生成（可选）", required: false },
 ] as const;
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
@@ -53,13 +49,18 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [selectedOverrideSlot, setSelectedOverrideSlot] = useState("heavy");
 
   const [newPreset, setNewPreset] = useState<Omit<CustomPreset, "id">>({
-    name: "", provider: "", baseUrl: "", model: "",
+    name: "", provider: "", baseUrl: "", model: "", protocol: "openai-chat-v1", apiKey: "",
   });
 
-  // Ping test state: keyed by presetId
   const [pingResults, setPingResults] = useState<Record<string, PingResult & { testing?: boolean }>>({});
-
+  const [capOverrides, setCapOverridesLocal] = useState<Record<string, Partial<ModelCapabilityInfo>>>({});
+  const [editingSlot, setEditingSlot] = useState<string | null>(null);
+  const [modelDbInfo, setModelDbInfo] = useState<ModelDbInfo | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const llm = state.llmConfig;
+  const isConfigured = llm?.configured ?? false;
 
   useEffect(() => {
     if (open) {
@@ -67,15 +68,18 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       setSlotConfigLocal(getSlotConfig());
       setCustomPresetsLocal(getCustomPresets());
       setParamOverridesLocal(getParamOverrides());
+      setCapOverridesLocal(getCapabilityOverrides());
       setSaved(false);
       setVisibleKeys({});
       setPingResults({});
+      setEditingSlot(null);
+      // Load model DB info
+      fetchModelDbInfo().then(setModelDbInfo).catch(() => {});
     }
   }, [open]);
 
   const handlePing = async (presetId: string) => {
     setPingResults((prev) => ({ ...prev, [presetId]: { ok: false, latencyMs: 0, testing: true } }));
-    // Temporarily save keys so the ping request uses the latest values
     const cleanedKeys: Record<string, string> = {};
     for (const [k, v] of Object.entries(keys)) {
       if (v.trim()) cleanedKeys[k] = v.trim();
@@ -98,12 +102,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     ...customPresets.map((p) => ({ id: p.id, name: p.name, provider: p.provider, model: p.model, isCustom: true })),
   ];
 
-  const activeProviders = new Set<string>();
-  for (const slot of Object.values(slotConfig)) {
-    const preset = allPresets.find((p) => p.id === slot.presetId);
-    if (preset) activeProviders.add(preset.provider);
-  }
-
   const handleSave = () => {
     const cleanedKeys: Record<string, string> = {};
     for (const [k, v] of Object.entries(keys)) {
@@ -113,8 +111,46 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setSlotConfig(slotConfig);
     setCustomPresets(customPresets);
     setParamOverrides(paramOverrides);
+    setCapabilityOverrides(capOverrides);
     setSaved(true);
     setTimeout(() => onOpenChange(false), 600);
+  };
+
+  const handleRefreshModelDb = async () => {
+    setRefreshing(true);
+    try {
+      const result = await refreshModelDb();
+      if (result.ok) {
+        setModelDbInfo({ available: true, count: result.count, updatedAt: new Date().toISOString() });
+      }
+    } catch {
+      // silent
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  /** Get the effective capability for a slot (server data merged with user overrides). */
+  const getEffectiveCapability = (slotId: string): ModelCapabilityInfo | undefined => {
+    const serverCap = isConfigured ? llm!.slots[slotId]?.capability : undefined;
+    return mergeCapability(serverCap, capOverrides[slotId]);
+  };
+
+  /** Update a single field in a slot's capability override. */
+  const updateCapOverride = (slotId: string, patch: Partial<ModelCapabilityInfo>) => {
+    setCapOverridesLocal((prev) => ({
+      ...prev,
+      [slotId]: { ...prev[slotId], ...patch },
+    }));
+  };
+
+  /** Clear all overrides for a slot. */
+  const resetCapOverride = (slotId: string) => {
+    setCapOverridesLocal((prev) => {
+      const next = { ...prev };
+      delete next[slotId];
+      return next;
+    });
   };
 
   const handleAddCustomPreset = () => {
@@ -122,7 +158,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     const preset: CustomPreset = { ...newPreset, id: `custom_${uid()}` };
     const updated = [...customPresets, preset];
     setCustomPresetsLocal(updated);
-    setNewPreset({ name: "", provider: "", baseUrl: "", model: "" });
+    if (preset.apiKey?.trim()) {
+      setKeys((prev) => ({ ...prev, [preset.provider]: preset.apiKey! }));
+    }
+    setNewPreset({ name: "", provider: "", baseUrl: "", model: "", protocol: "openai-chat-v1", apiKey: "" });
   };
 
   const handleRemoveCustomPreset = (id: string) => {
@@ -135,7 +174,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   };
 
   const handleExportPresets = () => {
-    const blob = new Blob([JSON.stringify(customPresets, null, 2)], { type: "application/json" });
+    const exportSafe = customPresets.map(({ apiKey: _, ...rest }) => rest);
+    const blob = new Blob([JSON.stringify(exportSafe, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -192,6 +232,22 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setParamOverridesLocal(updated);
   };
 
+  // Derive providers that need API keys
+  const requiredProviders = isConfigured
+    ? (llm!.providers ?? []).map((p) => ({
+        id: p,
+        name: p.charAt(0).toUpperCase() + p.slice(1),
+        placeholder: "sk-...",
+      }))
+    : [
+        { id: "deepseek", name: "DeepSeek", placeholder: "sk-..." },
+        { id: "dashscope", name: "DashScope (Qwen)", placeholder: "sk-..." },
+        { id: "openai", name: "OpenAI", placeholder: "sk-..." },
+      ];
+
+  // Active slots from server config
+  const configuredSlots = isConfigured ? Object.keys(llm!.slots) : [];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
@@ -201,113 +257,292 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             {t("nav.settings", "Settings")}
           </DialogTitle>
           <DialogDescription>
-            {/* 配置模型插槽、API 密钥和高级参数。所有数据仅存储在浏览器本地。 */}
-            Configure model slots, API keys, and advanced parameters. All data is stored locally.
+            {isConfigured
+              ? "llm.toml 已配置。管理 API 密钥和高级参数。"
+              : "配置模型插槽、API 密钥和高级参数。所有数据仅存储在浏览器本地。"
+            }
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="slots" className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className="w-full grid grid-cols-4">
-            <TabsTrigger value="slots" className="text-xs">
-              <Cpu className="w-3 h-3 mr-1" />
-              {/* 模型配置 */}
-              Slots
-            </TabsTrigger>
-            <TabsTrigger value="keys" className="text-xs">
-              <KeyRound className="w-3 h-3 mr-1" />
-              {/* 密钥管理 */}
-              Keys
-            </TabsTrigger>
-            <TabsTrigger value="advanced" className="text-xs">
-              <SlidersHorizontal className="w-3 h-3 mr-1" />
-              {/* 高级参数 */}
-              Advanced
-            </TabsTrigger>
-            <TabsTrigger value="presets" className="text-xs">
-              <Plus className="w-3 h-3 mr-1" />
-              {/* 自定义预设 */}
-              Presets
-            </TabsTrigger>
+        <Tabs defaultValue={isConfigured ? "overview" : "slots"} className="flex-1 overflow-hidden flex flex-col">
+          <TabsList className={`w-full grid ${isConfigured ? "grid-cols-3" : "grid-cols-4"}`}>
+            {isConfigured ? (
+              /* Configured mode: Overview + Keys + Advanced */
+              <>
+                <TabsTrigger value="overview" className="text-xs">
+                  <Cpu className="w-3 h-3 mr-1" />
+                  Slots
+                </TabsTrigger>
+                <TabsTrigger value="keys" className="text-xs">
+                  <KeyRound className="w-3 h-3 mr-1" />
+                  Keys
+                </TabsTrigger>
+                <TabsTrigger value="advanced" className="text-xs">
+                  <SlidersHorizontal className="w-3 h-3 mr-1" />
+                  Advanced
+                </TabsTrigger>
+              </>
+            ) : (
+              /* Legacy mode: Slots + Keys + Advanced + Presets */
+              <>
+                <TabsTrigger value="slots" className="text-xs">
+                  <Cpu className="w-3 h-3 mr-1" />
+                  Slots
+                </TabsTrigger>
+                <TabsTrigger value="keys" className="text-xs">
+                  <KeyRound className="w-3 h-3 mr-1" />
+                  Keys
+                </TabsTrigger>
+                <TabsTrigger value="advanced" className="text-xs">
+                  <SlidersHorizontal className="w-3 h-3 mr-1" />
+                  Advanced
+                </TabsTrigger>
+                <TabsTrigger value="presets" className="text-xs">
+                  <Plus className="w-3 h-3 mr-1" />
+                  Presets
+                </TabsTrigger>
+              </>
+            )}
           </TabsList>
 
           <div className="flex-1 overflow-y-auto mt-2 pr-1">
-            {/* Tab 1: Model Slots */}
-            <TabsContent value="slots" className="space-y-3 mt-0">
-              {MODEL_SLOTS.map((slot) => {
-                const selectedPresetId = slotConfig[slot.id]?.presetId ?? "";
-                const selectedPreset = allPresets.find((p) => p.id === selectedPresetId);
-                const isFallback = !selectedPresetId && slot.id !== "heavy";
-                return (
-                  <div key={slot.id} className="border border-border p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">{slot.labelZh}</span>
-                        <span className="text-xs text-muted-foreground">({slot.label})</span>
+            {/* ── Configured mode: Slot Overview (read-only from llm.toml) ── */}
+            {isConfigured && (
+              <TabsContent value="overview" className="space-y-3 mt-0">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Info className="w-3 h-3" />
+                  <span>由 llm.toml 配置。修改需编辑服务器端文件。</span>
+                </div>
+                {configuredSlots.map((slotId) => {
+                  const slot = llm!.slots[slotId];
+                  const meta = MODEL_SLOTS.find((s) => s.id === slotId);
+                  const presetId = `slot-${slotId}`;
+                  const ping = pingResults[presetId];
+                  const isTesting = ping?.testing;
+                  const cap = slot.capability;
+                  return (
+                    <div key={slotId} className="border border-border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">
+                            {meta?.labelZh ?? slotId}
+                          </span>
+                          <span className="text-xs text-muted-foreground">({slotId})</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {meta?.required && <Badge variant="default" className="text-[10px]">required</Badge>}
+                          {slot.fallback && (
+                            <Badge variant="secondary" className="text-[10px]">
+                              fallback: {slot.fallback}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        {slot.required && <Badge variant="default" className="text-[10px]">required</Badge>}
-                        {slot.optional && <Badge variant="outline" className="text-[10px]">optional</Badge>}
-                        {isFallback && (
-                          <Badge variant="secondary" className="text-[10px]">
-                            fallback: heavy
-                          </Badge>
+                      <div className="text-xs text-muted-foreground grid grid-cols-3 gap-1">
+                        <span>Provider: {slot.provider}</span>
+                        <span>Model: {slot.model}</span>
+                        <span>Protocol: {slot.protocol.replace("-v1", "")}</span>
+                      </div>
+
+                      {/* ── Capability Tags ── */}
+                      {(() => {
+                        const effective = getEffectiveCapability(slotId);
+                        const hasOverride = !!capOverrides[slotId];
+                        const isEditing = editingSlot === slotId;
+                        return (
+                          <>
+                            {effective && <CapabilityTags capability={effective} />}
+                            <div className="flex items-center gap-1.5">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 text-[10px] px-1.5"
+                                onClick={() => setEditingSlot(isEditing ? null : slotId)}
+                              >
+                                <Pencil className="w-3 h-3 mr-0.5" />
+                                {isEditing ? "收起" : "编辑能力"}
+                              </Button>
+                              {hasOverride && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 text-[10px] px-1.5 text-amber-600"
+                                  onClick={() => resetCapOverride(slotId)}
+                                >
+                                  <RotateCw className="w-3 h-3 mr-0.5" />
+                                  重置
+                                </Button>
+                              )}
+                              {hasOverride && (
+                                <Badge variant="outline" className="text-[9px] text-amber-600 border-amber-400">已覆盖</Badge>
+                              )}
+                            </div>
+                            {isEditing && (
+                              <CapabilityEditor
+                                slotId={slotId}
+                                serverCap={slot.capability}
+                                override={capOverrides[slotId]}
+                                onUpdate={(patch) => updateCapOverride(slotId, patch)}
+                              />
+                            )}
+                          </>
+                        );
+                      })()}
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[11px] px-2.5"
+                          disabled={isTesting}
+                          onClick={() => handlePing(presetId)}
+                        >
+                          {isTesting ? (
+                            <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                          ) : (
+                            <Zap className="w-3 h-3 mr-1" />
+                          )}
+                          Ping
+                        </Button>
+                        {ping && !isTesting && (
+                          <span className="flex items-center gap-1 text-xs">
+                            {ping.ok ? (
+                              <>
+                                <CheckCircle2 className="w-3 h-3 text-green-500" />
+                                <span className="text-green-600 font-mono">{ping.ttfbMs ?? ping.latencyMs}ms</span>
+                                <span className="text-[10px] text-muted-foreground">TTFB</span>
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="w-3 h-3 text-destructive" />
+                                <span className="text-destructive truncate max-w-[200px]" title={ping.error}>
+                                  {ping.error?.slice(0, 40)}
+                                </span>
+                              </>
+                            )}
+                          </span>
                         )}
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">{slot.desc}</p>
-                    <select
-                      value={selectedPresetId}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val) {
-                          setSlotConfigLocal({ ...slotConfig, [slot.id]: { presetId: val } });
-                        } else {
-                          const updated = { ...slotConfig };
-                          delete updated[slot.id];
-                          setSlotConfigLocal(updated);
-                        }
-                      }}
-                      className="w-full bg-background border border-border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
-                    >
-                      <option value="">-- {slot.required ? "请选择预设" : "未配置（回退到 Heavy）"} --</option>
-                      {state.presets.length > 0 && (
-                        <optgroup label="Built-in">
-                          {state.presets.map((p) => (
-                            <option key={p.id} value={p.id}>{p.name} ({p.provider}/{p.model})</option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {customPresets.length > 0 && (
-                        <optgroup label="Custom">
-                          {customPresets.map((p) => (
-                            <option key={p.id} value={p.id}>{p.name} ({p.provider}/{p.model})</option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </select>
-                    {selectedPreset && (
-                      <div className="text-xs text-muted-foreground grid grid-cols-3 gap-1">
-                        <span>Provider: {selectedPreset.provider}</span>
-                        <span>Model: {selectedPreset.model}</span>
-                        {selectedPreset.isCustom && <span className="text-amber-500">custom</span>}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </TabsContent>
+                  );
+                })}
 
-            {/* Tab 2: API Keys */}
+                {/* ── Model Database Info ── */}
+                <div className="border border-dashed border-border p-3 space-y-2 mt-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                      <Database className="w-3 h-3" />
+                      模型数据库
+                    </h4>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[10px] px-2"
+                      disabled={refreshing}
+                      onClick={handleRefreshModelDb}
+                    >
+                      {refreshing ? (
+                        <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                      ) : (
+                        <RotateCw className="w-3 h-3 mr-1" />
+                      )}
+                      从 GitHub 更新
+                    </Button>
+                  </div>
+                  {modelDbInfo?.available ? (
+                    <div className="text-[10px] text-muted-foreground space-y-0.5">
+                      <div>{modelDbInfo.count} 个模型 (LiteLLM)</div>
+                      <div>更新于: {modelDbInfo.updatedAt ? new Date(modelDbInfo.updatedAt).toLocaleDateString("zh-CN") : "未知"}</div>
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-muted-foreground">数据库不可用</div>
+                  )}
+                </div>
+              </TabsContent>
+            )}
+
+            {/* ── Legacy mode: Manual Slot Assignment ── */}
+            {!isConfigured && (
+              <TabsContent value="slots" className="space-y-3 mt-0">
+                {MODEL_SLOTS.map((slot) => {
+                  const selectedPresetId = slotConfig[slot.id]?.presetId ?? "";
+                  const selectedPreset = allPresets.find((p) => p.id === selectedPresetId);
+                  const isFallback = !selectedPresetId && slot.id !== "heavy";
+                  return (
+                    <div key={slot.id} className="border border-border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{slot.labelZh}</span>
+                          <span className="text-xs text-muted-foreground">({slot.label})</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {slot.required && <Badge variant="default" className="text-[10px]">required</Badge>}
+                          {isFallback && (
+                            <Badge variant="secondary" className="text-[10px]">
+                              fallback: heavy
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{slot.desc}</p>
+                      <select
+                        value={selectedPresetId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val) {
+                            setSlotConfigLocal({ ...slotConfig, [slot.id]: { presetId: val } });
+                          } else {
+                            const updated = { ...slotConfig };
+                            delete updated[slot.id];
+                            setSlotConfigLocal(updated);
+                          }
+                        }}
+                        className="w-full bg-background border border-border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
+                      >
+                        <option value="">-- {slot.required ? "请选择预设" : "未配置（回退到 Heavy）"} --</option>
+                        {state.presets.length > 0 && (
+                          <optgroup label="Built-in">
+                            {state.presets.map((p) => (
+                              <option key={p.id} value={p.id}>{p.name} ({p.provider}/{p.model})</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {customPresets.length > 0 && (
+                          <optgroup label="Custom">
+                            {customPresets.map((p) => (
+                              <option key={p.id} value={p.id}>{p.name} ({p.provider}/{p.model})</option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                      {selectedPreset && (
+                        <div className="text-xs text-muted-foreground grid grid-cols-3 gap-1">
+                          <span>Provider: {selectedPreset.provider}</span>
+                          <span>Model: {selectedPreset.model}</span>
+                          {selectedPreset.isCustom && <span className="text-amber-500">custom</span>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </TabsContent>
+            )}
+
+            {/* ── Keys Tab ── */}
             <TabsContent value="keys" className="space-y-3 mt-0">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Info className="w-3 h-3" />
-                <span>密钥仅存储在浏览器 localStorage 中，不会发送至服务器存储。</span>
+                <span>
+                  {isConfigured
+                    ? "填写 llm.toml 中配置的 provider 对应的 API 密钥。也可通过 .env.llm 文件配置。"
+                    : "密钥仅存储在浏览器 localStorage 中，不会发送至服务器存储。"
+                  }
+                </span>
               </div>
-              {PROVIDERS.map((provider) => {
-                const inUse = activeProviders.has(provider.id);
+              {requiredProviders.map((provider) => {
                 const hasKey = !!(keys[provider.id]?.trim());
                 const visible = visibleKeys[provider.id] ?? false;
-                // Find presets that use this provider (for test buttons)
+                // Find presets using this provider for ping tests
                 const providerPresets = allPresets.filter((p) => p.provider === provider.id);
 
                 return (
@@ -320,8 +555,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                         ) : (
                           <Badge variant="outline" className="text-[10px]">未配置</Badge>
                         )}
-                        {inUse && <Badge variant="secondary" className="text-[10px]">使用中</Badge>}
                       </Label>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {provider.id.toUpperCase().replace(/-/g, "_")}_API_KEY
+                      </span>
                     </div>
                     <div className="flex gap-1">
                       <input
@@ -342,7 +579,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       </Button>
                     </div>
 
-                    {/* Test buttons for each preset under this provider */}
+                    {/* Ping test for presets under this provider */}
                     {hasKey && providerPresets.length > 0 && (
                       <div className="space-y-1.5 pt-1">
                         <span className="text-[10px] text-muted-foreground uppercase tracking-widest">连通测试</span>
@@ -363,7 +600,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                                 ) : (
                                   <Zap className="w-3 h-3 mr-1" />
                                 )}
-                                测试
+                                Ping
                               </Button>
                               <span className="truncate text-muted-foreground">{preset.name}</span>
                               <span className="text-[10px] text-muted-foreground">({preset.model})</span>
@@ -395,12 +632,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               })}
             </TabsContent>
 
-            {/* Tab 3: Advanced Parameters */}
+            {/* ── Advanced Parameters ── */}
             <TabsContent value="advanced" className="space-y-3 mt-0">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Info className="w-3 h-3" />
                 <span>留空则使用模型提供商默认值。</span>
-                {/* Leave empty to use provider defaults */}
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">选择插槽 (Select Slot)</Label>
@@ -409,9 +645,14 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   onChange={(e) => setSelectedOverrideSlot(e.target.value)}
                   className="w-full bg-background border border-border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
                 >
-                  {MODEL_SLOTS.map((slot) => (
-                    <option key={slot.id} value={slot.id}>{slot.labelZh} ({slot.label})</option>
-                  ))}
+                  {(isConfigured ? configuredSlots : MODEL_SLOTS.map((s) => s.id)).map((slotId) => {
+                    const meta = MODEL_SLOTS.find((s) => s.id === slotId);
+                    return (
+                      <option key={slotId} value={slotId}>
+                        {meta?.labelZh ?? slotId} ({slotId})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -463,93 +704,128 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               </Button>
             </TabsContent>
 
-            {/* Tab 4: Custom Presets */}
-            <TabsContent value="presets" className="space-y-3 mt-0">
-              {customPresets.length > 0 && (
-                <div className="space-y-2">
-                  {customPresets.map((preset) => (
-                    <div key={preset.id} className="flex items-center justify-between border border-border px-3 py-2 text-xs">
-                      <div>
-                        <span className="font-medium">{preset.name}</span>
-                        <span className="text-muted-foreground ml-2">{preset.provider}/{preset.model}</span>
+            {/* ── Custom Presets (legacy mode only) ── */}
+            {!isConfigured && (
+              <TabsContent value="presets" className="space-y-3 mt-0">
+                {customPresets.length > 0 && (
+                  <div className="space-y-2">
+                    {customPresets.map((preset) => (
+                      <div key={preset.id} className="border border-border px-3 py-2 text-xs space-y-1">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{preset.name}</span>
+                            {preset.apiKey && <Badge variant="default" className="text-[10px]">有密钥</Badge>}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            onClick={() => handleRemoveCustomPreset(preset.id)}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                        <div className="text-muted-foreground flex flex-wrap gap-x-3">
+                          <span>{preset.provider}/{preset.model}</span>
+                          {preset.protocol && <span>{preset.protocol}</span>}
+                          {preset.baseUrl && <span className="truncate max-w-[200px]">{preset.baseUrl}</span>}
+                        </div>
                       </div>
+                    ))}
+                  </div>
+                )}
+                {customPresets.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-2">
+                    暂无自定义预设
+                  </p>
+                )}
+
+                <div className="border border-dashed border-border p-3 space-y-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                    添加预设
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      placeholder="名称 (Name)"
+                      value={newPreset.name}
+                      onChange={(e) => setNewPreset({ ...newPreset, name: e.target.value })}
+                      className="bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <input
+                      placeholder="Provider (e.g. openai)"
+                      value={newPreset.provider}
+                      onChange={(e) => setNewPreset({ ...newPreset, provider: e.target.value })}
+                      className="bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <input
+                      placeholder="Model ID (e.g. deepseek-chat)"
+                      value={newPreset.model}
+                      onChange={(e) => setNewPreset({ ...newPreset, model: e.target.value })}
+                      className="bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <select
+                      value={newPreset.protocol ?? "openai-chat-v1"}
+                      onChange={(e) => setNewPreset({ ...newPreset, protocol: e.target.value })}
+                      className="bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
+                    >
+                      <option value="openai-chat-v1">OpenAI Chat (v1)</option>
+                      <option value="openai-responses-v1">OpenAI Responses (v1)</option>
+                      <option value="anthropic-messages-v1">Anthropic Messages (v1)</option>
+                    </select>
+                    <input
+                      placeholder="Base URL (可选)"
+                      value={newPreset.baseUrl}
+                      onChange={(e) => setNewPreset({ ...newPreset, baseUrl: e.target.value })}
+                      className="col-span-2 bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <div className="col-span-2 flex gap-1">
+                      <input
+                        type={visibleKeys[`new_preset`] ? "text" : "password"}
+                        placeholder="API Key (sk-...)"
+                        value={newPreset.apiKey ?? ""}
+                        onChange={(e) => setNewPreset({ ...newPreset, apiKey: e.target.value })}
+                        className="flex-1 bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary font-mono"
+                      />
                       <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={() => handleRemoveCustomPreset(preset.id)}
+                        variant="outline"
+                        size="icon"
+                        className="shrink-0 h-7 w-7"
+                        onClick={() => setVisibleKeys((prev) => ({ ...prev, new_preset: !prev.new_preset }))}
                       >
-                        <Trash2 className="w-3 h-3" />
+                        {visibleKeys[`new_preset`] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
                       </Button>
                     </div>
-                  ))}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddCustomPreset}
+                    disabled={!newPreset.name || !newPreset.provider || !newPreset.model}
+                    className="w-full text-xs"
+                  >
+                    <Plus className="w-3 h-3" />
+                    添加
+                  </Button>
                 </div>
-              )}
-              {customPresets.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-2">
-                  暂无自定义预设 {/* No custom presets yet */}
-                </p>
-              )}
 
-              <div className="border border-dashed border-border p-3 space-y-2">
-                <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  添加预设 {/* Add Preset */}
-                </h4>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={handleExportPresets} className="flex-1 text-xs">
+                    <Download className="w-3 h-3" />
+                    导出
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="flex-1 text-xs">
+                    <Upload className="w-3 h-3" />
+                    导入
+                  </Button>
                   <input
-                    placeholder="Name"
-                    value={newPreset.name}
-                    onChange={(e) => setNewPreset({ ...newPreset, name: e.target.value })}
-                    className="bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
-                  />
-                  <input
-                    placeholder="Provider (e.g. openai)"
-                    value={newPreset.provider}
-                    onChange={(e) => setNewPreset({ ...newPreset, provider: e.target.value })}
-                    className="bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
-                  />
-                  <input
-                    placeholder="Base URL"
-                    value={newPreset.baseUrl}
-                    onChange={(e) => setNewPreset({ ...newPreset, baseUrl: e.target.value })}
-                    className="bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
-                  />
-                  <input
-                    placeholder="Model ID"
-                    value={newPreset.model}
-                    onChange={(e) => setNewPreset({ ...newPreset, model: e.target.value })}
-                    className="bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".json"
+                    className="hidden"
+                    onChange={handleImportPresets}
                   />
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAddCustomPreset}
-                  disabled={!newPreset.name || !newPreset.provider || !newPreset.model}
-                  className="w-full text-xs"
-                >
-                  <Plus className="w-3 h-3" />
-                  添加 {/* Add */}
-                </Button>
-              </div>
-
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={handleExportPresets} className="flex-1 text-xs">
-                  <Download className="w-3 h-3" />
-                  导出 {/* Export */}
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="flex-1 text-xs">
-                  <Upload className="w-3 h-3" />
-                  导入 {/* Import */}
-                </Button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".json"
-                  className="hidden"
-                  onChange={handleImportPresets}
-                />
-              </div>
-            </TabsContent>
+              </TabsContent>
+            )}
           </div>
         </Tabs>
 
@@ -562,6 +838,313 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         </Button>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ── Modality / Feature display labels ─────────────────────────────
+
+const MODALITY_LABELS: Record<string, { label: string; color: string }> = {
+  // Input modalities
+  "in:text":  { label: "文本输入", color: "bg-blue-500/15 text-blue-600" },
+  "in:image": { label: "图片输入", color: "bg-violet-500/15 text-violet-600" },
+  "in:audio": { label: "音频输入", color: "bg-amber-500/15 text-amber-600" },
+  "in:video": { label: "视频输入", color: "bg-rose-500/15 text-rose-600" },
+  "in:file":  { label: "文件输入", color: "bg-slate-500/15 text-slate-600" },
+  // Output modalities
+  "out:text":      { label: "文本输出", color: "bg-blue-500/15 text-blue-600" },
+  "out:image":     { label: "图片生成", color: "bg-violet-500/15 text-violet-600" },
+  "out:audio":     { label: "语音合成", color: "bg-amber-500/15 text-amber-600" },
+  "out:embedding": { label: "Embedding", color: "bg-teal-500/15 text-teal-600" },
+};
+
+const FEATURE_LABELS: Record<string, string> = {
+  function_calling: "工具调用",
+  structured_output: "结构化输出",
+  streaming: "流式",
+  reasoning: "推理",
+  vision: "视觉",
+  prompt_caching: "缓存",
+  web_search: "搜索",
+  computer_use: "电脑使用",
+};
+
+function formatTokenCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1)}K`;
+  return String(n);
+}
+
+function formatPrice(perMToken: number): string {
+  if (perMToken < 0.01) return `$${perMToken.toFixed(3)}/M`;
+  if (perMToken < 1) return `$${perMToken.toFixed(2)}/M`;
+  return `$${perMToken.toFixed(1)}/M`;
+}
+
+// ── Capability Editor ─────────────────────────────────────────────
+
+const ALL_INPUT_MODALITIES: { id: InputModality; label: string }[] = [
+  { id: "text", label: "文本" },
+  { id: "image", label: "图片" },
+  { id: "audio", label: "音频" },
+  { id: "video", label: "视频" },
+  { id: "file", label: "文件" },
+];
+
+const ALL_OUTPUT_MODALITIES: { id: OutputModality; label: string }[] = [
+  { id: "text", label: "文本" },
+  { id: "image", label: "图片生成" },
+  { id: "audio", label: "语音合成" },
+  { id: "embedding", label: "Embedding" },
+];
+
+const ALL_FEATURES: { id: ModelFeature; label: string }[] = [
+  { id: "function_calling", label: "工具调用" },
+  { id: "structured_output", label: "结构化输出" },
+  { id: "streaming", label: "流式" },
+  { id: "reasoning", label: "推理" },
+  { id: "vision", label: "视觉" },
+  { id: "prompt_caching", label: "缓存" },
+  { id: "web_search", label: "搜索" },
+  { id: "computer_use", label: "电脑使用" },
+];
+
+function CapabilityEditor({
+  slotId,
+  serverCap,
+  override,
+  onUpdate,
+}: {
+  slotId: string;
+  serverCap: ModelCapabilityInfo | undefined;
+  override: Partial<ModelCapabilityInfo> | undefined;
+  onUpdate: (patch: Partial<ModelCapabilityInfo>) => void;
+}) {
+  const effective = mergeCapability(serverCap, override);
+  const currentInput = override?.input ?? serverCap?.input ?? ["text"];
+  const currentOutput = override?.output ?? serverCap?.output ?? ["text"];
+  const currentFeatures = override?.features ?? serverCap?.features ?? [];
+
+  const toggleModality = <T extends string>(
+    list: T[],
+    item: T,
+    field: "input" | "output" | "features",
+  ) => {
+    const next = list.includes(item)
+      ? list.filter((m) => m !== item)
+      : [...list, item];
+    onUpdate({ [field]: next } as Partial<ModelCapabilityInfo>);
+  };
+
+  return (
+    <div className="space-y-3 pt-1 border-t border-dashed border-border mt-2">
+      {/* Input Modalities */}
+      <div className="space-y-1">
+        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
+          输入模态 (模型接受什么)
+        </Label>
+        <div className="flex flex-wrap gap-1">
+          {ALL_INPUT_MODALITIES.map((m) => {
+            const active = currentInput.includes(m.id);
+            return (
+              <button
+                key={m.id}
+                onClick={() => toggleModality(currentInput as InputModality[], m.id, "input")}
+                className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
+                  active
+                    ? "bg-primary/15 text-primary border-primary/30"
+                    : "bg-muted/30 text-muted-foreground border-transparent hover:border-border"
+                }`}
+              >
+                {m.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Output Modalities */}
+      <div className="space-y-1">
+        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
+          输出模态 (模型产出什么)
+        </Label>
+        <div className="flex flex-wrap gap-1">
+          {ALL_OUTPUT_MODALITIES.map((m) => {
+            const active = currentOutput.includes(m.id);
+            return (
+              <button
+                key={m.id}
+                onClick={() => toggleModality(currentOutput as OutputModality[], m.id, "output")}
+                className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
+                  active
+                    ? "bg-primary/15 text-primary border-primary/30"
+                    : "bg-muted/30 text-muted-foreground border-transparent hover:border-border"
+                }`}
+              >
+                {m.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Features */}
+      <div className="space-y-1">
+        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
+          功能标签
+        </Label>
+        <div className="flex flex-wrap gap-1">
+          {ALL_FEATURES.map((f) => {
+            const active = currentFeatures.includes(f.id);
+            return (
+              <button
+                key={f.id}
+                onClick={() => toggleModality(currentFeatures as ModelFeature[], f.id, "features")}
+                className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
+                  active
+                    ? "bg-primary/15 text-primary border-primary/30"
+                    : "bg-muted/30 text-muted-foreground border-transparent hover:border-border"
+                }`}
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Numeric fields */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            Context Window (tokens)
+          </Label>
+          <input
+            type="number"
+            placeholder={effective?.contextWindow?.toString() ?? "e.g. 131072"}
+            value={override?.contextWindow ?? ""}
+            onChange={(e) => onUpdate({
+              contextWindow: e.target.value ? parseInt(e.target.value, 10) : undefined,
+            })}
+            className="w-full bg-background border border-border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary font-mono"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            Max Output Tokens
+          </Label>
+          <input
+            type="number"
+            placeholder={effective?.maxOutputTokens?.toString() ?? "e.g. 8192"}
+            value={override?.maxOutputTokens ?? ""}
+            onChange={(e) => onUpdate({
+              maxOutputTokens: e.target.value ? parseInt(e.target.value, 10) : undefined,
+            })}
+            className="w-full bg-background border border-border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary font-mono"
+          />
+        </div>
+      </div>
+
+      {/* Pricing */}
+      <div className="space-y-1">
+        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
+          价格 (USD / 百万 tokens)
+        </Label>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-muted-foreground w-8 shrink-0">输入:</span>
+            <input
+              type="number"
+              step="0.01"
+              placeholder={effective?.pricing?.inputPerMToken?.toString() ?? "$/M"}
+              value={override?.pricing?.inputPerMToken ?? ""}
+              onChange={(e) => onUpdate({
+                pricing: {
+                  ...override?.pricing,
+                  inputPerMToken: e.target.value ? parseFloat(e.target.value) : undefined,
+                },
+              })}
+              className="w-full bg-background border border-border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary font-mono"
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-muted-foreground w-8 shrink-0">输出:</span>
+            <input
+              type="number"
+              step="0.01"
+              placeholder={effective?.pricing?.outputPerMToken?.toString() ?? "$/M"}
+              value={override?.pricing?.outputPerMToken ?? ""}
+              onChange={(e) => onUpdate({
+                pricing: {
+                  ...override?.pricing,
+                  outputPerMToken: e.target.value ? parseFloat(e.target.value) : undefined,
+                },
+              })}
+              className="w-full bg-background border border-border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary font-mono"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CapabilityTags({ capability: cap }: { capability: ModelCapabilityInfo }) {
+  // Only show non-text modalities as tags (text is assumed)
+  const inputTags = cap.input
+    .filter((m) => m !== "text")
+    .map((m) => ({ key: `in:${m}`, ...MODALITY_LABELS[`in:${m}`] }))
+    .filter((t) => t.label);
+  const outputTags = cap.output
+    .filter((m) => m !== "text")
+    .map((m) => ({ key: `out:${m}`, ...MODALITY_LABELS[`out:${m}`] }))
+    .filter((t) => t.label);
+  const featureTags = (cap.features ?? [])
+    .filter((f) => f !== "streaming") // streaming is ubiquitous, skip
+    .map((f) => ({ key: f, label: FEATURE_LABELS[f] ?? f }));
+
+  const hasLimits = cap.contextWindow || cap.maxOutputTokens;
+  const hasPricing = cap.pricing && (cap.pricing.inputPerMToken || cap.pricing.perImage);
+
+  return (
+    <div className="space-y-1.5">
+      {/* Modality + Feature badges */}
+      <div className="flex flex-wrap gap-1">
+        {inputTags.map((t) => (
+          <span key={t.key} className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded ${t.color}`}>
+            {t.label}
+          </span>
+        ))}
+        {outputTags.map((t) => (
+          <span key={t.key} className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded ${t.color}`}>
+            {t.label}
+          </span>
+        ))}
+        {featureTags.map((t) => (
+          <span key={t.key} className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-muted text-muted-foreground">
+            {t.label}
+          </span>
+        ))}
+      </div>
+
+      {/* Token limits + Pricing in a compact row */}
+      {(hasLimits || hasPricing) && (
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground font-mono">
+          {cap.contextWindow ? (
+            <span title="Context Window">ctx: {formatTokenCount(cap.contextWindow)}</span>
+          ) : null}
+          {cap.maxOutputTokens ? (
+            <span title="Max Output Tokens">out: {formatTokenCount(cap.maxOutputTokens)}</span>
+          ) : null}
+          {cap.pricing?.inputPerMToken != null && cap.pricing?.outputPerMToken != null ? (
+            <span title="Pricing (input/output per M tokens)">
+              {formatPrice(cap.pricing.inputPerMToken)} / {formatPrice(cap.pricing.outputPerMToken)}
+            </span>
+          ) : cap.pricing?.perImage != null ? (
+            <span title="Price per image">${cap.pricing.perImage}/img</span>
+          ) : null}
+        </div>
+      )}
+    </div>
   );
 }
 

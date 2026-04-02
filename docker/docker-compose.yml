@@ -34,6 +34,8 @@ services:
     env_file:
       - ../.env
       - ../.env.llm
+    volumes:
+      - ../llm.toml:/app/llm.toml:ro
     depends_on:
       postgres:
         condition: service_healthy

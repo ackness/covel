@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "update-model-db": "tsx scripts/update-model-db.ts"
   },
   "dependencies": {
     "@covel/shared": "workspace:*",

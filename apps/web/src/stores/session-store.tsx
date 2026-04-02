@@ -32,6 +32,8 @@ interface SessionState {
   packages: api.PackageSummary[];
   commands: api.CommandSummary[];
   worlds: api.WorldRecord[];
+  /** Server-side llm.toml config (null = legacy / unconfigured). */
+  llmConfig: api.LlmConfigResponse | null;
   booted: boolean;
   bootError: string | null;
 
@@ -58,7 +60,7 @@ interface SessionState {
 }
 
 type Action =
-  | { type: "BOOT_SUCCESS"; presets: api.PresetSummary[]; packages: api.PackageSummary[]; commands: api.CommandSummary[]; worlds: api.WorldRecord[] }
+  | { type: "BOOT_SUCCESS"; presets: api.PresetSummary[]; packages: api.PackageSummary[]; commands: api.CommandSummary[]; worlds: api.WorldRecord[]; llmConfig: api.LlmConfigResponse | null }
   | { type: "BOOT_ERROR"; error: string }
   | { type: "SET_WORLD"; world: api.WorldRecord }
   | { type: "SET_SESSION"; session: api.SessionRecord }
@@ -80,6 +82,7 @@ const initialState: SessionState = {
   packages: [],
   commands: [],
   worlds: [],
+  llmConfig: null,
   booted: false,
   bootError: null,
   world: null,
@@ -104,7 +107,7 @@ function shallowMerge(
 function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
     case "BOOT_SUCCESS":
-      return { ...state, booted: true, bootError: null, presets: action.presets, packages: action.packages, commands: action.commands, worlds: action.worlds };
+      return { ...state, booted: true, bootError: null, presets: action.presets, packages: action.packages, commands: action.commands, worlds: action.worlds, llmConfig: action.llmConfig };
     case "BOOT_ERROR":
       return { ...state, bootError: action.error };
     case "SET_WORLD":
@@ -196,31 +199,30 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const boot = useCallback(async () => {
     try {
-      const [presets, packages, commands, worlds, schemas] = await Promise.all([
+      const [presets, packages, commands, worlds, schemas, llmConfig] = await Promise.all([
         api.listPresets(),
         api.listPackages(),
         api.listCommands(),
         api.listWorlds(),
         api.fetchBlockSchemas().catch(() => ({})),
+        api.fetchLlmConfig().catch(() => null),
       ]);
       setBlockSchemas(schemas as Record<string, BlockSchemaDeclaration>);
-      dispatch({ type: "BOOT_SUCCESS", presets, packages, commands, worlds });
+      dispatch({ type: "BOOT_SUCCESS", presets, packages, commands, worlds, llmConfig });
 
-      // Auto-load dev provider keys in development mode
-      if (import.meta.env.DEV) {
-        try {
-          const res = await fetch("/api/dev/provider-keys");
-          if (res.ok) {
-            const { keys } = await res.json();
-            // Only fill if user hasn't manually configured keys
-            const existing = api.getProviderKeys();
-            if (Object.keys(existing).length === 0 && Object.keys(keys).length > 0) {
-              api.setProviderKeys(keys);
-            }
+      // Auto-load server-configured provider keys (from .env.llm).
+      // Only fills if user hasn't manually configured keys in browser.
+      try {
+        const res = await fetch("/api/provider-keys");
+        if (res.ok) {
+          const { keys } = await res.json();
+          const existing = api.getProviderKeys();
+          if (Object.keys(existing).length === 0 && Object.keys(keys).length > 0) {
+            api.setProviderKeys(keys);
           }
-        } catch {
-          // Dev keys endpoint not available, skip
         }
+      } catch {
+        // Provider keys endpoint not available, skip
       }
     } catch (err) {
       dispatch({ type: "BOOT_ERROR", error: err instanceof Error ? err.message : String(err) });

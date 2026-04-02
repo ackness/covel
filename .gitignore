@@ -36,6 +36,10 @@ test-results/
 !.env.llm.example
 .envrc
 
+# ── LLM Configuration (user-specific) ─────────────────────────
+llm.toml
+!llm.toml.example
+
 # ── Generated files ─────────────────────────────────────────────
 apps/web/src/routeTree.gen.ts
 

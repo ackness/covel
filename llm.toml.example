@@ -1,0 +1,87 @@
+# ── Covel LLM Configuration ──────────────────────────────────────
+#
+# Copy this file to `llm.toml` and edit to match your provider setup.
+# API keys go in `.env.llm` (not here).
+#
+# Each [slots.<name>] defines a model slot used by plugins:
+#   - heavy    : main narrative, complex reasoning (required)
+#   - fast     : plugin default, lightweight judgment
+#   - balance  : referee plugins, complex logic
+#   - image    : image generation (optional)
+#
+# Unconfigured slots fall back to `heavy`.
+#
+# Fields:
+#   provider   — provider identifier, maps to {PROVIDER}_API_KEY in .env.llm
+#   model      — model ID passed to the provider API
+#   baseUrl    — API endpoint URL
+#   protocol   — "openai-chat-v1" | "openai-responses-v1" | "anthropic-messages-v1"
+#   fallback   — (optional) slot name to fall back to on failure
+#
+# You can also use environment variables in values, e.g.:
+#   baseUrl = "${DEEPSEEK_BASE_URL}"
+
+# ── Heavy Slot — Main narrative & complex reasoning ──────────────
+
+[slots.heavy]
+provider = "deepseek"
+model    = "deepseek-chat"
+baseUrl  = "https://api.deepseek.com"
+protocol = "openai-chat-v1"
+
+# ── Fast Slot — Lightweight plugin tasks ─────────────────────────
+
+[slots.fast]
+provider = "dashscope"
+model    = "qwen3.5-flash"
+baseUrl  = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+protocol = "openai-chat-v1"
+fallback = "heavy"
+
+# ── Capability Override (optional) ───────────────────────────────
+#
+# Model capabilities (input/output modalities, features, token limits,
+# pricing) are auto-inferred from a built-in database of ~60 common models.
+# Override any field if the auto-detection is wrong or for custom/private models.
+#
+# NOTE: "image" in input = vision (can see images), NOT image generation.
+#       "image" in output = image generation. Same logic for audio/video.
+#
+# [slots.multimodal]
+# provider = "dashscope"
+# model    = "qwen-omni-turbo"
+# baseUrl  = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+# protocol = "openai-chat-v1"
+# # --- capability overrides (auto-inferred if omitted) ---
+# input    = ["text", "image", "audio", "video"]   # what the model ACCEPTS
+# output   = ["text", "audio"]                      # what the model PRODUCES
+# features = ["function_calling", "streaming", "vision"]
+# contextWindow   = 131072
+# maxOutputTokens = 8192
+#
+# [slots.multimodal.pricing]
+# inputPerMToken  = 0.6
+# outputPerMToken = 1.5
+# audioInputPerMToken  = 1.8
+# audioOutputPerMToken = 4.0
+
+# ── Examples for other providers ─────────────────────────────────
+#
+# [slots.heavy]
+# provider = "openai"
+# model    = "gpt-5.4"
+# baseUrl  = "https://api.openai.com/v1"
+# protocol = "openai-chat-v1"
+#
+# [slots.heavy]
+# provider = "anthropic"
+# model    = "claude-sonnet-4-6"
+# baseUrl  = "https://api.anthropic.com"
+# protocol = "anthropic-messages-v1"
+#
+# [slots.fast]
+# provider = "openai"
+# model    = "gpt-5.4-mini"
+# baseUrl  = "https://api.openai.com/v1"
+# protocol = "openai-responses-v1"
+# fallback = "heavy"

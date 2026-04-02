@@ -157,6 +157,16 @@ export function createPresetRegistry(options: {
     }
   }
 
+  /** Register (or overwrite) a preset at runtime (e.g. custom presets from the frontend). */
+  function addPreset(preset: PresetConfig): void {
+    presets.set(preset.id, preset);
+  }
+
+  /** Remove a preset by ID. */
+  function removePreset(id: string): void {
+    presets.delete(id);
+  }
+
   return {
     listProfiles,
     listPresets,
@@ -164,5 +174,7 @@ export function createPresetRegistry(options: {
     resolveTextTarget,
     resolveEmbeddingTarget,
     resolveTextTargetChain,
+    addPreset,
+    removePreset,
   };
 }

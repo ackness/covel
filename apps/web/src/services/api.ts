@@ -99,13 +99,23 @@ function needsProviderKeys(url: string): boolean {
 function buildProviderKeysHeader(): Record<string, string> {
   const stored = localStorage.getItem("covel:providerKeys");
   const headers: Record<string, string> = {};
+  let keys: Record<string, string> = {};
   if (stored) {
     try {
-      const keys = JSON.parse(stored);
-      headers["X-Provider-Keys"] = btoa(JSON.stringify(keys));
+      keys = JSON.parse(stored);
     } catch {
       // skip
     }
+  }
+  // Merge API keys from custom presets (custom preset key overrides global for same provider)
+  const customPresets = getCustomPresets();
+  for (const preset of customPresets) {
+    if (preset.apiKey?.trim() && preset.provider) {
+      keys[preset.provider] = preset.apiKey.trim();
+    }
+  }
+  if (Object.keys(keys).length > 0) {
+    headers["X-Provider-Keys"] = btoa(JSON.stringify(keys));
   }
   return headers;
 }
@@ -132,11 +142,30 @@ function buildSlotConfigHeaderInternal(): Record<string, string> {
   } catch {
     overrides = {};
   }
+
+  // Include custom preset definitions for any custom presets referenced by slots
+  const customPresets = getCustomPresets();
+  const referencedCustomIds = new Set(
+    Object.values(slots as Record<string, { presetId: string }>)
+      .map((s) => s.presetId)
+      .filter((id) => id?.startsWith("custom_"))
+  );
+  const customPresetDefs = customPresets
+    .filter((p) => referencedCustomIds.has(p.id))
+    .map(({ id, name, provider, baseUrl, model, protocol }) => ({
+      id, name, provider, baseUrl, model, protocol,
+    }));
+
   const hasSlots = Object.keys(slots).length > 0;
   const hasOverrides = Object.keys(overrides).length > 0;
-  if (!hasSlots && !hasOverrides) return {};
+  const hasCustom = customPresetDefs.length > 0;
+  if (!hasSlots && !hasOverrides && !hasCustom) return {};
   return {
-    "X-Slot-Config": btoa(JSON.stringify({ slots, paramOverrides: overrides })),
+    "X-Slot-Config": btoa(JSON.stringify({
+      slots,
+      paramOverrides: overrides,
+      ...(hasCustom ? { customPresets: customPresetDefs } : {}),
+    })),
   };
 }
 
@@ -208,6 +237,142 @@ export async function listPackages(): Promise<PackageSummary[]> {
 
 export async function listCommands(): Promise<CommandSummary[]> {
   return request<CommandSummary[]>("/commands");
+}
+
+// ── LLM Config ───────────────────────────────────────────────────
+
+export type InputModality = "text" | "image" | "audio" | "video" | "file";
+export type OutputModality = "text" | "image" | "audio" | "embedding";
+export type ModelFeature =
+  | "function_calling" | "structured_output" | "streaming"
+  | "reasoning" | "vision" | "prompt_caching"
+  | "web_search" | "computer_use";
+
+export interface ModelPricing {
+  inputPerMToken?: number;
+  outputPerMToken?: number;
+  imageInputPerMToken?: number;
+  audioInputPerMToken?: number;
+  audioOutputPerMToken?: number;
+  perImage?: number;
+}
+
+export interface ModelCapabilityInfo {
+  input: InputModality[];
+  output: OutputModality[];
+  features?: ModelFeature[];
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  pricing?: ModelPricing;
+}
+
+export interface LlmSlotInfo {
+  provider: string;
+  model: string;
+  protocol: string;
+  fallback?: string;
+  capability?: ModelCapabilityInfo;
+}
+
+export interface LlmConfigResponse {
+  configured: boolean;
+  slots: Record<string, LlmSlotInfo>;
+  providers: string[];
+}
+
+export async function fetchLlmConfig(): Promise<LlmConfigResponse> {
+  return request<LlmConfigResponse>("/api/llm-config");
+}
+
+// ── Model Database API ───────────────────────────────────────────
+
+export interface ModelDbInfo {
+  available: boolean;
+  updatedAt?: string;
+  count?: number;
+  source?: string;
+}
+
+export interface ModelDbSearchResult {
+  id: string;
+  input: InputModality[];
+  output: OutputModality[];
+  features: ModelFeature[];
+  contextWindow: number;
+  maxOutputTokens: number;
+  mode: string;
+  inputPerMToken?: number;
+  outputPerMToken?: number;
+}
+
+export async function fetchModelDbInfo(): Promise<ModelDbInfo> {
+  return request<ModelDbInfo>("/api/model-db");
+}
+
+export async function searchModelDb(query: string, limit = 20): Promise<ModelDbSearchResult[]> {
+  const res = await request<{ results: ModelDbSearchResult[] }>(
+    `/api/model-db/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+  );
+  return res.results;
+}
+
+export async function lookupModelCapability(
+  model: string,
+  provider?: string,
+): Promise<ModelCapabilityInfo | null> {
+  const params = new URLSearchParams({ model });
+  if (provider) params.set("provider", provider);
+  const res = await request<{ found: boolean; capability?: ModelCapabilityInfo }>(
+    `/api/model-db/lookup?${params.toString()}`,
+  );
+  return res.found ? (res.capability ?? null) : null;
+}
+
+export async function refreshModelDb(): Promise<{ ok: boolean; count?: number; error?: string }> {
+  return request<{ ok: boolean; count?: number; error?: string }>("/api/model-db/refresh", {
+    method: "POST",
+  });
+}
+
+// ── Capability Overrides (localStorage) ──────────────────────────
+
+const CAPABILITY_OVERRIDES_KEY = "covel:capabilityOverrides";
+
+export function getCapabilityOverrides(): Record<string, Partial<ModelCapabilityInfo>> {
+  const stored = localStorage.getItem(CAPABILITY_OVERRIDES_KEY);
+  if (!stored) return {};
+  try {
+    return JSON.parse(stored);
+  } catch {
+    return {};
+  }
+}
+
+export function setCapabilityOverrides(overrides: Record<string, Partial<ModelCapabilityInfo>>): void {
+  localStorage.setItem(CAPABILITY_OVERRIDES_KEY, JSON.stringify(overrides));
+}
+
+/**
+ * Merge server capability with user's local overrides.
+ * User overrides take precedence for each field.
+ */
+export function mergeCapability(
+  base: ModelCapabilityInfo | undefined,
+  override: Partial<ModelCapabilityInfo> | undefined,
+): ModelCapabilityInfo | undefined {
+  if (!base && !override) return undefined;
+  if (!override) return base;
+  if (!base) return override as ModelCapabilityInfo;
+  return {
+    input: override.input ?? base.input,
+    output: override.output ?? base.output,
+    features: override.features ?? base.features,
+    contextWindow: override.contextWindow ?? base.contextWindow,
+    maxOutputTokens: override.maxOutputTokens ?? base.maxOutputTokens,
+    pricing: override.pricing
+      ? { ...base.pricing, ...override.pricing }
+      : base.pricing,
+  };
 }
 
 // ── Block Schemas ─────────────────────────────────────────────────
@@ -370,6 +535,7 @@ export interface CustomPreset {
   baseUrl: string;
   model: string;
   protocol?: string;
+  apiKey?: string;
 }
 
 export function getCustomPresets(): CustomPreset[] {

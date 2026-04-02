@@ -8,7 +8,7 @@ AI RPG 插件化框架 —— 通过插件驱动的 Kernel 编排 LLM 调用、�
 
 - **插件化架构** — Runtime / Tool / Hook / Context / Proposal 五大执行原语，Plugin Package 是分发单元
 - **优先级调度** — 0-1000 优先级排序，相同优先级并行执行，支持后台任务
-- **多 LLM Provider** — DeepSeek、Qwen (DashScope)、OpenAI、Anthropic，Preset 路由 + Slot 绑定
+- **多 LLM Provider** — DeepSeek、Qwen (DashScope)、OpenAI、Anthropic，Preset 路由 + Slot 绑定 + 模型能力自动识别
 - **提交链** — `proposal → validate → commit`，插件不直接写数据库
 - **Schema 驱动 UI** — 三层渲染：自定义组件 → JSON Schema 自动生成 → Raw JSON
 - **可观测性** — 完整 trace 链路，前端调试页面，可选 Langfuse 对接
@@ -36,9 +36,10 @@ pnpm install
 # 3. 启动 PostgreSQL（可选，开发模式有内存存储）
 pnpm db:up
 
-# 4. 配置 LLM 密钥
-cp .env.llm.example .env.llm
-# 编辑 .env.llm，填入至少一个 provider 的 API key
+# 4. 配置 LLM
+cp llm.toml.example llm.toml        # 模型 / 协议 / 端点配置
+cp .env.llm.example .env.llm        # API 密钥
+# 编辑 llm.toml 选择模型，编辑 .env.llm 填入 API key
 
 # 5. 启动开发服务
 pnpm dev
@@ -56,10 +57,11 @@ pnpm dev
 一键启动前端 + 后端 + 数据库：
 
 ```bash
-# 1. 配置环境变量（必须，Docker Compose 会读取这两个文件）
+# 1. 配置环境变量
 cp .env.example .env
-cp .env.llm.example .env.llm
-# 编辑 .env.llm，填入 API key
+cp llm.toml.example llm.toml        # 模型 / 协议 / 端点配置
+cp .env.llm.example .env.llm        # API 密钥
+# 编辑 llm.toml 选择模型，编辑 .env.llm 填入 API key
 
 # 2. 构建并启动
 docker compose -f docker/docker-compose.yml up -d --build
@@ -79,36 +81,71 @@ docker compose -f docker/docker-compose.yml down        # 保留数据
 docker compose -f docker/docker-compose.yml down -v      # 清除数据卷
 ```
 
-### LLM Provider 配置
+### LLM 配置
 
-Covel 支持两种方式配置 LLM API Key：
+Covel 使用两个文件管理 LLM 配置：
 
-**方式 A：浏览器端**（推荐）
-- 启动后在 UI 设置面板中输入 API Key
-- Key 仅存储在浏览器 `localStorage`，每次请求通过 `X-Provider-Keys` Header 传递
-- 服务端不持久化任何 Key
+**`llm.toml`** — 模型、协议、端点配置（按 slot 组织）
 
-**方式 B：服务端环境变量**
-- 适用于本地开发或信任的私有部署
-- 编辑 `.env.llm`，开发服务器自动加载
-- Docker 部署通过 `env_file` 注入
+```toml
+[slots.heavy]
+provider = "deepseek"
+model    = "deepseek-chat"
+baseUrl  = "https://api.deepseek.com"
+protocol = "openai-chat-v1"
 
-支持的 Provider：
+[slots.fast]
+provider = "dashscope"
+model    = "qwen3.5-flash"
+baseUrl  = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+protocol = "openai-chat-v1"
+fallback = "heavy"
 
-| Provider | 环境变量 | 默认 Preset |
-|----------|----------|-------------|
-| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek-chat`（heavy slot） |
-| DashScope (Qwen) | `DASHSCOPE_API_KEY` | `dashscope-qwen-flash`（fast slot） |
-| OpenAI | `OPENAI_API_KEY` | 需自定义 Preset |
-| Anthropic | `ANTHROPIC_API_KEY` | 需自定义 Preset |
+# 可选：能力覆盖（不填则自动识别）
+# input    = ["text", "image"]           # 模型接受的输入
+# output   = ["text"]                    # 模型产出的输出
+# features = ["function_calling", "streaming", "vision"]
+# contextWindow   = 131072
+# maxOutputTokens = 8192
+# [slots.fast.pricing]
+# inputPerMToken  = 0.14
+# outputPerMToken = 0.56
+```
 
-Model Slot 系统：
-- `heavy` — 主叙事，复杂推理（必须配置）
-- `fast` — 插件默认，轻量判断
-- `balance` — 裁判插件，复杂逻辑
-- `image` — 图片生成（可选）
+**`.env.llm`** — API 密钥（provider 名自动映射为 `{PROVIDER}_API_KEY`）
 
-未配置的 Slot 自动回退到 `heavy`。
+```bash
+DEEPSEEK_API_KEY=sk-xxx
+DASHSCOPE_API_KEY=sk-xxx
+```
+
+Slot 说明：
+- `heavy` — 主叙事、复杂推理（必需）
+- `fast` — 插件默认、轻量判断
+- `balance` — 裁判、复杂逻辑
+- `image` — 图像生成（可选）
+
+未配置的 slot 自动回退到 `heavy`。
+
+支持的协议：`openai-chat-v1` / `openai-responses-v1` / `anthropic-messages-v1`
+
+**无 `llm.toml` 时**：前端进入手动模式，用户需在设置面板中自行配置模型和密钥。
+
+### 模型能力系统
+
+每个 slot 的模型能力（多模态支持、功能标签、token 限制、价格）通过多源自动识别：
+
+1. **`llm.toml` 手动覆盖**（最高优先级）— 在 slot 定义中显式声明 `input`/`output`/`features` 等
+2. **内置模型数据库**（2597 模型，源自 [LiteLLM](https://github.com/BerriAI/litellm)）— 自动匹配 model ID
+3. **协议默认值**（兜底）
+
+能力描述采用 **方向性模态** 设计（参考 OpenRouter）：
+- `input` = 模型**接受**什么（如 `["text", "image"]` 表示支持视觉输入）
+- `output` = 模型**产出**什么（如 `["text"]` 表示纯文本，`["image"]` 表示图片生成）
+- `image` 在 input 里 = 看图（vision），在 output 里 = 生图（image generation）
+- `audio` 在 input 里 = 语音识别，在 output 里 = 语音合成
+
+前端设置面板可查看和覆盖每个 slot 的能力信息、价格、token 限制。模型数据库支持在线更新。
 
 ## 项目结构
 
@@ -119,7 +156,7 @@ covel/
 │   └── server/             Hono API + Drizzle ORM + pg-boss
 ├── packages/
 │   ├── shared/             共享类型与契约
-│   ├── ai-provider/        多 Provider LLM 抽象（Preset 路由）
+│   ├── ai-provider/        多 Provider LLM 抽象（Preset 路由 + 模型能力识别 + 2597 模型数据库）
 │   ├── runtime/            Runtime 执行引擎（LLM tool-calling loop + 预算控制）
 │   ├── context/            统一 Context 构建（TurnContextStore + PromptAssembler）
 │   ├── kernel/             编排内核（调度、工具执行、提案、渲染）
@@ -173,6 +210,9 @@ pnpm --filter @covel/runtime test
 pnpm --filter @covel/ai-provider test
 pnpm --filter @covel/store test
 # 添加 --watch 进入监听模式
+
+# ── 模型数据库 ──────────────────────────────────────────────────
+pnpm --filter @covel/ai-provider update-model-db  # 从 GitHub 更新 LiteLLM 模型数据
 
 # ── Docker ───────────────────────────────────────────────────────
 docker compose -f docker/docker-compose.yml up -d --build   # 构建并启动

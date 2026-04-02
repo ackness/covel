@@ -2,6 +2,11 @@
 export type {
   ProviderProtocol,
   OperationMode,
+  InputModality,
+  OutputModality,
+  ModelFeature,
+  ModelCapability,
+  ModelPricing,
   ModelTier,
   ProviderConfig,
   ProviderDefaults,
@@ -41,6 +46,8 @@ export { AiProviderError, type AiProviderErrorCode } from "./errors.js";
 // Config
 export { loadAiConfig, parseAiConfig } from "./config/loader.js";
 export { aiConfigSchema, presetConfigSchema, modelProfileSchema } from "./config/schema.js";
+export { loadLlmConfig, parseLlmConfig } from "./config/llm-loader.js";
+export { llmConfigSchema, type LlmConfig, type SlotDefinition } from "./config/llm-schema.js";
 
 // Adapters
 export type { ModelProviderAdapter } from "./adapters/adapter.js";
@@ -55,6 +62,24 @@ export { createSlotRegistry, type SlotRegistry } from "./slot-registry.js";
 
 // Gateway
 export { createGateway, type GatewayOptions } from "./gateway.js";
+
+// Capability
+export {
+  resolveCapability,
+  lookupKnownModel,
+  setModelDatabase,
+  getModelDatabase,
+  createModelDatabase,
+  fetchLiteLlmModels,
+  KNOWN_MODELS,
+  MODEL_ALIASES,
+  type KnownModelEntry,
+  type ManualCapabilityOverride,
+  type ModelDatabase,
+  type ModelDbEntry,
+  type ModelDbFile,
+  type ModelDbPersistence,
+} from "./capability/index.js";
 
 // Trace
 export type { TraceContext } from "./trace/context.js";

@@ -10,6 +10,12 @@ protocol = "openai-chat-v1"
 baseUrl = "${DASHSCOPE_BASE_URL}"
 protocol = "openai-chat-v1"
 
+[providers.fast]
+model = "qwen3.5-flash"
+baseUrl = "${DASHSCOPE_BASE_URL}"
+protocol = "openai-chat-v1"
+
+
 # ── Presets ──────────────────────────────────────────────────────
 
 [[presets]]

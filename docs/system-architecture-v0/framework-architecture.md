@@ -1132,7 +1132,52 @@ Preset 是预填充的模型配置模板，降低玩家配置门槛。
 
 - 全局默认参数 → slot 级覆盖 → runtime 级覆盖（未来）
 
-#### 11.1.6 API Key 安全策略
+#### 11.1.6 模型能力系统
+
+每个 Model Slot 绑定的模型附带能力描述（ModelCapability），用于 UI 展示、功能可用性判断和成本控制。
+
+**方向性模态设计（参考 OpenRouter）：**
+
+能力描述区分**输入**和**输出**两个方向，而非单一标签：
+
+```ts
+interface ModelCapability {
+  input:   InputModality[];   // 模型接受什么
+  output:  OutputModality[];  // 模型产出什么
+  features: ModelFeature[];   // 功能标签
+  contextWindow?: number;     // 上下文窗口（token 数）
+  maxOutputTokens?: number;   // 最大输出 token 数
+  pricing?: ModelPricing;     // 价格信息
+}
+
+type InputModality  = "text" | "image" | "audio" | "video" | "file";
+type OutputModality = "text" | "image" | "audio" | "embedding";
+type ModelFeature   = "function_calling" | "structured_output" | "streaming"
+                    | "reasoning" | "vision" | "prompt_caching"
+                    | "web_search" | "computer_use";
+```
+
+关键区分：
+- `image` 在 `input` = 看图（vision），在 `output` = 生图（image generation）
+- `audio` 在 `input` = 语音识别（STT），在 `output` = 语音合成（TTS）
+- 同一模型可同时出现在多个方向（如 Qwen-Omni：input=[text,image,audio,video]，output=[text,audio]）
+
+**多源解析优先级：**
+
+1. **前端用户覆盖**（最高）— localStorage 中的手动设置
+2. **`llm.toml` 手动覆盖** — slot 定义中显式声明 `input`/`output`/`features` 等
+3. **内置模型数据库** — 手工维护的常见模型（~60 条，毫秒级查找）
+4. **LiteLLM 完整数据库** — 2597+ 模型，静态 JSON 内置 + 在线更新
+5. **协议默认值**（兜底）— 如 openai-chat: text→text + function_calling
+
+**模型数据库更新机制：**
+
+- 项目内置 `packages/ai-provider/data/model-db.json`（LiteLLM 转换后的静态数据）
+- 服务端 API 支持在线刷新（从 GitHub 拉取最新 LiteLLM 数据）
+- 可持久化到 IndexedDB（浏览器端）或 PostgreSQL（服务端）
+- 脚本 `pnpm --filter @covel/ai-provider update-model-db` 可手动更新内置数据
+
+#### 11.1.7 API Key 安全策略
 
 - API key 仅存储在玩家浏览器的 localStorage 中
 - 每次请求通过 `X-Provider-Keys` header 以 base64 编码传递

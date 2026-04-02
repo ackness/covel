@@ -1,36 +1,60 @@
 import { Hono } from "hono";
+import type { LlmConfig } from "@covel/ai-provider";
 
 /**
- * DEV-ONLY: Expose provider keys from .env.llm to the frontend.
- * Only registered when NODE_ENV !== "production" (see app.ts).
+ * Expose server-configured provider keys to the frontend for auto-fill.
  *
- * The frontend uses this to auto-fill localStorage provider keys
- * so developers don't need to re-enter keys in the settings panel.
+ * Key resolution: provider name → {PROVIDER_UPPER}_API_KEY env var.
  *
- * Returns keys in frontend format: { "deepseek": "sk-...", "dashscope": "sk-..." }
- * matching the provider IDs used in settings-dialog.tsx and X-Provider-Keys header.
+ * When llm.toml is present, only returns keys for providers defined in slots.
+ * When no llm.toml, falls back to a static list of well-known providers.
+ *
+ * Returns: `{ keys: { "deepseek": "sk-...", "dashscope": "sk-..." } }`
  */
 
-/** Maps env var name → frontend provider ID */
-const ENV_TO_PROVIDER: ReadonlyArray<[envVar: string, providerId: string]> = [
-  ["DEEPSEEK_API_KEY", "deepseek"],
-  ["DASHSCOPE_API_KEY", "dashscope"],
-  ["OPENAI_API_KEY", "openai"],
-  ["ANTHROPIC_API_KEY", "anthropic"],
-  ["GOOGLE_API_KEY", "google"],
+/** Well-known provider → env var mappings (fallback when no llm.toml). */
+const FALLBACK_PROVIDERS: ReadonlyArray<[provider: string, envVar: string]> = [
+  ["deepseek", "DEEPSEEK_API_KEY"],
+  ["dashscope", "DASHSCOPE_API_KEY"],
+  ["openai", "OPENAI_API_KEY"],
+  ["anthropic", "ANTHROPIC_API_KEY"],
+  ["google", "GOOGLE_API_KEY"],
 ];
 
-export function createDevKeysRoute() {
+/** Derive env var name from provider id: "deepseek" → "DEEPSEEK_API_KEY". */
+function providerToEnvVar(provider: string): string {
+  return `${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
+}
+
+export function createDevKeysRoute(llmConfig?: LlmConfig | null) {
   const route = new Hono();
 
   route.get("/", (c) => {
     const keys: Record<string, string> = {};
-    for (const [envVar, providerId] of ENV_TO_PROVIDER) {
-      const value = process.env[envVar];
-      if (value) {
-        keys[providerId] = value;
+
+    if (llmConfig) {
+      // Derive providers from llm.toml slots
+      const providers = new Set<string>();
+      for (const def of Object.values(llmConfig.slots)) {
+        providers.add(def.provider);
+      }
+      for (const provider of providers) {
+        const envVar = providerToEnvVar(provider);
+        const value = process.env[envVar];
+        if (value) {
+          keys[provider] = value;
+        }
+      }
+    } else {
+      // Fallback: static well-known providers
+      for (const [provider, envVar] of FALLBACK_PROVIDERS) {
+        const value = process.env[envVar];
+        if (value) {
+          keys[provider] = value;
+        }
       }
     }
+
     return c.json({ keys });
   });
 

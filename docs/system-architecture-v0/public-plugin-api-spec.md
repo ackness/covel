@@ -396,6 +396,38 @@ runtime 通过 `providerBinding` 引用命名 model slot（如 `"heavy"`、`"fas
 - 未配置的 slot 自动回退到 `heavy`
 - slot 名称属于公开合同，插件可稳定依赖
 
+### 13.2 Model Capability
+
+每个 slot 绑定的模型附带能力描述（`ModelCapability`），插件可通过 runtime context 查询当前 slot 的能力信息，用于条件功能启用和优雅降级。
+
+```ts
+interface ModelCapability {
+  input:   InputModality[];   // 模型接受的输入模态
+  output:  OutputModality[];  // 模型产出的输出模态
+  features: ModelFeature[];   // 功能标签
+  contextWindow?: number;     // 上下文窗口（token 数）
+  maxOutputTokens?: number;   // 最大输出 token 数
+  pricing?: ModelPricing;     // 价格信息（每百万 token）
+}
+
+type InputModality  = "text" | "image" | "audio" | "video" | "file";
+type OutputModality = "text" | "image" | "audio" | "embedding";
+type ModelFeature   = "function_calling" | "structured_output" | "streaming"
+                    | "reasoning" | "vision" | "prompt_caching"
+                    | "web_search" | "computer_use";
+```
+
+**方向性模态**：`image` 在 `input` = 看图（vision），在 `output` = 生图；`audio` 在 `input` = 语音识别，在 `output` = 语音合成。插件不应假设 input 和 output 模态对称。
+
+**插件用法示例**：
+
+- 检查 `capability.features.includes("function_calling")` 决定是否提供 tool
+- 检查 `capability.input.includes("image")` 决定是否接受图片输入
+- 使用 `capability.contextWindow` 估算可用上下文预算
+- 使用 `capability.pricing` 预估调用成本
+
+**能力来源**：系统自动从多源解析（llm.toml 覆盖 > 内置模型库 > LiteLLM 数据库 > 协议默认值），插件无需关心解析逻辑，只消费最终结果。
+
 ## 14. Proposal Output Contract
 
 ```ts
