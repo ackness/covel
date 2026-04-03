@@ -4,6 +4,7 @@
  * Persistent data (worlds, sessions, messages, characters) is stored in PG.
  * Ephemeral data (state patches, trace events) remains in memory.
  */
+import { randomUUID } from "node:crypto";
 import type { CharacterCard, CharacterCreateInput, SessionPhase, WorldDimensions } from "@covel/shared";
 import { humanId } from "human-id";
 import { SEED_WORLDS } from "./seed-worlds.js";
@@ -18,7 +19,7 @@ import type {
 import pgClient from "postgres";
 
 function uid(prefix: string): string {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  return `${prefix}_${randomUUID()}`;
 }
 
 function humanSessionId(): string {
@@ -28,12 +29,6 @@ function humanSessionId(): string {
 }
 
 const MAX_TRACE_EVENTS_PER_SESSION = 2000;
-
-function logPersistError(entity: string, id: string) {
-  return (err: unknown) => {
-    console.error(`[pg-server-store] Failed to persist ${entity} ${id}:`, err);
-  };
-}
 
 export interface PgServerStoreOptions {
   databaseUrl: string;
@@ -91,7 +86,8 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       fields JSONB NOT NULL DEFAULT '{}'::jsonb,
       extensions JSONB NOT NULL DEFAULT '{}'::jsonb,
       version INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      updated_at TEXT
     )
   `;
 
@@ -106,16 +102,15 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
 
   // ── Worlds ──────────────────────────────────────────────────────
 
-  function listWorlds(): WorldRecord[] {
-    // Return cached; sync API contract
+  async function listWorlds(): Promise<WorldRecord[]> {
     return worldCache.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
-  function createWorld(
+  async function createWorld(
     name: string,
     description: string,
     opts?: { lore?: string; locale?: string; tags?: string[]; dimensions?: WorldDimensions },
-  ): WorldRecord {
+  ): Promise<WorldRecord> {
     const world: WorldRecord = {
       id: uid("world"),
       name,
@@ -128,18 +123,18 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     };
     worldCache.push(world);
     worldMap.set(world.id, world);
-    persistWorld(world).catch(logPersistError("world", world.id));
+    await persistWorld(world);
     return world;
   }
 
-  function getWorld(id: string): WorldRecord | undefined {
+  async function getWorld(id: string): Promise<WorldRecord | undefined> {
     return worldMap.get(id);
   }
 
-  function updateWorld(
+  async function updateWorld(
     id: string,
     patch: Partial<Omit<WorldRecord, "id" | "createdAt">>,
-  ): WorldRecord | undefined {
+  ): Promise<WorldRecord | undefined> {
     const world = worldMap.get(id);
     if (!world) return undefined;
     const updated: WorldRecord = {
@@ -150,7 +145,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     worldMap.set(id, updated);
     const idx = worldCache.findIndex((w) => w.id === id);
     if (idx >= 0) worldCache[idx] = updated;
-    persistWorld(updated).catch(logPersistError("world", id));
+    await persistWorld(updated);
     return updated;
   }
 
@@ -170,17 +165,17 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
 
   // ── Sessions ────────────────────────────────────────────────────
 
-  function listSessions(worldId: string): SessionRecord[] {
+  async function listSessions(worldId: string): Promise<SessionRecord[]> {
     return sessionCache
       .filter((s) => s.worldId === worldId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
-  function createSession(opts: {
+  async function createSession(opts: {
     worldId: string;
     presetId?: string;
     taskBindings?: Record<string, string>;
-  }): SessionRecord {
+  }): Promise<SessionRecord> {
     const session: SessionRecord = {
       id: humanSessionId(),
       worldId: opts.worldId,
@@ -192,18 +187,18 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     };
     sessionCache.push(session);
     sessionMap.set(session.id, session);
-    persistSession(session).catch(logPersistError("session", session.id));
+    await persistSession(session);
     return session;
   }
 
-  function getSession(id: string): SessionRecord | undefined {
+  async function getSession(id: string): Promise<SessionRecord | undefined> {
     return sessionMap.get(id);
   }
 
-  function updateSession(
+  async function updateSession(
     id: string,
     patch: Partial<Pick<SessionRecord, "status" | "phase" | "presetId" | "taskBindings">>,
-  ): SessionRecord | undefined {
+  ): Promise<SessionRecord | undefined> {
     const session = sessionMap.get(id);
     if (!session) return undefined;
     const validPatch: Partial<SessionRecord> = {};
@@ -215,11 +210,11 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     sessionMap.set(id, updated);
     const idx = sessionCache.findIndex((s) => s.id === id);
     if (idx >= 0) sessionCache[idx] = updated;
-    persistSession(updated).catch(logPersistError("session", id));
+    await persistSession(updated);
     return updated;
   }
 
-  function updateSessionPhase(id: string, phase: SessionPhase): SessionRecord | undefined {
+  async function updateSessionPhase(id: string, phase: SessionPhase): Promise<SessionRecord | undefined> {
     return updateSession(id, { phase });
   }
 
@@ -234,18 +229,41 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     `;
   }
 
-  // ── Messages ────────────────────────────────────────────────────
+  // ── Messages (DB-backed, no in-memory cache) ───────────────────
 
-  function listMessages(sessionId: string): MessageRecord[] {
-    return messagesBySession.get(sessionId) ?? [];
+  // Raw row type matching PG snake_case columns
+  interface MessageRow {
+    id: string; session_id: string; role: string; content: string;
+    turn_id: string | null; runtime_id: string | null;
+    block: Record<string, unknown> | null; created_at: string;
   }
 
-  function addMessage(
+  function rowToMessage(r: MessageRow): MessageRecord {
+    return {
+      id: r.id,
+      sessionId: r.session_id,
+      role: r.role as MessageRecord["role"],
+      content: r.content,
+      turnId: r.turn_id ?? undefined,
+      runtimeId: r.runtime_id ?? undefined,
+      block: r.block ?? undefined,
+      createdAt: r.created_at,
+    };
+  }
+
+  async function listMessages(sessionId: string): Promise<MessageRecord[]> {
+    const rows = await sql<MessageRow[]>`
+      SELECT * FROM sv_messages WHERE session_id = ${sessionId} ORDER BY created_at
+    `;
+    return rows.map(rowToMessage);
+  }
+
+  async function addMessage(
     sessionId: string,
     role: MessageRecord["role"],
     content: string,
     meta?: { turnId?: string; runtimeId?: string; block?: Record<string, unknown> },
-  ): MessageRecord {
+  ): Promise<MessageRecord> {
     const msg: MessageRecord = {
       id: uid("msg"),
       sessionId,
@@ -256,9 +274,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       ...(meta?.block ? { block: meta.block } : {}),
       createdAt: new Date().toISOString(),
     };
-    const list = messagesBySession.get(sessionId) ?? [];
-    messagesBySession.set(sessionId, [...list, msg]);
-    persistMessage(msg).catch(logPersistError("message", msg.id));
+    await persistMessage(msg);
     return msg;
   }
 
@@ -273,14 +289,14 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
 
   // ── State Patches (in-memory) ──────────────────────────────────
 
-  function listStatePatches(sessionId: string): StatePatchRecord[] {
+  async function listStatePatches(sessionId: string): Promise<StatePatchRecord[]> {
     return statePatches.get(sessionId) ?? [];
   }
 
-  function addStatePatch(
+  async function addStatePatch(
     sessionId: string,
     patch: { id: string; summary: string; packageName: string; data?: unknown },
-  ): StatePatchRecord {
+  ): Promise<StatePatchRecord> {
     const record: StatePatchRecord = {
       id: patch.id,
       sessionId,
@@ -296,7 +312,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
 
   // ── Characters ──────────────────────────────────────────────────
 
-  function createCharacter(sessionId: string, input: CharacterCreateInput): CharacterCard {
+  async function createCharacter(sessionId: string, input: CharacterCreateInput): Promise<CharacterCard> {
     const session = sessionMap.get(sessionId);
     if (!session) throw new Error("Session not found: " + sessionId);
     const card: CharacterCard = {
@@ -312,19 +328,19 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       version: 1,
     };
     characterMap.set(card.id, card);
-    persistCharacter(card).catch(logPersistError("character", card.id));
+    await persistCharacter(card);
     return card;
   }
 
-  function getCharacter(id: string): CharacterCard | undefined {
+  async function getCharacter(id: string): Promise<CharacterCard | undefined> {
     return characterMap.get(id);
   }
 
-  function getSessionCharacters(sessionId: string): CharacterCard[] {
+  async function getSessionCharacters(sessionId: string): Promise<CharacterCard[]> {
     return Array.from(characterMap.values()).filter((c) => c.runId === sessionId);
   }
 
-  function updateCharacter(id: string, patch: Partial<CharacterCard>): CharacterCard | undefined {
+  async function updateCharacter(id: string, patch: Partial<CharacterCard>): Promise<CharacterCard | undefined> {
     const card = characterMap.get(id);
     if (!card) return undefined;
     const updated: CharacterCard = {
@@ -338,42 +354,41 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       version: card.version + 1,
     };
     characterMap.set(id, updated);
-    persistCharacter(updated).catch(logPersistError("character", id));
+    await persistCharacter(updated);
     return updated;
   }
 
   async function persistCharacter(c: CharacterCard): Promise<void> {
+    const now = new Date().toISOString();
     await sql`
-      INSERT INTO sv_characters (id, world_id, run_id, name, type, description, portrait, fields, extensions, version, created_at)
+      INSERT INTO sv_characters (id, world_id, run_id, name, type, description, portrait, fields, extensions, version, created_at, updated_at)
       VALUES (${c.id}, ${c.worldId}, ${c.runId ?? null}, ${c.name}, ${c.type},
               ${c.description ?? ""}, ${c.portrait ?? null},
               ${JSON.stringify(c.fields ?? {})}, ${JSON.stringify(c.extensions ?? {})},
-              ${c.version}, ${c.createdAt})
+              ${c.version}, ${c.createdAt}, ${now})
       ON CONFLICT (id) DO UPDATE SET
         name = EXCLUDED.name, type = EXCLUDED.type, description = EXCLUDED.description,
         portrait = EXCLUDED.portrait, fields = EXCLUDED.fields, extensions = EXCLUDED.extensions,
-        version = EXCLUDED.version
+        version = EXCLUDED.version, updated_at = EXCLUDED.updated_at
     `;
   }
 
   // ── Trace Events (in-memory) ────────────────────────────────────
 
-  function addTraceEvent(sessionId: string, event: TraceEvent): void {
+  async function addTraceEvent(sessionId: string, event: TraceEvent): Promise<void> {
     const list = traceEvents.get(sessionId) ?? [];
-    list.push(event);
-    if (list.length > MAX_TRACE_EVENTS_PER_SESSION) {
-      list.splice(0, list.length - MAX_TRACE_EVENTS_PER_SESSION);
-    }
-    traceEvents.set(sessionId, list);
+    const updated = [...list, event];
+    traceEvents.set(sessionId, updated.length > MAX_TRACE_EVENTS_PER_SESSION
+      ? updated.slice(-MAX_TRACE_EVENTS_PER_SESSION)
+      : updated);
   }
 
-  function listTraceEvents(sessionId: string): TraceEvent[] {
+  async function listTraceEvents(sessionId: string): Promise<TraceEvent[]> {
     return traceEvents.get(sessionId) ?? [];
   }
 
   // ── Load existing data from PG into cache ───────────────────────
 
-  // Raw row types matching PG snake_case columns
   interface WorldRow {
     id: string; name: string; description: string;
     lore: string | null; locale: string | null;
@@ -384,11 +399,6 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     id: string; world_id: string; status: string; phase: string;
     preset_id: string | null; task_bindings: Record<string, string> | null;
     created_at: string;
-  }
-  interface MessageRow {
-    id: string; session_id: string; role: string; content: string;
-    turn_id: string | null; runtime_id: string | null;
-    block: Record<string, unknown> | null; created_at: string;
   }
   interface CharacterRow {
     id: string; world_id: string; run_id: string | null;
@@ -423,23 +433,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
   }));
   const sessionMap = new Map<string, SessionRecord>(sessionCache.map((s) => [s.id, s]));
 
-  const msgRows = await sql<MessageRow[]>`SELECT * FROM sv_messages ORDER BY created_at`;
-  const messagesBySession = new Map<string, MessageRecord[]>();
-  for (const r of msgRows) {
-    const msg: MessageRecord = {
-      id: r.id,
-      sessionId: r.session_id,
-      role: r.role as MessageRecord["role"],
-      content: r.content,
-      turnId: r.turn_id ?? undefined,
-      runtimeId: r.runtime_id ?? undefined,
-      block: r.block ?? undefined,
-      createdAt: r.created_at,
-    };
-    const list = messagesBySession.get(msg.sessionId) ?? [];
-    list.push(msg);
-    messagesBySession.set(msg.sessionId, list);
-  }
+  // Messages are now loaded lazily per session via listMessages() — no startup cache.
 
   const charRows = await sql<CharacterRow[]>`SELECT * FROM sv_characters`;
   const characterMap = new Map<string, CharacterCard>();
@@ -447,7 +441,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     const card: CharacterCard = {
       id: r.id,
       worldId: r.world_id,
-      runId: r.run_id ?? `__orphan_${r.id}`,
+      runId: r.run_id ?? "",
       name: r.name,
       type: r.type as CharacterCard["type"],
       description: r.description ?? "",
@@ -464,7 +458,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
 
   if (worldCache.length === 0) {
     for (const seed of SEED_WORLDS) {
-      createWorld(seed.name, seed.description, {
+      await createWorld(seed.name, seed.description, {
         lore: seed.lore,
         locale: seed.locale,
         tags: seed.tags,

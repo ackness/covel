@@ -7,6 +7,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./idb": {
+      "types": "./src/indexeddb/idb-store.ts",
+      "import": "./src/indexeddb/idb-store.ts"
     }
   },
   "scripts": {

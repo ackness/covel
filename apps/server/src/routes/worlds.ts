@@ -5,12 +5,12 @@ import type { ServerStore } from "../store/types.js";
 export function createWorldsRoute(store: ServerStore) {
   const route = new Hono();
 
-  route.get("/", (c) => {
-    return c.json(store.listWorlds());
+  route.get("/", async (c) => {
+    return c.json(await store.listWorlds());
   });
 
-  route.get("/:id", (c) => {
-    const world = store.getWorld(c.req.param("id"));
+  route.get("/:id", async (c) => {
+    const world = await store.getWorld(c.req.param("id"));
     if (!world) {
       return c.json({ code: "NOT_FOUND", message: "World not found" }, 404);
     }
@@ -27,13 +27,13 @@ export function createWorldsRoute(store: ServerStore) {
       );
     }
     const { name, description, lore, locale, tags, dimensions } = result.data;
-    const world = store.createWorld(name, description, { lore, locale, tags, dimensions });
+    const world = await store.createWorld(name, description, { lore, locale, tags, dimensions });
     return c.json(world, 201);
   });
 
   route.patch("/:id", async (c) => {
     const id = c.req.param("id");
-    const existing = store.getWorld(id);
+    const existing = await store.getWorld(id);
     if (!existing) {
       return c.json({ code: "NOT_FOUND", message: "World not found" }, 404);
     }
@@ -45,7 +45,7 @@ export function createWorldsRoute(store: ServerStore) {
         400,
       );
     }
-    const updated = store.updateWorld(id, result.data);
+    const updated = await store.updateWorld(id, result.data);
     return c.json(updated);
   });
 

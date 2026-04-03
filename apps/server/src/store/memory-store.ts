@@ -4,58 +4,21 @@
  * Provides worlds, sessions, and messages storage.
  * All data lives in process memory — lost on restart.
  */
-import type { CharacterCard, CharacterCreateInput, CharacterType, SessionPhase, WorldDimensions } from "@covel/shared";
+import { randomUUID } from "node:crypto";
+import type { CharacterCard, CharacterCreateInput, SessionPhase, WorldDimensions } from "@covel/shared";
 import { humanId } from "human-id";
 import { SEED_WORLDS } from "./seed-worlds.js";
-
-export interface WorldRecord {
-  id: string;
-  name: string;
-  description: string;
-  /** Extended world lore for system prompt context. */
-  lore?: string;
-  locale?: string;
-  tags?: string[];
-  /** Structured world-building dimensions. */
-  dimensions?: WorldDimensions;
-  createdAt: string;
-  updatedAt?: string;
-}
-
-export interface SessionRecord {
-  id: string;
-  worldId: string;
-  status: "active" | "waiting_for_input" | "archived";
-  phase: SessionPhase;
-  presetId?: string;
-  taskBindings?: Record<string, string>;
-  createdAt: string;
-}
-
-export interface MessageRecord {
-  id: string;
-  sessionId: string;
-  role: "system" | "user" | "assistant";
-  content: string;
-  turnId?: string;
-  runtimeId?: string;
-  /** Serialized block data for UI blocks (choice_set, character_creation, etc.) */
-  block?: Record<string, unknown>;
-  createdAt: string;
-}
-
-/** A persisted state patch applied during a turn. */
-export interface StatePatchRecord {
-  id: string;
-  sessionId: string;
-  summary: string;
-  packageName: string;
-  data?: unknown;
-  createdAt: string;
-}
+import type {
+  ServerStore,
+  WorldRecord,
+  SessionRecord,
+  MessageRecord,
+  StatePatchRecord,
+  TraceEvent,
+} from "./types.js";
 
 function uid(prefix: string): string {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  return `${prefix}_${randomUUID()}`;
 }
 
 /** Generate a human-readable session ID: "word-word-word-xxxx" */
@@ -65,23 +28,10 @@ function humanSessionId(): string {
   return `${words}-${hex}`;
 }
 
-/** A recorded SSE event for trace inspection. */
-export interface TraceEvent {
-  type: string;
-  requestId: string;
-  traceId: string;
-  sessionId: string;
-  turnId: string;
-  flowId: string;
-  seq: number;
-  timestamp: string;
-  payload: Record<string, unknown>;
-}
-
 /** Max trace events kept per session (ring buffer). */
 const MAX_TRACE_EVENTS_PER_SESSION = 2000;
 
-export function createMemoryStore() {
+export async function createMemoryStore(): Promise<ServerStore> {
   const worlds = new Map<string, WorldRecord>();
   const sessions = new Map<string, SessionRecord>();
   const messages = new Map<string, MessageRecord[]>(); // sessionId → messages
@@ -91,17 +41,17 @@ export function createMemoryStore() {
 
   // ── Worlds ──────────────────────────────────────────────────────
 
-  function listWorlds(): WorldRecord[] {
+  async function listWorlds(): Promise<WorldRecord[]> {
     return Array.from(worlds.values()).sort(
       (a, b) => b.createdAt.localeCompare(a.createdAt)
     );
   }
 
-  function createWorld(
+  async function createWorld(
     name: string,
     description: string,
     opts?: { lore?: string; locale?: string; tags?: string[]; dimensions?: WorldDimensions },
-  ): WorldRecord {
+  ): Promise<WorldRecord> {
     const world: WorldRecord = {
       id: uid("world"),
       name,
@@ -116,14 +66,14 @@ export function createMemoryStore() {
     return world;
   }
 
-  function getWorld(id: string): WorldRecord | undefined {
+  async function getWorld(id: string): Promise<WorldRecord | undefined> {
     return worlds.get(id);
   }
 
-  function updateWorld(
+  async function updateWorld(
     id: string,
     patch: Partial<Omit<WorldRecord, "id" | "createdAt">>,
-  ): WorldRecord | undefined {
+  ): Promise<WorldRecord | undefined> {
     const world = worlds.get(id);
     if (!world) return undefined;
     const updated: WorldRecord = {
@@ -137,17 +87,17 @@ export function createMemoryStore() {
 
   // ── Sessions ────────────────────────────────────────────────────
 
-  function listSessions(worldId: string): SessionRecord[] {
+  async function listSessions(worldId: string): Promise<SessionRecord[]> {
     return Array.from(sessions.values())
       .filter((s) => s.worldId === worldId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
-  function createSession(opts: {
+  async function createSession(opts: {
     worldId: string;
     presetId?: string;
     taskBindings?: Record<string, string>;
-  }): SessionRecord {
+  }): Promise<SessionRecord> {
     const session: SessionRecord = {
       id: humanSessionId(),
       worldId: opts.worldId,
@@ -162,14 +112,14 @@ export function createMemoryStore() {
     return session;
   }
 
-  function getSession(id: string): SessionRecord | undefined {
+  async function getSession(id: string): Promise<SessionRecord | undefined> {
     return sessions.get(id);
   }
 
-  function updateSession(
+  async function updateSession(
     id: string,
     patch: Partial<Pick<SessionRecord, "status" | "phase" | "presetId" | "taskBindings">>
-  ): SessionRecord | undefined {
+  ): Promise<SessionRecord | undefined> {
     const session = sessions.get(id);
     if (!session) return undefined;
     const validPatch: Partial<SessionRecord> = {};
@@ -182,7 +132,7 @@ export function createMemoryStore() {
     return updated;
   }
 
-  function updateSessionPhase(id: string, phase: SessionPhase): SessionRecord | undefined {
+  async function updateSessionPhase(id: string, phase: SessionPhase): Promise<SessionRecord | undefined> {
     const session = sessions.get(id);
     if (!session) return undefined;
     const updated = { ...session, phase };
@@ -192,16 +142,16 @@ export function createMemoryStore() {
 
   // ── Messages ────────────────────────────────────────────────────
 
-  function listMessages(sessionId: string): MessageRecord[] {
+  async function listMessages(sessionId: string): Promise<MessageRecord[]> {
     return messages.get(sessionId) ?? [];
   }
 
-  function addMessage(
+  async function addMessage(
     sessionId: string,
     role: MessageRecord["role"],
     content: string,
     meta?: { turnId?: string; runtimeId?: string; block?: Record<string, unknown> },
-  ): MessageRecord {
+  ): Promise<MessageRecord> {
     const msg: MessageRecord = {
       id: uid("msg"),
       sessionId,
@@ -219,14 +169,14 @@ export function createMemoryStore() {
 
   // ── State Patches ──────────────────────────────────────────────────
 
-  function listStatePatches(sessionId: string): StatePatchRecord[] {
+  async function listStatePatches(sessionId: string): Promise<StatePatchRecord[]> {
     return statePatches.get(sessionId) ?? [];
   }
 
-  function addStatePatch(
+  async function addStatePatch(
     sessionId: string,
     patch: { id: string; summary: string; packageName: string; data?: unknown },
-  ): StatePatchRecord {
+  ): Promise<StatePatchRecord> {
     const record: StatePatchRecord = {
       id: patch.id,
       sessionId,
@@ -242,7 +192,7 @@ export function createMemoryStore() {
 
   // ── Characters ──────────────────────────────────────────────────
 
-  function createCharacter(sessionId: string, input: CharacterCreateInput): CharacterCard {
+  async function createCharacter(sessionId: string, input: CharacterCreateInput): Promise<CharacterCard> {
     const session = sessions.get(sessionId);
     if (!session) throw new Error("Session not found: " + sessionId);
     const card: CharacterCard = {
@@ -261,15 +211,15 @@ export function createMemoryStore() {
     return card;
   }
 
-  function getCharacter(id: string): CharacterCard | undefined {
+  async function getCharacter(id: string): Promise<CharacterCard | undefined> {
     return characters.get(id);
   }
 
-  function getSessionCharacters(sessionId: string): CharacterCard[] {
+  async function getSessionCharacters(sessionId: string): Promise<CharacterCard[]> {
     return Array.from(characters.values()).filter((c) => c.runId === sessionId);
   }
 
-  function updateCharacter(id: string, patch: Partial<CharacterCard>): CharacterCard | undefined {
+  async function updateCharacter(id: string, patch: Partial<CharacterCard>): Promise<CharacterCard | undefined> {
     const card = characters.get(id);
     if (!card) return undefined;
     const updated: CharacterCard = {
@@ -288,7 +238,7 @@ export function createMemoryStore() {
 
   // ── Trace Events ────────────────────────────────────────────────
 
-  function addTraceEvent(sessionId: string, event: TraceEvent): void {
+  async function addTraceEvent(sessionId: string, event: TraceEvent): Promise<void> {
     const existing = traceEvents.get(sessionId) ?? [];
     // Immutable append with ring buffer: drop oldest when exceeding max
     const appended = [...existing, event];
@@ -298,13 +248,13 @@ export function createMemoryStore() {
     traceEvents.set(sessionId, updated);
   }
 
-  function listTraceEvents(sessionId: string): TraceEvent[] {
+  async function listTraceEvents(sessionId: string): Promise<TraceEvent[]> {
     return traceEvents.get(sessionId) ?? [];
   }
 
   // ── Seed preset worlds ──────────────────────────────────────────
   for (const seed of SEED_WORLDS) {
-    createWorld(seed.name, seed.description, {
+    await createWorld(seed.name, seed.description, {
       lore: seed.lore,
       locale: seed.locale,
       tags: seed.tags,
@@ -335,4 +285,4 @@ export function createMemoryStore() {
   };
 }
 
-export type MemoryStore = ReturnType<typeof createMemoryStore>;
+export type MemoryStore = Awaited<ReturnType<typeof createMemoryStore>>;

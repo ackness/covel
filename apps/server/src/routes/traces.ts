@@ -9,16 +9,16 @@ export function createTracesRoute(store: ServerStore) {
   const route = new Hono();
 
   // All events for a session (flat list, chronological)
-  route.get("/:sessionId", (c) => {
+  route.get("/:sessionId", async (c) => {
     const { sessionId } = c.req.param();
-    const events = store.listTraceEvents(sessionId);
+    const events = await store.listTraceEvents(sessionId);
     return c.json({ sessionId, count: events.length, events });
   });
 
   // Events grouped by turnId
-  route.get("/:sessionId/turns", (c) => {
+  route.get("/:sessionId/turns", async (c) => {
     const { sessionId } = c.req.param();
-    const events = store.listTraceEvents(sessionId);
+    const events = await store.listTraceEvents(sessionId);
 
     const turnMap = new Map<string, typeof events>();
     for (const evt of events) {

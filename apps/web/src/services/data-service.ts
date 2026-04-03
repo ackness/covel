@@ -174,15 +174,15 @@ const LOCAL_SEED_WORLDS = [
 ];
 
 class LocalDataService implements DataService {
-  private idbStore: import("@covel/store").IdbStore | null = null;
+  private idbStore: import("@covel/store/idb").IdbStore | null = null;
   private statePatches = new Map<string, StatePatchRecord[]>();
   private initPromise: Promise<void> | null = null;
 
-  private async getStore(): Promise<import("@covel/store").IdbStore> {
+  private async getStore(): Promise<import("@covel/store/idb").IdbStore> {
     if (this.idbStore) return this.idbStore;
     if (!this.initPromise) {
       this.initPromise = (async () => {
-        const { IdbStore } = await import("@covel/store");
+        const { IdbStore } = await import("@covel/store/idb");
         this.idbStore = new IdbStore({ dbName: "covel-game" });
         // Seed worlds on first use
         const existing = await this.idbStore.listWorlds();

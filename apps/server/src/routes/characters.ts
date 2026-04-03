@@ -5,17 +5,17 @@ import type { ServerStore } from "../store/types.js";
 export function createCharactersRoute(store: ServerStore) {
   const route = new Hono();
 
-  route.get("/", (c) => {
+  route.get("/", async (c) => {
     const sessionId = c.req.query("sessionId");
     if (!sessionId) {
       return c.json({ code: "INVALID_REQUEST", message: "sessionId query parameter required" }, 400);
     }
-    return c.json(store.getSessionCharacters(sessionId));
+    return c.json(await store.getSessionCharacters(sessionId));
   });
 
-  route.get("/:id", (c) => {
+  route.get("/:id", async (c) => {
     const id = c.req.param("id");
-    const character = store.getCharacter(id);
+    const character = await store.getCharacter(id);
     if (!character) {
       return c.json({ code: "NOT_FOUND", message: "Character not found" }, 404);
     }
@@ -44,7 +44,7 @@ export function createCharactersRoute(store: ServerStore) {
       description: body.description,
       fields: body.fields,
     };
-    const character = store.createCharacter(body.sessionId, input);
+    const character = await store.createCharacter(body.sessionId, input);
     return c.json(character, 201);
   });
 
@@ -69,7 +69,7 @@ export function createCharactersRoute(store: ServerStore) {
     if (typeof body.portrait === "string") patch.portrait = body.portrait;
     if (body.fields && typeof body.fields === "object") patch.fields = body.fields;
     if (body.extensions && typeof body.extensions === "object") patch.extensions = body.extensions;
-    const character = store.updateCharacter(id, patch);
+    const character = await store.updateCharacter(id, patch);
     if (!character) {
       return c.json({ code: "NOT_FOUND", message: "Character not found" }, 404);
     }

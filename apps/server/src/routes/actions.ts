@@ -93,7 +93,7 @@ export function createActionsRoute(deps: {
       );
     }
 
-    const session = store.getSession(sessionId);
+    const session = await store.getSession(sessionId);
     if (!session) {
       return c.json({ code: "SESSION_NOT_FOUND", message: "Session not found" }, 404);
     }
@@ -153,7 +153,7 @@ export function createActionsRoute(deps: {
       async function emit(eventType: string, turnId: string, traceId: string, eventPayload: Record<string, unknown>) {
         const env = envelope(eventType, turnId, traceId, eventPayload);
         // Record to trace event log for debug inspection
-        store.addTraceEvent(sessionId, env);
+        await store.addTraceEvent(sessionId, env);
         await stream.writeSSE({
           data: JSON.stringify(env),
           event: env.type,
@@ -224,7 +224,7 @@ export function createActionsRoute(deps: {
               })) as Record<string, unknown> | undefined;
 
               if (result?.content) {
-                store.addMessage(sessionId, "assistant", result.content as string, { turnId });
+                await store.addMessage(sessionId, "assistant", result.content as string, { turnId });
                 await emit("message.completed", turnId, traceId, {
                   messageId: `msg_${seq}`,
                   content: result.content,
@@ -249,11 +249,11 @@ export function createActionsRoute(deps: {
           const kernelSession = getOrCreateSession(sessionId);
 
           // Rebuild context (same as normal turn)
-          const chatHistory = store.listMessages(sessionId).map((m) => ({
+          const chatHistory = (await store.listMessages(sessionId)).map((m) => ({
             role: m.role,
             content: m.content,
           }));
-          const world = store.getWorld(session.worldId);
+          const world = await store.getWorld(session.worldId);
           kernelSession.setContext({
             world: world
               ? { name: world.name, description: world.description, ...(world.lore ? { lore: world.lore } : {}) }
@@ -309,7 +309,7 @@ export function createActionsRoute(deps: {
                 }
                 const { turnId: tid, traceId: trid } = retryTurnResult;
                 if (task.status === "completed" && task.result?.text) {
-                  store.addMessage(sessionId, "assistant", task.result.text, { turnId: tid, runtimeId: task.runtimeId });
+                  await store.addMessage(sessionId, "assistant", task.result.text, { turnId: tid, runtimeId: task.runtimeId });
                   const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
                   await emit("message.completed", tid, trid, {
                     messageId: msgId,
@@ -350,7 +350,7 @@ export function createActionsRoute(deps: {
               narrativeIndex++;
               // For retry: emit all non-cached, non-streamed narrative
               if (!streamedRuntimeIds.has(sourceRuntimeId)) {
-                store.addMessage(sessionId, "assistant", block.content as string, { turnId, runtimeId: sourceRuntimeId });
+                await store.addMessage(sessionId, "assistant", block.content as string, { turnId, runtimeId: sourceRuntimeId });
                 const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
                 await emit("message.completed", turnId, traceId, {
                   messageId: msgId,
@@ -360,7 +360,7 @@ export function createActionsRoute(deps: {
               }
             } else {
               const blockEnvelope = toBlockEnvelope(block, { turnId, sessionId, requestId, traceId });
-              store.addMessage(sessionId, "assistant", "", { turnId, block: blockEnvelope });
+              await store.addMessage(sessionId, "assistant", "", { turnId, block: blockEnvelope });
               await emit("block.emitted", turnId, traceId, { block: blockEnvelope });
             }
           }
@@ -375,7 +375,7 @@ export function createActionsRoute(deps: {
                   packageName: proposal.pluginId,
                   data: item.payload,
                 };
-                store.addStatePatch(sessionId, patchRecord);
+                await store.addStatePatch(sessionId, patchRecord);
                 await emit("state.patch.applied", turnId, traceId, {
                   patch: { ...patchRecord, target: "state" },
                 });
@@ -408,18 +408,18 @@ export function createActionsRoute(deps: {
 
         // Store user message (not for start_session — no user content)
         if (userContent && type === "send_message") {
-          store.addMessage(sessionId, "user", userContent);
+          await store.addMessage(sessionId, "user", userContent);
         }
 
         // Resolve per-session kernel session
         const kernelSession = getOrCreateSession(sessionId);
 
         // Build kernel context from session state
-        const chatHistory = store.listMessages(sessionId).map((m) => ({
+        const chatHistory = (await store.listMessages(sessionId)).map((m) => ({
           role: m.role,
           content: m.content,
         }));
-        const world = store.getWorld(session.worldId);
+        const world = await store.getWorld(session.worldId);
         const loreOverride = payload?.loreOverride as string | undefined;
 
         kernelSession.setContext({
@@ -493,7 +493,7 @@ export function createActionsRoute(deps: {
                 if (task.status === "completed" && task.result) {
                   // Emit narrative from background runtime
                   if (task.result.text) {
-                    store.addMessage(sessionId, "assistant", task.result.text, { turnId: tid, runtimeId: task.runtimeId });
+                    await store.addMessage(sessionId, "assistant", task.result.text, { turnId: tid, runtimeId: task.runtimeId });
                     const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
                     await emit("message.completed", tid, trid, {
                       messageId: msgId,
@@ -512,7 +512,7 @@ export function createActionsRoute(deps: {
                         packageName: task.pluginId,
                         data: item.payload,
                       };
-                      store.addStatePatch(sessionId, patchRecord);
+                      await store.addStatePatch(sessionId, patchRecord);
                       await emit("state.patch.applied", tid, trid, {
                         patch: { ...patchRecord, target: "state" },
                       });
@@ -526,7 +526,7 @@ export function createActionsRoute(deps: {
                         },
                         { turnId: tid, sessionId, requestId, traceId: trid }
                       );
-                      store.addMessage(sessionId, "assistant", "", { turnId: tid, block: blockEnvelope });
+                      await store.addMessage(sessionId, "assistant", "", { turnId: tid, block: blockEnvelope });
                       await emit("block.emitted", tid, trid, { block: blockEnvelope });
                     }
                   }
@@ -575,7 +575,7 @@ export function createActionsRoute(deps: {
               ?? narrativeSourceRuntimeIds[narrativeIndex]
               ?? "";
             narrativeIndex++;
-            store.addMessage(sessionId, "assistant", block.content as string, { turnId, runtimeId: sourceRuntimeId });
+            await store.addMessage(sessionId, "assistant", block.content as string, { turnId, runtimeId: sourceRuntimeId });
             if (!streamedRuntimeIds.has(sourceRuntimeId)) {
               const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
               await emit("message.completed", turnId, traceId, {
@@ -590,7 +590,7 @@ export function createActionsRoute(deps: {
               requestId,
               traceId,
             });
-            store.addMessage(sessionId, "assistant", "", { turnId, block: blockEnvelope });
+            await store.addMessage(sessionId, "assistant", "", { turnId, block: blockEnvelope });
             await emit("block.emitted", turnId, traceId, { block: blockEnvelope });
           }
         }
@@ -605,7 +605,7 @@ export function createActionsRoute(deps: {
                 packageName: proposal.pluginId,
                 data: item.payload,
               };
-              store.addStatePatch(sessionId, patchRecord);
+              await store.addStatePatch(sessionId, patchRecord);
               await emit("state.patch.applied", turnId, traceId, {
                 patch: { ...patchRecord, target: "state" },
               });
@@ -619,12 +619,12 @@ export function createActionsRoute(deps: {
         );
 
         if (type === "start_session" && hasCharCreationBlock) {
-          store.updateSessionPhase(sessionId, "character_creation");
+          await store.updateSessionPhase(sessionId, "character_creation");
           await emit("phase_change", turnId, traceId, { phase: "character_creation" });
         } else if (type === "submit_block_response") {
-          const currentSession = store.getSession(sessionId);
+          const currentSession = await store.getSession(sessionId);
           if (currentSession?.phase === "character_creation") {
-            store.updateSessionPhase(sessionId, "playing");
+            await store.updateSessionPhase(sessionId, "playing");
             await emit("phase_change", turnId, traceId, { phase: "playing" });
           }
         }

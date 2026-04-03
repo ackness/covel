@@ -35,6 +35,8 @@ export class IdbStore implements DataStore {
 
   constructor(options?: IdbStoreOptions) {
     this.dbName = options?.dbName ?? "covel";
+    // NOTE: Increment dbVersion when adding new object stores or indexes.
+    // Existing clients with version 1 won't get schema updates unless version increases.
     this.dbVersion = options?.dbVersion ?? 1;
   }
 

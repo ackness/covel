@@ -4,19 +4,19 @@ import type { ServerStore } from "../store/types.js";
 export function createSessionsRoute(store: ServerStore) {
   const route = new Hono();
 
-  route.get("/", (c) => {
+  route.get("/", async (c) => {
     const worldId = c.req.query("worldId");
     if (!worldId) {
       return c.json({ code: "INVALID_REQUEST", message: "worldId query parameter required" }, 400);
     }
-    return c.json(store.listSessions(worldId));
+    return c.json(await store.listSessions(worldId));
   });
 
-  route.get("/:sessionId", (c) => {
+  route.get("/:sessionId", async (c) => {
     const sessionId = c.req.param("sessionId");
     // Avoid matching sub-paths like /:sessionId/messages
     if (sessionId.includes("/")) return c.notFound();
-    const session = store.getSession(sessionId);
+    const session = await store.getSession(sessionId);
     if (!session) {
       return c.json({ code: "NOT_FOUND", message: "Session not found" }, 404);
     }
@@ -45,7 +45,7 @@ export function createSessionsRoute(store: ServerStore) {
         }
       }
     }
-    const session = store.createSession({
+    const session = await store.createSession({
       worldId: body.worldId,
       presetId: body.presetId,
       taskBindings: body.taskBindings,
@@ -88,7 +88,7 @@ export function createSessionsRoute(store: ServerStore) {
       return c.json({ code: "INVALID_JSON", message: "Malformed JSON body" }, 400);
     }
     const patch = parseSessionPatch(body);
-    const session = store.updateSession(sessionId, patch);
+    const session = await store.updateSession(sessionId, patch);
     if (!session) {
       return c.json({ code: "NOT_FOUND", message: "Session not found" }, 404);
     }
@@ -104,29 +104,29 @@ export function createSessionsRoute(store: ServerStore) {
       return c.json({ code: "INVALID_JSON", message: "Malformed JSON body" }, 400);
     }
     const patch = parseSessionPatch(body);
-    const session = store.updateSession(sessionId, patch);
+    const session = await store.updateSession(sessionId, patch);
     if (!session) {
       return c.json({ code: "NOT_FOUND", message: "Session not found" }, 404);
     }
     return c.json(session);
   });
 
-  route.get("/:sessionId/messages", (c) => {
+  route.get("/:sessionId/messages", async (c) => {
     const sessionId = c.req.param("sessionId");
-    const session = store.getSession(sessionId);
+    const session = await store.getSession(sessionId);
     if (!session) {
       return c.json({ code: "NOT_FOUND", message: "Session not found" }, 404);
     }
-    return c.json(store.listMessages(sessionId));
+    return c.json(await store.listMessages(sessionId));
   });
 
-  route.get("/:sessionId/state-patches", (c) => {
+  route.get("/:sessionId/state-patches", async (c) => {
     const sessionId = c.req.param("sessionId");
-    const session = store.getSession(sessionId);
+    const session = await store.getSession(sessionId);
     if (!session) {
       return c.json({ code: "NOT_FOUND", message: "Session not found" }, 404);
     }
-    return c.json(store.listStatePatches(sessionId));
+    return c.json(await store.listStatePatches(sessionId));
   });
 
   // Stubs for endpoints the frontend may call

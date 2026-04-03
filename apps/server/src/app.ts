@@ -56,7 +56,7 @@ const kernelStack = await initKernelStack(ai.gateway);
 const storeBackend = process.env.STORE_BACKEND ?? "memory";
 const store = storeBackend === "pg" && process.env.DATABASE_URL
   ? await createPgServerStore({ databaseUrl: process.env.DATABASE_URL })
-  : createMemoryStore();
+  : await createMemoryStore();
 
 // ── Internal API routes (programmatic access) ────────────────────
 app.route("/api/health", healthRoute);

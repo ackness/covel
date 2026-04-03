@@ -62,55 +62,55 @@ export interface TraceEvent {
 
 export interface ServerStore {
   // Worlds
-  listWorlds(): WorldRecord[];
+  listWorlds(): Promise<WorldRecord[]>;
   createWorld(
     name: string,
     description: string,
     opts?: { lore?: string; locale?: string; tags?: string[]; dimensions?: WorldDimensions },
-  ): WorldRecord;
-  getWorld(id: string): WorldRecord | undefined;
+  ): Promise<WorldRecord>;
+  getWorld(id: string): Promise<WorldRecord | undefined>;
   updateWorld(
     id: string,
     patch: Partial<Omit<WorldRecord, "id" | "createdAt">>,
-  ): WorldRecord | undefined;
+  ): Promise<WorldRecord | undefined>;
 
   // Sessions
-  listSessions(worldId: string): SessionRecord[];
+  listSessions(worldId: string): Promise<SessionRecord[]>;
   createSession(opts: {
     worldId: string;
     presetId?: string;
     taskBindings?: Record<string, string>;
-  }): SessionRecord;
-  getSession(id: string): SessionRecord | undefined;
+  }): Promise<SessionRecord>;
+  getSession(id: string): Promise<SessionRecord | undefined>;
   updateSession(
     id: string,
     patch: Partial<Pick<SessionRecord, "status" | "phase" | "presetId" | "taskBindings">>,
-  ): SessionRecord | undefined;
-  updateSessionPhase(id: string, phase: SessionPhase): SessionRecord | undefined;
+  ): Promise<SessionRecord | undefined>;
+  updateSessionPhase(id: string, phase: SessionPhase): Promise<SessionRecord | undefined>;
 
   // Messages
-  listMessages(sessionId: string): MessageRecord[];
+  listMessages(sessionId: string): Promise<MessageRecord[]>;
   addMessage(
     sessionId: string,
     role: MessageRecord["role"],
     content: string,
     meta?: { turnId?: string; runtimeId?: string; block?: Record<string, unknown> },
-  ): MessageRecord;
+  ): Promise<MessageRecord>;
 
   // State Patches
-  listStatePatches(sessionId: string): StatePatchRecord[];
+  listStatePatches(sessionId: string): Promise<StatePatchRecord[]>;
   addStatePatch(
     sessionId: string,
     patch: { id: string; summary: string; packageName: string; data?: unknown },
-  ): StatePatchRecord;
+  ): Promise<StatePatchRecord>;
 
   // Characters
-  createCharacter(sessionId: string, input: CharacterCreateInput): CharacterCard;
-  getCharacter(id: string): CharacterCard | undefined;
-  getSessionCharacters(sessionId: string): CharacterCard[];
-  updateCharacter(id: string, patch: Partial<CharacterCard>): CharacterCard | undefined;
+  createCharacter(sessionId: string, input: CharacterCreateInput): Promise<CharacterCard>;
+  getCharacter(id: string): Promise<CharacterCard | undefined>;
+  getSessionCharacters(sessionId: string): Promise<CharacterCard[]>;
+  updateCharacter(id: string, patch: Partial<CharacterCard>): Promise<CharacterCard | undefined>;
 
   // Trace Events
-  addTraceEvent(sessionId: string, event: TraceEvent): void;
-  listTraceEvents(sessionId: string): TraceEvent[];
+  addTraceEvent(sessionId: string, event: TraceEvent): Promise<void>;
+  listTraceEvents(sessionId: string): Promise<TraceEvent[]>;
 }
