@@ -5,6 +5,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { healthRoute } from "./routes/health.js";
 import { apiKeyInjection } from "./middleware/api-key-injection.js";
+import { createRateLimiter } from "./middleware/rate-limiter.js";
 import { createAiStack } from "./ai-setup.js";
 import { createGenerateRoute } from "./routes/ai/generate.js";
 import { createStreamRoute } from "./routes/ai/stream.js";
@@ -43,6 +44,9 @@ app.use(
     allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   }),
 );
+
+// Rate limiting (after CORS/logging, before route handlers)
+app.use("*", createRateLimiter());
 
 // API key injection for routes that need LLM access
 app.use("/api/ai/*", apiKeyInjection);
