@@ -181,7 +181,7 @@ export function createActionsRoute(deps: {
               })) as Record<string, unknown> | undefined;
 
               if (result?.content) {
-                store.addMessage(sessionId, "assistant", result.content as string);
+                store.addMessage(sessionId, "assistant", result.content as string, { turnId });
                 await emit("message.completed", turnId, traceId, {
                   messageId: `msg_${seq}`,
                   content: result.content,
@@ -261,6 +261,7 @@ export function createActionsRoute(deps: {
               try {
                 const { turnId: tid, traceId: trid } = turnResult;
                 if (task.status === "completed" && task.result?.text) {
+                  store.addMessage(sessionId, "assistant", task.result.text, { turnId: tid, runtimeId: task.runtimeId });
                   const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
                   await emit("message.completed", tid, trid, {
                     messageId: msgId,
@@ -300,7 +301,7 @@ export function createActionsRoute(deps: {
               narrativeIndex++;
               // For retry: emit all non-cached, non-streamed narrative
               if (!streamedRuntimeIds.has(sourceRuntimeId)) {
-                store.addMessage(sessionId, "assistant", block.content as string);
+                store.addMessage(sessionId, "assistant", block.content as string, { turnId, runtimeId: sourceRuntimeId });
                 const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
                 await emit("message.completed", turnId, traceId, {
                   messageId: msgId,
@@ -310,6 +311,7 @@ export function createActionsRoute(deps: {
               }
             } else {
               const blockEnvelope = toBlockEnvelope(block, { turnId, sessionId, requestId, traceId });
+              store.addMessage(sessionId, "assistant", "", { turnId, block: blockEnvelope });
               await emit("block.emitted", turnId, traceId, { block: blockEnvelope });
             }
           }
@@ -318,14 +320,15 @@ export function createActionsRoute(deps: {
           for (const proposal of turnResult.proposals) {
             for (const item of proposal.items) {
               if (item.kind === "state.patch") {
+                const patchRecord = {
+                  id: `patch_${seq}`,
+                  summary: `${proposal.pluginId} state update`,
+                  packageName: proposal.pluginId,
+                  data: item.payload,
+                };
+                store.addStatePatch(sessionId, patchRecord);
                 await emit("state.patch.applied", turnId, traceId, {
-                  patch: {
-                    id: `patch_${seq}`,
-                    target: "state",
-                    summary: `${proposal.pluginId} state update`,
-                    packageName: proposal.pluginId,
-                    data: item.payload,
-                  },
+                  patch: { ...patchRecord, target: "state" },
                 });
               }
             }
@@ -432,7 +435,7 @@ export function createActionsRoute(deps: {
                 if (task.status === "completed" && task.result) {
                   // Emit narrative from background runtime
                   if (task.result.text) {
-                    store.addMessage(sessionId, "assistant", task.result.text);
+                    store.addMessage(sessionId, "assistant", task.result.text, { turnId: tid, runtimeId: task.runtimeId });
                     const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
                     await emit("message.completed", tid, trid, {
                       messageId: msgId,
@@ -445,14 +448,15 @@ export function createActionsRoute(deps: {
                   // Emit state patches from background proposals
                   for (const item of task.result.proposals) {
                     if (item.kind === "state.patch") {
+                      const patchRecord = {
+                        id: `patch_${seq}`,
+                        summary: `${task.pluginId} background state update`,
+                        packageName: task.pluginId,
+                        data: item.payload,
+                      };
+                      store.addStatePatch(sessionId, patchRecord);
                       await emit("state.patch.applied", tid, trid, {
-                        patch: {
-                          id: `patch_${seq}`,
-                          target: "state",
-                          summary: `${task.pluginId} background state update`,
-                          packageName: task.pluginId,
-                          data: item.payload,
-                        },
+                        patch: { ...patchRecord, target: "state" },
                       });
                     } else if (item.kind === "ui.render") {
                       const payload = item.payload as { type: string; content: unknown };
@@ -464,6 +468,7 @@ export function createActionsRoute(deps: {
                         },
                         { turnId: tid, sessionId, requestId, traceId: trid }
                       );
+                      store.addMessage(sessionId, "assistant", "", { turnId: tid, block: blockEnvelope });
                       await emit("block.emitted", tid, trid, { block: blockEnvelope });
                     }
                   }
@@ -505,13 +510,13 @@ export function createActionsRoute(deps: {
         let narrativeIndex = 0;
         for (const block of turnResult.render.blocks) {
           if (block.type === "narrative") {
-            store.addMessage(sessionId, "assistant", block.content as string);
             // Check if THIS specific runtime's narrative was already streamed via message.delta.
             // Only suppress message.completed for runtimes that streamed their content.
             const sourceRuntimeId = block.source?.runtimeId
               ?? narrativeSourceRuntimeIds[narrativeIndex]
               ?? "";
             narrativeIndex++;
+            store.addMessage(sessionId, "assistant", block.content as string, { turnId, runtimeId: sourceRuntimeId });
             if (!streamedRuntimeIds.has(sourceRuntimeId)) {
               const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
               await emit("message.completed", turnId, traceId, {
@@ -526,6 +531,7 @@ export function createActionsRoute(deps: {
               requestId,
               traceId,
             });
+            store.addMessage(sessionId, "assistant", "", { turnId, block: blockEnvelope });
             await emit("block.emitted", turnId, traceId, { block: blockEnvelope });
           }
         }
@@ -534,14 +540,15 @@ export function createActionsRoute(deps: {
         for (const proposal of turnResult.proposals) {
           for (const item of proposal.items) {
             if (item.kind === "state.patch") {
+              const patchRecord = {
+                id: `patch_${seq}`,
+                summary: `${proposal.pluginId} state update`,
+                packageName: proposal.pluginId,
+                data: item.payload,
+              };
+              store.addStatePatch(sessionId, patchRecord);
               await emit("state.patch.applied", turnId, traceId, {
-                patch: {
-                  id: `patch_${seq}`,
-                  target: "state",
-                  summary: `${proposal.pluginId} state update`,
-                  packageName: proposal.pluginId,
-                  data: item.payload,
-                },
+                patch: { ...patchRecord, target: "state" },
               });
             }
           }

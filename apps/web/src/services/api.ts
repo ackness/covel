@@ -33,6 +33,18 @@ export interface MessageRecord {
   sessionId: string;
   role: "system" | "user" | "assistant";
   content: string;
+  turnId?: string;
+  runtimeId?: string;
+  block?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface StatePatchRecord {
+  id: string;
+  sessionId: string;
+  summary: string;
+  packageName: string;
+  data?: unknown;
   createdAt: string;
 }
 
@@ -219,6 +231,14 @@ export async function updateWorld(
 
 export async function listSessions(worldId: string): Promise<SessionRecord[]> {
   return request<SessionRecord[]>(`/sessions?worldId=${encodeURIComponent(worldId)}`);
+}
+
+export async function getSession(sessionId: string): Promise<SessionRecord> {
+  return request<SessionRecord>(`/sessions/${encodeURIComponent(sessionId)}`);
+}
+
+export async function listStatePatches(sessionId: string): Promise<StatePatchRecord[]> {
+  return request<StatePatchRecord[]>(`/sessions/${encodeURIComponent(sessionId)}/state-patches`);
 }
 
 export async function createSession(worldId: string, presetId?: string): Promise<SessionRecord> {

@@ -9,6 +9,10 @@ export const DEFAULT_BACKGROUND_THRESHOLD = 800;
 export const DEFAULT_MAX_STEPS = 10;
 /** Default max steps for runtimes without tools (single LLM call). */
 export const DEFAULT_MAX_STEPS_NO_TOOLS = 1;
+/** Default max total tool invocations per runtime execution. */
+export const DEFAULT_MAX_TOOL_CALLS = 20;
+/** Default per-tool-call timeout in milliseconds (10 seconds). */
+export const DEFAULT_TOOL_TIMEOUT_MS = 10_000;
 
 /** A runtime candidate selected by the trigger router. */
 export interface CandidateRuntime {

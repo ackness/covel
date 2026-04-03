@@ -12,12 +12,16 @@ export const MIN_SUPPORTED_LOCALES: Locale[] = ["zh-CN", "en-US"];
 
 /** Runtime budget constraints */
 export interface RuntimeBudget {
-  /** Hard limit: max tool-calling steps */
+  /** Hard limit: max LLM tool-calling loop iterations (each iteration may invoke multiple tools) */
   maxSteps?: number;
-  /** Hard limit: timeout in milliseconds */
+  /** Hard limit: total runtime timeout in milliseconds */
   timeoutMs?: number;
   /** Best-effort: approximate max tokens */
   maxTokens?: number;
+  /** Hard limit: max total tool invocations across all steps. Default: 20. */
+  maxToolCalls?: number;
+  /** Hard limit: per-tool-call timeout in milliseconds. Default: 10000 (10s). */
+  toolTimeoutMs?: number;
 }
 
 /** Runtime isolation spec */

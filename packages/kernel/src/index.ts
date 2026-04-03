@@ -37,6 +37,8 @@ export {
   DEFAULT_BACKGROUND_THRESHOLD,
   DEFAULT_MAX_STEPS,
   DEFAULT_MAX_STEPS_NO_TOOLS,
+  DEFAULT_MAX_TOOL_CALLS,
+  DEFAULT_TOOL_TIMEOUT_MS,
 } from "./types.js";
 
 // ── Router ──────────────────────────────────────────────────────────

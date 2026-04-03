@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Terminal, Activity, ChevronDown, ChevronRight, RefreshCw,
@@ -10,8 +10,15 @@ import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import * as api from "@/services/api.js";
 
+interface DebugSearchParams {
+  sid?: string;
+}
+
 export const Route = createFileRoute("/debug")({
   component: DebugPage,
+  validateSearch: (search: Record<string, unknown>): DebugSearchParams => ({
+    sid: typeof search.sid === "string" ? search.sid : undefined,
+  }),
 });
 
 // ── Event type styling ────────────────────────────────────────────
@@ -116,8 +123,10 @@ function fmtDuration(startIso: string, endIso: string): string {
 // ── Main Page ─────────────────────────────────────────────────────
 
 function DebugPage() {
+  const { sid } = Route.useSearch();
+  const navigate = useNavigate();
   const [sessions, setSessions] = useState<api.SessionRecord[]>([]);
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(sid ?? null);
   const [turns, setTurns] = useState<api.TurnTrace[]>([]);
   const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -125,6 +134,12 @@ function DebugPage() {
   const [expandedTurns, setExpandedTurns] = useState<Set<string>>(new Set());
   const [expandedRuntimes, setExpandedRuntimes] = useState<Set<string>>(new Set());
   const [selectedEvent, setSelectedEvent] = useState<api.TraceEvent | null>(null);
+
+  // Sync URL when selected session changes
+  const selectSession = useCallback((id: string) => {
+    setSelectedSessionId(id);
+    navigate({ to: "/debug", search: { sid: id }, replace: true });
+  }, [navigate]);
 
   // Load all sessions from all worlds
   const loadSessions = useCallback(async () => {
@@ -137,14 +152,17 @@ function DebugPage() {
       }
       allSessions.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       setSessions(allSessions);
-      // Auto-select first session if none selected
+      // Auto-select: prefer sid from URL, else first session
       if (!selectedSessionId && allSessions.length > 0) {
-        setSelectedSessionId(allSessions[0].id);
+        const target = sid && allSessions.some((s) => s.id === sid)
+          ? sid
+          : allSessions[0].id;
+        setSelectedSessionId(target);
       }
     } catch {
       // silently fail
     }
-  }, [selectedSessionId]);
+  }, [selectedSessionId, sid]);
 
   // Load trace data for selected session
   const loadTraces = useCallback(async () => {
@@ -248,7 +266,7 @@ function DebugPage() {
               {sessions.map((s) => (
                 <button
                   key={s.id}
-                  onClick={() => setSelectedSessionId(s.id)}
+                  onClick={() => selectSession(s.id)}
                   className={`w-full text-left px-2.5 py-2 text-[11px] border transition-colors ${
                     selectedSessionId === s.id
                       ? "border-primary/40 bg-primary/5 text-foreground"

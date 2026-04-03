@@ -37,6 +37,20 @@ export interface MessageRecord {
   sessionId: string;
   role: "system" | "user" | "assistant";
   content: string;
+  turnId?: string;
+  runtimeId?: string;
+  /** Serialized block data for UI blocks (choice_set, character_creation, etc.) */
+  block?: Record<string, unknown>;
+  createdAt: string;
+}
+
+/** A persisted state patch applied during a turn. */
+export interface StatePatchRecord {
+  id: string;
+  sessionId: string;
+  summary: string;
+  packageName: string;
+  data?: unknown;
   createdAt: string;
 }
 
@@ -71,6 +85,7 @@ export function createMemoryStore() {
   const worlds = new Map<string, WorldRecord>();
   const sessions = new Map<string, SessionRecord>();
   const messages = new Map<string, MessageRecord[]>(); // sessionId → messages
+  const statePatches = new Map<string, StatePatchRecord[]>(); // sessionId → patches
   const characters = new Map<string, CharacterCard>();
   const traceEvents = new Map<string, TraceEvent[]>(); // sessionId → events
 
@@ -184,18 +199,45 @@ export function createMemoryStore() {
   function addMessage(
     sessionId: string,
     role: MessageRecord["role"],
-    content: string
+    content: string,
+    meta?: { turnId?: string; runtimeId?: string; block?: Record<string, unknown> },
   ): MessageRecord {
     const msg: MessageRecord = {
       id: uid("msg"),
       sessionId,
       role,
       content,
+      ...(meta?.turnId ? { turnId: meta.turnId } : {}),
+      ...(meta?.runtimeId ? { runtimeId: meta.runtimeId } : {}),
+      ...(meta?.block ? { block: meta.block } : {}),
       createdAt: new Date().toISOString(),
     };
     const list = messages.get(sessionId) ?? [];
     messages.set(sessionId, [...list, msg]);
     return msg;
+  }
+
+  // ── State Patches ──────────────────────────────────────────────────
+
+  function listStatePatches(sessionId: string): StatePatchRecord[] {
+    return statePatches.get(sessionId) ?? [];
+  }
+
+  function addStatePatch(
+    sessionId: string,
+    patch: { id: string; summary: string; packageName: string; data?: unknown },
+  ): StatePatchRecord {
+    const record: StatePatchRecord = {
+      id: patch.id,
+      sessionId,
+      summary: patch.summary,
+      packageName: patch.packageName,
+      data: patch.data,
+      createdAt: new Date().toISOString(),
+    };
+    const list = statePatches.get(sessionId) ?? [];
+    statePatches.set(sessionId, [...list, record]);
+    return record;
   }
 
   // ── Characters ──────────────────────────────────────────────────
@@ -282,6 +324,8 @@ export function createMemoryStore() {
     updateSessionPhase,
     listMessages,
     addMessage,
+    listStatePatches,
+    addStatePatch,
     createCharacter,
     getCharacter,
     getSessionCharacters,

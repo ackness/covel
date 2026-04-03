@@ -1,12 +1,37 @@
 import type { CommitResult, ValidatedProposalEnvelope } from "@covel/shared";
 import type { TurnState } from "../types.js";
 
+/** Recursively merge plain objects; non-object values are overwritten. */
+function deepMerge(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  const result = { ...target };
+  for (const key of Object.keys(source)) {
+    const tVal = result[key];
+    const sVal = source[key];
+    if (
+      tVal && sVal &&
+      typeof tVal === "object" && !Array.isArray(tVal) &&
+      typeof sVal === "object" && !Array.isArray(sVal)
+    ) {
+      result[key] = deepMerge(
+        tVal as Record<string, unknown>,
+        sVal as Record<string, unknown>,
+      );
+    } else {
+      result[key] = sVal;
+    }
+  }
+  return result;
+}
+
 /**
  * In-memory commit service for first-round implementation.
  *
  * Applies validated proposals to the turn state:
  * - narrative.append → append to narrative segments
- * - state.patch → merge into state object
+ * - state.patch → deep merge into state object
  * - event.emit → append to events list
  * - record.upsert → upsert into records map
  * - ui.render → append to render blocks
@@ -27,7 +52,7 @@ export function commitProposals(
         }
         case "state.patch": {
           const patch = item.payload as Record<string, unknown>;
-          turnState.state = { ...turnState.state, ...patch };
+          turnState.state = deepMerge(turnState.state, patch);
           break;
         }
         case "event.emit": {

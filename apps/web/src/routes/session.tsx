@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useState, useEffect, useRef } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useSession } from "@/stores/session-store.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
@@ -7,8 +7,15 @@ import { WorldSelectScreen } from "@/components/session/world-select-screen.js";
 import { SessionPrepScreen } from "@/components/session/session-prep-screen.js";
 import { GameView } from "@/components/session/game-view.js";
 
+interface SessionSearchParams {
+  sid?: string;
+}
+
 export const Route = createFileRoute("/session")({
   component: SessionPage,
+  validateSearch: (search: Record<string, unknown>): SessionSearchParams => ({
+    sid: typeof search.sid === "string" ? search.sid : undefined,
+  }),
 });
 
 function SessionPage() {
@@ -17,6 +24,7 @@ function SessionPage() {
     selectWorld,
     startGame,
     resumeSession,
+    resumeSessionById,
     loadWorldSessions,
     sendMessage,
     submitBlock,
@@ -27,9 +35,42 @@ function SessionPage() {
   } = useSession();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { resolvedSlots } = useSlotConfig(state.presets);
+  const { sid } = Route.useSearch();
+  const navigate = useNavigate();
+  const autoResumeAttempted = useRef(false);
 
-  // Loading
+  // Sync URL with session state
+  useEffect(() => {
+    if (state.session && state.session.id !== sid) {
+      navigate({ to: "/session", search: { sid: state.session.id }, replace: true });
+    } else if (!state.session && sid && autoResumeAttempted.current) {
+      // Session was cleared (back to world select) — remove sid from URL
+      navigate({ to: "/session", search: {}, replace: true });
+    }
+  }, [state.session, sid, navigate]);
+
+  // Auto-resume from URL sid on boot
+  useEffect(() => {
+    if (state.booted && sid && !state.session && !autoResumeAttempted.current) {
+      autoResumeAttempted.current = true;
+      resumeSessionById(sid).catch(() => {
+        // Session not found — clear sid from URL
+        navigate({ to: "/session", search: {}, replace: true });
+      });
+    }
+  }, [state.booted, sid, state.session, resumeSessionById, navigate]);
+
+  // Loading (boot or auto-resume in progress)
   if (!state.booted && !state.bootError) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Auto-resuming from URL — show spinner while loading
+  if (state.booted && sid && !state.session && !state.world) {
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />

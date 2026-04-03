@@ -19,7 +19,12 @@ import { createRuntimeExecutor, buildPrompt } from "@covel/runtime";
 import { executeTool } from "../tools/tool-executor.js";
 import type { ContextFragment } from "@covel/context";
 import type { KernelProgressEvent } from "../types.js";
-import { DEFAULT_MAX_STEPS, DEFAULT_MAX_STEPS_NO_TOOLS } from "../types.js";
+import {
+  DEFAULT_MAX_STEPS,
+  DEFAULT_MAX_STEPS_NO_TOOLS,
+  DEFAULT_MAX_TOOL_CALLS,
+  DEFAULT_TOOL_TIMEOUT_MS,
+} from "../types.js";
 
 export interface RuntimeRunnerDeps {
   gateway: GatewayLike;
@@ -146,6 +151,8 @@ export async function runRuntime(
 
   const hasTools = toolDefs.length > 0;
   const maxSteps = runtime.spec.budget?.maxSteps ?? (hasTools ? DEFAULT_MAX_STEPS : DEFAULT_MAX_STEPS_NO_TOOLS);
+  const maxToolCalls = runtime.spec.budget?.maxToolCalls ?? DEFAULT_MAX_TOOL_CALLS;
+  const toolTimeoutMs = runtime.spec.budget?.toolTimeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
 
   // Build initial messages via the executor's prompt builder
   const executorInput: RuntimeExecutorInput = {
@@ -197,17 +204,25 @@ export async function runRuntime(
     locale: context.locale,
   });
 
+  // Sanitize qualified tool IDs for OpenAI compatibility:
+  // OpenAI requires tool names to match ^[a-zA-Z0-9_-]+$ (no colons).
+  // We replace ":" with "__" and maintain a bidirectional mapping.
+  const sanitizeToolName = (qualifiedId: string): string =>
+    qualifiedId.replace(/:/g, "__");
+  const desanitizeToolName = (sanitized: string): string =>
+    sanitized.replace(/__/g, ":");
+
   const toolDefinitions: ToolDefinition[] = toolDefs.map((td) => ({
     type: "function",
     function: {
-      name: td.qualifiedId,
+      name: sanitizeToolName(td.qualifiedId),
       description: td.description,
       parameters: td.parameters,
     },
   }));
 
-  // Fix 2: Build whitelist set from resolved tool definitions
-  const allowedToolNames = new Set(toolDefs.map((td) => td.qualifiedId));
+  // Fix 2: Build whitelist set from resolved tool definitions (using sanitized names)
+  const allowedToolNames = new Set(toolDefs.map((td) => sanitizeToolName(td.qualifiedId)));
 
   // Fix 3: Wire AbortSignal/timeoutMs
   const timeoutMs = runtime.spec.budget?.timeoutMs;
@@ -250,13 +265,28 @@ export async function runRuntime(
 
       // Execute each tool call
       for (const toolCall of result.toolCalls) {
+        // Enforce max total tool invocations
+        if (toolCallsProcessed >= maxToolCalls) {
+          messages.push({
+            role: "tool",
+            content: JSON.stringify({
+              error: `Tool call limit reached (max ${maxToolCalls}). Produce a final response now.`,
+            }),
+            toolCallId: toolCall.id,
+          });
+          continue;
+        }
+
         toolCallsProcessed++;
+
+        // Desanitize tool name back to qualified ID (e.g., "core-combat__start-combat" → "core-combat:start-combat")
+        const qualifiedToolId = desanitizeToolName(toolCall.name);
 
         options.onProgress?.({
           type: "tool.calling",
           runtimeId: runtime.spec.id,
           pluginId: runtime.pluginId,
-          label: toolCall.name,
+          label: qualifiedToolId,
           detail: toolCall.arguments,
         });
 
@@ -277,11 +307,13 @@ export async function runRuntime(
               const toolResult = await executeTool(
                 { toolRegistry: deps.toolRegistry, hookRegistry: deps.hookRegistry },
                 {
-                  qualifiedToolId: toolCall.name,
+                  qualifiedToolId,
                   input,
                   runtimeId: runtime.spec.id,
                   pluginId: runtime.pluginId,
                   locale: context.locale,
+                  timeoutMs: toolTimeoutMs,
+                  state: options.dataAccess?.state.getAll(),
                 }
               );
 
@@ -303,7 +335,7 @@ export async function runRuntime(
           type: "tool.completed",
           runtimeId: runtime.spec.id,
           pluginId: runtime.pluginId,
-          label: toolCall.name,
+          label: qualifiedToolId,
         });
 
         // Append tool result message
@@ -317,7 +349,7 @@ export async function runRuntime(
       }
     }
 
-    // Fix 1: If maxSteps exhausted without final text, make a text-only LLM call
+    // If maxSteps or maxToolCalls exhausted without final text, make a text-only LLM call
     if (!finalText && toolCallsProcessed > 0) {
       try {
         const fallbackResult = await deps.gateway.generateText(

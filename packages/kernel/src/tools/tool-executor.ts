@@ -1,5 +1,6 @@
 import type { ToolExecutionContext, ToolExecutionResult } from "@covel/shared";
 import type { ScopedToolRegistry, ScopedHookRegistry, RegisteredTool } from "@covel/plugin-runtime";
+import { DEFAULT_TOOL_TIMEOUT_MS } from "../types.js";
 
 export interface ToolExecutorDeps {
   toolRegistry: ScopedToolRegistry;
@@ -13,6 +14,10 @@ export interface ToolCallRequest {
   runtimeId: string;
   pluginId: string;
   locale: string;
+  /** Per-tool-call timeout in milliseconds. Default: 10000 (10s). */
+  timeoutMs?: number;
+  /** Current turn state snapshot to inject into tool context. */
+  state?: Record<string, unknown>;
 }
 
 export interface ToolCallResult {
@@ -67,15 +72,25 @@ export async function executeTool(
     }
   }
 
-  // ── Execute the tool ──────────────────────────────────────────
+  // ── Execute the tool (with timeout) ────────────────────────────
   const ctx: ToolExecutionContext = {
     input: currentInput,
     runtimeId: request.runtimeId,
     pluginId: request.pluginId,
     locale: request.locale,
+    state: request.state,
   };
 
-  const toolResult: ToolExecutionResult = await tool.handler(ctx);
+  const timeoutMs = request.timeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
+  const toolResult: ToolExecutionResult = await Promise.race([
+    tool.handler(ctx),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`Tool "${request.qualifiedToolId}" timed out after ${timeoutMs}ms`)),
+        timeoutMs,
+      ),
+    ),
+  ]);
 
   // ── PostToolUse hooks ─────────────────────────────────────────
   const postHooks = deps.hookRegistry.getHooksForEvent("PostToolUse", {

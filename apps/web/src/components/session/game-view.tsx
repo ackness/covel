@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "@tanstack/react-router";
 import {
   SlidersHorizontal, Database, MessageSquare, Settings2, History, Send,
   Code, LayoutTemplate, Loader2, AlertCircle, KeyRound, Plus,
   PanelLeftClose, PanelRightClose, BookOpen, MapIcon, Copy, Check, Gamepad2,
+  Bug,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.js";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
@@ -569,6 +571,12 @@ export function GameView({
 
               <Button variant="ghost" size="icon" className="h-8 w-8 rounded-sm shrink-0" onClick={() => setSettingsOpen(true)} title="Settings">
                 <KeyRound className="w-4 h-4" />
+              </Button>
+
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-sm shrink-0" asChild title="Debug Traces">
+                <Link to="/debug" search={{ sid: session.id }}>
+                  <Bug className="w-4 h-4" />
+                </Link>
               </Button>
 
               <Button

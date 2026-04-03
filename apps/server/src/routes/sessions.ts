@@ -12,6 +12,17 @@ export function createSessionsRoute(store: MemoryStore) {
     return c.json(store.listSessions(worldId));
   });
 
+  route.get("/:sessionId", (c) => {
+    const sessionId = c.req.param("sessionId");
+    // Avoid matching sub-paths like /:sessionId/messages
+    if (sessionId.includes("/")) return c.notFound();
+    const session = store.getSession(sessionId);
+    if (!session) {
+      return c.json({ code: "NOT_FOUND", message: "Session not found" }, 404);
+    }
+    return c.json(session);
+  });
+
   route.post("/", async (c) => {
     const body = await c.req.json<{
       worldId?: string;
@@ -80,6 +91,15 @@ export function createSessionsRoute(store: MemoryStore) {
       return c.json({ code: "NOT_FOUND", message: "Session not found" }, 404);
     }
     return c.json(store.listMessages(sessionId));
+  });
+
+  route.get("/:sessionId/state-patches", (c) => {
+    const sessionId = c.req.param("sessionId");
+    const session = store.getSession(sessionId);
+    if (!session) {
+      return c.json({ code: "NOT_FOUND", message: "Session not found" }, 404);
+    }
+    return c.json(store.listStatePatches(sessionId));
   });
 
   // Stubs for endpoints the frontend may call

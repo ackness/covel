@@ -33,7 +33,8 @@
       "hooks": [],
       "budget": {
         "maxSteps": 25,
-        "timeoutMs": 120000
+        "timeoutMs": 120000,
+        "maxToolCalls": 40
       }
     }
   ],

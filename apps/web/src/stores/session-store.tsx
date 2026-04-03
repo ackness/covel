@@ -77,6 +77,7 @@ type Action =
   | { type: "SET_EXECUTION_ERROR"; error: string | null }
   | { type: "ADD_STATE_PATCH"; patch: { id: string; summary: string; packageName: string; data?: unknown } }
   | { type: "LOAD_MESSAGES"; messages: StreamMessage[] }
+  | { type: "LOAD_STATE_PATCHES"; patches: Array<{ id: string; summary: string; packageName: string; data?: unknown }> }
   | { type: "SET_PHASE"; phase: api.SessionPhase }
   | { type: "ADD_EXECUTION_STEP"; step: ExecutionStep }
   | { type: "CLEAR_EXECUTION_STEPS" }
@@ -106,11 +107,29 @@ const initialState: SessionState = {
   submittedBlockIds: new Set<string>(),
 };
 
-function shallowMerge(
+/** Recursively merge plain objects; non-object values are overwritten. */
+function deepMerge(
   target: Record<string, unknown>,
   source: Record<string, unknown>,
 ): Record<string, unknown> {
-  return { ...target, ...source };
+  const result = { ...target };
+  for (const key of Object.keys(source)) {
+    const tVal = result[key];
+    const sVal = source[key];
+    if (
+      tVal && sVal &&
+      typeof tVal === "object" && !Array.isArray(tVal) &&
+      typeof sVal === "object" && !Array.isArray(sVal)
+    ) {
+      result[key] = deepMerge(
+        tVal as Record<string, unknown>,
+        sVal as Record<string, unknown>,
+      );
+    } else {
+      result[key] = sVal;
+    }
+  }
+  return result;
 }
 
 function reducer(state: SessionState, action: Action): SessionState {
@@ -163,7 +182,7 @@ function reducer(state: SessionState, action: Action): SessionState {
     case "ADD_STATE_PATCH": {
       const patchData = action.patch.data as Record<string, unknown> | undefined;
       const newGameState = patchData
-        ? shallowMerge(state.gameState, patchData)
+        ? deepMerge(state.gameState, patchData)
         : state.gameState;
       return {
         ...state,
@@ -173,6 +192,15 @@ function reducer(state: SessionState, action: Action): SessionState {
     }
     case "LOAD_MESSAGES":
       return { ...state, messages: action.messages };
+    case "LOAD_STATE_PATCHES": {
+      let rebuiltGameState: Record<string, unknown> = {};
+      for (const patch of action.patches) {
+        if (patch.data && typeof patch.data === "object") {
+          rebuiltGameState = deepMerge(rebuiltGameState, patch.data as Record<string, unknown>);
+        }
+      }
+      return { ...state, statePatches: action.patches, gameState: rebuiltGameState };
+    }
     case "SET_PHASE":
       return { ...state, phase: action.phase };
     case "ADD_EXECUTION_STEP":
@@ -208,6 +236,8 @@ interface SessionContextValue {
   startGame: () => Promise<void>;
   /** Resume a previously created session. */
   resumeSession: (session: api.SessionRecord) => Promise<void>;
+  /** Resume a session by ID (for URL-based auto-resume on refresh). */
+  resumeSessionById: (sessionId: string) => Promise<void>;
   /** Load all sessions for the current world. */
   loadWorldSessions: () => Promise<void>;
   sendMessage: (content: string) => void;
@@ -401,7 +431,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, [state.world, state.presets, handleSseEvent]);
 
-  const resumeSession = useCallback(async (session: api.SessionRecord) => {
+  /** Shared logic for fully restoring a session from server data. */
+  const restoreSession = useCallback(async (session: api.SessionRecord) => {
+    // Clear stale state from previous session before loading the new one
+    dispatch({ type: "RESET_SESSION" });
+
     // Set the world context
     const world = state.worlds.find((w) => w.id === session.worldId);
     if (world) {
@@ -409,20 +443,42 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
     dispatch({ type: "SET_SESSION", session });
 
-    // Load existing messages
-    try {
-      const messages = await api.listMessages(session.id);
-      const streamMessages: StreamMessage[] = messages.map((m) => ({
+    // Load messages and state patches in parallel
+    const [messagesResult, patchesResult] = await Promise.allSettled([
+      api.listMessages(session.id),
+      api.listStatePatches(session.id),
+    ]);
+
+    // Restore messages (including block data)
+    if (messagesResult.status === "fulfilled") {
+      const streamMessages: StreamMessage[] = messagesResult.value.map((m) => ({
         id: m.id,
         role: m.role as "system" | "user" | "assistant",
         content: m.content,
         timestamp: m.createdAt,
+        turnId: m.turnId,
+        runtimeId: m.runtimeId,
+        ...(m.block ? { block: m.block } : {}),
       }));
       dispatch({ type: "LOAD_MESSAGES", messages: streamMessages });
-    } catch (err) {
-      console.warn('[session] Failed to load messages:', err instanceof Error ? err.message : err);
+    } else {
+      console.warn('[session] Failed to load messages:', messagesResult.reason);
+    }
+
+    // Restore state patches and rebuild gameState
+    if (patchesResult.status === "fulfilled") {
+      dispatch({ type: "LOAD_STATE_PATCHES", patches: patchesResult.value });
     }
   }, [state.worlds]);
+
+  const resumeSession = useCallback(async (session: api.SessionRecord) => {
+    await restoreSession(session);
+  }, [restoreSession]);
+
+  const resumeSessionById = useCallback(async (sessionId: string) => {
+    const session = await api.getSession(sessionId);
+    await restoreSession(session);
+  }, [restoreSession]);
 
   const loadWorldSessions = useCallback(async () => {
     if (!state.world) return;
@@ -570,6 +626,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     selectWorld,
     startGame,
     resumeSession,
+    resumeSessionById,
     loadWorldSessions,
     sendMessage,
     submitBlock,

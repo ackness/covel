@@ -491,6 +491,11 @@ function targetModel(t: ResolvedTarget): string {
 }
 
 function shouldFallback(error: AiProviderError): boolean {
+  // Never fallback on client errors (4xx) — the request itself is malformed,
+  // so retrying with a different provider will produce the same failure.
+  if (error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
+    return false;
+  }
   return (
     error.code === "RATE_LIMITED" ||
     error.code === "PROVIDER_ERROR" ||
