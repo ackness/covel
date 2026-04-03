@@ -26,12 +26,13 @@ pnpm db:generate          # Generate Drizzle migrations
 pnpm db:migrate           # Run Drizzle migrations
 pnpm db:studio            # Open Drizzle Studio
 
-# Tests (vitest)
+# Tests (vitest — all packages)
 pnpm --filter @covel/kernel test           # Run kernel tests
 pnpm --filter @covel/plugin-runtime test   # Run plugin-runtime tests
 pnpm --filter @covel/runtime test          # Run runtime tests
 pnpm --filter @covel/ai-provider test      # Run ai-provider tests
 pnpm --filter @covel/store test            # Run store tests
+pnpm --filter @covel/server test           # Run server tests
 # Add --watch for watch mode, --run for single run
 ```
 
@@ -198,6 +199,46 @@ Two route sets:
 - Routes: `/` (landing), `/session` (game workbench), `/debug` (debugger)
 - `@` path alias → `apps/web/src/`
 - i18n via i18next: `zh-CN` (default) + `en-US`
+
+## Testing Conventions
+
+All packages use **vitest** as the test runner (`vitest run` for CI, `vitest` for watch mode). No package uses Node's built-in `node:test`.
+
+### Test Organization
+
+```
+packages/<pkg>/tests/       # Unit & integration tests for each package
+apps/server/tests/          # Server store & route tests
+plugins/<plugin>/tests/     # Plugin-specific tests (if any)
+```
+
+### Test Patterns
+
+- **Contract tests** (`store-contract.ts`): Shared test suite defining behavioral expectations for the `DataStore` interface. Each backend (MemoryStore, IdbStore, PgStore) runs the same contract tests to ensure consistency. New store backends MUST pass the contract suite.
+- **ServerStore tests**: `apps/server/tests/memory-store.test.ts` (in-memory, fast), `pg-server-store.test.ts` (requires local PG — `DATABASE_URL=postgresql://covel:covel_dev@localhost:5432/covel`).
+- **Tool call tests**: `packages/kernel/tests/builtin-data-tools.test.ts` (all 10 builtin data tools), `tool-call-integration.test.ts` (full lifecycle: registration → sanitization → scoping → execution → hooks → proposals).
+- **Plugin API tests**: `packages/plugin-runtime/tests/plugin-registrar-api.test.ts` (PluginRegistrar interface for plugin authors: tool/hook/context/runtime/command registration).
+
+### Test Style
+
+```typescript
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+describe("ComponentName", () => {
+  // Group by method or behavior
+  describe("methodName", () => {
+    it("should describe expected behavior", () => {
+      // Arrange → Act → Assert
+    });
+  });
+});
+```
+
+- Use `vi.fn()` for mocks, `vi.spyOn()` for spying
+- Use `beforeEach` for per-test isolation (fresh store/registry instances)
+- IDB tests use `fake-indexeddb` polyfill
+- PG tests use a real local database (Docker: `pnpm db:up`)
+- JSONB columns: use `sql.json(value as JSONValue)` for writes — never `JSON.stringify()` (causes double-serialization)
 
 ## Conventions
 

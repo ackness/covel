@@ -16,7 +16,7 @@ import type {
   StatePatchRecord,
   TraceEvent,
 } from "./types.js";
-import pgClient from "postgres";
+import pgClient, { type JSONValue } from "postgres";
 
 function uid(prefix: string): string {
   return `${prefix}_${randomUUID()}`;
@@ -153,7 +153,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     await sql`
       INSERT INTO sv_worlds (id, name, description, lore, locale, tags, dimensions, created_at, updated_at)
       VALUES (${w.id}, ${w.name}, ${w.description}, ${w.lore ?? null}, ${w.locale ?? null},
-              ${JSON.stringify(w.tags ?? null)}, ${JSON.stringify(w.dimensions ?? null)},
+              ${w.tags ? sql.json(w.tags as JSONValue) : null}, ${w.dimensions ? sql.json(w.dimensions as JSONValue) : null},
               ${w.createdAt}, ${w.updatedAt ?? null})
       ON CONFLICT (id) DO UPDATE SET
         name = EXCLUDED.name, description = EXCLUDED.description,
@@ -222,7 +222,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     await sql`
       INSERT INTO sv_sessions (id, world_id, status, phase, preset_id, task_bindings, created_at)
       VALUES (${s.id}, ${s.worldId}, ${s.status}, ${s.phase}, ${s.presetId ?? null},
-              ${JSON.stringify(s.taskBindings ?? null)}, ${s.createdAt})
+              ${s.taskBindings ? sql.json(s.taskBindings as JSONValue) : null}, ${s.createdAt})
       ON CONFLICT (id) DO UPDATE SET
         status = EXCLUDED.status, phase = EXCLUDED.phase,
         preset_id = EXCLUDED.preset_id, task_bindings = EXCLUDED.task_bindings
@@ -283,7 +283,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       INSERT INTO sv_messages (id, session_id, role, content, turn_id, runtime_id, block, created_at)
       VALUES (${m.id}, ${m.sessionId}, ${m.role}, ${m.content},
               ${m.turnId ?? null}, ${m.runtimeId ?? null},
-              ${m.block ? JSON.stringify(m.block) : null}, ${m.createdAt})
+              ${m.block ? sql.json(m.block as JSONValue) : null}, ${m.createdAt})
     `;
   }
 
@@ -364,7 +364,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       INSERT INTO sv_characters (id, world_id, run_id, name, type, description, portrait, fields, extensions, version, created_at, updated_at)
       VALUES (${c.id}, ${c.worldId}, ${c.runId ?? null}, ${c.name}, ${c.type},
               ${c.description ?? ""}, ${c.portrait ?? null},
-              ${JSON.stringify(c.fields ?? {})}, ${JSON.stringify(c.extensions ?? {})},
+              ${sql.json((c.fields ?? {}) as JSONValue)}, ${sql.json((c.extensions ?? {}) as JSONValue)},
               ${c.version}, ${c.createdAt}, ${now})
       ON CONFLICT (id) DO UPDATE SET
         name = EXCLUDED.name, type = EXCLUDED.type, description = EXCLUDED.description,
