@@ -11,6 +11,7 @@ import {
   Gamepad2,
   Flag,
 } from "lucide-react";
+import i18n from "@/i18n/index.js";
 import type {
   I18nText,
   WorldGeography,
@@ -34,6 +35,14 @@ import { WorldDimensionSection } from "./world-dimension-section.js";
 function text(v: I18nText | undefined): string {
   if (!v) return "";
   if (typeof v === "string") return v;
+  const lang = i18n.language;
+  if (lang) {
+    const r = v as Record<string, string>;
+    if (r[lang]) return r[lang];
+    const prefix = lang.split("-")[0];
+    const fallback = Object.keys(r).find((k) => k.startsWith(prefix));
+    if (fallback) return r[fallback];
+  }
   return Object.values(v)[0] ?? "";
 }
 

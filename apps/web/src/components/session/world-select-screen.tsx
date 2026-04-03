@@ -110,7 +110,7 @@ export function WorldSelectScreen({
               {t("session.selectWorld", "Select World")}
             </h1>
             <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              Choose a world to begin your adventure. Each world has unique lore, characters, and narration style.
+              {t("session.worldSelectDesc")}
             </p>
             <div className="flex items-center justify-center gap-3">
               <Button variant="ghost" size="sm" className="text-xs uppercase tracking-widest" onClick={() => onSettingsOpenChange(true)}>
@@ -172,7 +172,7 @@ export function WorldSelectScreen({
           {worlds.length === 0 && (
             <div className="text-center py-12">
               <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" />
-              <p className="text-sm text-muted-foreground mt-2">Loading worlds...</p>
+              <p className="text-sm text-muted-foreground mt-2">{t("session.loadingWorlds")}</p>
             </div>
           )}
 
@@ -181,7 +181,7 @@ export function WorldSelectScreen({
             {packages.filter((p) => p.enabled).length > 0 && (
               <span className="flex items-center gap-1.5">
                 <Cpu className="w-3.5 h-3.5" />
-                {packages.filter((p) => p.enabled).length} plugins loaded
+                {t("session.pluginsLoaded", { count: packages.filter((p) => p.enabled).length })}
               </span>
             )}
             {defaultSlot?.preset && (
