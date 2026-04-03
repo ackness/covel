@@ -270,6 +270,15 @@
     "featWebSearch": "搜索",
     "featComputerUse": "电脑使用"
   },
+  "plugin": {
+    "runtimes": "运行时",
+    "tools": "工具",
+    "requires": "依赖",
+    "triggerAlways": "每回合",
+    "triggerInterval": "间隔",
+    "triggerManual": "手动",
+    "triggerEvent": "事件触发"
+  },
   "common": {
     "loading": "加载中...",
     "error": "出错了",

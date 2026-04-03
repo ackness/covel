@@ -68,12 +68,21 @@ export interface RuntimeSummary {
   providerBinding?: string;
 }
 
+export interface ToolSummary {
+  id: string;
+  kind: string;
+}
+
 export interface PackageSummary {
   name: string;
   displayName?: string | Record<string, string>;
   description?: string | Record<string, string>;
   enabled: boolean;
   runtimes?: RuntimeSummary[];
+  tools?: ToolSummary[];
+  requires?: string[];
+  version?: string;
+  author?: string;
 }
 
 export interface CommandSummary {

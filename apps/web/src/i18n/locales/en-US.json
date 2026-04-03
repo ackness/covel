@@ -270,6 +270,15 @@
     "featWebSearch": "Web Search",
     "featComputerUse": "Computer Use"
   },
+  "plugin": {
+    "runtimes": "Runtimes",
+    "tools": "Tools",
+    "requires": "Requires",
+    "triggerAlways": "Always",
+    "triggerInterval": "Interval",
+    "triggerManual": "Manual",
+    "triggerEvent": "Event"
+  },
   "common": {
     "loading": "Loading...",
     "error": "Something went wrong",

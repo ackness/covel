@@ -28,6 +28,7 @@ import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 import type { SessionRecord, WorldRecord, PackageSummary, PresetSummary, CommandSummary, LlmConfigResponse } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
+import { PluginListPanel } from "./plugin-list-panel.js";
 
 // ── Extracted Panel Components ──────────────────────────────────
 
@@ -176,18 +177,11 @@ function LeftPanel({
           <div className="px-3 py-3 border-b border-border space-y-2">
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               {t("session.plugins", "Plugins")}
+              {enabledPackages.length > 0 && (
+                <span className="ml-1 font-normal">({enabledPackages.length})</span>
+              )}
             </h3>
-            {enabledPackages.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">{t("session.noPluginsLoaded")}</p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {enabledPackages.map((pkg) => (
-                  <Badge key={pkg.name} variant="outline" className="text-[10px] border-primary/20">
-                    {pkg.name}
-                  </Badge>
-                ))}
-              </div>
-            )}
+            <PluginListPanel packages={enabledPackages} />
           </div>
 
           {/* ── Commands ── */}

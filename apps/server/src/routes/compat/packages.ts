@@ -22,12 +22,21 @@ export function createCompatPackagesRoute(pluginHost: PluginHost) {
           providerBinding: r.spec.providerBinding,
         }));
 
+      const pluginTools = (p.manifest.tools ?? []).map((t) => ({
+        id: t.id,
+        kind: t.kind,
+      }));
+
       return {
         name: p.manifest.id,
         displayName: p.manifest.displayName,
         description: p.manifest.description,
         enabled: p.enabled,
         runtimes: pluginRuntimes,
+        tools: pluginTools,
+        requires: p.manifest.requires,
+        version: p.manifest.version,
+        author: p.manifest.author,
       };
     });
     return c.json(packages);
