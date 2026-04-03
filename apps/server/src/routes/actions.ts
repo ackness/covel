@@ -40,13 +40,29 @@ export function createActionsRoute(deps: {
 }) {
   const { getOrCreateSession, commandBus, store } = deps;
 
-  // Per-session run tracking
-  const sessionRuns = new Map<string, { runId: string; branchId: string }>();
+  // Per-session run tracking (capped to prevent unbounded growth)
+  const SESSION_RUNS_MAX = 1000;
+  const sessionRuns = new Map<string, { runId: string; branchId: string; lastUsed: number }>();
 
   function getRunInfo(sessionId: string) {
     let info = sessionRuns.get(sessionId);
     if (!info) {
-      info = { runId: `run-${sessionId}`, branchId: "branch-main" };
+      // Evict oldest entries when exceeding max size
+      if (sessionRuns.size >= SESSION_RUNS_MAX) {
+        let oldestKey: string | undefined;
+        let oldestTime = Infinity;
+        for (const [key, val] of sessionRuns) {
+          if (val.lastUsed < oldestTime) {
+            oldestTime = val.lastUsed;
+            oldestKey = key;
+          }
+        }
+        if (oldestKey) sessionRuns.delete(oldestKey);
+      }
+      info = { runId: `run-${sessionId}`, branchId: "branch-main", lastUsed: Date.now() };
+      sessionRuns.set(sessionId, info);
+    } else {
+      info = { ...info, lastUsed: Date.now() };
       sessionRuns.set(sessionId, info);
     }
     return info;
@@ -55,13 +71,18 @@ export function createActionsRoute(deps: {
   const route = new Hono<ApiKeyEnv>();
 
   route.post("/", async (c) => {
-    const body = await c.req.json<{
+    let body: {
       requestId: string;
       type: "send_message" | "execute_command" | "submit_block_response" | "start_session" | "retry_runtime";
       sessionId: string;
       locale?: string;
       payload: Record<string, unknown>;
-    }>();
+    };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ code: "INVALID_JSON", message: "Malformed JSON body" }, 400);
+    }
 
     const { requestId, type, sessionId, locale, payload = {} } = body;
 
@@ -102,7 +123,7 @@ export function createActionsRoute(deps: {
           customPresetDefs = decoded.customPresets;
         }
       } catch {
-        // Invalid header, skip
+        console.warn("[actions] Failed to decode X-Slot-Config header, skipping");
       }
     }
 
@@ -140,12 +161,24 @@ export function createActionsRoute(deps: {
         });
       }
 
-      // Register custom presets from frontend (ephemeral, for this request)
+      // Register custom presets from frontend (ephemeral, per-request scoped).
+      // Use a unique suffix per request to avoid collisions from concurrent requests.
+      const reqSuffix = `_req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
       const registeredCustomIds: string[] = [];
       if (customPresetDefs && deps.presetRegistry) {
+        // Validate baseUrl against allowlist if configured (SSRF prevention)
+        const allowedBaseUrls = process.env.ALLOWED_BASE_URLS
+          ? process.env.ALLOWED_BASE_URLS.split(",").map((s) => s.trim())
+          : null;
+
         for (const def of customPresetDefs) {
+          if (allowedBaseUrls && def.baseUrl && !allowedBaseUrls.some((allowed) => def.baseUrl.startsWith(allowed))) {
+            console.warn(`[actions] Blocked baseUrl not in ALLOWED_BASE_URLS: ${def.baseUrl}`);
+            continue;
+          }
+          const scopedId = def.id + reqSuffix;
           deps.presetRegistry.addPreset({
-            id: def.id,
+            id: scopedId,
             name: def.name,
             provider: def.provider,
             model: def.model,
@@ -155,7 +188,17 @@ export function createActionsRoute(deps: {
             supportedModes: ["text"],
             enabled: true,
           });
-          registeredCustomIds.push(def.id);
+          registeredCustomIds.push(scopedId);
+        }
+        // Remap slot overrides to use scoped preset IDs
+        if (slotOverrides) {
+          for (const [slotName, slotDef] of Object.entries(slotOverrides)) {
+            const originalId = slotDef.presetId;
+            const matchingDef = customPresetDefs.find((d) => d.id === originalId);
+            if (matchingDef) {
+              slotOverrides[slotName] = { presetId: originalId + reqSuffix };
+            }
+          }
         }
       }
 
@@ -239,7 +282,8 @@ export function createActionsRoute(deps: {
             resolveBackgroundDone = resolve;
           });
 
-          const turnResult = await kernelSession.retryTurn(retryRuntimeId, {
+          let retryTurnResult: KernelTurnResult | undefined;
+          retryTurnResult = await kernelSession.retryTurn(retryRuntimeId, {
             apiKeys,
             slotOverrides,
             onProgress: async (evt) => {
@@ -259,7 +303,11 @@ export function createActionsRoute(deps: {
             },
             onBackgroundTaskDone: async (task) => {
               try {
-                const { turnId: tid, traceId: trid } = turnResult;
+                if (!retryTurnResult) {
+                  console.warn("[actions] onBackgroundTaskDone fired before retryTurn resolved");
+                  return;
+                }
+                const { turnId: tid, traceId: trid } = retryTurnResult;
                 if (task.status === "completed" && task.result?.text) {
                   store.addMessage(sessionId, "assistant", task.result.text, { turnId: tid, runtimeId: task.runtimeId });
                   const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
@@ -279,6 +327,7 @@ export function createActionsRoute(deps: {
               }
             },
           });
+          const turnResult = retryTurnResult;
 
           const { turnId, traceId } = turnResult;
 
@@ -405,7 +454,8 @@ export function createActionsRoute(deps: {
         });
 
         // Execute kernel turn with progress callback for real-time SSE
-        const turnResult = await kernelSession.executeTurn(
+        let mainTurnResult: KernelTurnResult | undefined;
+        mainTurnResult = await kernelSession.executeTurn(
           {
             runId: runInfo.runId,
             branchId: runInfo.branchId,
@@ -430,7 +480,15 @@ export function createActionsRoute(deps: {
               }
             },
             onBackgroundTaskDone: async (task) => {
-              const { turnId: tid, traceId: trid } = turnResult;
+              if (!mainTurnResult) {
+                console.warn("[actions] onBackgroundTaskDone fired before executeTurn resolved");
+                backgroundTaskDoneCount++;
+                if (backgroundTaskDoneCount >= backgroundTaskCount) {
+                  resolveBackgroundDone?.();
+                }
+                return;
+              }
+              const { turnId: tid, traceId: trid } = mainTurnResult;
               try {
                 if (task.status === "completed" && task.result) {
                   // Emit narrative from background runtime
@@ -491,6 +549,7 @@ export function createActionsRoute(deps: {
             },
           }
         );
+        const turnResult = mainTurnResult;
 
         const { turnId, traceId } = turnResult;
 
@@ -584,8 +643,10 @@ export function createActionsRoute(deps: {
         // flow.completed
         await emit("flow.completed", turnId, traceId, { flowId });
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Internal error";
+        const rawMsg = err instanceof Error ? err.message : "Internal error";
         console.error("[actions] Error:", err);
+        const tier = process.env.DEPLOYMENT_TIER ?? "self";
+        const msg = tier === "self" ? rawMsg : "An internal error occurred";
         await emit("flow.failed", "", "", { code: "EXECUTION_ERROR", message: msg });
       } finally {
         // Clean up ephemeral custom presets

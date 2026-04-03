@@ -64,47 +64,6 @@ export interface RuntimeExecutorResult {
  */
 export function createRuntimeExecutor(gateway: GatewayLike) {
   /**
-   * Execute a single non-streaming generation.
-   */
-  async function execute(
-    input: RuntimeExecutorInput
-  ): Promise<RuntimeExecutorResult> {
-    const budget = createBudgetEnforcer(input.context.runtime.budget);
-
-    try {
-      budget.checkStep();
-
-      const messages = buildMessages(input);
-      const presetId = resolvePresetId(input);
-      const gatewayOptions: GatewayOptions = {
-        apiKeys: input.apiKeys,
-        traceId: input.traceId,
-        signal: budget.signal(),
-      };
-
-      const result = await gateway.generateText(
-        {
-          presetId,
-          messages,
-          providerRequestMetadata: input.providerRequestMetadata,
-        },
-        gatewayOptions
-      );
-
-      budget.recordTokens(result.usage.inputTokens, result.usage.outputTokens);
-
-      return {
-        text: result.text,
-        finishReason: result.finishReason,
-        usage: result.usage,
-        steps: budget.state.steps,
-      };
-    } finally {
-      budget.dispose();
-    }
-  }
-
-  /**
    * Execute a streaming generation.
    * Yields StreamEvents from the gateway.
    */
@@ -145,7 +104,7 @@ export function createRuntimeExecutor(gateway: GatewayLike) {
     }
   }
 
-  return { execute, stream };
+  return { stream };
 }
 
 function buildMessages(input: RuntimeExecutorInput): TextMessage[] {

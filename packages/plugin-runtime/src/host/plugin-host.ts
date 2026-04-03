@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { access } from "node:fs/promises";
 import { scanPluginDirectory } from "../loader/fs-scanner.js";
 import { loadPluginModule } from "../loader/module-loader.js";
@@ -48,9 +48,12 @@ export function createPluginHost(): PluginHost {
       (a, b) => (a.manifest.loadingOrder ?? 100) - (b.manifest.loadingOrder ?? 100)
     );
 
+    // Pre-pass: collect all manifest IDs for dependency validation
+    const allManifestIds = new Set(scanned.map((s) => s.manifest.id));
+
     for (const { dir, manifest } of scanned) {
-      // Check dependency/conflict constraints
-      const constraintErrors = pluginRegistry.validateConstraints(manifest);
+      // Check dependency/conflict constraints against the full set of manifests
+      const constraintErrors = pluginRegistry.validateConstraints(manifest, allManifestIds);
       if (constraintErrors.length > 0) {
         console.warn(
           `[plugin-host] Skipping "${manifest.id}" due to constraint errors:\n` +
@@ -74,7 +77,10 @@ export function createPluginHost(): PluginHost {
         for (const spec of manifest.runtimes) {
           let instructionsPath: string | undefined;
           if (spec.instructionsRef) {
-            const refPath = join(dir, spec.instructionsRef);
+            const refPath = resolve(dir, spec.instructionsRef);
+            if (!refPath.startsWith(resolve(dir) + sep)) {
+              throw new Error(`Unsafe instructionsRef: ${spec.instructionsRef}`);
+            }
             try {
               await access(refPath);
               instructionsPath = refPath;
@@ -106,6 +112,10 @@ export function createPluginHost(): PluginHost {
             toolRegistry.register(manifest.id, def, handler);
           } else {
             // Tool registered without manifest definition — register with minimal def
+            console.warn(
+              `[plugin-host] Tool "${toolId}" from plugin "${manifest.id}" is not declared in the manifest. ` +
+                `Registering with default kind "query". Declare it in plugin.json for explicit kind/schema/permissions.`
+            );
             toolRegistry.register(
               manifest.id,
               { id: toolId, kind: "query" },

@@ -80,7 +80,6 @@ export async function compactChatHistory(
 
   // 1b. Extract narrative from compacted messages
   const narrativeSegments: string[] = [];
-  const stateSnapshots: string[] = [];
 
   for (const msg of toCompact) {
     const content = msg.content ?? "";
@@ -91,11 +90,6 @@ export async function compactChatHistory(
           ? content.slice(0, 500) + "..."
           : content;
       narrativeSegments.push(preview);
-    }
-
-    // Detect state snapshot patterns
-    if (content.includes("<state>")) {
-      stateSnapshots.push(content);
     }
   }
 

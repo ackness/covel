@@ -18,6 +18,7 @@ interface SessionPrepScreenProps {
   world: api.WorldRecord;
   packages: api.PackageSummary[];
   presets: api.PresetSummary[];
+  llmConfig?: api.LlmConfigResponse | null;
   onBack: () => void;
   onStart: () => void;
   onResume: (session: api.SessionRecord) => void;
@@ -29,6 +30,7 @@ export function SessionPrepScreen({
   world,
   packages,
   presets,
+  llmConfig,
   onBack,
   onStart,
   onResume,
@@ -36,7 +38,7 @@ export function SessionPrepScreen({
   onSettingsOpenChange,
 }: SessionPrepScreenProps) {
   const { t } = useTranslation();
-  const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(presets);
+  const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(presets, llmConfig);
 
   const [priorityOverrides, setPriorityOverrides] = useState<Record<string, number>>(() =>
     api.getRuntimePriorityOverrides()

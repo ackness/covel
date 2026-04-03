@@ -51,18 +51,28 @@ export function createPluginRegistry() {
   /**
    * Check dependency and conflict constraints.
    * Returns an array of error messages (empty if valid).
+   *
+   * @param manifest - The plugin manifest to validate
+   * @param allKnownIds - Optional set of all known plugin IDs (e.g. from a pre-scan).
+   *   When provided, `requires` is checked against this set instead of just the
+   *   already-loaded plugins, so that load order doesn't affect validation.
+   *   `conflicts` is always checked against both the loaded set and the full set.
    */
-  function validateConstraints(manifest: PluginManifest): string[] {
+  function validateConstraints(manifest: PluginManifest, allKnownIds?: ReadonlySet<string>): string[] {
     const errors: string[] = [];
 
     for (const req of manifest.requires ?? []) {
-      if (!plugins.has(req)) {
+      const known = allKnownIds ? allKnownIds.has(req) : plugins.has(req);
+      if (!known) {
         errors.push(`Missing required plugin: "${req}"`);
       }
     }
 
     for (const conflict of manifest.conflicts ?? []) {
-      if (plugins.has(conflict)) {
+      const conflicted = allKnownIds
+        ? allKnownIds.has(conflict)
+        : plugins.has(conflict);
+      if (conflicted) {
         errors.push(`Conflicts with loaded plugin: "${conflict}"`);
       }
     }

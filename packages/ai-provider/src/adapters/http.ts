@@ -220,7 +220,13 @@ export function appendProviderMetadata(
 
 // ── Internal helper ──────────────────────────────────────────────
 
-/** Safely cast an unknown value to a record for optional chaining. */
+/**
+ * Safely cast an unknown value to a record for optional chaining.
+ *
+ * TODO: Replace with properly typed helper functions per provider response shape.
+ * Each call site (readOpenAiChatText, readOpenAiChatStreamDelta, etc.) should
+ * use narrowing or typed response interfaces instead of bypassing the type system.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function asAny(value: unknown): any {
   return value;

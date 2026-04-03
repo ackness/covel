@@ -36,7 +36,13 @@ export function createSessionPluginsRoute(deps: {
 
   route.post("/:sessionId/plugins/enable", async (c) => {
     const sessionId = c.req.param("sessionId");
-    const { pluginId } = await c.req.json<{ pluginId: string }>();
+    let parsed: { pluginId: string };
+    try {
+      parsed = await c.req.json();
+    } catch {
+      return c.json({ code: "INVALID_JSON", message: "Malformed JSON body" }, 400);
+    }
+    const { pluginId } = parsed;
 
     if (!pluginId) {
       return c.json({ code: "INVALID_REQUEST", message: "pluginId is required" }, 400);
@@ -57,7 +63,13 @@ export function createSessionPluginsRoute(deps: {
 
   route.post("/:sessionId/plugins/disable", async (c) => {
     const sessionId = c.req.param("sessionId");
-    const { pluginId } = await c.req.json<{ pluginId: string }>();
+    let parsed: { pluginId: string };
+    try {
+      parsed = await c.req.json();
+    } catch {
+      return c.json({ code: "INVALID_JSON", message: "Malformed JSON body" }, 400);
+    }
+    const { pluginId } = parsed;
 
     if (!pluginId) {
       return c.json({ code: "INVALID_REQUEST", message: "pluginId is required" }, 400);

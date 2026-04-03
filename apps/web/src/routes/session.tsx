@@ -34,7 +34,7 @@ function SessionPage() {
     updateWorldLocal,
   } = useSession();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const { resolvedSlots } = useSlotConfig(state.presets);
+  const { resolvedSlots } = useSlotConfig(state.presets, state.llmConfig);
   const { sid } = Route.useSearch();
   const navigate = useNavigate();
   const autoResumeAttempted = useRef(false);
@@ -101,6 +101,7 @@ function SessionPage() {
         packages={state.packages}
         presets={state.presets}
         commands={state.commands}
+        llmConfig={state.llmConfig}
         statePatches={state.statePatches}
         gameState={state.gameState}
         executionSteps={state.executionSteps}
@@ -124,6 +125,7 @@ function SessionPage() {
         world={state.world}
         packages={state.packages}
         presets={state.presets}
+        llmConfig={state.llmConfig}
         onBack={backToWorldSelect}
         onStart={startGame}
         onResume={resumeSession}

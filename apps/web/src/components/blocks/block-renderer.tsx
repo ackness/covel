@@ -60,6 +60,10 @@ const CUSTOM_RENDERERS: Record<string, BlockRendererComponent> = {
 
 // ── Tier 2: Schema Registry ──────────────────────────────────────
 
+// Module-level mutable state: intentional singleton registry shared across all
+// React component instances. Updated once at boot via setBlockSchemas() and
+// read by getBlockRenderer() during render. Not placed in React context because
+// it must be accessible outside the component tree (e.g. in resolution helpers).
 let blockSchemas: Record<string, BlockSchemaDeclaration> = {};
 
 export function setBlockSchemas(schemas: Record<string, BlockSchemaDeclaration>) {

@@ -1,4 +1,5 @@
 import type { ToolExecutionContext, ToolExecutionResult } from "@covel/shared";
+import { z } from "zod";
 import {
   initCombat,
   resolveAttack,
@@ -17,6 +18,50 @@ import type {
   CombatParticipant,
   ParticipantInput,
 } from "./combat-logic.js";
+
+// ── Zod Schemas ───────────────────────────────────────────────────
+
+const participantSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.enum(["player", "ally", "enemy"]),
+  hp: z.number(),
+  maxHp: z.number(),
+  statusEffects: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    duration: z.number(),
+    effect: z.record(z.unknown()),
+  })).optional(),
+});
+
+const startCombatInputSchema = z.object({
+  participants: z.array(participantSchema).min(1),
+  initiativeRolls: z.array(z.number()).optional(),
+});
+
+const attackInputSchema = z.object({
+  attackerId: z.string(),
+  targetId: z.string(),
+  rollResult: z.number(),
+});
+
+const defendInputSchema = z.object({
+  participantId: z.string(),
+});
+
+const useSkillInputSchema = z.object({
+  actorId: z.string(),
+  targetId: z.string(),
+  skillName: z.string(),
+  skillType: z.enum(["damage", "heal", "buff", "debuff"]),
+  rollResult: z.number(),
+  magnitude: z.number().optional(),
+});
+
+const endCombatInputSchema = z.object({
+  reason: z.enum(["victory", "defeat", "retreat", "narrative"]),
+});
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -41,19 +86,15 @@ export async function startCombatTool(
   ctx: ToolExecutionContext<StartCombatInput>
 ): Promise<ToolExecutionResult> {
   const isZh = ctx.locale.startsWith("zh");
-  const { participants } = ctx.input;
-
-  if (!participants || participants.length === 0) {
-    return {
-      output: {
-        error: isZh ? "未提供参与者列表" : "No participants provided",
-      },
-    };
+  const parsed = startCombatInputSchema.safeParse(ctx.input);
+  if (!parsed.success) {
+    return { output: { error: parsed.error.message } };
   }
+  const { participants } = parsed.data;
 
   // Use provided initiative rolls or default to indices (in real usage, LLM calls core-dice first)
   const initiativeRolls =
-    ctx.input.initiativeRolls ??
+    parsed.data.initiativeRolls ??
     participants.map((_, i) => (participants.length - i) * 5);
 
   const turnId =
@@ -103,6 +144,10 @@ export async function attackTool(
   ctx: ToolExecutionContext<AttackInput>
 ): Promise<ToolExecutionResult> {
   const isZh = ctx.locale.startsWith("zh");
+  const parsed = attackInputSchema.safeParse(ctx.input);
+  if (!parsed.success) {
+    return { output: { error: parsed.error.message } };
+  }
 
   // Retrieve combat from the broader state context
   const combatState = extractCombatFromContext(ctx);
@@ -115,7 +160,7 @@ export async function attackTool(
     };
   }
 
-  const { attackerId, targetId, rollResult } = ctx.input;
+  const { attackerId, targetId, rollResult } = parsed.data;
 
   const attacker = combatState.turnOrder.find((p) => p.id === attackerId);
   const target = combatState.turnOrder.find((p) => p.id === targetId);
@@ -219,6 +264,11 @@ export async function defendTool(
   ctx: ToolExecutionContext<DefendInput>
 ): Promise<ToolExecutionResult> {
   const isZh = ctx.locale.startsWith("zh");
+  const parsed = defendInputSchema.safeParse(ctx.input);
+  if (!parsed.success) {
+    return { output: { error: parsed.error.message } };
+  }
+
   const combatState = extractCombatFromContext(ctx);
 
   if (!combatState || !combatState.active) {
@@ -229,7 +279,7 @@ export async function defendTool(
     };
   }
 
-  const { participantId } = ctx.input;
+  const { participantId } = parsed.data;
   const participant = combatState.turnOrder.find(
     (p) => p.id === participantId
   );
@@ -301,6 +351,11 @@ export async function useSkillTool(
   ctx: ToolExecutionContext<UseSkillInput>
 ): Promise<ToolExecutionResult> {
   const isZh = ctx.locale.startsWith("zh");
+  const parsed = useSkillInputSchema.safeParse(ctx.input);
+  if (!parsed.success) {
+    return { output: { error: parsed.error.message } };
+  }
+
   const combatState = extractCombatFromContext(ctx);
 
   if (!combatState || !combatState.active) {
@@ -312,7 +367,7 @@ export async function useSkillTool(
   }
 
   const { actorId, targetId, skillName, skillType, rollResult, magnitude } =
-    ctx.input;
+    parsed.data;
 
   const actor = combatState.turnOrder.find((p) => p.id === actorId);
   const target = combatState.turnOrder.find((p) => p.id === targetId);
@@ -425,6 +480,11 @@ export async function endCombatTool(
   ctx: ToolExecutionContext<EndCombatInput>
 ): Promise<ToolExecutionResult> {
   const isZh = ctx.locale.startsWith("zh");
+  const parsed = endCombatInputSchema.safeParse(ctx.input);
+  if (!parsed.success) {
+    return { output: { error: parsed.error.message } };
+  }
+
   const combatState = extractCombatFromContext(ctx);
 
   if (!combatState) {
@@ -435,7 +495,7 @@ export async function endCombatTool(
     };
   }
 
-  const { reason } = ctx.input;
+  const { reason } = parsed.data;
 
   const clearedCombat: CombatState = {
     ...combatState,

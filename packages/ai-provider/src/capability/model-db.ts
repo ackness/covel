@@ -102,6 +102,9 @@ export function createModelDatabase(
     }
   };
 
+  // Eagerly start loading persisted data (fire-and-forget on first access)
+  void loadPersisted();
+
   function lookup(modelId: string, provider?: string): ModelDbEntry | null {
     const normalized = modelId.toLowerCase();
 

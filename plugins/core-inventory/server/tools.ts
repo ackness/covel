@@ -1,5 +1,6 @@
 import type { ToolExecutionContext, ToolExecutionResult } from "@covel/shared";
 import type { ToolHandler } from "@covel/plugin-runtime";
+import { z } from "zod";
 import {
   addItem,
   removeItem,
@@ -10,6 +11,38 @@ import {
   createEmptyInventory,
   type InventoryState,
 } from "./inventory-logic.js";
+
+// ── Zod Schemas ─────────────────────────────────────────────────
+
+const addItemInputSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  category: z.enum(["weapon", "armor", "consumable", "quest", "material", "misc"]),
+  quantity: z.number().optional(),
+  properties: z.record(z.unknown()).optional(),
+});
+
+const removeItemInputSchema = z.object({
+  itemId: z.string().optional(),
+  itemName: z.string().optional(),
+  quantity: z.number().optional(),
+});
+
+const useItemInputSchema = z.object({
+  itemId: z.string().optional(),
+  itemName: z.string().optional(),
+});
+
+const equipItemInputSchema = z.object({
+  itemId: z.string().optional(),
+  itemName: z.string().optional(),
+  equip: z.boolean().optional(),
+});
+
+const modifyCurrencyInputSchema = z.object({
+  currency: z.string(),
+  amount: z.number(),
+});
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -39,7 +72,11 @@ export const addItemTool: ToolHandler = async (
   ctx: ToolExecutionContext
 ): Promise<ToolExecutionResult> => {
   const inventory = getInventory(ctx);
-  const input = ctx.input as AddItemInput;
+  const parsed = addItemInputSchema.safeParse(ctx.input);
+  if (!parsed.success) {
+    return { output: { error: parsed.error.message } };
+  }
+  const input = parsed.data;
   const isZh = ctx.locale.startsWith("zh");
 
   try {
@@ -109,7 +146,11 @@ export const removeItemTool: ToolHandler = async (
   ctx: ToolExecutionContext
 ): Promise<ToolExecutionResult> => {
   const inventory = getInventory(ctx);
-  const input = ctx.input as RemoveItemInput;
+  const parsed = removeItemInputSchema.safeParse(ctx.input);
+  if (!parsed.success) {
+    return { output: { error: parsed.error.message } };
+  }
+  const input = parsed.data;
   const isZh = ctx.locale.startsWith("zh");
 
   const resolvedId = input.itemId ?? findItemByName(inventory, input.itemName ?? "")?.id;
@@ -180,7 +221,11 @@ export const useItemTool: ToolHandler = async (
   ctx: ToolExecutionContext
 ): Promise<ToolExecutionResult> => {
   const inventory = getInventory(ctx);
-  const input = ctx.input as UseItemInput;
+  const parsed = useItemInputSchema.safeParse(ctx.input);
+  if (!parsed.success) {
+    return { output: { error: parsed.error.message } };
+  }
+  const input = parsed.data;
   const isZh = ctx.locale.startsWith("zh");
 
   const resolvedId = input.itemId ?? findItemByName(inventory, input.itemName ?? "")?.id;
@@ -252,7 +297,11 @@ export const equipItemTool: ToolHandler = async (
   ctx: ToolExecutionContext
 ): Promise<ToolExecutionResult> => {
   const inventory = getInventory(ctx);
-  const input = ctx.input as EquipItemInput;
+  const parsed = equipItemInputSchema.safeParse(ctx.input);
+  if (!parsed.success) {
+    return { output: { error: parsed.error.message } };
+  }
+  const input = parsed.data;
   const isZh = ctx.locale.startsWith("zh");
 
   const resolvedId = input.itemId ?? findItemByName(inventory, input.itemName ?? "")?.id;
@@ -322,7 +371,11 @@ export const modifyCurrencyTool: ToolHandler = async (
   ctx: ToolExecutionContext
 ): Promise<ToolExecutionResult> => {
   const inventory = getInventory(ctx);
-  const input = ctx.input as ModifyCurrencyInput;
+  const parsed = modifyCurrencyInputSchema.safeParse(ctx.input);
+  if (!parsed.success) {
+    return { output: { error: parsed.error.message } };
+  }
+  const input = parsed.data;
   const isZh = ctx.locale.startsWith("zh");
 
   try {

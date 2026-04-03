@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { CommitResult, ValidatedProposalEnvelope } from "@covel/shared";
 import type { TurnState } from "../types.js";
 
@@ -90,7 +91,7 @@ export function commitProposals(
   }
 
   return {
-    commitId: `commit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    commitId: `commit-${randomUUID()}`,
     turnId: turnContext.turnId,
     branchId: turnContext.branchId,
     committedAt: new Date().toISOString(),

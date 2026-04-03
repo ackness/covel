@@ -107,8 +107,23 @@ function loadBundledModelDb(projectRoot: string): ModelDatabase | null {
   const dbPath = resolve(projectRoot, "packages/ai-provider/data/model-db.json");
   try {
     const raw = readFileSync(dbPath, "utf-8");
-    const data = JSON.parse(raw) as ModelDbFile;
-    return createModelDatabase(data);
+    const data: unknown = JSON.parse(raw);
+    // Basic runtime validation of ModelDbFile shape
+    if (
+      !data ||
+      typeof data !== "object" ||
+      !("updatedAt" in data) ||
+      typeof (data as Record<string, unknown>).updatedAt !== "string" ||
+      !("count" in data) ||
+      typeof (data as Record<string, unknown>).count !== "number" ||
+      !("models" in data) ||
+      typeof (data as Record<string, unknown>).models !== "object" ||
+      (data as Record<string, unknown>).models === null
+    ) {
+      console.warn("[ai-setup] model-db.json has invalid structure (missing updatedAt/count/models)");
+      return null;
+    }
+    return createModelDatabase(data as ModelDbFile);
   } catch {
     console.warn("[ai-setup] Could not load bundled model-db.json");
     return null;

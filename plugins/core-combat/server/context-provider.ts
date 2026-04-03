@@ -21,7 +21,16 @@ export async function combatContextProvider(
     return null;
   }
 
-  const combat = state.combat as CombatState;
+  const raw = state.combat as Record<string, unknown>;
+  if (
+    typeof raw.active !== "boolean" ||
+    !Array.isArray(raw.turnOrder) ||
+    typeof raw.roundNumber !== "number"
+  ) {
+    return null;
+  }
+
+  const combat = raw as unknown as CombatState;
 
   if (!combat.active) {
     return null;

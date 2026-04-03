@@ -207,8 +207,12 @@ export async function runRuntime(
   // Sanitize qualified tool IDs for OpenAI compatibility:
   // OpenAI requires tool names to match ^[a-zA-Z0-9_-]+$ (no colons).
   // We replace ":" with "__" and maintain a bidirectional mapping.
-  const sanitizeToolName = (qualifiedId: string): string =>
-    qualifiedId.replace(/:/g, "__");
+  const sanitizeToolName = (qualifiedId: string): string => {
+    if (qualifiedId.includes("__")) {
+      throw new Error(`Tool ID "${qualifiedId}" must not contain "__"`);
+    }
+    return qualifiedId.replace(/:/g, "__");
+  };
   const desanitizeToolName = (sanitized: string): string =>
     sanitized.replace(/__/g, ":");
 

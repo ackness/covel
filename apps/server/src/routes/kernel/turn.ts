@@ -8,6 +8,9 @@ export function createTurnRoute(kernel: Kernel) {
   /**
    * POST /api/kernel/turn
    *
+   * DEBUG-ONLY: Uses the default kernel session. Not suitable for
+   * multi-session production use. Prefer /actions endpoint instead.
+   *
    * Body: {
    *   runId: string;
    *   branchId: string;
@@ -18,16 +21,23 @@ export function createTurnRoute(kernel: Kernel) {
    * }
    */
   route.post("/", async (c) => {
+    console.warn("[kernel/turn] WARNING: /api/kernel/turn uses default session — debug only, not for production");
+    let body: {
+      runId: string;
+      branchId: string;
+      actorId: string;
+      type: string;
+      locale?: string;
+      payload?: Record<string, unknown>;
+      traceId?: string;
+    };
     try {
-      const body = await c.req.json<{
-        runId: string;
-        branchId: string;
-        actorId: string;
-        type: string;
-        locale?: string;
-        payload?: Record<string, unknown>;
-        traceId?: string;
-      }>();
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Malformed JSON body", code: "INVALID_JSON" }, 400);
+    }
+
+    try {
       const apiKeys = c.get("apiKeys");
 
       const result = await kernel.executeTurn(
@@ -47,8 +57,10 @@ export function createTurnRoute(kernel: Kernel) {
 
       return c.json(result);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Unknown kernel error";
+      const rawMessage = err instanceof Error ? err.message : "Unknown kernel error";
       console.error("[kernel/turn] Error:", err);
+      const tier = process.env.DEPLOYMENT_TIER ?? "self";
+      const message = tier === "self" ? rawMessage : "An internal error occurred";
       return c.json({ error: message, code: "KERNEL_ERROR" }, 500);
     }
   });

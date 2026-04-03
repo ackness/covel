@@ -173,7 +173,7 @@ export function createScopedContextProviders(
   scope: SessionPluginScope,
 ): Map<string, RegisteredContextProvider> {
   const underlying = global as Map<string, RegisteredContextProvider>;
-  return new Proxy(underlying, {
+  const proxy: Map<string, RegisteredContextProvider> = new Proxy(underlying, {
     get(target, prop, receiver) {
       if (prop === "values") {
         return function* () {
@@ -191,10 +191,12 @@ export function createScopedContextProviders(
       }
       if (prop === "forEach") {
         return function (
+          this: unknown,
           cb: (value: RegisteredContextProvider, key: string, map: Map<string, RegisteredContextProvider>) => void,
+          thisArg?: unknown,
         ) {
           for (const [key, entry] of target.entries()) {
-            if (scope.isActive(entry.pluginId)) cb(entry, key, target);
+            if (scope.isActive(entry.pluginId)) cb.call(thisArg, entry, key, proxy);
           }
         };
       }
@@ -240,4 +242,5 @@ export function createScopedContextProviders(
       return Reflect.get(target, prop, receiver);
     },
   });
+  return proxy;
 }

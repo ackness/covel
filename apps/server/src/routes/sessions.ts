@@ -24,13 +24,26 @@ export function createSessionsRoute(store: ServerStore) {
   });
 
   route.post("/", async (c) => {
-    const body = await c.req.json<{
+    let body: {
       worldId?: string;
       presetId?: string;
       taskBindings?: Record<string, string>;
-    }>();
+    };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ code: "INVALID_JSON", message: "Malformed JSON body" }, 400);
+    }
     if (!body.worldId) {
       return c.json({ code: "INVALID_REQUEST", message: "worldId is required" }, 400);
+    }
+    // Validate taskBindings values are all strings
+    if (body.taskBindings && typeof body.taskBindings === "object") {
+      for (const [key, val] of Object.entries(body.taskBindings)) {
+        if (typeof val !== "string") {
+          return c.json({ code: "INVALID_REQUEST", message: `taskBindings.${key} must be a string` }, 400);
+        }
+      }
     }
     const session = store.createSession({
       worldId: body.worldId,
@@ -57,14 +70,23 @@ export function createSessionsRoute(store: ServerStore) {
     }
     if (typeof body.presetId === "string") patch.presetId = body.presetId;
     if (body.taskBindings && typeof body.taskBindings === "object") {
-      patch.taskBindings = body.taskBindings as Record<string, string>;
+      const tb = body.taskBindings as Record<string, unknown>;
+      const allStrings = Object.values(tb).every((v) => typeof v === "string");
+      if (allStrings) {
+        patch.taskBindings = tb as Record<string, string>;
+      }
     }
     return patch;
   }
 
   route.patch("/:sessionId", async (c) => {
     const sessionId = c.req.param("sessionId");
-    const body = await c.req.json<Record<string, unknown>>();
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ code: "INVALID_JSON", message: "Malformed JSON body" }, 400);
+    }
     const patch = parseSessionPatch(body);
     const session = store.updateSession(sessionId, patch);
     if (!session) {
@@ -75,7 +97,12 @@ export function createSessionsRoute(store: ServerStore) {
 
   route.put("/:sessionId", async (c) => {
     const sessionId = c.req.param("sessionId");
-    const body = await c.req.json<Record<string, unknown>>();
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ code: "INVALID_JSON", message: "Malformed JSON body" }, 400);
+    }
     const patch = parseSessionPatch(body);
     const session = store.updateSession(sessionId, patch);
     if (!session) {

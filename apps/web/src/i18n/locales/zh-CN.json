@@ -46,7 +46,12 @@
     "slotDefault": "默认",
     "slotFast": "快速",
     "slotBalance": "均衡",
-    "slotImage": "图像"
+    "slotImage": "图像",
+    "emptyInit": "正在准备冒险...",
+    "emptyCharCreate": "等待角色创建完成...",
+    "emptyPlaying": "冒险等待着你，输入消息开始吧。",
+    "emptyEnded": "本次会话已结束。",
+    "noModelsConfigured": "未配置模型"
   },
   "world": {
     "dimensions": "世界维度",

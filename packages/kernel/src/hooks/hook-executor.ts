@@ -7,6 +7,8 @@ export interface HookContext {
   runId: string;
   branchId: string;
   locale: string;
+  /** The runtime ID that triggered this hook (empty string for turn-level hooks). */
+  runtimeId?: string;
   /** Proposals data (for PreStateCommit/PostStateCommit). */
   proposals?: unknown[];
 }
@@ -35,7 +37,7 @@ export async function executeHooks(
     try {
       const result = await hook.handler({
         event: context.event,
-        runtimeId: "",
+        runtimeId: context.runtimeId ?? "",
         pluginId: hook.pluginId,
         locale: context.locale,
         proposals: context.proposals,

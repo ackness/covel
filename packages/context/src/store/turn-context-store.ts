@@ -5,6 +5,31 @@ import type {
   ProposalItem,
 } from "../types.js";
 
+/** Recursively merge plain objects; non-object values are overwritten. */
+function deepMergeState(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  const result = { ...target };
+  for (const key of Object.keys(source)) {
+    const tVal = result[key];
+    const sVal = source[key];
+    if (
+      tVal && sVal &&
+      typeof tVal === "object" && !Array.isArray(tVal) &&
+      typeof sVal === "object" && !Array.isArray(sVal)
+    ) {
+      result[key] = deepMergeState(
+        tVal as Record<string, unknown>,
+        sVal as Record<string, unknown>,
+      );
+    } else {
+      result[key] = sVal;
+    }
+  }
+  return result;
+}
+
 export interface TurnContextStore {
   /** Initialize with static context at turn start */
   init(input: TurnContextInit): void;
@@ -129,9 +154,9 @@ export function createTurnContextStore(): TurnContextStore {
     },
 
     getState(): Record<string, unknown> {
-      const merged = { ...initialState };
+      let merged: Record<string, unknown> = { ...initialState };
       for (const patch of accumulatedPatches) {
-        Object.assign(merged, patch);
+        merged = deepMergeState(merged, patch);
       }
       return merged;
     },

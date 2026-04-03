@@ -46,13 +46,13 @@ export function createHookRegistry() {
       const match = hook.definition.match;
       if (!match) return true;
 
-      if (match.toolIds && context.toolId && !match.toolIds.includes(context.toolId)) {
+      if (match.toolIds && (!context.toolId || !match.toolIds.includes(context.toolId))) {
         return false;
       }
-      if (match.runtimeIds && context.runtimeId && !match.runtimeIds.includes(context.runtimeId)) {
+      if (match.runtimeIds && (!context.runtimeId || !match.runtimeIds.includes(context.runtimeId))) {
         return false;
       }
-      if (match.pluginIds && context.pluginId && !match.pluginIds.includes(context.pluginId)) {
+      if (match.pluginIds && (!context.pluginId || !match.pluginIds.includes(context.pluginId))) {
         return false;
       }
 

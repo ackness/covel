@@ -97,16 +97,13 @@ export interface NpcCard {
   version: number;
 }
 
-let npcSeq = 0;
-
 export function buildNpcCard(
   input: NpcInput,
   worldId: string,
   runId: string,
 ): NpcCard {
-  npcSeq++;
   return {
-    id: `npc_${Date.now()}_${npcSeq}`,
+    id: `npc_${crypto.randomUUID()}`,
     worldId,
     runId,
     name: input.name,

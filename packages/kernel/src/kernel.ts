@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { CharacterCard, KernelInput, KernelTurnResult } from "@covel/shared";
 import type { PluginHost } from "@covel/plugin-runtime";
 import {
@@ -255,8 +256,8 @@ function createKernelSession(
     input: KernelInput,
     options: KernelExecuteOptions = {}
   ): Promise<KernelTurnResult> {
-    const turnId = `turn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const traceId = options.traceId ?? `trace-${Date.now()}`;
+    const turnId = `turn-${randomUUID()}`;
+    const traceId = options.traceId ?? `trace-${randomUUID()}`;
     const locale = resolveLocale(input.locale, kernelContext);
 
     // Increment session-level turn counter for interval gating
@@ -437,8 +438,8 @@ function createKernelSession(
                 turnState: snapshotTurnState,
                 characters: kernelContext.characters ?? [],
                 events: snapshotEvents.map((e) => ({
-                  eventType: (e as Record<string, unknown>).eventType as string,
-                  data: (e as Record<string, unknown>).data as Record<string, unknown> | undefined,
+                  eventType: e.type,
+                  data: e.payload as Record<string, unknown> | undefined,
                 })),
               });
 
@@ -615,8 +616,8 @@ function createKernelSession(
             turnState,
             characters: kernelContext.characters ?? [],
             events: turnState.events.map((e) => ({
-              eventType: (e as Record<string, unknown>).eventType as string,
-              data: (e as Record<string, unknown>).data as Record<string, unknown> | undefined,
+              eventType: e.type,
+              data: e.payload as Record<string, unknown> | undefined,
             })),
           });
 
@@ -759,8 +760,8 @@ function createKernelSession(
         branchId: input.branchId,
       });
 
-      // Update kernel state with committed changes
-      kernelContext.state = { ...turnState.state };
+      // Update kernel state with committed changes (immutable update)
+      kernelContext = { ...kernelContext, state: { ...turnState.state } };
 
       // ── PostStateCommit hooks ───────────────────────────────────
       await executeHooks(scopedHooks, {

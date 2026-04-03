@@ -23,13 +23,18 @@ export function createCharactersRoute(store: ServerStore) {
   });
 
   route.post("/", async (c) => {
-    const body = await c.req.json<{
+    let body: {
       sessionId?: string;
       name?: string;
       type?: CharacterType;
       description?: string;
       fields?: Record<string, unknown>;
-    }>();
+    };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ code: "INVALID_JSON", message: "Malformed JSON body" }, 400);
+    }
     if (!body.sessionId || !body.name) {
       return c.json({ code: "INVALID_REQUEST", message: "sessionId and name are required" }, 400);
     }
@@ -45,10 +50,21 @@ export function createCharactersRoute(store: ServerStore) {
 
   route.patch("/:id", async (c) => {
     const id = c.req.param("id");
-    const body = await c.req.json<Record<string, unknown>>();
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ code: "INVALID_JSON", message: "Malformed JSON body" }, 400);
+    }
+    const VALID_CHARACTER_TYPES = ["player", "npc", "companion"] as const;
     const patch: Record<string, unknown> = {};
     if (typeof body.name === "string") patch.name = body.name;
-    if (typeof body.type === "string") patch.type = body.type;
+    if (typeof body.type === "string") {
+      if (!(VALID_CHARACTER_TYPES as readonly string[]).includes(body.type)) {
+        return c.json({ code: "INVALID_REQUEST", message: `type must be one of: ${VALID_CHARACTER_TYPES.join(", ")}` }, 400);
+      }
+      patch.type = body.type;
+    }
     if (typeof body.description === "string") patch.description = body.description;
     if (typeof body.portrait === "string") patch.portrait = body.portrait;
     if (body.fields && typeof body.fields === "object") patch.fields = body.fields;

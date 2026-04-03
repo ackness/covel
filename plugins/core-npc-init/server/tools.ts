@@ -1,5 +1,6 @@
 import type { ToolExecutionContext, ToolExecutionResult } from "@covel/shared";
 import type { DynamicFieldSchema } from "@covel/shared";
+import { z } from "zod";
 import {
   validateFieldDefinitions,
   buildSchema,
@@ -8,6 +9,24 @@ import {
   type NpcInput,
   type NpcCard,
 } from "./logic.js";
+
+// ── Zod Schemas ─────────────────────────────────────────────────
+
+const defineCharacterSchemaInputSchema = z.object({
+  fields: z.array(z.unknown()),
+});
+
+const createNpcInputSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().min(1),
+  type: z.enum(["npc", "companion"]),
+  fields: z.record(z.unknown()).optional(),
+});
+
+const finalizeInitInputSchema = z.object({
+  summary: z.string(),
+  npcCount: z.number(),
+});
 
 // ── Helpers ───────────────────────────────────────────────────────
 

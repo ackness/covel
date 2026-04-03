@@ -289,13 +289,13 @@ export function createMemoryStore() {
   // ── Trace Events ────────────────────────────────────────────────
 
   function addTraceEvent(sessionId: string, event: TraceEvent): void {
-    const list = traceEvents.get(sessionId) ?? [];
-    list.push(event);
-    // Ring buffer: drop oldest when exceeding max
-    if (list.length > MAX_TRACE_EVENTS_PER_SESSION) {
-      list.splice(0, list.length - MAX_TRACE_EVENTS_PER_SESSION);
-    }
-    traceEvents.set(sessionId, list);
+    const existing = traceEvents.get(sessionId) ?? [];
+    // Immutable append with ring buffer: drop oldest when exceeding max
+    const appended = [...existing, event];
+    const updated = appended.length > MAX_TRACE_EVENTS_PER_SESSION
+      ? appended.slice(appended.length - MAX_TRACE_EVENTS_PER_SESSION)
+      : appended;
+    traceEvents.set(sessionId, updated);
   }
 
   function listTraceEvents(sessionId: string): TraceEvent[] {

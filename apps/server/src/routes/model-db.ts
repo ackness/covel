@@ -21,7 +21,8 @@ export function createModelDbRoute(modelDb: ModelDatabase | null) {
   route.get("/search", (c) => {
     if (!modelDb) return c.json({ results: [] });
     const q = c.req.query("q") ?? "";
-    const limit = Math.min(parseInt(c.req.query("limit") ?? "20", 10), 100);
+    const rawLimit = parseInt(c.req.query("limit") ?? "20", 10);
+    const limit = Math.min(Number.isNaN(rawLimit) ? 20 : rawLimit, 100);
     if (!q.trim()) return c.json({ results: [] });
 
     const results = modelDb.search(q, limit).map(({ id, entry }) => ({
@@ -52,6 +53,12 @@ export function createModelDbRoute(modelDb: ModelDatabase | null) {
   });
 
   route.post("/refresh", async (c) => {
+    // Only allow refresh in self-hosted tier or with explicit env opt-in
+    const tier = process.env.DEPLOYMENT_TIER ?? "self";
+    if (tier !== "self" && process.env.ALLOW_MODEL_DB_REFRESH !== "true") {
+      return c.json({ ok: false, error: "Model database refresh is not allowed in this deployment tier" }, 403);
+    }
+
     if (!modelDb) {
       return c.json({ ok: false, error: "Model database not initialized" }, 500);
     }

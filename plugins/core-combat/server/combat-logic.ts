@@ -176,7 +176,8 @@ export function resolveSkill(
   target: CombatParticipant,
   skillType: "damage" | "heal" | "buff" | "debuff",
   rollResult: number,
-  magnitude?: number
+  magnitude?: number,
+  generateId: () => string = () => `buff_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
 ): SkillResult {
   const baseMag = magnitude ?? 10;
 
@@ -213,7 +214,7 @@ export function resolveSkill(
 
     case "buff": {
       const buffEffect: StatusEffect = {
-        id: `buff_${Date.now()}`,
+        id: generateId(),
         name: "Empowered",
         duration: BUFF_DURATION,
         effect: { attackBonus: Math.floor(rollResult * 0.2) },
@@ -228,7 +229,7 @@ export function resolveSkill(
 
     case "debuff": {
       const debuffEffect: StatusEffect = {
-        id: `debuff_${Date.now()}`,
+        id: generateId(),
         name: "Weakened",
         duration: DEBUFF_DURATION,
         effect: { attackPenalty: Math.floor(rollResult * 0.15) },
@@ -255,10 +256,6 @@ export function advanceTurn(state: CombatState): CombatState {
   }
 
   let nextIndex = (state.currentTurnIndex + 1) % state.turnOrder.length;
-  const newRound =
-    nextIndex <= state.currentTurnIndex
-      ? state.roundNumber + 1
-      : state.roundNumber;
 
   // Skip defeated participants
   let attempts = 0;
@@ -269,6 +266,12 @@ export function advanceTurn(state: CombatState): CombatState {
     nextIndex = (nextIndex + 1) % state.turnOrder.length;
     attempts++;
   }
+
+  // Calculate newRound after skip loop so wrapping is accurate
+  const newRound =
+    nextIndex <= state.currentTurnIndex
+      ? state.roundNumber + 1
+      : state.roundNumber;
 
   return {
     ...state,

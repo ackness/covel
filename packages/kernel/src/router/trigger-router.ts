@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { KernelInput, RuntimeTriggerEvent } from "@covel/shared";
 import type { RegisteredRuntime } from "@covel/plugin-runtime";
 import type { CandidateRuntime } from "../types.js";
@@ -17,7 +18,7 @@ export function routeTrigger(
   turnNumber?: number
 ): { triggerEvent: RuntimeTriggerEvent; candidates: CandidateRuntime[] } {
   const triggerEvent: RuntimeTriggerEvent = {
-    eventId: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    eventId: `evt-${randomUUID()}`,
     type: input.type,
     source: input.actorId,
     payload: input.payload,

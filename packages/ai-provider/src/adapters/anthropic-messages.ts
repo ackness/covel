@@ -106,6 +106,16 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
           yield { type: "text-delta", textDelta: delta.text };
         }
 
+        if (payload.type === "message_start") {
+          const msgUsage = (payload.message as Record<string, unknown> | undefined)?.usage as Record<string, unknown> | undefined;
+          if (msgUsage) {
+            usage = {
+              inputTokens: Number(msgUsage.input_tokens ?? 0),
+              outputTokens: usage.outputTokens,
+            };
+          }
+        }
+
         if (payload.type === "message_delta") {
           finishReason = String(
             delta?.stop_reason ?? finishReason

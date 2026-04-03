@@ -155,7 +155,13 @@ function interpolateEnv(input: string): string {
     .map((line) => {
       // Skip comment lines
       if (line.trimStart().startsWith("#")) return line;
-      return line.replace(
+      // Split off inline comment — only interpolate the active portion.
+      // TOML inline comments start with # outside of quoted strings.
+      // Simplified: find the first # that is not inside a quoted value.
+      const commentIdx = findInlineCommentIndex(line);
+      const active = commentIdx >= 0 ? line.slice(0, commentIdx) : line;
+      const comment = commentIdx >= 0 ? line.slice(commentIdx) : "";
+      const replaced = active.replace(
         /\$\{([A-Za-z_][A-Za-z0-9_]*)}/g,
         (match, varName: string) => {
           const value = process.env[varName];
@@ -166,10 +172,31 @@ function interpolateEnv(input: string): string {
           return value;
         },
       );
+      return replaced + comment;
     })
     .join("\n");
   if (missing.length > 0) {
     throw new Error(`llm.toml: unresolved environment variables: ${missing.join(", ")}`);
   }
   return result;
+}
+
+/**
+ * Find the index of an inline `#` comment in a TOML line, skipping `#` inside
+ * single-quoted or double-quoted strings. Returns -1 if no comment is found.
+ */
+function findInlineCommentIndex(line: string): number {
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+    } else if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+    } else if (ch === "#" && !inSingle && !inDouble) {
+      return i;
+    }
+  }
+  return -1;
 }

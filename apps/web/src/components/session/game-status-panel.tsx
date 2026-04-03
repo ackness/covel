@@ -28,6 +28,9 @@ export function GameStatusPanel({ gameState }: GameStatusPanelProps) {
   const schema = gameState.characterFieldSchema as
     | { version: number; worldId: string; fields: Array<Record<string, unknown>>; createdAt: string }
     | undefined;
+
+  // DynamicFieldSchema expected by CharacterTablePanel
+  type DynamicFieldSchema = { version: number; worldId: string; fields: Array<Record<string, unknown>>; createdAt: string };
   const chars = gameState.characters;
   const charArray = Array.isArray(chars)
     ? chars

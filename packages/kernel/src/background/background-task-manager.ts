@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { BackgroundTask } from "../types.js";
 
 /**
@@ -45,7 +46,7 @@ export function createBackgroundTaskManager(
     }>
   ): BackgroundTask {
     const task: BackgroundTask = {
-      taskId: `bg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      taskId: `bg-${randomUUID()}`,
       runtimeId,
       pluginId,
       status: "pending",

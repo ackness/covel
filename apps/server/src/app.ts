@@ -32,7 +32,9 @@ app.use("*", logger());
 app.use(
   "*",
   cors({
-    origin: ["http://localhost:5173"],
+    origin: process.env.CORS_ORIGIN
+      ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim())
+      : ["http://localhost:5173"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   }),
 );
@@ -58,6 +60,7 @@ app.route("/api/ai/generate", createGenerateRoute(ai));
 app.route("/api/ai/stream", createStreamRoute(ai));
 app.route("/api/ai/ping", createPingRoute(ai));
 app.route("/api/config/presets", createPresetsRoute(ai));
+// DEBUG-ONLY: Uses default kernel session — not suitable for multi-session production use.
 app.route("/api/kernel/turn", createTurnRoute(kernelStack.kernel));
 app.route("/api/plugins", createPluginsRoute(kernelStack.pluginHost));
 app.route("/api/block-schemas", createBlockSchemasRoute(kernelStack.pluginHost));
@@ -85,11 +88,12 @@ app.route("/presets", createCompatPresetsRoute(ai));
 app.route("/block-schemas", createBlockSchemasRoute(kernelStack.pluginHost));
 
 // Expose server-configured provider keys to frontend for auto-fill.
-// Available in all environments — when .env.llm has keys, frontend
-// auto-fills them so users don't need manual configuration.
-// When no keys configured, returns empty object → frontend shows blank form.
+// Only available when DEPLOYMENT_TIER=self or ENABLE_DEV_KEYS_ENDPOINT=true.
 import { createDevKeysRoute } from "./routes/dev-keys.js";
-app.route("/api/provider-keys", createDevKeysRoute(ai.llmConfig));
+const deploymentTier = process.env.DEPLOYMENT_TIER ?? "self";
+if (deploymentTier === "self" || process.env.ENABLE_DEV_KEYS_ENDPOINT === "true") {
+  app.route("/api/provider-keys", createDevKeysRoute(ai.llmConfig));
+}
 
 // Expose llm.toml slot configuration to frontend (with capability data).
 import { createLlmConfigRoute } from "./routes/llm-config.js";

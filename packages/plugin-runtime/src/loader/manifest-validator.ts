@@ -102,6 +102,18 @@ const runtimeSettingFieldSchema = z.object({
   affects: z.array(z.string()).optional(),
 });
 
+const blockSchemaDeclarationSchema = z.object({
+  type: z.string().min(1),
+  interactive: z.boolean(),
+  meta: z.object({
+    displayName: i18nTextSchema,
+    description: z.string(),
+    icon: z.string().optional(),
+  }),
+  dataSchema: z.record(z.unknown()),
+  submitSchema: z.record(z.unknown()).optional(),
+});
+
 export const pluginManifestSchema = z.object({
   schemaVersion: z.string().min(1),
   id: z.string().min(1),
@@ -123,7 +135,10 @@ export const pluginManifestSchema = z.object({
   runtimeSettings: z.array(runtimeSettingFieldSchema).optional(),
   permissions: z.array(z.string()).optional(),
   providers: z.array(publicProviderBindingSchema).optional(),
+  blockSchemas: z.array(blockSchemaDeclarationSchema).optional(),
 });
+
+export type ValidatedPluginManifest = z.infer<typeof pluginManifestSchema>;
 
 /** Validation result. */
 export type ManifestValidationResult =
@@ -132,6 +147,10 @@ export type ManifestValidationResult =
 
 /**
  * Validate a raw object against the PluginManifest schema.
+ *
+ * The cast to PluginManifest is safe: the Zod schema mirrors the interface
+ * fields (including blockSchemas). Minor z.unknown() optionality differences
+ * are harmless at runtime since Zod has already validated the shape.
  */
 export function validateManifest(data: unknown): ManifestValidationResult {
   const result = pluginManifestSchema.safeParse(data);

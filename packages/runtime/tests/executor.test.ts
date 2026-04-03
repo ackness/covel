@@ -44,48 +44,6 @@ function makeContext(
 }
 
 describe("runtime-executor", () => {
-  it("executes a non-streaming generation", async () => {
-    const executor = createRuntimeExecutor(makeGateway());
-    const result = await executor.execute({
-      context: makeContext(),
-      instructions: "You are a storyteller.",
-    });
-
-    expect(result.text).toBe("generated text");
-    expect(result.steps).toBe(1);
-    expect(result.usage.inputTokens).toBe(10);
-  });
-
-  it("resolves preset from providerBinding", async () => {
-    let capturedPresetId: string | undefined;
-    const gateway = makeGateway({
-      async generateText(input) {
-        capturedPresetId = input.presetId;
-        return {
-          text: "ok",
-          finishReason: "stop",
-          usage: { inputTokens: 1, outputTokens: 1 },
-        };
-      },
-    });
-
-    const executor = createRuntimeExecutor(gateway);
-    await executor.execute({
-      context: makeContext({
-        runtime: {
-          runtimeId: "rt",
-          pluginId: "p",
-          kind: "story",
-          phase: "story",
-          allowedTools: [],
-          providerBinding: "my-preset",
-        },
-      }),
-    });
-
-    expect(capturedPresetId).toBe("my-preset");
-  });
-
   it("streams events from gateway", async () => {
     const executor = createRuntimeExecutor(makeGateway());
     const events: StreamEvent[] = [];
@@ -101,13 +59,13 @@ describe("runtime-executor", () => {
     expect(events[1]).toMatchObject({ type: "done" });
   });
 
-  it("passes apiKeys and traceId to gateway", async () => {
+  it("passes apiKeys and traceId to gateway via stream", async () => {
     let capturedOptions: any;
     const gateway = makeGateway({
-      async generateText(input, options) {
+      async *streamText(input, options) {
         capturedOptions = options;
-        return {
-          text: "ok",
+        yield {
+          type: "done" as const,
           finishReason: "stop",
           usage: { inputTokens: 1, outputTokens: 1 },
         };
@@ -115,11 +73,14 @@ describe("runtime-executor", () => {
     });
 
     const executor = createRuntimeExecutor(gateway);
-    await executor.execute({
+    // Consume the stream to trigger the call
+    for await (const _event of executor.stream({
       context: makeContext(),
       apiKeys: { deepseek: "sk-123" },
       traceId: "trace-abc",
-    });
+    })) {
+      // consume
+    }
 
     expect(capturedOptions.apiKeys).toEqual({ deepseek: "sk-123" });
     expect(capturedOptions.traceId).toBe("trace-abc");

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { KernelProposalEnvelope, KernelProposalItem } from "@covel/shared";
 
 const VALID_KINDS: ReadonlySet<KernelProposalItem["kind"]> = new Set([
@@ -47,7 +48,7 @@ export function createProposalCollector(turnContext: {
     if (items.length === 0) return;
 
     envelopes.push({
-      proposalId: `prop-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      proposalId: `prop-${randomUUID()}`,
       runId: turnContext.runId,
       branchId: turnContext.branchId,
       turnId: turnContext.turnId,

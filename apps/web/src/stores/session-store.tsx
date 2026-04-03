@@ -285,9 +285,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const res = await fetch("/api/provider-keys");
         if (res.ok) {
           const { keys } = await res.json();
-          const existing = api.getProviderKeys();
-          if (Object.keys(existing).length === 0 && Object.keys(keys).length > 0) {
-            api.setProviderKeys(keys);
+          if (keys && typeof keys === "object" && !Array.isArray(keys)) {
+            const existing = api.getProviderKeys();
+            if (Object.keys(existing).length === 0 && Object.keys(keys as Record<string, string>).length > 0) {
+              api.setProviderKeys(keys as Record<string, string>);
+            }
           }
         }
       } catch {

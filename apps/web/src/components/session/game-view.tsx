@@ -25,7 +25,7 @@ import { ExecutionTimeline } from "./execution-timeline.js";
 import { GameStatusPanel } from "./game-status-panel.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
-import type { SessionRecord, WorldRecord, PackageSummary, PresetSummary, CommandSummary } from "@/services/api.js";
+import type { SessionRecord, WorldRecord, PackageSummary, PresetSummary, CommandSummary, LlmConfigResponse } from "@/services/api.js";
 
 // ── Extracted Panel Components ──────────────────────────────────
 
@@ -292,6 +292,7 @@ interface GameViewProps {
   packages: PackageSummary[];
   presets: PresetSummary[];
   commands: CommandSummary[];
+  llmConfig?: LlmConfigResponse | null;
   statePatches: Array<{ id: string; summary: string; packageName: string; data?: unknown }>;
   gameState: Record<string, unknown>;
   executionSteps: ExecutionStep[];
@@ -319,6 +320,7 @@ export function GameView({
   packages,
   presets,
   commands,
+  llmConfig,
   statePatches,
   gameState,
   executionSteps,
@@ -333,7 +335,7 @@ export function GameView({
   onLoadWorldSessions,
 }: GameViewProps) {
   const { t } = useTranslation();
-  const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(presets);
+  const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(presets, llmConfig);
 
   const [viewMode, setViewMode] = useState<"parsed" | "raw">("parsed");
   const [inputValue, setInputValue] = useState("");
@@ -352,10 +354,15 @@ export function GameView({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const isLeftCollapsedRef = useRef(isLeftCollapsed);
+  const isRightCollapsedRef = useRef(isRightCollapsed);
+  isLeftCollapsedRef.current = isLeftCollapsed;
+  isRightCollapsedRef.current = isRightCollapsed;
+
   useEffect(() => {
     if (isMobile || isTablet) {
-      if (leftPanelRef.current && !isLeftCollapsed) leftPanelRef.current.collapse();
-      if (rightPanelRef.current && !isRightCollapsed) rightPanelRef.current.collapse();
+      if (leftPanelRef.current && !isLeftCollapsedRef.current) leftPanelRef.current.collapse();
+      if (rightPanelRef.current && !isRightCollapsedRef.current) rightPanelRef.current.collapse();
     }
   }, [isMobile, isTablet]);
 
@@ -419,7 +426,8 @@ export function GameView({
   }
 
   function renderBlock(msg: StreamMessage) {
-    const block = msg.block!;
+    const block = msg.block;
+    if (!block) return null;
     const blockType = block.type as string;
     const data = block.data as Record<string, unknown> | undefined;
     const Renderer = getBlockRenderer(blockType);
@@ -696,11 +704,17 @@ export function GameView({
 
 function RawJsonBlock({ content }: { content: string }) {
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    return () => clearTimeout(copyTimerRef.current);
+  }, []);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(content);
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopied(false), 1500);
   };
 
   return (

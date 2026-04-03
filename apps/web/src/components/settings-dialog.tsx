@@ -59,6 +59,15 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [modelDbInfo, setModelDbInfo] = useState<ModelDbInfo | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const reloadTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    return () => {
+      clearTimeout(saveTimerRef.current);
+      clearTimeout(reloadTimerRef.current);
+    };
+  }, []);
 
   // Storage mode
   const [storageMode, setStorageModeLocal] = useState<StorageMode>(getStorageMode);
@@ -124,11 +133,12 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       setStorageMode(storageMode);
       resetDataService();
       // Reload to re-initialize with new data source
-      setTimeout(() => window.location.reload(), 800);
+      reloadTimerRef.current = setTimeout(() => window.location.reload(), 800);
     }
 
     setSaved(true);
-    setTimeout(() => onOpenChange(false), 600);
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => onOpenChange(false), 600);
   };
 
   const handleRefreshModelDb = async () => {
@@ -207,19 +217,29 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const imported = JSON.parse(reader.result as string) as CustomPreset[];
-        if (!Array.isArray(imported)) return;
+        const imported = JSON.parse(reader.result as string);
+        if (!Array.isArray(imported) || imported.length > 200) return;
         const valid = imported
-          .filter((p) => p.id && p.name && p.provider && p.model)
+          .filter((p): p is Record<string, unknown> =>
+            p != null &&
+            typeof p === "object" &&
+            typeof p.id === "string" && p.id.length > 0 && p.id.length <= 100 &&
+            typeof p.name === "string" && p.name.length > 0 &&
+            typeof p.provider === "string" && p.provider.length > 0 &&
+            typeof p.model === "string" && p.model.length > 0
+          )
           .map((p) => ({
             ...p,
-            name: typeof p.name === "string" ? p.name.slice(0, 100) : "",
+            id: (p.id as string).slice(0, 100),
+            name: (p.name as string).slice(0, 100),
+            provider: (p.provider as string).slice(0, 100),
+            model: (p.model as string).slice(0, 200),
             baseUrl:
               typeof p.baseUrl === "string" &&
               (p.baseUrl.startsWith("http://") || p.baseUrl.startsWith("https://"))
-                ? p.baseUrl
+                ? p.baseUrl.slice(0, 500)
                 : "",
-          }));
+          })) as CustomPreset[];
         setCustomPresetsLocal([...customPresets, ...valid]);
       } catch {
         // invalid JSON

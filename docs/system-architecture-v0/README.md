@@ -3,12 +3,13 @@
 时间：2026-03-29  
 状态：草案
 
-本目录包含一个主文档、两份配套规格和一份执行链流程图：
+本目录包含一个主文档、两份配套规格、一份执行链流程图和一份部署安全模型：
 
-- [framework-architecture.md](/Users/wuyong/codes/game/covel-design/docs/architecture/2026-03-29_12-32_system-architecture-v2/framework-architecture.md)
-- [runtime-kernel-spec.md](/Users/wuyong/codes/game/covel-design/docs/architecture/2026-03-29_12-32_system-architecture-v2/runtime-kernel-spec.md)
-- [public-plugin-api-spec.md](/Users/wuyong/codes/game/covel-design/docs/architecture/2026-03-29_12-32_system-architecture-v2/public-plugin-api-spec.md)
-- [execution-flow.md](/Users/wuyong/codes/game/covel-design/docs/architecture/2026-03-29_12-32_system-architecture-v2/execution-flow.md)
+- [framework-architecture.md](framework-architecture.md)
+- [runtime-kernel-spec.md](runtime-kernel-spec.md)
+- [public-plugin-api-spec.md](public-plugin-api-spec.md)
+- [execution-flow.md](execution-flow.md)
+- [deployment-security-model.md](deployment-security-model.md)
 
 并补了两组契约骨架：
 
@@ -29,6 +30,7 @@
 2. `execution-flow.md`
 3. `runtime-kernel-spec.md`
 4. `public-plugin-api-spec.md`
+5. `deployment-security-model.md`（部署层级 T1/T2/T3、API Key 安全模型、插件安全模型）
 
 关系：
 

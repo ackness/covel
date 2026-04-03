@@ -82,14 +82,15 @@ export async function executeTool(
   };
 
   const timeoutMs = request.timeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   const toolResult: ToolExecutionResult = await Promise.race([
-    tool.handler(ctx),
-    new Promise<never>((_, reject) =>
-      setTimeout(
+    tool.handler(ctx).finally(() => clearTimeout(timeoutHandle)),
+    new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(
         () => reject(new Error(`Tool "${request.qualifiedToolId}" timed out after ${timeoutMs}ms`)),
         timeoutMs,
-      ),
-    ),
+      );
+    }),
   ]);
 
   // ── PostToolUse hooks ─────────────────────────────────────────
