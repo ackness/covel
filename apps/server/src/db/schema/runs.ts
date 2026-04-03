@@ -20,6 +20,7 @@ export const runPlugins = pgTable("run_plugins", {
     .notNull()
     .references(() => runs.id),
   pluginId: text("plugin_id").notNull(),
+  // TODO: migrate to boolean("enabled") — currently text for historical reasons
   enabled: text("enabled").notNull().default("true"),
   settings: jsonb("settings"),
   createdAt: timestamp("created_at", { withTimezone: true })

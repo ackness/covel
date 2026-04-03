@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { secureHeaders } from "hono/secure-headers";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { healthRoute } from "./routes/health.js";
 import { apiKeyInjection } from "./middleware/api-key-injection.js";
@@ -29,6 +30,9 @@ import { createPgServerStore } from "./store/pg-server-store.js";
 const app = new Hono();
 
 app.use("*", logger());
+if (process.env.DEPLOYMENT_TIER && process.env.DEPLOYMENT_TIER !== "self") {
+  app.use("*", secureHeaders());
+}
 app.use(
   "*",
   cors({

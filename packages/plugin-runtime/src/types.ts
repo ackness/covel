@@ -14,8 +14,8 @@ export interface LoadedPlugin {
   manifest: PluginManifest;
   /** Absolute path to the plugin directory. */
   dir: string;
-  /** Whether the plugin is currently enabled. */
-  enabled: boolean;
+  /** Whether the plugin is currently enabled. Use registry.enable()/disable() to change. */
+  readonly enabled: boolean;
 }
 
 /** Result of scanning a plugin directory. */

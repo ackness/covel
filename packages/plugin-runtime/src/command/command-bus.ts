@@ -47,7 +47,7 @@ export function createCommandBus(registry: CommandRegistry): CommandBus {
       validatedArgs = result.data;
     }
 
-    return cmd.handler(validatedArgs, context) as Promise<CommandResult>;
+    return Promise.resolve(cmd.handler(validatedArgs, context)) as Promise<CommandResult>;
   }
 
   return { dispatch };

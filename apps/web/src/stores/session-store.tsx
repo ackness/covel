@@ -469,7 +469,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }));
       dispatch({ type: "LOAD_MESSAGES", messages: streamMessages });
     } else {
-      console.warn('[session] Failed to load messages:', messagesResult.reason);
+      // Message loading failed — user won't see historical messages but can still play
+      void messagesResult.reason;
     }
 
     // Restore state patches and rebuild gameState

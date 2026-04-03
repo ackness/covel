@@ -103,6 +103,7 @@ function renderDisplayField(
       <div key={key} className="space-y-2">
         <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{key}</p>
         <div className="space-y-1.5">
+          {/* Items lack stable IDs; index key is acceptable for static display */}
           {value.map((item, i) => (
             <div key={i} className="border border-border p-2 text-sm">
               {typeof item === "object" && item !== null

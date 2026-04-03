@@ -47,7 +47,10 @@ export function createBuiltinDataTools(
         },
       },
       handler: async (ctx) => {
-        const { scope, key } = ctx.input as { scope: string; key?: string };
+        const input = ctx.input as Record<string, unknown> | undefined;
+        const scope = typeof input?.scope === "string" ? input.scope : "";
+        if (!scope) return { output: { error: "Missing required parameter: scope" } };
+        const key = typeof input?.key === "string" ? input.key : undefined;
         const result = key ? da().state.get(scope, key) : da().state.getScope(scope);
         return { output: result ?? null };
       },
@@ -67,9 +70,11 @@ export function createBuiltinDataTools(
         },
       },
       handler: async (ctx) => {
-        const { recordType, limit } = (ctx.input ?? {}) as { recordType?: string; limit?: number };
+        const input = (ctx.input ?? {}) as Record<string, unknown>;
+        const recordType = typeof input.recordType === "string" ? input.recordType : undefined;
+        const limit = typeof input.limit === "number" ? input.limit : DEFAULT_QUERY_LIMIT;
         const results = da().records.list(recordType);
-        return { output: results.slice(0, limit ?? DEFAULT_QUERY_LIMIT) };
+        return { output: results.slice(0, limit) };
       },
     },
 
@@ -87,7 +92,9 @@ export function createBuiltinDataTools(
         },
       },
       handler: async (ctx) => {
-        const { key } = ctx.input as { key: string };
+        const input = ctx.input as Record<string, unknown> | undefined;
+        const key = typeof input?.key === "string" ? input.key : "";
+        if (!key) return { output: { error: "Missing required parameter: key" } };
         return { output: da().records.get(key) ?? null };
       },
     },
@@ -105,7 +112,8 @@ export function createBuiltinDataTools(
         },
       },
       handler: async (ctx) => {
-        const { type } = (ctx.input ?? {}) as { type?: string };
+        const input = (ctx.input ?? {}) as Record<string, unknown>;
+        const type = typeof input.type === "string" ? input.type : undefined;
         const chars = type ? da().characters.listByType(type) : da().characters.list();
         return { output: chars };
       },
@@ -125,7 +133,9 @@ export function createBuiltinDataTools(
         },
       },
       handler: async (ctx) => {
-        const { id, name } = (ctx.input ?? {}) as { id?: string; name?: string };
+        const input = (ctx.input ?? {}) as Record<string, unknown>;
+        const id = typeof input.id === "string" ? input.id : undefined;
+        const name = typeof input.name === "string" ? input.name : undefined;
         const char = id ? da().characters.get(id) : name ? da().characters.findByName(name) : undefined;
         return { output: char ?? null };
       },
@@ -145,7 +155,9 @@ export function createBuiltinDataTools(
         },
       },
       handler: async (ctx) => {
-        const { limit, eventType } = (ctx.input ?? {}) as { limit?: number; eventType?: string };
+        const input = (ctx.input ?? {}) as Record<string, unknown>;
+        const limit = typeof input.limit === "number" ? input.limit : undefined;
+        const eventType = typeof input.eventType === "string" ? input.eventType : undefined;
         const events = eventType
           ? da().events.findByType(eventType, limit)
           : da().events.recent(limit);
@@ -168,7 +180,10 @@ export function createBuiltinDataTools(
         },
       },
       handler: async (ctx) => {
-        const { scope, patch } = ctx.input as { scope: string; patch: Record<string, unknown> };
+        const input = ctx.input as Record<string, unknown> | undefined;
+        const scope = typeof input?.scope === "string" ? input.scope : "";
+        const patch = input?.patch && typeof input.patch === "object" ? input.patch as Record<string, unknown> : null;
+        if (!scope || !patch) return { output: { error: "Missing required parameters: scope and patch" } };
         return {
           output: { ok: true, scope },
           proposals: [da().propose.statePatch(scope, patch)],
@@ -192,11 +207,11 @@ export function createBuiltinDataTools(
         },
       },
       handler: async (ctx) => {
-        const { recordType, key, fields } = ctx.input as {
-          recordType: string;
-          key: string;
-          fields: Record<string, unknown>;
-        };
+        const input = ctx.input as Record<string, unknown> | undefined;
+        const recordType = typeof input?.recordType === "string" ? input.recordType : "";
+        const key = typeof input?.key === "string" ? input.key : "";
+        const fields = input?.fields && typeof input.fields === "object" ? input.fields as Record<string, unknown> : null;
+        if (!recordType || !key || !fields) return { output: { error: "Missing required parameters: recordType, key, and fields" } };
         return {
           output: { ok: true, key },
           proposals: [da().propose.recordUpsert(recordType, key, fields)],
@@ -219,7 +234,10 @@ export function createBuiltinDataTools(
         },
       },
       handler: async (ctx) => {
-        const { eventType, data } = ctx.input as { eventType: string; data?: Record<string, unknown> };
+        const input = ctx.input as Record<string, unknown> | undefined;
+        const eventType = typeof input?.eventType === "string" ? input.eventType : "";
+        if (!eventType) return { output: { error: "Missing required parameter: eventType" } };
+        const data = input?.data && typeof input.data === "object" ? input.data as Record<string, unknown> : undefined;
         return {
           output: { ok: true, eventType },
           proposals: [da().propose.eventEmit(eventType, data)],

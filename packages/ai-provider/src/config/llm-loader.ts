@@ -9,6 +9,9 @@ import { resolveCapability, type ManualCapabilityOverride } from "../capability/
 /**
  * Load llm.toml from disk, validate, and convert to internal AiConfig format.
  *
+ * Uses synchronous I/O intentionally — this function is called once at server
+ * startup before any request handling begins. Do not use in request paths.
+ *
  * Returns null if the file does not exist (caller should fall back to defaults).
  * Throws on parse/validation errors.
  */

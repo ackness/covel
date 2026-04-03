@@ -1,15 +1,24 @@
 import type { ToolExecutionContext, ToolExecutionResult } from "@covel/shared";
+import { z } from "zod";
 import { rollCheck, rollDice } from "./dice-engine.js";
-import type { RollCheckParams } from "./dice-engine.js";
 
 /**
  * Tool handler for roll-check.
  * Performs a skill check and emits proposals for state and event tracking.
  */
+const rollCheckInputSchema = z.object({
+  skill: z.string().optional(),
+  modifier: z.number().optional(),
+  difficulty: z.string().optional(),
+  system: z.enum(["d20", "percentage", "custom"]).optional(),
+});
+
 export async function rollCheckTool(
   ctx: ToolExecutionContext
 ): Promise<ToolExecutionResult> {
-  const input = (ctx.input ?? {}) as RollCheckParams;
+  const parsed = rollCheckInputSchema.safeParse(ctx.input ?? {});
+  if (!parsed.success) return { output: { error: parsed.error.message } };
+  const input = parsed.data;
   const result = rollCheck(input);
 
   const proposals: Array<{ kind: string; payload: unknown }> = [
@@ -56,14 +65,16 @@ export async function rollCheckTool(
  * Tool handler for roll-dice.
  * Rolls arbitrary dice expressions and emits an event.
  */
+const rollDiceInputSchema = z.object({
+  expression: z.string().min(1, 'roll-dice requires an "expression" parameter'),
+});
+
 export async function rollDiceTool(
   ctx: ToolExecutionContext
 ): Promise<ToolExecutionResult> {
-  const input = (ctx.input ?? {}) as { expression: string };
-
-  if (!input.expression) {
-    throw new Error('roll-dice requires an "expression" parameter');
-  }
+  const parsed = rollDiceInputSchema.safeParse(ctx.input ?? {});
+  if (!parsed.success) return { output: { error: parsed.error.message } };
+  const input = parsed.data;
 
   const result = rollDice(input.expression);
 

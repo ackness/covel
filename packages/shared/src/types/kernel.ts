@@ -12,6 +12,7 @@ export interface KernelInput {
   runId: string;
   branchId: string;
   actorId: string;
+  /** Input type. Known values are listed; `(string & {})` allows plugin-defined custom types while preserving autocomplete. */
   type: "user.input" | "system.event" | "session_start" | "manual_action" | "interval_tick" | (string & {});
   locale?: string;
   payload: Record<string, unknown>;

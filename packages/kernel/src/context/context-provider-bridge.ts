@@ -30,12 +30,13 @@ export async function gatherContextFragments(
       if (result && typeof result === "object") {
         const r = result as Record<string, unknown>;
         if (typeof r.content === "string" && r.content.length > 0) {
+          const rawPriority = typeof r.priority === "number" ? r.priority : 0;
           fragments.push({
-            id: (r.id as string) ?? provider.id,
+            id: typeof r.id === "string" ? r.id : provider.id,
             pluginId: provider.pluginId,
-            title: (r.title as string) ?? provider.id,
+            title: typeof r.title === "string" ? r.title : provider.id,
             content: r.content,
-            priority: (r.priority as number) ?? 0,
+            priority: Number.isFinite(rawPriority) ? rawPriority : 0,
           });
         }
       }
