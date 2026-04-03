@@ -19,8 +19,8 @@ import register from "../server/index.js";
 // ── buildSummaryPrompt ──────────────────────────────────────────
 
 describe("buildSummaryPrompt", () => {
-  it("builds a Chinese prompt when locale is zh-CN", () => {
-    const prompt = buildSummaryPrompt(
+  it("builds a Chinese prompt when locale is zh-CN", async () => {
+    const prompt = await buildSummaryPrompt(
       "勇者进入了黑暗森林",
       "之前的摘要内容",
       [{ type: "quest.start", payload: "找到失落的圣剑" }],
@@ -34,8 +34,8 @@ describe("buildSummaryPrompt", () => {
     expect(prompt).toContain("找到失落的圣剑");
   });
 
-  it("builds an English prompt when locale is en-US", () => {
-    const prompt = buildSummaryPrompt(
+  it("builds an English prompt when locale is en-US", async () => {
+    const prompt = await buildSummaryPrompt(
       "The hero entered the dark forest",
       "Previous summary",
       [{ type: "quest.start", payload: "Find the lost sword" }],
@@ -48,8 +48,8 @@ describe("buildSummaryPrompt", () => {
     expect(prompt).toContain("quest.start");
   });
 
-  it("handles missing existing summary", () => {
-    const prompt = buildSummaryPrompt(
+  it("handles missing existing summary", async () => {
+    const prompt = await buildSummaryPrompt(
       "Some narrative",
       undefined,
       [],
@@ -60,8 +60,8 @@ describe("buildSummaryPrompt", () => {
     expect(prompt).toContain("first summary");
   });
 
-  it("handles empty events array", () => {
-    const prompt = buildSummaryPrompt(
+  it("handles empty events array", async () => {
+    const prompt = await buildSummaryPrompt(
       "Some narrative",
       "Existing summary",
       [],
@@ -71,8 +71,8 @@ describe("buildSummaryPrompt", () => {
     expect(prompt).toContain("No recent events");
   });
 
-  it("formats event payloads that are objects", () => {
-    const prompt = buildSummaryPrompt(
+  it("formats event payloads that are objects", async () => {
+    const prompt = await buildSummaryPrompt(
       "Narrative",
       undefined,
       [{ type: "item.acquired", payload: { item: "sword", qty: 1 } }],

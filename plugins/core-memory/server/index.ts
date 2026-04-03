@@ -68,7 +68,7 @@ async function memorySummarizerHandler(
   }
 
   // Build prompt and generate summary via LLM
-  const prompt = buildSummaryPrompt(
+  const prompt = await buildSummaryPrompt(
     narrative,
     existingSummary,
     events,

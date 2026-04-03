@@ -37,7 +37,7 @@ async function initWizardHandler(
   let transitionText = "";
   if (ctx.generateText && openingNarrative) {
     try {
-      const prompt = buildTransitionPrompt(openingNarrative, ctx.locale);
+      const prompt = await buildTransitionPrompt(openingNarrative, ctx.locale);
       const result = await ctx.generateText(prompt);
       if (result?.trim()) {
         transitionText = result.trim();

@@ -30,8 +30,8 @@ describe("register", () => {
 // ── buildTransitionPrompt ──────────────────────────────────────
 
 describe("buildTransitionPrompt", () => {
-  it("builds a Chinese prompt for zh-CN locale", () => {
-    const prompt = buildTransitionPrompt("勇者走进了迷雾森林", "zh-CN");
+  it("builds a Chinese prompt for zh-CN locale", async () => {
+    const prompt = await buildTransitionPrompt("勇者走进了迷雾森林", "zh-CN");
 
     expect(prompt).toContain("RPG游戏的角色创建引导者");
     expect(prompt).toContain("勇者走进了迷雾森林");
@@ -39,8 +39,8 @@ describe("buildTransitionPrompt", () => {
     expect(prompt).toContain("第二人称");
   });
 
-  it("builds an English prompt for en-US locale", () => {
-    const prompt = buildTransitionPrompt("The hero entered the fog.", "en-US");
+  it("builds an English prompt for en-US locale", async () => {
+    const prompt = await buildTransitionPrompt("The hero entered the fog.", "en-US");
 
     expect(prompt).toContain("RPG character creation guide");
     expect(prompt).toContain("The hero entered the fog.");
@@ -48,8 +48,8 @@ describe("buildTransitionPrompt", () => {
     expect(prompt).toContain("second person");
   });
 
-  it("treats zh-TW as Chinese", () => {
-    const prompt = buildTransitionPrompt("Test narrative", "zh-TW");
+  it("treats zh-TW as Chinese", async () => {
+    const prompt = await buildTransitionPrompt("Test narrative", "zh-TW");
 
     expect(prompt).toContain("RPG游戏的角色创建引导者");
   });

@@ -1,10 +1,14 @@
+import { resolve } from "node:path";
 import type { ContextProviderInput } from "@covel/plugin-runtime";
+import { loadPrompt } from "@covel/context";
+
+const PROMPTS_DIR = resolve(import.meta.dirname, "../../prompts");
 
 /**
  * Build narrator persona context based on world data.
  *
  * Injects:
- * 1. Core narrator behavior rules
+ * 1. Core narrator behavior rules (loaded from prompts/)
  * 2. World-specific narration style
  * 3. World lore (if available) as authoritative reference
  */
@@ -26,38 +30,11 @@ export async function personaContextProvider(input: ContextProviderInput): Promi
 
   const parts: string[] = [];
 
-  // Core narrator behavior
-  if (isZh) {
-    parts.push(
-      "你是一个沉浸式 RPG 叙事主持人（GM）。你的职责是创造身临其境的互动叙事体验。",
-      "",
-      "## 核心规则",
-      "- 保持冷静、具体、可落地的主持人口吻，优先描写玩家可观察到的事实。",
-      "- 用 2 到 4 个鲜明的感官细节推进当前场景，不要空泛抒情。",
-      "- **绝不替玩家做决定**。描述环境、NPC反应和后果，但让玩家选择行动。",
-      "- 所有新信息必须与已有世界设定保持一致。如果设定中没有提到，可以合理延伸但不能矛盾。",
-      "- NPC 应有自己的动机和性格，不是提线木偶。",
-      "- 战斗和危险场景要有真实的紧张感和后果感。",
-      "- 每次回复末尾，自然地暗示2-3个可能的行动方向，但不要列成选项。",
-      "",
-      `## 叙事风格: ${style.zh}`,
-    );
-  } else {
-    parts.push(
-      "You are an immersive RPG narrative Game Master (GM). Your role is to create engaging, interactive storytelling experiences.",
-      "",
-      "## Core Rules",
-      "- Use a calm, concrete GM voice. Prioritize details the player can directly observe.",
-      "- Advance scenes with 2-4 sharp sensory details. Avoid vague filler.",
-      "- **Never decide actions for the player.** Describe environments, NPC reactions, and consequences, but let the player choose.",
-      "- All new information must be consistent with established world facts. You may extend lore reasonably but never contradict it.",
-      "- NPCs should have their own motivations and personality, not be puppets.",
-      "- Combat and danger scenes should feel tense with real consequences.",
-      "- At the end of each response, naturally hint at 2-3 possible action directions without listing them as explicit options.",
-      "",
-      `## Narration Style: ${style.en}`,
-    );
-  }
+  // Core narrator behavior (loaded from markdown)
+  const rules = await loadPrompt(PROMPTS_DIR, "persona-rules", locale);
+  parts.push(rules);
+  parts.push("");
+  parts.push(isZh ? `## 叙事风格: ${style.zh}` : `## Narration Style: ${style.en}`);
 
   // World lore injection
   if (world?.lore) {

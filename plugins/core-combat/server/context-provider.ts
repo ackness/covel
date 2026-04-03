@@ -1,6 +1,10 @@
+import { resolve } from "node:path";
 import type { ContextProviderInput } from "@covel/plugin-runtime";
+import { loadPrompt } from "@covel/context";
 import { getCombatSummary } from "./combat-logic.js";
 import type { CombatState } from "./combat-logic.js";
+
+const PROMPTS_DIR = resolve(import.meta.dirname, "../prompts");
 
 /**
  * Combat context provider.
@@ -39,33 +43,9 @@ export async function combatContextProvider(
   const isZh = input.locale.startsWith("zh");
   const summary = getCombatSummary(combat, input.locale);
 
-  const instructions = isZh
-    ? [
-        "## 战斗状态",
-        "",
-        summary,
-        "",
-        "### 战斗规则",
-        "- 你正在管理一场回合制战斗。",
-        "- 按照先攻顺序处理每个参与者的行动。",
-        "- 玩家行动：使用 `attack`、`defend` 或 `use-skill` 工具。",
-        "- 敌人行动：根据战术情境决定并调用相应工具。",
-        "- 每次攻击或技能必须先通过 `core-dice:roll-check` 投骰。",
-        "- 生动地叙述每个行动的结果。",
-      ].join("\n")
-    : [
-        "## Combat Status",
-        "",
-        summary,
-        "",
-        "### Combat Rules",
-        "- You are managing a turn-based combat encounter.",
-        "- Process each participant's action in initiative order.",
-        "- Player actions: use `attack`, `defend`, or `use-skill` tools.",
-        "- Enemy actions: decide based on tactical context and call the appropriate tool.",
-        "- Every attack or skill must be preceded by a `core-dice:roll-check` dice roll.",
-        "- Narrate each action's outcome vividly.",
-      ].join("\n");
+  const rules = await loadPrompt(PROMPTS_DIR, "combat-rules", input.locale);
+  const statusTitle = isZh ? "## 战斗状态" : "## Combat Status";
+  const instructions = [statusTitle, "", summary, "", rules].join("\n");
 
   return {
     id: "combat-status",

@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@covel/shared": "workspace:*",
+    "@covel/context": "workspace:*",
     "@covel/plugin-runtime": "workspace:*"
   },
   "devDependencies": {

@@ -3,6 +3,11 @@
  * All functions are side-effect-free and testable without LLM access.
  */
 
+import { resolve } from "node:path";
+import { loadPrompt, interpolate } from "@covel/context";
+
+const PROMPTS_DIR = resolve(import.meta.dirname, "../prompts");
+
 // ── Types ───────────────────────────────────────────────────────
 
 export interface MemoryArchive {
@@ -28,12 +33,12 @@ export interface MemoryProposal {
  * Combines existing summary, new narrative, and recent events into
  * a structured prompt that instructs the LLM to produce JSON output.
  */
-export function buildSummaryPrompt(
+export async function buildSummaryPrompt(
   narrative: string,
   existingSummary: string | undefined,
   events: ReadonlyArray<{ readonly type?: string; readonly payload?: unknown }>,
   locale: string
-): string {
+): Promise<string> {
   const isZh = locale.startsWith("zh");
 
   const eventLines = events
@@ -47,69 +52,14 @@ export function buildSummaryPrompt(
     })
     .join("\n");
 
-  if (isZh) {
-    return `你是一个RPG游戏的记忆管理者。你的任务是将叙事历史压缩成滚动摘要。
-
-## 现有摘要
-${existingSummary ? existingSummary : "（无，这是首次摘要）"}
-
-## 新叙事内容
-${narrative || "（无新叙事）"}
-
-## 近期事件
-${eventLines || "（无近期事件）"}
-
-## 要求
-1. 将现有摘要与新内容合并为一份更新的滚动摘要
-2. 保留关键事实：角色名、地点、关系、目标、物品
-3. 保留关键剧情事件和转折点
-4. 去除填充内容、重复描述和机械细节
-5. 摘要控制在300-500字以内
-6. 用第三人称、过去时、以事实编年的方式书写
-7. 用中文撰写
-8. 识别0-3个值得单独存储的"关键事件"
-
-## 输出格式
-返回有效的JSON：
-\`\`\`json
-{
-  "summary": "更新后的滚动摘要...",
-  "keyEvents": ["关键事件1的描述", "关键事件2的描述"]
-}
-\`\`\`
-只输出JSON，不要输出其他内容。`;
-  }
-
-  return `You are a memory manager for an RPG game. Your task is to compress narrative history into a rolling summary.
-
-## Existing Summary
-${existingSummary ? existingSummary : "(None — this is the first summary)"}
-
-## New Narrative Content
-${narrative || "(No new narrative)"}
-
-## Recent Events
-${eventLines || "(No recent events)"}
-
-## Requirements
-1. Merge the existing summary with new content into an updated rolling summary
-2. Preserve key facts: character names, locations, relationships, goals, items
-3. Preserve plot-critical events and turning points
-4. Drop filler, repetitive descriptions, and mechanical details
-5. Keep the summary to 300-500 words maximum
-6. Write in third person, past tense, as a factual chronicle
-7. Write in English
-8. Identify 0-3 "key events" worth storing individually
-
-## Output Format
-Return valid JSON:
-\`\`\`json
-{
-  "summary": "Updated rolling summary text...",
-  "keyEvents": ["Description of key event 1", "Description of key event 2"]
-}
-\`\`\`
-Output only JSON, nothing else.`;
+  const template = await loadPrompt(PROMPTS_DIR, "summary-prompt", locale);
+  return interpolate(template, {
+    existingSummary: existingSummary
+      ? existingSummary
+      : (isZh ? "（无，这是首次摘要）" : "(None — this is the first summary)"),
+    narrative: narrative || (isZh ? "（无新叙事）" : "(No new narrative)"),
+    eventLines: eventLines || (isZh ? "（无近期事件）" : "(No recent events)"),
+  });
 }
 
 // ── Response Parsing ────────────────────────────────────────────

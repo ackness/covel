@@ -1,4 +1,8 @@
+import { resolve } from "node:path";
 import type { CharacterCard, CharacterType, DynamicFieldSchema } from "@covel/shared";
+import { loadPrompt, interpolate } from "@covel/context";
+
+const PROMPTS_DIR = resolve(import.meta.dirname, "../prompts");
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -181,12 +185,12 @@ export function buildNewCard(
 /**
  * Build a prompt for LLM to extract character field updates from narrative.
  */
-export function buildFieldExtractionPrompt(
+export async function buildFieldExtractionPrompt(
   narrative: string,
   schema: DynamicFieldSchema,
   existingCharacters: readonly CharacterCard[],
   isZh: boolean,
-): string {
+): Promise<string> {
   const fieldDescriptions = schema.fields
     .map((f) => {
       let desc = `"${f.key}" (${f.label}, type: ${f.type})`;
@@ -200,47 +204,9 @@ export function buildFieldExtractionPrompt(
     ? existingCharacters.map((c) => `- ${c.name}: ${JSON.stringify(c.fields)}`).join("\n")
     : (isZh ? "（暂无已知角色）" : "(no known characters yet)");
 
-  if (isZh) {
-    return `分析以下叙事文本，提取角色信息变化。
-
-## 角色字段 Schema
-  ${fieldDescriptions}
-
-## 已有角色及其当前字段值
-${existingInfo}
-
-## 叙事文本
-${narrative}
-
-## 要求
-1. 识别叙事中提到的所有角色（包括新角色和已知角色）
-2. 根据叙事内容，推断字段值的变化（如 HP 减少、位置变化、状态改变等）
-3. 只输出有变化或新发现的字段，不要输出未改变的字段
-4. 对于新角色，尽量根据叙事推断初始字段值
-
-返回严格的 JSON 格式（不要包含其他文字）：
-{"characters":{"角色名":{"fieldKey":"newValue"}}}`;
-  }
-
-  return `Analyze the narrative below and extract character field changes.
-
-## Character Field Schema
-  ${fieldDescriptions}
-
-## Known Characters and Current Fields
-${existingInfo}
-
-## Narrative
-${narrative}
-
-## Requirements
-1. Identify all characters mentioned (both new and known)
-2. Infer field value changes from narrative (HP decrease, location change, status change, etc.)
-3. Only output changed or newly discovered fields, skip unchanged fields
-4. For new characters, infer initial field values from narrative
-
-Return strict JSON only (no other text):
-{"characters":{"CharacterName":{"fieldKey":"newValue"}}}`;
+  const locale = isZh ? "zh-CN" : "en-US";
+  const template = await loadPrompt(PROMPTS_DIR, "field-extraction", locale);
+  return interpolate(template, { fieldDescriptions, existingInfo, narrative });
 }
 
 /**

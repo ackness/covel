@@ -17,6 +17,9 @@ importers:
       '@covel/ai-provider':
         specifier: workspace:*
         version: link:../../packages/ai-provider
+      '@covel/context':
+        specifier: workspace:*
+        version: link:../../packages/context
       '@covel/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
@@ -319,6 +322,9 @@ importers:
 
   plugins/core-char-tracker:
     dependencies:
+      '@covel/context':
+        specifier: workspace:*
+        version: link:../../packages/context
       '@covel/plugin-runtime':
         specifier: workspace:*
         version: link:../../packages/plugin-runtime
@@ -338,6 +344,9 @@ importers:
 
   plugins/core-combat:
     dependencies:
+      '@covel/context':
+        specifier: workspace:*
+        version: link:../../packages/context
       '@covel/plugin-runtime':
         specifier: workspace:*
         version: link:../../packages/plugin-runtime
@@ -376,6 +385,9 @@ importers:
 
   plugins/core-guide:
     dependencies:
+      '@covel/context':
+        specifier: workspace:*
+        version: link:../../packages/context
       '@covel/plugin-runtime':
         specifier: workspace:*
         version: link:../../packages/plugin-runtime
@@ -395,6 +407,9 @@ importers:
 
   plugins/core-init-wizard:
     dependencies:
+      '@covel/context':
+        specifier: workspace:*
+        version: link:../../packages/context
       '@covel/plugin-runtime':
         specifier: workspace:*
         version: link:../../packages/plugin-runtime
@@ -436,6 +451,9 @@ importers:
 
   plugins/core-memory:
     dependencies:
+      '@covel/context':
+        specifier: workspace:*
+        version: link:../../packages/context
       '@covel/plugin-runtime':
         specifier: workspace:*
         version: link:../../packages/plugin-runtime
@@ -490,6 +508,9 @@ importers:
 
   plugins/core-persona:
     dependencies:
+      '@covel/context':
+        specifier: workspace:*
+        version: link:../../packages/context
       '@covel/plugin-runtime':
         specifier: workspace:*
         version: link:../../packages/plugin-runtime

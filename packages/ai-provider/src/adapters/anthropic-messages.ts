@@ -1,3 +1,6 @@
+/** Appended to system prompt for Anthropic generateObject (no native JSON mode). */
+const ANTHROPIC_JSON_DIRECTIVE = "Respond with JSON only.";
+
 import type { ModelProviderAdapter } from "./adapter.js";
 import type { UsageSummary } from "../types.js";
 import {
@@ -48,7 +51,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
 
     async generateObject(config, params) {
       const { system, messages } = toAnthropicMessages(params.messages);
-      const systemPrompt = [system, "Respond with JSON only."].filter(Boolean).join("\n\n");
+      const systemPrompt = [system, ANTHROPIC_JSON_DIRECTIVE].filter(Boolean).join("\n\n");
       const response = await postJson(config, "/messages", {
         model: params.model,
         max_tokens: ANTHROPIC_DEFAULT_MAX_TOKENS,

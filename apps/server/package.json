@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@covel/ai-provider": "workspace:*",
+    "@covel/context": "workspace:*",
     "@covel/kernel": "workspace:*",
     "@covel/plugin-runtime": "workspace:*",
     "@covel/runtime": "workspace:*",

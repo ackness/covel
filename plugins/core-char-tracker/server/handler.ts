@@ -62,7 +62,7 @@ export async function charTrackerHandler(
   let fieldUpdatesByName: Record<string, Record<string, unknown>> = {};
   if (schema && ctx.generateText) {
     try {
-      const prompt = buildFieldExtractionPrompt(narrative, schema, existingCards, isZh);
+      const prompt = await buildFieldExtractionPrompt(narrative, schema, existingCards, isZh);
       const response = await ctx.generateText(prompt);
       if (response) {
         fieldUpdatesByName = parseFieldExtractionResponse(response);

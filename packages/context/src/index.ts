@@ -47,6 +47,13 @@ export {
   type RepairRecord,
 } from "./normalizer/message-normalizer.js";
 
+// ── Template ──────────────────────────────────────────────────────
+export {
+  loadPrompt,
+  clearPromptCache,
+  interpolate,
+} from "./template/index.js";
+
 // ── Types ──────────────────────────────────────────────────────────
 export type {
   ProposalItem,

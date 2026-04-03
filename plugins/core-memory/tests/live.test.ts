@@ -15,7 +15,7 @@ describe.skipIf(!LIVE)("live: core-memory", () => {
   it("generates a coherent Chinese summary via LLM", async () => {
     const generateText = await createLiveGenerateText();
 
-    const prompt = buildSummaryPrompt(
+    const prompt = await buildSummaryPrompt(
       "勇者艾伦在黑暗森林深处发现了一把散发着蓝光的古剑。森林中的精灵族长老告诉他，这把剑名为「星辉」，是千年前封印魔王的神器。艾伦决定带着星辉前往北方的冰霜要塞，寻找解除封印的方法。途中，他遇到了流浪法师莉娜，她自称能读懂古代符文。",
       undefined,
       [
@@ -38,7 +38,7 @@ describe.skipIf(!LIVE)("live: core-memory", () => {
   it("generates a coherent English summary via LLM", async () => {
     const generateText = await createLiveGenerateText();
 
-    const prompt = buildSummaryPrompt(
+    const prompt = await buildSummaryPrompt(
       "The brave warrior Allen discovered an ancient sword glowing with blue light deep in the Dark Forest. The elder of the forest elves told him the sword was called Starblade, a divine artifact used to seal the Demon King a thousand years ago. Allen decided to travel north to the Frost Fortress to find a way to break the seal. Along the way, he met a wandering mage named Lina, who claimed she could read ancient runes.",
       "Previously, Allen left his home village after mysterious tremors destroyed the town square.",
       [
