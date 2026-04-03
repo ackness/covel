@@ -31,6 +31,7 @@ COPY plugins/core-inventory/package.json plugins/core-inventory/
 COPY plugins/core-quest/package.json plugins/core-quest/
 COPY plugins/core-dice/package.json plugins/core-dice/
 COPY plugins/core-memory/package.json plugins/core-memory/
+COPY plugins/core-npc-init/package.json plugins/core-npc-init/
 COPY plugins/core-world-state/package.json plugins/core-world-state/
 
 RUN pnpm install --frozen-lockfile
@@ -60,6 +61,12 @@ COPY apps/server/tsconfig.json apps/server/
 
 # Plugins (loaded by plugin-host at startup)
 COPY plugins/ plugins/
+
+# Externalized prompt templates (loaded by @covel/context at runtime)
+COPY prompts/ prompts/
+
+# World packages (seed data loaded on first startup)
+COPY worlds/ worlds/
 
 # Built web static assets
 COPY --from=build-web /app/apps/web/dist apps/server/web-dist/
