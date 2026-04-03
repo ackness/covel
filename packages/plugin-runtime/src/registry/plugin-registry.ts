@@ -56,9 +56,16 @@ export function createPluginRegistry() {
    * @param allKnownIds - Optional set of all known plugin IDs (e.g. from a pre-scan).
    *   When provided, `requires` is checked against this set instead of just the
    *   already-loaded plugins, so that load order doesn't affect validation.
-   *   `conflicts` is always checked against both the loaded set and the full set.
+   * @param acceptedIds - Optional set of already-accepted plugin IDs for conflict
+   *   checking. When provided, `conflicts` is checked against this set instead of
+   *   `allKnownIds`, so that the first plugin by loadingOrder wins and later
+   *   conflicting ones are skipped (rather than both being rejected).
    */
-  function validateConstraints(manifest: PluginManifest, allKnownIds?: ReadonlySet<string>): string[] {
+  function validateConstraints(
+    manifest: PluginManifest,
+    allKnownIds?: ReadonlySet<string>,
+    acceptedIds?: ReadonlySet<string>,
+  ): string[] {
     const errors: string[] = [];
 
     for (const req of manifest.requires ?? []) {
@@ -68,9 +75,12 @@ export function createPluginRegistry() {
       }
     }
 
+    // Check conflicts against accepted set (already loaded this pass) if provided,
+    // falling back to allKnownIds, then to the loaded plugins map.
+    const conflictSet = acceptedIds ?? allKnownIds;
     for (const conflict of manifest.conflicts ?? []) {
-      const conflicted = allKnownIds
-        ? allKnownIds.has(conflict)
+      const conflicted = conflictSet
+        ? conflictSet.has(conflict)
         : plugins.has(conflict);
       if (conflicted) {
         errors.push(`Conflicts with loaded plugin: "${conflict}"`);

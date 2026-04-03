@@ -1,8 +1,8 @@
 /**
  * PostgreSQL-backed server store.
  *
- * Persistent data (worlds, sessions, messages, characters) is stored in PG.
- * Ephemeral data (state patches, trace events) remains in memory.
+ * Persistent data (worlds, sessions, messages, characters, trace events) is stored in PG.
+ * State patches are also DB-backed.
  */
 import { randomUUID } from "node:crypto";
 import type { CharacterCard, CharacterCreateInput, SessionPhase, WorldDimensions } from "@covel/shared";
@@ -27,8 +27,6 @@ function humanSessionId(): string {
   const hex = Math.random().toString(16).slice(2, 6);
   return `${words}-${hex}`;
 }
-
-const MAX_TRACE_EVENTS_PER_SESSION = 2000;
 
 export interface PgServerStoreOptions {
   databaseUrl: string;
@@ -91,14 +89,39 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     )
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS sv_state_patches (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      summary TEXT NOT NULL DEFAULT '',
+      package_name TEXT NOT NULL DEFAULT '',
+      data JSONB,
+      created_at TEXT NOT NULL
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS sv_trace_events (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      request_id TEXT NOT NULL,
+      trace_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      turn_id TEXT NOT NULL,
+      flow_id TEXT NOT NULL,
+      seq INTEGER NOT NULL,
+      timestamp TEXT NOT NULL,
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb
+    )
+  `;
+
   // Indexes for common queries
   await sql`CREATE INDEX IF NOT EXISTS idx_sv_sessions_world ON sv_sessions(world_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_sv_messages_session ON sv_messages(session_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_sv_characters_run ON sv_characters(run_id)`;
-
-  // In-memory ephemeral stores
-  const statePatches = new Map<string, StatePatchRecord[]>();
-  const traceEvents = new Map<string, TraceEvent[]>();
+  await sql`CREATE INDEX IF NOT EXISTS idx_sv_state_patches_session ON sv_state_patches(session_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_sv_trace_events_session ON sv_trace_events(session_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_sv_trace_events_session_turn ON sv_trace_events(session_id, turn_id)`;
 
   // ── Worlds ──────────────────────────────────────────────────────
 
@@ -121,9 +144,9 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       dimensions: opts?.dimensions,
       createdAt: new Date().toISOString(),
     };
+    await persistWorld(world);
     worldCache.push(world);
     worldMap.set(world.id, world);
-    await persistWorld(world);
     return world;
   }
 
@@ -142,10 +165,10 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       ...patch,
       updatedAt: new Date().toISOString(),
     };
+    await persistWorld(updated);
     worldMap.set(id, updated);
     const idx = worldCache.findIndex((w) => w.id === id);
     if (idx >= 0) worldCache[idx] = updated;
-    await persistWorld(updated);
     return updated;
   }
 
@@ -185,9 +208,9 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       taskBindings: opts.taskBindings,
       createdAt: new Date().toISOString(),
     };
+    await persistSession(session);
     sessionCache.push(session);
     sessionMap.set(session.id, session);
-    await persistSession(session);
     return session;
   }
 
@@ -207,10 +230,10 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     if (patch.presetId !== undefined) validPatch.presetId = patch.presetId;
     if (patch.taskBindings !== undefined) validPatch.taskBindings = patch.taskBindings;
     const updated = { ...session, ...validPatch };
+    await persistSession(updated);
     sessionMap.set(id, updated);
     const idx = sessionCache.findIndex((s) => s.id === id);
     if (idx >= 0) sessionCache[idx] = updated;
-    await persistSession(updated);
     return updated;
   }
 
@@ -287,10 +310,33 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     `;
   }
 
-  // ── State Patches (in-memory) ──────────────────────────────────
+  // ── State Patches (DB-backed) ───────────────────────────────────
+
+  interface StatePatchRow {
+    id: string;
+    session_id: string;
+    summary: string;
+    package_name: string;
+    data: unknown | null;
+    created_at: string;
+  }
+
+  function rowToStatePatch(r: StatePatchRow): StatePatchRecord {
+    return {
+      id: r.id,
+      sessionId: r.session_id,
+      summary: r.summary,
+      packageName: r.package_name,
+      data: r.data ?? undefined,
+      createdAt: r.created_at,
+    };
+  }
 
   async function listStatePatches(sessionId: string): Promise<StatePatchRecord[]> {
-    return statePatches.get(sessionId) ?? [];
+    const rows = await sql<StatePatchRow[]>`
+      SELECT * FROM sv_state_patches WHERE session_id = ${sessionId} ORDER BY created_at
+    `;
+    return rows.map(rowToStatePatch);
   }
 
   async function addStatePatch(
@@ -305,8 +351,11 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       data: patch.data,
       createdAt: new Date().toISOString(),
     };
-    const list = statePatches.get(sessionId) ?? [];
-    statePatches.set(sessionId, [...list, record]);
+    await sql`
+      INSERT INTO sv_state_patches (id, session_id, summary, package_name, data, created_at)
+      VALUES (${record.id}, ${record.sessionId}, ${record.summary}, ${record.packageName},
+              ${record.data !== undefined ? sql.json(record.data as JSONValue) : null}, ${record.createdAt})
+    `;
     return record;
   }
 
@@ -327,8 +376,8 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       createdAt: new Date().toISOString(),
       version: 1,
     };
-    characterMap.set(card.id, card);
     await persistCharacter(card);
+    characterMap.set(card.id, card);
     return card;
   }
 
@@ -353,8 +402,8 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       ...(patch.extensions !== undefined ? { extensions: patch.extensions } : {}),
       version: card.version + 1,
     };
-    characterMap.set(id, updated);
     await persistCharacter(updated);
+    characterMap.set(id, updated);
     return updated;
   }
 
@@ -373,18 +422,50 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     `;
   }
 
-  // ── Trace Events (in-memory) ────────────────────────────────────
+  // ── Trace Events (DB-backed) ─────────────────────────────────────
 
-  async function addTraceEvent(sessionId: string, event: TraceEvent): Promise<void> {
-    const list = traceEvents.get(sessionId) ?? [];
-    const updated = [...list, event];
-    traceEvents.set(sessionId, updated.length > MAX_TRACE_EVENTS_PER_SESSION
-      ? updated.slice(-MAX_TRACE_EVENTS_PER_SESSION)
-      : updated);
+  interface TraceEventRow {
+    id: string;
+    type: string;
+    request_id: string;
+    trace_id: string;
+    session_id: string;
+    turn_id: string;
+    flow_id: string;
+    seq: number;
+    timestamp: string;
+    payload: Record<string, unknown>;
+  }
+
+  function rowToTraceEvent(r: TraceEventRow): TraceEvent {
+    return {
+      type: r.type,
+      requestId: r.request_id,
+      traceId: r.trace_id,
+      sessionId: r.session_id,
+      turnId: r.turn_id,
+      flowId: r.flow_id,
+      seq: r.seq,
+      timestamp: r.timestamp,
+      payload: r.payload,
+    };
+  }
+
+  async function addTraceEvent(_sessionId: string, event: TraceEvent): Promise<void> {
+    const id = `te_${randomUUID()}`;
+    await sql`
+      INSERT INTO sv_trace_events (id, type, request_id, trace_id, session_id, turn_id, flow_id, seq, timestamp, payload)
+      VALUES (${id}, ${event.type}, ${event.requestId}, ${event.traceId},
+              ${event.sessionId}, ${event.turnId}, ${event.flowId}, ${event.seq},
+              ${event.timestamp}, ${sql.json(event.payload as JSONValue)})
+    `;
   }
 
   async function listTraceEvents(sessionId: string): Promise<TraceEvent[]> {
-    return traceEvents.get(sessionId) ?? [];
+    const rows = await sql<TraceEventRow[]>`
+      SELECT * FROM sv_trace_events WHERE session_id = ${sessionId} ORDER BY seq ASC
+    `;
+    return rows.map(rowToTraceEvent);
   }
 
   // ── Load existing data from PG into cache ───────────────────────

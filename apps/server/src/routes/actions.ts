@@ -100,12 +100,13 @@ export function createActionsRoute(deps: {
 
     const apiKeys = c.get("apiKeys") ?? {};
 
-    // Parse X-Slot-Config header for per-request slot overrides and custom presets
+    // Parse X-Slot-Config header for per-request slot overrides, custom presets, and runtime priority
     let slotOverrides: Record<string, { presetId: string }> | undefined;
     let customPresetDefs: Array<{
       id: string; name: string; provider: string;
       baseUrl: string; model: string; protocol?: string;
     }> | undefined;
+    let runtimePriorityOverrides: Record<string, number> | undefined;
     const slotConfigHeader = c.req.header("x-slot-config");
     if (slotConfigHeader) {
       try {
@@ -115,12 +116,16 @@ export function createActionsRoute(deps: {
             id: string; name: string; provider: string;
             baseUrl: string; model: string; protocol?: string;
           }>;
+          runtimePriority?: Record<string, number>;
         };
         if (decoded.slots && Object.keys(decoded.slots).length > 0) {
           slotOverrides = decoded.slots;
         }
         if (decoded.customPresets && decoded.customPresets.length > 0) {
           customPresetDefs = decoded.customPresets;
+        }
+        if (decoded.runtimePriority && Object.keys(decoded.runtimePriority).length > 0) {
+          runtimePriorityOverrides = decoded.runtimePriority;
         }
       } catch {
         console.warn("[actions] Failed to decode X-Slot-Config header, skipping");
@@ -172,7 +177,7 @@ export function createActionsRoute(deps: {
           : null;
 
         for (const def of customPresetDefs) {
-          if (allowedBaseUrls && def.baseUrl && !allowedBaseUrls.some((allowed) => def.baseUrl.startsWith(allowed))) {
+          if (allowedBaseUrls && def.baseUrl && !allowedBaseUrls.some((allowed) => def.baseUrl === allowed || def.baseUrl.startsWith(allowed + "/"))) {
             console.warn(`[actions] Blocked baseUrl not in ALLOWED_BASE_URLS: ${def.baseUrl}`);
             continue;
           }
@@ -256,7 +261,12 @@ export function createActionsRoute(deps: {
           const world = await store.getWorld(session.worldId);
           kernelSession.setContext({
             world: world
-              ? { name: world.name, description: world.description, ...(world.lore ? { lore: world.lore } : {}) }
+              ? {
+                  name: world.name,
+                  description: world.description,
+                  ...(world.lore ? { lore: world.lore } : {}),
+                  ...(world.dimensions ? { dimensions: world.dimensions } : {}),
+                }
               : undefined,
             chat: chatHistory,
           });
@@ -286,6 +296,7 @@ export function createActionsRoute(deps: {
           retryTurnResult = await kernelSession.retryTurn(retryRuntimeId, {
             apiKeys,
             slotOverrides,
+            runtimePriorityOverrides,
             onProgress: async (evt) => {
               if (evt.type === "message.delta") {
                 // Only forward deltas for non-cached runtimes
@@ -430,6 +441,7 @@ export function createActionsRoute(deps: {
                 ...(loreOverride || world.lore
                   ? { lore: loreOverride ?? world.lore }
                   : {}),
+                ...(world.dimensions ? { dimensions: world.dimensions } : {}),
               }
             : undefined,
           chat: chatHistory,
@@ -467,6 +479,7 @@ export function createActionsRoute(deps: {
           {
             apiKeys,
             slotOverrides,
+            runtimePriorityOverrides,
             onProgress: async (evt) => {
               if (evt.type === "message.delta") {
                 streamedRuntimeIds.add(evt.runtimeId);

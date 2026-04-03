@@ -48,12 +48,15 @@ export function createPluginHost(): PluginHost {
       (a, b) => (a.manifest.loadingOrder ?? 100) - (b.manifest.loadingOrder ?? 100)
     );
 
-    // Pre-pass: collect all manifest IDs for dependency validation
+    // Pre-pass: collect all manifest IDs for dependency checking.
+    // For conflicts, we track only already-accepted plugins so that the first
+    // plugin by loadingOrder wins and later conflicting ones are skipped.
     const allManifestIds = new Set(scanned.map((s) => s.manifest.id));
+    const acceptedIds = new Set<string>();
 
     for (const { dir, manifest } of scanned) {
-      // Check dependency/conflict constraints against the full set of manifests
-      const constraintErrors = pluginRegistry.validateConstraints(manifest, allManifestIds);
+      // Check dependencies against full set, conflicts against accepted-only
+      const constraintErrors = pluginRegistry.validateConstraints(manifest, allManifestIds, acceptedIds);
       if (constraintErrors.length > 0) {
         console.warn(
           `[plugin-host] Skipping "${manifest.id}" due to constraint errors:\n` +
@@ -62,7 +65,9 @@ export function createPluginHost(): PluginHost {
         continue;
       }
 
-      // Register the plugin
+      // Register the plugin — mark as accepted before registration so it's
+      // visible to future constraint checks within this load pass.
+      acceptedIds.add(manifest.id);
       const plugin = pluginRegistry.add(manifest, dir);
 
       // Register block schemas from manifest
