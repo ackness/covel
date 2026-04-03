@@ -216,8 +216,8 @@ function createKernelSession(
   // Turn counter for interval-based runtime gating
   let turnCounter = 0;
 
-  // Per-runtime priority overrides (user-adjustable execution order)
-  const priorityOverrides: Record<string, number> = { ...opts?.runtimePriorityOverrides };
+  // Session-level runtime priority overrides (user-adjustable execution order)
+  const sessionPriorityOverrides: Record<string, number> = { ...opts?.runtimePriorityOverrides };
 
   // Cache of the last turn's execution for retry support
   let lastTurnCache: TurnCache | null = null;
@@ -320,7 +320,12 @@ function createKernelSession(
         pluginDeps.set(plugin.manifest.id, plugin.manifest.requires ?? []);
       }
     }
-    const plan = buildExecutionPlan(candidates, pluginDeps, priorityOverrides);
+    // Merge session-level + per-turn priority overrides (per-turn wins)
+    const effectivePriorityOverrides = {
+      ...sessionPriorityOverrides,
+      ...options.runtimePriorityOverrides,
+    };
+    const plan = buildExecutionPlan(candidates, pluginDeps, effectivePriorityOverrides);
 
     // 3-6. Execute groups sequentially, runtimes within a group in parallel
     const collector = createProposalCollector({

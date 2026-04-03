@@ -91,6 +91,11 @@ export interface KernelExecuteOptions {
   traceId?: string;
   /** Slot overrides from the frontend (maps slot name → preset ID). */
   slotOverrides?: Record<string, SlotOverride>;
+  /**
+   * Per-turn runtime priority overrides keyed by qualified runtime ID
+   * ("pluginId:runtimeId"). Merged on top of session-level overrides.
+   */
+  runtimePriorityOverrides?: Record<string, number>;
   /** Called during execution to stream progress events to the client. */
   onProgress?: (event: KernelProgressEvent) => void | Promise<void>;
   /** Priority threshold for background execution (default: 800). Runtimes with priority >= this value run asynchronously. */

@@ -171,15 +171,20 @@ function buildSlotConfigHeaderInternal(): Record<string, string> {
       id, name, provider, baseUrl, model, protocol,
     }));
 
+  // Include runtime priority overrides (qualified "pluginId:runtimeId" → number)
+  const runtimePriority = getRuntimePriorityOverrides();
+
   const hasSlots = Object.keys(slots).length > 0;
   const hasOverrides = Object.keys(overrides).length > 0;
   const hasCustom = customPresetDefs.length > 0;
-  if (!hasSlots && !hasOverrides && !hasCustom) return {};
+  const hasPriority = Object.keys(runtimePriority).length > 0;
+  if (!hasSlots && !hasOverrides && !hasCustom && !hasPriority) return {};
   return {
     "X-Slot-Config": btoa(JSON.stringify({
       slots,
       paramOverrides: overrides,
       ...(hasCustom ? { customPresets: customPresetDefs } : {}),
+      ...(hasPriority ? { runtimePriority } : {}),
     })),
   };
 }

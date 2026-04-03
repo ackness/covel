@@ -81,17 +81,17 @@ export function SessionPrepScreen({
     });
   };
 
-  const handlePriorityChange = (runtimeId: string, value: string) => {
+  const handlePriorityChange = (qualifiedId: string, value: string) => {
     const num = parseInt(value, 10);
     if (isNaN(num) || num < 0 || num > 1000) return;
-    const updated = { ...priorityOverrides, [runtimeId]: num };
+    const updated = { ...priorityOverrides, [qualifiedId]: num };
     setPriorityOverrides(updated);
     api.setRuntimePriorityOverrides(updated);
   };
 
-  const resetPriority = (runtimeId: string) => {
+  const resetPriority = (qualifiedId: string) => {
     const updated = { ...priorityOverrides };
-    delete updated[runtimeId];
+    delete updated[qualifiedId];
     setPriorityOverrides(updated);
     api.setRuntimePriorityOverrides(updated);
   };
@@ -285,8 +285,9 @@ export function SessionPrepScreen({
                           {pkg.runtimes && pkg.runtimes.length > 0 ? (
                             <div className="space-y-2">
                               {pkg.runtimes.map((rt) => {
-                                const effectivePriority = priorityOverrides[rt.id] ?? rt.priority;
-                                const isOverridden = rt.id in priorityOverrides;
+                                const qualifiedId = `${pkg.name}:${rt.id}`;
+                                const effectivePriority = priorityOverrides[qualifiedId] ?? rt.priority;
+                                const isOverridden = qualifiedId in priorityOverrides;
                                 return (
                                   <div key={rt.id} className="flex items-center justify-between gap-3 bg-muted/30 px-3 py-2">
                                     <div className="flex items-center gap-2 min-w-0">
@@ -303,7 +304,7 @@ export function SessionPrepScreen({
                                         min={0}
                                         max={1000}
                                         value={effectivePriority}
-                                        onChange={(e) => handlePriorityChange(rt.id, e.target.value)}
+                                        onChange={(e) => handlePriorityChange(qualifiedId, e.target.value)}
                                         className={`w-16 bg-background border px-2 py-1 text-xs text-center outline-none focus:ring-1 focus:ring-primary ${
                                           isOverridden ? "border-primary" : "border-border"
                                         }`}
@@ -311,7 +312,7 @@ export function SessionPrepScreen({
                                       {isOverridden && (
                                         <button
                                           className="text-[10px] text-muted-foreground hover:text-primary underline"
-                                          onClick={() => resetPriority(rt.id)}
+                                          onClick={() => resetPriority(qualifiedId)}
                                         >
                                           {t("session.reset")}
                                         </button>
