@@ -463,7 +463,9 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
 
   async function listTraceEvents(sessionId: string): Promise<TraceEvent[]> {
     const rows = await sql<TraceEventRow[]>`
-      SELECT * FROM sv_trace_events WHERE session_id = ${sessionId} ORDER BY seq ASC
+      SELECT * FROM sv_trace_events
+      WHERE session_id = ${sessionId}
+      ORDER BY timestamp ASC, seq ASC
     `;
     return rows.map(rowToTraceEvent);
   }

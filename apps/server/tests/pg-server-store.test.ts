@@ -20,6 +20,9 @@ beforeAll(async () => {
   pgSql = postgres(DATABASE_URL);
 
   // Clean server tables before test
+  await pgSql`DROP TABLE IF EXISTS sv_trace_events CASCADE`;
+  await pgSql`DROP TABLE IF EXISTS sv_state_patches CASCADE`;
+  await pgSql`DROP TABLE IF EXISTS sv_state_snapshots CASCADE`;
   await pgSql`DROP TABLE IF EXISTS sv_characters CASCADE`;
   await pgSql`DROP TABLE IF EXISTS sv_messages CASCADE`;
   await pgSql`DROP TABLE IF EXISTS sv_sessions CASCADE`;
@@ -30,6 +33,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   // Clean up
+  await pgSql`DROP TABLE IF EXISTS sv_trace_events CASCADE`;
+  await pgSql`DROP TABLE IF EXISTS sv_state_patches CASCADE`;
+  await pgSql`DROP TABLE IF EXISTS sv_state_snapshots CASCADE`;
   await pgSql`DROP TABLE IF EXISTS sv_characters CASCADE`;
   await pgSql`DROP TABLE IF EXISTS sv_messages CASCADE`;
   await pgSql`DROP TABLE IF EXISTS sv_sessions CASCADE`;
@@ -172,6 +178,25 @@ describe("PgServerStore — State Patches (in-memory)", () => {
     expect(patches).toHaveLength(1);
     expect(patches[0].summary).toBe("HP changed");
   });
+
+  it("should allow multiple state patches for different turns", async () => {
+    await store.addStatePatch("sess-1", {
+      id: "patch_turn-a_0",
+      summary: "Turn A update",
+      packageName: "core-combat",
+    });
+    await store.addStatePatch("sess-1", {
+      id: "patch_turn-b_0",
+      summary: "Turn B update",
+      packageName: "core-combat",
+    });
+
+    const patches = await store.listStatePatches("sess-1");
+    expect(patches.map((patch) => patch.id)).toEqual([
+      "patch_turn-a_0",
+      "patch_turn-b_0",
+    ]);
+  });
 });
 
 describe("PgServerStore — Trace Events (in-memory)", () => {
@@ -192,6 +217,49 @@ describe("PgServerStore — Trace Events (in-memory)", () => {
     const events = await store.listTraceEvents("sess-1");
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe("message.completed");
+  });
+
+  it("should return trace events in chronological order across turns", async () => {
+    await store.addTraceEvent("sess-1", {
+      type: "flow.completed",
+      requestId: "req-2",
+      traceId: "trace-2",
+      sessionId: "sess-1",
+      turnId: "turn-2",
+      flowId: "flow-2",
+      seq: 0,
+      timestamp: "2026-04-03T10:00:02.000Z",
+      payload: {},
+    });
+    await store.addTraceEvent("sess-1", {
+      type: "flow.started",
+      requestId: "req-1",
+      traceId: "trace-1",
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      flowId: "flow-1",
+      seq: 0,
+      timestamp: "2026-04-03T10:00:01.000Z",
+      payload: {},
+    });
+    await store.addTraceEvent("sess-1", {
+      type: "message.completed",
+      requestId: "req-1",
+      traceId: "trace-1",
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      flowId: "flow-1",
+      seq: 1,
+      timestamp: "2026-04-03T10:00:01.500Z",
+      payload: {},
+    });
+
+    const events = await store.listTraceEvents("sess-1");
+    expect(events.map((event) => `${event.turnId}:${event.seq}`)).toEqual([
+      "turn-1:0",
+      "turn-1:1",
+      "turn-2:0",
+    ]);
   });
 });
 

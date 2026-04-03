@@ -28,6 +28,10 @@ interface SseEnvelope {
   payload: Record<string, unknown>;
 }
 
+export function createStatePatchId(turnId: string, seq: number): string {
+  return "patch_" + turnId + "_" + String(seq);
+}
+
 export function createActionsRoute(deps: {
   getOrCreateSession: (sessionId: string) => KernelSession;
   commandBus: CommandBus;
@@ -381,7 +385,7 @@ export function createActionsRoute(deps: {
             for (const item of proposal.items) {
               if (item.kind === "state.patch") {
                 const patchRecord = {
-                  id: `patch_${seq}`,
+                  id: createStatePatchId(turnId, seq),
                   summary: `${proposal.pluginId} state update`,
                   packageName: proposal.pluginId,
                   data: item.payload,
@@ -529,7 +533,7 @@ export function createActionsRoute(deps: {
                   for (const item of task.result.proposals) {
                     if (item.kind === "state.patch") {
                       const patchRecord = {
-                        id: `patch_${seq}`,
+                        id: createStatePatchId(tid, seq),
                         summary: `${task.pluginId} background state update`,
                         packageName: task.pluginId,
                         data: item.payload,
@@ -622,7 +626,7 @@ export function createActionsRoute(deps: {
           for (const item of proposal.items) {
             if (item.kind === "state.patch") {
               const patchRecord = {
-                id: `patch_${seq}`,
+                id: createStatePatchId(turnId, seq),
                 summary: `${proposal.pluginId} state update`,
                 packageName: proposal.pluginId,
                 data: item.payload,
