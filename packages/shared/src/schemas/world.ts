@@ -180,6 +180,7 @@ export type WorldPackageMeta = z.infer<typeof worldPackageMetaSchema>;
 // ── WorldRecord schemas (API boundary) ─────────────────────
 
 export const worldRecordCreateSchema = z.object({
+  id: z.string().optional(),
   name: i18nTextSchema,
   description: i18nTextSchema,
   lore: i18nTextSchema.optional(),

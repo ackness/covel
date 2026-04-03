@@ -145,6 +145,10 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     }
   }
 
+  // ── Migrate: add columns added after initial schema ───────────────
+  await sql`ALTER TABLE sv_worlds ADD COLUMN IF NOT EXISTS dimensions JSONB`;
+  await sql`ALTER TABLE sv_worlds ADD COLUMN IF NOT EXISTS package_id TEXT`;
+
   // ── Worlds ──────────────────────────────────────────────────────
 
   async function listWorlds(): Promise<WorldRecord[]> {
@@ -154,10 +158,10 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
   async function createWorld(
     name: I18nText,
     description: I18nText,
-    opts?: { lore?: I18nText; locale?: string; tags?: string[]; dimensions?: WorldDimensions },
+    opts?: { id?: string; lore?: I18nText; locale?: string; tags?: string[]; dimensions?: WorldDimensions },
   ): Promise<WorldRecord> {
     const world: WorldRecord = {
-      id: uid("world"),
+      id: opts?.id ?? uid("world"),
       name,
       description,
       lore: opts?.lore,
@@ -199,14 +203,15 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     const descJson = sql.json(w.description as JSONValue);
     const loreJson = w.lore != null ? sql.json(w.lore as JSONValue) : null;
     await sql`
-      INSERT INTO sv_worlds (id, name, description, lore, locale, tags, dimensions, created_at, updated_at)
+      INSERT INTO sv_worlds (id, name, description, lore, locale, tags, dimensions, package_id, created_at, updated_at)
       VALUES (${w.id}, ${nameJson}, ${descJson}, ${loreJson}, ${w.locale ?? null},
               ${w.tags ? sql.json(w.tags as JSONValue) : null}, ${w.dimensions ? sql.json(w.dimensions as JSONValue) : null},
-              ${w.createdAt}, ${w.updatedAt ?? null})
+              ${w.packageId ?? null}, ${w.createdAt}, ${w.updatedAt ?? null})
       ON CONFLICT (id) DO UPDATE SET
         name = EXCLUDED.name, description = EXCLUDED.description,
         lore = EXCLUDED.lore, locale = EXCLUDED.locale,
         tags = EXCLUDED.tags, dimensions = EXCLUDED.dimensions,
+        package_id = EXCLUDED.package_id,
         updated_at = EXCLUDED.updated_at
     `;
   }
@@ -220,12 +225,13 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
   }
 
   async function createSession(opts: {
+    id?: string;
     worldId: string;
     presetId?: string;
     taskBindings?: Record<string, string>;
   }): Promise<SessionRecord> {
     const session: SessionRecord = {
-      id: humanSessionId(),
+      id: opts.id ?? humanSessionId(),
       worldId: opts.worldId,
       status: "active",
       phase: "init",
@@ -541,6 +547,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     id: string; name: I18nText; description: I18nText;
     lore: I18nText | null; locale: string | null;
     tags: string[] | null; dimensions: WorldDimensions | null;
+    package_id: string | null;
     created_at: string; updated_at: string | null;
   }
   interface SessionRow {
@@ -564,6 +571,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     locale: r.locale ?? undefined,
     tags: r.tags ?? undefined,
     dimensions: r.dimensions ?? undefined,
+    packageId: r.package_id ?? undefined,
     createdAt: r.created_at,
     updatedAt: r.updated_at ?? undefined,
   }));
@@ -602,17 +610,53 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     characterMap.set(card.id, card);
   }
 
-  // ── Seed worlds from world packages if DB is empty ─────────────
+  // ── Upsert world packages (always, so dimensions stay current) ────
+  // Uses stable IDs (world_<packageId>) so re-runs are idempotent.
 
-  if (worldCache.length === 0 && opts.worldsDir) {
+  if (opts.worldsDir) {
     const seeds = await loadWorldPackages(opts.worldsDir);
     for (const seed of seeds) {
-      await createWorld(seed.name, seed.description, {
-        lore: seed.lore,
-        locale: seed.locale,
-        tags: seed.tags,
-        dimensions: seed.dimensions,
-      });
+      const now = new Date().toISOString();
+      const nameJson = sql.json(seed.name as JSONValue);
+      const descJson = sql.json(seed.description as JSONValue);
+      const loreJson = seed.lore != null ? sql.json(seed.lore as JSONValue) : null;
+      await sql`
+        INSERT INTO sv_worlds (id, name, description, lore, locale, tags, dimensions, package_id, created_at)
+        VALUES (
+          ${seed.id}, ${nameJson}, ${descJson}, ${loreJson},
+          ${seed.locale ?? null}, ${seed.tags ? sql.json(seed.tags as JSONValue) : null},
+          ${seed.dimensions ? sql.json(seed.dimensions as JSONValue) : null},
+          ${seed.packageId ?? null}, ${now}
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          description = EXCLUDED.description,
+          dimensions = EXCLUDED.dimensions,
+          lore = EXCLUDED.lore,
+          tags = EXCLUDED.tags,
+          package_id = EXCLUDED.package_id,
+          updated_at = ${now}
+      `;
+      if (worldMap.has(seed.id)) {
+        const existing = worldMap.get(seed.id)!;
+        existing.dimensions = seed.dimensions;
+        existing.lore = seed.lore;
+        existing.tags = seed.tags;
+      } else {
+        const world: WorldRecord = {
+          id: seed.id,
+          packageId: seed.packageId,
+          name: seed.name,
+          description: seed.description,
+          lore: seed.lore,
+          locale: seed.locale,
+          tags: seed.tags,
+          dimensions: seed.dimensions,
+          createdAt: now,
+        };
+        worldCache.push(world);
+        worldMap.set(world.id, world);
+      }
     }
   }
 

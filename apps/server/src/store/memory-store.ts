@@ -51,10 +51,10 @@ export async function createMemoryStore(worldsDir?: string): Promise<ServerStore
   async function createWorld(
     name: I18nText,
     description: I18nText,
-    opts?: { lore?: I18nText; locale?: string; tags?: string[]; dimensions?: WorldDimensions },
+    opts?: { id?: string; lore?: I18nText; locale?: string; tags?: string[]; dimensions?: WorldDimensions },
   ): Promise<WorldRecord> {
     const world: WorldRecord = {
-      id: uid("world"),
+      id: opts?.id ?? uid("world"),
       name,
       description,
       lore: opts?.lore,
@@ -95,12 +95,13 @@ export async function createMemoryStore(worldsDir?: string): Promise<ServerStore
   }
 
   async function createSession(opts: {
+    id?: string;
     worldId: string;
     presetId?: string;
     taskBindings?: Record<string, string>;
   }): Promise<SessionRecord> {
     const session: SessionRecord = {
-      id: humanSessionId(),
+      id: opts.id ?? humanSessionId(),
       worldId: opts.worldId,
       status: "active",
       phase: "init",
@@ -278,15 +279,22 @@ export async function createMemoryStore(worldsDir?: string): Promise<ServerStore
   }
 
   // ── Seed preset worlds from worlds/ directory ──────────────────
+  // Uses stable IDs (world_<packageId>) for idempotency.
   if (worldsDir) {
     const seeds = await loadWorldPackages(worldsDir);
     for (const seed of seeds) {
-      await createWorld(seed.name, seed.description, {
+      const world: WorldRecord = {
+        id: seed.id,
+        packageId: seed.packageId,
+        name: seed.name,
+        description: seed.description,
         lore: seed.lore,
         locale: seed.locale,
         tags: seed.tags,
         dimensions: seed.dimensions,
-      });
+        createdAt: new Date().toISOString(),
+      };
+      worlds.set(world.id, world);
     }
   }
 

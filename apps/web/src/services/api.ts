@@ -217,10 +217,10 @@ export async function getWorld(id: string): Promise<WorldRecord> {
   return request<WorldRecord>(`/worlds/${encodeURIComponent(id)}`);
 }
 
-export async function createWorld(name: string, description: string): Promise<WorldRecord> {
+export async function createWorld(name: string, description: string, id?: string): Promise<WorldRecord> {
   return request<WorldRecord>("/worlds", {
     method: "POST",
-    body: JSON.stringify({ name, description }),
+    body: JSON.stringify({ id, name, description }),
   });
 }
 
@@ -348,10 +348,10 @@ export async function saveStateSnapshot(sessionId: string, snapshot: Record<stri
   });
 }
 
-export async function createSession(worldId: string, presetId?: string): Promise<SessionRecord> {
+export async function createSession(worldId: string, presetId?: string, id?: string): Promise<SessionRecord> {
   return request<SessionRecord>("/sessions", {
     method: "POST",
-    body: JSON.stringify({ worldId, presetId }),
+    body: JSON.stringify({ id, worldId, presetId }),
   });
 }
 

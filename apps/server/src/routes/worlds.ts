@@ -26,8 +26,8 @@ export function createWorldsRoute(store: ServerStore) {
         400,
       );
     }
-    const { name, description, lore, locale, tags, dimensions } = result.data;
-    const world = await store.createWorld(name, description, { lore, locale, tags, dimensions });
+    const { id, name, description, lore, locale, tags, dimensions } = result.data;
+    const world = await store.createWorld(name, description, { id, lore, locale, tags, dimensions });
     return c.json(world, 201);
   });
 

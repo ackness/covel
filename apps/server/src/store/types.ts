@@ -68,7 +68,7 @@ export interface ServerStore {
   createWorld(
     name: I18nText,
     description: I18nText,
-    opts?: { lore?: I18nText; locale?: string; tags?: string[]; dimensions?: WorldDimensions },
+    opts?: { id?: string; lore?: I18nText; locale?: string; tags?: string[]; dimensions?: WorldDimensions },
   ): Promise<WorldRecord>;
   getWorld(id: string): Promise<WorldRecord | undefined>;
   updateWorld(
@@ -79,6 +79,7 @@ export interface ServerStore {
   // Sessions
   listSessions(worldId: string): Promise<SessionRecord[]>;
   createSession(opts: {
+    id?: string;
     worldId: string;
     presetId?: string;
     taskBindings?: Record<string, string>;

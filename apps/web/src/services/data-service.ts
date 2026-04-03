@@ -9,7 +9,7 @@
  * regardless of storage mode.
  */
 
-import type { WorldDimensions } from "@covel/shared";
+import type { WorldDimensions, I18nText } from "@covel/shared";
 import type {
   WorldRecord,
   SessionRecord,
@@ -182,26 +182,34 @@ function humanSessionId(): string {
 }
 
 /** Minimal seed worlds for first-time local mode users. */
-const LOCAL_SEED_WORLDS = [
+const LOCAL_SEED_WORLDS: Array<{
+  name: I18nText;
+  description: I18nText;
+  tags: string[];
+}> = [
   {
-    name: "雾港・裂潮纪",
-    description: "一座被永恒浓雾包裹的港口城市。潮汐带来远古遗物，也带来危险。",
-    tags: ["港", "雾", "冒险"],
+    name: { "zh-CN": "雾港・裂潮纪", "en-US": "Mistport Chronicles" },
+    description: {
+      "zh-CN": "一座被永恒浓雾包裹的港口城市。潮汐带来远古遗物，也带来危险。",
+      "en-US": "A port city shrouded in eternal fog. The tides bring ancient relics—and danger.",
+    },
+    tags: ["dark-fantasy", "mystery", "exploration"],
   },
   {
-    name: "霓虹脊・2087",
-    description: "赛博朋克都市，义体改造与数据黑市交织的霓虹丛林。",
-    tags: ["赛博朋克", "义体", "黑客"],
+    name: { "zh-CN": "霓虹脊・2087", "en-US": "Neon Ridge 2087" },
+    description: {
+      "zh-CN": "赛博朋克都市，义体改造与数据黑市交织的霓虹丛林。",
+      "en-US": "A cyberpunk metropolis where body augmentation and data black markets intertwine beneath neon lights.",
+    },
+    tags: ["cyberpunk", "augmentation", "hacker"],
   },
   {
-    name: "九州・云梦泽",
-    description: "修仙世界，灵脉纵横，宗门林立，一场席卷九州的劫变正在酝酿。",
-    tags: ["修仙", "仙侠", "宗门"],
-  },
-  {
-    name: "Mistport Chronicles",
-    description: "A port city shrouded in eternal fog. The tides bring ancient relics—and danger.",
-    tags: ["port", "fog", "adventure"],
+    name: { "zh-CN": "九州・云梦泽", "en-US": "Nine Realms: Cloud Marsh" },
+    description: {
+      "zh-CN": "修仙世界，灵脉纵横，宗门林立，一场席卷九州的劫变正在酝酿。",
+      "en-US": "A cultivation world of spirit veins, rival sects, and a looming tribulation that threatens all Nine Realms.",
+    },
+    tags: ["xianxia", "cultivation", "sects"],
   },
 ];
 
@@ -455,20 +463,18 @@ class LocalDataService implements DataService {
 
     if (!session || !world) return;
 
-    // Ensure world exists on server
+    // Ensure world exists on server (pass local ID so server uses the same ID)
     try {
       await api.getWorld(world.id);
     } catch {
-      await api.createWorld(text(world.name), text(world.description));
-      // Server assigns its own ID — we need the server to know our world.
-      // Use updateWorld to set the lore etc.
+      await api.createWorld(text(world.name), text(world.description), world.id);
     }
 
-    // Ensure session exists on server (server needs it for action routing)
+    // Ensure session exists on server (pass local ID so server uses the same ID)
     try {
       await api.getSession(session.id);
     } catch {
-      await api.createSession(session.worldId, session.presetId);
+      await api.createSession(session.worldId, session.presetId, session.id);
     }
 
     // Upload state snapshot so the server kernel can rehydrate game state

@@ -25,6 +25,7 @@ export function createSessionsRoute(store: ServerStore) {
 
   route.post("/", async (c) => {
     let body: {
+      id?: string;
       worldId?: string;
       presetId?: string;
       taskBindings?: Record<string, string>;
@@ -46,6 +47,7 @@ export function createSessionsRoute(store: ServerStore) {
       }
     }
     const session = await store.createSession({
+      id: body.id,
       worldId: body.worldId,
       presetId: body.presetId,
       taskBindings: body.taskBindings,
