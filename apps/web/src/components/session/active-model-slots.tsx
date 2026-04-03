@@ -18,7 +18,7 @@ export function ActiveModelSlots({
   const { t } = useTranslation();
 
   if (slots.length === 0) {
-    return <p className="text-xs text-muted-foreground italic">No models configured</p>;
+    return <p className="text-xs text-muted-foreground italic">{t("session.noModelsConfigured")}</p>;
   }
 
   if (variant === "compact") {

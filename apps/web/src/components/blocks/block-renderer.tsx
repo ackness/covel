@@ -175,7 +175,8 @@ function CharacterCreationBlock({ data, onSubmit, disabled }: BlockRendererProps
   });
 
   const fields = (data.fields as CharacterField[]) ?? [];
-  const submitLabel = (data.submitLabel as string) ?? "确认";
+  const { t } = useTranslation();
+  const submitLabel = (data.submitLabel as string) ?? t("common.confirm");
   const submitMapping = (data.submitMapping as Record<string, string>) ?? {};
 
   const handleFieldChange = (fieldId: string, value: string) => {

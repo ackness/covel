@@ -1,22 +1,7 @@
 import { Loader2, CheckCircle2, XCircle, Zap, Wrench, ChevronDown, ChevronUp, RotateCw } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ExecutionStep } from "@/stores/session-store.js";
-
-const RUNTIME_LABELS: Record<string, string> = {
-  "core-persona": "角色设定",
-  "core-narrator": "叙事生成",
-  "core-init-wizard": "角色创建",
-  "core-guide": "引导系统",
-  "core-char-tracker": "角色追踪",
-};
-
-function runtimeLabel(step: ExecutionStep): string {
-  // Prefer known labels, then fall back to label from kernel (now "pluginId/kind"), then runtimeId
-  if (RUNTIME_LABELS[step.runtimeId]) return RUNTIME_LABELS[step.runtimeId];
-  if (RUNTIME_LABELS[step.pluginId]) return RUNTIME_LABELS[step.pluginId];
-  // label from kernel is now "pluginId/kind" format
-  return step.label ?? step.pluginId ?? step.runtimeId;
-}
 
 interface RuntimeStatus {
   runtimeId: string;
@@ -26,8 +11,17 @@ interface RuntimeStatus {
   detail?: string;
 }
 
-function deriveStatuses(steps: ExecutionStep[]): RuntimeStatus[] {
+function deriveStatuses(
+  steps: ExecutionStep[],
+  runtimeLabels: Record<string, string>,
+): RuntimeStatus[] {
   const map = new Map<string, RuntimeStatus>();
+
+  const runtimeLabel = (step: ExecutionStep): string => {
+    if (runtimeLabels[step.runtimeId]) return runtimeLabels[step.runtimeId];
+    if (runtimeLabels[step.pluginId]) return runtimeLabels[step.pluginId];
+    return step.label ?? step.pluginId ?? step.runtimeId;
+  };
 
   for (const step of steps) {
     const existing = map.get(step.runtimeId);
@@ -87,7 +81,17 @@ function StatusIcon({ status }: { status: RuntimeStatus["status"] }) {
   }
 }
 
-function RuntimeChip({ rt, canRetry, onRetry }: { rt: RuntimeStatus; canRetry?: boolean; onRetry?: (runtimeId: string) => void }) {
+function RuntimeChip({
+  rt,
+  canRetry,
+  onRetry,
+  retryFromLabel,
+}: {
+  rt: RuntimeStatus;
+  canRetry?: boolean;
+  onRetry?: (runtimeId: string) => void;
+  retryFromLabel: string;
+}) {
   const isActive = rt.status === "running" || rt.status === "llm" || rt.status === "tool";
 
   return (
@@ -114,7 +118,7 @@ function RuntimeChip({ rt, canRetry, onRetry }: { rt: RuntimeStatus; canRetry?: 
         <button
           onClick={(e) => { e.stopPropagation(); onRetry(rt.runtimeId); }}
           className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 p-0.5 hover:text-primary"
-          title={`从 ${rt.label} 开始重试`}
+          title={retryFromLabel}
         >
           <RotateCw className="w-2.5 h-2.5" />
         </button>
@@ -131,19 +135,27 @@ export function ExecutionTimeline({
 }: {
   steps: ExecutionStep[];
   executing: boolean;
-  /** Called to retry from a specific runtime (and all subsequent ones). */
   onRetryRuntime?: (runtimeId: string) => void;
-  /** Called to retry the entire turn. */
   onRetryAll?: () => void;
 }) {
+  const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
-  const statuses = deriveStatuses(steps);
+
+  const RUNTIME_LABELS: Record<string, string> = {
+    "core-persona": t("session.runtimePersona"),
+    "core-narrator": t("session.runtimeNarrator"),
+    "core-init-wizard": t("session.runtimeInitWizard"),
+    "core-guide": t("session.runtimeGuide"),
+    "core-char-tracker": t("session.runtimeCharTracker"),
+  };
+
+  const statuses = deriveStatuses(steps, RUNTIME_LABELS);
 
   if (statuses.length === 0 && executing) {
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
         <Loader2 className="w-3.5 h-3.5 animate-spin" />
-        <span>正在启动...</span>
+        <span>{t("session.startingUp")}</span>
       </div>
     );
   }
@@ -174,10 +186,10 @@ export function ExecutionTimeline({
             <button
               onClick={onRetryAll}
               className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
-              title="重新执行所有 runtime"
+              title={t("session.retryAllTitle")}
             >
               <RotateCw className="w-3 h-3" />
-              <span>重试全部</span>
+              <span>{t("session.retryAll")}</span>
             </button>
           )}
         </div>
@@ -192,6 +204,7 @@ export function ExecutionTimeline({
               rt={rt}
               canRetry={canRetry}
               onRetry={onRetryRuntime}
+              retryFromLabel={t("session.retryFrom", { label: rt.label })}
             />
           ))}
         </div>
@@ -203,9 +216,9 @@ export function ExecutionTimeline({
           <Loader2 className="w-3 h-3 animate-spin shrink-0" />
           <span className="truncate">
             {active.label}
-            {active.status === "llm" && " — 调用模型"}
+            {active.status === "llm" && ` — ${t("session.statusLlm")}`}
             {active.status === "tool" && active.detail && ` — ${active.detail}`}
-            {active.status === "running" && " — 准备中"}
+            {active.status === "running" && ` — ${t("session.statusPreparing")}`}
             ...
           </span>
         </div>

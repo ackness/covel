@@ -188,7 +188,19 @@
     "powerTypeCultivation": "Cultivation",
     "powerTypePsychic": "Psychic",
     "powerTypeHybrid": "Hybrid",
-    "powerTypeOther": "Other"
+    "powerTypeOther": "Other",
+    "aiCreate": "AI Create World",
+    "aiCreateDesc": "Describe your world concept and AI will generate a complete worldlore document.",
+    "aiPromptLabel": "World Concept",
+    "aiPromptPlaceholder": "Describe your world, e.g.: A steampunk sky city with floating islands...",
+    "aiExamples": "Try these for inspiration:",
+    "aiGenerate": "Generate World",
+    "aiRetry": "Retry",
+    "aiGenerating": "AI is building the world...",
+    "aiValidating": "Validating world data...",
+    "aiSaving": "Saving world...",
+    "aiDone": "World created successfully!",
+    "aiError": "Generation failed"
   },
   "settings": {
     "storageMode": "Data Storage",

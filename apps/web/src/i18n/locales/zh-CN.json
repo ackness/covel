@@ -188,7 +188,19 @@
     "powerTypeCultivation": "修炼",
     "powerTypePsychic": "灵能",
     "powerTypeHybrid": "混合",
-    "powerTypeOther": "其他"
+    "powerTypeOther": "其他",
+    "aiCreate": "AI 创建世界",
+    "aiCreateDesc": "描述你想要的世界概念，AI 将自动生成完整的世界观文档。",
+    "aiPromptLabel": "世界概念",
+    "aiPromptPlaceholder": "描述你想要的世界，例如：一个蒸汽朋克风格的空中城市...",
+    "aiExamples": "试试这些灵感：",
+    "aiGenerate": "生成世界",
+    "aiRetry": "重试",
+    "aiGenerating": "AI 正在构建世界...",
+    "aiValidating": "验证世界数据...",
+    "aiSaving": "保存世界...",
+    "aiDone": "世界创建完成！",
+    "aiError": "生成失败"
   },
   "settings": {
     "storageMode": "数据存储",

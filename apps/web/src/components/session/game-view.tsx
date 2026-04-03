@@ -92,7 +92,7 @@ function LeftPanel({
                 size="sm"
                 className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
                 onClick={onToggleSessionList}
-                title="Switch session"
+                title={t("session.switchSession")}
               >
                 <History className="w-3 h-3" />
               </Button>
@@ -106,10 +106,10 @@ function LeftPanel({
           {showSessionList && (
             <div className="px-3 py-2.5 border-b border-border space-y-1.5 bg-muted/20">
               <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Sessions
+                {t("session.sessions")}
               </h3>
               {otherSessions.length === 0 ? (
-                <p className="text-[11px] text-muted-foreground italic">No other sessions</p>
+                <p className="text-[11px] text-muted-foreground italic">{t("session.noOtherSessions")}</p>
               ) : (
                 <div className="space-y-1">
                   {otherSessions.map((s) => (
@@ -153,7 +153,7 @@ function LeftPanel({
               {t("session.plugins", "Plugins")}
             </h3>
             {enabledPackages.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">No plugins loaded</p>
+              <p className="text-xs text-muted-foreground italic">{t("session.noPluginsLoaded")}</p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {enabledPackages.map((pkg) => (
@@ -169,7 +169,7 @@ function LeftPanel({
           {commands.length > 0 && (
             <div className="px-3 py-3 border-b border-border space-y-2">
               <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Commands
+                {t("session.commands")}
               </h3>
               <div className="space-y-0.5">
                 {commands.map((cmd) => (
@@ -200,7 +200,7 @@ function LeftPanel({
           onClick={onResetSession}
         >
           <Plus className="w-3.5 h-3.5 mr-1.5" />
-          New Session
+          {t("common.newSession")}
         </Button>
       </div>
     </>
@@ -577,7 +577,7 @@ export function GameView({
                 </Toggle>
               </div>
 
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-sm shrink-0" onClick={() => setSettingsOpen(true)} title="Settings">
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-sm shrink-0" onClick={() => setSettingsOpen(true)} title={t("nav.settings")}>
                 <KeyRound className="w-4 h-4" />
               </Button>
 
@@ -606,10 +606,10 @@ export function GameView({
                 <div className="flex flex-col items-center justify-center py-12 text-center space-y-3">
                   <MessageSquare className="w-8 h-8 text-muted-foreground/50" />
                   <p className="text-sm text-muted-foreground">
-                    {phase === "init" && "正在准备冒险..."}
-                    {phase === "character_creation" && "等待角色创建完成..."}
-                    {phase === "playing" && "冒险等待着你，输入消息开始吧。"}
-                    {phase === "ended" && "本次会话已结束。"}
+                    {phase === "init" && t("session.emptyInit")}
+                    {phase === "character_creation" && t("session.emptyCharCreate")}
+                    {phase === "playing" && t("session.emptyPlaying")}
+                    {phase === "ended" && t("session.emptyEnded")}
                   </p>
                 </div>
               )}

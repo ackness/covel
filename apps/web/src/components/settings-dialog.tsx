@@ -31,10 +31,10 @@ interface SettingsDialogProps {
 }
 
 const MODEL_SLOTS = [
-  { id: "default", label: "Default", labelZh: "默认模型", desc: "主叙事、复杂推理", required: true },
-  { id: "fast", label: "Fast", labelZh: "快速模型", desc: "插件默认、轻量判断", required: false },
-  { id: "balance", label: "Balance", labelZh: "均衡模型", desc: "裁判插件、复杂逻辑", required: false },
-  { id: "image", label: "Image", labelZh: "图像模型", desc: "图像生成（可选）", required: false },
+  { id: "default", label: "Default", labelKey: "settings.modelDefault", descKey: "settings.descDefault", required: true },
+  { id: "fast", label: "Fast", labelKey: "settings.modelFast", descKey: "settings.descFast", required: false },
+  { id: "balance", label: "Balance", labelKey: "settings.modelBalance", descKey: "settings.descBalance", required: false },
+  { id: "image", label: "Image", labelKey: "settings.modelImage", descKey: "settings.descImage", required: false },
 ] as const;
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
@@ -293,8 +293,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           </DialogTitle>
           <DialogDescription>
             {isConfigured
-              ? "llm.toml 已配置。管理 API 密钥和高级参数。"
-              : "配置模型插槽、API 密钥和高级参数。所有数据仅存储在浏览器本地。"
+              ? t("settings.configuredDesc")
+              : t("settings.unconfiguredDesc")
             }
           </DialogDescription>
         </DialogHeader>
@@ -378,7 +378,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               <TabsContent value="overview" className="space-y-3 mt-0">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Info className="w-3 h-3" />
-                  <span>由 llm.toml 配置。修改需编辑服务器端文件。</span>
+                  <span>{t("settings.configuredByToml")}</span>
                 </div>
                 {configuredSlots.map((slotId) => {
                   const slot = llm!.slots[slotId];
@@ -392,7 +392,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium">
-                            {meta?.labelZh ?? slotId}
+                            {meta ? t(meta.labelKey) : slotId}
                           </span>
                           <span className="text-xs text-muted-foreground">({slotId})</span>
                         </div>
@@ -427,7 +427,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                                 onClick={() => setEditingSlot(isEditing ? null : slotId)}
                               >
                                 <Pencil className="w-3 h-3 mr-0.5" />
-                                {isEditing ? "收起" : "编辑能力"}
+                                {isEditing ? t("settings.collapseCapability") : t("settings.editCapability")}
                               </Button>
                               {hasOverride && (
                                 <Button
@@ -437,11 +437,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                                   onClick={() => resetCapOverride(slotId)}
                                 >
                                   <RotateCw className="w-3 h-3 mr-0.5" />
-                                  重置
+                                  {t("settings.resetOverride")}
                                 </Button>
                               )}
                               {hasOverride && (
-                                <Badge variant="outline" className="text-[9px] text-amber-600 border-amber-400">已覆盖</Badge>
+                                <Badge variant="outline" className="text-[9px] text-amber-600 border-amber-400">{t("settings.overrideApplied")}</Badge>
                               )}
                             </div>
                             {isEditing && (
@@ -499,7 +499,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
                       <Database className="w-3 h-3" />
-                      模型数据库
+                      {t("settings.modelDatabase")}
                     </h4>
                     <Button
                       variant="outline"
@@ -513,16 +513,16 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       ) : (
                         <RotateCw className="w-3 h-3 mr-1" />
                       )}
-                      从 GitHub 更新
+                      {t("settings.updateFromGitHub")}
                     </Button>
                   </div>
                   {modelDbInfo?.available ? (
                     <div className="text-[10px] text-muted-foreground space-y-0.5">
-                      <div>{modelDbInfo.count} 个模型 (LiteLLM)</div>
-                      <div>更新于: {modelDbInfo.updatedAt ? new Date(modelDbInfo.updatedAt).toLocaleDateString("zh-CN") : "未知"}</div>
+                      <div>{t("settings.modelCount", { count: modelDbInfo.count })}</div>
+                      <div>{t("settings.updatedAt", { date: modelDbInfo.updatedAt ? new Date(modelDbInfo.updatedAt).toLocaleDateString() : "?" })}</div>
                     </div>
                   ) : (
-                    <div className="text-[10px] text-muted-foreground">数据库不可用</div>
+                    <div className="text-[10px] text-muted-foreground">{t("settings.dbUnavailable")}</div>
                   )}
                 </div>
               </TabsContent>
@@ -539,7 +539,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     <div key={slot.id} className="border border-border p-3 space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{slot.labelZh}</span>
+                          <span className="text-sm font-medium">{t(slot.labelKey)}</span>
                           <span className="text-xs text-muted-foreground">({slot.label})</span>
                         </div>
                         <div className="flex items-center gap-1">
@@ -551,7 +551,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                           )}
                         </div>
                       </div>
-                      <p className="text-xs text-muted-foreground">{slot.desc}</p>
+                      <p className="text-xs text-muted-foreground">{t(slot.descKey)}</p>
                       <select
                         value={selectedPresetId}
                         onChange={(e) => {
@@ -566,7 +566,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                         }}
                         className="w-full bg-background border border-border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
                       >
-                        <option value="">-- {slot.required ? "请选择预设" : "未配置（回退到 Heavy）"} --</option>
+                        <option value="">-- {slot.required ? t("settings.selectPreset") : t("settings.noPresetFallback")} --</option>
                         {state.presets.length > 0 && (
                           <optgroup label="Built-in">
                             {state.presets.map((p) => (
@@ -601,8 +601,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <Info className="w-3 h-3" />
                 <span>
                   {isConfigured
-                    ? "填写 llm.toml 中配置的 provider 对应的 API 密钥。也可通过 .env.llm 文件配置。"
-                    : "密钥仅存储在浏览器 localStorage 中，不会发送至服务器存储。"
+                    ? t("settings.keysConfiguredDesc")
+                    : t("settings.keysLocalDesc")
                   }
                 </span>
               </div>
@@ -618,9 +618,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       <Label htmlFor={`key-${provider.id}`} className="text-xs flex items-center gap-2">
                         {provider.name}
                         {hasKey ? (
-                          <Badge variant="default" className="text-[10px]">已配置</Badge>
+                          <Badge variant="default" className="text-[10px]">{t("settings.keyConfigured")}</Badge>
                         ) : (
-                          <Badge variant="outline" className="text-[10px]">未配置</Badge>
+                          <Badge variant="outline" className="text-[10px]">{t("settings.keyUnconfigured")}</Badge>
                         )}
                       </Label>
                       <span className="text-[10px] text-muted-foreground font-mono">
@@ -649,7 +649,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     {/* Ping test for presets under this provider */}
                     {hasKey && providerPresets.length > 0 && (
                       <div className="space-y-1.5 pt-1">
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-widest">连通测试</span>
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{t("settings.pingTest")}</span>
                         {providerPresets.map((preset) => {
                           const ping = pingResults[preset.id];
                           const isTesting = ping?.testing;
@@ -703,10 +703,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             <TabsContent value="advanced" className="space-y-3 mt-0">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Info className="w-3 h-3" />
-                <span>留空则使用模型提供商默认值。</span>
+                <span>{t("settings.advancedDesc")}</span>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">选择插槽 (Select Slot)</Label>
+                <Label className="text-xs">{t("settings.selectSlot")}</Label>
                 <select
                   value={selectedOverrideSlot}
                   onChange={(e) => setSelectedOverrideSlot(e.target.value)}
@@ -716,7 +716,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     const meta = MODEL_SLOTS.find((s) => s.id === slotId);
                     return (
                       <option key={slotId} value={slotId}>
-                        {meta?.labelZh ?? slotId} ({slotId})
+                        {meta ? t(meta.labelKey) : slotId} ({slotId})
                       </option>
                     );
                   })}
@@ -781,7 +781,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span className="font-medium">{preset.name}</span>
-                            {preset.apiKey && <Badge variant="default" className="text-[10px]">有密钥</Badge>}
+                            {preset.apiKey && <Badge variant="default" className="text-[10px]">{t("settings.hasApiKey")}</Badge>}
                           </div>
                           <Button
                             variant="ghost"
@@ -802,17 +802,17 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 )}
                 {customPresets.length === 0 && (
                   <p className="text-xs text-muted-foreground text-center py-2">
-                    暂无自定义预设
+                    {t("settings.noCustomPresets")}
                   </p>
                 )}
 
                 <div className="border border-dashed border-border p-3 space-y-2">
                   <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                    添加预设
+                    {t("settings.addPreset")}
                   </h4>
                   <div className="grid grid-cols-2 gap-2">
                     <input
-                      placeholder="名称 (Name)"
+                      placeholder={t("settings.namePlaceholder")}
                       value={newPreset.name}
                       onChange={(e) => setNewPreset({ ...newPreset, name: e.target.value })}
                       className="bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
@@ -839,7 +839,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       <option value="anthropic-messages-v1">Anthropic Messages (v1)</option>
                     </select>
                     <input
-                      placeholder="Base URL (可选)"
+                      placeholder={t("settings.baseUrlPlaceholder")}
                       value={newPreset.baseUrl}
                       onChange={(e) => setNewPreset({ ...newPreset, baseUrl: e.target.value })}
                       className="col-span-2 bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
@@ -870,18 +870,18 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     className="w-full text-xs"
                   >
                     <Plus className="w-3 h-3" />
-                    添加
+                    {t("settings.add")}
                   </Button>
                 </div>
 
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={handleExportPresets} className="flex-1 text-xs">
                     <Download className="w-3 h-3" />
-                    导出
+                    {t("settings.export")}
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="flex-1 text-xs">
                     <Upload className="w-3 h-3" />
-                    导入
+                    {t("settings.import")}
                   </Button>
                   <input
                     ref={fileInputRef}
@@ -910,29 +910,39 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
 // ── Modality / Feature display labels ─────────────────────────────
 
-const MODALITY_LABELS: Record<string, { label: string; color: string }> = {
-  // Input modalities
-  "in:text":  { label: "文本输入", color: "bg-blue-500/15 text-blue-600" },
-  "in:image": { label: "图片输入", color: "bg-violet-500/15 text-violet-600" },
-  "in:audio": { label: "音频输入", color: "bg-amber-500/15 text-amber-600" },
-  "in:video": { label: "视频输入", color: "bg-rose-500/15 text-rose-600" },
-  "in:file":  { label: "文件输入", color: "bg-slate-500/15 text-slate-600" },
-  // Output modalities
-  "out:text":      { label: "文本输出", color: "bg-blue-500/15 text-blue-600" },
-  "out:image":     { label: "图片生成", color: "bg-violet-500/15 text-violet-600" },
-  "out:audio":     { label: "语音合成", color: "bg-amber-500/15 text-amber-600" },
-  "out:embedding": { label: "Embedding", color: "bg-teal-500/15 text-teal-600" },
+const MODALITY_COLORS: Record<string, string> = {
+  "in:text":       "bg-blue-500/15 text-blue-600",
+  "in:image":      "bg-violet-500/15 text-violet-600",
+  "in:audio":      "bg-amber-500/15 text-amber-600",
+  "in:video":      "bg-rose-500/15 text-rose-600",
+  "in:file":       "bg-slate-500/15 text-slate-600",
+  "out:text":      "bg-blue-500/15 text-blue-600",
+  "out:image":     "bg-violet-500/15 text-violet-600",
+  "out:audio":     "bg-amber-500/15 text-amber-600",
+  "out:embedding": "bg-teal-500/15 text-teal-600",
 };
 
-const FEATURE_LABELS: Record<string, string> = {
-  function_calling: "工具调用",
-  structured_output: "结构化输出",
-  streaming: "流式",
-  reasoning: "推理",
-  vision: "视觉",
-  prompt_caching: "缓存",
-  web_search: "搜索",
-  computer_use: "电脑使用",
+const MODALITY_LABEL_KEYS: Record<string, string> = {
+  "in:text":       "settings.modalInText",
+  "in:image":      "settings.modalInImage",
+  "in:audio":      "settings.modalInAudio",
+  "in:video":      "settings.modalInVideo",
+  "in:file":       "settings.modalInFile",
+  "out:text":      "settings.modalOutText",
+  "out:image":     "settings.modalOutImage",
+  "out:audio":     "settings.modalOutAudio",
+  "out:embedding": "settings.modalOutEmbedding",
+};
+
+const FEATURE_LABEL_KEYS: Record<string, string> = {
+  function_calling:  "settings.featFunctionCalling",
+  structured_output: "settings.featStructuredOutput",
+  streaming:         "settings.featStreaming",
+  reasoning:         "settings.featReasoning",
+  vision:            "settings.featVision",
+  prompt_caching:    "settings.featPromptCaching",
+  web_search:        "settings.featWebSearch",
+  computer_use:      "settings.featComputerUse",
 };
 
 function formatTokenCount(n: number): string {
@@ -949,30 +959,11 @@ function formatPrice(perMToken: number): string {
 
 // ── Capability Editor ─────────────────────────────────────────────
 
-const ALL_INPUT_MODALITIES: { id: InputModality; label: string }[] = [
-  { id: "text", label: "文本" },
-  { id: "image", label: "图片" },
-  { id: "audio", label: "音频" },
-  { id: "video", label: "视频" },
-  { id: "file", label: "文件" },
-];
-
-const ALL_OUTPUT_MODALITIES: { id: OutputModality; label: string }[] = [
-  { id: "text", label: "文本" },
-  { id: "image", label: "图片生成" },
-  { id: "audio", label: "语音合成" },
-  { id: "embedding", label: "Embedding" },
-];
-
-const ALL_FEATURES: { id: ModelFeature; label: string }[] = [
-  { id: "function_calling", label: "工具调用" },
-  { id: "structured_output", label: "结构化输出" },
-  { id: "streaming", label: "流式" },
-  { id: "reasoning", label: "推理" },
-  { id: "vision", label: "视觉" },
-  { id: "prompt_caching", label: "缓存" },
-  { id: "web_search", label: "搜索" },
-  { id: "computer_use", label: "电脑使用" },
+const ALL_INPUT_MODALITY_IDS: InputModality[] = ["text", "image", "audio", "video", "file"];
+const ALL_OUTPUT_MODALITY_IDS: OutputModality[] = ["text", "image", "audio", "embedding"];
+const ALL_FEATURE_IDS: ModelFeature[] = [
+  "function_calling", "structured_output", "streaming", "reasoning",
+  "vision", "prompt_caching", "web_search", "computer_use",
 ];
 
 function CapabilityEditor({
@@ -986,6 +977,7 @@ function CapabilityEditor({
   override: Partial<ModelCapabilityInfo> | undefined;
   onUpdate: (patch: Partial<ModelCapabilityInfo>) => void;
 }) {
+  const { t } = useTranslation();
   const effective = mergeCapability(serverCap, override);
   const currentInput = override?.input ?? serverCap?.input ?? ["text"];
   const currentOutput = override?.output ?? serverCap?.output ?? ["text"];
@@ -1007,22 +999,22 @@ function CapabilityEditor({
       {/* Input Modalities */}
       <div className="space-y-1">
         <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
-          输入模态 (模型接受什么)
+          {t("settings.inputModalities")}
         </Label>
         <div className="flex flex-wrap gap-1">
-          {ALL_INPUT_MODALITIES.map((m) => {
-            const active = currentInput.includes(m.id);
+          {ALL_INPUT_MODALITY_IDS.map((id) => {
+            const active = currentInput.includes(id);
             return (
               <button
-                key={m.id}
-                onClick={() => toggleModality(currentInput as InputModality[], m.id, "input")}
+                key={id}
+                onClick={() => toggleModality(currentInput as InputModality[], id, "input")}
                 className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
                   active
                     ? "bg-primary/15 text-primary border-primary/30"
                     : "bg-muted/30 text-muted-foreground border-transparent hover:border-border"
                 }`}
               >
-                {m.label}
+                {t(MODALITY_LABEL_KEYS[`in:${id}`] ?? `in:${id}`, { defaultValue: id })}
               </button>
             );
           })}
@@ -1032,22 +1024,22 @@ function CapabilityEditor({
       {/* Output Modalities */}
       <div className="space-y-1">
         <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
-          输出模态 (模型产出什么)
+          {t("settings.outputModalities")}
         </Label>
         <div className="flex flex-wrap gap-1">
-          {ALL_OUTPUT_MODALITIES.map((m) => {
-            const active = currentOutput.includes(m.id);
+          {ALL_OUTPUT_MODALITY_IDS.map((id) => {
+            const active = currentOutput.includes(id);
             return (
               <button
-                key={m.id}
-                onClick={() => toggleModality(currentOutput as OutputModality[], m.id, "output")}
+                key={id}
+                onClick={() => toggleModality(currentOutput as OutputModality[], id, "output")}
                 className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
                   active
                     ? "bg-primary/15 text-primary border-primary/30"
                     : "bg-muted/30 text-muted-foreground border-transparent hover:border-border"
                 }`}
               >
-                {m.label}
+                {t(MODALITY_LABEL_KEYS[`out:${id}`] ?? `out:${id}`, { defaultValue: id })}
               </button>
             );
           })}
@@ -1057,22 +1049,22 @@ function CapabilityEditor({
       {/* Features */}
       <div className="space-y-1">
         <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
-          功能标签
+          {t("settings.featureTags")}
         </Label>
         <div className="flex flex-wrap gap-1">
-          {ALL_FEATURES.map((f) => {
-            const active = currentFeatures.includes(f.id);
+          {ALL_FEATURE_IDS.map((id) => {
+            const active = currentFeatures.includes(id);
             return (
               <button
-                key={f.id}
-                onClick={() => toggleModality(currentFeatures as ModelFeature[], f.id, "features")}
+                key={id}
+                onClick={() => toggleModality(currentFeatures as ModelFeature[], id, "features")}
                 className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
                   active
                     ? "bg-primary/15 text-primary border-primary/30"
                     : "bg-muted/30 text-muted-foreground border-transparent hover:border-border"
                 }`}
               >
-                {f.label}
+                {t(FEATURE_LABEL_KEYS[id] ?? id, { defaultValue: id })}
               </button>
             );
           })}
@@ -1114,11 +1106,11 @@ function CapabilityEditor({
       {/* Pricing */}
       <div className="space-y-1">
         <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
-          价格 (USD / 百万 tokens)
+          {t("settings.pricing")}
         </Label>
         <div className="grid grid-cols-2 gap-2">
           <div className="flex items-center gap-1">
-            <span className="text-[10px] text-muted-foreground w-8 shrink-0">输入:</span>
+            <span className="text-[10px] text-muted-foreground w-8 shrink-0">{t("settings.pricingInput")}:</span>
             <input
               type="number"
               step="0.01"
@@ -1134,7 +1126,7 @@ function CapabilityEditor({
             />
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-[10px] text-muted-foreground w-8 shrink-0">输出:</span>
+            <span className="text-[10px] text-muted-foreground w-8 shrink-0">{t("settings.pricingOutput")}:</span>
             <input
               type="number"
               step="0.01"
@@ -1156,18 +1148,19 @@ function CapabilityEditor({
 }
 
 function CapabilityTags({ capability: cap }: { capability: ModelCapabilityInfo }) {
+  const { t } = useTranslation();
   // Only show non-text modalities as tags (text is assumed)
   const inputTags = cap.input
     .filter((m) => m !== "text")
-    .map((m) => ({ key: `in:${m}`, ...MODALITY_LABELS[`in:${m}`] }))
-    .filter((t) => t.label);
+    .map((m) => ({ key: `in:${m}`, label: MODALITY_LABEL_KEYS[`in:${m}`] ? t(MODALITY_LABEL_KEYS[`in:${m}`]) : m, color: MODALITY_COLORS[`in:${m}`] }))
+    .filter((tag) => tag.color);
   const outputTags = cap.output
     .filter((m) => m !== "text")
-    .map((m) => ({ key: `out:${m}`, ...MODALITY_LABELS[`out:${m}`] }))
-    .filter((t) => t.label);
+    .map((m) => ({ key: `out:${m}`, label: MODALITY_LABEL_KEYS[`out:${m}`] ? t(MODALITY_LABEL_KEYS[`out:${m}`]) : m, color: MODALITY_COLORS[`out:${m}`] }))
+    .filter((tag) => tag.color);
   const featureTags = (cap.features ?? [])
     .filter((f) => f !== "streaming") // streaming is ubiquitous, skip
-    .map((f) => ({ key: f, label: FEATURE_LABELS[f] ?? f }));
+    .map((f) => ({ key: f, label: FEATURE_LABEL_KEYS[f] ? t(FEATURE_LABEL_KEYS[f]) : f }));
 
   const hasLimits = cap.contextWindow || cap.maxOutputTokens;
   const hasPricing = cap.pricing && (cap.pricing.inputPerMToken || cap.pricing.perImage);

@@ -1,4 +1,5 @@
 import { ChevronRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export type SessionStep = "world_select" | "prep" | "game";
 
@@ -10,12 +11,6 @@ interface SessionBreadcrumbProps {
   disabled?: boolean;
 }
 
-const STEP_LABELS: Record<SessionStep, string> = {
-  world_select: "选择世界",
-  prep: "配置",
-  game: "游戏中",
-};
-
 export function SessionBreadcrumb({
   step,
   worldName,
@@ -23,6 +18,14 @@ export function SessionBreadcrumb({
   onGoPrep,
   disabled,
 }: SessionBreadcrumbProps) {
+  const { t } = useTranslation();
+
+  const STEP_LABELS: Record<SessionStep, string> = {
+    world_select: t("session.breadcrumbWorldSelect"),
+    prep: t("session.breadcrumbPrep"),
+    game: t("session.breadcrumbGame"),
+  };
+
   const items: Array<{ label: string; active: boolean; onClick?: () => void }> = [];
 
   // World select

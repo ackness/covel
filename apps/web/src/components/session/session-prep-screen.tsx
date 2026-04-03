@@ -173,7 +173,7 @@ export function SessionPrepScreen({
                       </div>
                     </div>
                     <Button variant="outline" size="sm" className="text-xs shrink-0" onClick={() => onResume(session)}>
-                      Resume
+                      {t("session.resume")}
                     </Button>
                   </div>
                 ))}
@@ -192,7 +192,7 @@ export function SessionPrepScreen({
                   <FileText className="w-4 h-4" />
                   {t("session.worldLore", "World Document")}
                   {isLoreModified && (
-                    <Badge variant="secondary" className="text-[10px] ml-1">modified</Badge>
+                    <Badge variant="secondary" className="text-[10px] ml-1">{t("session.modified")}</Badge>
                   )}
                 </CardTitle>
                 {loreExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -204,13 +204,13 @@ export function SessionPrepScreen({
                   value={loreValue}
                   onChange={(e) => handleLoreChange(e.target.value)}
                   className="w-full min-h-[300px] bg-background border border-border px-4 py-3 text-sm font-mono leading-relaxed outline-none focus:ring-1 focus:ring-primary resize-y"
-                  placeholder="Enter world lore in Markdown..."
+                  placeholder={t("session.lorePlaceholder")}
                 />
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>
                     {isLoreModified
-                      ? `Modified (${loreValue.length} chars)`
-                      : `Original (${originalLore.length} chars)`}
+                      ? t("session.loreModified", { count: loreValue.length })
+                      : t("session.loreOriginal", { count: originalLore.length })}
                   </span>
                   {isLoreModified && (
                     <button
@@ -252,7 +252,7 @@ export function SessionPrepScreen({
             </CardHeader>
             <CardContent className="space-y-2">
               {enabledPackages.length === 0 ? (
-                <p className="text-xs text-muted-foreground italic">No plugins loaded</p>
+                <p className="text-xs text-muted-foreground italic">{t("session.noPluginsLoaded")}</p>
               ) : (
                 enabledPackages.map((pkg) => {
                   const isExpanded = expandedPlugins.has(pkg.name);
@@ -297,7 +297,7 @@ export function SessionPrepScreen({
                                       )}
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
-                                      <span className="text-[10px] text-muted-foreground uppercase">Priority</span>
+                                      <span className="text-[10px] text-muted-foreground uppercase">{t("session.priority")}</span>
                                       <input
                                         type="number"
                                         min={0}
@@ -313,7 +313,7 @@ export function SessionPrepScreen({
                                           className="text-[10px] text-muted-foreground hover:text-primary underline"
                                           onClick={() => resetPriority(rt.id)}
                                         >
-                                          reset
+                                          {t("session.reset")}
                                         </button>
                                       )}
                                     </div>
@@ -322,7 +322,7 @@ export function SessionPrepScreen({
                               })}
                             </div>
                           ) : (
-                            <p className="text-xs text-muted-foreground italic">No runtimes</p>
+                            <p className="text-xs text-muted-foreground italic">{t("session.noRuntimes")}</p>
                           )}
                         </div>
                       )}
