@@ -169,31 +169,31 @@ describe("PgServerStore — Characters", () => {
 
 describe("PgServerStore — State Patches (in-memory)", () => {
   it("should add and list state patches", async () => {
-    await store.addStatePatch("sess-1", {
+    await store.addStatePatch("sess-sp-1", {
       id: "p1",
       summary: "HP changed",
       packageName: "core-combat",
       data: { hp: 80 },
     });
 
-    const patches = await store.listStatePatches("sess-1");
+    const patches = await store.listStatePatches("sess-sp-1");
     expect(patches).toHaveLength(1);
     expect(patches[0].summary).toBe("HP changed");
   });
 
   it("should allow multiple state patches for different turns", async () => {
-    await store.addStatePatch("sess-1", {
+    await store.addStatePatch("sess-sp-2", {
       id: "patch_turn-a_0",
       summary: "Turn A update",
       packageName: "core-combat",
     });
-    await store.addStatePatch("sess-1", {
+    await store.addStatePatch("sess-sp-2", {
       id: "patch_turn-b_0",
       summary: "Turn B update",
       packageName: "core-combat",
     });
 
-    const patches = await store.listStatePatches("sess-1");
+    const patches = await store.listStatePatches("sess-sp-2");
     expect(patches.map((patch) => patch.id)).toEqual([
       "patch_turn-a_0",
       "patch_turn-b_0",
@@ -207,48 +207,48 @@ describe("PgServerStore — Trace Events (in-memory)", () => {
       type: "message.completed",
       requestId: "req-1",
       traceId: "trace-1",
-      sessionId: "sess-1",
+      sessionId: "sess-te-1",
       turnId: "turn-1",
       flowId: "flow-1",
       seq: 0,
       timestamp: new Date().toISOString(),
       payload: { content: "test" },
     };
-    await store.addTraceEvent("sess-1", event);
+    await store.addTraceEvent("sess-te-1", event);
 
-    const events = await store.listTraceEvents("sess-1");
+    const events = await store.listTraceEvents("sess-te-1");
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe("message.completed");
   });
 
   it("should return trace events in chronological order across turns", async () => {
-    await store.addTraceEvent("sess-1", {
+    await store.addTraceEvent("sess-te-2", {
       type: "flow.completed",
       requestId: "req-2",
       traceId: "trace-2",
-      sessionId: "sess-1",
+      sessionId: "sess-te-2",
       turnId: "turn-2",
       flowId: "flow-2",
       seq: 0,
       timestamp: "2026-04-03T10:00:02.000Z",
       payload: {},
     });
-    await store.addTraceEvent("sess-1", {
+    await store.addTraceEvent("sess-te-2", {
       type: "flow.started",
       requestId: "req-1",
       traceId: "trace-1",
-      sessionId: "sess-1",
+      sessionId: "sess-te-2",
       turnId: "turn-1",
       flowId: "flow-1",
       seq: 0,
       timestamp: "2026-04-03T10:00:01.000Z",
       payload: {},
     });
-    await store.addTraceEvent("sess-1", {
+    await store.addTraceEvent("sess-te-2", {
       type: "message.completed",
       requestId: "req-1",
       traceId: "trace-1",
-      sessionId: "sess-1",
+      sessionId: "sess-te-2",
       turnId: "turn-1",
       flowId: "flow-1",
       seq: 1,
@@ -256,7 +256,7 @@ describe("PgServerStore — Trace Events (in-memory)", () => {
       payload: {},
     });
 
-    const events = await store.listTraceEvents("sess-1");
+    const events = await store.listTraceEvents("sess-te-2");
     expect(events.map((event) => `${event.turnId}:${event.seq}`)).toEqual([
       "turn-1:0",
       "turn-1:1",
