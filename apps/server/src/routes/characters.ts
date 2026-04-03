@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import type { CharacterCreateInput, CharacterType } from "@covel/shared";
-import type { MemoryStore } from "../store/memory-store.js";
+import type { ServerStore } from "../store/types.js";
 
-export function createCharactersRoute(store: MemoryStore) {
+export function createCharactersRoute(store: ServerStore) {
   const route = new Hono();
 
   route.get("/", (c) => {

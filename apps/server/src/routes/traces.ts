@@ -1,11 +1,11 @@
 import { Hono } from "hono";
-import type { MemoryStore } from "../store/memory-store.js";
+import type { ServerStore } from "../store/types.js";
 
 /**
  * GET /api/traces/:sessionId — Return all trace events for a session.
  * GET /api/traces/:sessionId/turns — Return trace events grouped by turnId.
  */
-export function createTracesRoute(store: MemoryStore) {
+export function createTracesRoute(store: ServerStore) {
   const route = new Hono();
 
   // All events for a session (flat list, chronological)

@@ -1,3 +1,6 @@
+import { eq, and } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/postgres-js";
+import pgClient from "postgres";
 import type {
   DataStore,
   WorldRecord,
@@ -9,87 +12,523 @@ import type {
   SnapshotRecord,
   StoreSnapshot,
 } from "../types.js";
+import * as schema from "./schema.js";
 
-const NOT_IMPLEMENTED = "PostgreSQL store not yet implemented";
+export interface PgStoreOptions {
+  databaseUrl: string;
+}
 
 export class PgStore implements DataStore {
+  private readonly db;
+  private readonly sql;
+
+  constructor(opts: PgStoreOptions) {
+    this.sql = pgClient(opts.databaseUrl);
+    this.db = drizzle(this.sql, { schema });
+  }
+
+  /** Run schema push (create tables if not exist). Call once at startup. */
+  async initialize(): Promise<void> {
+    // Create tables via raw SQL for simplicity — no migration tooling needed at runtime.
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS worlds (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        lore TEXT,
+        tags JSONB,
+        created_at TEXT NOT NULL
+      )
+    `;
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        world_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        phase TEXT NOT NULL DEFAULT 'init',
+        preset_id TEXT,
+        settings JSONB,
+        created_at TEXT NOT NULL
+      )
+    `;
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS messages (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        metadata JSONB,
+        created_at TEXT NOT NULL
+      )
+    `;
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS characters (
+        id TEXT PRIMARY KEY,
+        world_id TEXT NOT NULL,
+        session_id TEXT,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'npc',
+        description TEXT,
+        fields JSONB,
+        extensions JSONB,
+        version INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `;
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS events (
+        id TEXT PRIMARY KEY,
+        branch_id TEXT NOT NULL,
+        turn_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        source TEXT NOT NULL,
+        locale TEXT,
+        payload JSONB,
+        created_at TEXT NOT NULL
+      )
+    `;
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS domain_records (
+        id TEXT PRIMARY KEY,
+        branch_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value JSONB,
+        summary TEXT,
+        locale TEXT,
+        updated_at TEXT NOT NULL
+      )
+    `;
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS snapshots (
+        id TEXT PRIMARY KEY,
+        branch_id TEXT NOT NULL,
+        turn_id TEXT NOT NULL,
+        label TEXT,
+        summary TEXT,
+        data JSONB NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    `;
+  }
+
+  /** Close the underlying connection pool. */
+  async close(): Promise<void> {
+    await this.sql.end();
+  }
+
+  // ── World ───────────────────────────────────────────────────────
+
   async listWorlds(): Promise<WorldRecord[]> {
-    throw new Error(NOT_IMPLEMENTED);
-  }
-  async getWorld(_id: string): Promise<WorldRecord | null> {
-    throw new Error(NOT_IMPLEMENTED);
-  }
-  async upsertWorld(_world: WorldRecord): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED);
-  }
-  async deleteWorld(_id: string): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED);
+    const rows = await this.db.select().from(schema.worlds);
+    return rows.map(toWorldRecord);
   }
 
-  async listSessions(_worldId?: string): Promise<SessionRecord[]> {
-    throw new Error(NOT_IMPLEMENTED);
-  }
-  async getSession(_id: string): Promise<SessionRecord | null> {
-    throw new Error(NOT_IMPLEMENTED);
-  }
-  async upsertSession(_session: SessionRecord): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED);
-  }
-  async deleteSession(_id: string): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED);
+  async getWorld(id: string): Promise<WorldRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.worlds)
+      .where(eq(schema.worlds.id, id));
+    return rows.length > 0 ? toWorldRecord(rows[0]) : null;
   }
 
-  async listMessages(_sessionId: string): Promise<MessageRecord[]> {
-    throw new Error(NOT_IMPLEMENTED);
-  }
-  async addMessage(_msg: MessageRecord): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED);
-  }
-  async clearMessages(_sessionId: string): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED);
-  }
-
-  async listCharacters(_sessionId?: string): Promise<CharacterRecord[]> {
-    throw new Error(NOT_IMPLEMENTED);
-  }
-  async upsertCharacter(_char: CharacterRecord): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED);
-  }
-  async deleteCharacter(_id: string): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED);
-  }
-
-  async appendEvent(_event: EventRecord): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED);
-  }
-  async listEvents(_branchId: string): Promise<EventRecord[]> {
-    throw new Error(NOT_IMPLEMENTED);
+  async upsertWorld(world: WorldRecord): Promise<void> {
+    await this.db
+      .insert(schema.worlds)
+      .values({
+        id: world.id,
+        name: world.name,
+        description: world.description,
+        lore: world.lore ?? null,
+        tags: world.tags ?? null,
+        createdAt: world.createdAt,
+      })
+      .onConflictDoUpdate({
+        target: schema.worlds.id,
+        set: {
+          name: world.name,
+          description: world.description,
+          lore: world.lore ?? null,
+          tags: world.tags ?? null,
+        },
+      });
   }
 
-  async upsertRecord(_record: DomainRecord): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED);
-  }
-  async listRecords(_branchId: string, _kind?: string): Promise<DomainRecord[]> {
-    throw new Error(NOT_IMPLEMENTED);
+  async deleteWorld(id: string): Promise<void> {
+    await this.db.delete(schema.worlds).where(eq(schema.worlds.id, id));
   }
 
-  async createSnapshot(_snapshot: SnapshotRecord): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED);
+  // ── Session ─────────────────────────────────────────────────────
+
+  async listSessions(worldId?: string): Promise<SessionRecord[]> {
+    if (worldId != null) {
+      const rows = await this.db
+        .select()
+        .from(schema.sessions)
+        .where(eq(schema.sessions.worldId, worldId));
+      return rows.map(toSessionRecord);
+    }
+    const rows = await this.db.select().from(schema.sessions);
+    return rows.map(toSessionRecord);
   }
-  async getSnapshot(_id: string): Promise<SnapshotRecord | null> {
-    throw new Error(NOT_IMPLEMENTED);
+
+  async getSession(id: string): Promise<SessionRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.sessions)
+      .where(eq(schema.sessions.id, id));
+    return rows.length > 0 ? toSessionRecord(rows[0]) : null;
   }
-  async listSnapshots(_branchId: string): Promise<SnapshotRecord[]> {
-    throw new Error(NOT_IMPLEMENTED);
+
+  async upsertSession(session: SessionRecord): Promise<void> {
+    await this.db
+      .insert(schema.sessions)
+      .values({
+        id: session.id,
+        worldId: session.worldId,
+        status: session.status,
+        phase: session.phase,
+        presetId: session.presetId ?? null,
+        settings: session.settings ?? null,
+        createdAt: session.createdAt,
+      })
+      .onConflictDoUpdate({
+        target: schema.sessions.id,
+        set: {
+          worldId: session.worldId,
+          status: session.status,
+          phase: session.phase,
+          presetId: session.presetId ?? null,
+          settings: session.settings ?? null,
+        },
+      });
   }
+
+  async deleteSession(id: string): Promise<void> {
+    await this.db.delete(schema.sessions).where(eq(schema.sessions.id, id));
+  }
+
+  // ── Message ─────────────────────────────────────────────────────
+
+  async listMessages(sessionId: string): Promise<MessageRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.messages)
+      .where(eq(schema.messages.sessionId, sessionId));
+    return rows.map(toMessageRecord);
+  }
+
+  async addMessage(msg: MessageRecord): Promise<void> {
+    await this.db.insert(schema.messages).values({
+      id: msg.id,
+      sessionId: msg.sessionId,
+      role: msg.role,
+      content: msg.content,
+      metadata: msg.metadata ?? null,
+      createdAt: msg.createdAt,
+    });
+  }
+
+  async clearMessages(sessionId: string): Promise<void> {
+    await this.db
+      .delete(schema.messages)
+      .where(eq(schema.messages.sessionId, sessionId));
+  }
+
+  // ── Character ───────────────────────────────────────────────────
+
+  async listCharacters(sessionId?: string): Promise<CharacterRecord[]> {
+    if (sessionId != null) {
+      const rows = await this.db
+        .select()
+        .from(schema.characters)
+        .where(eq(schema.characters.sessionId, sessionId));
+      return rows.map(toCharacterRecord);
+    }
+    const rows = await this.db.select().from(schema.characters);
+    return rows.map(toCharacterRecord);
+  }
+
+  async upsertCharacter(char: CharacterRecord): Promise<void> {
+    await this.db
+      .insert(schema.characters)
+      .values({
+        id: char.id,
+        worldId: char.worldId,
+        sessionId: char.sessionId ?? null,
+        name: char.name,
+        type: char.type,
+        description: char.description ?? null,
+        fields: char.fields ?? null,
+        extensions: char.extensions ?? null,
+        version: char.version,
+        createdAt: char.createdAt,
+        updatedAt: char.updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: schema.characters.id,
+        set: {
+          worldId: char.worldId,
+          sessionId: char.sessionId ?? null,
+          name: char.name,
+          type: char.type,
+          description: char.description ?? null,
+          fields: char.fields ?? null,
+          extensions: char.extensions ?? null,
+          version: char.version,
+          updatedAt: char.updatedAt,
+        },
+      });
+  }
+
+  async deleteCharacter(id: string): Promise<void> {
+    await this.db
+      .delete(schema.characters)
+      .where(eq(schema.characters.id, id));
+  }
+
+  // ── Event ───────────────────────────────────────────────────────
+
+  async appendEvent(event: EventRecord): Promise<void> {
+    await this.db.insert(schema.events).values({
+      id: event.id,
+      branchId: event.branchId,
+      turnId: event.turnId,
+      type: event.type,
+      source: event.source,
+      locale: event.locale ?? null,
+      payload: event.payload ?? null,
+      createdAt: event.createdAt,
+    });
+  }
+
+  async listEvents(branchId: string): Promise<EventRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.branchId, branchId));
+    return rows.map(toEventRecord);
+  }
+
+  // ── Record ──────────────────────────────────────────────────────
+
+  async upsertRecord(record: DomainRecord): Promise<void> {
+    await this.db
+      .insert(schema.domainRecords)
+      .values({
+        id: record.id,
+        branchId: record.branchId,
+        kind: record.kind,
+        key: record.key,
+        value: record.value as Record<string, unknown> | null,
+        summary: record.summary ?? null,
+        locale: record.locale ?? null,
+        updatedAt: record.updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: schema.domainRecords.id,
+        set: {
+          branchId: record.branchId,
+          kind: record.kind,
+          key: record.key,
+          value: record.value as Record<string, unknown> | null,
+          summary: record.summary ?? null,
+          locale: record.locale ?? null,
+          updatedAt: record.updatedAt,
+        },
+      });
+  }
+
+  async listRecords(branchId: string, kind?: string): Promise<DomainRecord[]> {
+    if (kind != null) {
+      const rows = await this.db
+        .select()
+        .from(schema.domainRecords)
+        .where(
+          and(
+            eq(schema.domainRecords.branchId, branchId),
+            eq(schema.domainRecords.kind, kind),
+          ),
+        );
+      return rows.map(toDomainRecord);
+    }
+    const rows = await this.db
+      .select()
+      .from(schema.domainRecords)
+      .where(eq(schema.domainRecords.branchId, branchId));
+    return rows.map(toDomainRecord);
+  }
+
+  // ── Snapshot ────────────────────────────────────────────────────
+
+  async createSnapshot(snapshot: SnapshotRecord): Promise<void> {
+    await this.db.insert(schema.snapshots).values({
+      id: snapshot.id,
+      branchId: snapshot.branchId,
+      turnId: snapshot.turnId,
+      label: snapshot.label ?? null,
+      summary: snapshot.summary ?? null,
+      data: snapshot.data,
+      createdAt: snapshot.createdAt,
+    });
+  }
+
+  async getSnapshot(id: string): Promise<SnapshotRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.snapshots)
+      .where(eq(schema.snapshots.id, id));
+    return rows.length > 0 ? toSnapshotRecord(rows[0]) : null;
+  }
+
+  async listSnapshots(branchId: string): Promise<SnapshotRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.snapshots)
+      .where(eq(schema.snapshots.branchId, branchId));
+    return rows.map(toSnapshotRecord);
+  }
+
+  // ── Bulk ────────────────────────────────────────────────────────
 
   async exportAll(): Promise<StoreSnapshot> {
-    throw new Error(NOT_IMPLEMENTED);
+    const [w, s, m, c, e, r, sn] = await Promise.all([
+      this.listWorlds(),
+      this.listSessions(),
+      this.db.select().from(schema.messages).then((rows) => rows.map(toMessageRecord)),
+      this.listCharacters(),
+      this.db.select().from(schema.events).then((rows) => rows.map(toEventRecord)),
+      this.db.select().from(schema.domainRecords).then((rows) => rows.map(toDomainRecord)),
+      this.db.select().from(schema.snapshots).then((rows) => rows.map(toSnapshotRecord)),
+    ]);
+    return {
+      version: "covel-export/v1",
+      exportedAt: new Date().toISOString(),
+      data: {
+        worlds: w,
+        sessions: s,
+        messages: m,
+        characters: c,
+        events: e,
+        records: r,
+        snapshots: sn,
+      },
+      config: {},
+    };
   }
-  async importAll(_data: StoreSnapshot): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED);
+
+  async importAll(data: StoreSnapshot): Promise<void> {
+    await this.clear();
+    const promises: Promise<void>[] = [];
+    for (const w of data.data.worlds) promises.push(this.upsertWorld(w));
+    for (const s of data.data.sessions) promises.push(this.upsertSession(s));
+    for (const m of data.data.messages) promises.push(this.addMessage(m));
+    for (const c of data.data.characters) promises.push(this.upsertCharacter(c));
+    for (const e of data.data.events) promises.push(this.appendEvent(e));
+    for (const r of data.data.records) promises.push(this.upsertRecord(r));
+    for (const s of data.data.snapshots) promises.push(this.createSnapshot(s));
+    await Promise.all(promises);
   }
+
   async clear(): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED);
+    // Delete in dependency order
+    await this.db.delete(schema.snapshots);
+    await this.db.delete(schema.domainRecords);
+    await this.db.delete(schema.events);
+    await this.db.delete(schema.messages);
+    await this.db.delete(schema.characters);
+    await this.db.delete(schema.sessions);
+    await this.db.delete(schema.worlds);
   }
+}
+
+// ── Row → Record mappers ──────────────────────────────────────────
+
+function toWorldRecord(row: typeof schema.worlds.$inferSelect): WorldRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    ...(row.lore != null ? { lore: row.lore } : {}),
+    ...(row.tags != null ? { tags: row.tags } : {}),
+    createdAt: row.createdAt,
+  };
+}
+
+function toSessionRecord(row: typeof schema.sessions.$inferSelect): SessionRecord {
+  return {
+    id: row.id,
+    worldId: row.worldId,
+    status: row.status as SessionRecord["status"],
+    phase: row.phase as SessionRecord["phase"],
+    ...(row.presetId != null ? { presetId: row.presetId } : {}),
+    ...(row.settings != null ? { settings: row.settings } : {}),
+    createdAt: row.createdAt,
+  };
+}
+
+function toMessageRecord(row: typeof schema.messages.$inferSelect): MessageRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    role: row.role as MessageRecord["role"],
+    content: row.content,
+    ...(row.metadata != null ? { metadata: row.metadata } : {}),
+    createdAt: row.createdAt,
+  };
+}
+
+function toCharacterRecord(row: typeof schema.characters.$inferSelect): CharacterRecord {
+  return {
+    id: row.id,
+    worldId: row.worldId,
+    ...(row.sessionId != null ? { sessionId: row.sessionId } : {}),
+    name: row.name,
+    type: row.type as CharacterRecord["type"],
+    ...(row.description != null ? { description: row.description } : {}),
+    ...(row.fields != null ? { fields: row.fields } : {}),
+    ...(row.extensions != null ? { extensions: row.extensions } : {}),
+    version: row.version,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function toEventRecord(row: typeof schema.events.$inferSelect): EventRecord {
+  return {
+    id: row.id,
+    branchId: row.branchId,
+    turnId: row.turnId,
+    type: row.type,
+    source: row.source,
+    ...(row.locale != null ? { locale: row.locale } : {}),
+    ...(row.payload != null ? { payload: row.payload } : {}),
+    createdAt: row.createdAt,
+  };
+}
+
+function toDomainRecord(row: typeof schema.domainRecords.$inferSelect): DomainRecord {
+  return {
+    id: row.id,
+    branchId: row.branchId,
+    kind: row.kind,
+    key: row.key,
+    value: row.value,
+    ...(row.summary != null ? { summary: row.summary } : {}),
+    ...(row.locale != null ? { locale: row.locale } : {}),
+    updatedAt: row.updatedAt,
+  };
+}
+
+function toSnapshotRecord(row: typeof schema.snapshots.$inferSelect): SnapshotRecord {
+  return {
+    id: row.id,
+    branchId: row.branchId,
+    turnId: row.turnId,
+    ...(row.label != null ? { label: row.label } : {}),
+    ...(row.summary != null ? { summary: row.summary } : {}),
+    data: row.data,
+    createdAt: row.createdAt,
+  };
 }

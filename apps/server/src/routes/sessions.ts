@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import type { MemoryStore } from "../store/memory-store.js";
+import type { ServerStore } from "../store/types.js";
 
-export function createSessionsRoute(store: MemoryStore) {
+export function createSessionsRoute(store: ServerStore) {
   const route = new Hono();
 
   route.get("/", (c) => {

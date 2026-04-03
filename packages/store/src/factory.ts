@@ -26,8 +26,13 @@ export async function createStore(config: StoreConfig): Promise<DataStore> {
       });
     }
     case "postgres": {
+      if (!config.databaseUrl) {
+        throw new Error("databaseUrl is required for postgres backend");
+      }
       const { PgStore } = await import("./postgres/pg-store.js");
-      return new PgStore();
+      const store = new PgStore({ databaseUrl: config.databaseUrl });
+      await store.initialize();
+      return store;
     }
     default:
       throw new Error(`Unknown store backend: ${config.backend as string}`);

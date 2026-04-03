@@ -20,3 +20,4 @@ export { MemoryStore } from "./memory/memory-store.js";
 export { IdbStore } from "./indexeddb/idb-store.js";
 export type { IdbStoreOptions } from "./indexeddb/idb-store.js";
 export { PgStore } from "./postgres/pg-store.js";
+export type { PgStoreOptions } from "./postgres/pg-store.js";

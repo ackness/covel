@@ -16,7 +16,9 @@
   },
   "dependencies": {
     "@covel/shared": "workspace:*",
-    "idb": "^8.0.2"
+    "drizzle-orm": "^0.41.0",
+    "idb": "^8.0.2",
+    "postgres": "^3.4.0"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

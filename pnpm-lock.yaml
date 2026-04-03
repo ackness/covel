@@ -291,9 +291,15 @@ importers:
       '@covel/shared':
         specifier: workspace:*
         version: link:../shared
+      drizzle-orm:
+        specifier: ^0.41.0
+        version: 0.41.0(pg@8.20.0)(postgres@3.4.8)
       idb:
         specifier: ^8.0.2
         version: 8.0.3
+      postgres:
+        specifier: ^3.4.0
+        version: 3.4.8
     devDependencies:
       typescript:
         specifier: ^5.8.3

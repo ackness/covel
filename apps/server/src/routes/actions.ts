@@ -4,7 +4,7 @@ import type { KernelSession } from "@covel/kernel";
 import type { CommandBus } from "@covel/plugin-runtime";
 import type { KernelTurnResult, RenderBlock } from "@covel/shared";
 import type { ApiKeyEnv } from "../middleware/api-key-injection.js";
-import type { MemoryStore } from "../store/memory-store.js";
+import type { ServerStore } from "../store/types.js";
 
 /**
  * POST /actions — SSE streaming endpoint.
@@ -31,7 +31,7 @@ interface SseEnvelope {
 export function createActionsRoute(deps: {
   getOrCreateSession: (sessionId: string) => KernelSession;
   commandBus: CommandBus;
-  store: MemoryStore;
+  store: ServerStore;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   presetRegistry?: {
     addPreset: (preset: any) => void;

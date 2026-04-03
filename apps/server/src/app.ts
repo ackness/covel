@@ -24,6 +24,7 @@ import { createCharactersRoute } from "./routes/characters.js";
 import { createSessionPluginsRoute } from "./routes/session-plugins.js";
 import { initKernelStack } from "./kernel-setup.js";
 import { createMemoryStore } from "./store/memory-store.js";
+import { createPgServerStore } from "./store/pg-server-store.js";
 
 const app = new Hono();
 
@@ -44,7 +45,12 @@ app.use("/actions", apiKeyInjection);
 // Initialize stacks
 const ai = createAiStack();
 const kernelStack = await initKernelStack(ai.gateway);
-const store = createMemoryStore();
+
+// Store backend: use PG when DATABASE_URL is set and STORE_BACKEND=pg
+const storeBackend = process.env.STORE_BACKEND ?? "memory";
+const store = storeBackend === "pg" && process.env.DATABASE_URL
+  ? await createPgServerStore({ databaseUrl: process.env.DATABASE_URL })
+  : createMemoryStore();
 
 // ── Internal API routes (programmatic access) ────────────────────
 app.route("/api/health", healthRoute);
