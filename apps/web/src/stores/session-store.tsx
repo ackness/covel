@@ -2,6 +2,7 @@ import { createContext, useContext, useReducer, useCallback, useEffect, useMemo,
 import i18n from "i18next";
 import * as api from "@/services/api";
 import { getDataService } from "@/services/data-service";
+import { migrateLocalStorageToIdb } from "@/services/app-kv-store";
 import { setBlockSchemas } from "@/components/blocks/block-renderer.js";
 import type { BlockSchemaDeclaration } from "@covel/shared";
 
@@ -87,7 +88,8 @@ type Action =
   | { type: "SUBMIT_BLOCK"; blockId: string }
   | { type: "RESET_TO_WORLD_SELECT" }
   | { type: "REMOVE_MESSAGES_FROM_TURN"; turnId: string; keepRuntimeIds: ReadonlySet<string> }
-  | { type: "SET_GAME_STATE"; state: Record<string, unknown> };
+  | { type: "SET_GAME_STATE"; state: Record<string, unknown> }
+  | { type: "REMOVE_SESSION"; sessionId: string };
 
 const initialState: SessionState = {
   presets: [],
@@ -155,6 +157,8 @@ function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, session: action.session, phase: action.session.phase ?? "init" };
     case "SET_WORLD_SESSIONS":
       return { ...state, worldSessions: action.sessions };
+    case "REMOVE_SESSION":
+      return { ...state, worldSessions: state.worldSessions.filter((s) => s.id !== action.sessionId) };
     case "ADD_MESSAGE":
       return { ...state, messages: [...state.messages, action.message] };
     case "APPEND_DELTA": {
@@ -247,6 +251,8 @@ interface SessionContextValue {
   resumeSessionById: (sessionId: string) => Promise<void>;
   /** Load all sessions for the current world. */
   loadWorldSessions: () => Promise<void>;
+  /** Delete a session and all its data. */
+  deleteSession: (sessionId: string) => Promise<void>;
   sendMessage: (content: string) => void;
   /** Mark a block as submitted (permanently locks it). */
   submitBlock: (blockId: string) => void;
@@ -275,6 +281,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const ds = useMemo(() => getDataService(), []);
 
   const boot = useCallback(async () => {
+    // Migrate localStorage game data to IndexedDB (one-time, idempotent)
+    await migrateLocalStorageToIdb();
+
     try {
       const [presets, packages, commands, worlds, schemas, llmConfig] = await Promise.all([
         api.listPresets(),
@@ -433,7 +442,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // Sync context to server so stateless server can process the turn
       await ds.syncToServer(session.id);
 
-      const overlay = api.getWorldOverlay(state.world.id);
+      const overlay = await api.getWorldOverlay(state.world.id);
       const loreOverride = overlay?.lore;
 
       dispatch({ type: "CLEAR_EXECUTION_STEPS" });
@@ -530,6 +539,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // silently fail — non-critical
     }
   }, [state.world]);
+
+  const deleteSession = useCallback(async (sessionId: string) => {
+    await ds.deleteSession(sessionId);
+    dispatch({ type: "REMOVE_SESSION", sessionId });
+  }, []);
 
   const sendMessage = useCallback((content: string) => {
     if (!state.session || state.executing) return;
@@ -673,6 +687,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     resumeSession,
     resumeSessionById,
     loadWorldSessions,
+    deleteSession,
     sendMessage,
     submitBlock,
     executeCommand,

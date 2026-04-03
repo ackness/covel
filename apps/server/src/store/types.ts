@@ -87,6 +87,8 @@ export interface ServerStore {
     patch: Partial<Pick<SessionRecord, "status" | "phase" | "presetId" | "taskBindings">>,
   ): Promise<SessionRecord | undefined>;
   updateSessionPhase(id: string, phase: SessionPhase): Promise<SessionRecord | undefined>;
+  /** Delete a session and all associated data (messages, patches, characters, traces, snapshots). */
+  deleteSession(id: string): Promise<boolean>;
 
   // Messages
   listMessages(sessionId: string): Promise<MessageRecord[]>;

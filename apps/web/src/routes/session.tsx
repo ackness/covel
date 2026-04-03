@@ -26,6 +26,7 @@ function SessionPage() {
     resumeSession,
     resumeSessionById,
     loadWorldSessions,
+    deleteSession,
     sendMessage,
     submitBlock,
     retryRuntime,
@@ -114,6 +115,7 @@ function SessionPage() {
         onResetSession={resetSession}
         onBackToWorldSelect={backToWorldSelect}
         onSwitchSession={resumeSession}
+        onDeleteSession={deleteSession}
         onLoadWorldSessions={loadWorldSessions}
       />
     );
@@ -130,6 +132,7 @@ function SessionPage() {
         onBack={backToWorldSelect}
         onStart={startGame}
         onResume={resumeSession}
+        onDeleteSession={deleteSession}
         settingsOpen={settingsOpen}
         onSettingsOpenChange={setSettingsOpen}
       />

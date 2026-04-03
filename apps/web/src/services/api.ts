@@ -363,6 +363,12 @@ export async function updateSession(
   });
 }
 
+export async function deleteSession(sessionId: string): Promise<void> {
+  await request<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function listMessages(sessionId: string): Promise<MessageRecord[]> {
   return request<MessageRecord[]>(`/sessions/${sessionId}/messages`);
 }
@@ -747,31 +753,27 @@ export function setRuntimePriorityOverrides(overrides: Record<string, number>): 
   localStorage.setItem(RUNTIME_PRIORITY_KEY, JSON.stringify(overrides));
 }
 
-// ── World Overlay (localStorage) ────────────────────────────────
+// ── World Overlay (IndexedDB via app-kv-store) ─────────────────
 
-const WORLD_OVERLAY_KEY_PREFIX = "covel:worldOverlay:";
+import {
+  getWorldOverlay as idbGetWorldOverlay,
+  setWorldOverlay as idbSetWorldOverlay,
+  removeWorldOverlay as idbRemoveWorldOverlay,
+  type WorldOverlay,
+} from "./app-kv-store.js";
 
-export interface WorldOverlay {
-  lore?: string;
-  updatedAt: string;
+export type { WorldOverlay };
+
+export async function getWorldOverlay(worldId: string): Promise<WorldOverlay | null> {
+  return idbGetWorldOverlay(worldId);
 }
 
-export function getWorldOverlay(worldId: string): WorldOverlay | null {
-  const stored = localStorage.getItem(`${WORLD_OVERLAY_KEY_PREFIX}${worldId}`);
-  if (!stored) return null;
-  try {
-    return JSON.parse(stored);
-  } catch {
-    return null;
-  }
+export async function setWorldOverlay(worldId: string, overlay: WorldOverlay): Promise<void> {
+  return idbSetWorldOverlay(worldId, overlay);
 }
 
-export function setWorldOverlay(worldId: string, overlay: WorldOverlay): void {
-  localStorage.setItem(`${WORLD_OVERLAY_KEY_PREFIX}${worldId}`, JSON.stringify(overlay));
-}
-
-export function removeWorldOverlay(worldId: string): void {
-  localStorage.removeItem(`${WORLD_OVERLAY_KEY_PREFIX}${worldId}`);
+export async function removeWorldOverlay(worldId: string): Promise<void> {
+  return idbRemoveWorldOverlay(worldId);
 }
 
 // ── Trace API ────────────────────────────────────────────────────

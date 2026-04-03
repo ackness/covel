@@ -5,13 +5,14 @@ import {
   SlidersHorizontal, Database, MessageSquare, Settings2, History, Send,
   Code, LayoutTemplate, Loader2, AlertCircle, KeyRound, Plus,
   PanelLeftClose, PanelRightClose, BookOpen, MapIcon, Copy, Check, Gamepad2,
-  Bug,
+  Bug, Trash2,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.js";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog.js";
 import { Toggle } from "@/components/ui/toggle.js";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable.js";
 import type { ImperativePanelHandle } from "react-resizable-panels";
@@ -41,6 +42,7 @@ interface LeftPanelProps {
   onToggleLeftPanel: () => void;
   onToggleSessionList: () => void;
   onSwitchSession: (session: SessionRecord) => void;
+  onDeleteSession: (sessionId: string) => Promise<void>;
   onCloseSessionList: () => void;
   onOpenSettings: () => void;
   onResetSession: () => void;
@@ -58,11 +60,25 @@ function LeftPanel({
   onToggleLeftPanel,
   onToggleSessionList,
   onSwitchSession,
+  onDeleteSession,
   onCloseSessionList,
   onOpenSettings,
   onResetSession,
 }: LeftPanelProps) {
   const { t } = useTranslation();
+  const [deleteTarget, setDeleteTarget] = useState<SessionRecord | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await onDeleteSession(deleteTarget.id);
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  }, [deleteTarget, onDeleteSession]);
 
   return (
     <>
@@ -113,16 +129,24 @@ function LeftPanel({
               ) : (
                 <div className="space-y-1">
                   {otherSessions.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => { onSwitchSession(s); onCloseSessionList(); }}
-                      className="w-full text-left px-2 py-1.5 text-[11px] font-mono bg-background border border-border hover:border-primary/50 transition-colors truncate"
-                    >
-                      <span className="block truncate">{s.id}</span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {s.phase} · {new Date(s.createdAt).toLocaleString()}
-                      </span>
-                    </button>
+                    <div key={s.id} className="flex items-center gap-1 bg-background border border-border hover:border-primary/50 transition-colors">
+                      <button
+                        onClick={() => { onSwitchSession(s); onCloseSessionList(); }}
+                        className="flex-1 text-left px-2 py-1.5 text-[11px] font-mono truncate min-w-0"
+                      >
+                        <span className="block truncate">{s.id}</span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {s.phase} · {new Date(s.createdAt).toLocaleString()}
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget(s)}
+                        className="shrink-0 p-1.5 text-muted-foreground hover:text-destructive transition-colors"
+                        title={t("common.delete", "Delete")}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -203,6 +227,33 @@ function LeftPanel({
           {t("common.newSession")}
         </Button>
       </div>
+
+      {/* Delete session confirmation */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("session.deleteConfirmTitle", "Delete Session")}</DialogTitle>
+            <DialogDescription>
+              {t("session.deleteConfirmDesc", "This will permanently delete the session and all its data (messages, game state, etc.). This action cannot be undone.")}
+            </DialogDescription>
+          </DialogHeader>
+          {deleteTarget && (
+            <p className="text-xs font-mono text-muted-foreground bg-muted px-2 py-1.5 break-all">
+              {deleteTarget.id}
+            </p>
+          )}
+          <div className="flex justify-end gap-2 mt-2">
+            <DialogClose asChild>
+              <Button variant="outline" size="sm" disabled={deleting}>
+                {t("common.cancel", "Cancel")}
+              </Button>
+            </DialogClose>
+            <Button variant="destructive" size="sm" disabled={deleting} onClick={handleConfirmDelete}>
+              {deleting ? t("common.deleting", "Deleting...") : t("common.delete", "Delete")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -307,6 +358,7 @@ interface GameViewProps {
   onResetSession: () => void;
   onBackToWorldSelect: () => void;
   onSwitchSession: (session: SessionRecord) => void;
+  onDeleteSession: (sessionId: string) => Promise<void>;
   onLoadWorldSessions: () => void;
 }
 
@@ -332,6 +384,7 @@ export function GameView({
   onResetSession,
   onBackToWorldSelect,
   onSwitchSession,
+  onDeleteSession,
   onLoadWorldSessions,
 }: GameViewProps) {
   const { t } = useTranslation();
@@ -500,6 +553,7 @@ export function GameView({
                 onToggleLeftPanel={toggleLeftPanel}
                 onToggleSessionList={handleToggleSessionList}
                 onSwitchSession={onSwitchSession}
+                onDeleteSession={onDeleteSession}
                 onCloseSessionList={() => setShowSessionList(false)}
                 onOpenSettings={() => setSettingsOpen(true)}
                 onResetSession={onResetSession}

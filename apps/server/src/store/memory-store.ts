@@ -141,6 +141,20 @@ export async function createMemoryStore(): Promise<ServerStore> {
     return updated;
   }
 
+  async function deleteSession(id: string): Promise<boolean> {
+    if (!sessions.has(id)) return false;
+    sessions.delete(id);
+    messages.delete(id);
+    statePatches.delete(id);
+    traceEvents.delete(id);
+    stateSnapshots.delete(id);
+    // Remove characters belonging to this session
+    for (const [charId, card] of characters) {
+      if (card.runId === id) characters.delete(charId);
+    }
+    return true;
+  }
+
   // ── Messages ────────────────────────────────────────────────────
 
   async function listMessages(sessionId: string): Promise<MessageRecord[]> {
@@ -283,6 +297,7 @@ export async function createMemoryStore(): Promise<ServerStore> {
     getSession,
     updateSession,
     updateSessionPhase,
+    deleteSession,
     listMessages,
     addMessage,
     listStatePatches,

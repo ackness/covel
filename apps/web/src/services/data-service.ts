@@ -18,6 +18,7 @@ import type {
   SessionPhase,
 } from "./api.js";
 import * as api from "./api.js";
+import * as appKv from "./app-kv-store.js";
 
 // ── Interface ─────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ export interface DataService {
     sessionId: string,
     updates: Partial<Pick<SessionRecord, "status" | "presetId">>,
   ): Promise<SessionRecord>;
+  deleteSession(sessionId: string): Promise<void>;
 
   // Messages
   listMessages(sessionId: string): Promise<MessageRecord[]>;
@@ -124,6 +126,9 @@ class RemoteDataService implements DataService {
     updates: Partial<Pick<SessionRecord, "status" | "presetId">>,
   ) {
     return api.updateSession(sessionId, updates);
+  }
+  async deleteSession(sessionId: string) {
+    return api.deleteSession(sessionId);
   }
 
   async listMessages(sessionId: string) {
@@ -377,6 +382,16 @@ class LocalDataService implements DataService {
     return updated;
   }
 
+  async deleteSession(sessionId: string): Promise<void> {
+    const store = await this.getStore();
+    // Clear related data
+    await store.clearMessages(sessionId);
+    await store.deleteSession(sessionId);
+    // Also clear state snapshot from app KV store
+    // (fire-and-forget — non-critical)
+    appKv.removeStateSnapshot(sessionId).catch(() => {});
+  }
+
   // ── Messages ────────────────────────────────────────────────────
 
   async listMessages(sessionId: string): Promise<MessageRecord[]> {
@@ -418,27 +433,12 @@ class LocalDataService implements DataService {
 
   // ── State snapshot persistence (IndexedDB) ─────────────────────
 
-  private static readonly STATE_SNAPSHOT_PREFIX = "covel:stateSnapshot:";
-
   async persistStateSnapshot(sessionId: string, snapshot: Record<string, unknown>): Promise<void> {
-    try {
-      localStorage.setItem(
-        LocalDataService.STATE_SNAPSHOT_PREFIX + sessionId,
-        JSON.stringify(snapshot),
-      );
-    } catch {
-      // localStorage quota exceeded — silently degrade
-    }
+    await appKv.saveStateSnapshot(sessionId, snapshot);
   }
 
   async loadStateSnapshot(sessionId: string): Promise<Record<string, unknown> | null> {
-    const raw = localStorage.getItem(LocalDataService.STATE_SNAPSHOT_PREFIX + sessionId);
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw) as Record<string, unknown>;
-    } catch {
-      return null;
-    }
+    return appKv.getStateSnapshot(sessionId);
   }
 
   // ── Sync to server ──────────────────────────────────────────────

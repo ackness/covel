@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MapIcon, Play, ArrowLeft, ChevronDown, ChevronUp, FileText,
-  Cpu, KeyRound, History,
+  Cpu, KeyRound, History, Trash2,
 } from "lucide-react";
 import * as api from "@/services/api.js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.js";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { SettingsDialog } from "@/components/settings-dialog.js";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog.js";
 import { SessionBreadcrumb } from "./session-breadcrumb.js";
 import { ActiveModelSlots } from "./active-model-slots.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
@@ -22,6 +23,7 @@ interface SessionPrepScreenProps {
   onBack: () => void;
   onStart: () => void;
   onResume: (session: api.SessionRecord) => void;
+  onDeleteSession: (sessionId: string) => Promise<void>;
   settingsOpen: boolean;
   onSettingsOpenChange: (v: boolean) => void;
 }
@@ -34,6 +36,7 @@ export function SessionPrepScreen({
   onBack,
   onStart,
   onResume,
+  onDeleteSession,
   settingsOpen,
   onSettingsOpenChange,
 }: SessionPrepScreenProps) {
@@ -45,32 +48,50 @@ export function SessionPrepScreen({
   );
   const [expandedPlugins, setExpandedPlugins] = useState<Set<string>>(new Set());
   const [existingSessions, setExistingSessions] = useState<api.SessionRecord[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<api.SessionRecord | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Fetch existing sessions for this world
   useEffect(() => {
     api.listSessions(world.id).then(setExistingSessions).catch(() => {});
   }, [world.id]);
 
-  const [loreValue, setLoreValue] = useState<string>(() => {
-    const overlay = api.getWorldOverlay(world.id);
-    return overlay?.lore ?? world.lore ?? "";
-  });
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await onDeleteSession(deleteTarget.id);
+      setExistingSessions((prev) => prev.filter((s) => s.id !== deleteTarget.id));
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  }, [deleteTarget, onDeleteSession]);
+
+  const [loreValue, setLoreValue] = useState<string>(world.lore ?? "");
   const [loreExpanded, setLoreExpanded] = useState(false);
   const originalLore = world.lore ?? "";
   const isLoreModified = loreValue !== originalLore;
 
+  // Load world overlay from IDB on mount
+  useEffect(() => {
+    api.getWorldOverlay(world.id).then((overlay) => {
+      if (overlay?.lore) setLoreValue(overlay.lore);
+    });
+  }, [world.id]);
+
   const handleLoreChange = (value: string) => {
     setLoreValue(value);
     if (value !== originalLore) {
-      api.setWorldOverlay(world.id, { lore: value, updatedAt: new Date().toISOString() });
+      void api.setWorldOverlay(world.id, { lore: value, updatedAt: new Date().toISOString() });
     } else {
-      api.removeWorldOverlay(world.id);
+      void api.removeWorldOverlay(world.id);
     }
   };
 
   const resetLore = () => {
     setLoreValue(originalLore);
-    api.removeWorldOverlay(world.id);
+    void api.removeWorldOverlay(world.id);
   };
 
   const togglePlugin = (name: string) => {
@@ -172,9 +193,19 @@ export function SessionPrepScreen({
                         </div>
                       </div>
                     </div>
-                    <Button variant="outline" size="sm" className="text-xs shrink-0" onClick={() => onResume(session)}>
-                      {t("session.resume")}
-                    </Button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button variant="outline" size="sm" className="text-xs" onClick={() => onResume(session)}>
+                        {t("session.resume")}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-muted-foreground hover:text-destructive h-8 w-8 p-0"
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(session); }}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </CardContent>
@@ -347,6 +378,33 @@ export function SessionPrepScreen({
           </div>
         </div>
       </ScrollArea>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("session.deleteConfirmTitle", "Delete Session")}</DialogTitle>
+            <DialogDescription>
+              {t("session.deleteConfirmDesc", "This will permanently delete the session and all its data (messages, game state, etc.). This action cannot be undone.")}
+            </DialogDescription>
+          </DialogHeader>
+          {deleteTarget && (
+            <p className="text-xs font-mono text-muted-foreground bg-muted px-2 py-1.5 break-all">
+              {deleteTarget.id}
+            </p>
+          )}
+          <div className="flex justify-end gap-2 mt-2">
+            <DialogClose asChild>
+              <Button variant="outline" size="sm" disabled={deleting}>
+                {t("common.cancel", "Cancel")}
+              </Button>
+            </DialogClose>
+            <Button variant="destructive" size="sm" disabled={deleting} onClick={handleConfirmDelete}>
+              {deleting ? t("common.deleting", "Deleting...") : t("common.delete", "Delete")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -249,6 +249,27 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     return updateSession(id, { phase });
   }
 
+  async function deleteSession(id: string): Promise<boolean> {
+    const session = sessionMap.get(id);
+    if (!session) return false;
+    // Cascade delete all associated data
+    await sql`DELETE FROM sv_messages WHERE session_id = ${id}`;
+    await sql`DELETE FROM sv_state_patches WHERE session_id = ${id}`;
+    await sql`DELETE FROM sv_characters WHERE run_id = ${id}`;
+    await sql`DELETE FROM sv_trace_events WHERE session_id = ${id}`;
+    await sql`DELETE FROM sv_state_snapshots WHERE session_id = ${id}`;
+    await sql`DELETE FROM sv_sessions WHERE id = ${id}`;
+    // Update cache
+    sessionMap.delete(id);
+    const idx = sessionCache.findIndex((s) => s.id === id);
+    if (idx >= 0) sessionCache.splice(idx, 1);
+    // Remove cached characters
+    for (const [charId, card] of characterMap) {
+      if (card.runId === id) characterMap.delete(charId);
+    }
+    return true;
+  }
+
   async function persistSession(s: SessionRecord): Promise<void> {
     await sql`
       INSERT INTO sv_sessions (id, world_id, status, phase, preset_id, task_bindings, created_at)
@@ -587,6 +608,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     getSession,
     updateSession,
     updateSessionPhase,
+    deleteSession,
     listMessages,
     addMessage,
     listStatePatches,

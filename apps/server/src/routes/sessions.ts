@@ -111,6 +111,15 @@ export function createSessionsRoute(store: ServerStore) {
     return c.json(session);
   });
 
+  route.delete("/:sessionId", async (c) => {
+    const sessionId = c.req.param("sessionId");
+    const deleted = await store.deleteSession(sessionId);
+    if (!deleted) {
+      return c.json({ code: "NOT_FOUND", message: "Session not found" }, 404);
+    }
+    return c.json({ ok: true });
+  });
+
   route.get("/:sessionId/messages", async (c) => {
     const sessionId = c.req.param("sessionId");
     const session = await store.getSession(sessionId);
