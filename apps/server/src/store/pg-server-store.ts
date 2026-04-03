@@ -29,6 +29,12 @@ function humanSessionId(): string {
 
 const MAX_TRACE_EVENTS_PER_SESSION = 2000;
 
+function logPersistError(entity: string, id: string) {
+  return (err: unknown) => {
+    console.error(`[pg-server-store] Failed to persist ${entity} ${id}:`, err);
+  };
+}
+
 export interface PgServerStoreOptions {
   databaseUrl: string;
 }
@@ -122,8 +128,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     };
     worldCache.push(world);
     worldMap.set(world.id, world);
-    // Async persist — fire and forget
-    persistWorld(world);
+    persistWorld(world).catch(logPersistError("world", world.id));
     return world;
   }
 
@@ -145,7 +150,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     worldMap.set(id, updated);
     const idx = worldCache.findIndex((w) => w.id === id);
     if (idx >= 0) worldCache[idx] = updated;
-    persistWorld(updated);
+    persistWorld(updated).catch(logPersistError("world", id));
     return updated;
   }
 
@@ -187,7 +192,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     };
     sessionCache.push(session);
     sessionMap.set(session.id, session);
-    persistSession(session);
+    persistSession(session).catch(logPersistError("session", session.id));
     return session;
   }
 
@@ -210,7 +215,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     sessionMap.set(id, updated);
     const idx = sessionCache.findIndex((s) => s.id === id);
     if (idx >= 0) sessionCache[idx] = updated;
-    persistSession(updated);
+    persistSession(updated).catch(logPersistError("session", id));
     return updated;
   }
 
@@ -253,7 +258,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     };
     const list = messagesBySession.get(sessionId) ?? [];
     messagesBySession.set(sessionId, [...list, msg]);
-    persistMessage(msg);
+    persistMessage(msg).catch(logPersistError("message", msg.id));
     return msg;
   }
 
@@ -307,7 +312,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       version: 1,
     };
     characterMap.set(card.id, card);
-    persistCharacter(card);
+    persistCharacter(card).catch(logPersistError("character", card.id));
     return card;
   }
 
@@ -333,7 +338,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       version: card.version + 1,
     };
     characterMap.set(id, updated);
-    persistCharacter(updated);
+    persistCharacter(updated).catch(logPersistError("character", id));
     return updated;
   }
 
@@ -442,7 +447,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     const card: CharacterCard = {
       id: r.id,
       worldId: r.world_id,
-      runId: r.run_id ?? "",
+      runId: r.run_id ?? `__orphan_${r.id}`,
       name: r.name,
       type: r.type as CharacterCard["type"],
       description: r.description ?? "",

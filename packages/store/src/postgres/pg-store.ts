@@ -419,27 +419,62 @@ export class PgStore implements DataStore {
   }
 
   async importAll(data: StoreSnapshot): Promise<void> {
-    await this.clear();
-    const promises: Promise<void>[] = [];
-    for (const w of data.data.worlds) promises.push(this.upsertWorld(w));
-    for (const s of data.data.sessions) promises.push(this.upsertSession(s));
-    for (const m of data.data.messages) promises.push(this.addMessage(m));
-    for (const c of data.data.characters) promises.push(this.upsertCharacter(c));
-    for (const e of data.data.events) promises.push(this.appendEvent(e));
-    for (const r of data.data.records) promises.push(this.upsertRecord(r));
-    for (const s of data.data.snapshots) promises.push(this.createSnapshot(s));
-    await Promise.all(promises);
+    // Use a transaction so a partial failure rolls back instead of leaving
+    // the database in a half-imported state after clear() wiped existing data.
+    await this.sql.begin(async (tx) => {
+      // Clear all tables inside the transaction
+      await tx`DELETE FROM snapshots`;
+      await tx`DELETE FROM domain_records`;
+      await tx`DELETE FROM events`;
+      await tx`DELETE FROM messages`;
+      await tx`DELETE FROM characters`;
+      await tx`DELETE FROM sessions`;
+      await tx`DELETE FROM worlds`;
+
+      // Import all data
+      for (const w of data.data.worlds) {
+        await tx`INSERT INTO worlds (id, name, description, lore, tags, created_at)
+          VALUES (${w.id}, ${w.name}, ${w.description}, ${w.lore ?? null}, ${JSON.stringify(w.tags ?? null)}, ${w.createdAt})`;
+      }
+      for (const s of data.data.sessions) {
+        await tx`INSERT INTO sessions (id, world_id, status, phase, preset_id, settings, created_at)
+          VALUES (${s.id}, ${s.worldId}, ${s.status}, ${s.phase}, ${s.presetId ?? null}, ${JSON.stringify(s.settings ?? null)}, ${s.createdAt})`;
+      }
+      for (const m of data.data.messages) {
+        await tx`INSERT INTO messages (id, session_id, role, content, metadata, created_at)
+          VALUES (${m.id}, ${m.sessionId}, ${m.role}, ${m.content}, ${JSON.stringify(m.metadata ?? null)}, ${m.createdAt})`;
+      }
+      for (const c of data.data.characters) {
+        await tx`INSERT INTO characters (id, world_id, session_id, name, type, description, fields, extensions, version, created_at, updated_at)
+          VALUES (${c.id}, ${c.worldId}, ${c.sessionId ?? null}, ${c.name}, ${c.type}, ${c.description ?? null},
+                  ${JSON.stringify(c.fields ?? null)}, ${JSON.stringify(c.extensions ?? null)}, ${c.version}, ${c.createdAt}, ${c.updatedAt})`;
+      }
+      for (const e of data.data.events) {
+        await tx`INSERT INTO events (id, branch_id, turn_id, type, source, locale, payload, created_at)
+          VALUES (${e.id}, ${e.branchId}, ${e.turnId}, ${e.type}, ${e.source}, ${e.locale ?? null}, ${JSON.stringify(e.payload ?? null)}, ${e.createdAt})`;
+      }
+      for (const r of data.data.records) {
+        await tx`INSERT INTO domain_records (id, branch_id, kind, key, value, summary, locale, updated_at)
+          VALUES (${r.id}, ${r.branchId}, ${r.kind}, ${r.key}, ${JSON.stringify(r.value ?? null)}, ${r.summary ?? null}, ${r.locale ?? null}, ${r.updatedAt})`;
+      }
+      for (const s of data.data.snapshots) {
+        await tx`INSERT INTO snapshots (id, branch_id, turn_id, label, summary, data, created_at)
+          VALUES (${s.id}, ${s.branchId}, ${s.turnId}, ${s.label ?? null}, ${s.summary ?? null}, ${JSON.stringify(s.data)}, ${s.createdAt})`;
+      }
+    });
   }
 
   async clear(): Promise<void> {
-    // Delete in dependency order
-    await this.db.delete(schema.snapshots);
-    await this.db.delete(schema.domainRecords);
-    await this.db.delete(schema.events);
-    await this.db.delete(schema.messages);
-    await this.db.delete(schema.characters);
-    await this.db.delete(schema.sessions);
-    await this.db.delete(schema.worlds);
+    // Delete all tables in a single transaction to avoid partial state on interruption.
+    await this.sql.begin(async (tx) => {
+      await tx`DELETE FROM snapshots`;
+      await tx`DELETE FROM domain_records`;
+      await tx`DELETE FROM events`;
+      await tx`DELETE FROM messages`;
+      await tx`DELETE FROM characters`;
+      await tx`DELETE FROM sessions`;
+      await tx`DELETE FROM worlds`;
+    });
   }
 }
 
