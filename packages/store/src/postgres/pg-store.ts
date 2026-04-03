@@ -421,7 +421,10 @@ export class PgStore implements DataStore {
   async importAll(data: StoreSnapshot): Promise<void> {
     // Use a transaction so a partial failure rolls back instead of leaving
     // the database in a half-imported state after clear() wiped existing data.
-    await this.sql.begin(async (tx) => {
+    // postgres.js TransactionSql extends Omit<Sql, ...> which strips the call
+    // signature in TypeScript. Cast to the base sql type to restore it.
+    await this.sql.begin(async (_tx) => {
+      const tx = _tx as unknown as typeof this.sql;
       // Clear all tables inside the transaction
       await tx`DELETE FROM snapshots`;
       await tx`DELETE FROM domain_records`;
@@ -466,7 +469,8 @@ export class PgStore implements DataStore {
 
   async clear(): Promise<void> {
     // Delete all tables in a single transaction to avoid partial state on interruption.
-    await this.sql.begin(async (tx) => {
+    await this.sql.begin(async (_tx) => {
+      const tx = _tx as unknown as typeof this.sql;
       await tx`DELETE FROM snapshots`;
       await tx`DELETE FROM domain_records`;
       await tx`DELETE FROM events`;

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   KeyRound, Check, Settings2, Cpu, SlidersHorizontal, Plus, Trash2,
   Download, Upload, Eye, EyeOff, Info, Pencil, RotateCw, Database,
-  Loader2, Zap, XCircle, CheckCircle2,
+  Loader2, Zap, XCircle, CheckCircle2, HardDrive, Cloud,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog.js";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs.js";
@@ -22,6 +22,7 @@ import {
   type PingResult, type LlmConfigResponse, type ModelCapabilityInfo, type ModelDbInfo,
   type InputModality, type OutputModality, type ModelFeature,
 } from "@/services/api.js";
+import { getStorageMode, setStorageMode, resetDataService, type StorageMode } from "@/services/data-service.js";
 import { useSession } from "@/stores/session-store.js";
 
 interface SettingsDialogProps {
@@ -59,6 +60,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [refreshing, setRefreshing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Storage mode
+  const [storageMode, setStorageModeLocal] = useState<StorageMode>(getStorageMode);
+
   const llm = state.llmConfig;
   const isConfigured = llm?.configured ?? false;
 
@@ -69,6 +73,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       setCustomPresetsLocal(getCustomPresets());
       setParamOverridesLocal(getParamOverrides());
       setCapOverridesLocal(getCapabilityOverrides());
+      setStorageModeLocal(getStorageMode());
       setSaved(false);
       setVisibleKeys({});
       setPingResults({});
@@ -112,6 +117,16 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setCustomPresets(customPresets);
     setParamOverrides(paramOverrides);
     setCapabilityOverrides(capOverrides);
+
+    // Persist storage mode change — reset cached service so next access uses new mode
+    const prevMode = getStorageMode();
+    if (storageMode !== prevMode) {
+      setStorageMode(storageMode);
+      resetDataService();
+      // Reload to re-initialize with new data source
+      setTimeout(() => window.location.reload(), 800);
+    }
+
     setSaved(true);
     setTimeout(() => onOpenChange(false), 600);
   };
@@ -263,6 +278,38 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             }
           </DialogDescription>
         </DialogHeader>
+
+        {/* ── Storage Mode Toggle ── */}
+        <div className="flex items-center justify-between rounded border border-border/50 px-3 py-2 text-xs">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Database className="w-3.5 h-3.5" />
+            <span>{t("settings.storageMode", "数据存储")}</span>
+          </div>
+          <div className="flex items-center gap-1 rounded-md border border-border/50 p-0.5">
+            <button
+              onClick={() => setStorageModeLocal("local")}
+              className={`flex items-center gap-1 rounded px-2 py-1 transition-colors ${
+                storageMode === "local"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <HardDrive className="w-3 h-3" />
+              {t("settings.storageLocal", "本地")}
+            </button>
+            <button
+              onClick={() => setStorageModeLocal("remote")}
+              className={`flex items-center gap-1 rounded px-2 py-1 transition-colors ${
+                storageMode === "remote"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Cloud className="w-3 h-3" />
+              {t("settings.storageRemote", "远程")}
+            </button>
+          </div>
+        </div>
 
         <Tabs defaultValue={isConfigured ? "overview" : "slots"} className="flex-1 overflow-hidden flex flex-col">
           <TabsList className={`w-full grid ${isConfigured ? "grid-cols-3" : "grid-cols-4"}`}>

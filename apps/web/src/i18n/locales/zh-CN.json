@@ -42,7 +42,11 @@
     "recordsTitle": "记录",
     "noRecords": "随着故事推进，长期记录将在此显示。",
     "npcInitComplete": "NPC 初始化完成",
-    "npcInitCount": "已创建 {{count}} 个 NPC"
+    "npcInitCount": "已创建 {{count}} 个 NPC",
+    "slotDefault": "默认",
+    "slotFast": "快速",
+    "slotBalance": "均衡",
+    "slotImage": "图像"
   },
   "world": {
     "dimensions": "世界维度",
@@ -145,6 +149,11 @@
     "powerTypePsychic": "灵能",
     "powerTypeHybrid": "混合",
     "powerTypeOther": "其他"
+  },
+  "settings": {
+    "storageMode": "数据存储",
+    "storageLocal": "本地",
+    "storageRemote": "远程"
   },
   "common": {
     "loading": "加载中...",

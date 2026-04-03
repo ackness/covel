@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@covel/shared": "workspace:*",
+    "@covel/store": "workspace:*",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-label": "^2.1.8",

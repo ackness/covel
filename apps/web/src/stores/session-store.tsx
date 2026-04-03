@@ -1,6 +1,7 @@
-import { createContext, useContext, useReducer, useCallback, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useReducer, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import i18n from "i18next";
 import * as api from "@/services/api";
+import { getDataService } from "@/services/data-service";
 import { setBlockSchemas } from "@/components/blocks/block-renderer.js";
 import type { BlockSchemaDeclaration } from "@covel/shared";
 
@@ -263,13 +264,15 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
 
+  const ds = useMemo(() => getDataService(), []);
+
   const boot = useCallback(async () => {
     try {
       const [presets, packages, commands, worlds, schemas, llmConfig] = await Promise.all([
         api.listPresets(),
         api.listPackages(),
         api.listCommands(),
-        api.listWorlds(),
+        ds.listWorlds(),
         api.fetchBlockSchemas().catch(() => ({})),
         api.fetchLlmConfig().catch(() => null),
       ]);
@@ -401,8 +404,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const presetId = defaultPresetId
         ?? state.presets.find((p) => p.isDefault)?.id
         ?? state.presets[0]?.id;
-      const session = await api.createSession(state.world.id, presetId);
+      const session = await ds.createSession(state.world.id, presetId);
       dispatch({ type: "SET_SESSION", session });
+      // Sync context to server so stateless server can process the turn
+      await ds.syncToServer(session.id);
 
       const overlay = api.getWorldOverlay(state.world.id);
       const loreOverride = overlay?.lore;
@@ -445,8 +450,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     // Load messages and state patches in parallel
     const [messagesResult, patchesResult] = await Promise.allSettled([
-      api.listMessages(session.id),
-      api.listStatePatches(session.id),
+      ds.listMessages(session.id),
+      ds.listStatePatches(session.id),
     ]);
 
     // Restore messages (including block data)
@@ -476,14 +481,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [restoreSession]);
 
   const resumeSessionById = useCallback(async (sessionId: string) => {
-    const session = await api.getSession(sessionId);
+    const session = await ds.getSession(sessionId);
+    if (!session) throw new Error("Session not found: " + sessionId);
     await restoreSession(session);
   }, [restoreSession]);
 
   const loadWorldSessions = useCallback(async () => {
     if (!state.world) return;
     try {
-      const sessions = await api.listSessions(state.world.id);
+      const sessions = await ds.listSessions(state.world.id);
       dispatch({ type: "SET_WORLD_SESSIONS", sessions });
     } catch {
       // silently fail — non-critical

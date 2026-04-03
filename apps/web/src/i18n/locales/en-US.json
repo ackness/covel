@@ -42,7 +42,11 @@
     "recordsTitle": "Records",
     "noRecords": "Long-term records will appear here as the story progresses.",
     "npcInitComplete": "NPC initialization complete",
-    "npcInitCount": "{{count}} NPC created"
+    "npcInitCount": "{{count}} NPC created",
+    "slotDefault": "Default",
+    "slotFast": "Fast",
+    "slotBalance": "Balance",
+    "slotImage": "Image"
   },
   "world": {
     "dimensions": "World Dimensions",
@@ -145,6 +149,11 @@
     "powerTypePsychic": "Psychic",
     "powerTypeHybrid": "Hybrid",
     "powerTypeOther": "Other"
+  },
+  "settings": {
+    "storageMode": "Data Storage",
+    "storageLocal": "Local",
+    "storageRemote": "Remote"
   },
   "common": {
     "loading": "Loading...",
