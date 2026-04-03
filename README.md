@@ -154,7 +154,7 @@ Slot 说明：
 covel/
 ├── apps/
 │   ├── web/                React 19 + Vite 8 + TailwindCSS v4 + TanStack Router
-│   └── server/             Hono API + Drizzle ORM + pg-boss
+│   └── server/             Hono API + Drizzle ORM
 ├── packages/
 │   ├── shared/             共享类型与契约
 │   ├── ai-provider/        多 Provider LLM 抽象（Preset 路由 + 模型能力识别 + 2597 模型数据库）
@@ -287,7 +287,6 @@ core-persona (100, 上下文注入)
 | 前端 | React 19, Vite 8, TailwindCSS v4, TanStack Router, Radix UI |
 | 后端 | Hono, Node.js, tsx |
 | 数据库 | PostgreSQL 17, Drizzle ORM |
-| 任务队列 | pg-boss |
 | AI | OpenAI / Anthropic / DeepSeek / DashScope (Qwen) |
 | 构建 | pnpm workspaces, Turborepo |
 | 部署 | Docker, Docker Compose |

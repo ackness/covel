@@ -49,7 +49,7 @@ pnpm --filter @covel/server test           # Run server tests
 ```
 apps/
   web/        @covel/web              — React 19 + Vite 8 + TailwindCSS v4 + TanStack Router
-  server/     @covel/server           — Hono API server + Drizzle ORM + pg-boss
+  server/     @covel/server           — Hono API server + Drizzle ORM
 
 packages/
   shared/           @covel/shared           — Shared types and contracts (character, kernel, plugin, world, data-access)

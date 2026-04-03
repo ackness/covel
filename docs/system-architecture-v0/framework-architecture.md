@@ -1678,7 +1678,6 @@ Phase 字段存储在 `RunDescriptor.phase` 中，每次 phase 变更通过 `eve
 
 - `PostgreSQL`
 - `Drizzle ORM`
-- `pg-boss`
 
 建议固定的持久化对象边界：
 
