@@ -802,6 +802,15 @@ function createKernelSession(
       slotOverrides: options.slotOverrides,
     };
 
+    // Build state snapshot for persistence (only when commit succeeded)
+    const stateSnapshot = commitResult
+      ? {
+          state: { ...turnState.state },
+          events: [...turnState.events],
+          records: Object.fromEntries(turnState.records),
+        }
+      : undefined;
+
     return {
       runId: input.runId,
       branchId: input.branchId,
@@ -813,6 +822,7 @@ function createKernelSession(
       render,
       followUpEvents: [],
       backgroundTasks: backgroundTasks.length > 0 ? backgroundTasks : undefined,
+      stateSnapshot,
     };
   }
 

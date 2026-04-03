@@ -394,6 +394,15 @@ export function createActionsRoute(deps: {
             }
           }
 
+          // Emit state snapshot for client-side persistence (retry path)
+          if (turnResult.stateSnapshot) {
+            await emit("state.snapshot", turnId, traceId, {
+              state: turnResult.stateSnapshot.state,
+              events: turnResult.stateSnapshot.events,
+              records: turnResult.stateSnapshot.records,
+            });
+          }
+
           backgroundTaskCount = turnResult.backgroundTasks?.length ?? 0;
           if (backgroundTaskCount === 0) resolveBackgroundDone?.();
           if (backgroundTaskCount > 0) {
@@ -624,6 +633,15 @@ export function createActionsRoute(deps: {
               });
             }
           }
+        }
+
+        // Emit state snapshot for client-side persistence (T1/T2)
+        if (turnResult.stateSnapshot) {
+          await emit("state.snapshot", turnId, traceId, {
+            state: turnResult.stateSnapshot.state,
+            events: turnResult.stateSnapshot.events,
+            records: turnResult.stateSnapshot.records,
+          });
         }
 
         // Phase transitions

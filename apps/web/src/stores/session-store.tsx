@@ -86,7 +86,8 @@ type Action =
   | { type: "RESET_SESSION" }
   | { type: "SUBMIT_BLOCK"; blockId: string }
   | { type: "RESET_TO_WORLD_SELECT" }
-  | { type: "REMOVE_MESSAGES_FROM_TURN"; turnId: string; keepRuntimeIds: ReadonlySet<string> };
+  | { type: "REMOVE_MESSAGES_FROM_TURN"; turnId: string; keepRuntimeIds: ReadonlySet<string> }
+  | { type: "SET_GAME_STATE"; state: Record<string, unknown> };
 
 const initialState: SessionState = {
   presets: [],
@@ -207,6 +208,8 @@ function reducer(state: SessionState, action: Action): SessionState {
     }
     case "SET_PHASE":
       return { ...state, phase: action.phase };
+    case "SET_GAME_STATE":
+      return { ...state, gameState: action.state };
     case "ADD_EXECUTION_STEP":
       return { ...state, executionSteps: [...state.executionSteps, action.step] };
     case "CLEAR_EXECUTION_STEPS":
@@ -360,6 +363,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const patch = payload.patch as { id: string; summary: string; packageName: string; data?: unknown };
         if (patch) {
           dispatch({ type: "ADD_STATE_PATCH", patch });
+        }
+        break;
+      }
+      case "state.snapshot": {
+        const snapshotState = payload.state as Record<string, unknown> | undefined;
+        if (snapshotState) {
+          dispatch({ type: "SET_GAME_STATE", state: snapshotState });
+          // Persist to DataService (T1/T2: localStorage, T3: no-op)
+          const sessionId = state.session?.id;
+          if (sessionId) {
+            getDataService()
+              .persistStateSnapshot(sessionId, payload as Record<string, unknown>)
+              .catch((err: unknown) => console.warn("[session] Failed to persist state snapshot:", err));
+          }
         }
         break;
       }

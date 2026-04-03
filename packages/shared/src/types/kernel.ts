@@ -27,6 +27,19 @@ export interface BackgroundTaskInfo {
   description: string;
 }
 
+/**
+ * Post-commit state snapshot — full game state after all proposals are applied.
+ * Used for persistence: T1/T2 → client IdbStore, T3 → server PgStore.
+ */
+export interface TurnStateSnapshot {
+  /** Full game state after commit. */
+  state: Record<string, unknown>;
+  /** Events emitted during this turn. */
+  events: Array<{ type: string; payload: unknown; timestamp: string }>;
+  /** Records upserted during this turn (key → value). */
+  records: Record<string, unknown>;
+}
+
 /** Kernel turn result */
 export interface KernelTurnResult {
   runId: string;
@@ -40,6 +53,12 @@ export interface KernelTurnResult {
   followUpEvents: RuntimeTriggerEvent[];
   /** Background tasks that were spawned but not awaited during this turn. */
   backgroundTasks?: BackgroundTaskInfo[];
+  /**
+   * Post-commit state snapshot for persistence.
+   * Contains the full game state, events, and records after all proposals
+   * have been committed. Absent when commit was blocked by hooks.
+   */
+  stateSnapshot?: TurnStateSnapshot;
 }
 
 /** Kernel proposal envelope */

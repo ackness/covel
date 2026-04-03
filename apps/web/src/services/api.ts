@@ -335,6 +335,10 @@ export async function listStatePatches(sessionId: string): Promise<StatePatchRec
   return request<StatePatchRecord[]>(`/sessions/${encodeURIComponent(sessionId)}/state-patches`);
 }
 
+export async function loadStateSnapshot(sessionId: string): Promise<Record<string, unknown> | null> {
+  return request<Record<string, unknown> | null>(`/sessions/${encodeURIComponent(sessionId)}/state-snapshot`);
+}
+
 export async function createSession(worldId: string, presetId?: string): Promise<SessionRecord> {
   return request<SessionRecord>("/sessions", {
     method: "POST",

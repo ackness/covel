@@ -48,6 +48,19 @@ export interface DataService {
   listStatePatches(sessionId: string): Promise<StatePatchRecord[]>;
 
   /**
+   * Persist post-commit state snapshot from the kernel.
+   * T1/T2 (local): writes to IndexedDB.
+   * T3 (remote): no-op (server handles persistence).
+   */
+  persistStateSnapshot(sessionId: string, snapshot: Record<string, unknown>): Promise<void>;
+
+  /**
+   * Load the most recent state snapshot for a session.
+   * Returns null if no snapshot exists (fresh session).
+   */
+  loadStateSnapshot(sessionId: string): Promise<Record<string, unknown> | null>;
+
+  /**
    * Sync session context to server MemoryStore before sending actions.
    * In remote mode this is a no-op. In local mode it pushes
    * world + session + messages so the stateless server can process the turn.
@@ -122,6 +135,19 @@ class RemoteDataService implements DataService {
 
   async listStatePatches(sessionId: string) {
     return api.listStatePatches(sessionId);
+  }
+
+  async persistStateSnapshot() {
+    // No-op: T3 server handles persistence directly
+  }
+
+  async loadStateSnapshot(sessionId: string) {
+    // T3: load from server API
+    try {
+      return await api.loadStateSnapshot(sessionId);
+    } catch {
+      return null;
+    }
   }
 
   async syncToServer() {
@@ -388,6 +414,31 @@ class LocalDataService implements DataService {
 
   async listStatePatches(sessionId: string): Promise<StatePatchRecord[]> {
     return this.statePatches.get(sessionId) ?? [];
+  }
+
+  // ── State snapshot persistence (IndexedDB) ─────────────────────
+
+  private static readonly STATE_SNAPSHOT_PREFIX = "covel:stateSnapshot:";
+
+  async persistStateSnapshot(sessionId: string, snapshot: Record<string, unknown>): Promise<void> {
+    try {
+      localStorage.setItem(
+        LocalDataService.STATE_SNAPSHOT_PREFIX + sessionId,
+        JSON.stringify(snapshot),
+      );
+    } catch {
+      // localStorage quota exceeded — silently degrade
+    }
+  }
+
+  async loadStateSnapshot(sessionId: string): Promise<Record<string, unknown> | null> {
+    const raw = localStorage.getItem(LocalDataService.STATE_SNAPSHOT_PREFIX + sessionId);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
   }
 
   // ── Sync to server ──────────────────────────────────────────────
