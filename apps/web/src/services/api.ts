@@ -227,6 +227,95 @@ export async function updateWorld(
   });
 }
 
+// ── AI World Generation ──────────────────────────────────────────────
+
+export interface GenerateWorldProgress {
+  type: "progress";
+  phase: "generating" | "validating" | "saving";
+}
+
+export interface GenerateWorldDone {
+  type: "done";
+  world: WorldRecord;
+}
+
+export interface GenerateWorldError {
+  type: "error";
+  message: string;
+}
+
+export type GenerateWorldEvent = GenerateWorldProgress | GenerateWorldDone | GenerateWorldError;
+
+/**
+ * Generate a world via AI from a text prompt.
+ * Returns an AbortController to cancel the stream.
+ */
+export function generateWorld(
+  prompt: string,
+  locale: string,
+  onEvent: (event: GenerateWorldEvent) => void,
+  onError?: (err: Error) => void,
+  onDone?: () => void,
+): AbortController {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const res = await fetch("/api/ai/generate-world", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...buildAiHeaders(),
+        },
+        body: JSON.stringify({ prompt, locale }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`API ${res.status}: ${text}`);
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (line.startsWith("data:")) {
+            const data = line.slice(5).trim();
+            if (data) {
+              try {
+                const event = JSON.parse(data) as GenerateWorldEvent;
+                onEvent(event);
+              } catch {
+                // skip malformed
+              }
+            }
+          }
+        }
+      }
+
+      onDone?.();
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        onError?.(err instanceof Error ? err : new Error(String(err)));
+      }
+    }
+  })();
+
+  return controller;
+}
+
 // ── Session API ────────────────────────────────────────────────────
 
 export async function listSessions(worldId: string): Promise<SessionRecord[]> {

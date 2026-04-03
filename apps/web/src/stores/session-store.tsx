@@ -69,6 +69,7 @@ type Action =
   | { type: "BOOT_SUCCESS"; presets: api.PresetSummary[]; packages: api.PackageSummary[]; commands: api.CommandSummary[]; worlds: api.WorldRecord[]; llmConfig: api.LlmConfigResponse | null }
   | { type: "BOOT_ERROR"; error: string }
   | { type: "SET_WORLD"; world: api.WorldRecord }
+  | { type: "ADD_WORLD"; world: api.WorldRecord }
   | { type: "UPDATE_WORLD"; world: api.WorldRecord }
   | { type: "SET_SESSION"; session: api.SessionRecord }
   | { type: "SET_WORLD_SESSIONS"; sessions: api.SessionRecord[] }
@@ -141,6 +142,8 @@ function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, bootError: action.error };
     case "SET_WORLD":
       return { ...state, world: action.world };
+    case "ADD_WORLD":
+      return { ...state, worlds: [...state.worlds, action.world] };
     case "UPDATE_WORLD":
       return {
         ...state,
@@ -257,6 +260,8 @@ interface SessionContextValue {
   backToWorldSelect: () => void;
   /** Update a world record in the local worlds list (after server-side edit). */
   updateWorldLocal: (world: api.WorldRecord) => void;
+  /** Add a newly created world to the local worlds list. */
+  addWorldLocal: (world: api.WorldRecord) => void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -629,6 +634,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "UPDATE_WORLD", world });
   }, []);
 
+  const addWorldLocal = useCallback((world: api.WorldRecord) => {
+    dispatch({ type: "ADD_WORLD", world });
+  }, []);
+
   const value: SessionContextValue = {
     state,
     boot,
@@ -644,6 +653,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     resetSession,
     backToWorldSelect,
     updateWorldLocal,
+    addWorldLocal,
   };
 
   return (

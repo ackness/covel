@@ -9,6 +9,7 @@ import { createAiStack } from "./ai-setup.js";
 import { createGenerateRoute } from "./routes/ai/generate.js";
 import { createStreamRoute } from "./routes/ai/stream.js";
 import { createPingRoute } from "./routes/ai/ping.js";
+import { createGenerateWorldRoute } from "./routes/ai/generate-world.js";
 import { createPresetsRoute } from "./routes/config/presets.js";
 import { createTurnRoute } from "./routes/kernel/turn.js";
 import { createPluginsRoute } from "./routes/plugins/list.js";
@@ -63,6 +64,7 @@ app.route("/api/health", healthRoute);
 app.route("/api/ai/generate", createGenerateRoute(ai));
 app.route("/api/ai/stream", createStreamRoute(ai));
 app.route("/api/ai/ping", createPingRoute(ai));
+app.route("/api/ai/generate-world", createGenerateWorldRoute(ai, store));
 app.route("/api/config/presets", createPresetsRoute(ai));
 // DEBUG-ONLY: Uses default kernel session — not suitable for multi-session production use.
 app.route("/api/kernel/turn", createTurnRoute(kernelStack.kernel));

@@ -32,6 +32,7 @@ function SessionPage() {
     resetSession,
     backToWorldSelect,
     updateWorldLocal,
+    addWorldLocal,
   } = useSession();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { resolvedSlots } = useSlotConfig(state.presets, state.llmConfig);
@@ -145,6 +146,7 @@ function SessionPage() {
       onSettingsOpenChange={setSettingsOpen}
       onSelectWorld={selectWorld}
       onWorldUpdated={updateWorldLocal}
+      onWorldCreated={addWorldLocal}
     />
   );
 }

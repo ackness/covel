@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Globe, Sparkles, Loader2, KeyRound, Cpu, Eye } from "lucide-react";
+import { Globe, Sparkles, Loader2, KeyRound, Cpu, Eye, Wand2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
@@ -9,6 +9,7 @@ import { SettingsDialog } from "@/components/settings-dialog.js";
 import { SessionBreadcrumb } from "./session-breadcrumb.js";
 import { WorldDetailView } from "@/components/world/world-detail-view.js";
 import { WorldEditor } from "@/components/world/world-editor.js";
+import { AiWorldGenerator } from "@/components/world/ai-world-generator.js";
 import type { WorldRecord, PackageSummary } from "@/services/api.js";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 
@@ -22,6 +23,7 @@ interface WorldSelectScreenProps {
   onSettingsOpenChange: (v: boolean) => void;
   onSelectWorld: (worldId: string) => void;
   onWorldUpdated?: (world: WorldRecord) => void;
+  onWorldCreated?: (world: WorldRecord) => void;
 }
 
 export function WorldSelectScreen({
@@ -32,12 +34,14 @@ export function WorldSelectScreen({
   onSettingsOpenChange,
   onSelectWorld,
   onWorldUpdated,
+  onWorldCreated,
 }: WorldSelectScreenProps) {
   const { t } = useTranslation();
   const defaultSlot = resolvedSlots.find((s) => s.slotId === "default");
 
   const [mode, setMode] = useState<ViewMode>("list");
   const [selectedWorldId, setSelectedWorldId] = useState<string | null>(null);
+  const [generatorOpen, setGeneratorOpen] = useState(false);
 
   const selectedWorld = selectedWorldId
     ? worlds.find((w) => w.id === selectedWorldId) ?? null
@@ -88,6 +92,11 @@ export function WorldSelectScreen({
   return (
     <div className="flex h-full w-full overflow-hidden">
       <SettingsDialog open={settingsOpen} onOpenChange={onSettingsOpenChange} />
+      <AiWorldGenerator
+        open={generatorOpen}
+        onOpenChange={setGeneratorOpen}
+        onWorldCreated={(world) => onWorldCreated?.(world)}
+      />
       <ScrollArea className="w-full h-full">
         <div className="max-w-4xl mx-auto px-4 md:px-8 py-8 md:py-16">
           <div className="mb-4">
@@ -102,10 +111,21 @@ export function WorldSelectScreen({
             <p className="text-sm text-muted-foreground max-w-md mx-auto">
               Choose a world to begin your adventure. Each world has unique lore, characters, and narration style.
             </p>
-            <Button variant="ghost" size="sm" className="text-xs uppercase tracking-widest" onClick={() => onSettingsOpenChange(true)}>
-              <KeyRound className="w-3.5 h-3.5 mr-1.5" />
-              Configure API Keys
-            </Button>
+            <div className="flex items-center justify-center gap-3">
+              <Button variant="ghost" size="sm" className="text-xs uppercase tracking-widest" onClick={() => onSettingsOpenChange(true)}>
+                <KeyRound className="w-3.5 h-3.5 mr-1.5" />
+                {t("session.configureKeys")}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs uppercase tracking-widest"
+                onClick={() => setGeneratorOpen(true)}
+              >
+                <Wand2 className="w-3.5 h-3.5 mr-1.5" />
+                {t("world.aiCreate", "AI 创建世界")}
+              </Button>
+            </div>
           </div>
 
           <div className="grid gap-4 md:gap-6">
