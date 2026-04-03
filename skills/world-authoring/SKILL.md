@@ -1,30 +1,111 @@
 ---
 name: covel-world-authoring
-description: How to create Covel RPG world packages — lore writing, structured dimensions (geography, factions, power systems, history, economy, social structure, tone, mechanics, starting conditions), character schemas, and seed data. Use this skill whenever the user wants to create a new world, write world lore, design world-building content, add or edit world dimensions, create seed worlds, or asks about WorldDimensions, WorldRecord, WorldPackageMeta, or the world data model. Also use when the user is working on files in apps/server/src/store/seed-worlds or world-related types.
+description: How to create Covel RPG world packages — file-based world packages with YAML manifests, i18n lore files (WORLD.*.md), structured dimensions, and the extract-dimensions API. Use this skill whenever the user wants to create a new world, write world lore, design world-building content, add or edit world dimensions, or asks about WorldDimensions, WorldRecord, WorldPackageMeta, world packages, or the world data model. Also use when working on files in worlds/ directory or world-related types.
 ---
 
 # Covel World Authoring
 
-A Covel "world" defines the setting for an RPG session. It has two data layers:
+A Covel "world" defines the setting for an RPG session. Worlds are file-based packages (like plugins), stored in the `worlds/` directory.
 
-1. **Lore** (`lore` field) — Free-form markdown injected into the LLM's system prompt as authoritative reference
-2. **Dimensions** (`dimensions` field) — Structured data that plugins and UI can programmatically consume
+## World Package Structure
 
-Both are optional. A world can have just lore, just dimensions, or both (recommended).
+```
+worlds/my-world/
+  world.yaml          # Manifest — metadata, i18n config, structured dimensions
+  WORLD.md            # Default locale lore (fallback)
+  WORLD.zh.md         # Chinese lore
+  WORLD.en.md         # English lore
+```
+
+### Naming Convention
+
+- Directory name: lowercase with hyphens (`my-world`)
+- Lore files: `WORLD.md` (default), `WORLD.{lang}.md` (locale-specific)
+- Language codes: `zh` → `zh-CN`, `en` → `en-US`, `ja` → `ja-JP`, `ko` → `ko-KR`
+- Locale-specific files take precedence over `WORLD.md`
+
+## world.yaml Manifest
+
+```yaml
+schemaVersion: "1.0"
+id: my-world                # Lowercase, a-z0-9 and hyphens only
+name:
+  zh-CN: 我的世界
+  en-US: My World
+version: "1.0.0"
+summary:
+  zh-CN: 简短的世界描述
+  en-US: Short world description
+defaultLocale: zh-CN
+supportedLocales: [zh-CN, en-US]
+tags: [fantasy, adventure]
+
+# Optional: plugins to load with this world
+requiredPlugins: []
+recommendedPlugins: [core-combat, core-quest]
+
+# Optional: structured world dimensions
+dimensions:
+  geography:
+    overview:
+      zh-CN: 地理概述
+      en-US: Geographic overview
+    regions:
+      - name:
+          zh-CN: 区域名
+          en-US: Region Name
+        description:
+          zh-CN: 区域描述
+          en-US: Region description
+        climate:
+          zh-CN: 温带海洋性
+          en-US: Temperate oceanic
+  # ... other dimensions
+```
+
+### I18nText Pattern
+
+All text fields in world.yaml support two forms:
+
+```yaml
+# Simple string (single locale)
+name: 雾港
+
+# Multi-locale object
+name:
+  zh-CN: 雾港
+  en-US: Mistport
+```
+
+Use multi-locale objects for worlds that support multiple languages.
 
 ## World Data Model
 
 ```typescript
+// Inferred from worldPackageMetaSchema (Zod)
+interface WorldPackageMeta {
+  schemaVersion: "1.0";
+  id: string;               // ^[a-z0-9-]+$
+  name: I18nText;
+  version: string;
+  summary: I18nText;
+  defaultLocale: string;
+  supportedLocales: string[];
+  tags?: string[];
+  requiredPlugins?: string[];
+  recommendedPlugins?: string[];
+  dimensions?: WorldDimensions;
+}
+
+// Stored in DataStore
 interface WorldRecord {
-  id: string;                    // Auto-generated
-  name: string;                  // Display name
-  description: string;           // 1-2 sentence summary
-  lore?: string;                 // Extended markdown for LLM
-  locale?: string;               // "zh-CN" or "en-US"
-  tags?: string[];               // 2-5 categorization tags
-  dimensions?: WorldDimensions;  // Structured world-building data
+  id: string;
+  name: I18nText;
+  description: I18nText;
+  lore?: I18nText;
+  tags?: string[];
+  packageId?: string;        // Links to world package directory name
   createdAt: string;
-  updatedAt?: string;
 }
 ```
 
@@ -47,7 +128,6 @@ All optional. Fill what makes sense for your world.
 ### Type Quick Reference
 
 ```typescript
-// Enum values:
 type FactionType = "political" | "guild" | "corporate" | "religious" | "criminal" | "military" | "other";
 type PowerSystemType = "magic" | "technology" | "cultivation" | "psychic" | "hybrid" | "other";
 type ContentRating = "all-ages" | "teen" | "mature";
@@ -58,9 +138,9 @@ type I18nText = string | Record<string, string>;
 
 For complete type definitions of every dimension, see `references/world-types-reference.md`.
 
-## Writing Effective Lore
+## Writing Effective Lore (WORLD.md)
 
-The `lore` field is the most important for narrative quality — it's injected directly into the LLM's system prompt.
+The lore file is the most important for narrative quality — it's injected directly into the LLM's system prompt.
 
 ### Lore Template
 
@@ -77,7 +157,6 @@ The `lore` field is the most important for narrative quality — it's injected d
 
 ## Key Characters
 - {Name}: {Role}, {1-sentence description}
-- {Name}: {Role}, {1-sentence description}
 
 ## Opening Scene
 {1 paragraph with sensory details. End with a choice or tension point.}
@@ -86,102 +165,46 @@ The `lore` field is the most important for narrative quality — it's injected d
 ### Best Practices
 
 1. **Be specific, not generic.** "雾中存在'雾兽'，它们被声音和光亮吸引" > "这里很危险"
-2. **Include hard constraints.** Rules the LLM must follow: "每次潮退暴露不同遗迹，永远不重复"
+2. **Include hard constraints.** Rules the LLM must follow
 3. **Name concrete entities.** Factions, locations, characters with specific names
 4. **End with tension.** The opening scene should present a choice or dilemma
 5. **Keep under 2000 words.** Dense, specific lore beats verbose exposition
 6. **Write for the LLM.** This is system prompt content — be instructive and factual
 
-### Lore vs Dimensions
+## World Creation Paths
 
-| Aspect | Lore (markdown) | Dimensions (structured) |
-|--------|----------------|------------------------|
-| Consumer | LLM system prompt | Plugins, UI, game mechanics |
-| Format | Free-form markdown | Typed JSON objects |
-| Purpose | Narrative guidance | Programmatic data |
+| User Type | Input | Method | Format |
+|-----------|-------|--------|--------|
+| Developer | Full package | Create `worlds/` directory manually | YAML + Markdown |
+| Creative player | Lore text | `POST /api/ai/extract-dimensions` | Markdown → YAML |
+| Quick start | Concept prompt | `POST /api/ai/generate-world` | Prompt → Full world |
+| Agent | Skill command | `/world-create` skill | Agent generates all files |
 
-Write lore first for narrative flavor, then extract structured dimensions for plugins.
+## Extract-Dimensions API
 
-## Dimension Examples
+Players who write only WORLD.md can use the LLM to extract structured dimensions:
 
-### Geography
-
-```typescript
-geography: {
-  overview: "雾港建在悬崖与海面之间，被永恒浓雾笼罩。",
-  regions: [
-    {
-      name: "上城",
-      description: "议会与商会所在地，雾气稀薄。",
-      climate: "雾气稀薄，偶见天光",
-      landmarks: [{ name: "议事厅", description: "议会权力中枢" }],
-    },
-  ],
-}
+```
+POST /api/ai/extract-dimensions
+Body: { lore: string, locale?: string }
+Response (SSE):
+  { type: "progress", phase: "extracting" }
+  { type: "progress", phase: "validating" }
+  { type: "done", dimensions: WorldDimensions }
+  { type: "error", message: string }
 ```
 
-### Factions
-
-```typescript
-factions: [
-  {
-    id: "council",
-    name: "雾港议会",
-    description: "上城的统治机构，由商会领袖和世家组成。",
-    type: "political",
-    influence: "major",
-    leader: "陈议长",
-    headquarters: "上城・议事厅",
-    relations: [{ targetId: "salt-fangs", type: "hostile" }],
-  },
-]
-```
-
-### Power System
-
-```typescript
-powerSystem: {
-  name: "灵气修炼",
-  type: "cultivation",
-  description: "以灵根为基础，吸收天地灵气进行修炼。",
-  rules: ["灵气并非均匀分布", "修炼需要功法、灵石和天赋"],
-  tiers: [
-    { name: "练气", rank: 1 },
-    { name: "筑基", rank: 2 },
-    { name: "金丹", rank: 3 },
-  ],
-}
-```
-
-### Tone & Starting Conditions
-
-```typescript
-tone: {
-  genres: ["dark-fantasy", "mystery"],
-  contentRating: "teen",
-  narrativeStyle: "哥特悬疑风格，节奏缓慢但暗流涌动。",
-  themes: ["阶层对立", "未知探索"],
-}
-
-startingConditions: {
-  openingScenario: "你刚抵达雾港中港的主栈桥。浓雾中传来潮汐钟声。",
-  playerConstraints: ["初始为验潮师学徒"],
-  startingLocation: "中港・主栈桥",
-  startingResources: { "潮币": 50, "雾灯": 1 },
-}
-```
+The extracted dimensions are validated against `worldDimensionsSchema`.
 
 ## How Lore Reaches the LLM
 
 ```
-WorldRecord.lore → Server extracts on action → Kernel sets world context
+WORLD.*.md → World Package Loader → WorldRecord.lore
+  → Server extracts on action → Kernel sets world context
   → core-persona context provider builds system prompt
   → Injects as "世界设定 (权威参考)" at priority 100
   → All runtimes see this context → LLM generates constrained narrative
 ```
-
-Narration style auto-detected from world name/description keywords:
-- 江湖/武侠 → Wuxia style | 赛博/义体 → Cyberpunk | 修仙/灵气 → Xianxia | 港/雾 → Harbor mood
 
 ## API
 
@@ -190,38 +213,25 @@ GET /worlds              # List all
 GET /worlds/:id          # Get single
 POST /worlds             # Create (name + description required)
 PATCH /worlds/:id        # Update (all fields optional)
+POST /api/ai/generate-world         # Generate from prompt (SSE)
+POST /api/ai/extract-dimensions     # Extract dimensions from lore (SSE)
 ```
 
-Validated with Zod schemas: `worldRecordCreateSchema`, `worldRecordUpdateSchema` from `@covel/shared`.
-
-## Seed World Pattern
-
-```typescript
-// apps/server/src/store/seed-world-dimensions.ts
-import type { WorldDimensions } from "@covel/shared";
-export const MY_WORLD_DIMENSIONS: WorldDimensions = { ... };
-
-// apps/server/src/store/seed-worlds.ts
-import type { WorldDimensions } from "@covel/shared";
-export interface SeedWorld {
-  name: string; description: string; lore: string;
-  locale: "zh-CN" | "en-US"; tags: string[]; dimensions?: WorldDimensions;
-}
-```
-
-See `apps/server/src/store/seed-world-dimensions.ts` for 4 complete examples.
+Validated with Zod schemas: `worldRecordCreateSchema`, `worldRecordUpdateSchema`, `worldPackageMetaSchema` from `@covel/shared`.
 
 ## Checklist
 
-- [ ] `name` and `description` concise and evocative
-- [ ] `lore` follows template (Setting, Rules, Characters, Opening), under 2000 words
-- [ ] `locale` set correctly
-- [ ] `tags` are 2-5 short keywords
+- [ ] World package directory exists in `worlds/`
+- [ ] `world.yaml` passes `worldPackageMetaSchema` validation
+- [ ] `id` is lowercase with hyphens only
+- [ ] At least one `WORLD.md` or `WORLD.{lang}.md` exists
+- [ ] `supportedLocales` matches available lore files
+- [ ] `name` and `summary` concise and evocative
+- [ ] Lore follows template, under 2000 words
 - [ ] If dimensions: at least `tone` and `startingConditions` filled
 - [ ] Factions have unique `id`, `relations.targetId` reference valid IDs
 - [ ] Power system `tiers` ordered by `rank`
-- [ ] Economy has at least 1 currency
-- [ ] I18nText consistent (all strings or all objects)
+- [ ] I18nText consistent (all strings or all objects within a field)
 - [ ] Lore and dimensions data are consistent (no contradictions)
 
 ## Detailed Reference

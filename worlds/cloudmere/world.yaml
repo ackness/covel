@@ -1,0 +1,190 @@
+schemaVersion: "1.0"
+id: cloudmere
+name: 九州・云梦泽
+version: "0.1.0"
+summary: 修仙世界，灵气复苏，宗门林立。你是偏僻小宗的外门弟子。
+defaultLocale: zh-CN
+supportedLocales:
+  - zh-CN
+tags:
+  - xianxia
+  - adventure
+  - political-intrigue
+requiredPlugins:
+  - core-persona
+  - core-narrator
+recommendedPlugins:
+  - core-guide
+  - core-inventory
+  - core-combat
+
+dimensions:
+  geography:
+    overview: 九州大陆东南的广袤灵域，水汽充沛、灵气浓郁，宗门林立于灵脉之上。
+    regions:
+      - name: 青萍山
+        description: 青萍宗所在的灵脉山峰，山腰以下是外门，山顶是内门禁地。
+        climate: 四季如春，常有灵雾缭绕
+        landmarks:
+          - name: 试炼场
+            description: 年度试炼大会的比武场地。
+          - name: 坊市
+            description: 外门弟子交易灵石、丹药、法器的集市。
+      - name: 云梦泽深处
+        description: 未经开发的原始灵域，瘴气与灵兽并存，藏有野生灵脉。
+        climate: 湿热多瘴，灵气浓度极不稳定
+        landmarks:
+          - name: 梦莲池
+            description: 野生梦莲的主要产地，常有人冒险采摘。
+      - name: 灵渡镇
+        description: 各宗门势力交汇的中立市镇，散修与宗门弟子在此交易。
+        climate: 温和湿润
+        landmarks:
+          - name: 万宝楼
+            description: 灵渡镇最大的拍卖行，偶有上古法器现世。
+
+  factions:
+    - id: qingping-sect
+      name: 青萍宗
+      description: 偏居一隅的中小宗门，擅水系法术与灵植培育，门风淳朴。
+      type: guild
+      influence: minor
+      leader: 宗主・陆沉渊（金丹后期）
+      headquarters: 青萍山
+    - id: tianji-pavilion
+      name: 天机阁
+      description: 云梦泽最强宗门，以炼丹术闻名天下，控制多条核心灵脉。
+      type: guild
+      influence: major
+      leader: 阁主・玄清子（元婴期）
+      headquarters: 天机峰
+      relations:
+        - targetId: qingping-sect
+          type: neutral
+          description: 未将青萍宗视为威胁
+        - targetId: heiyuan-sect
+          type: hostile
+          description: 暗中争夺灵脉控制权
+    - id: heiyuan-sect
+      name: 黑渊宗
+      description: 行事阴狠的宗门，修炼偏门功法，觊觎各派灵脉。
+      type: guild
+      influence: major
+      leader: 宗主・殷无极（金丹巅峰）
+      relations:
+        - targetId: tianji-pavilion
+          type: hostile
+    - id: loose-cultivators
+      name: 散修联盟
+      description: 没有宗门背景的独立修士组成的松散互助组织。
+      type: other
+      influence: minor
+      headquarters: 灵渡镇
+
+  powerSystem:
+    name: 灵气修炼
+    type: cultivation
+    description: 吸纳天地灵气淬炼己身，以功法引导灵气在体内循环，逐步突破境界。
+    rules:
+      - 修炼需功法、灵石和天赋（灵根属性决定亲和系别）
+      - 灵脉附近灵气浓郁，修炼效率倍增；荒野灵气稀薄
+      - 梦莲可短暂扩展灵识但有成瘾风险，长期使用损伤根基
+      - 跨境界突破需机缘与资源，大多数修士终身停在练气期
+    tiers:
+      - name: 练气
+        rank: 1
+        description: 感应灵气并引入体内，分九层
+      - name: 筑基
+        rank: 2
+        description: 灵气凝实，构建修仙根基
+      - name: 金丹
+        rank: 3
+        description: 灵力凝结成丹，实力质变
+      - name: 元婴
+        rank: 4
+        description: 孕育元婴分身，可御空飞行
+      - name: 化神
+        rank: 5
+        description: 沟通天地法则，近乎传说
+
+  history:
+    - era: 上古
+      name: 灵潮涌现
+      description: 天地灵气复苏，云梦泽成为九州灵气最浓郁的区域之一。
+      significance: major
+    - era: 宗门纪
+      name: 百宗争脉
+      description: 数百个宗门为争夺灵脉大战，最终天机阁、黑渊宗等强宗胜出。
+      significance: major
+    - era: 当代
+      year: 三年前
+      name: 青萍宗灵脉衰退
+      description: 青萍山灵脉出现衰退迹象，宗门资源日趋紧张。
+      significance: minor
+    - era: 当代
+      year: 近日
+      name: 野生灵脉发现
+      description: 外门首席苏婉在云梦泽深处发现未登记的野生灵脉，消息尚未公开。
+      significance: major
+
+  economy:
+    currencies:
+      - name: 灵石
+        symbol: "◆"
+        description: 兼做货币与修炼能量源，分下品/中品/上品
+    resources:
+      - 灵草
+      - 丹药
+      - 法器
+      - 灵兽材料
+      - 梦莲
+    tradeNotes: 宗门坊市内部交易用灵石；灵渡镇的万宝楼是跨宗门高价值交易的主要场所。
+
+  socialStructure:
+    classes:
+      - name: 宗门长老
+        rank: 1
+        description: 金丹期以上强者，宗门决策层
+      - name: 内门弟子
+        rank: 2
+        description: 筑基期或天赋出众者，获重点培养
+      - name: 外门弟子
+        rank: 3
+        description: 练气期弟子，负责杂务，通过试炼可升入内门
+      - name: 散修
+        rank: 4
+        description: 无宗门背景的独立修士，资源匮乏
+    notes: 修仙世界以实力为尊，境界突破可打破阶层壁垒，但低阶弟子常被当作棋子。
+
+  tone:
+    genres:
+      - xianxia
+      - adventure
+      - political-intrigue
+    contentRating: teen
+    narrativeStyle: 古风仙侠笔触，山水灵秀中暗藏宗门权谋。
+    themes:
+      - 弱者成长
+      - 宗门政治
+      - 灵脉争夺
+      - 机缘与命运
+
+  mechanics:
+    combatStyle: turn-based
+    skillSystem: 以灵根属性为基础的法术体系（水/火/木/金/土），辅以炼丹、炼器、阵法等辅助技能。
+    difficulty: normal
+    customRules:
+      - 修炼进度受灵脉浓度、功法品质和灵根资质三重影响
+      - 梦莲使用需成瘾检定，连续使用增加失败概率
+      - 跨境界战斗实力差距极大，通常无法正面对抗
+
+  startingConditions:
+    openingScenario: >-
+      试炼大会三日后举行，你正在坊市采购备战物资。师姐苏婉匆匆赶来，说她在云梦泽深处发现了一处野生灵脉。消息若泄露，各大宗门必定争抢。她问你：大会之前，要不要先去探查？
+    playerConstraints:
+      - 初始为练气三层，水灵根
+      - 仅限使用青萍宗入门功法
+    startingLocation: 青萍山・坊市
+    startingResources:
+      下品灵石: 30
+      丹药: 3

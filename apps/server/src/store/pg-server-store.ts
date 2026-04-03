@@ -5,9 +5,9 @@
  * State patches are also DB-backed.
  */
 import { randomUUID } from "node:crypto";
-import type { CharacterCard, CharacterCreateInput, SessionPhase, WorldDimensions } from "@covel/shared";
+import type { CharacterCard, CharacterCreateInput, I18nText, SessionPhase, WorldDimensions } from "@covel/shared";
 import { humanId } from "human-id";
-import { SEED_WORLDS } from "./seed-worlds.js";
+import { loadWorldPackages } from "./world-package-loader.js";
 import type {
   ServerStore,
   WorldRecord,
@@ -30,6 +30,7 @@ function humanSessionId(): string {
 
 export interface PgServerStoreOptions {
   databaseUrl: string;
+  worldsDir?: string;
 }
 
 export async function createPgServerStore(opts: PgServerStoreOptions): Promise<ServerStore> {
@@ -39,9 +40,9 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
   await sql`
     CREATE TABLE IF NOT EXISTS sv_worlds (
       id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      description TEXT NOT NULL DEFAULT '',
-      lore TEXT,
+      name JSONB NOT NULL DEFAULT '""'::jsonb,
+      description JSONB NOT NULL DEFAULT '""'::jsonb,
+      lore JSONB,
       locale TEXT,
       tags JSONB,
       dimensions JSONB,
@@ -131,6 +132,19 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
   await sql`CREATE INDEX IF NOT EXISTS idx_sv_trace_events_session ON sv_trace_events(session_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_sv_trace_events_session_turn ON sv_trace_events(session_id, turn_id)`;
 
+  // ── Migrate legacy TEXT columns to JSONB ─────────────────────────
+  // Existing databases may have name/description/lore as TEXT; convert to JSONB.
+  for (const col of ["name", "description", "lore"] as const) {
+    const [info] = await sql<{ data_type: string }[]>`
+      SELECT data_type FROM information_schema.columns
+      WHERE table_name = 'sv_worlds' AND column_name = ${col}`;
+    if (info && info.data_type === "text") {
+      await sql.unsafe(
+        `ALTER TABLE sv_worlds ALTER COLUMN ${col} TYPE JSONB USING to_jsonb(${col})`,
+      );
+    }
+  }
+
   // ── Worlds ──────────────────────────────────────────────────────
 
   async function listWorlds(): Promise<WorldRecord[]> {
@@ -138,9 +152,9 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
   }
 
   async function createWorld(
-    name: string,
-    description: string,
-    opts?: { lore?: string; locale?: string; tags?: string[]; dimensions?: WorldDimensions },
+    name: I18nText,
+    description: I18nText,
+    opts?: { lore?: I18nText; locale?: string; tags?: string[]; dimensions?: WorldDimensions },
   ): Promise<WorldRecord> {
     const world: WorldRecord = {
       id: uid("world"),
@@ -181,9 +195,12 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
   }
 
   async function persistWorld(w: WorldRecord): Promise<void> {
+    const nameJson = sql.json(w.name as JSONValue);
+    const descJson = sql.json(w.description as JSONValue);
+    const loreJson = w.lore != null ? sql.json(w.lore as JSONValue) : null;
     await sql`
       INSERT INTO sv_worlds (id, name, description, lore, locale, tags, dimensions, created_at, updated_at)
-      VALUES (${w.id}, ${w.name}, ${w.description}, ${w.lore ?? null}, ${w.locale ?? null},
+      VALUES (${w.id}, ${nameJson}, ${descJson}, ${loreJson}, ${w.locale ?? null},
               ${w.tags ? sql.json(w.tags as JSONValue) : null}, ${w.dimensions ? sql.json(w.dimensions as JSONValue) : null},
               ${w.createdAt}, ${w.updatedAt ?? null})
       ON CONFLICT (id) DO UPDATE SET
@@ -521,8 +538,8 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
   // ── Load existing data from PG into cache ───────────────────────
 
   interface WorldRow {
-    id: string; name: string; description: string;
-    lore: string | null; locale: string | null;
+    id: string; name: I18nText; description: I18nText;
+    lore: I18nText | null; locale: string | null;
     tags: string[] | null; dimensions: WorldDimensions | null;
     created_at: string; updated_at: string | null;
   }
@@ -585,10 +602,11 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     characterMap.set(card.id, card);
   }
 
-  // ── Seed worlds if DB is empty ──────────────────────────────────
+  // ── Seed worlds from world packages if DB is empty ─────────────
 
-  if (worldCache.length === 0) {
-    for (const seed of SEED_WORLDS) {
+  if (worldCache.length === 0 && opts.worldsDir) {
+    const seeds = await loadWorldPackages(opts.worldsDir);
+    for (const seed of seeds) {
       await createWorld(seed.name, seed.description, {
         lore: seed.lore,
         locale: seed.locale,

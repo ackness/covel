@@ -56,7 +56,7 @@ function GeographySection({ geo, t }: { geo: WorldGeography; t: (k: string) => s
             <CardContent className="p-3 pt-1 text-xs text-muted-foreground">
               <p>{text(region.description)}</p>
               {region.climate && (
-                <Badge variant="outline" className="mt-1">{region.climate}</Badge>
+                <Badge variant="outline" className="mt-1">{text(region.climate)}</Badge>
               )}
               {region.landmarks && region.landmarks.length > 0 && (
                 <ul className="mt-2 list-disc pl-4">
@@ -89,7 +89,7 @@ function FactionsSection({ factions, t }: { factions: WorldFaction[]; t: (k: str
             <CardContent className="space-y-1 p-3 pt-1 text-xs text-muted-foreground">
               <p>{text(faction.description)}</p>
               {faction.leader && <p><span className="font-medium">{t("world.leader")}:</span> {text(faction.leader)}</p>}
-              {faction.headquarters && <p><span className="font-medium">{t("world.headquarters")}:</span> {faction.headquarters}</p>}
+              {faction.headquarters && <p><span className="font-medium">{t("world.headquarters")}:</span> {text(faction.headquarters)}</p>}
               {faction.relations && faction.relations.length > 0 && (
                 <ul className="mt-1 list-disc pl-4">
                   {faction.relations.map((rel, j) => (
@@ -139,15 +139,15 @@ function PowerSystemSection({ ps, t }: { ps: WorldPowerSystem; t: (k: string) =>
 
 function HistorySection({ events, t }: { events: WorldHistoryEvent[]; t: (k: string) => string }) {
   const sorted = [...events].sort((a, b) => {
-    if (a.era !== b.era) return (a.era ?? "").localeCompare(b.era ?? "");
-    return (a.year ?? "").localeCompare(b.year ?? "");
+    if (a.era !== b.era) return text(a.era).localeCompare(text(b.era));
+    return text(a.year).localeCompare(text(b.year));
   });
   return (
     <WorldDimensionSection title={t("world.history")} icon={Clock}>
       <div className="space-y-2">
         {sorted.map((evt, i) => (
           <div key={i} className="flex gap-2 text-xs">
-            <span className="shrink-0 font-medium">{[evt.era, evt.year].filter(Boolean).join(" ")}</span>
+            <span className="shrink-0 font-medium">{[text(evt.era), text(evt.year)].filter(Boolean).join(" ")}</span>
             <div className="border-l border-border pl-2">
               <span className="font-medium">{text(evt.name)}</span>{" "}
               <Badge variant={evt.significance === "major" ? "default" : "outline"} className="text-xs">{evt.significance}</Badge>
@@ -250,7 +250,7 @@ function ToneSection({ tone, t }: { tone: WorldTone; t: (k: string) => string })
         {tone.themes && tone.themes.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {tone.themes.map((th, i) => (
-              <Badge key={i} variant="outline" className="text-xs">{th}</Badge>
+              <Badge key={i} variant="outline" className="text-xs">{text(th)}</Badge>
             ))}
           </div>
         )}
@@ -291,7 +291,7 @@ function StartingSection({ sc, t }: { sc: WorldStartingConditions; t: (k: string
         <p className="text-muted-foreground">{text(sc.openingScenario)}</p>
         {sc.startingLocation && (
           <p className="text-xs">
-            <span className="font-medium">{t("world.startingLocation")}:</span> {sc.startingLocation}
+            <span className="font-medium">{t("world.startingLocation")}:</span> {text(sc.startingLocation)}
           </p>
         )}
         {sc.playerConstraints && sc.playerConstraints.length > 0 && (
@@ -328,7 +328,7 @@ export function WorldDetailView({ world, onClose, onEdit }: WorldDetailViewProps
             <Button variant="ghost" size="icon" onClick={onClose}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <h2 className="text-lg font-bold flex-1">{world.name}</h2>
+            <h2 className="text-lg font-bold flex-1">{text(world.name)}</h2>
             {world.locale && <Badge variant="outline">{world.locale}</Badge>}
             {onEdit && (
               <Button variant="outline" size="sm" onClick={onEdit}>
@@ -347,7 +347,7 @@ export function WorldDetailView({ world, onClose, onEdit }: WorldDetailViewProps
 
         {/* Description */}
         {world.description && (
-          <p className="text-sm text-muted-foreground">{world.description}</p>
+          <p className="text-sm text-muted-foreground">{text(world.description)}</p>
         )}
 
         <Separator />
@@ -388,7 +388,7 @@ export function WorldDetailView({ world, onClose, onEdit }: WorldDetailViewProps
             <p>{t("world.noStructuredData")}</p>
             {world.lore && (
               <div className="whitespace-pre-wrap rounded border border-border p-3 text-xs">
-                {world.lore}
+                {text(world.lore)}
               </div>
             )}
           </div>

@@ -1,8 +1,10 @@
+import type { I18nText } from "@covel/shared";
+
 export interface WorldRecord {
   id: string;
-  name: string;
-  description: string;
-  lore?: string;
+  name: I18nText;
+  description: I18nText;
+  lore?: I18nText;
   tags?: string[];
   createdAt: string;
 }

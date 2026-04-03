@@ -2,9 +2,12 @@ import { z } from "zod";
 
 // ── Shared primitives ──────────────────────────────────────
 
-const i18nTextSchema = z.union([
+export const i18nTextSchema = z.union([
   z.string().min(1),
-  z.record(z.string().min(1)),
+  z.record(z.string().min(1)).refine(
+    (obj) => Object.keys(obj).length > 0,
+    { message: "I18nText record must have at least one locale entry" },
+  ),
 ]);
 
 // ── Geography ──────────────────────────────────────────────
@@ -17,7 +20,7 @@ const landmarkSchema = z.object({
 const regionSchema = z.object({
   name: i18nTextSchema,
   description: i18nTextSchema,
-  climate: z.string().optional(),
+  climate: i18nTextSchema.optional(),
   landmarks: z.array(landmarkSchema).optional(),
 });
 
@@ -47,7 +50,7 @@ const factionSchema = z.object({
   type: factionTypeSchema,
   influence: influenceLevelSchema,
   leader: i18nTextSchema.optional(),
-  headquarters: z.string().optional(),
+  headquarters: i18nTextSchema.optional(),
   relations: z.array(factionRelationSchema).optional(),
 });
 
@@ -74,8 +77,8 @@ const powerSystemSchema = z.object({
 // ── History ────────────────────────────────────────────────
 
 const historyEventSchema = z.object({
-  era: z.string().optional(),
-  year: z.string().optional(),
+  era: i18nTextSchema.optional(),
+  year: i18nTextSchema.optional(),
   name: i18nTextSchema,
   description: i18nTextSchema,
   significance: z.enum(["major", "minor"]),
@@ -121,7 +124,7 @@ const toneSchema = z.object({
   genres: z.array(z.string().min(1)).min(1),
   contentRating: z.enum(["all-ages", "teen", "mature"]),
   narrativeStyle: i18nTextSchema.optional(),
-  themes: z.array(z.string().min(1)).optional(),
+  themes: z.array(i18nTextSchema).optional(),
 });
 
 // ── Game Mechanics ─────────────────────────────────────────
@@ -138,7 +141,7 @@ const mechanicsSchema = z.object({
 const startingConditionsSchema = z.object({
   openingScenario: i18nTextSchema,
   playerConstraints: z.array(i18nTextSchema).optional(),
-  startingLocation: z.string().optional(),
+  startingLocation: i18nTextSchema.optional(),
   startingResources: z.record(z.number()).optional(),
 });
 
@@ -156,12 +159,30 @@ export const worldDimensionsSchema = z.object({
   startingConditions: startingConditionsSchema.optional(),
 });
 
+// ── World Package Meta (world.yaml manifest) ─────────────────
+
+export const worldPackageMetaSchema = z.object({
+  schemaVersion: z.literal("1.0"),
+  id: z.string().min(1).regex(/^[a-z0-9-]+$/),
+  name: i18nTextSchema,
+  version: z.string().min(1),
+  summary: i18nTextSchema,
+  defaultLocale: z.string().min(2),
+  supportedLocales: z.array(z.string().min(2)).min(1),
+  tags: z.array(z.string()).optional(),
+  requiredPlugins: z.array(z.string()).optional(),
+  recommendedPlugins: z.array(z.string()).optional(),
+  dimensions: worldDimensionsSchema.optional(),
+});
+
+export type WorldPackageMeta = z.infer<typeof worldPackageMetaSchema>;
+
 // ── WorldRecord schemas (API boundary) ─────────────────────
 
 export const worldRecordCreateSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().min(1),
-  lore: z.string().optional(),
+  name: i18nTextSchema,
+  description: i18nTextSchema,
+  lore: i18nTextSchema.optional(),
   locale: z.string().optional(),
   tags: z.array(z.string()).optional(),
   dimensions: worldDimensionsSchema.optional(),

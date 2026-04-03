@@ -19,6 +19,7 @@ import type {
 } from "./api.js";
 import * as api from "./api.js";
 import * as appKv from "./app-kv-store.js";
+import { text } from "@/components/world/editor-helpers.js";
 
 // ── Interface ─────────────────────────────────────────────────────
 
@@ -458,7 +459,7 @@ class LocalDataService implements DataService {
     try {
       await api.getWorld(world.id);
     } catch {
-      await api.createWorld(world.name, world.description);
+      await api.createWorld(text(world.name), text(world.description));
       // Server assigns its own ID — we need the server to know our world.
       // Use updateWorld to set the lore etc.
     }

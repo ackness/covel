@@ -2,13 +2,15 @@
  * API client for communicating with the Covel server.
  */
 
+import type { I18nText } from "@covel/shared";
+
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface WorldRecord {
   id: string;
-  name: string;
-  description: string;
-  lore?: string;
+  name: I18nText;
+  description: I18nText;
+  lore?: I18nText;
   locale?: string;
   tags?: string[];
   dimensions?: import("@covel/shared").WorldDimensions;

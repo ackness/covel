@@ -5,9 +5,9 @@
  * All data lives in process memory — lost on restart.
  */
 import { randomUUID } from "node:crypto";
-import type { CharacterCard, CharacterCreateInput, SessionPhase, WorldDimensions } from "@covel/shared";
+import type { CharacterCard, CharacterCreateInput, I18nText, SessionPhase, WorldDimensions } from "@covel/shared";
 import { humanId } from "human-id";
-import { SEED_WORLDS } from "./seed-worlds.js";
+import { loadWorldPackages } from "./world-package-loader.js";
 import type {
   ServerStore,
   WorldRecord,
@@ -31,7 +31,7 @@ function humanSessionId(): string {
 /** Max trace events kept per session (ring buffer). */
 const MAX_TRACE_EVENTS_PER_SESSION = 2000;
 
-export async function createMemoryStore(): Promise<ServerStore> {
+export async function createMemoryStore(worldsDir?: string): Promise<ServerStore> {
   const worlds = new Map<string, WorldRecord>();
   const sessions = new Map<string, SessionRecord>();
   const messages = new Map<string, MessageRecord[]>(); // sessionId → messages
@@ -49,9 +49,9 @@ export async function createMemoryStore(): Promise<ServerStore> {
   }
 
   async function createWorld(
-    name: string,
-    description: string,
-    opts?: { lore?: string; locale?: string; tags?: string[]; dimensions?: WorldDimensions },
+    name: I18nText,
+    description: I18nText,
+    opts?: { lore?: I18nText; locale?: string; tags?: string[]; dimensions?: WorldDimensions },
   ): Promise<WorldRecord> {
     const world: WorldRecord = {
       id: uid("world"),
@@ -277,14 +277,17 @@ export async function createMemoryStore(): Promise<ServerStore> {
     return stateSnapshots.get(sessionId) ?? null;
   }
 
-  // ── Seed preset worlds ──────────────────────────────────────────
-  for (const seed of SEED_WORLDS) {
-    await createWorld(seed.name, seed.description, {
-      lore: seed.lore,
-      locale: seed.locale,
-      tags: seed.tags,
-      dimensions: seed.dimensions,
-    });
+  // ── Seed preset worlds from worlds/ directory ──────────────────
+  if (worldsDir) {
+    const seeds = await loadWorldPackages(worldsDir);
+    for (const seed of seeds) {
+      await createWorld(seed.name, seed.description, {
+        lore: seed.lore,
+        locale: seed.locale,
+        tags: seed.tags,
+        dimensions: seed.dimensions,
+      });
+    }
   }
 
   return {

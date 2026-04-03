@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { SettingsDialog } from "@/components/settings-dialog.js";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog.js";
 import { SessionBreadcrumb } from "./session-breadcrumb.js";
+import { text } from "@/components/world/editor-helpers.js";
 import { ActiveModelSlots } from "./active-model-slots.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 
@@ -68,9 +69,9 @@ export function SessionPrepScreen({
     }
   }, [deleteTarget, onDeleteSession]);
 
-  const [loreValue, setLoreValue] = useState<string>(world.lore ?? "");
+  const [loreValue, setLoreValue] = useState<string>(text(world.lore));
   const [loreExpanded, setLoreExpanded] = useState(false);
-  const originalLore = world.lore ?? "";
+  const originalLore = text(world.lore);
   const isLoreModified = loreValue !== originalLore;
 
   // Load world overlay from IDB on mount
@@ -140,7 +141,7 @@ export function SessionPrepScreen({
             </h1>
           </div>
           <div className="mb-8 ml-11">
-            <SessionBreadcrumb step="prep" worldName={world.name} onGoWorldSelect={onBack} />
+            <SessionBreadcrumb step="prep" worldName={text(world.name)} onGoWorldSelect={onBack} />
           </div>
 
           {/* World Info */}
@@ -148,11 +149,11 @@ export function SessionPrepScreen({
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-base">
                 <MapIcon className="w-4 h-4" />
-                {world.name}
+                {text(world.name)}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <p className="text-sm text-muted-foreground">{world.description}</p>
+              <p className="text-sm text-muted-foreground">{text(world.description)}</p>
               {world.tags && world.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {world.tags.map((tag) => (

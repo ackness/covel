@@ -11,9 +11,9 @@ import {
 
 export const worlds = pgTable("worlds", {
   id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  description: text("description").notNull().default(""),
-  lore: text("lore"),
+  name: jsonb("name").notNull().$type<string | Record<string, string>>(),
+  description: jsonb("description").notNull().$type<string | Record<string, string>>().default(""),
+  lore: jsonb("lore").$type<string | Record<string, string>>(),
   tags: jsonb("tags").$type<string[]>(),
   createdAt: text("created_at").notNull(),
 });

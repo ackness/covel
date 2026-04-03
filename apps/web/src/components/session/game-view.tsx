@@ -27,6 +27,7 @@ import { GameStatusPanel } from "./game-status-panel.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 import type { SessionRecord, WorldRecord, PackageSummary, PresetSummary, CommandSummary, LlmConfigResponse } from "@/services/api.js";
+import { text } from "@/components/world/editor-helpers.js";
 
 // ── Extracted Panel Components ──────────────────────────────────
 
@@ -311,8 +312,8 @@ function RightPanel({ world, gameState, statePatches, onToggleRightPanel }: Righ
           {world ? (
             <Card>
               <CardContent className="p-4 space-y-2">
-                <span className="font-bold text-sm">{world.name}</span>
-                <p className="text-muted-foreground text-xs">{world.description}</p>
+                <span className="font-bold text-sm">{text(world.name)}</span>
+                <p className="text-muted-foreground text-xs">{text(world.description)}</p>
                 <span className="text-[10px] text-muted-foreground font-mono">{world.id}</span>
               </CardContent>
             </Card>
@@ -602,7 +603,7 @@ export function GameView({
               </Button>
               <SessionBreadcrumb
                 step="game"
-                worldName={world?.name}
+                worldName={text(world?.name)}
                 onGoWorldSelect={onBackToWorldSelect}
                 onGoPrep={onResetSession}
                 disabled={executing}

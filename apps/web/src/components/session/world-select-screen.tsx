@@ -11,6 +11,7 @@ import { WorldDetailView } from "@/components/world/world-detail-view.js";
 import { WorldEditor } from "@/components/world/world-editor.js";
 import { AiWorldGenerator } from "@/components/world/ai-world-generator.js";
 import type { WorldRecord, PackageSummary } from "@/services/api.js";
+import { text } from "@/components/world/editor-helpers.js";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 
 type ViewMode = "list" | "detail" | "edit";
@@ -139,9 +140,9 @@ export function WorldSelectScreen({
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0 space-y-2">
                       <h2 className="font-display font-bold text-lg group-hover:text-primary transition-colors">
-                        {world.name}
+                        {text(world.name)}
                       </h2>
-                      <p className="text-sm text-muted-foreground">{world.description}</p>
+                      <p className="text-sm text-muted-foreground">{text(world.description)}</p>
                       {world.tags && world.tags.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 pt-1">
                           {world.tags.map((tag) => (

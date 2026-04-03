@@ -58,7 +58,7 @@ export function HistoryTab({ dimensions, onChange, t }: TabProps) {
               <Label>{t("world.era")}</Label>
               <input
                 className={inputCls}
-                value={ev.era ?? ""}
+                value={text(ev.era)}
                 onChange={(e) => updateEvent(ei, { era: e.target.value })}
               />
             </div>
@@ -66,7 +66,7 @@ export function HistoryTab({ dimensions, onChange, t }: TabProps) {
               <Label>{t("world.year")}</Label>
               <input
                 className={inputCls}
-                value={ev.year ?? ""}
+                value={text(ev.year)}
                 onChange={(e) => updateEvent(ei, { year: e.target.value })}
               />
             </div>

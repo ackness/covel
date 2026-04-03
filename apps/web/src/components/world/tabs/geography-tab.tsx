@@ -103,7 +103,7 @@ export function GeographyTab({ dimensions, onChange, t }: TabProps) {
                 <Label>{t("world.climate")}</Label>
                 <input
                   className={inputCls}
-                  value={region.climate ?? ""}
+                  value={text(region.climate)}
                   onChange={(e) => updateRegion(ri, { climate: e.target.value })}
                 />
               </div>

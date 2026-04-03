@@ -5,11 +5,13 @@
  * Requires: STORE_BACKEND=pg DATABASE_URL=postgresql://covel:covel_dev@localhost:5432/covel
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { resolve } from "node:path";
 import { createPgServerStore } from "../src/store/pg-server-store.js";
 import type { ServerStore } from "../src/store/types.js";
 
 const DATABASE_URL =
   process.env.DATABASE_URL ?? "postgresql://covel:covel_dev@localhost:5432/covel";
+const WORLDS_DIR = resolve(import.meta.dirname, "../../../worlds");
 
 let store: ServerStore;
 // Keep a reference to the underlying pg connection for cleanup
@@ -28,7 +30,7 @@ beforeAll(async () => {
   await pgSql`DROP TABLE IF EXISTS sv_sessions CASCADE`;
   await pgSql`DROP TABLE IF EXISTS sv_worlds CASCADE`;
 
-  store = await createPgServerStore({ databaseUrl: DATABASE_URL });
+  store = await createPgServerStore({ databaseUrl: DATABASE_URL, worldsDir: WORLDS_DIR });
 });
 
 afterAll(async () => {

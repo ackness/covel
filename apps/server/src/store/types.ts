@@ -4,16 +4,18 @@
  * Both MemoryStore and PgServerStore satisfy this interface.
  * Routes use this type so the backend can be swapped via config.
  */
-import type { CharacterCard, CharacterCreateInput, SessionPhase, WorldDimensions } from "@covel/shared";
+import type { CharacterCard, CharacterCreateInput, I18nText, SessionPhase, WorldDimensions } from "@covel/shared";
 
 export interface WorldRecord {
   id: string;
-  name: string;
-  description: string;
-  lore?: string;
+  name: I18nText;
+  description: I18nText;
+  lore?: I18nText;
   locale?: string;
   tags?: string[];
   dimensions?: WorldDimensions;
+  /** Source world package ID (set for seed/file-based worlds, absent for user-created). */
+  packageId?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -64,9 +66,9 @@ export interface ServerStore {
   // Worlds
   listWorlds(): Promise<WorldRecord[]>;
   createWorld(
-    name: string,
-    description: string,
-    opts?: { lore?: string; locale?: string; tags?: string[]; dimensions?: WorldDimensions },
+    name: I18nText,
+    description: I18nText,
+    opts?: { lore?: I18nText; locale?: string; tags?: string[]; dimensions?: WorldDimensions },
   ): Promise<WorldRecord>;
   getWorld(id: string): Promise<WorldRecord | undefined>;
   updateWorld(

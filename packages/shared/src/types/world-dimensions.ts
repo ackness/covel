@@ -10,7 +10,7 @@ export interface WorldLandmark {
 export interface WorldRegion {
   name: I18nText;
   description: I18nText;
-  climate?: string;
+  climate?: I18nText;
   landmarks?: WorldLandmark[];
 }
 
@@ -45,7 +45,7 @@ export interface WorldFaction {
   type: FactionType;
   influence: InfluenceLevel;
   leader?: I18nText;
-  headquarters?: string;
+  headquarters?: I18nText;
   relations?: FactionRelation[];
 }
 
@@ -78,8 +78,8 @@ export interface WorldPowerSystem {
 export type HistorySignificance = "major" | "minor";
 
 export interface WorldHistoryEvent {
-  era?: string;
-  year?: string;
+  era?: I18nText;
+  year?: I18nText;
   name: I18nText;
   description: I18nText;
   significance: HistorySignificance;
@@ -127,7 +127,7 @@ export interface WorldTone {
   genres: string[];
   contentRating: ContentRating;
   narrativeStyle?: I18nText;
-  themes?: string[];
+  themes?: I18nText[];
 }
 
 // ── Game Mechanics ─────────────────────────────────────────
@@ -147,7 +147,7 @@ export interface WorldMechanics {
 export interface WorldStartingConditions {
   openingScenario: I18nText;
   playerConstraints?: I18nText[];
-  startingLocation?: string;
+  startingLocation?: I18nText;
   startingResources?: Record<string, number>;
 }
 

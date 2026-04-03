@@ -88,7 +88,7 @@ export function StartingConditionsTab({ dimensions, onChange, t }: TabProps) {
         <Label>{t("world.startingLocation")}</Label>
         <input
           className={inputCls}
-          value={sc.startingLocation ?? ""}
+          value={text(sc.startingLocation)}
           onChange={(e) => setSc({ ...sc, startingLocation: e.target.value })}
         />
       </div>

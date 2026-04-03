@@ -1,22 +1,10 @@
 import type { I18nText, Locale } from "./common.js";
 import type { WorldDimensions } from "./world-dimensions.js";
 
-/** World package metadata */
-export interface WorldPackageMeta {
-  schemaVersion: string;
-  id: string;
-  name: I18nText;
-  version: string;
-  summary: I18nText;
-  defaultLocale: Locale;
-  supportedLocales: Locale[];
-  characterSchema?: unknown;
-  requiredPlugins?: string[];
-  recommendedPlugins?: string[];
-  contentVariants: WorldContentVariant[];
-  /** Structured world-building dimensions */
-  dimensions?: WorldDimensions;
-}
+/**
+ * WorldPackageMeta is now inferred from worldPackageMetaSchema in schemas/world.ts.
+ * Re-exported from there via the barrel (index.ts).
+ */
 
 /** World content variant */
 export interface WorldContentVariant {

@@ -436,8 +436,11 @@ export class PgStore implements DataStore {
 
       // Import all data
       for (const w of data.data.worlds) {
+        const wName = typeof w.name === "string" ? w.name : JSON.stringify(w.name);
+        const wDesc = typeof w.description === "string" ? w.description : JSON.stringify(w.description);
+        const wLore = w.lore == null ? null : typeof w.lore === "string" ? w.lore : JSON.stringify(w.lore);
         await tx`INSERT INTO worlds (id, name, description, lore, tags, created_at)
-          VALUES (${w.id}, ${w.name}, ${w.description}, ${w.lore ?? null}, ${JSON.stringify(w.tags ?? null)}, ${w.createdAt})`;
+          VALUES (${w.id}, ${wName}, ${wDesc}, ${wLore}, ${JSON.stringify(w.tags ?? null)}, ${w.createdAt})`;
       }
       for (const s of data.data.sessions) {
         await tx`INSERT INTO sessions (id, world_id, status, phase, preset_id, settings, created_at)

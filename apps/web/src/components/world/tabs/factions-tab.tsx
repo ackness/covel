@@ -143,7 +143,7 @@ export function FactionsTab({ dimensions, onChange, t }: TabProps) {
               <Label>{t("world.headquarters")}</Label>
               <input
                 className={inputCls}
-                value={faction.headquarters ?? ""}
+                value={text(faction.headquarters)}
                 onChange={(e) =>
                   updateFaction(fi, { headquarters: e.target.value })
                 }

@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
@@ -11,6 +12,7 @@ import { createGenerateRoute } from "./routes/ai/generate.js";
 import { createStreamRoute } from "./routes/ai/stream.js";
 import { createPingRoute } from "./routes/ai/ping.js";
 import { createGenerateWorldRoute } from "./routes/ai/generate-world.js";
+import { createExtractDimensionsRoute } from "./routes/ai/extract-dimensions.js";
 import { createPresetsRoute } from "./routes/config/presets.js";
 import { createTurnRoute } from "./routes/kernel/turn.js";
 import { createPluginsRoute } from "./routes/plugins/list.js";
@@ -59,9 +61,10 @@ const kernelStack = await initKernelStack(ai.gateway);
 
 // Store backend: use PG when DATABASE_URL is set and STORE_BACKEND=pg
 const storeBackend = process.env.STORE_BACKEND ?? "memory";
+const worldsDir = process.env.COVEL_WORLDS_DIR ?? resolve(import.meta.dirname, "../../../worlds");
 const store = storeBackend === "pg" && process.env.DATABASE_URL
-  ? await createPgServerStore({ databaseUrl: process.env.DATABASE_URL })
-  : await createMemoryStore();
+  ? await createPgServerStore({ databaseUrl: process.env.DATABASE_URL, worldsDir })
+  : await createMemoryStore(worldsDir);
 
 // ── Internal API routes (programmatic access) ────────────────────
 app.route("/api/health", healthRoute);
@@ -69,6 +72,7 @@ app.route("/api/ai/generate", createGenerateRoute(ai));
 app.route("/api/ai/stream", createStreamRoute(ai));
 app.route("/api/ai/ping", createPingRoute(ai));
 app.route("/api/ai/generate-world", createGenerateWorldRoute(ai, store));
+app.route("/api/ai/extract-dimensions", createExtractDimensionsRoute(ai));
 app.route("/api/config/presets", createPresetsRoute(ai));
 // DEBUG-ONLY: Uses default kernel session — not suitable for multi-session production use.
 app.route("/api/kernel/turn", createTurnRoute(kernelStack.kernel));

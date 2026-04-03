@@ -1,0 +1,189 @@
+schemaVersion: "1.0"
+id: neonridge
+name: 霓虹脊・2087
+version: "0.1.0"
+summary: 赛博朋克城市，义体改造与企业战争是日常。你是街头的无名小卒。
+defaultLocale: zh-CN
+supportedLocales:
+  - zh-CN
+tags:
+  - cyberpunk
+  - noir
+  - thriller
+requiredPlugins:
+  - core-persona
+  - core-narrator
+recommendedPlugins:
+  - core-guide
+  - core-inventory
+  - core-combat
+
+dimensions:
+  geography:
+    overview: 垂直发展的巨型城市，底层永夜，顶层空中庭园。义体改造是生存的基础。
+    regions:
+      - name: 顶层・云庭
+        description: 企业集团的总部与高管住宅区，阳光充沛，空气经过净化。
+        climate: 人工恒温，天气可控
+        landmarks:
+          - name: 寰宇科技天穹塔
+            description: 全城最高建筑，集团总部兼数据中枢。
+      - name: 中层・霓虹带
+        description: 商业区和中产住宅区，霓虹灯永不熄灭。
+        climate: 人工光照，温度适宜但空气质量一般
+        landmarks:
+          - name: 中央义体诊所
+            description: 官方授权的义体维护设施。
+      - name: 底层・暗沟
+        description: 信号屏蔽的贫民窟，阳光无法抵达，靠废热和泄漏管道供暖。
+        climate: 潮湿闷热，空气含有微量工业废气
+        landmarks:
+          - name: 虹姐信号站
+            description: 底层信息网络的中枢，靠物理线路运作。
+          - name: 第三区废弃充能站
+            description: 已停用的义体充能设施，传闻有人秘密使用。
+
+  factions:
+    - id: huanyu-tech
+      name: 寰宇科技
+      description: 控制城市主网与数据基础设施的科技巨头。
+      type: corporate
+      influence: major
+      headquarters: 顶层・天穹塔
+      relations:
+        - targetId: redflame-sec
+          type: allied
+          description: 雇佣赤焰执行安保合同
+        - targetId: deepblue-pharma
+          type: neutral
+          description: 商业竞争但互不侵犯
+    - id: redflame-sec
+      name: 赤焰安保
+      description: 私人军事安保企业，控制城市武装力量与边境通行。
+      type: military
+      influence: major
+      headquarters: 中层・赤焰堡
+      relations:
+        - targetId: huanyu-tech
+          type: allied
+        - targetId: free-bodies
+          type: hostile
+          description: 将自由体视为安全威胁
+    - id: deepblue-pharma
+      name: 幽蓝制药
+      description: 垄断义体维护药剂与生物兼容液的制药集团。
+      type: corporate
+      influence: major
+      headquarters: 顶层・幽蓝生命园区
+    - id: free-bodies
+      name: 自由体
+      description: 拒绝义体改造的稀有群体，被底层人崇拜、被企业列为危险分子。
+      type: other
+      influence: minor
+      relations:
+        - targetId: redflame-sec
+          type: hostile
+
+  powerSystem:
+    name: 义体技术
+    type: technology
+    description: 通过植入机械义体增强人体能力。超过70%居民至少有一处义体，但维护成本是底层人的枷锁。
+    rules:
+      - 义体过载触发'金属热'——排异反应导致抽搐甚至义体失控
+      - 义体需定期充能和维护，否则性能衰减直至瘫痪
+      - 底层信号屏蔽区无法远程诊断义体，只能依赖黑市技师
+      - 军用级义体仅限赤焰安保持有，民间持有属重罪
+    tiers:
+      - name: 民用级
+        rank: 1
+        description: 基础肢体替换与感官增强
+      - name: 商用级
+        rank: 2
+        description: 高性能运动/计算义体，需企业授权
+      - name: 军用级
+        rank: 3
+        description: 武器化义体与战术神经接口
+      - name: 实验级
+        rank: 4
+        description: 未公开的前沿原型，存在严重风险
+
+  history:
+    - era: 建城纪
+      year: "2041"
+      name: 霓虹脊奠基
+      description: 三大企业联合投资建造垂直城市，以应对沿海地区环境崩溃。
+      significance: major
+    - era: 义体纪
+      year: "2058"
+      name: 全民义体化政策
+      description: 幽蓝制药推出廉价义体套件，义体改造率从15%飙升至70%。
+      significance: major
+    - era: 当代
+      year: "2085"
+      name: 底层信号封锁
+      description: 寰宇科技以安全为由切断底层主网接入，底层通讯退回物理线路时代。
+      significance: minor
+    - era: 当代
+      year: "2087"
+      name: 自由体运动
+      description: 拒绝义体化的群体开始组织化，在底层获得越来越多的追随者。
+      significance: minor
+
+  economy:
+    currencies:
+      - name: 信用点
+        symbol: Cr
+        description: 数字货币，由寰宇科技结算网管理
+      - name: 硬币
+        description: 底层流通的物理代币，不可追踪
+    resources:
+      - 义体零件
+      - 充能电池
+      - 生物兼容液
+      - 数据芯片
+    tradeNotes: 底层因信号屏蔽无法使用信用点，硬币和以物易物是主要交易方式。黑市义体交易利润极高但风险致命。
+
+  socialStructure:
+    classes:
+      - name: 企业高管
+        rank: 1
+        description: 顶层居民，享有最先进义体与医疗
+      - name: 签约员工
+        rank: 2
+        description: 中层居民，为企业工作换取义体维护
+      - name: 底层自由人
+        rank: 3
+        description: 无企业合同者，义体维护只能靠黑市
+    notes: 自由体（无义体者）不属于任何阶层，在底层被视为精神领袖，在顶层被视为恐怖分子。
+
+  tone:
+    genres:
+      - cyberpunk
+      - noir
+      - thriller
+    contentRating: mature
+    narrativeStyle: 霓虹与阴影交织的硬派叙事，对话尖锐，节奏紧凑。
+    themes:
+      - 身体自主权
+      - 阶层固化
+      - 科技异化
+      - 企业垄断
+
+  mechanics:
+    combatStyle: turn-based
+    skillSystem: 义体强化树（肢体/感官/神经/武器）与软技能（骇入、交涉、潜行、维修）双轨并行。
+    difficulty: hard
+    customRules:
+      - 义体过载检定：高强度动作后骰过载值，失败触发金属热
+      - 底层行动无网络支援，骇入只能通过物理接触
+      - 赤焰安保巡逻有固定路线，可观察规律后规避
+
+  startingConditions:
+    openingScenario: 凌晨三点，底层第七区。虹姐的加急信息把你叫醒：旧友阿灰失联48小时，最后位置信号来自第三区废弃充能站。虹姐要的是阿灰手上那批'特殊义体'数据。酬金丰厚，但第三区是赤焰安保的巡逻区。
+    playerConstraints:
+      - 初始仅有民用级义体腿
+      - 无企业授权，不可进入中层以上
+    startingLocation: 底层・第七区
+    startingResources:
+      硬币: 200
+      充能电池: 2

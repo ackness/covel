@@ -6,13 +6,15 @@
  * behavior that any alternative backend (e.g. PgServerStore) must match.
  */
 import { describe, it, expect, beforeEach } from "vitest";
+import { resolve } from "node:path";
 import { createMemoryStore } from "../src/store/memory-store.js";
 import type { ServerStore } from "../src/store/types.js";
 
+const WORLDS_DIR = resolve(import.meta.dirname, "../../../worlds");
 let store: ServerStore;
 
 beforeEach(async () => {
-  store = await createMemoryStore();
+  store = await createMemoryStore(WORLDS_DIR);
 });
 
 // ─── Worlds ──────────────────────────────────────────────────────────────────
