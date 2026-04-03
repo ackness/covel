@@ -38,6 +38,7 @@ export async function createMemoryStore(): Promise<ServerStore> {
   const statePatches = new Map<string, StatePatchRecord[]>(); // sessionId → patches
   const characters = new Map<string, CharacterCard>();
   const traceEvents = new Map<string, TraceEvent[]>(); // sessionId → events
+  const stateSnapshots = new Map<string, Record<string, unknown>>(); // sessionId → snapshot
 
   // ── Worlds ──────────────────────────────────────────────────────
 
@@ -252,6 +253,16 @@ export async function createMemoryStore(): Promise<ServerStore> {
     return traceEvents.get(sessionId) ?? [];
   }
 
+  // ── State Snapshots ──────────────────────────────────────────────
+
+  async function saveStateSnapshot(sessionId: string, snapshot: Record<string, unknown>): Promise<void> {
+    stateSnapshots.set(sessionId, snapshot);
+  }
+
+  async function getStateSnapshot(sessionId: string): Promise<Record<string, unknown> | null> {
+    return stateSnapshots.get(sessionId) ?? null;
+  }
+
   // ── Seed preset worlds ──────────────────────────────────────────
   for (const seed of SEED_WORLDS) {
     await createWorld(seed.name, seed.description, {
@@ -282,6 +293,8 @@ export async function createMemoryStore(): Promise<ServerStore> {
     updateCharacter,
     addTraceEvent,
     listTraceEvents,
+    saveStateSnapshot,
+    getStateSnapshot,
   };
 }
 

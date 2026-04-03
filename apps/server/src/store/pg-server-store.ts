@@ -115,6 +115,14 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     )
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS sv_state_snapshots (
+      session_id TEXT PRIMARY KEY,
+      data JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_at TEXT NOT NULL
+    )
+  `;
+
   // Indexes for common queries
   await sql`CREATE INDEX IF NOT EXISTS idx_sv_sessions_world ON sv_sessions(world_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_sv_messages_session ON sv_messages(session_id)`;
@@ -470,6 +478,25 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     return rows.map(rowToTraceEvent);
   }
 
+  // ── State Snapshots (DB-backed) ──────────────────────────────────
+
+  async function saveStateSnapshot(sessionId: string, snapshot: Record<string, unknown>): Promise<void> {
+    const now = new Date().toISOString();
+    await sql`
+      INSERT INTO sv_state_snapshots (session_id, data, updated_at)
+      VALUES (${sessionId}, ${sql.json(snapshot as JSONValue)}, ${now})
+      ON CONFLICT (session_id) DO UPDATE SET
+        data = EXCLUDED.data, updated_at = EXCLUDED.updated_at
+    `;
+  }
+
+  async function getStateSnapshot(sessionId: string): Promise<Record<string, unknown> | null> {
+    const rows = await sql<{ data: Record<string, unknown> }[]>`
+      SELECT data FROM sv_state_snapshots WHERE session_id = ${sessionId}
+    `;
+    return rows.length > 0 ? rows[0].data : null;
+  }
+
   // ── Load existing data from PG into cache ───────────────────────
 
   interface WorldRow {
@@ -570,5 +597,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     updateCharacter,
     addTraceEvent,
     listTraceEvents,
+    saveStateSnapshot,
+    getStateSnapshot,
   };
 }

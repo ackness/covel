@@ -339,6 +339,13 @@ export async function loadStateSnapshot(sessionId: string): Promise<Record<strin
   return request<Record<string, unknown> | null>(`/sessions/${encodeURIComponent(sessionId)}/state-snapshot`);
 }
 
+export async function saveStateSnapshot(sessionId: string, snapshot: Record<string, unknown>): Promise<void> {
+  await request<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/state-snapshot`, {
+    method: "PUT",
+    body: JSON.stringify(snapshot),
+  });
+}
+
 export async function createSession(worldId: string, presetId?: string): Promise<SessionRecord> {
   return request<SessionRecord>("/sessions", {
     method: "POST",

@@ -470,10 +470,15 @@ class LocalDataService implements DataService {
       await api.createSession(session.worldId, session.presetId);
     }
 
-    // Messages will be rebuilt from SSE events on the server side during action execution.
-    // The server's MemoryStore accumulates messages per session automatically.
-    // For resume scenarios, we'd need a bulk-sync endpoint. For now, the server
-    // rebuilds context from what it has.
+    // Upload state snapshot so the server kernel can rehydrate game state
+    const snapshot = await this.loadStateSnapshot(session.id);
+    if (snapshot) {
+      try {
+        await api.saveStateSnapshot(session.id, snapshot);
+      } catch {
+        // Non-critical: server may not have state-snapshot endpoint in T1 mode
+      }
+    }
   }
 }
 

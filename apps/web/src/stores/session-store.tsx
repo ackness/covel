@@ -472,10 +472,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
     dispatch({ type: "SET_SESSION", session });
 
-    // Load messages and state patches in parallel
-    const [messagesResult, patchesResult] = await Promise.allSettled([
+    // Load messages, state patches, and state snapshot in parallel
+    const [messagesResult, patchesResult, snapshotResult] = await Promise.allSettled([
       ds.listMessages(session.id),
       ds.listStatePatches(session.id),
+      ds.loadStateSnapshot(session.id),
     ]);
 
     // Restore messages (including block data)
@@ -498,6 +499,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // Restore state patches and rebuild gameState
     if (patchesResult.status === "fulfilled") {
       dispatch({ type: "LOAD_STATE_PATCHES", patches: patchesResult.value });
+    }
+
+    // Restore state snapshot (overrides patch-rebuilt state if available)
+    if (snapshotResult.status === "fulfilled" && snapshotResult.value) {
+      const snapshot = snapshotResult.value;
+      const snapshotState = snapshot.state as Record<string, unknown> | undefined;
+      if (snapshotState) {
+        dispatch({ type: "SET_GAME_STATE", state: snapshotState });
+      }
     }
   }, [state.worlds]);
 

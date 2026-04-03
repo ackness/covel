@@ -29,7 +29,7 @@ interface SseEnvelope {
 }
 
 export function createStatePatchId(turnId: string, seq: number): string {
-  return "patch_" + turnId + "_" + String(seq);
+  return `patch_${turnId}_${seq}`;
 }
 
 export function createActionsRoute(deps: {
@@ -263,6 +263,9 @@ export function createActionsRoute(deps: {
             content: m.content,
           }));
           const world = await store.getWorld(session.worldId);
+          // Load persisted state snapshot for kernel context rehydration
+          const retrySnapshot = await store.getStateSnapshot(sessionId);
+
           kernelSession.setContext({
             world: world
               ? {
@@ -273,6 +276,7 @@ export function createActionsRoute(deps: {
                 }
               : undefined,
             chat: chatHistory,
+            ...(retrySnapshot ? { state: retrySnapshot } : {}),
           });
 
           const provTurnId = `turn_${Date.now().toString(36)}`;
@@ -405,6 +409,12 @@ export function createActionsRoute(deps: {
               events: turnResult.stateSnapshot.events,
               records: turnResult.stateSnapshot.records,
             });
+            // Persist server-side for T3 and session resume
+            await store.saveStateSnapshot(sessionId, {
+              state: turnResult.stateSnapshot.state,
+              events: turnResult.stateSnapshot.events,
+              records: turnResult.stateSnapshot.records,
+            });
           }
 
           backgroundTaskCount = turnResult.backgroundTasks?.length ?? 0;
@@ -446,6 +456,9 @@ export function createActionsRoute(deps: {
         const world = await store.getWorld(session.worldId);
         const loreOverride = payload?.loreOverride as string | undefined;
 
+        // Load persisted state snapshot for kernel context rehydration
+        const stateSnapshot = await store.getStateSnapshot(sessionId);
+
         kernelSession.setContext({
           world: world
             ? {
@@ -458,6 +471,7 @@ export function createActionsRoute(deps: {
               }
             : undefined,
           chat: chatHistory,
+          ...(stateSnapshot ? { state: stateSnapshot } : {}),
         });
 
         // Provisional IDs for progress events emitted before turn completes
@@ -642,6 +656,12 @@ export function createActionsRoute(deps: {
         // Emit state snapshot for client-side persistence (T1/T2)
         if (turnResult.stateSnapshot) {
           await emit("state.snapshot", turnId, traceId, {
+            state: turnResult.stateSnapshot.state,
+            events: turnResult.stateSnapshot.events,
+            records: turnResult.stateSnapshot.records,
+          });
+          // Persist server-side for T3 and session resume
+          await store.saveStateSnapshot(sessionId, {
             state: turnResult.stateSnapshot.state,
             events: turnResult.stateSnapshot.events,
             records: turnResult.stateSnapshot.records,

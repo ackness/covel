@@ -129,6 +129,37 @@ export function createSessionsRoute(store: ServerStore) {
     return c.json(await store.listStatePatches(sessionId));
   });
 
+  // ── State Snapshots (post-commit full state) ────────────────────
+
+  route.get("/:sessionId/state-snapshot", async (c) => {
+    const sessionId = c.req.param("sessionId");
+    const session = await store.getSession(sessionId);
+    if (!session) {
+      return c.json({ code: "NOT_FOUND", message: "Session not found" }, 404);
+    }
+    const snapshot = await store.getStateSnapshot(sessionId);
+    if (!snapshot) {
+      return c.json(null);
+    }
+    return c.json(snapshot);
+  });
+
+  route.put("/:sessionId/state-snapshot", async (c) => {
+    const sessionId = c.req.param("sessionId");
+    const session = await store.getSession(sessionId);
+    if (!session) {
+      return c.json({ code: "NOT_FOUND", message: "Session not found" }, 404);
+    }
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ code: "INVALID_JSON", message: "Malformed JSON body" }, 400);
+    }
+    await store.saveStateSnapshot(sessionId, body);
+    return c.json({ ok: true });
+  });
+
   // Stubs for endpoints the frontend may call
   route.get("/:sessionId/workflow-snapshots", (c) => {
     return c.json([]);

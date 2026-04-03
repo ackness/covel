@@ -113,4 +113,8 @@ export interface ServerStore {
   // Trace Events
   addTraceEvent(sessionId: string, event: TraceEvent): Promise<void>;
   listTraceEvents(sessionId: string): Promise<TraceEvent[]>;
+
+  // State Snapshots (post-commit full state)
+  saveStateSnapshot(sessionId: string, snapshot: Record<string, unknown>): Promise<void>;
+  getStateSnapshot(sessionId: string): Promise<Record<string, unknown> | null>;
 }
