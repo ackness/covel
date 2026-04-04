@@ -1,0 +1,27 @@
+# Render Blueprint — one-click demo deployment (no PostgreSQL)
+# https://docs.render.com/infrastructure-as-code
+#
+# Data persists in the player's browser IndexedDB.
+# Server uses volatile MemoryStore — data is lost on sleep/restart,
+# but the frontend auto-syncs session context back when needed.
+#
+# Deploy: connect this repo on Render Dashboard, or use the Deploy button.
+
+services:
+  - type: web
+    name: covel-demo
+    runtime: docker
+    dockerfilePath: ./docker/Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SERVE_STATIC
+        value: "true"
+      - key: STATIC_DIR
+        value: ./web-dist
+      - key: SERVER_PORT
+        value: "3001"
+      # No STORE_BACKEND / DATABASE_URL → server uses MemoryStore
+      # All persistent data lives in the player's browser IndexedDB

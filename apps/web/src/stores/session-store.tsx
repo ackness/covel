@@ -517,6 +517,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       dispatch({ type: "SET_SESSION", session });
       // Sync context to server so stateless server can process the turn
       await ds.syncToServer(session.id);
+      api.markServerAck();
 
       const overlay = await api.getWorldOverlay(state.world.id);
       const loreOverride = overlay?.lore;
@@ -596,7 +597,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
 
     // Sync session context to server so subsequent turns can be processed
-    ds.syncToServer(session.id).catch((err: unknown) => {
+    ds.syncToServer(session.id).then(() => {
+      api.markServerAck();
+    }).catch((err: unknown) => {
       console.warn("[session] Failed to sync to server on resume:", err);
     });
   }, [state.worlds]);
@@ -629,6 +632,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const sendMessage = useCallback((content: string) => {
     if (!state.session || state.executing) return;
 
+    const sessionId = state.session.id;
+
     // Add user message immediately
     const userMsgId = api.uid();
     const userTimestamp = new Date().toISOString();
@@ -645,7 +650,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // Persist user message to IDB
     ds.addMessage({
       id: userMsgId,
-      sessionId: state.session.id,
+      sessionId,
       role: "user",
       content,
       createdAt: userTimestamp,
@@ -655,25 +660,31 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "SET_EXECUTING", value: true });
     dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
-    // Check if it's a slash command
-    const isCommand = content.startsWith("/");
-    api.sendAction(
-      {
-        requestId: api.uid(),
-        type: isCommand ? "execute_command" : "send_message",
-        sessionId: state.session.id,
-        locale: i18n.language,
-        payload: isCommand ? { command: content } : { content },
-      },
-      handleSseEvent,
-      (err) => {
-        dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
-        dispatch({ type: "SET_EXECUTING", value: false });
-      },
-      () => {
-        dispatch({ type: "SET_EXECUTING", value: false });
-      }
-    );
+    const fireAction = () => {
+      const isCommand = content.startsWith("/");
+      api.sendAction(
+        {
+          requestId: api.uid(),
+          type: isCommand ? "execute_command" : "send_message",
+          sessionId,
+          locale: i18n.language,
+          payload: isCommand ? { command: content } : { content },
+        },
+        handleSseEvent,
+        (err) => {
+          dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
+          dispatch({ type: "SET_EXECUTING", value: false });
+        },
+        () => {
+          dispatch({ type: "SET_EXECUTING", value: false });
+        },
+      );
+    };
+
+    // Guard: re-sync if server restarted after idle (e.g. Render free-tier sleep)
+    api.ensureServerSession(sessionId, (sid) => ds.syncToServer(sid))
+      .then(fireAction)
+      .catch(fireAction); // proceed anyway — let the action surface the real error
   }, [state.session, state.executing, handleSseEvent]);
 
   const submitBlock = useCallback((blockId: string) => {
@@ -683,27 +694,35 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const executeCommand = useCallback((command: string) => {
     if (!state.session || state.executing) return;
 
+    const sessionId = state.session.id;
+
     dispatch({ type: "CLEAR_EXECUTION_STEPS" });
     dispatch({ type: "SET_EXECUTING", value: true });
     dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
-    api.sendAction(
-      {
-        requestId: api.uid(),
-        type: "execute_command",
-        sessionId: state.session.id,
-        locale: i18n.language,
-        payload: { command },
-      },
-      handleSseEvent,
-      (err) => {
-        dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
-        dispatch({ type: "SET_EXECUTING", value: false });
-      },
-      () => {
-        dispatch({ type: "SET_EXECUTING", value: false });
-      }
-    );
+    const fireAction = () => {
+      api.sendAction(
+        {
+          requestId: api.uid(),
+          type: "execute_command",
+          sessionId,
+          locale: i18n.language,
+          payload: { command },
+        },
+        handleSseEvent,
+        (err) => {
+          dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
+          dispatch({ type: "SET_EXECUTING", value: false });
+        },
+        () => {
+          dispatch({ type: "SET_EXECUTING", value: false });
+        },
+      );
+    };
+
+    api.ensureServerSession(sessionId, (sid) => ds.syncToServer(sid))
+      .then(fireAction)
+      .catch(fireAction);
   }, [state.session, state.executing, handleSseEvent]);
 
   const retryRuntime = useCallback((runtimeId?: string) => {
@@ -725,27 +744,35 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       dispatch({ type: "REMOVE_MESSAGES_FROM_TURN", turnId: lastTurnId, keepRuntimeIds: new Set<string>() });
     }
 
+    const sessionId = state.session.id;
+
     dispatch({ type: "CLEAR_EXECUTION_STEPS" });
     dispatch({ type: "SET_EXECUTING", value: true });
     dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
-    api.sendAction(
-      {
-        requestId: api.uid(),
-        type: "retry_runtime",
-        sessionId: state.session.id,
-        locale: i18n.language,
-        payload: runtimeId ? { runtimeId } : {},
-      },
-      handleSseEvent,
-      (err) => {
-        dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
-        dispatch({ type: "SET_EXECUTING", value: false });
-      },
-      () => {
-        dispatch({ type: "SET_EXECUTING", value: false });
-      }
-    );
+    const fireAction = () => {
+      api.sendAction(
+        {
+          requestId: api.uid(),
+          type: "retry_runtime",
+          sessionId,
+          locale: i18n.language,
+          payload: runtimeId ? { runtimeId } : {},
+        },
+        handleSseEvent,
+        (err) => {
+          dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
+          dispatch({ type: "SET_EXECUTING", value: false });
+        },
+        () => {
+          dispatch({ type: "SET_EXECUTING", value: false });
+        },
+      );
+    };
+
+    api.ensureServerSession(sessionId, (sid) => ds.syncToServer(sid))
+      .then(fireAction)
+      .catch(fireAction);
   }, [state.session, state.executing, state.messages, handleSseEvent]);
 
   // Boot on mount
