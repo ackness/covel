@@ -728,7 +728,7 @@ function toBlockEnvelope(
 
   const data = normalizeBlockData(block);
   // Block types that require player response
-  const INTERACTIVE_BLOCK_TYPES = new Set(["choice_set", "character_creation"]);
+  const INTERACTIVE_BLOCK_TYPES = new Set(["choice_set", "character_creation", "action_guide"]);
   const isInteractive = INTERACTIVE_BLOCK_TYPES.has(blockType);
 
   return {

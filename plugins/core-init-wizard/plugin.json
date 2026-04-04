@@ -71,8 +71,15 @@
       "kind": "render",
       "schema": {
         "type": "object",
-        "description": "Display the character creation form to the player. Call this after writing a short narrative transition.",
-        "properties": {}
+        "description": "Display the character creation form to the player. You MUST call this tool exactly once after writing a short narrative transition.",
+        "properties": {
+          "confirm": {
+            "type": "boolean",
+            "description": "Must be true. Confirms you intend to show the character creation form.",
+            "const": true
+          }
+        },
+        "required": ["confirm"]
       }
     }
   ]

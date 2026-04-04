@@ -68,3 +68,23 @@
   --color-input: hsl(240 3.7% 15.9%);
   --color-ring: hsl(240 4.9% 83.9%);
 }
+
+/* Dark mode prose overrides for @tailwindcss/typography */
+.dark .prose {
+  --tw-prose-body: hsl(0 0% 90%);
+  --tw-prose-headings: hsl(0 0% 98%);
+  --tw-prose-lead: hsl(240 5% 64.9%);
+  --tw-prose-links: hsl(0 0% 98%);
+  --tw-prose-bold: hsl(0 0% 98%);
+  --tw-prose-counters: hsl(240 5% 64.9%);
+  --tw-prose-bullets: hsl(240 3.7% 35%);
+  --tw-prose-hr: hsl(240 3.7% 15.9%);
+  --tw-prose-quotes: hsl(0 0% 90%);
+  --tw-prose-quote-borders: hsl(240 3.7% 25%);
+  --tw-prose-captions: hsl(240 5% 64.9%);
+  --tw-prose-code: hsl(0 0% 98%);
+  --tw-prose-pre-code: hsl(0 0% 90%);
+  --tw-prose-pre-bg: hsl(240 10% 8%);
+  --tw-prose-th-borders: hsl(240 3.7% 25%);
+  --tw-prose-td-borders: hsl(240 3.7% 15.9%);
+}

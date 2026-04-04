@@ -844,6 +844,20 @@ export async function fetchTraceTurns(sessionId: string): Promise<{ sessionId: s
   return request(`/api/traces/${encodeURIComponent(sessionId)}/turns`);
 }
 
+// ── Server Info ──────────────────────────────────────────────────
+
+export interface ServerHealth {
+  status: string;
+  timestamp: string;
+  version: string;
+  storeBackend: "pg" | "memory";
+}
+
+export async function fetchServerHealth(): Promise<ServerHealth> {
+  const res = await fetch("/api/health");
+  return res.json() as Promise<ServerHealth>;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────
 
 export function uid(): string {

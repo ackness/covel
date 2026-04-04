@@ -294,6 +294,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   // Ref to track current session ID for use in callbacks (avoids stale closures)
   const sessionIdRef = useRef<string | null>(null);
+  // Track runtime kind (story vs plugin) so we can filter non-story text from main chat
+  const runtimeKindRef = useRef<Map<string, string>>(new Map());
   useEffect(() => {
     sessionIdRef.current = state.session?.id ?? null;
   }, [state.session]);
@@ -351,7 +353,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const delta = (payload.delta as string) ?? "";
         const runtimeId = (payload.runtimeId as string) ?? "unknown";
         const pluginId = (payload.pluginId as string) ?? "";
-        if (delta) {
+        // Only show story-kind runtime text in main chat; plugin text goes to debug only
+        const deltaKind = runtimeKindRef.current.get(runtimeId);
+        if (delta && deltaKind === "story") {
           dispatch({ type: "APPEND_DELTA", turnId: turnId ?? "unknown", runtimeId, pluginId, delta });
         }
         break;
@@ -361,7 +365,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // Dispatch a deduplicated action — the reducer checks for existing stream messages.
         const content = (payload.content as string) ?? "";
         const runtimeId = (payload.runtimeId as string) ?? "unknown";
-        if (content) {
+        // Only show story-kind runtime text in main chat; plugin text goes to debug only
+        const completedKind = runtimeKindRef.current.get(runtimeId);
+        if (content && completedKind === "story") {
           const msgId = (payload.messageId as string) ?? api.uid();
           const msg: StreamMessage = {
             id: msgId,
@@ -468,6 +474,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           detail: payload.detail as string | undefined,
           timestamp: payload.timestamp as string,
         };
+        // Track runtime kind from runtime.started label (format: "pluginId/kind")
+        if (step.type === "runtime.started" && step.label) {
+          const slashIdx = step.label.indexOf("/");
+          if (slashIdx >= 0) {
+            runtimeKindRef.current.set(step.runtimeId, step.label.slice(slashIdx + 1));
+          }
+        }
         dispatch({ type: "ADD_EXECUTION_STEP", step });
         break;
       }

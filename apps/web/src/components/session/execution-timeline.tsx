@@ -9,6 +9,8 @@ interface RuntimeStatus {
   label: string;
   status: "running" | "llm" | "tool" | "completed" | "failed";
   detail?: string;
+  /** Qualified tool name when status is "tool" (e.g. "core-init-wizard:emit-character-form"). */
+  toolName?: string;
 }
 
 function deriveStatuses(
@@ -42,12 +44,13 @@ function deriveStatuses(
         break;
       case "tool.calling":
         if (existing) {
-          map.set(step.runtimeId, { ...existing, status: "tool", detail: step.detail });
+          // step.label is the qualified tool ID (e.g. "core-init-wizard:emit-character-form")
+          map.set(step.runtimeId, { ...existing, status: "tool", toolName: step.label, detail: step.detail });
         }
         break;
       case "tool.completed":
         if (existing) {
-          map.set(step.runtimeId, { ...existing, status: "running", detail: undefined });
+          map.set(step.runtimeId, { ...existing, status: "running", toolName: undefined, detail: undefined });
         }
         break;
       case "runtime.completed":
@@ -106,9 +109,9 @@ function RuntimeChip({
     >
       <StatusIcon status={rt.status} />
       <span className="font-medium truncate max-w-[120px]">{rt.label}</span>
-      {rt.detail && rt.detail !== "[cached]" && (
-        <span className="text-[10px] text-muted-foreground truncate max-w-[100px]">
-          {rt.detail}
+      {rt.status === "tool" && rt.toolName && (
+        <span className="text-[10px] text-muted-foreground truncate max-w-[140px] font-mono">
+          {rt.toolName}
         </span>
       )}
       {rt.detail === "[cached]" && (
@@ -217,7 +220,7 @@ export function ExecutionTimeline({
           <span className="truncate">
             {active.label}
             {active.status === "llm" && ` — ${t("session.statusLlm")}`}
-            {active.status === "tool" && active.detail && ` — ${active.detail}`}
+            {active.status === "tool" && active.toolName && ` — ${active.toolName}`}
             {active.status === "running" && ` — ${t("session.statusPreparing")}`}
             ...
           </span>

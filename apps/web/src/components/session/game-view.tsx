@@ -72,6 +72,7 @@ import type {
   CommandSummary,
   LlmConfigResponse,
   PluginLoadError,
+  fetchServerHealth,
 } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { PluginListPanel } from "./plugin-list-panel.js";
@@ -368,6 +369,13 @@ function RightPanel({
   onToggleRightPanel,
 }: RightPanelProps) {
   const { t } = useTranslation();
+  const [storeBackend, setStoreBackend] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchServerHealth()
+      .then((h) => setStoreBackend(h.storeBackend))
+      .catch(() => {});
+  }, []);
 
   return (
     <Tabs
@@ -525,6 +533,25 @@ function RightPanel({
           </p>
         </TabsContent>
       </ScrollArea>
+      {storeBackend && (
+        <div className="border-t border-border px-3 py-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0">
+          <Database className="w-3 h-3" />
+          <span>Store:</span>
+          <Badge
+            variant="outline"
+            className={`text-[9px] rounded-none ${
+              storeBackend === "pg"
+                ? "border-green-500/40 text-green-600 dark:text-green-400"
+                : "border-amber-500/40 text-amber-600 dark:text-amber-400"
+            }`}
+          >
+            {storeBackend === "pg" ? "PostgreSQL" : "Memory"}
+          </Badge>
+          {storeBackend === "memory" && (
+            <span className="text-amber-600 dark:text-amber-400">{t("session.memoryStoreWarning", "Data lost on restart")}</span>
+          )}
+        </div>
+      )}
     </Tabs>
   );
 }

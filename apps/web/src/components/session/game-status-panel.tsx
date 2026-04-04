@@ -35,7 +35,10 @@ export function GameStatusPanel({ gameState }: GameStatusPanelProps) {
   const charArray = Array.isArray(chars)
     ? chars
     : chars && typeof chars === "object"
-      ? Object.values(chars as Record<string, unknown>)
+      ? Object.entries(chars as Record<string, unknown>).map(([key, val]) => {
+          const obj = (typeof val === "object" && val !== null ? val : {}) as Record<string, unknown>;
+          return obj.name ? obj : { ...obj, name: key };
+        })
       : [];
 
   return (
@@ -262,7 +265,14 @@ function CharacterCard({ char }: { char: Record<string, unknown> }) {
 function CharactersSection({ data }: { data: unknown }) {
   const { t } = useTranslation();
   if (!data) return null;
-  const chars = Array.isArray(data) ? data : typeof data === "object" ? Object.values(data as Record<string, unknown>) : [];
+  const chars = Array.isArray(data)
+    ? data
+    : typeof data === "object"
+      ? Object.entries(data as Record<string, unknown>).map(([key, val]) => {
+          const obj = (typeof val === "object" && val !== null ? val : {}) as Record<string, unknown>;
+          return obj.name ? obj : { ...obj, name: key };
+        })
+      : [];
   if (chars.length === 0) return null;
 
   return (

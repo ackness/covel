@@ -420,9 +420,12 @@ function TurnCard({
   const isCompleted = turn.events.some((e) => e.type === "flow.completed");
   const duration = fmtDuration(turn.startedAt, turn.completedAt);
 
-  const filteredEvents = filterCategory
-    ? turn.events.filter((e) => categorize(e.type) === filterCategory || categorize((e.payload.type as string) || e.type) === filterCategory)
-    : turn.events;
+  const filteredEvents = useMemo(() => {
+    const filtered = filterCategory
+      ? turn.events.filter((e) => categorize(e.type) === filterCategory || categorize((e.payload.type as string) || e.type) === filterCategory)
+      : turn.events;
+    return aggregateDeltas(filtered);
+  }, [turn.events, filterCategory]);
 
   return (
     <div className={`border ${hasError ? "border-destructive/30" : "border-border"} bg-card`}>
@@ -596,7 +599,7 @@ function RuntimeRow({
 
       {expanded && runtime.events.length > 0 && (
         <div className="border-t border-border/30 divide-y divide-border/30">
-          {runtime.events.map((evt) => (
+          {aggregateDeltas(runtime.events).map((evt) => (
             <EventRow
               key={evt.seq}
               event={evt}
@@ -717,6 +720,61 @@ function MetaField({ label, value, mono }: { label: string; value: string; mono?
 
 // ── Helpers ───────────────────────────────────────────────────────
 
+/**
+ * Collapse consecutive `message.delta` events into a single aggregated entry.
+ * Each group of deltas sharing the same runtimeId is merged into one synthetic
+ * event whose payload contains the full concatenated text and event count.
+ */
+function aggregateDeltas(events: api.TraceEvent[]): api.TraceEvent[] {
+  const result: api.TraceEvent[] = [];
+  let i = 0;
+
+  while (i < events.length) {
+    const evt = events[i];
+    const innerType = evt.type === "runtime.progress"
+      ? (evt.payload.type as string) || evt.type
+      : evt.type;
+
+    if (innerType !== "message.delta") {
+      result.push(evt);
+      i++;
+      continue;
+    }
+
+    // Collect consecutive deltas with the same runtimeId
+    const runtimeId = evt.payload.runtimeId as string;
+    let text = String((evt.payload.delta as string) || "");
+    let count = 1;
+    let j = i + 1;
+
+    while (j < events.length) {
+      const next = events[j];
+      const nextType = next.type === "runtime.progress"
+        ? (next.payload.type as string) || next.type
+        : next.type;
+      if (nextType !== "message.delta" || (next.payload.runtimeId as string) !== runtimeId) break;
+      text += String((next.payload.delta as string) || "");
+      count++;
+      j++;
+    }
+
+    // Create a synthetic aggregated event using the first event as base
+    result.push({
+      ...evt,
+      payload: {
+        ...evt.payload,
+        type: "message.completed",
+        content: text,
+        _aggregated: count,
+        _originalType: "message.delta",
+      },
+    });
+    i = j;
+  }
+
+  return result;
+}
+
 function extractDetail(event: api.TraceEvent): string {
   const p = event.payload;
   const innerType = (p.type as string) || event.type;
@@ -736,8 +794,13 @@ function extractDetail(event: api.TraceEvent): string {
       return (p.detail as string) || "";
     case "message.delta":
       return `${p.runtimeId || ""} +${String((p.delta as string) || "").length} chars`;
-    case "message.completed":
-      return `${((p.content as string) || "").slice(0, 60)}${((p.content as string) || "").length > 60 ? "..." : ""}`;
+    case "message.completed": {
+      const content = (p.content as string) || "";
+      const aggregated = p._aggregated as number | undefined;
+      const prefix = aggregated ? `${p.runtimeId || ""} ${content.length} chars (${aggregated} deltas) — ` : "";
+      const preview = content.slice(0, 80);
+      return `${prefix}${preview}${content.length > 80 ? "..." : ""}`;
+    }
     case "block.emitted": {
       const block = p.block as Record<string, unknown> | undefined;
       return block ? `type: ${block.type || "unknown"}` : "";
