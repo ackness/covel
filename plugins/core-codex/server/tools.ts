@@ -28,7 +28,7 @@ const updateCodexEntryInputSchema = z.object({
 
 function extractCodexState(state: Record<string, unknown> | undefined): CodexState {
   if (state && typeof state === "object") {
-    const codexState = state["core-codex"];
+    const codexState = state["codex"] ?? state["core-codex"];
     if (codexState && typeof codexState === "object" && Array.isArray((codexState as Record<string, unknown>).entries)) {
       return codexState as unknown as CodexState;
     }
@@ -74,8 +74,7 @@ export async function unlockCodexEntryTool(
         {
           kind: "state.patch",
           payload: {
-            scope: "core-codex",
-            patch: { entries: result.state.entries },
+            codex: { entries: result.state.entries },
           },
         },
         {
@@ -98,8 +97,8 @@ export async function unlockCodexEntryTool(
         {
           kind: "ui.render",
           payload: {
-            blockType: "codex_entry",
-            data: {
+            type: "codex_entry",
+            content: {
               action: "unlock",
               category: result.entry.category,
               entryId: result.entry.entryId,
@@ -162,8 +161,7 @@ export async function updateCodexEntryTool(
         {
           kind: "state.patch",
           payload: {
-            scope: "core-codex",
-            patch: { entries: newState.entries },
+            codex: { entries: newState.entries },
           },
         },
         {
@@ -177,8 +175,8 @@ export async function updateCodexEntryTool(
         {
           kind: "ui.render",
           payload: {
-            blockType: "codex_entry",
-            data: {
+            type: "codex_entry",
+            content: {
               action: "update",
               category: updatedEntry?.category,
               entryId: input.entryId,

@@ -28,6 +28,8 @@ coverage/
 htmlcov/
 playwright-report/
 test-results/
+tests/e2e/artifacts/
+tests/e2e/report/
 .cache/
 
 # ── Environment / Secrets ───────────────────────────────────────

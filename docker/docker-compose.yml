@@ -34,7 +34,11 @@ services:
       STATIC_DIR: ./web-dist
     env_file:
       - ../.env
-      - ../.env.llm
+      # .env.llm is optional — only needed for server-side LLM key injection.
+      # In production, API keys are passed per-request from the browser.
+      # Create .env.llm from .env.llm.example: cp .env.llm.example .env.llm
+      - path: ../.env.llm
+        required: false
     # Optional: mount custom llm.toml for model slot configuration
     # volumes:
     #   - ../llm.toml:/app/llm.toml:ro

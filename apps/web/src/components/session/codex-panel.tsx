@@ -252,8 +252,8 @@ function CategoryButton({ active, onClick, label, count, icon }: {
 // ── Helpers ──────────────────────────────────────────────────────
 
 function extractCodexEntries(gameState: Record<string, unknown>): CodexEntry[] {
-  // Codex data can be in gameState.codex (array or object with entries)
-  const raw = gameState.codex;
+  // Codex data can be in gameState.codex or gameState["core-codex"]
+  const raw = gameState.codex ?? gameState["core-codex"];
   if (!raw) return [];
 
   let list: unknown[];

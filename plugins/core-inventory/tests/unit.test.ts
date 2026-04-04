@@ -386,9 +386,10 @@ describe("tools", () => {
 
       expect(result.output).toHaveProperty("message");
       expect(result.proposals).toBeDefined();
-      expect(result.proposals).toHaveLength(2);
+      expect(result.proposals).toHaveLength(3);
       expect(result.proposals![0]!.kind).toBe("state.patch");
-      expect(result.proposals![1]!.kind).toBe("event.emit");
+      expect(result.proposals![1]!.kind).toBe("record.upsert");
+      expect(result.proposals![2]!.kind).toBe("event.emit");
     });
 
     it("returns error for full inventory", async () => {
@@ -421,7 +422,7 @@ describe("tools", () => {
       );
 
       expect(result.output).toHaveProperty("message");
-      expect(result.proposals).toHaveLength(2);
+      expect(result.proposals).toHaveLength(3);
     });
 
     it("returns error for nonexistent item", async () => {
@@ -451,8 +452,8 @@ describe("tools", () => {
       );
 
       expect(result.output).toHaveProperty("message");
-      expect(result.proposals).toHaveLength(3); // state.patch + event.emit + narrative.append
-      expect(result.proposals![2]!.kind).toBe("narrative.append");
+      expect(result.proposals).toHaveLength(4); // state.patch + record.upsert + event.emit + narrative.append
+      expect(result.proposals![3]!.kind).toBe("narrative.append");
     });
   });
 
@@ -471,7 +472,7 @@ describe("tools", () => {
       );
 
       expect(result.output).toHaveProperty("message");
-      expect(result.proposals).toHaveLength(2);
+      expect(result.proposals).toHaveLength(3);
     });
   });
 
@@ -485,7 +486,7 @@ describe("tools", () => {
       );
 
       expect(result.output).toHaveProperty("message");
-      expect(result.proposals).toHaveLength(2);
+      expect(result.proposals).toHaveLength(3);
     });
 
     it("returns error for insufficient funds", async () => {

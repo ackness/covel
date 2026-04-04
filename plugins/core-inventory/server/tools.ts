@@ -48,8 +48,16 @@ const modifyCurrencyInputSchema = z.object({
 
 function getInventory(ctx: ToolExecutionContext): InventoryState {
   const raw = ctx.state;
-  if (raw && typeof raw === "object" && "items" in raw) {
-    return raw as InventoryState;
+  if (raw && typeof raw === "object") {
+    // Direct inventory state (has items array at top level)
+    if ("items" in raw) {
+      return raw as InventoryState;
+    }
+    // Nested under inventory key (from state.patch deep merge)
+    const nested = (raw as Record<string, unknown>).inventory;
+    if (nested && typeof nested === "object" && "items" in nested) {
+      return nested as InventoryState;
+    }
   }
   return createEmptyInventory();
 }
@@ -104,7 +112,7 @@ export const addItemTool: ToolHandler = async (
       proposals: [
         {
           kind: "state.patch",
-          payload: { path: "inventory", value: result.inventory },
+          payload: { inventory: result.inventory },
         },
         {
           kind: "record.upsert",
@@ -181,7 +189,7 @@ export const removeItemTool: ToolHandler = async (
       proposals: [
         {
           kind: "state.patch",
-          payload: { path: "inventory", value: result.inventory },
+          payload: { inventory: result.inventory },
         },
         {
           kind: "record.upsert",
@@ -252,7 +260,7 @@ export const useItemTool: ToolHandler = async (
       proposals: [
         {
           kind: "state.patch",
-          payload: { path: "inventory", value: result.inventory },
+          payload: { inventory: result.inventory },
         },
         {
           kind: "record.upsert",
@@ -331,7 +339,7 @@ export const equipItemTool: ToolHandler = async (
       proposals: [
         {
           kind: "state.patch",
-          payload: { path: "inventory", value: result.inventory },
+          payload: { inventory: result.inventory },
         },
         {
           kind: "record.upsert",
@@ -396,7 +404,7 @@ export const modifyCurrencyTool: ToolHandler = async (
       proposals: [
         {
           kind: "state.patch",
-          payload: { path: "inventory", value: updatedInventory },
+          payload: { inventory: updatedInventory },
         },
         {
           kind: "record.upsert",

@@ -2,6 +2,7 @@ import { Loader2, CheckCircle2, XCircle, Zap, Wrench, ChevronDown, ChevronUp, Ro
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ExecutionStep } from "@/stores/session-store.js";
+import type { PackageSummary } from "@/services/api.js";
 
 interface RuntimeStatus {
   runtimeId: string;
@@ -130,27 +131,37 @@ function RuntimeChip({
   );
 }
 
+function resolveDisplayName(
+  displayName: string | Record<string, string> | undefined,
+  locale: string,
+): string | undefined {
+  if (!displayName) return undefined;
+  if (typeof displayName === "string") return displayName;
+  return displayName[locale] ?? displayName["en-US"] ?? Object.values(displayName)[0];
+}
+
 export function ExecutionTimeline({
   steps,
   executing,
+  packages = [],
   onRetryRuntime,
   onRetryAll,
 }: {
   steps: ExecutionStep[];
   executing: boolean;
+  packages?: PackageSummary[];
   onRetryRuntime?: (runtimeId: string) => void;
   onRetryAll?: () => void;
 }) {
-  const { t } = useTranslation();
+  const { i18n, t } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
 
-  const RUNTIME_LABELS: Record<string, string> = {
-    "core-persona": t("session.runtimePersona"),
-    "core-narrator": t("session.runtimeNarrator"),
-    "core-init-wizard": t("session.runtimeInitWizard"),
-    "core-guide": t("session.runtimeGuide"),
-    "core-char-tracker": t("session.runtimeCharTracker"),
-  };
+  // Build label map from plugin manifests (pluginId → display name)
+  const RUNTIME_LABELS: Record<string, string> = {};
+  for (const pkg of packages) {
+    const name = resolveDisplayName(pkg.displayName, i18n.language);
+    if (name) RUNTIME_LABELS[pkg.name] = name;
+  }
 
   const statuses = deriveStatuses(steps, RUNTIME_LABELS);
 

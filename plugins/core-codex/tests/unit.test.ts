@@ -471,11 +471,11 @@ describe("tools", () => {
 
       const uiBlock = result.proposals!.find((p) => p.kind === "ui.render");
       const payload = uiBlock?.payload as Record<string, unknown>;
-      expect(payload.blockType).toBe("codex_entry");
+      expect(payload.type).toBe("codex_entry");
 
-      const data = payload.data as Record<string, unknown>;
-      expect(data.action).toBe("unlock");
-      expect(data.title).toBe("Dark Knight");
+      const content = payload.content as Record<string, unknown>;
+      expect(content.action).toBe("unlock");
+      expect(content.title).toBe("Dark Knight");
     });
 
     it("returns error for invalid input", async () => {
@@ -506,7 +506,6 @@ describe("tools", () => {
       const patchPayload = unlockResult.proposals!.find(
         (p) => p.kind === "state.patch",
       )?.payload as Record<string, unknown>;
-      const statePatch = patchPayload.patch as Record<string, unknown>;
 
       // Now update using the state from the unlock
       const result = await updateCodexEntryTool(
@@ -517,7 +516,7 @@ describe("tools", () => {
             tags: ["goblin", "cunning"],
           },
           "en-US",
-          { "core-codex": statePatch },
+          patchPayload,
         ),
       );
 
@@ -546,7 +545,6 @@ describe("tools", () => {
       const patchPayload = unlockResult.proposals!.find(
         (p) => p.kind === "state.patch",
       )?.payload as Record<string, unknown>;
-      const statePatch = patchPayload.patch as Record<string, unknown>;
 
       const result = await updateCodexEntryTool(
         makeToolCtx(
@@ -555,7 +553,7 @@ describe("tools", () => {
             content: "绿色小生物，非常狡猾。",
           },
           "zh-CN",
-          { "core-codex": statePatch },
+          patchPayload,
         ),
       );
 
