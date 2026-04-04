@@ -72,8 +72,8 @@ import type {
   CommandSummary,
   LlmConfigResponse,
   PluginLoadError,
-  fetchServerHealth,
 } from "@/services/api.js";
+import { fetchServerHealth } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { PluginListPanel } from "./plugin-list-panel.js";
 
