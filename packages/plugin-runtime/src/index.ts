@@ -66,4 +66,4 @@ export {
 } from "./scope/session-plugin-scope.js";
 
 // ── Host ───────────────────────────────────────────────────────────
-export { createPluginHost, type PluginHost } from "./host/plugin-host.js";
+export { createPluginHost, type PluginHost, type PluginLoadError } from "./host/plugin-host.js";

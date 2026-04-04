@@ -3,17 +3,31 @@ import { join } from "node:path";
 import { validateManifest } from "./manifest-validator.js";
 import type { ScannedPlugin } from "../types.js";
 
+/** A plugin that failed manifest validation during scanning. */
+export interface PluginScanError {
+  /** Directory name (e.g. "core-init-wizard"). */
+  dirName: string;
+  /** Human-readable error messages. */
+  errors: string[];
+}
+
+export interface ScanResult {
+  plugins: ScannedPlugin[];
+  scanErrors: PluginScanError[];
+}
+
 /**
  * Scan a directory for plugin subdirectories.
  * Each subdirectory must contain a valid `plugin.json`.
  *
- * Returns successfully scanned plugins; logs warnings for invalid ones.
+ * Returns successfully scanned plugins and a list of scan errors for invalid ones.
  */
 export async function scanPluginDirectory(
   baseDir: string
-): Promise<ScannedPlugin[]> {
+): Promise<ScanResult> {
   const entries = await readdir(baseDir, { withFileTypes: true });
-  const results: ScannedPlugin[] = [];
+  const plugins: ScannedPlugin[] = [];
+  const scanErrors: PluginScanError[] = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -35,9 +49,9 @@ export async function scanPluginDirectory(
     try {
       parsed = JSON.parse(raw);
     } catch {
-      console.warn(
-        `[plugin-scanner] Invalid JSON in ${manifestPath}, skipping.`
-      );
+      const msg = `Invalid JSON in plugin.json`;
+      console.warn(`[plugin-scanner] ${msg} (${manifestPath}), skipping.`);
+      scanErrors.push({ dirName: entry.name, errors: [msg] });
       continue;
     }
 
@@ -47,11 +61,12 @@ export async function scanPluginDirectory(
         `[plugin-scanner] Invalid manifest in ${manifestPath}:\n` +
           validation.errors.map((e) => `  - ${e}`).join("\n")
       );
+      scanErrors.push({ dirName: entry.name, errors: validation.errors });
       continue;
     }
 
-    results.push({ dir: pluginDir, manifest: validation.manifest });
+    plugins.push({ dir: pluginDir, manifest: validation.manifest });
   }
 
-  return results;
+  return { plugins, scanErrors };
 }

@@ -33,6 +33,7 @@
   "tools": [
     {
       "id": "update-memory-archive",
+      "kind": "mutate",
       "schema": {
         "type": "object",
         "description": "Update the rolling memory archive with a merged summary. Call this with the combined summary of old archive + new narrative.",
@@ -47,6 +48,7 @@
     },
     {
       "id": "record-key-event",
+      "kind": "mutate",
       "schema": {
         "type": "object",
         "description": "Record a significant event for long-term storage. Call 0-3 times per summarization for important plot points.",

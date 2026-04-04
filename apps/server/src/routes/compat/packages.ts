@@ -3,7 +3,11 @@ import type { PluginHost } from "@covel/plugin-runtime";
 
 /**
  * Frontend-compatible GET /packages
- * Returns PackageSummary[] with runtime info including priority.
+ * Returns { packages: PackageSummary[], loadErrors: PluginLoadError[] }
+ *
+ * For backward compatibility the response is still a plain array when there are
+ * no errors; when errors exist the shape becomes `{ packages, loadErrors }`.
+ * Update: always returns `{ packages, loadErrors }` for consistency.
  */
 export function createCompatPackagesRoute(pluginHost: PluginHost) {
   const route = new Hono();
@@ -39,7 +43,11 @@ export function createCompatPackagesRoute(pluginHost: PluginHost) {
         author: p.manifest.author,
       };
     });
-    return c.json(packages);
+
+    return c.json({
+      packages,
+      loadErrors: pluginHost.loadErrors,
+    });
   });
 
   return route;

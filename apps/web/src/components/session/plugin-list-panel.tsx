@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronRight, Puzzle, Wrench, Zap, Link } from "lucide-react";
+import { ChevronRight, Puzzle, Wrench, Zap, Link, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import { text } from "@/components/world/editor-helpers.js";
-import type { PackageSummary } from "@/services/api.js";
+import type { PackageSummary, PluginLoadError } from "@/services/api.js";
 
 interface PluginListPanelProps {
   packages: PackageSummary[];
+  loadErrors?: PluginLoadError[];
 }
 
 const TRIGGER_LABELS: Record<string, { key: string; fallback: string }> = {
@@ -131,10 +132,45 @@ function PluginItem({ pkg }: { pkg: PackageSummary }) {
   );
 }
 
-export function PluginListPanel({ packages }: PluginListPanelProps) {
+function PluginErrorItem({ error }: { error: PluginLoadError }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="border border-destructive/40 bg-destructive/5 rounded-md overflow-hidden">
+      <button
+        type="button"
+        className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-destructive/10 transition-colors"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <ChevronRight
+          className={`w-3 h-3 shrink-0 text-destructive transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
+        />
+        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-destructive" />
+        <span className="text-xs font-medium truncate flex-1 text-destructive">{error.pluginId}</span>
+        <Badge variant="destructive" className="text-[9px] px-1.5 py-0 h-4 shrink-0">
+          Error
+        </Badge>
+      </button>
+
+      {expanded && (
+        <div className="px-3 pb-2.5 pt-1 border-t border-destructive/20">
+          <ul className="space-y-0.5">
+            {error.errors.map((msg, i) => (
+              <li key={i} className="text-[10px] text-destructive/80 font-mono">
+                • {msg}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function PluginListPanel({ packages, loadErrors = [] }: PluginListPanelProps) {
   const { t } = useTranslation();
 
-  if (packages.length === 0) {
+  if (packages.length === 0 && loadErrors.length === 0) {
     return (
       <p className="text-xs text-muted-foreground italic">{t("session.noPluginsLoaded")}</p>
     );
@@ -142,6 +178,13 @@ export function PluginListPanel({ packages }: PluginListPanelProps) {
 
   return (
     <div className="space-y-1.5">
+      {loadErrors.length > 0 && (
+        <div className="space-y-1.5">
+          {loadErrors.map((err) => (
+            <PluginErrorItem key={err.pluginId} error={err} />
+          ))}
+        </div>
+      )}
       {packages.map((pkg) => (
         <PluginItem key={pkg.name} pkg={pkg} />
       ))}

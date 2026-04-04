@@ -10,6 +10,14 @@ import { createCommandRegistry, type CommandRegistry } from "../command/command-
 import type { BlockSchemaDeclaration } from "@covel/shared";
 import type { LoadedPlugin, RegisteredContextProvider, ContextProvider } from "../types.js";
 
+/** A plugin that failed to load (validation or constraint error). */
+export interface PluginLoadError {
+  /** Plugin directory name or manifest ID. */
+  pluginId: string;
+  /** Human-readable error messages. */
+  errors: string[];
+}
+
 export interface PluginHost {
   pluginRegistry: PluginRegistry;
   toolRegistry: ToolRegistry;
@@ -18,6 +26,9 @@ export interface PluginHost {
   commandRegistry: CommandRegistry;
   contextProviders: ReadonlyMap<string, RegisteredContextProvider>;
   blockSchemas: ReadonlyMap<string, BlockSchemaDeclaration>;
+
+  /** Plugins that failed to load (manifest validation or constraint errors). */
+  readonly loadErrors: readonly PluginLoadError[];
 
   /** Scan, validate, load, and register all plugins from a directory. */
   loadFromDirectory(baseDir: string): Promise<LoadedPlugin[]>;
@@ -38,10 +49,16 @@ export function createPluginHost(): PluginHost {
   const commandRegistry = createCommandRegistry();
   const contextProviders = new Map<string, RegisteredContextProvider>();
   const blockSchemas = new Map<string, BlockSchemaDeclaration>();
+  const loadErrors: PluginLoadError[] = [];
 
   async function loadFromDirectory(baseDir: string): Promise<LoadedPlugin[]> {
-    const scanned = await scanPluginDirectory(baseDir);
+    const { plugins: scanned, scanErrors } = await scanPluginDirectory(baseDir);
     const loaded: LoadedPlugin[] = [];
+
+    // Record scan-phase errors (invalid JSON, schema validation failures)
+    for (const err of scanErrors) {
+      loadErrors.push({ pluginId: err.dirName, errors: err.errors });
+    }
 
     // Sort by loadingOrder for deterministic load sequence
     scanned.sort(
@@ -62,6 +79,7 @@ export function createPluginHost(): PluginHost {
           `[plugin-host] Skipping "${manifest.id}" due to constraint errors:\n` +
             constraintErrors.map((e) => `  - ${e}`).join("\n")
         );
+        loadErrors.push({ pluginId: manifest.id, errors: constraintErrors });
         continue;
       }
 
@@ -198,6 +216,7 @@ export function createPluginHost(): PluginHost {
     commandRegistry,
     contextProviders,
     blockSchemas,
+    loadErrors,
     loadFromDirectory,
     getBlockSchema,
   };

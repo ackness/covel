@@ -32,6 +32,7 @@
   "tools": [
     {
       "id": "upsert-character",
+      "kind": "mutate",
       "schema": {
         "type": "object",
         "description": "Create a new character card or update an existing one. Call once per named character found in the narrative.",

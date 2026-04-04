@@ -68,6 +68,7 @@
   "tools": [
     {
       "id": "emit-character-form",
+      "kind": "render",
       "schema": {
         "type": "object",
         "description": "Display the character creation form to the player. Call this after writing a short narrative transition.",

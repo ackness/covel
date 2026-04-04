@@ -1,9 +1,29 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
 import {
   createCollectingRegistrar,
 } from "@covel/plugin-test-utils";
+import { validateManifest } from "@covel/plugin-runtime";
 import type { ToolExecutionContext, DynamicFieldSchema } from "@covel/shared";
 import register from "../server/index.js";
+
+// ── plugin.json manifest ────────────────────────────────────────
+
+describe("plugin.json manifest", () => {
+  it("passes schema validation", () => {
+    const raw = JSON.parse(
+      readFileSync(resolve(import.meta.dirname, "../plugin.json"), "utf-8"),
+    );
+    const result = validateManifest(raw);
+    if (!result.ok) {
+      throw new Error(
+        `Manifest validation failed:\n${result.errors.map((e) => `  - ${e}`).join("\n")}`,
+      );
+    }
+    expect(result.ok).toBe(true);
+  });
+});
 
 // ── Plugin Registration ─────────────────────────────────────────
 

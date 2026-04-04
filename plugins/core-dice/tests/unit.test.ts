@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   parseExpression,
@@ -12,8 +14,26 @@ import type {
 } from "../server/dice-engine.js";
 import { rollCheckTool, rollDiceTool } from "../server/tools.js";
 import { diceContextProvider } from "../server/context-provider.js";
+import { validateManifest } from "@covel/plugin-runtime";
 import type { ToolExecutionContext } from "@covel/shared";
 import type { ContextProviderInput } from "@covel/plugin-runtime";
+
+// ── plugin.json manifest ────────────────────────────────────────
+
+describe("plugin.json manifest", () => {
+  it("passes schema validation", () => {
+    const raw = JSON.parse(
+      readFileSync(resolve(import.meta.dirname, "../plugin.json"), "utf-8"),
+    );
+    const result = validateManifest(raw);
+    if (!result.ok) {
+      throw new Error(
+        `Manifest validation failed:\n${result.errors.map((e) => `  - ${e}`).join("\n")}`,
+      );
+    }
+    expect(result.ok).toBe(true);
+  });
+});
 
 // ── parseExpression ───────────────────────────────────────────────
 
