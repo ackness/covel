@@ -35,6 +35,13 @@ import {
 import { ActionGuideBlock } from "./action-guide-block.js";
 import { CodexEntryBlock } from "./codex-entry-block.js";
 import { StoryImageBlock } from "./story-image-block.js";
+import { NotificationBlock } from "./notification-block.js";
+import { LootBlock } from "./loot-block.js";
+import { ItemUpdateBlock } from "./item-update-block.js";
+import { StatusEffectBlock } from "./status-effect-block.js";
+import { RelationshipBlock } from "./relationship-block.js";
+import { ReputationBlock } from "./reputation-block.js";
+import { SceneUpdateBlock } from "./scene-update-block.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -62,6 +69,13 @@ const CUSTOM_RENDERERS: Record<string, BlockRendererComponent> = {
   action_guide: ActionGuideBlock,
   codex_entry: CodexEntryBlock,
   story_image: StoryImageBlock,
+  notification: NotificationBlock,
+  loot: LootBlock,
+  item_update: ItemUpdateBlock,
+  status_effect: StatusEffectBlock,
+  relationship_change: RelationshipBlock,
+  reputation_change: ReputationBlock,
+  scene_update: SceneUpdateBlock,
 };
 
 // ── Tier 2: Schema Registry ──────────────────────────────────────

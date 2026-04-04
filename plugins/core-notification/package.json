@@ -1,0 +1,28 @@
+{
+  "name": "core-notification",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./server/index.ts",
+      "import": "./server/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:live": "LIVE_LLM_ENABLED=1 vitest run"
+  },
+  "dependencies": {
+    "@covel/shared": "workspace:*",
+    "@covel/plugin-runtime": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@covel/ai-provider": "workspace:*",
+    "@covel/plugin-test-utils": "workspace:*",
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0"
+  }
+}
