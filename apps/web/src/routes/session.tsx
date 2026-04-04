@@ -101,6 +101,7 @@ function SessionPage() {
         executing={state.executing}
         executionError={state.executionError}
         packages={state.packages}
+        pluginLoadErrors={state.pluginLoadErrors}
         presets={state.presets}
         commands={state.commands}
         llmConfig={state.llmConfig}
