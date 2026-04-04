@@ -147,6 +147,13 @@ export function createSessionsRoute(store: ServerStore) {
     if (!body.messages || !Array.isArray(body.messages)) {
       return c.json({ code: "INVALID_BODY", message: "messages array is required" }, 400);
     }
+    // Validate message roles at runtime to prevent prompt injection via arbitrary roles
+    const VALID_ROLES = new Set(["system", "user", "assistant"]);
+    for (const m of body.messages) {
+      if (!VALID_ROLES.has(m.role)) {
+        return c.json({ code: "INVALID_BODY", message: `Invalid message role: ${m.role}` }, 400);
+      }
+    }
     // Clear existing messages first to avoid duplicates, then re-add all
     await store.clearMessages(sessionId);
     for (const m of body.messages) {

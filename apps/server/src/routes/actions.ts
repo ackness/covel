@@ -112,7 +112,9 @@ export function createActionsRoute(deps: {
     }> | undefined;
     let runtimePriorityOverrides: Record<string, number> | undefined;
     const slotConfigHeader = c.req.header("x-slot-config");
-    if (slotConfigHeader) {
+    if (slotConfigHeader && slotConfigHeader.length > 8192) {
+      console.warn("[actions] X-Slot-Config header exceeds 8KB size limit, skipping");
+    } else if (slotConfigHeader) {
       try {
         const decoded = JSON.parse(atob(slotConfigHeader)) as {
           slots?: Record<string, { presetId: string }>;
@@ -179,11 +181,41 @@ export function createActionsRoute(deps: {
         const allowedBaseUrls = process.env.ALLOWED_BASE_URLS
           ? process.env.ALLOWED_BASE_URLS.split(",").map((s) => s.trim())
           : null;
+        const currentTier = process.env.DEPLOYMENT_TIER ?? "self";
 
         for (const def of customPresetDefs) {
-          if (allowedBaseUrls && def.baseUrl && !allowedBaseUrls.some((allowed) => def.baseUrl === allowed || def.baseUrl.startsWith(allowed + "/"))) {
-            console.warn(`[actions] Blocked baseUrl not in ALLOWED_BASE_URLS: ${def.baseUrl}`);
-            continue;
+          if (def.baseUrl) {
+            // Block custom baseUrl for non-self tiers when no allowlist configured
+            if (!allowedBaseUrls && currentTier !== "self") {
+              console.warn(`[actions] Blocking custom baseUrl: ALLOWED_BASE_URLS not configured for tier ${currentTier}`);
+              continue;
+            }
+            // Block private/internal IP ranges to prevent SSRF
+            try {
+              const url = new URL(def.baseUrl);
+              const host = url.hostname;
+              if (
+                host === "localhost" ||
+                host === "127.0.0.1" ||
+                host === "0.0.0.0" ||
+                host === "::1" ||
+                host.startsWith("10.") ||
+                host.startsWith("172.") ||
+                host.startsWith("192.168.") ||
+                host.startsWith("169.254.")
+              ) {
+                console.warn(`[actions] Blocked baseUrl targeting private network: ${def.baseUrl}`);
+                continue;
+              }
+            } catch {
+              console.warn(`[actions] Blocked invalid baseUrl: ${def.baseUrl}`);
+              continue;
+            }
+            // Check against allowlist if configured
+            if (allowedBaseUrls && !allowedBaseUrls.some((allowed) => def.baseUrl === allowed || def.baseUrl.startsWith(allowed + "/"))) {
+              console.warn(`[actions] Blocked baseUrl not in ALLOWED_BASE_URLS: ${def.baseUrl}`);
+              continue;
+            }
           }
           const scopedId = def.id + reqSuffix;
           deps.presetRegistry.addPreset({
@@ -700,7 +732,7 @@ export function createActionsRoute(deps: {
       } catch (err: unknown) {
         const rawMsg = err instanceof Error ? err.message : "Internal error";
         console.error("[actions] Error:", err);
-        const tier = process.env.DEPLOYMENT_TIER ?? "self";
+        const tier = process.env.DEPLOYMENT_TIER ?? "demo";
         const msg = tier === "self" ? rawMsg : "An internal error occurred";
         await emit("flow.failed", "", "", { code: "EXECUTION_ERROR", message: msg });
       } finally {

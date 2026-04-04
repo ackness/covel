@@ -7,7 +7,7 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-covel}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-covel_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: ${POSTGRES_DB:-covel}
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -26,7 +26,7 @@ services:
     ports:
       - "${APP_PORT:-3001}:3001"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-covel}:${POSTGRES_PASSWORD:-covel_dev}@postgres:5432/${POSTGRES_DB:-covel}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-covel}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-covel}
       STORE_BACKEND: pg
       SERVER_PORT: "3001"
       NODE_ENV: production

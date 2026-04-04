@@ -127,16 +127,45 @@ function classifyRoute(path: string): { prefix: string; isAi: boolean; isExclude
 }
 
 /**
- * Extract client IP from the request, respecting common proxy headers.
+ * Set of trusted proxy IPs. Only trust X-Forwarded-For when the request
+ * comes from one of these addresses. Configure via TRUSTED_PROXY_IPS env var.
  */
-function getClientIp(req: { header: (name: string) => string | undefined }): string {
-  const forwarded = req.header("x-forwarded-for");
-  if (forwarded) {
-    // Take the first IP in the chain (original client)
-    const first = forwarded.split(",")[0];
-    return first ? first.trim() : "unknown";
+const trustedProxies = new Set(
+  process.env.TRUSTED_PROXY_IPS
+    ? process.env.TRUSTED_PROXY_IPS.split(",").map((s) => s.trim())
+    : [],
+);
+
+/**
+ * Extract client IP from the request.
+ * Only trusts proxy headers (X-Forwarded-For, X-Real-IP) when TRUSTED_PROXY_IPS
+ * is configured and the connection comes from a trusted proxy.
+ */
+function getClientIp(
+  req: { header: (name: string) => string | undefined },
+  remoteAddr?: string,
+): string {
+  // Only trust proxy headers when connection is from a known trusted proxy
+  if (remoteAddr && trustedProxies.has(remoteAddr)) {
+    const forwarded = req.header("x-forwarded-for");
+    if (forwarded) {
+      const first = forwarded.split(",")[0];
+      return first ? first.trim() : "unknown";
+    }
+    const realIp = req.header("x-real-ip");
+    if (realIp) return realIp;
   }
-  return req.header("x-real-ip") ?? "unknown";
+  // Fall back to remote address or proxy headers when no trusted proxies configured
+  // (backwards compatible for self-hosted setups behind a reverse proxy)
+  if (trustedProxies.size === 0) {
+    const forwarded = req.header("x-forwarded-for");
+    if (forwarded) {
+      const first = forwarded.split(",")[0];
+      return first ? first.trim() : "unknown";
+    }
+    return req.header("x-real-ip") ?? remoteAddr ?? "unknown";
+  }
+  return remoteAddr ?? "unknown";
 }
 
 // ── Middleware factory ───────────────────────────────────────────────

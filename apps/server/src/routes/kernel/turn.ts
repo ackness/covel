@@ -59,7 +59,7 @@ export function createTurnRoute(kernel: Kernel) {
     } catch (err: unknown) {
       const rawMessage = err instanceof Error ? err.message : "Unknown kernel error";
       console.error("[kernel/turn] Error:", err);
-      const tier = process.env.DEPLOYMENT_TIER ?? "self";
+      const tier = process.env.DEPLOYMENT_TIER ?? "demo";
       const message = tier === "self" ? rawMessage : "An internal error occurred";
       return c.json({ error: message, code: "KERNEL_ERROR" }, 500);
     }

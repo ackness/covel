@@ -10,7 +10,7 @@ import type { ApiKeyEnv } from "../../middleware/api-key-injection.js";
 
 const requestSchema = z.object({
   prompt: z.string().min(1).max(4000),
-  locale: z.string().optional(),
+  locale: z.string().regex(/^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{2,8})*$/).optional(),
 });
 
 const PROMPTS_DIR = resolve(import.meta.dirname, "../../../../../prompts/server");

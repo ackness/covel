@@ -34,9 +34,16 @@ import { createPgServerStore } from "./store/pg-server-store.js";
 const app = new Hono();
 
 app.use("*", logger());
-if (process.env.DEPLOYMENT_TIER && process.env.DEPLOYMENT_TIER !== "self") {
-  app.use("*", secureHeaders());
+app.use("*", secureHeaders());
+
+const deploymentTier = process.env.DEPLOYMENT_TIER ?? "self";
+
+// Require explicit CORS_ORIGIN for non-self deployments
+if (!process.env.CORS_ORIGIN && deploymentTier !== "self") {
+  console.error("CRITICAL: CORS_ORIGIN must be set for non-self deployment tiers");
+  process.exit(1);
 }
+
 app.use(
   "*",
   cors({
@@ -104,7 +111,6 @@ app.route("/block-schemas", createBlockSchemasRoute(kernelStack.pluginHost));
 // Expose server-configured provider keys to frontend for auto-fill.
 // Only available when DEPLOYMENT_TIER=self or ENABLE_DEV_KEYS_ENDPOINT=true.
 import { createDevKeysRoute } from "./routes/dev-keys.js";
-const deploymentTier = process.env.DEPLOYMENT_TIER ?? "self";
 if (deploymentTier === "self" || process.env.ENABLE_DEV_KEYS_ENDPOINT === "true") {
   app.route("/api/provider-keys", createDevKeysRoute(ai.llmConfig));
 }

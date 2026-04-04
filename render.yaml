@@ -23,5 +23,7 @@ services:
         value: ./web-dist
       - key: SERVER_PORT
         value: "3001"
+      - key: DEPLOYMENT_TIER
+        value: demo
       # No STORE_BACKEND / DATABASE_URL → server uses MemoryStore
       # All persistent data lives in the player's browser IndexedDB

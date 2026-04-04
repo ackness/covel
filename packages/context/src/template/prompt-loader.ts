@@ -1,7 +1,13 @@
 import { readFile, access } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 
 const cache = new Map<string, string>();
+
+/**
+ * Validate locale format to prevent path traversal.
+ * Only allows BCP 47-like patterns: "zh", "zh-CN", "en-US", etc.
+ */
+const LOCALE_PATTERN = /^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{2,8})*$/;
 
 /**
  * Extract the language prefix from a locale string.
@@ -39,12 +45,18 @@ export async function loadPrompt(
   name: string,
   locale: string,
 ): Promise<string> {
+  // Validate locale format to prevent path traversal attacks
+  if (!LOCALE_PATTERN.test(locale)) {
+    throw new Error(`Invalid locale format: ${locale}`);
+  }
+
   const lang = langPrefix(locale);
   const cacheKey = `${dir}/${name}:${lang}`;
 
   const cached = cache.get(cacheKey);
   if (cached !== undefined) return cached;
 
+  const resolvedDir = resolve(dir);
   const candidates = [
     join(dir, `${name}.${lang}.md`),
     ...(lang !== "en" ? [join(dir, `${name}.en.md`)] : []),
@@ -52,6 +64,10 @@ export async function loadPrompt(
   ];
 
   for (const path of candidates) {
+    // Path traversal guard: ensure resolved path stays within the prompts directory
+    if (!resolve(path).startsWith(resolvedDir + sep)) {
+      throw new Error(`Path traversal detected: ${path}`);
+    }
     if (await fileExists(path)) {
       const content = (await readFile(path, "utf-8")).trim();
       cache.set(cacheKey, content);
