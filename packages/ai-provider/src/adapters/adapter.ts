@@ -24,42 +24,42 @@ export interface ModelProviderAdapter {
   generateText(
     config: ProviderConfig,
     params: TextGenerationParams,
-    context: ModelRequestContext
+    context?: ModelRequestContext
   ): Promise<TextGenerationResult>;
 
   generateObject<TObject>(
     config: ProviderConfig,
     params: ObjectGenerationParams<TObject>,
-    context: ModelRequestContext
+    context?: ModelRequestContext
   ): Promise<ObjectGenerationResult<TObject>>;
 
   streamText(
     config: ProviderConfig,
     params: TextGenerationParams,
-    context: ModelRequestContext
+    context?: ModelRequestContext
   ): AsyncIterable<StreamEvent>;
 
   embed(
     config: ProviderConfig,
     params: EmbeddingParams,
-    context: ModelRequestContext
+    context?: ModelRequestContext
   ): Promise<EmbeddingResult>;
 
   generateImage(
     config: ProviderConfig,
     params: ImageGenerationParams,
-    context: ModelRequestContext
+    context?: ModelRequestContext
   ): Promise<ImageGenerationResult>;
 
   synthesizeSpeech(
     config: ProviderConfig,
     params: SpeechSynthesisParams,
-    context: ModelRequestContext
+    context?: ModelRequestContext
   ): Promise<SpeechSynthesisResult>;
 
   transcribeAudio(
     config: ProviderConfig,
     params: TranscriptionParams,
-    context: ModelRequestContext
+    context?: ModelRequestContext
   ): Promise<TranscriptionResult>;
 }

@@ -87,7 +87,7 @@ export interface ModelDatabase {
 export function createModelDatabase(
   bundledData: ModelDbFile,
   persistence?: ModelDbPersistence,
-): ModelDatabase {
+): ModelDatabase & { ready: Promise<void> } {
   let data: ModelDbFile = bundledData;
   let dirty = false;
 
@@ -102,8 +102,8 @@ export function createModelDatabase(
     }
   };
 
-  // Eagerly start loading persisted data (fire-and-forget on first access)
-  void loadPersisted();
+  // Eagerly start loading persisted data; callers can await `ready` to avoid races
+  const readyPromise = loadPersisted();
 
   function lookup(modelId: string, provider?: string): ModelDbEntry | null {
     const normalized = modelId.toLowerCase();
@@ -184,8 +184,11 @@ export function createModelDatabase(
   }
 
   function upsert(modelId: string, entry: ModelDbEntry): void {
-    data.models[modelId] = entry;
-    data.count = Object.keys(data.models).length;
+    data = {
+      ...data,
+      models: { ...data.models, [modelId]: entry },
+      count: Object.keys(data.models).length + (data.models[modelId] ? 0 : 1),
+    };
     dirty = true;
   }
 
@@ -210,6 +213,7 @@ export function createModelDatabase(
     replaceAll,
     persist,
     get count() { return data.count; },
+    ready: readyPromise,
   };
 }
 
@@ -225,7 +229,14 @@ const LITELLM_URL =
 export async function fetchLiteLlmModels(
   url = LITELLM_URL,
 ): Promise<ModelDbFile> {
-  const res = await fetch(url);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  let res: Response;
+  try {
+    res = await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!res.ok) {
     throw new Error(`Failed to fetch LiteLLM models: ${res.status} ${res.statusText}`);
   }

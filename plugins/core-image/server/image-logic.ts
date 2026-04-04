@@ -69,7 +69,7 @@ const MULTI_SCENE_KEYWORDS_EN = [
 
 const DIALOGUE_PATTERN = /["「『].*?["」』].*?["「『].*?["」』]/s;
 
-const SEQUENCING_PATTERN =
+const SEQUENCING_PATTERN_SOURCE =
   /(?:first|then|next|finally|afterward|subsequently|接着|随后|然后|最后|紧接着)/i;
 
 /**
@@ -96,9 +96,7 @@ export function detectMultiScene(
     return { isMultiScene: true, reason: "dialogue pattern" };
   }
 
-  const sequenceMatches = text.match(
-    new RegExp(SEQUENCING_PATTERN.source, "gi"),
-  );
+  const sequenceMatches = text.match(new RegExp(SEQUENCING_PATTERN_SOURCE.source, "gi"));
   if (sequenceMatches && sequenceMatches.length >= 2) {
     return { isMultiScene: true, reason: "sequential cues" };
   }

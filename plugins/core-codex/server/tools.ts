@@ -146,6 +146,12 @@ export async function updateCodexEntryTool(
       (e) => e.entryId === input.entryId,
     );
 
+    if (!updatedEntry) {
+      return {
+        output: { error: `Entry not found after update: ${input.entryId}` },
+      };
+    }
+
     return {
       output: {
         message: isZh

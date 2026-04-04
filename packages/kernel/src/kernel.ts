@@ -23,7 +23,7 @@ import { gatherContextFragments } from "./context/context-provider-bridge.js";
 import { createPluginDataAccess } from "./data-access/plugin-data-access.js";
 import { createProposalCollector } from "./proposals/proposal-collector.js";
 import { validateProposals } from "./proposals/proposal-validator.js";
-import { commitProposals } from "./commit/commit-service.js";
+import { commitProposals, deepMerge } from "./commit/commit-service.js";
 import { buildRenderResult } from "./render/render-builder.js";
 import { executeHooks } from "./hooks/hook-executor.js";
 import type { TurnState, KernelExecuteOptions, KernelProgressEvent, BackgroundTask, TurnCache, CachedRuntimeResult } from "./types.js";
@@ -394,6 +394,8 @@ function createKernelSession(
           const snapshotState = { ...turnState.state };
           const snapshotEvents = [...turnState.events];
           const snapshotRecords = new Map(turnState.records);
+          const snapshotNarrativeSegments = [...turnState.narrativeSegments];
+          const snapshotRenderBlocks = [...turnState.renderBlocks];
 
           const task = backgroundManager.enqueue(
             spec.id,
@@ -435,8 +437,8 @@ function createKernelSession(
                 state: snapshotState,
                 events: snapshotEvents,
                 records: snapshotRecords,
-                narrativeSegments: [...turnState.narrativeSegments],
-                renderBlocks: [...turnState.renderBlocks],
+                narrativeSegments: snapshotNarrativeSegments,
+                renderBlocks: snapshotRenderBlocks,
               };
 
               const dataAccess = createPluginDataAccess({
@@ -508,7 +510,7 @@ function createKernelSession(
             proposals: cached.proposals,
           });
 
-          // Apply to turnState (same as normal execution)
+          // Apply to turnState (same as normal execution, uses deepMerge for state.patch)
           collector.addFromRuntime(runtimeId, scheduled.registered.pluginId, cached.proposals);
           for (const item of cached.proposals) {
             switch (item.kind) {
@@ -518,7 +520,10 @@ function createKernelSession(
                 break;
               }
               case "state.patch": {
-                turnState.state = { ...turnState.state, ...(item.payload as Record<string, unknown>) };
+                turnState.state = deepMerge(
+                  turnState.state,
+                  item.payload as Record<string, unknown>,
+                );
                 break;
               }
               case "record.upsert": {
@@ -689,25 +694,9 @@ function createKernelSession(
             proposals: result.proposals,
           });
 
-          // Also apply to turnState for proposal tracking
-          for (const item of result.proposals) {
-            switch (item.kind) {
-              case "narrative.append": {
-                const p = item.payload as { text: string };
-                turnState.narrativeSegments.push(p.text);
-                break;
-              }
-              case "state.patch": {
-                turnState.state = { ...turnState.state, ...(item.payload as Record<string, unknown>) };
-                break;
-              }
-              case "record.upsert": {
-                const r = item.payload as { key: string; value: unknown };
-                turnState.records.set(r.key, r.value);
-                break;
-              }
-            }
-          }
+          // NOTE: State application is deferred to after Promise.allSettled
+          // to prevent race conditions between parallel runtimes (H19).
+          return result.proposals;
         })
       );
 
@@ -725,6 +714,35 @@ function createKernelSession(
               label: `${failedScheduled.registered.pluginId}/${failedScheduled.registered.spec.kind}`,
               detail: result.reason instanceof Error ? result.reason.message : String(result.reason),
             });
+          }
+        }
+      }
+
+      // ── Serial post-group state apply (H19 fix) ──────────────────
+      // Apply proposals to turnState *after* the parallel group completes,
+      // so parallel runtimes cannot race on shared mutable state.
+      for (const result of results) {
+        if (result.status !== "fulfilled" || !result.value) continue;
+        const proposals = result.value;
+        for (const item of proposals) {
+          switch (item.kind) {
+            case "narrative.append": {
+              const p = item.payload as { text: string };
+              turnState.narrativeSegments.push(p.text);
+              break;
+            }
+            case "state.patch": {
+              turnState.state = deepMerge(
+                turnState.state,
+                item.payload as Record<string, unknown>,
+              );
+              break;
+            }
+            case "record.upsert": {
+              const r = item.payload as { key: string; value: unknown };
+              turnState.records.set(r.key, r.value);
+              break;
+            }
           }
         }
       }
@@ -752,6 +770,7 @@ function createKernelSession(
     });
 
     // 8. Commit — reset eagerly-applied state and rebuild from validated proposals
+    const preCommitState = structuredClone(kernelContext.state) as Record<string, unknown>;
     turnState.narrativeSegments = [];
     turnState.state = { ...kernelContext.state };
     turnState.records = new Map();
@@ -800,6 +819,7 @@ function createKernelSession(
       runtimeResults: turnRuntimeResults,
       apiKeys: options.apiKeys,
       slotOverrides: options.slotOverrides,
+      preCommitState,
     };
 
     // Build state snapshot for persistence (only when commit succeeded)
@@ -847,6 +867,9 @@ function createKernelSession(
     //  so that the retry re-applies from the same baseline.)
     // Note: For simplicity, we re-execute with the same input. The context
     // is set externally by the server before each turn, so it should be correct.
+
+    // Revert kernel state to pre-commit snapshot so retry starts from the same baseline
+    kernelContext = { ...kernelContext, state: { ...lastTurnCache.preCommitState } };
 
     const retryInput = lastTurnCache.input;
     const retryOptions: KernelExecuteOptions = {

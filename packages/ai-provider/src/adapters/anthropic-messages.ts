@@ -15,6 +15,27 @@ import {
 } from "./http.js";
 
 const ANTHROPIC_DEFAULT_MAX_TOKENS = 1024;
+const ANTHROPIC_VERSION = "2023-06-01";
+
+/** Fields that providerRequestMetadata must never override. */
+const ANTHROPIC_PROTECTED_KEYS = new Set(["model", "messages", "stream", "max_tokens", "system"]);
+
+function sanitizeAnthropicMetadata(
+  meta: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!meta) return {};
+  const sanitized: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(meta)) {
+    if (!ANTHROPIC_PROTECTED_KEYS.has(k)) sanitized[k] = v;
+  }
+  return sanitized;
+}
+
+function anthropicHeaders(apiKey?: string): Record<string, string> {
+  const h: Record<string, string> = { "anthropic-version": ANTHROPIC_VERSION };
+  if (apiKey) h["x-api-key"] = apiKey;
+  return h;
+}
 
 function readAnthropicUsage(payload: Record<string, unknown>): UsageSummary {
   const usage = payload.usage as Record<string, unknown> | undefined;
@@ -32,13 +53,15 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
   return {
     async generateText(config, params) {
       const { system, messages } = toAnthropicMessages(params.messages);
-      const response = await postJson(config, "/messages", {
+      const headers = anthropicHeaders(config.apiKey);
+      const configNoKey = { ...config, apiKey: undefined };
+      const response = await postJson(configNoKey, "/messages", {
         model: params.model,
         max_tokens: ANTHROPIC_DEFAULT_MAX_TOKENS,
         ...(system ? { system } : {}),
         messages,
-        ...params.providerRequestMetadata,
-      });
+        ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
+      }, undefined, headers);
       const payload = await parseJson(response);
       assertSuccess(response, payload, "anthropic");
 
@@ -52,13 +75,15 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
     async generateObject(config, params) {
       const { system, messages } = toAnthropicMessages(params.messages);
       const systemPrompt = [system, ANTHROPIC_JSON_DIRECTIVE].filter(Boolean).join("\n\n");
-      const response = await postJson(config, "/messages", {
+      const headers = anthropicHeaders(config.apiKey);
+      const configNoKey = { ...config, apiKey: undefined };
+      const response = await postJson(configNoKey, "/messages", {
         model: params.model,
         max_tokens: ANTHROPIC_DEFAULT_MAX_TOKENS,
         system: systemPrompt,
         messages,
-        ...params.providerRequestMetadata,
-      });
+        ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
+      }, undefined, headers);
       const payload = await parseJson(response);
       assertSuccess(response, payload, "anthropic");
 
@@ -82,14 +107,16 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
 
     async *streamText(config, params) {
       const { system, messages } = toAnthropicMessages(params.messages);
-      const response = await postJson(config, "/messages", {
+      const headers = anthropicHeaders(config.apiKey);
+      const configNoKey = { ...config, apiKey: undefined };
+      const response = await postJson(configNoKey, "/messages", {
         model: params.model,
         max_tokens: ANTHROPIC_DEFAULT_MAX_TOKENS,
         stream: true,
         ...(system ? { system } : {}),
         messages,
-        ...params.providerRequestMetadata,
-      });
+        ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
+      }, undefined, headers);
 
       if (!response.ok) {
         const payload = await parseJson(response);

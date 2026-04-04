@@ -1,4 +1,5 @@
 import type { CharacterCard, CharacterCreateInput } from "./character.js";
+import type { ProposalKind } from "./common.js";
 
 /**
  * Plugin Data Access interface.
@@ -62,7 +63,7 @@ export interface EventEntry {
 }
 
 export interface ProposalItem {
-  kind: string;
+  kind: ProposalKind;
   payload: unknown;
 }
 

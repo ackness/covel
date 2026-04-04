@@ -10,6 +10,33 @@ import {
 } from "./http.js";
 import { createOpenAiChatAdapter } from "./openai-chat.js";
 
+/** Fields that providerRequestMetadata must never override. */
+const RESPONSES_PROTECTED_KEYS = new Set(["model", "input", "stream", "text"]);
+
+function sanitizeResponsesMetadata(
+  meta: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!meta) return {};
+  const sanitized: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(meta)) {
+    if (!RESPONSES_PROTECTED_KEYS.has(k)) sanitized[k] = v;
+  }
+  return sanitized;
+}
+
+/**
+ * Map OpenAI Responses API `status` field to a finish reason string.
+ * The Responses API uses: "completed", "failed", "incomplete", "in_progress".
+ */
+function mapResponseStatus(status: unknown): string {
+  switch (status) {
+    case "completed": return "stop";
+    case "incomplete": return "length";
+    case "failed": return "error";
+    default: return "stop";
+  }
+}
+
 /**
  * OpenAI Responses v1 adapter.
  * Uses the /responses endpoint with different streaming format.
@@ -23,7 +50,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       const response = await postJson(config, "/responses", {
         model: params.model,
         input: params.messages,
-        ...params.providerRequestMetadata,
+        ...sanitizeResponsesMetadata(params.providerRequestMetadata),
       });
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-responses");
@@ -31,7 +58,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       const genTextUsage = payload.usage as Record<string, unknown> | undefined;
       return {
         text: readResponsesOutputText(payload),
-        finishReason: "stop",
+        finishReason: mapResponseStatus(payload.status),
         usage: {
           inputTokens: Number(genTextUsage?.input_tokens ?? 0),
           outputTokens: Number(genTextUsage?.output_tokens ?? 0),
@@ -44,7 +71,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         model: params.model,
         input: params.messages,
         text: { format: { type: "json_schema" } },
-        ...params.providerRequestMetadata,
+        ...sanitizeResponsesMetadata(params.providerRequestMetadata),
       });
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-responses");
@@ -63,7 +90,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       const genObjUsage = payload.usage as Record<string, unknown> | undefined;
       return {
         object: validation.data,
-        finishReason: "stop",
+        finishReason: mapResponseStatus(payload.status),
         usage: {
           inputTokens: Number(genObjUsage?.input_tokens ?? 0),
           outputTokens: Number(genObjUsage?.output_tokens ?? 0),
@@ -76,7 +103,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         model: params.model,
         input: params.messages,
         stream: true,
-        ...params.providerRequestMetadata,
+        ...sanitizeResponsesMetadata(params.providerRequestMetadata),
       });
 
       if (!response.ok) {
@@ -85,6 +112,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       }
 
       let usage: UsageSummary = { inputTokens: 0, outputTokens: 0 };
+      let streamFinishReason = "stop";
 
       for await (const payload of iterateSsePayloads(response)) {
         if (
@@ -101,10 +129,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
             inputTokens: Number(responseUsage?.input_tokens ?? 0),
             outputTokens: Number(responseUsage?.output_tokens ?? 0),
           };
+          streamFinishReason = mapResponseStatus(responseObj?.status);
         }
       }
 
-      yield { type: "done", finishReason: "stop", usage };
+      yield { type: "done", finishReason: streamFinishReason, usage };
     },
 
     // Delegate non-text operations to the chat adapter

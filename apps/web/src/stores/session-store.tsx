@@ -331,9 +331,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (res.ok) {
           const { keys } = await res.json();
           if (keys && typeof keys === "object" && !Array.isArray(keys)) {
+            const validKeys: Record<string, string> = {};
+            for (const [k, v] of Object.entries(keys)) {
+              if (typeof k === "string" && typeof v === "string" && k.length <= 64 && v.length <= 256) {
+                validKeys[k] = v;
+              }
+            }
             const existing = api.getProviderKeys();
-            if (Object.keys(existing).length === 0 && Object.keys(keys as Record<string, string>).length > 0) {
-              api.setProviderKeys(keys as Record<string, string>);
+            if (Object.keys(existing).length === 0 && Object.keys(validKeys).length > 0) {
+              api.setProviderKeys(validKeys);
             }
           }
         }
@@ -453,7 +459,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           if (sid) {
             getDataService()
               .persistStateSnapshot(sid, payload as Record<string, unknown>)
-              .catch((err: unknown) => console.warn("[session] Failed to persist state snapshot:", err));
+              .catch((e: unknown) => console.warn("[session] persistStateSnapshot failed:", e));
           }
         }
         break;
@@ -600,7 +606,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     ds.syncToServer(session.id).then(() => {
       api.markServerAck();
     }).catch((err: unknown) => {
-      console.warn("[session] Failed to sync to server on resume:", err);
+      console.warn("[session] syncToServer failed:", err);
     });
   }, [state.worlds]);
 

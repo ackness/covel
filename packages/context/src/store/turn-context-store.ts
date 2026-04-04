@@ -24,7 +24,7 @@ function deepMergeState(
         sVal as Record<string, unknown>,
       );
     } else {
-      result[key] = sVal;
+      result[key] = Array.isArray(sVal) ? [...sVal as unknown[]] : sVal;
     }
   }
   return result;
@@ -84,10 +84,10 @@ export function createTurnContextStore(): TurnContextStore {
     | undefined;
 
   // Dynamic accumulation
-  const narrativeSegments: string[] = [];
-  const accumulatedPatches: Record<string, unknown>[] = [];
-  const allProposals: ProposalItem[] = [];
-  const completedRuntimes: string[] = [];
+  let narrativeSegments: string[] = [];
+  let accumulatedPatches: Record<string, unknown>[] = [];
+  let allProposals: ProposalItem[] = [];
+  let completedRuntimes: string[] = [];
 
   return {
     init(input: TurnContextInit): void {
@@ -103,10 +103,10 @@ export function createTurnContextStore(): TurnContextStore {
       runtimeSettings = input.runtimeSettings;
 
       // Reset dynamic state
-      narrativeSegments.length = 0;
-      accumulatedPatches.length = 0;
-      allProposals.length = 0;
-      completedRuntimes.length = 0;
+      narrativeSegments = [];
+      accumulatedPatches = [];
+      allProposals = [];
+      completedRuntimes = [];
     },
 
     ingest(output: RuntimeOutput): void {

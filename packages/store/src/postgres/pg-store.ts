@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import pgClient from "postgres";
 import type {
@@ -29,88 +29,104 @@ export class PgStore implements DataStore {
 
   /** Run schema push (create tables if not exist). Call once at startup. */
   async initialize(): Promise<void> {
-    // Create tables via raw SQL for simplicity — no migration tooling needed at runtime.
-    await this.sql`
-      CREATE TABLE IF NOT EXISTS worlds (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        description TEXT NOT NULL DEFAULT '',
-        lore TEXT,
-        tags JSONB,
-        created_at TEXT NOT NULL
-      )
-    `;
-    await this.sql`
-      CREATE TABLE IF NOT EXISTS sessions (
-        id TEXT PRIMARY KEY,
-        world_id TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'active',
-        phase TEXT NOT NULL DEFAULT 'init',
-        preset_id TEXT,
-        settings JSONB,
-        created_at TEXT NOT NULL
-      )
-    `;
-    await this.sql`
-      CREATE TABLE IF NOT EXISTS messages (
-        id TEXT PRIMARY KEY,
-        session_id TEXT NOT NULL,
-        role TEXT NOT NULL,
-        content TEXT NOT NULL,
-        metadata JSONB,
-        created_at TEXT NOT NULL
-      )
-    `;
-    await this.sql`
-      CREATE TABLE IF NOT EXISTS characters (
-        id TEXT PRIMARY KEY,
-        world_id TEXT NOT NULL,
-        session_id TEXT,
-        name TEXT NOT NULL,
-        type TEXT NOT NULL DEFAULT 'npc',
-        description TEXT,
-        fields JSONB,
-        extensions JSONB,
-        version INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `;
-    await this.sql`
-      CREATE TABLE IF NOT EXISTS events (
-        id TEXT PRIMARY KEY,
-        branch_id TEXT NOT NULL,
-        turn_id TEXT NOT NULL,
-        type TEXT NOT NULL,
-        source TEXT NOT NULL,
-        locale TEXT,
-        payload JSONB,
-        created_at TEXT NOT NULL
-      )
-    `;
-    await this.sql`
-      CREATE TABLE IF NOT EXISTS domain_records (
-        id TEXT PRIMARY KEY,
-        branch_id TEXT NOT NULL,
-        kind TEXT NOT NULL,
-        key TEXT NOT NULL,
-        value JSONB,
-        summary TEXT,
-        locale TEXT,
-        updated_at TEXT NOT NULL
-      )
-    `;
-    await this.sql`
-      CREATE TABLE IF NOT EXISTS snapshots (
-        id TEXT PRIMARY KEY,
-        branch_id TEXT NOT NULL,
-        turn_id TEXT NOT NULL,
-        label TEXT,
-        summary TEXT,
-        data JSONB NOT NULL,
-        created_at TEXT NOT NULL
-      )
-    `;
+    // Create tables via raw SQL inside a transaction for atomicity.
+    await this.sql.begin(async (_tx) => {
+      const tx = _tx as unknown as typeof this.sql;
+      await tx`
+        CREATE TABLE IF NOT EXISTS worlds (
+          id TEXT PRIMARY KEY,
+          name JSONB NOT NULL,
+          description JSONB NOT NULL DEFAULT '""',
+          lore JSONB,
+          tags JSONB,
+          created_at TEXT NOT NULL
+        )
+      `;
+      // Migration: ensure worlds name/description/lore columns are JSONB (C1 fix)
+      await tx`
+        DO $$ BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'worlds' AND column_name = 'name' AND data_type = 'text'
+          ) THEN
+            ALTER TABLE worlds ALTER COLUMN name TYPE JSONB USING to_jsonb(name);
+            ALTER TABLE worlds ALTER COLUMN description TYPE JSONB USING to_jsonb(description);
+            ALTER TABLE worlds ALTER COLUMN lore TYPE JSONB USING to_jsonb(lore);
+          END IF;
+        END $$
+      `;
+      await tx`
+        CREATE TABLE IF NOT EXISTS sessions (
+          id TEXT PRIMARY KEY,
+          world_id TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'active',
+          phase TEXT NOT NULL DEFAULT 'init',
+          preset_id TEXT,
+          settings JSONB,
+          created_at TEXT NOT NULL
+        )
+      `;
+      await tx`
+        CREATE TABLE IF NOT EXISTS messages (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          role TEXT NOT NULL,
+          content TEXT NOT NULL,
+          metadata JSONB,
+          created_at TEXT NOT NULL
+        )
+      `;
+      await tx`
+        CREATE TABLE IF NOT EXISTS characters (
+          id TEXT PRIMARY KEY,
+          world_id TEXT NOT NULL,
+          session_id TEXT,
+          name TEXT NOT NULL,
+          type TEXT NOT NULL DEFAULT 'npc',
+          description TEXT,
+          fields JSONB,
+          extensions JSONB,
+          version INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      `;
+      await tx`
+        CREATE TABLE IF NOT EXISTS events (
+          id TEXT PRIMARY KEY,
+          branch_id TEXT NOT NULL,
+          turn_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          source TEXT NOT NULL,
+          locale TEXT,
+          payload JSONB,
+          created_at TEXT NOT NULL
+        )
+      `;
+      await tx`
+        CREATE TABLE IF NOT EXISTS domain_records (
+          id TEXT PRIMARY KEY,
+          branch_id TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          key TEXT NOT NULL,
+          value JSONB,
+          summary TEXT,
+          locale TEXT,
+          updated_at TEXT NOT NULL
+        )
+      `;
+      await tx`
+        CREATE TABLE IF NOT EXISTS snapshots (
+          id TEXT PRIMARY KEY,
+          branch_id TEXT NOT NULL,
+          turn_id TEXT NOT NULL,
+          label TEXT,
+          summary TEXT,
+          data JSONB NOT NULL,
+          created_at TEXT NOT NULL
+        )
+      `;
+    });
   }
 
   /** Close the underlying connection pool. */
@@ -215,7 +231,8 @@ export class PgStore implements DataStore {
     const rows = await this.db
       .select()
       .from(schema.messages)
-      .where(eq(schema.messages.sessionId, sessionId));
+      .where(eq(schema.messages.sessionId, sessionId))
+      .orderBy(asc(schema.messages.createdAt));
     return rows.map(toMessageRecord);
   }
 
@@ -307,7 +324,8 @@ export class PgStore implements DataStore {
     const rows = await this.db
       .select()
       .from(schema.events)
-      .where(eq(schema.events.branchId, branchId));
+      .where(eq(schema.events.branchId, branchId))
+      .orderBy(asc(schema.events.createdAt));
     return rows.map(toEventRecord);
   }
 
@@ -386,7 +404,8 @@ export class PgStore implements DataStore {
     const rows = await this.db
       .select()
       .from(schema.snapshots)
-      .where(eq(schema.snapshots.branchId, branchId));
+      .where(eq(schema.snapshots.branchId, branchId))
+      .orderBy(asc(schema.snapshots.createdAt));
     return rows.map(toSnapshotRecord);
   }
 
@@ -434,38 +453,36 @@ export class PgStore implements DataStore {
       await tx`DELETE FROM sessions`;
       await tx`DELETE FROM worlds`;
 
-      // Import all data
+      // Import all data — JSONB columns need JSON.stringify + ::jsonb cast
+      const jsonVal = (v: unknown) => v != null ? JSON.stringify(v) : null;
       for (const w of data.data.worlds) {
-        const wName = typeof w.name === "string" ? w.name : JSON.stringify(w.name);
-        const wDesc = typeof w.description === "string" ? w.description : JSON.stringify(w.description);
-        const wLore = w.lore == null ? null : typeof w.lore === "string" ? w.lore : JSON.stringify(w.lore);
         await tx`INSERT INTO worlds (id, name, description, lore, tags, created_at)
-          VALUES (${w.id}, ${wName}, ${wDesc}, ${wLore}, ${JSON.stringify(w.tags ?? null)}, ${w.createdAt})`;
+          VALUES (${w.id}, ${jsonVal(w.name ?? "")}::jsonb, ${jsonVal(w.description ?? "")}::jsonb, ${jsonVal(w.lore)}::jsonb, ${jsonVal(w.tags)}::jsonb, ${w.createdAt})`;
       }
       for (const s of data.data.sessions) {
         await tx`INSERT INTO sessions (id, world_id, status, phase, preset_id, settings, created_at)
-          VALUES (${s.id}, ${s.worldId}, ${s.status}, ${s.phase}, ${s.presetId ?? null}, ${JSON.stringify(s.settings ?? null)}, ${s.createdAt})`;
+          VALUES (${s.id}, ${s.worldId}, ${s.status}, ${s.phase}, ${s.presetId ?? null}, ${jsonVal(s.settings)}::jsonb, ${s.createdAt})`;
       }
       for (const m of data.data.messages) {
         await tx`INSERT INTO messages (id, session_id, role, content, metadata, created_at)
-          VALUES (${m.id}, ${m.sessionId}, ${m.role}, ${m.content}, ${JSON.stringify(m.metadata ?? null)}, ${m.createdAt})`;
+          VALUES (${m.id}, ${m.sessionId}, ${m.role}, ${m.content}, ${jsonVal(m.metadata)}::jsonb, ${m.createdAt})`;
       }
       for (const c of data.data.characters) {
         await tx`INSERT INTO characters (id, world_id, session_id, name, type, description, fields, extensions, version, created_at, updated_at)
           VALUES (${c.id}, ${c.worldId}, ${c.sessionId ?? null}, ${c.name}, ${c.type}, ${c.description ?? null},
-                  ${JSON.stringify(c.fields ?? null)}, ${JSON.stringify(c.extensions ?? null)}, ${c.version}, ${c.createdAt}, ${c.updatedAt})`;
+                  ${jsonVal(c.fields)}::jsonb, ${jsonVal(c.extensions)}::jsonb, ${c.version}, ${c.createdAt}, ${c.updatedAt})`;
       }
       for (const e of data.data.events) {
         await tx`INSERT INTO events (id, branch_id, turn_id, type, source, locale, payload, created_at)
-          VALUES (${e.id}, ${e.branchId}, ${e.turnId}, ${e.type}, ${e.source}, ${e.locale ?? null}, ${JSON.stringify(e.payload ?? null)}, ${e.createdAt})`;
+          VALUES (${e.id}, ${e.branchId}, ${e.turnId}, ${e.type}, ${e.source}, ${e.locale ?? null}, ${jsonVal(e.payload)}::jsonb, ${e.createdAt})`;
       }
       for (const r of data.data.records) {
         await tx`INSERT INTO domain_records (id, branch_id, kind, key, value, summary, locale, updated_at)
-          VALUES (${r.id}, ${r.branchId}, ${r.kind}, ${r.key}, ${JSON.stringify(r.value ?? null)}, ${r.summary ?? null}, ${r.locale ?? null}, ${r.updatedAt})`;
+          VALUES (${r.id}, ${r.branchId}, ${r.kind}, ${r.key}, ${jsonVal(r.value)}::jsonb, ${r.summary ?? null}, ${r.locale ?? null}, ${r.updatedAt})`;
       }
       for (const s of data.data.snapshots) {
         await tx`INSERT INTO snapshots (id, branch_id, turn_id, label, summary, data, created_at)
-          VALUES (${s.id}, ${s.branchId}, ${s.turnId}, ${s.label ?? null}, ${s.summary ?? null}, ${JSON.stringify(s.data)}, ${s.createdAt})`;
+          VALUES (${s.id}, ${s.branchId}, ${s.turnId}, ${s.label ?? null}, ${s.summary ?? null}, ${jsonVal(s.data)}::jsonb, ${s.createdAt})`;
       }
     });
   }
@@ -485,6 +502,12 @@ export class PgStore implements DataStore {
   }
 }
 
+// ── Validation sets for DB→Record mapping ────────────────────────────
+const VALID_STATUSES = new Set(["active", "waiting_for_input", "archived"]);
+const VALID_PHASES = new Set(["init", "character_creation", "playing", "ended"]);
+const VALID_ROLES = new Set(["system", "user", "assistant"]);
+const VALID_CHARACTER_TYPES = new Set(["player", "npc", "companion"]);
+
 // ── Row → Record mappers ──────────────────────────────────────────
 
 function toWorldRecord(row: typeof schema.worlds.$inferSelect): WorldRecord {
@@ -499,11 +522,13 @@ function toWorldRecord(row: typeof schema.worlds.$inferSelect): WorldRecord {
 }
 
 function toSessionRecord(row: typeof schema.sessions.$inferSelect): SessionRecord {
+  const status = VALID_STATUSES.has(row.status) ? row.status as SessionRecord["status"] : "active" as const;
+  const phase = VALID_PHASES.has(row.phase) ? row.phase as SessionRecord["phase"] : "init" as const;
   return {
     id: row.id,
     worldId: row.worldId,
-    status: row.status as SessionRecord["status"],
-    phase: row.phase as SessionRecord["phase"],
+    status,
+    phase,
     ...(row.presetId != null ? { presetId: row.presetId } : {}),
     ...(row.settings != null ? { settings: row.settings } : {}),
     createdAt: row.createdAt,
@@ -511,10 +536,11 @@ function toSessionRecord(row: typeof schema.sessions.$inferSelect): SessionRecor
 }
 
 function toMessageRecord(row: typeof schema.messages.$inferSelect): MessageRecord {
+  const role = VALID_ROLES.has(row.role) ? row.role as MessageRecord["role"] : "user" as const;
   return {
     id: row.id,
     sessionId: row.sessionId,
-    role: row.role as MessageRecord["role"],
+    role,
     content: row.content,
     ...(row.metadata != null ? { metadata: row.metadata } : {}),
     createdAt: row.createdAt,
@@ -522,12 +548,13 @@ function toMessageRecord(row: typeof schema.messages.$inferSelect): MessageRecor
 }
 
 function toCharacterRecord(row: typeof schema.characters.$inferSelect): CharacterRecord {
+  const type = VALID_CHARACTER_TYPES.has(row.type) ? row.type as CharacterRecord["type"] : "npc" as const;
   return {
     id: row.id,
     worldId: row.worldId,
     ...(row.sessionId != null ? { sessionId: row.sessionId } : {}),
     name: row.name,
-    type: row.type as CharacterRecord["type"],
+    type,
     ...(row.description != null ? { description: row.description } : {}),
     ...(row.fields != null ? { fields: row.fields } : {}),
     ...(row.extensions != null ? { extensions: row.extensions } : {}),

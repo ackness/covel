@@ -128,4 +128,6 @@ export interface TurnCache {
   /** The original execution options (minus callbacks). */
   apiKeys?: Record<string, string>;
   slotOverrides?: Record<string, SlotOverride>;
+  /** Snapshot of kernelContext.state before proposals were committed (for retry state revert). */
+  preCommitState: Record<string, unknown>;
 }

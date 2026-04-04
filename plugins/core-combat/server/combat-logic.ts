@@ -177,7 +177,7 @@ export function resolveSkill(
   skillType: "damage" | "heal" | "buff" | "debuff",
   rollResult: number,
   magnitude?: number,
-  generateId: () => string = () => `buff_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+  generateId: () => string = () => `buff_${crypto.randomUUID()}`
 ): SkillResult {
   const baseMag = magnitude ?? 10;
 
@@ -381,8 +381,8 @@ export function getCombatSummary(state: CombatState, locale: string): string {
   });
 
   const header = isZh
-    ? `⚔️ 第 ${state.roundNumber} 回合`
-    : `⚔️ Round ${state.roundNumber}`;
+    ? `[战斗] 第 ${state.roundNumber} 回合`
+    : `[Combat] Round ${state.roundNumber}`;
 
   const turnInfo = currentActor
     ? isZh

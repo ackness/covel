@@ -11,6 +11,9 @@ export async function eventContextProvider(
   const isZh = input.locale.startsWith("zh");
   const state = input.state as Record<string, unknown> | undefined;
   const eventState = (state?.["core-event"] as EventState) ?? EMPTY_STATE;
+  const events = eventState.events;
+
+  if (!events || events.length === 0) return null;
 
   const summary = getEventSummary(eventState, input.locale);
 

@@ -52,9 +52,13 @@ export async function defineCharacterSchemaTool(
   ctx: ToolExecutionContext,
 ): Promise<ToolExecutionResult> {
   const isZh = ctx.locale.startsWith("zh");
-  const input = ctx.input as { fields: unknown[] };
+  const parsed = defineCharacterSchemaInputSchema.safeParse(ctx.input);
+  if (!parsed.success) {
+    return { output: { error: parsed.error.message } };
+  }
+  const { fields } = parsed.data;
 
-  const { valid, errors } = validateFieldDefinitions(input.fields);
+  const { valid, errors } = validateFieldDefinitions(fields);
 
   if (valid.length === 0) {
     return {
@@ -134,9 +138,9 @@ export async function createNpcTool(
     runId,
   );
 
-  // Merge into existing characters map
+  // Merge into existing characters map (immutable)
   const characters = getCharacterMap(ctx.state);
-  characters[card.name] = card;
+  const updatedCharacters = { ...characters, [card.name]: card };
 
   return {
     output: {
@@ -161,7 +165,7 @@ export async function createNpcTool(
       },
       {
         kind: "state.patch",
-        payload: { characters },
+        payload: { characters: updatedCharacters },
       },
     ],
   };

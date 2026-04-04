@@ -3,9 +3,11 @@ import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import type { KernelSession } from "@covel/kernel";
 import type { CommandBus } from "@covel/plugin-runtime";
-import type { KernelTurnResult, RenderBlock } from "@covel/shared";
+import type { KernelTurnResult } from "@covel/shared";
 import type { ApiKeyEnv } from "../middleware/api-key-injection.js";
 import type { ServerStore } from "../store/types.js";
+import { toBlockEnvelope } from "./actions/block-envelope.js";
+import { isPrivateHost } from "./actions/ssrf-guard.js";
 
 const customPresetSchema = z.object({
   id: z.string().min(1).max(128),
@@ -21,38 +23,6 @@ const slotConfigSchema = z.object({
   customPresets: z.array(customPresetSchema).max(20).optional(),
   runtimePriority: z.record(z.string(), z.number().int().min(0).max(1000)).optional(),
 });
-
-/**
- * Check if a hostname resolves to a private/internal network address.
- * Covers RFC 1918, RFC 6598 (CGNAT), link-local, loopback, and IPv6 equivalents.
- */
-function isPrivateHost(host: string): boolean {
-  // Loopback and special addresses
-  if (host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1") return true;
-  // IPv6 private ranges
-  if (host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80")) return true;
-  // IPv6 long-form loopback
-  if (host === "0:0:0:0:0:0:0:1") return true;
-  // IPv4 private ranges
-  if (host.startsWith("10.") || host.startsWith("192.168.") || host.startsWith("169.254.")) return true;
-  // RFC 1918: 172.16.0.0/12 (172.16.x.x – 172.31.x.x)
-  if (host.startsWith("172.")) {
-    const parts = host.split(".");
-    if (parts.length === 4) {
-      const second = parseInt(parts[1], 10);
-      if (second >= 16 && second <= 31) return true;
-    }
-  }
-  // RFC 6598 CGNAT: 100.64.0.0/10 (100.64.x.x – 100.127.x.x)
-  if (host.startsWith("100.")) {
-    const parts = host.split(".");
-    if (parts.length === 4) {
-      const second = parseInt(parts[1], 10);
-      if (second >= 64 && second <= 127) return true;
-    }
-  }
-  return false;
-}
 
 /**
  * POST /actions — SSE streaming endpoint.
@@ -99,17 +69,14 @@ export function createActionsRoute(deps: {
   function getRunInfo(sessionId: string) {
     let info = sessionRuns.get(sessionId);
     if (!info) {
-      // Evict oldest entries when exceeding max size
+      // Evict oldest entries when exceeding max size (Map preserves insertion order)
       if (sessionRuns.size >= SESSION_RUNS_MAX) {
-        let oldestKey: string | undefined;
-        let oldestTime = Infinity;
-        for (const [key, val] of sessionRuns) {
-          if (val.lastUsed < oldestTime) {
-            oldestTime = val.lastUsed;
-            oldestKey = key;
-          }
+        const deleteCount = Math.floor(SESSION_RUNS_MAX / 4);
+        const iter = sessionRuns.keys();
+        for (let i = 0; i < deleteCount; i++) {
+          const key = iter.next().value;
+          if (key) sessionRuns.delete(key);
         }
-        if (oldestKey) sessionRuns.delete(oldestKey);
       }
       info = { runId: `run-${sessionId}`, branchId: "branch-main", lastUsed: Date.now() };
       sessionRuns.set(sessionId, info);
@@ -780,51 +747,4 @@ export function createActionsRoute(deps: {
   });
 
   return route;
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────
-
-function toBlockEnvelope(
-  block: RenderBlock,
-  meta: { turnId: string; sessionId: string; requestId: string; traceId: string }
-) {
-  let blockType = block.type;
-  if (blockType === "choices") blockType = "choice_set";
-
-  const data = normalizeBlockData(block);
-  // Block types that require player response
-  const INTERACTIVE_BLOCK_TYPES = new Set(["choice_set", "character_creation", "action_guide"]);
-  const isInteractive = INTERACTIVE_BLOCK_TYPES.has(blockType);
-
-  return {
-    id: `block_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-    type: blockType,
-    version: "1.0",
-    meta: {
-      package: block.source?.pluginId ?? "kernel",
-      requestId: meta.requestId,
-      traceId: meta.traceId,
-      sessionId: meta.sessionId,
-      turnId: meta.turnId,
-    },
-    interaction: {
-      requiresResponse: isInteractive,
-      ...(isInteractive
-        ? { responseSchema: "inline", submitAs: "block_response", resumePolicy: "continue" }
-        : {}),
-    },
-    data,
-  };
-}
-
-function normalizeBlockData(block: RenderBlock): Record<string, unknown> {
-  const content = block.content as Record<string, unknown> | undefined;
-  if (!content) return {};
-
-  // Flatten nested content: { type: "choices", content: { title, options } } → { title, options }
-  if (content.content && typeof content.content === "object") {
-    return content.content as Record<string, unknown>;
-  }
-
-  return content;
 }

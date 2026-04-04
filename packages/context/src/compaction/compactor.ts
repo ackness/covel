@@ -65,15 +65,18 @@ export async function compactChatHistory(
   let truncated = 0;
   let removed = 0;
 
-  // 1a. Truncate oversized messages in preserved set
-  for (const msg of preserved) {
-    const content = msg.content ?? "";
+  // 1a. Truncate oversized messages in preserved set (immutable — replace array entries)
+  for (let i = 0; i < preserved.length; i++) {
+    const content = preserved[i].content ?? "";
     if (content.length > cfg.truncateMessageChars) {
       const half = Math.floor(cfg.truncateMessageChars / 2);
-      msg.content =
-        content.slice(0, half) +
-        "\n\n[... content truncated ...]\n\n" +
-        content.slice(-half);
+      preserved[i] = {
+        ...preserved[i],
+        content:
+          content.slice(0, half) +
+          "\n\n[... content truncated ...]\n\n" +
+          content.slice(-half),
+      };
       truncated++;
     }
   }

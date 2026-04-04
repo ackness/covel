@@ -11,6 +11,9 @@ export async function questContextProvider(
   const isZh = input.locale.startsWith("zh");
   const state = input.state as Record<string, unknown> | undefined;
   const questState = (state?.["core-quest"] as QuestState) ?? EMPTY_STATE;
+  const quests = questState.quests;
+
+  if (!quests || quests.length === 0) return null;
 
   const summary = getQuestSummary(questState, input.locale);
 

@@ -64,6 +64,7 @@ export function createModelDbRoute(modelDb: ModelDatabase | null) {
     }
 
     try {
+      // fetchLiteLlmModels has its own 30s AbortController timeout
       const freshData = await fetchLiteLlmModels();
       modelDb.replaceAll(freshData);
       await modelDb.persist();

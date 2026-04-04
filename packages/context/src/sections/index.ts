@@ -4,7 +4,9 @@ import type { ProposalItem } from "../types.js";
  * Format a named context section with XML-style tags.
  */
 export function formatSection(name: string, content: string): string {
-  return `<${name}>\n${content}\n</${name}>`;
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escaped = content.replace(new RegExp(`</${escapedName}>`, "g"), `<\\/${name}>`);
+  return `<${name}>\n${escaped}\n</${name}>`;
 }
 
 /**

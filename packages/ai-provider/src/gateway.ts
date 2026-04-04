@@ -498,8 +498,7 @@ function shouldFallback(error: AiProviderError): boolean {
   }
   return (
     error.code === "RATE_LIMITED" ||
-    error.code === "PROVIDER_ERROR" ||
-    error.code === "SCHEMA_VALIDATION_FAILED"
+    error.code === "PROVIDER_ERROR"
   );
 }
 

@@ -19,6 +19,20 @@ import {
 
 import type { TextMessage } from "../types.js";
 
+/** Fields that providerRequestMetadata must never override. */
+const OPENAI_PROTECTED_KEYS = new Set(["model", "messages", "stream", "max_tokens", "response_format"]);
+
+function sanitizeOpenAiMetadata(
+  meta: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!meta) return {};
+  const sanitized: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(meta)) {
+    if (!OPENAI_PROTECTED_KEYS.has(k)) sanitized[k] = v;
+  }
+  return sanitized;
+}
+
 /**
  * Serialize TextMessage[] to OpenAI wire format.
  * Handles assistant messages with tool_calls and tool role messages.
@@ -59,7 +73,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       const body: Record<string, unknown> = {
         model: params.model,
         messages: serializeMessages(params.messages),
-        ...params.providerRequestMetadata,
+        ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
       };
       if (params.tools && params.tools.length > 0) {
         body.tools = params.tools;
@@ -83,7 +97,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         model: params.model,
         messages: serializeMessages(params.messages),
         response_format: { type: "json_object" },
-        ...params.providerRequestMetadata,
+        ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
       });
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-chat");
@@ -111,7 +125,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         model: params.model,
         messages: serializeMessages(params.messages),
         stream: true,
-        ...params.providerRequestMetadata,
+        ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
       });
 
       // Check HTTP status before parsing SSE — a non-2xx response won't be SSE
@@ -153,7 +167,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       const response = await postJson(config, "/embeddings", {
         model: params.model,
         input: params.values,
-        ...params.providerRequestMetadata,
+        ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
       });
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-chat");
@@ -174,7 +188,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       const response = await postJson(config, "/images/generations", {
         model: params.model,
         prompt: params.prompt,
-        ...params.providerRequestMetadata,
+        ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
       });
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-chat");
@@ -204,7 +218,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         input: params.text,
         ...(params.voice ? { voice: params.voice } : {}),
         ...(params.format ? { format: params.format } : {}),
-        ...params.providerRequestMetadata,
+        ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
       });
 
       if (!response.ok) {

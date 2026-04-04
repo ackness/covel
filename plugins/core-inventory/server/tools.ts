@@ -379,9 +379,9 @@ export const modifyCurrencyTool: ToolHandler = async (
   const isZh = ctx.locale.startsWith("zh");
 
   try {
-    const result = modifyCurrency(inventory, input.currency, input.amount);
+    const updatedInventory = modifyCurrency(inventory, input.currency, input.amount);
 
-    const newAmount = result.currency[input.currency] ?? 0;
+    const newAmount = updatedInventory.currency[input.currency] ?? 0;
     const message =
       input.amount >= 0
         ? isZh
@@ -396,14 +396,14 @@ export const modifyCurrencyTool: ToolHandler = async (
       proposals: [
         {
           kind: "state.patch",
-          payload: { path: "inventory", value: result },
+          payload: { path: "inventory", value: updatedInventory },
         },
         {
           kind: "record.upsert",
           payload: {
             key: "inventory:current",
             recordType: "inventory",
-            value: result,
+            value: updatedInventory,
           },
         },
         {

@@ -173,6 +173,8 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     await persistWorld(world);
     worldCache.push(world);
     worldMap.set(world.id, world);
+    evictArray(worldCache);
+    evictMap(worldMap);
     return world;
   }
 
@@ -242,6 +244,8 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     await persistSession(session);
     sessionCache.push(session);
     sessionMap.set(session.id, session);
+    evictArray(sessionCache);
+    evictMap(sessionMap);
     return session;
   }
 
@@ -434,6 +438,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     };
     await persistCharacter(card);
     characterMap.set(card.id, card);
+    evictMap(characterMap);
     return card;
   }
 
@@ -522,6 +527,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       SELECT * FROM sv_trace_events
       WHERE session_id = ${sessionId}
       ORDER BY timestamp ASC, seq ASC
+      LIMIT 2000
     `;
     return rows.map(rowToTraceEvent);
   }
@@ -564,6 +570,27 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     name: string; type: string; description: string;
     portrait: string | null; fields: Record<string, unknown>;
     extensions: Record<string, unknown>; version: number; created_at: string;
+  }
+
+  // ── Cache size bounding ────────────────────────────────────────────
+  const CACHE_MAX = 1000;
+
+  /** Evict the oldest half of a Map when it exceeds CACHE_MAX entries. */
+  function evictMap<K, V>(map: Map<K, V>): void {
+    if (map.size <= CACHE_MAX) return;
+    const evictCount = Math.floor(map.size / 2);
+    const iter = map.keys();
+    for (let i = 0; i < evictCount; i++) {
+      const key = iter.next().value;
+      if (key !== undefined) map.delete(key);
+    }
+  }
+
+  /** Evict the oldest half of an array when it exceeds CACHE_MAX entries. */
+  function evictArray<T>(arr: T[]): void {
+    if (arr.length <= CACHE_MAX) return;
+    const evictCount = Math.floor(arr.length / 2);
+    arr.splice(0, evictCount);
   }
 
   const worldRows = await sql<WorldRow[]>`SELECT * FROM sv_worlds`;
@@ -643,9 +670,10 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       `;
       if (worldMap.has(seed.id)) {
         const existing = worldMap.get(seed.id)!;
-        existing.dimensions = seed.dimensions;
-        existing.lore = seed.lore;
-        existing.tags = seed.tags;
+        const updated = { ...existing, dimensions: seed.dimensions, lore: seed.lore, tags: seed.tags };
+        worldMap.set(seed.id, updated);
+        const idx = worldCache.findIndex((w) => w.id === seed.id);
+        if (idx >= 0) worldCache[idx] = updated;
       } else {
         const world: WorldRecord = {
           id: seed.id,

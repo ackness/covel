@@ -378,7 +378,7 @@ describe("event.recent", () => {
 
     const result = await tool.handler(makeCtx({}));
 
-    expect(da.events.recent).toHaveBeenCalledWith(undefined);
+    expect(da.events.recent).toHaveBeenCalledWith(20);
     expect(result.output).toEqual(events);
   });
 
@@ -401,7 +401,7 @@ describe("event.recent", () => {
 
     const result = await tool.handler(makeCtx({ eventType: "combat.start" }));
 
-    expect(da.events.findByType).toHaveBeenCalledWith("combat.start", undefined);
+    expect(da.events.findByType).toHaveBeenCalledWith("combat.start", 20);
     expect(da.events.recent).not.toHaveBeenCalled();
     expect(result.output).toEqual(events);
   });

@@ -8,6 +8,8 @@
  * The same pattern is reusable across character, inventory, and future plugins.
  */
 
+import type { I18nText } from "./common.js";
+
 export type FieldType = "number" | "string" | "boolean" | "enum" | "text";
 
 export type FieldCategory = "stats" | "bio" | "equipment" | "social" | "custom";
@@ -16,7 +18,7 @@ export interface FieldDefinition {
   /** Machine key used in CharacterCard.fields, e.g. "hp", "mana". */
   key: string;
   /** Human-readable label (locale-aware). */
-  label: string;
+  label: I18nText;
   /** Value type. */
   type: FieldType;
   /** Allowed values for enum type. */

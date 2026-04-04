@@ -62,6 +62,7 @@ export async function initKernelStack(gateway: GatewayLike): Promise<KernelStack
   const commandBus = createCommandBus(pluginHost.commandRegistry);
 
   // Per-session KernelSession cache
+  const MAX_CACHED_SESSIONS = 500;
   const sessionMap = new Map<string, KernelSession>();
 
   function getOrCreateSession(
@@ -70,6 +71,11 @@ export async function initKernelStack(gateway: GatewayLike): Promise<KernelStack
   ): KernelSession {
     let session = sessionMap.get(sessionId);
     if (!session) {
+      // Evict oldest entry when cache is full
+      if (sessionMap.size >= MAX_CACHED_SESSIONS) {
+        const oldest = sessionMap.keys().next().value;
+        if (oldest) sessionMap.delete(oldest);
+      }
       session = instance.createSession({
         activePlugins: options?.activePlugins,
       });

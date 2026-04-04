@@ -261,9 +261,7 @@ export function getQuestSummary(state: QuestState, locale: string): string {
       : quest.status;
 
     lines.push(
-      isZh
-        ? `[${typeLabel}][${statusLabel}] ${quest.title}: ${quest.description}`
-        : `[${typeLabel}][${statusLabel}] ${quest.title}: ${quest.description}`,
+      `[${typeLabel}][${statusLabel}] ${quest.title}: ${quest.description}`,
     );
 
     for (const obj of quest.objectives) {

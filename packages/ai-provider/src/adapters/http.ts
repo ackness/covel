@@ -10,19 +10,23 @@ export async function postJson(
   config: ProviderConfig,
   path: string,
   body: Record<string, unknown>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  overrideHeaders?: Record<string, string>,
 ): Promise<Response> {
   if (!config.baseUrl) {
     throw new Error("Provider error: baseUrl is required.");
   }
 
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
+    ...config.headers,
+    ...overrideHeaders,
+  };
+
   return fetch(buildProviderUrl(config.baseUrl, path), {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
-      ...config.headers,
-    },
+    headers,
     body: JSON.stringify(body),
     signal: signal ?? config.signal,
   });
@@ -56,6 +60,16 @@ export async function postFormData(
  * Build full URL from base + path.
  */
 export function buildProviderUrl(baseUrl: string, path: string): string {
+  if (
+    baseUrl &&
+    !baseUrl.startsWith("https://") &&
+    !baseUrl.startsWith("http://localhost") &&
+    !baseUrl.startsWith("http://127.0.0.1")
+  ) {
+    console.warn(
+      `[ai-provider] Non-HTTPS base URL detected: ${baseUrl}. API keys may be sent in plaintext.`,
+    );
+  }
   const base = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
   const p = path.startsWith("/") ? path.slice(1) : path;
   return `${base}/${p}`;
@@ -321,6 +335,8 @@ export function readAnthropicText(payload: Record<string, unknown>): string {
   return String(block?.text ?? "");
 }
 
+let _toolDropWarned = false;
+
 export function toAnthropicMessages(
   messages: Array<{ role: string; content: string | null }>
 ): { system: string; messages: Array<{ role: string; content: string }> } {
@@ -329,6 +345,13 @@ export function toAnthropicMessages(
     .map((m) => m.content ?? "")
     .filter(Boolean)
     .join("\n\n");
+  const toolMessages = messages.filter((m) => m.role === "tool");
+  if (toolMessages.length > 0 && !_toolDropWarned) {
+    _toolDropWarned = true;
+    console.warn(
+      `[anthropic] Dropped ${toolMessages.length} tool-role message(s) (not supported in this adapter path). This warning is shown once.`,
+    );
+  }
   const filtered = messages
     .filter((m) => m.role === "user" || m.role === "assistant")
     .map((m) => ({ role: m.role, content: m.content ?? "" }));

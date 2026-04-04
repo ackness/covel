@@ -51,12 +51,30 @@ function resetIds(): void {
   idCounter = 0;
 }
 
-function makeToolCtx(input: unknown, locale = "en-US"): ToolExecutionContext {
+function makeToolCtx(input: unknown, locale = "en-US", state?: Record<string, unknown>): ToolExecutionContext {
   return {
     input,
     runtimeId: "quest-tracker",
     pluginId: "core-quest",
     locale,
+    state,
+  };
+}
+
+/** State with one active quest (quest-123) containing one objective (obj-456). */
+function stateWithQuest(): Record<string, unknown> {
+  return {
+    quests: [
+      {
+        id: "quest-123",
+        title: "Test Quest",
+        description: "A quest",
+        type: "main",
+        status: "active",
+        objectives: [{ id: "obj-456", description: "Test objective", completed: false }],
+        createdAt: "turn-0",
+      },
+    ],
   };
 }
 
@@ -549,7 +567,7 @@ describe("tools", () => {
         makeToolCtx({
           questId: "quest-123",
           title: "Updated Title",
-        }),
+        }, "en-US", stateWithQuest()),
       );
 
       expect(result.proposals).toHaveLength(1);
@@ -567,14 +585,14 @@ describe("tools", () => {
             { description: "New obj 1" },
             { id: "existing-id", description: "Existing obj" },
           ],
-        }),
+        }, "en-US", stateWithQuest()),
       );
 
       const patch = result.proposals![0].payload as Record<string, unknown>;
-      const questsPatch = patch["core-quest.quests"] as Record<string, unknown>;
-      const updateOp = questsPatch.$updateWhere as Record<string, unknown>;
-      const setData = updateOp.set as Record<string, unknown>;
-      const objectives = setData.objectives as Array<Record<string, unknown>>;
+      const questsPatchData = patch.patch as Record<string, unknown>;
+      const quests = questsPatchData.quests as Array<Record<string, unknown>>;
+      const updated = quests.find((q) => q.id === "quest-123") as Record<string, unknown>;
+      const objectives = updated.objectives as Array<Record<string, unknown>>;
 
       expect(objectives).toHaveLength(2);
       expect(objectives[0].id).toBeDefined();
@@ -588,7 +606,7 @@ describe("tools", () => {
         makeToolCtx({
           questId: "quest-123",
           objectiveId: "obj-456",
-        }),
+        }, "en-US", stateWithQuest()),
       );
 
       expect(result.proposals).toHaveLength(2);
@@ -607,7 +625,7 @@ describe("tools", () => {
   describe("completeQuestTool", () => {
     it("emits state.patch and event.emit with quest_completed", async () => {
       const result = await completeQuestTool(
-        makeToolCtx({ questId: "quest-123" }),
+        makeToolCtx({ questId: "quest-123" }, "en-US", stateWithQuest()),
       );
 
       expect(result.proposals).toHaveLength(2);
@@ -621,7 +639,7 @@ describe("tools", () => {
   describe("failQuestTool", () => {
     it("emits state.patch and event.emit with quest_failed", async () => {
       const result = await failQuestTool(
-        makeToolCtx({ questId: "quest-123" }),
+        makeToolCtx({ questId: "quest-123" }, "en-US", stateWithQuest()),
       );
 
       expect(result.proposals).toHaveLength(2);
@@ -636,7 +654,7 @@ describe("tools", () => {
 
     it("returns zh-CN message for Chinese locale", async () => {
       const result = await failQuestTool(
-        makeToolCtx({ questId: "quest-123" }, "zh-CN"),
+        makeToolCtx({ questId: "quest-123" }, "zh-CN", stateWithQuest()),
       );
 
       const msg = (result.output as Record<string, unknown>).message as string;
@@ -648,15 +666,15 @@ describe("tools", () => {
 // ── Context provider tests ──────────────────────────────────
 
 describe("questContextProvider", () => {
-  it("returns empty quest message for no quests", async () => {
-    const result = (await questContextProvider({
+  it("returns null for no quests", async () => {
+    const result = await questContextProvider({
       pluginId: "core-quest",
       runtimeId: "quest-tracker",
       locale: "en-US",
       state: {},
-    })) as Record<string, unknown>;
+    });
 
-    expect(result.content).toBe("No active quests.");
+    expect(result).toBeNull();
   });
 
   it("returns quest summary for active quests", async () => {
@@ -684,15 +702,14 @@ describe("questContextProvider", () => {
     expect(result.priority).toBe(70);
   });
 
-  it("returns zh-CN content for Chinese locale", async () => {
-    const result = (await questContextProvider({
+  it("returns null for Chinese locale with no quests", async () => {
+    const result = await questContextProvider({
       pluginId: "core-quest",
       runtimeId: "quest-tracker",
       locale: "zh-CN",
       state: {},
-    })) as Record<string, unknown>;
+    });
 
-    expect(result.title).toBe("当前任务状态");
-    expect(result.content).toBe("当前没有进行中的任务。");
+    expect(result).toBeNull();
   });
 });

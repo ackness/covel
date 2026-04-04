@@ -21,7 +21,9 @@ export function createTurnRoute(kernel: Kernel) {
    * }
    */
   route.post("/", async (c) => {
-    console.warn("[kernel/turn] WARNING: /api/kernel/turn uses default session — debug only, not for production");
+    if ((process.env.DEPLOYMENT_TIER ?? "self") === "self") {
+      console.warn("[kernel/turn] WARNING: /api/kernel/turn uses default session — debug only, not for production");
+    }
     let body: {
       runId: string;
       branchId: string;

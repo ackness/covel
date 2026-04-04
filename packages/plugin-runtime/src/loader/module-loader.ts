@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { access } from "node:fs/promises";
 import type {
   ContributionMap,
@@ -77,6 +77,13 @@ export async function loadPluginModule(
 
   if (!modulePath) {
     return null;
+  }
+
+  // Path containment check: ensure module stays within the plugin directory
+  const resolvedBase = resolve(pluginDir);
+  const resolvedModule = resolve(modulePath);
+  if (!resolvedModule.startsWith(resolvedBase + sep)) {
+    throw new Error(`Module path escapes plugin directory: ${modulePath}`);
   }
 
   let mod: PluginServerModule;

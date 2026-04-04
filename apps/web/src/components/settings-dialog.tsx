@@ -240,7 +240,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 ? p.baseUrl.slice(0, 500)
                 : "",
           })) as CustomPreset[];
-        setCustomPresetsLocal([...customPresets, ...valid]);
+        const existingIds = new Set(customPresets.map((p) => p.id));
+        const deduped = valid.filter((p) => !existingIds.has(p.id));
+        setCustomPresetsLocal([...customPresets, ...deduped]);
       } catch {
         // invalid JSON
       }

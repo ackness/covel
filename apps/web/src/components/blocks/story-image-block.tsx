@@ -49,9 +49,11 @@ export function StoryImageBlock({ data }: BlockRendererProps) {
   }
 
   // status === "ready"
+  const isValidUrl = imageUrl && (imageUrl.startsWith("https://") || imageUrl.startsWith("http://") || imageUrl.startsWith("data:"));
+
   return (
     <Card className="max-w-lg overflow-hidden">
-      {imageUrl && (
+      {isValidUrl && (
         <div className="w-full bg-muted">
           <img
             src={imageUrl}

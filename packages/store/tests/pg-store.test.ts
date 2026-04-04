@@ -295,6 +295,18 @@ describe("PgStore — Characters", () => {
     const all = await store.listCharacters();
     expect(all).toHaveLength(0);
   });
+
+  it("should fallback invalid character type to 'npc' (M23)", async () => {
+    // Insert with a valid type then manually corrupt it via raw SQL
+    const char = makeCharacter("w1", { type: "player" });
+    await store.upsertCharacter(char);
+    // Corrupt the type directly in DB
+    const pgClient = (store as any).sql;
+    await pgClient`UPDATE characters SET type = 'invalid_type' WHERE id = ${char.id}`;
+    const chars = await store.listCharacters();
+    expect(chars).toHaveLength(1);
+    expect(chars[0].type).toBe("npc"); // fallback, not the invalid raw value
+  });
 });
 
 // ── Event Tests ───────────────────────────────────────────────────

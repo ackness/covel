@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Sparkles, Loader2, Globe, AlertCircle, Check } from "lucide-react";
 import {
@@ -38,6 +38,9 @@ export function AiWorldGenerator({
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
   const handleGenerate = useCallback(() => {
     if (!prompt.trim()) return;
@@ -54,7 +57,7 @@ export function AiWorldGenerator({
           setPhase("done");
           onWorldCreated(event.world);
           // Auto-close after short delay
-          setTimeout(() => {
+          timerRef.current = setTimeout(() => {
             setPhase("idle");
             setPrompt("");
             onOpenChange(false);

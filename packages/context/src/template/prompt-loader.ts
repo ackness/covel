@@ -35,11 +35,18 @@ async function fileExists(path: string): Promise<boolean> {
  *
  * Results are cached in memory. Use `clearPromptCache()` to reset.
  */
+const NAME_PATTERN = /^[a-z0-9_-]+$/i;
+
 export async function loadPrompt(
   dir: string,
   name: string,
   locale: string,
 ): Promise<string> {
+  // Validate name to prevent path traversal attacks
+  if (!NAME_PATTERN.test(name)) {
+    throw new Error(`Invalid prompt name: "${name}". Must match /^[a-z0-9_-]+$/i`);
+  }
+
   // Validate locale format to prevent path traversal attacks
   if (!LOCALE_PATTERN.test(locale)) {
     throw new Error(`Invalid locale format: ${locale}`);

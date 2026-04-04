@@ -25,6 +25,7 @@ export interface BuiltinToolEntry {
 
 const DEFAULT_QUERY_LIMIT = 20;
 const DEFAULT_FIND_LIMIT = 10;
+const MAX_QUERY_LIMIT = 200;
 
 export function createBuiltinDataTools(
   deps: BuiltinToolDeps
@@ -72,7 +73,7 @@ export function createBuiltinDataTools(
       handler: async (ctx) => {
         const input = (ctx.input ?? {}) as Record<string, unknown>;
         const recordType = typeof input.recordType === "string" ? input.recordType : undefined;
-        const limit = typeof input.limit === "number" ? input.limit : DEFAULT_QUERY_LIMIT;
+        const limit = Math.min(typeof input.limit === "number" ? input.limit : DEFAULT_QUERY_LIMIT, MAX_QUERY_LIMIT);
         const results = da().records.list(recordType);
         return { output: results.slice(0, limit) };
       },
@@ -156,7 +157,7 @@ export function createBuiltinDataTools(
       },
       handler: async (ctx) => {
         const input = (ctx.input ?? {}) as Record<string, unknown>;
-        const limit = typeof input.limit === "number" ? input.limit : undefined;
+        const limit = Math.min(typeof input.limit === "number" ? input.limit : DEFAULT_QUERY_LIMIT, MAX_QUERY_LIMIT);
         const eventType = typeof input.eventType === "string" ? input.eventType : undefined;
         const events = eventType
           ? da().events.findByType(eventType, limit)
@@ -261,11 +262,13 @@ export function createBuiltinDataTools(
         },
       },
       handler: async (ctx) => {
-        const { blockType, data, interactive } = ctx.input as {
-          blockType: string;
-          data: unknown;
-          interactive?: boolean;
-        };
+        const input = ctx.input as Record<string, unknown> | undefined;
+        const blockType = typeof input?.blockType === "string" ? input.blockType.trim() : "";
+        if (!blockType || blockType.length > 64) {
+          return { output: { error: "Invalid blockType" } };
+        }
+        const data = input?.data;
+        const interactive = input?.interactive === true;
         return {
           output: { ok: true, blockType },
           proposals: [

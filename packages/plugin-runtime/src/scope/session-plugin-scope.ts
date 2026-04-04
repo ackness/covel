@@ -239,6 +239,7 @@ export function createScopedContextProviders(
           }
         };
       }
+      if (prop === Symbol.toStringTag) return "Map";
       return Reflect.get(target, prop, receiver);
     },
   });
