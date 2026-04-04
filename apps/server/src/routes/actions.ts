@@ -1,10 +1,58 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import { z } from "zod";
 import type { KernelSession } from "@covel/kernel";
 import type { CommandBus } from "@covel/plugin-runtime";
 import type { KernelTurnResult, RenderBlock } from "@covel/shared";
 import type { ApiKeyEnv } from "../middleware/api-key-injection.js";
 import type { ServerStore } from "../store/types.js";
+
+const customPresetSchema = z.object({
+  id: z.string().min(1).max(128),
+  name: z.string().min(1).max(256),
+  provider: z.string().min(1).max(128),
+  baseUrl: z.string().max(2048).default(""),
+  model: z.string().min(1).max(256),
+  protocol: z.string().max(64).optional(),
+});
+
+const slotConfigSchema = z.object({
+  slots: z.record(z.string(), z.object({ presetId: z.string().min(1).max(128) })).optional(),
+  customPresets: z.array(customPresetSchema).max(20).optional(),
+  runtimePriority: z.record(z.string(), z.number().int().min(0).max(1000)).optional(),
+});
+
+/**
+ * Check if a hostname resolves to a private/internal network address.
+ * Covers RFC 1918, RFC 6598 (CGNAT), link-local, loopback, and IPv6 equivalents.
+ */
+function isPrivateHost(host: string): boolean {
+  // Loopback and special addresses
+  if (host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1") return true;
+  // IPv6 private ranges
+  if (host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80")) return true;
+  // IPv6 long-form loopback
+  if (host === "0:0:0:0:0:0:0:1") return true;
+  // IPv4 private ranges
+  if (host.startsWith("10.") || host.startsWith("192.168.") || host.startsWith("169.254.")) return true;
+  // RFC 1918: 172.16.0.0/12 (172.16.x.x – 172.31.x.x)
+  if (host.startsWith("172.")) {
+    const parts = host.split(".");
+    if (parts.length === 4) {
+      const second = parseInt(parts[1], 10);
+      if (second >= 16 && second <= 31) return true;
+    }
+  }
+  // RFC 6598 CGNAT: 100.64.0.0/10 (100.64.x.x – 100.127.x.x)
+  if (host.startsWith("100.")) {
+    const parts = host.split(".");
+    if (parts.length === 4) {
+      const second = parseInt(parts[1], 10);
+      if (second >= 64 && second <= 127) return true;
+    }
+  }
+  return false;
+}
 
 /**
  * POST /actions — SSE streaming endpoint.
@@ -106,24 +154,15 @@ export function createActionsRoute(deps: {
 
     // Parse X-Slot-Config header for per-request slot overrides, custom presets, and runtime priority
     let slotOverrides: Record<string, { presetId: string }> | undefined;
-    let customPresetDefs: Array<{
-      id: string; name: string; provider: string;
-      baseUrl: string; model: string; protocol?: string;
-    }> | undefined;
+    let customPresetDefs: z.infer<typeof customPresetSchema>[] | undefined;
     let runtimePriorityOverrides: Record<string, number> | undefined;
     const slotConfigHeader = c.req.header("x-slot-config");
     if (slotConfigHeader && slotConfigHeader.length > 8192) {
       console.warn("[actions] X-Slot-Config header exceeds 8KB size limit, skipping");
     } else if (slotConfigHeader) {
       try {
-        const decoded = JSON.parse(atob(slotConfigHeader)) as {
-          slots?: Record<string, { presetId: string }>;
-          customPresets?: Array<{
-            id: string; name: string; provider: string;
-            baseUrl: string; model: string; protocol?: string;
-          }>;
-          runtimePriority?: Record<string, number>;
-        };
+        const raw = JSON.parse(atob(slotConfigHeader));
+        const decoded = slotConfigSchema.parse(raw);
         if (decoded.slots && Object.keys(decoded.slots).length > 0) {
           slotOverrides = decoded.slots;
         }
@@ -134,7 +173,7 @@ export function createActionsRoute(deps: {
           runtimePriorityOverrides = decoded.runtimePriority;
         }
       } catch {
-        console.warn("[actions] Failed to decode X-Slot-Config header, skipping");
+        console.warn("[actions] Failed to decode/validate X-Slot-Config header, skipping");
       }
     }
 
@@ -194,16 +233,7 @@ export function createActionsRoute(deps: {
             try {
               const url = new URL(def.baseUrl);
               const host = url.hostname;
-              if (
-                host === "localhost" ||
-                host === "127.0.0.1" ||
-                host === "0.0.0.0" ||
-                host === "::1" ||
-                host.startsWith("10.") ||
-                host.startsWith("172.") ||
-                host.startsWith("192.168.") ||
-                host.startsWith("169.254.")
-              ) {
+              if (isPrivateHost(host)) {
                 console.warn(`[actions] Blocked baseUrl targeting private network: ${def.baseUrl}`);
                 continue;
               }
@@ -486,7 +516,10 @@ export function createActionsRoute(deps: {
           content: m.content,
         }));
         const world = await store.getWorld(session.worldId);
-        const loreOverride = payload?.loreOverride as string | undefined;
+        const rawLoreOverride = payload?.loreOverride;
+        const loreOverride = typeof rawLoreOverride === "string" && rawLoreOverride.length <= 50000
+          ? rawLoreOverride
+          : undefined;
 
         // Load persisted state snapshot for kernel context rehydration
         const stateSnapshot = await store.getStateSnapshot(sessionId);
@@ -732,7 +765,7 @@ export function createActionsRoute(deps: {
       } catch (err: unknown) {
         const rawMsg = err instanceof Error ? err.message : "Internal error";
         console.error("[actions] Error:", err);
-        const tier = process.env.DEPLOYMENT_TIER ?? "demo";
+        const tier = process.env.DEPLOYMENT_TIER ?? "self";
         const msg = tier === "self" ? rawMsg : "An internal error occurred";
         await emit("flow.failed", "", "", { code: "EXECUTION_ERROR", message: msg });
       } finally {

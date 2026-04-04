@@ -1,3 +1,4 @@
+import { getConnInfo } from "@hono/node-server/conninfo";
 import { createMiddleware } from "hono/factory";
 
 // ── Configuration (from environment variables) ──────────────────────
@@ -117,7 +118,7 @@ function classifyRoute(path: string): { prefix: string; isAi: boolean; isExclude
   if (path === "/api/health" || path === "/health") {
     return { prefix: "health", isAi: false, isExcluded: true };
   }
-  if (path.startsWith("/api/ai/") || path === "/api/ai") {
+  if (path.startsWith("/api/ai/") || path === "/api/ai" || path === "/actions") {
     return { prefix: "/api/ai", isAi: true, isExcluded: false };
   }
   if (path.startsWith("/api/")) {
@@ -195,7 +196,14 @@ export function createRateLimiter() {
       return;
     }
 
-    const ip = getClientIp(c.req);
+    let remoteAddr: string | undefined;
+    try {
+      const connInfo = getConnInfo(c);
+      remoteAddr = connInfo.remote.address;
+    } catch {
+      // getConnInfo may fail in test environments
+    }
+    const ip = getClientIp(c.req, remoteAddr);
     const key = `${ip}:${route.prefix}`;
     const now = Date.now();
     const limit = route.isAi ? config.aiMaxRequests : config.maxRequests;

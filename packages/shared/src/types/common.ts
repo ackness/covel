@@ -4,6 +4,9 @@ export type I18nText = string | Record<string, string>;
 /** Supported locale identifiers */
 export type Locale = "zh-CN" | "en-US" | (string & {});
 
+/** BCP 47 locale format pattern for validation (e.g. "zh", "zh-CN", "en-US") */
+export const LOCALE_PATTERN = /^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{2,8})*$/;
+
 /** Default application locale */
 export const APP_DEFAULT_LOCALE: Locale = "zh-CN";
 

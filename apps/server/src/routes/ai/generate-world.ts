@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
-import { worldDimensionsSchema } from "@covel/shared";
+import { LOCALE_PATTERN, worldDimensionsSchema } from "@covel/shared";
 import { loadPrompt, interpolate } from "@covel/context";
 import type { AiStack } from "../../ai-setup.js";
 import type { ServerStore } from "../../store/types.js";
@@ -10,7 +10,7 @@ import type { ApiKeyEnv } from "../../middleware/api-key-injection.js";
 
 const requestSchema = z.object({
   prompt: z.string().min(1).max(4000),
-  locale: z.string().regex(/^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{2,8})*$/).optional(),
+  locale: z.string().regex(LOCALE_PATTERN).optional(),
 });
 
 const PROMPTS_DIR = resolve(import.meta.dirname, "../../../../../prompts/server");

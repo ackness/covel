@@ -1,13 +1,8 @@
 import { readFile, access } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
+import { LOCALE_PATTERN } from "@covel/shared";
 
 const cache = new Map<string, string>();
-
-/**
- * Validate locale format to prevent path traversal.
- * Only allows BCP 47-like patterns: "zh", "zh-CN", "en-US", etc.
- */
-const LOCALE_PATTERN = /^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{2,8})*$/;
 
 /**
  * Extract the language prefix from a locale string.
@@ -65,7 +60,8 @@ export async function loadPrompt(
 
   for (const path of candidates) {
     // Path traversal guard: ensure resolved path stays within the prompts directory
-    if (!resolve(path).startsWith(resolvedDir + sep)) {
+    const resolvedPath = resolve(path);
+    if (resolvedPath !== resolvedDir && !resolvedPath.startsWith(resolvedDir + sep)) {
       throw new Error(`Path traversal detected: ${path}`);
     }
     if (await fileExists(path)) {
