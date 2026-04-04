@@ -1,0 +1,77 @@
+##
+# E2E testing stack: PostgreSQL + Covel app (production build)
+#
+# Usage (two-step — Docker app + local Playwright):
+#   1. docker compose -f docker/docker-compose.e2e.yml up --build -d
+#   2. E2E_BASE_URL=http://localhost:3001 pnpm e2e
+#   3. docker compose -f docker/docker-compose.e2e.yml down -v
+#
+# Or use the one-liner:
+#   pnpm e2e:docker
+#
+# For CI with all-in-Docker (Playwright container):
+#   docker compose -f docker/docker-compose.e2e.yml --profile ci up --build --abort-on-container-exit
+##
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: covel-e2e-postgres
+    environment:
+      POSTGRES_USER: covel
+      POSTGRES_PASSWORD: covel_e2e_test
+      POSTGRES_DB: covel
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U covel"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: covel-e2e-app
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://covel:covel_e2e_test@postgres:5432/covel
+      STORE_BACKEND: pg
+      SERVER_PORT: "3001"
+      NODE_ENV: production
+      SERVE_STATIC: "true"
+      STATIC_DIR: ./web-dist
+      DEPLOYMENT_TIER: self
+    env_file:
+      - ../.env.llm
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 15s
+
+  # Optional: all-in-Docker Playwright runner (activate with --profile ci)
+  playwright:
+    profiles: ["ci"]
+    image: mcr.microsoft.com/playwright:v1.52.0-noble
+    container_name: covel-e2e-runner
+    working_dir: /work
+    volumes:
+      - ..:/work
+    environment:
+      E2E_BASE_URL: http://app:3001
+      CI: "true"
+    depends_on:
+      app:
+        condition: service_healthy
+    command: >
+      bash -c "
+        cd /work &&
+        corepack enable pnpm &&
+        pnpm install --frozen-lockfile &&
+        pnpm exec playwright install chromium &&
+        pnpm exec playwright test --reporter=list
+      "
