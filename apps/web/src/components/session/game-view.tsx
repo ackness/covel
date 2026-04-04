@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog.js";
 import { Toggle } from "@/components/ui/toggle.js";
+import { Markdown } from "@/components/ui/markdown.js";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable.js";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
@@ -480,9 +481,7 @@ export function GameView({
           <div className={`border border-border p-4 text-sm break-words max-w-[90%] md:max-w-[85%] ${
             isUser ? "bg-primary text-primary-foreground" : "bg-card prose prose-sm dark:prose-invert max-w-none"
           }`}>
-            {msg.content.split("\n").map((line, i) => (
-              <p key={i} className={i > 0 ? "mt-2" : ""}>{line}</p>
-            ))}
+            <Markdown>{msg.content}</Markdown>
           </div>
         ) : (
           <div className="border border-border p-4 bg-muted/10 text-xs font-mono text-muted-foreground whitespace-pre-wrap break-all max-w-[90%] md:max-w-[85%]">
