@@ -362,6 +362,10 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     `;
   }
 
+  async function clearMessages(sessionId: string): Promise<void> {
+    await sql`DELETE FROM sv_messages WHERE session_id = ${sessionId}`;
+  }
+
   // ── State Patches (DB-backed) ───────────────────────────────────
 
   interface StatePatchRow {
@@ -673,6 +677,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     deleteSession,
     listMessages,
     addMessage,
+    clearMessages,
     listStatePatches,
     addStatePatch,
     createCharacter,

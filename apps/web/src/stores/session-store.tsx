@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useCallback, useEffect, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useReducer, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import i18n from "i18next";
 import * as api from "@/services/api";
 import { getDataService } from "@/services/data-service";
@@ -34,6 +34,8 @@ interface SessionState {
   // Boot data
   presets: api.PresetSummary[];
   packages: api.PackageSummary[];
+  /** Plugins that failed to load (manifest or dependency errors). */
+  pluginLoadErrors: api.PluginLoadError[];
   commands: api.CommandSummary[];
   worlds: api.WorldRecord[];
   /** Server-side llm.toml config (null = legacy / unconfigured). */
@@ -67,7 +69,7 @@ interface SessionState {
 }
 
 type Action =
-  | { type: "BOOT_SUCCESS"; presets: api.PresetSummary[]; packages: api.PackageSummary[]; commands: api.CommandSummary[]; worlds: api.WorldRecord[]; llmConfig: api.LlmConfigResponse | null }
+  | { type: "BOOT_SUCCESS"; presets: api.PresetSummary[]; packages: api.PackageSummary[]; pluginLoadErrors: api.PluginLoadError[]; commands: api.CommandSummary[]; worlds: api.WorldRecord[]; llmConfig: api.LlmConfigResponse | null }
   | { type: "BOOT_ERROR"; error: string }
   | { type: "SET_WORLD"; world: api.WorldRecord }
   | { type: "ADD_WORLD"; world: api.WorldRecord }
@@ -75,6 +77,7 @@ type Action =
   | { type: "SET_SESSION"; session: api.SessionRecord }
   | { type: "SET_WORLD_SESSIONS"; sessions: api.SessionRecord[] }
   | { type: "ADD_MESSAGE"; message: StreamMessage }
+  | { type: "COMPLETE_MESSAGE"; turnId: string; runtimeId: string; message: StreamMessage }
   | { type: "APPEND_DELTA"; turnId: string; runtimeId: string; pluginId: string; delta: string }
   | { type: "SET_EXECUTING"; value: boolean }
   | { type: "SET_EXECUTION_ERROR"; error: string | null }
@@ -94,6 +97,7 @@ type Action =
 const initialState: SessionState = {
   presets: [],
   packages: [],
+  pluginLoadErrors: [],
   commands: [],
   worlds: [],
   llmConfig: null,
@@ -140,7 +144,7 @@ function deepMerge(
 function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
     case "BOOT_SUCCESS":
-      return { ...state, booted: true, bootError: null, presets: action.presets, packages: action.packages, commands: action.commands, worlds: action.worlds, llmConfig: action.llmConfig };
+      return { ...state, booted: true, bootError: null, presets: action.presets, packages: action.packages, pluginLoadErrors: action.pluginLoadErrors, commands: action.commands, worlds: action.worlds, llmConfig: action.llmConfig };
     case "BOOT_ERROR":
       return { ...state, bootError: action.error };
     case "SET_WORLD":
@@ -161,6 +165,14 @@ function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, worldSessions: state.worldSessions.filter((s) => s.id !== action.sessionId) };
     case "ADD_MESSAGE":
       return { ...state, messages: [...state.messages, action.message] };
+    case "COMPLETE_MESSAGE": {
+      // If a streaming message already exists for this turn+runtime, skip the completed message
+      // since the streamed version is already displayed.
+      const streamId = `stream_${action.turnId}_${action.runtimeId}`;
+      const hasStreamed = state.messages.some((m) => m.id === streamId);
+      if (hasStreamed) return state;
+      return { ...state, messages: [...state.messages, action.message] };
+    }
     case "APPEND_DELTA": {
       // Find existing streaming message for this runtime, or create one
       const streamId = `stream_${action.turnId}_${action.runtimeId}`;
@@ -280,12 +292,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const ds = useMemo(() => getDataService(), []);
 
+  // Ref to track current session ID for use in callbacks (avoids stale closures)
+  const sessionIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    sessionIdRef.current = state.session?.id ?? null;
+  }, [state.session]);
+
   const boot = useCallback(async () => {
     // Migrate localStorage game data to IndexedDB (one-time, idempotent)
     await migrateLocalStorageToIdb();
 
     try {
-      const [presets, packages, commands, worlds, schemas, llmConfig] = await Promise.all([
+      const [presets, packagesRes, commands, worlds, schemas, llmConfig] = await Promise.all([
         api.listPresets(),
         api.listPackages(),
         api.listCommands(),
@@ -294,7 +312,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         api.fetchLlmConfig().catch(() => null),
       ]);
       setBlockSchemas(schemas as Record<string, BlockSchemaDeclaration>);
-      dispatch({ type: "BOOT_SUCCESS", presets, packages, commands, worlds, llmConfig });
+      dispatch({
+        type: "BOOT_SUCCESS",
+        presets,
+        packages: packagesRes.packages,
+        pluginLoadErrors: packagesRes.loadErrors,
+        commands,
+        worlds,
+        llmConfig,
+      });
 
       // Auto-load server-configured provider keys (from .env.llm).
       // Only fills if user hasn't manually configured keys in browser.
@@ -331,21 +357,36 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         break;
       }
       case "message.completed": {
-        // When streaming is active, message.completed may duplicate streamed content.
-        // Only add if no streaming message exists for this turn.
+        // When streaming is active, message.completed duplicates streamed content.
+        // Dispatch a deduplicated action — the reducer checks for existing stream messages.
         const content = (payload.content as string) ?? "";
+        const runtimeId = (payload.runtimeId as string) ?? "unknown";
         if (content) {
-          dispatch({
-            type: "ADD_MESSAGE",
-            message: {
-              id: (payload.messageId as string) ?? api.uid(),
+          const msgId = (payload.messageId as string) ?? api.uid();
+          const msg: StreamMessage = {
+            id: msgId,
+            role: "assistant",
+            content,
+            timestamp: envelope.timestamp,
+            turnId,
+            runtimeId: runtimeId !== "unknown" ? runtimeId : undefined,
+          };
+          dispatch({ type: "COMPLETE_MESSAGE", turnId: turnId ?? "unknown", runtimeId, message: msg });
+          // Persist to IDB (fire-and-forget). Use the final content for the stream message.
+          const sid = sessionIdRef.current;
+          if (sid) {
+            // For streamed messages, the reducer may skip COMPLETE_MESSAGE if stream exists.
+            // We persist the final content regardless — IDB uses msgId as key for dedup.
+            ds.addMessage({
+              id: msgId,
+              sessionId: sid,
               role: "assistant",
               content,
-              timestamp: envelope.timestamp,
               turnId,
-              runtimeId: (payload.runtimeId as string) || undefined,
-            },
-          });
+              runtimeId: runtimeId !== "unknown" ? runtimeId : undefined,
+              createdAt: envelope.timestamp,
+            }).catch(() => {});
+          }
         }
         break;
       }
@@ -353,18 +394,31 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const block = payload.block as Record<string, unknown>;
         if (block) {
           const blockMeta = block.meta as Record<string, unknown> | undefined;
-          dispatch({
-            type: "ADD_MESSAGE",
-            message: {
-              id: (block.id as string) ?? api.uid(),
+          const blockId = (block.id as string) ?? api.uid();
+          const msg: StreamMessage = {
+            id: blockId,
+            role: "assistant",
+            content: "",
+            timestamp: envelope.timestamp,
+            turnId,
+            runtimeId: (blockMeta?.runtimeId as string) || undefined,
+            block,
+          };
+          dispatch({ type: "ADD_MESSAGE", message: msg });
+          // Persist block message to IDB
+          const sid = sessionIdRef.current;
+          if (sid) {
+            ds.addMessage({
+              id: blockId,
+              sessionId: sid,
               role: "assistant",
               content: "",
-              timestamp: envelope.timestamp,
               turnId,
               runtimeId: (blockMeta?.runtimeId as string) || undefined,
               block,
-            },
-          });
+              createdAt: envelope.timestamp,
+            }).catch(() => {});
+          }
         }
         break;
       }
@@ -372,6 +426,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const patch = payload.patch as { id: string; summary: string; packageName: string; data?: unknown };
         if (patch) {
           dispatch({ type: "ADD_STATE_PATCH", patch });
+          // Persist state patch to IDB
+          const sid = sessionIdRef.current;
+          if (sid) {
+            ds.addStatePatch(sid, {
+              ...patch,
+              sessionId: sid,
+              createdAt: new Date().toISOString(),
+            }).catch(() => {});
+          }
         }
         break;
       }
@@ -379,11 +442,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const snapshotState = payload.state as Record<string, unknown> | undefined;
         if (snapshotState) {
           dispatch({ type: "SET_GAME_STATE", state: snapshotState });
-          // Persist to DataService (T1/T2: localStorage, T3: no-op)
-          const sessionId = state.session?.id;
-          if (sessionId) {
+          // Persist to DataService (T1/T2: IndexedDB, T3: no-op)
+          const sid = sessionIdRef.current;
+          if (sid) {
             getDataService()
-              .persistStateSnapshot(sessionId, payload as Record<string, unknown>)
+              .persistStateSnapshot(sid, payload as Record<string, unknown>)
               .catch((err: unknown) => console.warn("[session] Failed to persist state snapshot:", err));
           }
         }
@@ -518,6 +581,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "SET_GAME_STATE", state: snapshotState });
       }
     }
+
+    // Sync session context to server so subsequent turns can be processed
+    ds.syncToServer(session.id).catch((err: unknown) => {
+      console.warn("[session] Failed to sync to server on resume:", err);
+    });
   }, [state.worlds]);
 
   const resumeSession = useCallback(async (session: api.SessionRecord) => {
@@ -549,15 +617,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (!state.session || state.executing) return;
 
     // Add user message immediately
+    const userMsgId = api.uid();
+    const userTimestamp = new Date().toISOString();
     dispatch({
       type: "ADD_MESSAGE",
       message: {
-        id: api.uid(),
+        id: userMsgId,
         role: "user",
         content,
-        timestamp: new Date().toISOString(),
+        timestamp: userTimestamp,
       },
     });
+
+    // Persist user message to IDB
+    ds.addMessage({
+      id: userMsgId,
+      sessionId: state.session.id,
+      role: "user",
+      content,
+      createdAt: userTimestamp,
+    }).catch(() => {});
 
     dispatch({ type: "CLEAR_EXECUTION_STEPS" });
     dispatch({ type: "SET_EXECUTING", value: true });

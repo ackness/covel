@@ -183,6 +183,10 @@ export async function createMemoryStore(worldsDir?: string): Promise<ServerStore
     return msg;
   }
 
+  async function clearMessages(sessionId: string): Promise<void> {
+    messages.delete(sessionId);
+  }
+
   // ── State Patches ──────────────────────────────────────────────────
 
   async function listStatePatches(sessionId: string): Promise<StatePatchRecord[]> {
@@ -311,6 +315,7 @@ export async function createMemoryStore(worldsDir?: string): Promise<ServerStore
     deleteSession,
     listMessages,
     addMessage,
+    clearMessages,
     listStatePatches,
     addStatePatch,
     createCharacter,

@@ -47,8 +47,9 @@ export interface DataService {
   listMessages(sessionId: string): Promise<MessageRecord[]>;
   addMessage(msg: MessageRecord): Promise<void>;
 
-  // State patches (ephemeral — only in-memory for local mode)
+  // State patches
   listStatePatches(sessionId: string): Promise<StatePatchRecord[]>;
+  addStatePatch(sessionId: string, patch: StatePatchRecord): Promise<void>;
 
   /**
    * Persist post-commit state snapshot from the kernel.
@@ -141,6 +142,9 @@ class RemoteDataService implements DataService {
 
   async listStatePatches(sessionId: string) {
     return api.listStatePatches(sessionId);
+  }
+  async addStatePatch(_sessionId: string, _patch: StatePatchRecord) {
+    // Remote mode: server stores patches during action SSE flow
   }
 
   async persistStateSnapshot() {
@@ -396,9 +400,10 @@ class LocalDataService implements DataService {
     // Clear related data
     await store.clearMessages(sessionId);
     await store.deleteSession(sessionId);
-    // Also clear state snapshot from app KV store
+    // Also clear state snapshot and patches from app KV store
     // (fire-and-forget — non-critical)
     appKv.removeStateSnapshot(sessionId).catch(() => {});
+    appKv.removeStatePatches(sessionId).catch(() => {});
   }
 
   // ── Messages ────────────────────────────────────────────────────
@@ -434,10 +439,20 @@ class LocalDataService implements DataService {
     });
   }
 
-  // ── State patches (in-memory only) ──────────────────────────────
+  // ── State patches ───────────────────────────────────────────────
 
   async listStatePatches(sessionId: string): Promise<StatePatchRecord[]> {
+    // Try loading from IDB first, fall back to in-memory cache
+    const persisted = await appKv.getStatePatches(sessionId);
+    if (persisted && persisted.length > 0) return persisted;
     return this.statePatches.get(sessionId) ?? [];
+  }
+
+  async addStatePatch(sessionId: string, patch: StatePatchRecord): Promise<void> {
+    const list = this.statePatches.get(sessionId) ?? [];
+    this.statePatches.set(sessionId, [...list, patch]);
+    // Persist to IDB (fire-and-forget)
+    appKv.saveStatePatches(sessionId, [...list, patch]).catch(() => {});
   }
 
   // ── State snapshot persistence (IndexedDB) ─────────────────────
@@ -475,6 +490,21 @@ class LocalDataService implements DataService {
       await api.getSession(session.id);
     } catch {
       await api.createSession(session.worldId, session.presetId, session.id);
+    }
+
+    // Upload messages so the server kernel can build LLM context
+    if (messages.length > 0) {
+      try {
+        await api.syncMessages(session.id, messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          turnId: m.turnId,
+          runtimeId: m.runtimeId,
+          block: m.block,
+        })));
+      } catch {
+        // Non-critical: server may not have sync endpoint
+      }
     }
 
     // Upload state snapshot so the server kernel can rehydrate game state

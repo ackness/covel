@@ -384,14 +384,39 @@ export async function listMessages(sessionId: string): Promise<MessageRecord[]> 
   return request<MessageRecord[]>(`/sessions/${sessionId}/messages`);
 }
 
+export async function syncMessages(
+  sessionId: string,
+  messages: Array<{ role: string; content: string; turnId?: string; runtimeId?: string; block?: Record<string, unknown> }>,
+): Promise<void> {
+  await request<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/messages/sync`, {
+    method: "POST",
+    body: JSON.stringify({ messages }),
+  });
+}
+
 // ── Config API ─────────────────────────────────────────────────────
 
 export async function listPresets(): Promise<PresetSummary[]> {
   return request<PresetSummary[]>("/presets");
 }
 
-export async function listPackages(): Promise<PackageSummary[]> {
-  return request<PackageSummary[]>("/packages");
+export interface PluginLoadError {
+  pluginId: string;
+  errors: string[];
+}
+
+interface PackagesResponse {
+  packages: PackageSummary[];
+  loadErrors: PluginLoadError[];
+}
+
+export async function listPackages(): Promise<PackagesResponse> {
+  const res = await request<PackagesResponse | PackageSummary[]>("/packages");
+  // Backward compat: old servers return a plain array
+  if (Array.isArray(res)) {
+    return { packages: res, loadErrors: [] };
+  }
+  return res;
 }
 
 export async function listCommands(): Promise<CommandSummary[]> {

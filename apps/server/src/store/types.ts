@@ -101,6 +101,7 @@ export interface ServerStore {
     content: string,
     meta?: { turnId?: string; runtimeId?: string; block?: Record<string, unknown> },
   ): Promise<MessageRecord>;
+  clearMessages(sessionId: string): Promise<void>;
 
   // State Patches
   listStatePatches(sessionId: string): Promise<StatePatchRecord[]>;

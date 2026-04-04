@@ -131,6 +131,35 @@ export function createSessionsRoute(store: ServerStore) {
     return c.json(await store.listMessages(sessionId));
   });
 
+  // Bulk message sync — used by local mode to push IDB messages to server on resume
+  route.post("/:sessionId/messages/sync", async (c) => {
+    const sessionId = c.req.param("sessionId");
+    const session = await store.getSession(sessionId);
+    if (!session) {
+      return c.json({ code: "NOT_FOUND", message: "Session not found" }, 404);
+    }
+    let body: { messages: Array<{ role: string; content: string; turnId?: string; runtimeId?: string; block?: Record<string, unknown>; createdAt?: string }> };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ code: "INVALID_JSON", message: "Malformed JSON body" }, 400);
+    }
+    if (!body.messages || !Array.isArray(body.messages)) {
+      return c.json({ code: "INVALID_BODY", message: "messages array is required" }, 400);
+    }
+    // Clear existing messages first to avoid duplicates, then re-add all
+    await store.clearMessages(sessionId);
+    for (const m of body.messages) {
+      await store.addMessage(
+        sessionId,
+        m.role as "system" | "user" | "assistant",
+        m.content,
+        { turnId: m.turnId, runtimeId: m.runtimeId, block: m.block },
+      );
+    }
+    return c.json({ ok: true, count: body.messages.length });
+  });
+
   route.get("/:sessionId/state-patches", async (c) => {
     const sessionId = c.req.param("sessionId");
     const session = await store.getSession(sessionId);

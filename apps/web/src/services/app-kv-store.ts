@@ -9,12 +9,13 @@
  */
 
 const DB_NAME = "covel-app";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORE_STATE_SNAPSHOTS = "stateSnapshots"; // key: sessionId
 const STORE_WORLD_OVERLAYS = "worldOverlays"; // key: worldId
+const STORE_STATE_PATCHES = "statePatches"; // key: sessionId
 
-type StoreNames = typeof STORE_STATE_SNAPSHOTS | typeof STORE_WORLD_OVERLAYS;
+type StoreNames = typeof STORE_STATE_SNAPSHOTS | typeof STORE_WORLD_OVERLAYS | typeof STORE_STATE_PATCHES;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -29,6 +30,9 @@ function openAppDb(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_WORLD_OVERLAYS)) {
         db.createObjectStore(STORE_WORLD_OVERLAYS);
+      }
+      if (!db.objectStoreNames.contains(STORE_STATE_PATCHES)) {
+        db.createObjectStore(STORE_STATE_PATCHES);
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -82,6 +86,20 @@ export async function saveStateSnapshot(sessionId: string, snapshot: Record<stri
 
 export async function removeStateSnapshot(sessionId: string): Promise<void> {
   return idbDelete(STORE_STATE_SNAPSHOTS, sessionId);
+}
+
+// ── State Patches ───────────────────────────────────────────────
+
+export async function getStatePatches(sessionId: string): Promise<import("./api.js").StatePatchRecord[] | null> {
+  return idbGet<import("./api.js").StatePatchRecord[]>(STORE_STATE_PATCHES, sessionId);
+}
+
+export async function saveStatePatches(sessionId: string, patches: import("./api.js").StatePatchRecord[]): Promise<void> {
+  return idbPut(STORE_STATE_PATCHES, sessionId, patches);
+}
+
+export async function removeStatePatches(sessionId: string): Promise<void> {
+  return idbDelete(STORE_STATE_PATCHES, sessionId);
 }
 
 // ── World Overlays ───────────────────────────────────────────────
