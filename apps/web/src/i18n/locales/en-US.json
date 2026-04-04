@@ -61,6 +61,8 @@
     "worldLore": "World Document",
     "resetLore": "Reset to original",
     "configureKeys": "Configure API Keys & Presets",
+    "beginAdventure": "Begin Adventure",
+    "beginAdventureHint": "Ready? Click below to let the story begin.",
     "startGame": "Start Game",
     "selectWorld": "Select World",
     "worldSelectDesc": "Choose a world to begin your adventure. Each world has unique lore, characters, and narration style.",

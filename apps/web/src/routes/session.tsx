@@ -23,6 +23,7 @@ function SessionPage() {
     state,
     selectWorld,
     startGame,
+    beginAdventure,
     resumeSession,
     resumeSessionById,
     loadWorldSessions,
@@ -40,16 +41,38 @@ function SessionPage() {
   const { sid } = Route.useSearch();
   const navigate = useNavigate();
   const autoResumeAttempted = useRef(false);
+  // Track whether a stale session existed at mount (before any user action on this page).
+  // If the component mounts with a session but no sid in URL, the session is stale
+  // (carried over from a previous navigation). Sessions created by startGame() on
+  // this page won't be flagged because staleSessionRef is set only once at mount.
+  const staleSessionRef = useRef<string | null>(
+    // At mount: if session exists but URL has no sid, it's stale
+    null,
+  );
+  useEffect(() => {
+    // Run once: if we mounted with a session but no sid, mark it as stale
+    if (state.session && !sid && staleSessionRef.current === null) {
+      staleSessionRef.current = state.session.id;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Sync URL with session state
   useEffect(() => {
     if (state.session && state.session.id !== sid) {
-      navigate({ to: "/session", search: { sid: state.session.id }, replace: true });
+      if (!sid && state.session.id === staleSessionRef.current) {
+        // Navigated to /session without sid (e.g. from homepage) while a stale
+        // session is still in state — clear it so the user lands on world select.
+        backToWorldSelect();
+        staleSessionRef.current = null;
+      } else {
+        navigate({ to: "/session", search: { sid: state.session.id }, replace: true });
+      }
     } else if (!state.session && sid && autoResumeAttempted.current) {
       // Session was cleared (back to world select) — remove sid from URL
       navigate({ to: "/session", search: {}, replace: true });
     }
-  }, [state.session, sid, navigate]);
+  }, [state.session, sid, navigate, backToWorldSelect]);
 
   // Auto-resume from URL sid on boot
   useEffect(() => {
@@ -112,6 +135,7 @@ function SessionPage() {
         submittedBlockIds={state.submittedBlockIds}
         onSendMessage={sendMessage}
         onSubmitBlock={submitBlock}
+        onBeginAdventure={beginAdventure}
         onRetryRuntime={retryRuntime}
         onResetSession={resetSession}
         onBackToWorldSelect={backToWorldSelect}

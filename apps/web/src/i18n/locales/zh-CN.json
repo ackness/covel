@@ -52,6 +52,8 @@
     "slotBalance": "均衡",
     "slotImage": "图像",
     "emptyInit": "正在准备冒险...",
+    "beginAdventure": "开始冒险",
+    "beginAdventureHint": "准备好了吗？点击下方按钮，让故事开始。",
     "emptyCharCreate": "等待角色创建完成...",
     "emptyPlaying": "冒险等待着你，输入消息开始吧。",
     "emptyEnded": "本次会话已结束。",

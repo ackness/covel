@@ -378,6 +378,7 @@ function RightPanel({
   }, []);
 
   return (
+    <div className="flex-1 flex flex-col min-h-0 min-w-0">
     <Tabs
       defaultValue="game"
       className="flex-1 flex min-h-0 min-w-0"
@@ -533,26 +534,27 @@ function RightPanel({
           </p>
         </TabsContent>
       </ScrollArea>
-      {storeBackend && (
-        <div className="border-t border-border px-3 py-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0">
-          <Database className="w-3 h-3" />
-          <span>Store:</span>
-          <Badge
-            variant="outline"
-            className={`text-[9px] rounded-none ${
-              storeBackend === "pg"
-                ? "border-green-500/40 text-green-600 dark:text-green-400"
-                : "border-amber-500/40 text-amber-600 dark:text-amber-400"
-            }`}
-          >
-            {storeBackend === "pg" ? "PostgreSQL" : "Memory"}
-          </Badge>
-          {storeBackend === "memory" && (
-            <span className="text-amber-600 dark:text-amber-400">{t("session.memoryStoreWarning", "Data lost on restart")}</span>
-          )}
-        </div>
-      )}
     </Tabs>
+    {storeBackend && (
+      <div className="border-t border-border px-3 py-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0">
+        <Database className="w-3 h-3" />
+        <span>Store:</span>
+        <Badge
+          variant="outline"
+          className={`text-[9px] rounded-none ${
+            storeBackend === "pg"
+              ? "border-green-500/40 text-green-600 dark:text-green-400"
+              : "border-amber-500/40 text-amber-600 dark:text-amber-400"
+          }`}
+        >
+          {storeBackend === "pg" ? "PostgreSQL" : "Memory"}
+        </Badge>
+        {storeBackend === "memory" && (
+          <span className="text-amber-600 dark:text-amber-400">{t("session.memoryStoreWarning", "Data lost on restart")}</span>
+        )}
+      </div>
+    )}
+    </div>
   );
 }
 
@@ -581,6 +583,8 @@ interface GameViewProps {
   worldSessions: SessionRecord[];
   /** Block IDs that have been submitted (permanently locked). */
   submittedBlockIds: ReadonlySet<string>;
+  /** Kick off the narrative — called when player clicks 开始冒险. */
+  onBeginAdventure: () => void;
   onSendMessage: (content: string) => void;
   /** Mark a block as submitted (permanently locks it). */
   onSubmitBlock: (blockId: string) => void;
@@ -610,6 +614,7 @@ export function GameView({
   executionSteps,
   worldSessions,
   submittedBlockIds,
+  onBeginAdventure,
   onSendMessage,
   onSubmitBlock,
   onRetryRuntime,
@@ -967,15 +972,34 @@ export function GameView({
           <ScrollArea className="flex-1 min-h-0">
             <div className="p-4 md:p-6 space-y-6 md:space-y-8 max-w-4xl mx-auto w-full">
               {messages.length === 0 && !executing && (
-                <div className="flex flex-col items-center justify-center py-12 text-center space-y-3">
-                  <MessageSquare className="w-8 h-8 text-muted-foreground/50" />
-                  <p className="text-sm text-muted-foreground">
-                    {phase === "init" && t("session.emptyInit")}
-                    {phase === "character_creation" &&
-                      t("session.emptyCharCreate")}
-                    {phase === "playing" && t("session.emptyPlaying")}
-                    {phase === "ended" && t("session.emptyEnded")}
-                  </p>
+                <div className="flex flex-col items-center justify-center py-16 text-center space-y-6">
+                  {phase === "init" ? (
+                    <>
+                      <div className="space-y-2">
+                        <p className="text-base font-semibold">{world ? (typeof world.name === "string" ? world.name : (world.name as Record<string, string>)["zh-CN"] ?? "") : ""}</p>
+                        <p className="text-sm text-muted-foreground max-w-xs">
+                          {t("session.beginAdventureHint", "准备好了吗？点击下方按钮，让故事开始。")}
+                        </p>
+                      </div>
+                      <Button
+                        size="lg"
+                        className="px-10 py-5 text-sm uppercase tracking-widest font-bold"
+                        onClick={onBeginAdventure}
+                      >
+                        <Flame className="w-4 h-4 mr-2" />
+                        {t("session.beginAdventure", "开始冒险")}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <MessageSquare className="w-8 h-8 text-muted-foreground/50" />
+                      <p className="text-sm text-muted-foreground">
+                        {phase === "character_creation" && t("session.emptyCharCreate")}
+                        {phase === "playing" && t("session.emptyPlaying")}
+                        {phase === "ended" && t("session.emptyEnded")}
+                      </p>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -985,6 +1009,7 @@ export function GameView({
                 <ExecutionTimeline
                   steps={executionSteps}
                   executing={executing}
+                  packages={packages}
                   onRetryRuntime={
                     onRetryRuntime ? (id) => onRetryRuntime(id) : undefined
                   }

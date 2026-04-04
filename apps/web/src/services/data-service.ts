@@ -168,7 +168,7 @@ class RemoteDataService implements DataService {
 // ── Local implementation (IndexedDB) ──────────────────────────────
 
 function uid(prefix: string): string {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function humanSessionId(): string {
@@ -478,24 +478,29 @@ class LocalDataService implements DataService {
 
     if (!session || !world) return;
 
+    // Sanitize IDs: server schema requires /^[a-z0-9-]+$/, but older local IDs
+    // may contain underscores (generated before the uid() fix). Replace them.
+    const serverWorldId = world.id.replace(/_/g, "-");
+    const serverSessionId = session.id.replace(/_/g, "-");
+
     // Ensure world exists on server (pass local ID so server uses the same ID)
     try {
-      await api.getWorld(world.id);
+      await api.getWorld(serverWorldId);
     } catch {
-      await api.createWorld(text(world.name), text(world.description), world.id);
+      await api.createWorld(text(world.name), text(world.description), serverWorldId);
     }
 
     // Ensure session exists on server (pass local ID so server uses the same ID)
     try {
-      await api.getSession(session.id);
+      await api.getSession(serverSessionId);
     } catch {
-      await api.createSession(session.worldId, session.presetId, session.id);
+      await api.createSession(serverWorldId, session.presetId, serverSessionId);
     }
 
     // Upload messages so the server kernel can build LLM context
     if (messages.length > 0) {
       try {
-        await api.syncMessages(session.id, messages.map((m) => ({
+        await api.syncMessages(serverSessionId, messages.map((m) => ({
           role: m.role,
           content: m.content,
           turnId: m.turnId,
@@ -511,7 +516,7 @@ class LocalDataService implements DataService {
     const snapshot = await this.loadStateSnapshot(session.id);
     if (snapshot) {
       try {
-        await api.saveStateSnapshot(session.id, snapshot);
+        await api.saveStateSnapshot(serverSessionId, snapshot);
       } catch {
         // Non-critical: server may not have state-snapshot endpoint in T1 mode
       }

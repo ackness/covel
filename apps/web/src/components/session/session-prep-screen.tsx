@@ -47,6 +47,7 @@ export function SessionPrepScreen({
   const [priorityOverrides, setPriorityOverrides] = useState<Record<string, number>>(() =>
     api.getRuntimePriorityOverrides()
   );
+  const [pluginSectionExpanded, setPluginSectionExpanded] = useState(false);
   const [expandedPlugins, setExpandedPlugins] = useState<Set<string>>(new Set());
   const [existingSessions, setExistingSessions] = useState<api.SessionRecord[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<api.SessionRecord | null>(null);
@@ -277,11 +278,29 @@ export function SessionPrepScreen({
           {/* Plugin & Runtime Configuration */}
           <Card className="mb-8">
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Cpu className="w-4 h-4" />
-                {t("session.plugins", "Plugins & Runtimes")}
-              </CardTitle>
+              <button
+                className="w-full flex items-center justify-between text-left"
+                onClick={() => setPluginSectionExpanded(!pluginSectionExpanded)}
+              >
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Cpu className="w-4 h-4" />
+                  {t("session.plugins", "Plugins & Runtimes")}
+                  {enabledPackages.length > 0 && (
+                    <Badge variant="secondary" className="text-[10px] ml-1">
+                      {enabledPackages.length}
+                    </Badge>
+                  )}
+                </CardTitle>
+                {pluginSectionExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              {!pluginSectionExpanded && enabledPackages.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  {enabledPackages.length} 个插件已加载，共{" "}
+                  {enabledPackages.reduce((sum, p) => sum + (p.runtimes?.length ?? 0), 0)} 个 runtime
+                </p>
+              )}
             </CardHeader>
+            {pluginSectionExpanded && (
             <CardContent className="space-y-2">
               {enabledPackages.length === 0 ? (
                 <p className="text-xs text-muted-foreground italic">{t("session.noPluginsLoaded")}</p>
@@ -364,6 +383,7 @@ export function SessionPrepScreen({
                 })
               )}
             </CardContent>
+            )}
           </Card>
 
           {/* Start Game Button */}

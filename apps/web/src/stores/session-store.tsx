@@ -226,8 +226,13 @@ function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, phase: action.phase };
     case "SET_GAME_STATE":
       return { ...state, gameState: action.state };
-    case "ADD_EXECUTION_STEP":
-      return { ...state, executionSteps: [...state.executionSteps, action.step] };
+    case "ADD_EXECUTION_STEP": {
+      const updated = [...state.executionSteps, action.step];
+      if (state.session?.id) {
+        try { sessionStorage.setItem(`covel:execSteps:${state.session.id}`, JSON.stringify(updated)); } catch { /* quota */ }
+      }
+      return { ...state, executionSteps: updated };
+    }
     case "CLEAR_EXECUTION_STEPS":
       return { ...state, executionSteps: [] };
     case "SUBMIT_BLOCK":
@@ -257,6 +262,8 @@ interface SessionContextValue {
   boot: () => Promise<void>;
   selectWorld: (worldId: string) => void;
   startGame: () => Promise<void>;
+  /** Send start_session action to kick off the narrative from GameView. */
+  beginAdventure: () => void;
   /** Resume a previously created session. */
   resumeSession: (session: api.SessionRecord) => Promise<void>;
   /** Resume a session by ID (for URL-based auto-resume on refresh). */
@@ -510,10 +517,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, [state.worlds]);
 
+  /**
+   * Create a new session and enter GameView — does NOT start the narrative.
+   * The player presses "开始冒险" inside GameView to actually kick off the LLM flow.
+   */
   const startGame = useCallback(async () => {
     if (!state.world) return;
     try {
-      // Use user's slot config (default slot) if configured, else fall back to server default
       const slotConfig = api.getSlotConfig();
       const defaultPresetId = slotConfig.default?.presetId;
       const presetId = defaultPresetId
@@ -521,20 +531,27 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         ?? state.presets[0]?.id;
       const session = await ds.createSession(state.world.id, presetId);
       dispatch({ type: "SET_SESSION", session });
-      // Sync context to server so stateless server can process the turn
+      // Sync context to server so the stateless server can process the first turn
       await ds.syncToServer(session.id);
       api.markServerAck();
+    } catch (err) {
+      dispatch({ type: "SET_EXECUTION_ERROR", error: (err as Error).message });
+    }
+  }, [state.world, state.presets]);
 
-      const overlay = await api.getWorldOverlay(state.world.id);
+  /** Send the start_session action to kick off the narrative. Called from GameView. */
+  const beginAdventure = useCallback(() => {
+    if (!state.session || state.executing) return;
+    const sessionId = state.session.id;
+    void api.getWorldOverlay(state.world?.id ?? "").then((overlay) => {
       const loreOverride = overlay?.lore;
-
       dispatch({ type: "CLEAR_EXECUTION_STEPS" });
       dispatch({ type: "SET_EXECUTING", value: true });
       api.sendAction(
         {
           requestId: api.uid(),
           type: "start_session",
-          sessionId: session.id,
+          sessionId,
           locale: i18n.language,
           payload: { ...(loreOverride ? { loreOverride } : {}) },
         },
@@ -547,10 +564,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           dispatch({ type: "SET_EXECUTING", value: false });
         }
       );
-    } catch (err) {
-      dispatch({ type: "SET_EXECUTION_ERROR", error: (err as Error).message });
-    }
-  }, [state.world, state.presets, handleSseEvent]);
+    }).catch(() => {
+      // Proceed without overlay if fetch fails
+      dispatch({ type: "CLEAR_EXECUTION_STEPS" });
+      dispatch({ type: "SET_EXECUTING", value: true });
+      api.sendAction(
+        {
+          requestId: api.uid(),
+          type: "start_session",
+          sessionId,
+          locale: i18n.language,
+          payload: {},
+        },
+        handleSseEvent,
+        (err) => {
+          dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
+          dispatch({ type: "SET_EXECUTING", value: false });
+        },
+        () => {
+          dispatch({ type: "SET_EXECUTING", value: false });
+        }
+      );
+    });
+  }, [state.session, state.world, state.executing, handleSseEvent]);
 
   /** Shared logic for fully restoring a session from server data. */
   const restoreSession = useCallback(async (session: api.SessionRecord) => {
@@ -601,6 +637,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "SET_GAME_STATE", state: snapshotState });
       }
     }
+
+    // Restore last turn's execution steps from sessionStorage (survives F5 refresh)
+    try {
+      const raw = sessionStorage.getItem(`covel:execSteps:${session.id}`);
+      if (raw) {
+        const steps = JSON.parse(raw) as ExecutionStep[];
+        for (const step of steps) {
+          dispatch({ type: "ADD_EXECUTION_STEP", step });
+        }
+      }
+    } catch { /* ignore parse errors */ }
 
     // Sync session context to server so subsequent turns can be processed
     ds.syncToServer(session.id).then(() => {
@@ -809,6 +856,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     boot,
     selectWorld,
     startGame,
+    beginAdventure,
     resumeSession,
     resumeSessionById,
     loadWorldSessions,
