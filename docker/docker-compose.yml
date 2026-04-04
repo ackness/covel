@@ -34,8 +34,9 @@ services:
     env_file:
       - ../.env
       - ../.env.llm
-    volumes:
-      - ../llm.toml:/app/llm.toml:ro
+    # Optional: mount custom llm.toml for model slot configuration
+    # volumes:
+    #   - ../llm.toml:/app/llm.toml:ro
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,5 +1,5 @@
 import { parse as parseToml } from "smol-toml";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { llmConfigSchema, type LlmConfig, type SlotDefinition } from "./llm-schema.js";
@@ -17,7 +17,11 @@ import { resolveCapability, type ManualCapabilityOverride } from "../capability/
  */
 export function loadLlmConfig(filePath: string): { llmConfig: LlmConfig; aiConfig: AiConfig } | null {
   const absolutePath = resolve(filePath);
-  if (!existsSync(absolutePath)) return null;
+  try {
+    if (!statSync(absolutePath).isFile()) return null;
+  } catch {
+    return null;
+  }
 
   let raw: string;
   try {

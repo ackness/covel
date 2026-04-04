@@ -2,54 +2,53 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
-import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const RUNTIME_PROXY_PATHS = [
+  "/actions",
+  "/archives",
+  "/commands",
+  "/packages",
+  "/presets",
+  "/sessions",
+  "/traces",
+  "/worlds"
+] as const;
+
+export function resolveRuntimeProxyTarget(env: Record<string, string | undefined> = process.env): string {
+  const host = env.RUNTIME_HOST?.trim() || "127.0.0.1";
+  const port = env.RUNTIME_PORT?.trim() || "3001";
+  return `http://${host}:${port}`;
+}
+
+export function createRuntimeProxyConfig(env: Record<string, string | undefined> = process.env) {
+  const target = resolveRuntimeProxyTarget(env);
+
+  return Object.fromEntries(
+    RUNTIME_PROXY_PATHS.map((path) => [
+      path,
+      {
+        target
+      }
+    ])
+  );
+}
+
+export function resolveWorkspaceRoot(): string {
+  return fileURLToPath(new URL("../../", import.meta.url));
+}
 
 export default defineConfig({
-  plugins: [
-    TanStackRouterVite({ quoteStyle: "double" }),
-    react(),
-    tailwindcss(),
-  ],
-  resolve: {
-    alias: {
-      "@": resolve(__dirname, "./src"),
-    },
-  },
+  root: fileURLToPath(new URL("./", import.meta.url)),
+  plugins: [TanStackRouterVite(), tailwindcss(), react()],
   server: {
-    port: 5173,
-    proxy: {
-      "/api": {
-        target: "http://localhost:3001",
-        changeOrigin: true,
-      },
-      "/worlds": {
-        target: "http://localhost:3001",
-        changeOrigin: true,
-      },
-      "/sessions": {
-        target: "http://localhost:3001",
-        changeOrigin: true,
-      },
-      "/actions": {
-        target: "http://localhost:3001",
-        changeOrigin: true,
-      },
-      "/commands": {
-        target: "http://localhost:3001",
-        changeOrigin: true,
-      },
-      "/packages": {
-        target: "http://localhost:3001",
-        changeOrigin: true,
-      },
-      "/presets": {
-        target: "http://localhost:3001",
-        changeOrigin: true,
-      },
-      "/health": {
-        target: "http://localhost:3001",
-        changeOrigin: true,
-      },
-    },
+    proxy: createRuntimeProxyConfig(),
+    fs: {
+      allow: [resolveWorkspaceRoot()]
+    }
   },
+  build: {
+    outDir: fileURLToPath(new URL("../../dist/web", import.meta.url)),
+    emptyOutDir: true
+  }
 });

@@ -33,6 +33,10 @@ COPY plugins/core-dice/package.json plugins/core-dice/
 COPY plugins/core-memory/package.json plugins/core-memory/
 COPY plugins/core-npc-init/package.json plugins/core-npc-init/
 COPY plugins/core-world-state/package.json plugins/core-world-state/
+COPY plugins/core-codex/package.json plugins/core-codex/
+COPY plugins/core-event/package.json plugins/core-event/
+COPY plugins/core-image/package.json plugins/core-image/
+COPY plugins/core-notification/package.json plugins/core-notification/
 
 RUN pnpm install --frozen-lockfile
 
@@ -69,7 +73,7 @@ COPY prompts/ prompts/
 COPY worlds/ worlds/
 
 # Built web static assets
-COPY --from=build-web /app/apps/web/dist apps/server/web-dist/
+COPY --from=build-web /app/dist/web apps/server/web-dist/
 
 WORKDIR /app/apps/server
 
