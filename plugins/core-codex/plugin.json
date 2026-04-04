@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "1.0",
+  "id": "core-codex",
+  "displayName": {
+    "zh-CN": "图鉴百科",
+    "en-US": "Codex"
+  },
+  "version": "0.1.0",
+  "author": "covel",
+  "description": {
+    "zh-CN": "追踪玩家在冒险中发现的知识条目，包括怪物、道具、地点、传说和人物。",
+    "en-US": "Track discovered knowledge entries during gameplay, including monsters, items, locations, lore, and characters."
+  },
+  "defaultLocale": "zh-CN",
+  "supportedLocales": ["zh-CN", "en-US"],
+  "loadingOrder": 60,
+  "runtimes": [
+    {
+      "id": "codex-tracker",
+      "pluginId": "core-codex",
+      "kind": "plugin",
+      "priority": 700,
+      "trigger": {
+        "mode": "event",
+        "onEvents": ["user.input"]
+      },
+      "providerBinding": "fast",
+      "tools": [
+        "core-codex:unlock-codex-entry",
+        "core-codex:update-codex-entry"
+      ],
+      "hooks": []
+    }
+  ],
+  "tools": [
+    {
+      "id": "unlock-codex-entry",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": ["monster", "item", "location", "lore", "character"],
+            "description": "Category of the codex entry"
+          },
+          "title": { "type": "string", "description": "Entry title" },
+          "content": { "type": "string", "description": "Descriptive content (2-4 sentences)" },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "2-5 relevant tags for searchability"
+          },
+          "imageHint": { "type": "string", "description": "Optional brief image generation hint" }
+        },
+        "required": ["category", "title", "content", "tags"]
+      }
+    },
+    {
+      "id": "update-codex-entry",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "entryId": { "type": "string", "description": "ID of the codex entry to update" },
+          "content": { "type": "string", "description": "Updated descriptive content" },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Updated tags"
+          },
+          "imageHint": { "type": "string", "description": "Updated image generation hint" }
+        },
+        "required": ["entryId"]
+      }
+    }
+  ],
+  "blockSchemas": [
+    {
+      "type": "codex_entry",
+      "interactive": false,
+      "meta": {
+        "displayName": { "zh-CN": "图鉴条目", "en-US": "Codex Entry" },
+        "description": "Codex entry display"
+      },
+      "dataSchema": {
+        "type": "object",
+        "properties": {
+          "action": { "type": "string", "enum": ["unlock", "update"] },
+          "category": { "type": "string", "enum": ["monster", "item", "location", "lore", "character"] },
+          "entryId": { "type": "string" },
+          "title": { "type": "string" },
+          "content": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  ]
+}

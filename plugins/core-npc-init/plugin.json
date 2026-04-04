@@ -12,7 +12,10 @@
     "en-US": "Analyze world lore to auto-generate character field schema and initialize NPC character cards."
   },
   "defaultLocale": "zh-CN",
-  "supportedLocales": ["zh-CN", "en-US"],
+  "supportedLocales": [
+    "zh-CN",
+    "en-US"
+  ],
   "loadingOrder": 25,
   "runtimes": [
     {
@@ -22,7 +25,9 @@
       "priority": 420,
       "trigger": {
         "mode": "event",
-        "onEvents": ["session_start"]
+        "onEvents": [
+          "session_start"
+        ]
       },
       "providerBinding": "default",
       "tools": [
@@ -43,15 +48,24 @@
       "type": "npc_init_summary",
       "interactive": false,
       "meta": {
-        "displayName": { "zh-CN": "NPC 初始化摘要", "en-US": "NPC Init Summary" },
-        "description": { "zh-CN": "显示 NPC 初始化完成结果", "en-US": "Shows NPC initialization results" }
+        "displayName": {
+          "zh-CN": "NPC 初始化摘要",
+          "en-US": "NPC Init Summary"
+        },
+        "description": "Shows NPC initialization results"
       },
       "dataSchema": {
         "type": "object",
         "properties": {
-          "npcCount": { "type": "number" },
-          "summary": { "type": "string" },
-          "completedAt": { "type": "string" }
+          "npcCount": {
+            "type": "number"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "completedAt": {
+            "type": "string"
+          }
         }
       }
     }
@@ -70,21 +84,70 @@
             "items": {
               "type": "object",
               "properties": {
-                "key": { "type": "string", "description": "Machine key, e.g. 'hp', 'mana', 'faction'" },
-                "label": { "type": "string", "description": "Human-readable label" },
-                "type": { "type": "string", "enum": ["number", "string", "boolean", "enum", "text"], "description": "Field value type" },
-                "options": { "type": "array", "items": { "type": "string" }, "description": "Allowed values for enum type" },
-                "defaultValue": { "description": "Default value for new characters" },
-                "category": { "type": "string", "enum": ["stats", "bio", "equipment", "social", "custom"], "description": "Grouping category" },
-                "visible": { "type": "boolean", "description": "Show in compact view (default true)" },
-                "min": { "type": "number", "description": "Minimum value for number type" },
-                "max": { "type": "number", "description": "Maximum value for number type" }
+                "key": {
+                  "type": "string",
+                  "description": "Machine key, e.g. 'hp', 'mana', 'faction'"
+                },
+                "label": {
+                  "type": "string",
+                  "description": "Human-readable label"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "number",
+                    "string",
+                    "boolean",
+                    "enum",
+                    "text"
+                  ],
+                  "description": "Field value type"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Allowed values for enum type"
+                },
+                "defaultValue": {
+                  "description": "Default value for new characters"
+                },
+                "category": {
+                  "type": "string",
+                  "enum": [
+                    "stats",
+                    "bio",
+                    "equipment",
+                    "social",
+                    "custom"
+                  ],
+                  "description": "Grouping category"
+                },
+                "visible": {
+                  "type": "boolean",
+                  "description": "Show in compact view (default true)"
+                },
+                "min": {
+                  "type": "number",
+                  "description": "Minimum value for number type"
+                },
+                "max": {
+                  "type": "number",
+                  "description": "Maximum value for number type"
+                }
               },
-              "required": ["key", "label", "type"]
+              "required": [
+                "key",
+                "label",
+                "type"
+              ]
             }
           }
         },
-        "required": ["fields"]
+        "required": [
+          "fields"
+        ]
       }
     },
     {
@@ -94,12 +157,34 @@
         "type": "object",
         "description": "Create an NPC character card with dynamic fields. Call define-character-schema first.",
         "properties": {
-          "name": { "type": "string", "description": "NPC name" },
-          "description": { "type": "string", "description": "Brief description of the NPC" },
-          "type": { "type": "string", "enum": ["npc", "companion"], "description": "'companion' if the NPC can join the player's party" },
-          "fields": { "type": "object", "description": "Dynamic field values matching the schema keys", "additionalProperties": true }
+          "name": {
+            "type": "string",
+            "description": "NPC name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Brief description of the NPC"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "npc",
+              "companion"
+            ],
+            "description": "'companion' if the NPC can join the player's party"
+          },
+          "fields": {
+            "type": "object",
+            "description": "Dynamic field values matching the schema keys",
+            "additionalProperties": true
+          }
         },
-        "required": ["name", "description", "type", "fields"]
+        "required": [
+          "name",
+          "description",
+          "type",
+          "fields"
+        ]
       }
     },
     {
@@ -109,10 +194,19 @@
         "type": "object",
         "description": "Signal that NPC initialization is complete. Call this as the LAST step.",
         "properties": {
-          "summary": { "type": "string", "description": "Brief summary of what was initialized" },
-          "npcCount": { "type": "number", "description": "Number of NPCs created" }
+          "summary": {
+            "type": "string",
+            "description": "Brief summary of what was initialized"
+          },
+          "npcCount": {
+            "type": "number",
+            "description": "Number of NPCs created"
+          }
         },
-        "required": ["summary", "npcCount"]
+        "required": [
+          "summary",
+          "npcCount"
+        ]
       }
     }
   ]

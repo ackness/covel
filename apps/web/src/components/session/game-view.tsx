@@ -5,7 +5,7 @@ import {
   SlidersHorizontal, Database, MessageSquare, Settings2, History, Send,
   Code, LayoutTemplate, Loader2, AlertCircle, KeyRound, Plus,
   PanelLeftClose, PanelRightClose, BookOpen, MapIcon, Copy, Check, Gamepad2,
-  Bug, Trash2,
+  Bug, Trash2, Flame, Library,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.js";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
@@ -24,6 +24,8 @@ import { SessionBreadcrumb } from "./session-breadcrumb.js";
 import { getBlockRenderer } from "@/components/blocks/block-renderer.js";
 import { ExecutionTimeline } from "./execution-timeline.js";
 import { GameStatusPanel } from "./game-status-panel.js";
+import { EventPanel } from "./event-panel.js";
+import { CodexPanel } from "./codex-panel.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 import type { SessionRecord, WorldRecord, PackageSummary, PresetSummary, CommandSummary, LlmConfigResponse } from "@/services/api.js";
@@ -266,9 +268,15 @@ function RightPanel({ world, gameState, statePatches, onToggleRightPanel }: Righ
   return (
     <Tabs defaultValue="game" className="flex-1 flex flex-col min-h-0 min-w-0">
       <div className="h-14 px-2 border-b border-border bg-background flex items-center justify-between shrink-0">
-        <TabsList className="grid w-full grid-cols-4 rounded-none flex-1 max-w-[320px]">
+        <TabsList className="grid w-full grid-cols-6 rounded-none flex-1 max-w-[480px]">
           <TabsTrigger value="game" className="text-xs uppercase tracking-widest">
             <Gamepad2 className="w-3 h-3 mr-1" />{t("session.game", "Game")}
+          </TabsTrigger>
+          <TabsTrigger value="events" className="text-xs uppercase tracking-widest">
+            <Flame className="w-3 h-3 mr-1" />{t("session.events", "Events")}
+          </TabsTrigger>
+          <TabsTrigger value="codex" className="text-xs uppercase tracking-widest">
+            <Library className="w-3 h-3 mr-1" />{t("session.codex", "Codex")}
           </TabsTrigger>
           <TabsTrigger value="state" className="text-xs uppercase tracking-widest">{t("session.state", "State")}</TabsTrigger>
           <TabsTrigger value="world" className="text-xs uppercase tracking-widest">{t("session.world", "World")}</TabsTrigger>
@@ -281,6 +289,18 @@ function RightPanel({ world, gameState, statePatches, onToggleRightPanel }: Righ
       <ScrollArea className="flex-1 min-h-0">
         <TabsContent value="game" className="p-4 m-0">
           <GameStatusPanel gameState={gameState} />
+        </TabsContent>
+        <TabsContent value="events" className="p-4 m-0">
+          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
+            <Flame className="w-4 h-4 shrink-0" /> {t("session.eventsTitle", "Events")}
+          </h3>
+          <EventPanel gameState={gameState} />
+        </TabsContent>
+        <TabsContent value="codex" className="p-4 m-0">
+          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
+            <Library className="w-4 h-4 shrink-0" /> {t("session.codexTitle", "Codex")}
+          </h3>
+          <CodexPanel gameState={gameState} />
         </TabsContent>
         <TabsContent value="state" className="p-4 m-0 space-y-4">
           <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">

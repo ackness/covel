@@ -41,6 +41,43 @@
           }
         }
       }
+    },
+    {
+      "type": "action_guide",
+      "interactive": true,
+      "meta": {
+        "displayName": { "zh-CN": "行动建议", "en-US": "Action Guide" },
+        "description": "Categorized action suggestions with styles (safe/aggressive/creative/wild)"
+      },
+      "dataSchema": {
+        "type": "object",
+        "properties": {
+          "topic": { "type": "string" },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "style": { "type": "string", "enum": ["safe", "aggressive", "creative", "wild"] },
+                "label": { "type": "string" },
+                "suggestions": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              },
+              "required": ["style", "label", "suggestions"]
+            }
+          }
+        },
+        "required": ["topic", "categories"]
+      },
+      "submitSchema": {
+        "type": "object",
+        "properties": {
+          "selectedSuggestion": { "type": "string", "description": "The suggestion text the player chose" },
+          "customInput": { "type": "string", "description": "Player's own custom action input" }
+        }
+      }
     }
   ],
   "runtimes": [
@@ -54,7 +91,7 @@
         "onEvents": ["user.input"]
       },
       "providerBinding": "fast",
-      "tools": ["core-guide:generate-choices"],
+      "tools": ["core-guide:generate-choices", "core-guide:generate-action-guide"],
       "hooks": []
     }
   ],
@@ -79,6 +116,38 @@
             }
           }
         }
+      }
+    },
+    {
+      "id": "generate-action-guide",
+      "kind": "render",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "topic": { "type": "string", "description": "Concise description of the current situation" },
+          "categories": {
+            "type": "array",
+            "description": "Categorized action suggestions grouped by style",
+            "items": {
+              "type": "object",
+              "properties": {
+                "style": { "type": "string", "enum": ["safe", "aggressive", "creative", "wild"], "description": "Suggestion style category" },
+                "label": { "type": "string", "description": "Optional custom label for this category" },
+                "suggestions": {
+                  "type": "array",
+                  "description": "1-4 actionable suggestions in this category",
+                  "items": { "type": "string" },
+                  "minItems": 1,
+                  "maxItems": 4
+                }
+              },
+              "required": ["style", "suggestions"]
+            },
+            "minItems": 1,
+            "maxItems": 4
+          }
+        },
+        "required": ["topic", "categories"]
       }
     }
   ]

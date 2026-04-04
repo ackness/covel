@@ -1,30 +1,4 @@
-import { resolve } from "node:path";
-import type { CharacterCreateInput, DynamicFieldSchema } from "@covel/shared";
-import { loadPrompt, interpolate } from "@covel/context";
-
-const PROMPTS_DIR = resolve(import.meta.dirname, "../prompts");
-
-/**
- * Build a prompt asking the LLM to write a narrative transition
- * from the opening story into a character name question.
- */
-export async function buildTransitionPrompt(
-  narrative: string,
-  locale: string,
-): Promise<string> {
-  const template = await loadPrompt(PROMPTS_DIR, "transition-prompt", locale);
-  return interpolate(template, { narrative });
-}
-
-/**
- * Return a static fallback transition when LLM is unavailable.
- */
-export function buildFallbackTransition(locale: string): string {
-  const isZh = locale.startsWith("zh");
-  return isZh
-    ? "在这一切开始之前——你叫什么名字？"
-    : "Before all this begins — what is your name?";
-}
+import type { DynamicFieldSchema } from "@covel/shared";
 
 /**
  * Build the character creation UI block proposal payload.

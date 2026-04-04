@@ -5,7 +5,7 @@
     "zh-CN": "角色追踪器",
     "en-US": "Character Tracker"
   },
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "covel",
   "description": {
     "zh-CN": "分析叙事文本，自动识别和跟踪出场角色。",
@@ -25,8 +25,38 @@
         "onEvents": ["user.input"]
       },
       "providerBinding": "fast",
-      "tools": [],
+      "tools": ["upsert-character"],
       "hooks": []
+    }
+  ],
+  "tools": [
+    {
+      "id": "upsert-character",
+      "schema": {
+        "type": "object",
+        "description": "Create a new character card or update an existing one. Call once per named character found in the narrative.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Character's name (e.g. '李明', 'Lady Blackwood')"
+          },
+          "description": {
+            "type": "string",
+            "description": "Brief one-sentence description of the character based on narrative"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["npc", "companion"],
+            "description": "Character type: 'npc' for non-player characters, 'companion' for party members"
+          },
+          "fields": {
+            "type": "object",
+            "description": "Dynamic field values matching the character field schema (if available). e.g. {\"hp\": 100, \"faction\": \"云梦泽\"}",
+            "additionalProperties": true
+          }
+        },
+        "required": ["name", "description", "type"]
+      }
     }
   ]
 }

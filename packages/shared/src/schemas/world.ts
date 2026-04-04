@@ -4,7 +4,7 @@ import { z } from "zod";
 
 export const i18nTextSchema = z.union([
   z.string().min(1),
-  z.record(z.string().min(1)).refine(
+  z.record(z.string(), z.string().min(1)).refine(
     (obj) => Object.keys(obj).length > 0,
     { message: "I18nText record must have at least one locale entry" },
   ),
@@ -142,7 +142,7 @@ const startingConditionsSchema = z.object({
   openingScenario: i18nTextSchema,
   playerConstraints: z.array(i18nTextSchema).optional(),
   startingLocation: i18nTextSchema.optional(),
-  startingResources: z.record(z.number()).optional(),
+  startingResources: z.record(z.string(), z.number()).optional(),
 });
 
 // ── Composite ──────────────────────────────────────────────

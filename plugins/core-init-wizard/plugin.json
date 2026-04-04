@@ -5,7 +5,7 @@
     "zh-CN": "角色初始化向导",
     "en-US": "Character Init Wizard"
   },
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "covel",
   "description": {
     "zh-CN": "在 session_start 时弹出角色创建表单，引导用户创建角色。",
@@ -61,8 +61,18 @@
         "onEvents": ["session_start"]
       },
       "providerBinding": "default",
-      "tools": [],
+      "tools": ["emit-character-form"],
       "hooks": []
+    }
+  ],
+  "tools": [
+    {
+      "id": "emit-character-form",
+      "schema": {
+        "type": "object",
+        "description": "Display the character creation form to the player. Call this after writing a short narrative transition.",
+        "properties": {}
+      }
     }
   ]
 }

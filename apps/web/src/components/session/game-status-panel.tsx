@@ -122,9 +122,9 @@ function WorldStateSection({ data }: { data: unknown }) {
 
 const TYPE_STYLES: Record<string, string> = {
   player: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30",
-  npc:    "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30",
-  ally:   "bg-green-500/15 text-green-600 dark:text-green-400 border-green-500/30",
-  enemy:  "bg-red-500/15 text-red-500 dark:text-red-400 border-red-500/30",
+  npc: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30",
+  ally: "bg-green-500/15 text-green-600 dark:text-green-400 border-green-500/30",
+  enemy: "bg-red-500/15 text-red-500 dark:text-red-400 border-red-500/30",
 };
 
 function CharacterCard({ char }: { char: Record<string, unknown> }) {
@@ -146,6 +146,7 @@ function CharacterCard({ char }: { char: Record<string, unknown> }) {
   const handledKeys = new Set([
     "id", "name", "type", "description", "traits", "status",
     "hp", "maxHp", "level", "role", "relationship", "location",
+    "worldId", "runId", "fields", "extensions", "createdAt", "version",
   ]);
   const extraEntries = Object.entries(char).filter(([k]) => !handledKeys.has(k));
 
@@ -194,9 +195,8 @@ function CharacterCard({ char }: { char: Record<string, unknown> }) {
               </div>
               <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all ${
-                    hp / maxHp > 0.5 ? "bg-green-500" : hp / maxHp > 0.25 ? "bg-yellow-500" : "bg-red-500"
-                  }`}
+                  className={`h-full rounded-full transition-all ${hp / maxHp > 0.5 ? "bg-green-500" : hp / maxHp > 0.25 ? "bg-yellow-500" : "bg-red-500"
+                    }`}
                   style={{ width: `${Math.max(0, Math.min(100, (hp / maxHp) * 100))}%` }}
                 />
               </div>
@@ -406,9 +406,8 @@ function CombatSection({ data }: { data: unknown }) {
               {hpPct != null && (
                 <div className="h-1 bg-muted rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all ${
-                      hpPct > 50 ? "bg-green-500" : hpPct > 25 ? "bg-yellow-500" : "bg-red-500"
-                    }`}
+                    className={`h-full rounded-full transition-all ${hpPct > 50 ? "bg-green-500" : hpPct > 25 ? "bg-yellow-500" : "bg-red-500"
+                      }`}
                     style={{ width: `${hpPct}%` }}
                   />
                 </div>
@@ -454,7 +453,7 @@ function MemorySection({ data }: { data: unknown }) {
 
 // ── Unknown Sections (catch-all for plugin data not handled above) ─
 
-const KNOWN_KEYS = new Set(["worldState", "characters", "quests", "inventory", "combat", "memoryArchive", "characterFieldSchema", "core-npc-init"]);
+const KNOWN_KEYS = new Set(["worldState", "characters", "quests", "inventory", "combat", "memoryArchive", "characterFieldSchema", "core-npc-init", "events", "codex"]);
 
 function UnknownSections({ gameState }: { gameState: Record<string, unknown> }) {
   const unknownEntries = Object.entries(gameState).filter(([k]) => !KNOWN_KEYS.has(k));

@@ -19,7 +19,7 @@ const addItemInputSchema = z.object({
   description: z.string().optional(),
   category: z.enum(["weapon", "armor", "consumable", "quest", "material", "misc"]),
   quantity: z.number().optional(),
-  properties: z.record(z.unknown()).optional(),
+  properties: z.record(z.string(), z.unknown()).optional(),
 });
 
 const removeItemInputSchema = z.object({

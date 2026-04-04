@@ -57,7 +57,7 @@ describe("generateChoicesTool", () => {
     }>(result.proposals!, "ui.render");
 
     expect(uiRender).toBeDefined();
-    expect(uiRender!.type).toBe("choices");
+    expect(uiRender!.type).toBe("choice_set");
     expect(uiRender!.content.options).toHaveLength(3);
     expect(uiRender!.content.options[0]!.id).toBe("opt_a");
     expect(uiRender!.content.options[0]!.label).toBe("假装工人混入");
@@ -208,6 +208,204 @@ describe("generateChoicesTool", () => {
   });
 });
 
+// ── generateActionGuideTool ────────────────────────────────────
+
+describe("generateActionGuideTool", () => {
+  it("registers the action guide tool", () => {
+    const { registrar, contributions } = createCollectingRegistrar();
+    register(registrar);
+
+    expect(contributions.tools.has("generate-action-guide")).toBe(true);
+  });
+
+  it("generates categorized suggestions (zh-CN)", async () => {
+    const { registrar, contributions } = createCollectingRegistrar();
+    register(registrar);
+
+    const tool = contributions.tools.get("generate-action-guide")!;
+
+    const ctx = createMockToolContext({
+      locale: "zh-CN",
+      pluginId: "core-guide",
+      input: {
+        topic: "码头搜查方式",
+        categories: [
+          { style: "safe", suggestions: ["先远处观察码头布局"] },
+          { style: "aggressive", suggestions: ["直接闯入码头仓库"] },
+          { style: "creative", suggestions: ["伪装成送货工人混入"] },
+        ],
+      },
+    });
+
+    const result = await tool(ctx);
+
+    expect(result.output.message).toContain("码头搜查方式");
+    expect(result.output.message).toContain("3 类");
+    expect(result.output.message).toContain("3 条建议");
+    expect(result.proposals).toHaveLength(1);
+
+    const uiRender = findProposal<{
+      type: string;
+      content: {
+        topic: string;
+        categories: Array<{
+          style: string;
+          label: string;
+          suggestions: string[];
+        }>;
+      };
+    }>(result.proposals!, "ui.render");
+
+    expect(uiRender).toBeDefined();
+    expect(uiRender!.type).toBe("action_guide");
+    expect(uiRender!.content.topic).toBe("码头搜查方式");
+    expect(uiRender!.content.categories).toHaveLength(3);
+    expect(uiRender!.content.categories[0]!.style).toBe("safe");
+    expect(uiRender!.content.categories[0]!.label).toBe("稳妥");
+    expect(uiRender!.content.categories[1]!.label).toBe("激进");
+    expect(uiRender!.content.categories[2]!.label).toBe("创意");
+  });
+
+  it("generates categorized suggestions (en-US)", async () => {
+    const { registrar, contributions } = createCollectingRegistrar();
+    register(registrar);
+
+    const tool = contributions.tools.get("generate-action-guide")!;
+
+    const ctx = createMockToolContext({
+      locale: "en-US",
+      pluginId: "core-guide",
+      input: {
+        topic: "dock search approach",
+        categories: [
+          { style: "safe", suggestions: ["Scout the area first"] },
+          { style: "wild", suggestions: ["Set the dock on fire as distraction"] },
+        ],
+      },
+    });
+
+    const result = await tool(ctx);
+
+    expect(result.output.message).toContain("dock search approach");
+    expect(result.output.message).toContain("2 categories");
+
+    const uiRender = findProposal<{
+      type: string;
+      content: {
+        categories: Array<{ style: string; label: string; suggestions: string[] }>;
+      };
+    }>(result.proposals!, "ui.render");
+
+    expect(uiRender!.content.categories[0]!.label).toBe("Safe");
+    expect(uiRender!.content.categories[1]!.label).toBe("Wild");
+  });
+
+  it("uses custom labels when provided", async () => {
+    const { registrar, contributions } = createCollectingRegistrar();
+    register(registrar);
+
+    const tool = contributions.tools.get("generate-action-guide")!;
+
+    const ctx = createMockToolContext({
+      locale: "zh-CN",
+      input: {
+        topic: "战斗策略",
+        categories: [
+          { style: "safe", label: "防御为主", suggestions: ["举盾格挡"] },
+          { style: "aggressive", label: "全力进攻", suggestions: ["冲锋斩击"] },
+        ],
+      },
+    });
+
+    const result = await tool(ctx);
+
+    const uiRender = findProposal<{
+      type: string;
+      content: {
+        categories: Array<{ label: string }>;
+      };
+    }>(result.proposals!, "ui.render");
+
+    expect(uiRender!.content.categories[0]!.label).toBe("防御为主");
+    expect(uiRender!.content.categories[1]!.label).toBe("全力进攻");
+  });
+
+  it("counts total suggestions across categories", async () => {
+    const { registrar, contributions } = createCollectingRegistrar();
+    register(registrar);
+
+    const tool = contributions.tools.get("generate-action-guide")!;
+
+    const ctx = createMockToolContext({
+      locale: "en-US",
+      input: {
+        topic: "test",
+        categories: [
+          { style: "safe", suggestions: ["a", "b"] },
+          { style: "creative", suggestions: ["c", "d", "e"] },
+        ],
+      },
+    });
+
+    const result = await tool(ctx);
+
+    expect(result.output.message).toContain("5 suggestions");
+    expect(result.output.message).toContain("2 categories");
+  });
+
+  it("returns error for invalid input (missing topic)", async () => {
+    const { registrar, contributions } = createCollectingRegistrar();
+    register(registrar);
+
+    const tool = contributions.tools.get("generate-action-guide")!;
+
+    const ctx = createMockToolContext({
+      locale: "en-US",
+      input: { categories: [{ style: "safe", suggestions: ["a"] }] },
+    });
+
+    const result = await tool(ctx);
+
+    expect(result.output.error).toBeDefined();
+    expect(result.proposals).toBeUndefined();
+  });
+
+  it("returns error for invalid input (empty categories)", async () => {
+    const { registrar, contributions } = createCollectingRegistrar();
+    register(registrar);
+
+    const tool = contributions.tools.get("generate-action-guide")!;
+
+    const ctx = createMockToolContext({
+      locale: "en-US",
+      input: { topic: "test", categories: [] },
+    });
+
+    const result = await tool(ctx);
+
+    expect(result.output.error).toBeDefined();
+  });
+
+  it("returns error for invalid style value", async () => {
+    const { registrar, contributions } = createCollectingRegistrar();
+    register(registrar);
+
+    const tool = contributions.tools.get("generate-action-guide")!;
+
+    const ctx = createMockToolContext({
+      locale: "en-US",
+      input: {
+        topic: "test",
+        categories: [{ style: "invalid", suggestions: ["a"] }],
+      },
+    });
+
+    const result = await tool(ctx);
+
+    expect(result.output.error).toBeDefined();
+  });
+});
+
 // ── Guide Context Provider ──────────────────────────────────────
 
 describe("guideContextProvider", () => {
@@ -217,7 +415,7 @@ describe("guideContextProvider", () => {
 
     const provider = contributions.contextProviders.get("guide-context")!;
 
-    const input = createMockProviderInput({ locale: "zh-CN" });
+    const input = createMockProviderInput({ locale: "zh-CN", pluginId: "core-guide" });
 
     const result = (await provider(input)) as {
       id: string;
@@ -230,7 +428,8 @@ describe("guideContextProvider", () => {
     expect(result.title).toContain("引导选择指令");
     expect(result.content).toContain("互动引导规则");
     expect(result.content).toContain("generate-choices");
-    expect(result.content).toContain("关键决策点");
+    expect(result.content).toContain("generate-action-guide");
+    expect(result.content).toContain("明确决策点");
     expect(result.priority).toBe(50);
   });
 
@@ -240,7 +439,7 @@ describe("guideContextProvider", () => {
 
     const provider = contributions.contextProviders.get("guide-context")!;
 
-    const input = createMockProviderInput({ locale: "en-US" });
+    const input = createMockProviderInput({ locale: "en-US", pluginId: "core-guide" });
 
     const result = (await provider(input)) as {
       id: string;
@@ -253,7 +452,8 @@ describe("guideContextProvider", () => {
     expect(result.title).toContain("Guide & Choices Instructions");
     expect(result.content).toContain("Guidance Rules");
     expect(result.content).toContain("generate-choices");
-    expect(result.content).toContain("Key decision points");
+    expect(result.content).toContain("generate-action-guide");
+    expect(result.content).toContain("Direct questions");
     expect(result.priority).toBe(50);
   });
 });

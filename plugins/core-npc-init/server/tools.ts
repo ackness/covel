@@ -20,7 +20,7 @@ const createNpcInputSchema = z.object({
   name: z.string().min(1),
   description: z.string().min(1),
   type: z.enum(["npc", "companion"]),
-  fields: z.record(z.unknown()).optional(),
+  fields: z.record(z.string(), z.unknown()).optional(),
 });
 
 const finalizeInitInputSchema = z.object({

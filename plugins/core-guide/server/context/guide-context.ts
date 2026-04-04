@@ -6,13 +6,18 @@ const PROMPTS_DIR = resolve(import.meta.dirname, "../../prompts");
 
 /**
  * Inject guidance instructions telling the LLM when and how to use the choices tool.
+ * Only injects into the core-guide runtime to avoid polluting the narrator with tool-call instructions.
  */
 export async function guideContextProvider(input: ContextProviderInput): Promise<{
   id: string;
   title: string;
   content: string;
   priority: number;
-}> {
+} | null> {
+  if (input.pluginId !== "core-guide") {
+    return null;
+  }
+
   const isZh = input.locale.startsWith("zh");
   const content = await loadPrompt(PROMPTS_DIR, "guide-instructions", input.locale);
 

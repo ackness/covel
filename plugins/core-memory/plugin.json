@@ -5,7 +5,7 @@
     "zh-CN": "记忆管理",
     "en-US": "Memory Manager"
   },
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "covel",
   "description": {
     "zh-CN": "长期记忆管理与上下文摘要，定期将叙事历史压缩为滚动摘要，确保长时间会话不丢失关键上下文。",
@@ -26,8 +26,38 @@
         "intervalTurns": 5
       },
       "providerBinding": "fast",
-      "tools": [],
+      "tools": ["update-memory-archive", "record-key-event"],
       "hooks": []
+    }
+  ],
+  "tools": [
+    {
+      "id": "update-memory-archive",
+      "schema": {
+        "type": "object",
+        "description": "Update the rolling memory archive with a merged summary. Call this with the combined summary of old archive + new narrative.",
+        "properties": {
+          "summary": {
+            "type": "string",
+            "description": "The updated rolling summary text (300-500 words, third person, past tense)"
+          }
+        },
+        "required": ["summary"]
+      }
+    },
+    {
+      "id": "record-key-event",
+      "schema": {
+        "type": "object",
+        "description": "Record a significant event for long-term storage. Call 0-3 times per summarization for important plot points.",
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "A single sentence describing the key event and why it matters"
+          }
+        },
+        "required": ["content"]
+      }
     }
   ]
 }

@@ -3,7 +3,7 @@ import type { PluginManifest } from "@covel/shared";
 
 // ── Zod schemas matching PluginManifest ────────────────────────────
 
-const i18nTextSchema = z.union([z.string(), z.record(z.string())]);
+const i18nTextSchema = z.union([z.string(), z.record(z.string(), z.string())]);
 
 const runtimeTriggerSpecSchema = z.object({
   mode: z.enum(["always", "interval", "manual", "event"]),
@@ -110,8 +110,8 @@ const blockSchemaDeclarationSchema = z.object({
     description: z.string(),
     icon: z.string().optional(),
   }),
-  dataSchema: z.record(z.unknown()),
-  submitSchema: z.record(z.unknown()).optional(),
+  dataSchema: z.record(z.string(), z.unknown()),
+  submitSchema: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const pluginManifestSchema = z.object({
@@ -127,7 +127,7 @@ export const pluginManifestSchema = z.object({
   requires: z.array(z.string()).optional(),
   supersedes: z.array(z.string()).optional(),
   conflicts: z.array(z.string()).optional(),
-  compatibility: z.record(z.string()).optional(),
+  compatibility: z.record(z.string(), z.string()).optional(),
   runtimes: z.array(publicRuntimeSpecSchema).optional(),
   tools: z.array(publicToolDefinitionSchema).optional(),
   hooks: z.array(publicHookDefinitionSchema).optional(),

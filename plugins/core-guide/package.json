@@ -17,7 +17,8 @@
   "dependencies": {
     "@covel/shared": "workspace:*",
     "@covel/context": "workspace:*",
-    "@covel/plugin-runtime": "workspace:*"
+    "@covel/plugin-runtime": "workspace:*",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@covel/plugin-test-utils": "workspace:*",

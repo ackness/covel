@@ -1,6 +1,6 @@
 import type { PluginRegistrar } from "@covel/plugin-runtime";
-import { charTrackerHandler } from "./handler.js";
+import { upsertCharacterTool } from "./tools.js";
 
 export default function register(registrar: PluginRegistrar): void {
-  registrar.addRuntimeHandler("char-tracker", charTrackerHandler);
+  registrar.addTool("upsert-character", upsertCharacterTool);
 }

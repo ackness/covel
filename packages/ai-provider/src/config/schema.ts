@@ -21,7 +21,7 @@ const modelTierSchema = z.enum(["small", "medium", "large", "embed-default"]);
 export const providerDefaultsSchema = z.object({
   baseUrl: z.string().optional(),
   protocol: providerProtocolSchema.optional(),
-  headers: z.record(z.string()).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
 });
 
 export const modelProfileSchema = z.object({
@@ -49,11 +49,11 @@ export const presetConfigSchema = z.object({
   isDefault: z.boolean().optional(),
   scope: z.string().optional(),
   defaultSlot: z.string().optional(),
-  providerRequestMetadata: z.record(z.unknown()).optional(),
+  providerRequestMetadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const aiConfigSchema = z.object({
-  providers: z.record(providerDefaultsSchema).default({}),
+  providers: z.record(z.string(), providerDefaultsSchema).default({}),
   profiles: z.array(modelProfileSchema).default([]),
   presets: z.array(presetConfigSchema).default([]),
 });

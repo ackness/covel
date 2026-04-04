@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "1.0",
+  "id": "core-image",
+  "displayName": {
+    "zh-CN": "故事插画",
+    "en-US": "Story Image"
+  },
+  "version": "0.1.0",
+  "author": "covel",
+  "description": {
+    "zh-CN": "通过 LLM 增强提示词，生成故事插画",
+    "en-US": "Generate story illustrations with LLM-enhanced prompts"
+  },
+  "defaultLocale": "zh-CN",
+  "supportedLocales": ["zh-CN", "en-US"],
+  "loadingOrder": 70,
+  "runtimes": [
+    {
+      "id": "image-generator",
+      "pluginId": "core-image",
+      "kind": "background",
+      "priority": 800,
+      "trigger": {
+        "mode": "event",
+        "onEvents": ["image.requested"]
+      },
+      "providerBinding": "default",
+      "tools": [],
+      "hooks": [],
+      "budget": {
+        "maxSteps": 3,
+        "timeoutMs": 60000
+      }
+    }
+  ],
+  "tools": [
+    {
+      "id": "request-story-image",
+      "kind": "generate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "storyBackground": {
+            "type": "string",
+            "description": "World/scene context"
+          },
+          "scenePrompt": {
+            "type": "string",
+            "description": "Current scene to illustrate"
+          },
+          "continuityNotes": {
+            "type": "string",
+            "description": "Visual consistency hints"
+          },
+          "layoutPreference": {
+            "type": "string",
+            "enum": ["single", "comic", "auto"]
+          },
+          "stylePreset": {
+            "type": "string",
+            "description": "Art style preset"
+          },
+          "negativePrompt": {
+            "type": "string",
+            "description": "Things to avoid"
+          }
+        },
+        "required": ["storyBackground", "scenePrompt"]
+      }
+    }
+  ],
+  "blockSchemas": [
+    {
+      "type": "story_image",
+      "interactive": false,
+      "meta": {
+        "displayName": {
+          "zh-CN": "故事插画",
+          "en-US": "Story Image"
+        },
+        "description": "Story illustration display"
+      },
+      "dataSchema": {
+        "type": "object",
+        "properties": {
+          "imageId": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["generating", "ready", "error"]
+          },
+          "originalPrompt": { "type": "string" },
+          "enhancedPrompt": { "type": "string" },
+          "isMultiScene": { "type": "boolean" },
+          "stylePreset": { "type": "string" },
+          "imageUrl": { "type": "string" },
+          "error": { "type": "string" }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,130 @@
+{
+  "schemaVersion": "1.0",
+  "id": "core-event",
+  "displayName": {
+    "zh-CN": "事件系统",
+    "en-US": "Event System"
+  },
+  "version": "0.1.0",
+  "author": "covel",
+  "description": {
+    "zh-CN": "追踪和管理层级化的游戏事件，包括任务、战斗、社交互动和世界变化。",
+    "en-US": "Track and manage hierarchical game events including quests, combat, social interactions, and world changes."
+  },
+  "defaultLocale": "zh-CN",
+  "supportedLocales": ["zh-CN", "en-US"],
+  "loadingOrder": 55,
+  "runtimes": [
+    {
+      "id": "event-tracker",
+      "pluginId": "core-event",
+      "kind": "plugin",
+      "priority": 650,
+      "trigger": {
+        "mode": "event",
+        "onEvents": ["user.input"]
+      },
+      "providerBinding": "fast",
+      "tools": [
+        "core-event:create-event",
+        "core-event:evolve-event",
+        "core-event:resolve-event",
+        "core-event:end-event"
+      ],
+      "hooks": []
+    }
+  ],
+  "tools": [
+    {
+      "id": "create-event",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "eventType": {
+            "type": "string",
+            "enum": ["quest", "combat", "social", "world", "system"],
+            "description": "Type of game event"
+          },
+          "name": { "type": "string", "description": "Short event name" },
+          "description": { "type": "string", "description": "Event description" },
+          "source": { "type": "string", "description": "Plugin ID that created this event" },
+          "parentEventId": { "type": "string", "description": "Parent event ID for hierarchical events" },
+          "visibility": {
+            "type": "string",
+            "enum": ["known", "hidden", "secret"],
+            "description": "Event visibility to the player"
+          }
+        },
+        "required": ["eventType", "name", "description", "source"]
+      }
+    },
+    {
+      "id": "evolve-event",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "eventId": { "type": "string", "description": "ID of the event to evolve" },
+          "description": { "type": "string", "description": "Updated event description" }
+        },
+        "required": ["eventId", "description"]
+      }
+    },
+    {
+      "id": "resolve-event",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "eventId": { "type": "string", "description": "ID of the event to resolve" },
+          "resolution": { "type": "string", "description": "Optional resolution description" }
+        },
+        "required": ["eventId"]
+      }
+    },
+    {
+      "id": "end-event",
+      "kind": "mutate",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "eventId": { "type": "string", "description": "ID of the event to end" },
+          "reason": { "type": "string", "description": "Optional reason for ending" }
+        },
+        "required": ["eventId"]
+      }
+    }
+  ],
+  "blockSchemas": [
+    {
+      "type": "event_timeline",
+      "interactive": false,
+      "meta": {
+        "displayName": { "zh-CN": "事件时间线", "en-US": "Event Timeline" },
+        "description": "Display current game events and their status"
+      },
+      "dataSchema": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "eventId": { "type": "string" },
+                "eventType": { "type": "string", "enum": ["quest", "combat", "social", "world", "system"] },
+                "name": { "type": "string" },
+                "description": { "type": "string" },
+                "status": { "type": "string", "enum": ["active", "evolved", "resolved", "ended"] },
+                "visibility": { "type": "string", "enum": ["known", "hidden", "secret"] },
+                "parentEventId": { "type": "string" },
+                "source": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

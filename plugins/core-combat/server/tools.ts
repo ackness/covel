@@ -31,7 +31,7 @@ const participantSchema = z.object({
     id: z.string(),
     name: z.string(),
     duration: z.number(),
-    effect: z.record(z.unknown()),
+    effect: z.record(z.string(), z.unknown()),
   })).optional(),
 });
 

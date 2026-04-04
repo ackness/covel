@@ -32,6 +32,9 @@ import {
   Users,
   CheckCircle2,
 } from "lucide-react";
+import { ActionGuideBlock } from "./action-guide-block.js";
+import { CodexEntryBlock } from "./codex-entry-block.js";
+import { StoryImageBlock } from "./story-image-block.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -56,6 +59,9 @@ const CUSTOM_RENDERERS: Record<string, BlockRendererComponent> = {
   quest_log: QuestLogBlock,
   inventory_panel: InventoryPanelBlock,
   npc_init_summary: NpcInitSummaryBlock,
+  action_guide: ActionGuideBlock,
+  codex_entry: CodexEntryBlock,
+  story_image: StoryImageBlock,
 };
 
 // ── Tier 2: Schema Registry ──────────────────────────────────────

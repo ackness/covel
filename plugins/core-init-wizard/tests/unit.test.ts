@@ -1,100 +1,55 @@
 import { describe, it, expect } from "vitest";
 import {
   createCollectingRegistrar,
-  createMockHandlerContext,
-  findProposal,
 } from "@covel/plugin-test-utils";
+import type { ToolExecutionContext, DynamicFieldSchema } from "@covel/shared";
 import register from "../server/index.js";
-import {
-  buildTransitionPrompt,
-  buildFallbackTransition,
-  buildCharacterCreationBlock,
-} from "../server/logic.js";
 
 // ── Plugin Registration ─────────────────────────────────────────
 
 describe("register", () => {
-  it("registers a runtime handler", () => {
+  it("registers emit-character-form tool (no runtime handler)", () => {
     const { registrar, contributions } = createCollectingRegistrar();
-
     register(registrar);
 
-    expect(contributions.runtimeHandlers.has("init-wizard")).toBe(true);
-    expect(contributions.tools.size).toBe(0);
+    expect(contributions.tools.has("emit-character-form")).toBe(true);
+    expect(contributions.runtimeHandlers.size).toBe(0);
     expect(contributions.hooks.size).toBe(0);
-    expect(contributions.contextProviders.size).toBe(0);
-    expect(contributions.commands).toHaveLength(0);
   });
 });
 
-// ── buildTransitionPrompt ──────────────────────────────────────
+// ── emit-character-form tool ──────────────────────────────────────
 
-describe("buildTransitionPrompt", () => {
-  it("builds a Chinese prompt for zh-CN locale", async () => {
-    const prompt = await buildTransitionPrompt("勇者走进了迷雾森林", "zh-CN");
+describe("emit-character-form tool", () => {
+  function getToolHandler() {
+    const { registrar, contributions } = createCollectingRegistrar();
+    register(registrar);
+    return contributions.tools.get("emit-character-form")!;
+  }
 
-    expect(prompt).toContain("RPG游戏的角色创建引导者");
-    expect(prompt).toContain("勇者走进了迷雾森林");
-    expect(prompt).toContain("你叫什么名字");
-    expect(prompt).toContain("第二人称");
-  });
+  function makeCtx(
+    locale: string,
+    state?: Record<string, unknown>,
+  ): ToolExecutionContext {
+    return {
+      input: {},
+      locale,
+      state: state ?? {},
+    } as ToolExecutionContext;
+  }
 
-  it("builds an English prompt for en-US locale", async () => {
-    const prompt = await buildTransitionPrompt("The hero entered the fog.", "en-US");
+  it("emits a ui.render proposal with character_creation block", async () => {
+    const handler = getToolHandler();
+    const result = await handler(makeCtx("zh-CN"));
 
-    expect(prompt).toContain("RPG character creation guide");
-    expect(prompt).toContain("The hero entered the fog.");
-    expect(prompt).toContain("what is your name");
-    expect(prompt).toContain("second person");
-  });
+    expect(result.proposals).toBeDefined();
+    const uiRender = result.proposals!.find((p) => p.kind === "ui.render");
+    expect(uiRender).toBeDefined();
 
-  it("treats zh-TW as Chinese", async () => {
-    const prompt = await buildTransitionPrompt("Test narrative", "zh-TW");
-
-    expect(prompt).toContain("RPG游戏的角色创建引导者");
-  });
-});
-
-// ── buildFallbackTransition ────────────────────────────────────
-
-describe("buildFallbackTransition", () => {
-  it("returns Chinese fallback for zh-CN", () => {
-    const text = buildFallbackTransition("zh-CN");
-
-    expect(text).toBe("在这一切开始之前——你叫什么名字？");
-  });
-
-  it("returns English fallback for en-US", () => {
-    const text = buildFallbackTransition("en-US");
-
-    expect(text).toBe("Before all this begins — what is your name?");
-  });
-
-  it("returns Chinese fallback for zh-TW", () => {
-    const text = buildFallbackTransition("zh-TW");
-
-    expect(text).toContain("你叫什么名字");
-  });
-});
-
-// ── buildCharacterCreationBlock ────────────────────────────────
-
-describe("buildCharacterCreationBlock", () => {
-  it("builds zh-CN character creation block", () => {
-    const block = buildCharacterCreationBlock("zh-CN");
-
-    expect(block.kind).toBe("ui.render");
-
-    const payload = block.payload as {
+    const payload = uiRender!.payload as {
       type: string;
       content: {
-        fields: Array<{
-          id: string;
-          type: string;
-          label: string;
-          placeholder: string;
-          required: boolean;
-        }>;
+        fields: Array<{ id: string; type: string; label: string; required?: boolean }>;
         submitLabel: string;
         submitMapping: Record<string, string>;
       };
@@ -104,18 +59,33 @@ describe("buildCharacterCreationBlock", () => {
     expect(payload.content.fields).toHaveLength(1);
     expect(payload.content.fields[0]!.id).toBe("character_name");
     expect(payload.content.fields[0]!.type).toBe("text");
-    expect(payload.content.fields[0]!.label).toBe("你的名字");
-    expect(payload.content.fields[0]!.placeholder).toContain("键入");
     expect(payload.content.fields[0]!.required).toBe(true);
-    expect(payload.content.submitLabel).toBe("确认");
     expect(payload.content.submitMapping.character_name).toBe("name");
   });
 
-  it("builds en-US character creation block", () => {
-    const block = buildCharacterCreationBlock("en-US");
+  it("uses Chinese labels for zh-CN locale", async () => {
+    const handler = getToolHandler();
+    const result = await handler(makeCtx("zh-CN"));
 
-    const payload = block.payload as {
-      type: string;
+    const uiRender = result.proposals!.find((p) => p.kind === "ui.render");
+    const payload = uiRender!.payload as {
+      content: {
+        fields: Array<{ label: string; placeholder: string }>;
+        submitLabel: string;
+      };
+    };
+
+    expect(payload.content.fields[0]!.label).toBe("你的名字");
+    expect(payload.content.fields[0]!.placeholder).toContain("键入");
+    expect(payload.content.submitLabel).toBe("确认");
+  });
+
+  it("uses English labels for en-US locale", async () => {
+    const handler = getToolHandler();
+    const result = await handler(makeCtx("en-US"));
+
+    const uiRender = result.proposals!.find((p) => p.kind === "ui.render");
+    const payload = uiRender!.payload as {
       content: {
         fields: Array<{ label: string; placeholder: string }>;
         submitLabel: string;
@@ -126,189 +96,45 @@ describe("buildCharacterCreationBlock", () => {
     expect(payload.content.fields[0]!.placeholder).toContain("Type your name");
     expect(payload.content.submitLabel).toBe("Confirm");
   });
-});
 
-// ── initWizardHandler ──────────────────────────────────────────
-
-describe("initWizardHandler", () => {
-  it("uses LLM transition when generateText and narrative are available", async () => {
-    const { registrar, contributions } = createCollectingRegistrar();
-    register(registrar);
-
-    const handler = contributions.runtimeHandlers.get("init-wizard")!;
-
-    const ctx = createMockHandlerContext({
-      contextOverrides: {
-        locale: "zh-CN",
-      },
-      generateTextImpl: async () => "雾气中传来低沉的钟声，你不由得停下脚步——你，叫什么名字？",
-    });
-
-    // Inject previousOutputs into context
-    const ctxWithNarrative = {
-      ...ctx,
-      context: {
-        ...ctx.context,
-        previousOutputs: [{ narrative: "迷雾笼罩着港口" }],
-      },
+  it("includes bio fields from schema when available", async () => {
+    const handler = getToolHandler();
+    const schema: DynamicFieldSchema = {
+      worldId: "world_test",
+      fields: [
+        { key: "gender", label: "性别", type: "enum", category: "bio", options: ["男", "女"], visible: true },
+        { key: "hp", label: "生命值", type: "number", category: "stats", visible: true },
+        { key: "hidden_field", label: "隐藏", type: "string", category: "bio", visible: false },
+      ],
     };
 
-    const result = await handler(ctxWithNarrative);
+    const result = await handler(makeCtx("zh-CN", {
+      characterFieldSchema: schema,
+    }));
 
-    expect(result.proposals).toHaveLength(2);
-    expect(result.proposals[0]!.kind).toBe("narrative.append");
-
-    const narrativePayload = result.proposals[0]!.payload as { text: string };
-    expect(narrativePayload.text).toContain("钟声");
-
-    expect(result.proposals[1]!.kind).toBe("ui.render");
-  });
-
-  it("falls back to static transition when generateText is not available", async () => {
-    const { registrar, contributions } = createCollectingRegistrar();
-    register(registrar);
-
-    const handler = contributions.runtimeHandlers.get("init-wizard")!;
-
-    const ctx = createMockHandlerContext({
-      contextOverrides: { locale: "zh-CN" },
-    });
-
-    const ctxWithoutLLM = { ...ctx, generateText: undefined };
-
-    const result = await handler(ctxWithoutLLM);
-
-    expect(result.proposals).toHaveLength(2);
-
-    const narrativePayload = result.proposals[0]!.payload as { text: string };
-    expect(narrativePayload.text).toBe("在这一切开始之前——你叫什么名字？");
-  });
-
-  it("falls back to static transition when no opening narrative exists", async () => {
-    const { registrar, contributions } = createCollectingRegistrar();
-    register(registrar);
-
-    const handler = contributions.runtimeHandlers.get("init-wizard")!;
-
-    const ctx = createMockHandlerContext({
-      contextOverrides: { locale: "en-US" },
-      generateTextImpl: async () => "should not be called",
-    });
-
-    // No previousOutputs in context
-    const result = await handler(ctx);
-
-    expect(result.proposals).toHaveLength(2);
-
-    const narrativePayload = result.proposals[0]!.payload as { text: string };
-    expect(narrativePayload.text).toBe("Before all this begins — what is your name?");
-  });
-
-  it("falls back to static transition when LLM throws an error", async () => {
-    const { registrar, contributions } = createCollectingRegistrar();
-    register(registrar);
-
-    const handler = contributions.runtimeHandlers.get("init-wizard")!;
-
-    const ctx = createMockHandlerContext({
-      contextOverrides: { locale: "en-US" },
-      generateTextImpl: async () => {
-        throw new Error("LLM unavailable");
-      },
-    });
-
-    const ctxWithNarrative = {
-      ...ctx,
-      context: {
-        ...ctx.context,
-        previousOutputs: [{ narrative: "Some opening narrative" }],
-      },
+    const uiRender = result.proposals!.find((p) => p.kind === "ui.render");
+    const payload = uiRender!.payload as {
+      content: {
+        fields: Array<{ id: string; label: string; type: string; options?: string[] }>;
+        submitMapping: Record<string, string>;
+      };
     };
 
-    const result = await handler(ctxWithNarrative);
-
-    expect(result.proposals).toHaveLength(2);
-
-    const narrativePayload = result.proposals[0]!.payload as { text: string };
-    expect(narrativePayload.text).toBe("Before all this begins — what is your name?");
+    // name + gender (bio visible), NOT hp (stats), NOT hidden_field (visible=false)
+    expect(payload.content.fields).toHaveLength(2);
+    expect(payload.content.fields[0]!.id).toBe("character_name");
+    expect(payload.content.fields[1]!.id).toBe("field_gender");
+    expect(payload.content.fields[1]!.type).toBe("select");
+    expect(payload.content.fields[1]!.options).toEqual(["男", "女"]);
+    expect(payload.content.submitMapping["field_gender"]).toBe("fields.gender");
   });
 
-  it("falls back when LLM returns empty string", async () => {
-    const { registrar, contributions } = createCollectingRegistrar();
-    register(registrar);
+  it("returns success output message", async () => {
+    const handler = getToolHandler();
+    const result = await handler(makeCtx("zh-CN"));
 
-    const handler = contributions.runtimeHandlers.get("init-wizard")!;
-
-    const ctx = createMockHandlerContext({
-      contextOverrides: { locale: "zh-CN" },
-      generateTextImpl: async () => "   ",
-    });
-
-    const ctxWithNarrative = {
-      ...ctx,
-      context: {
-        ...ctx.context,
-        previousOutputs: [{ narrative: "开场叙事" }],
-      },
-    };
-
-    const result = await handler(ctxWithNarrative);
-
-    const narrativePayload = result.proposals[0]!.payload as { text: string };
-    expect(narrativePayload.text).toBe("在这一切开始之前——你叫什么名字？");
-  });
-
-  it("always emits narrative.append and ui.render proposals", async () => {
-    const { registrar, contributions } = createCollectingRegistrar();
-    register(registrar);
-
-    const handler = contributions.runtimeHandlers.get("init-wizard")!;
-
-    const ctx = createMockHandlerContext({
-      contextOverrides: { locale: "en-US" },
-    });
-
-    const result = await handler({ ...ctx, generateText: undefined });
-
-    expect(result.proposals).toHaveLength(2);
-    expect(result.proposals[0]!.kind).toBe("narrative.append");
-    expect(result.proposals[1]!.kind).toBe("ui.render");
-
-    const uiPayload = result.proposals[1]!.payload as {
-      type: string;
-      content: { fields: unknown[] };
-    };
-    expect(uiPayload.type).toBe("character_creation");
-    expect(uiPayload.content.fields).toHaveLength(1);
-  });
-
-  it("concatenates multiple previous narrative outputs", async () => {
-    const { registrar, contributions } = createCollectingRegistrar();
-    register(registrar);
-
-    const handler = contributions.runtimeHandlers.get("init-wizard")!;
-
-    const customTransition = "从码头的雾气中走来一个身影——你是谁？";
-
-    const ctx = createMockHandlerContext({
-      contextOverrides: { locale: "zh-CN" },
-      generateTextImpl: async () => customTransition,
-    });
-
-    const ctxWithMultipleOutputs = {
-      ...ctx,
-      context: {
-        ...ctx.context,
-        previousOutputs: [
-          { narrative: "Part 1 of the story." },
-          { narrative: "Part 2 continues." },
-        ],
-      },
-    };
-
-    const result = await handler(ctxWithMultipleOutputs);
-
-    const narrativePayload = result.proposals[0]!.payload as { text: string };
-    expect(narrativePayload.text).toBe(customTransition);
+    expect(result.output).toEqual(expect.objectContaining({
+      message: expect.any(String),
+    }));
   });
 });
