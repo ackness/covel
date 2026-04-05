@@ -6,12 +6,12 @@ import { fileURLToPath } from "node:url";
 
 const RUNTIME_PROXY_PATHS = [
   "/actions",
+  "/api",
   "/archives",
   "/commands",
   "/packages",
   "/presets",
   "/sessions",
-  "/traces",
   "/worlds"
 ] as const;
 

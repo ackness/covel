@@ -32,7 +32,7 @@ function categorize(type: string): EventCategory {
   if (type.startsWith("block.")) return "block";
   if (type.startsWith("state.")) return "state";
   if (type === "phase_change") return "phase";
-  if (type.includes("llm")) return "llm";
+  if (type.startsWith("llm.") || type.includes("llm")) return "llm";
   if (type.includes("tool")) return "tool";
   return "flow";
 }
@@ -431,12 +431,25 @@ function TurnCard({
   const isCompleted = turn.events.some((e) => e.type === "flow.completed");
   const duration = fmtDuration(turn.startedAt, turn.completedAt);
 
-  const filteredEvents = useMemo(() => {
-    const filtered = filterCategory
-      ? turn.events.filter((e) => categorize(e.type) === filterCategory || categorize((e.payload.type as string) || e.type) === filterCategory)
+  // Collect runtimeIds that are already shown in the RUNTIMES section
+  const runtimeEventSeqs = useMemo(() => {
+    const seqs = new Set<number>();
+    for (const rt of runtimes) {
+      for (const evt of rt.events) seqs.add(evt.seq);
+    }
+    return seqs;
+  }, [runtimes]);
+
+  // Only show events NOT belonging to any runtime in the flat stream
+  const orphanEvents = useMemo(() => {
+    const events = runtimes.length > 0
+      ? turn.events.filter((e) => !runtimeEventSeqs.has(e.seq))
       : turn.events;
+    const filtered = filterCategory
+      ? events.filter((e) => categorize(e.type) === filterCategory || categorize((e.payload.type as string) || e.type) === filterCategory)
+      : events;
     return aggregateDeltas(filtered);
-  }, [turn.events, filterCategory]);
+  }, [turn.events, filterCategory, runtimes, runtimeEventSeqs]);
 
   return (
     <div className={`border ${hasError ? "border-destructive/30" : "border-border"} bg-card`}>
@@ -460,26 +473,16 @@ function TurnCard({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {/* Runtime summary chips */}
-          <div className="hidden sm:flex items-center gap-1">
-            {runtimes.map((rt) => (
-              <span
-                key={rt.runtimeId}
-                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] border ${
-                  rt.status === "completed"
-                    ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-600"
-                    : rt.status === "failed"
-                      ? "border-destructive/20 bg-destructive/5 text-destructive"
-                      : "border-blue-500/20 bg-blue-500/5 text-blue-600"
-                }`}
-              >
-                {rt.status === "completed" && <CheckCircle2 className="w-2 h-2" />}
-                {rt.status === "failed" && <XCircle className="w-2 h-2" />}
-                {rt.status === "running" && <Activity className="w-2 h-2 animate-pulse" />}
-                {rt.pluginId}
-              </span>
-            ))}
-          </div>
+          {/* Runtime summary */}
+          {runtimes.length > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] border border-border bg-muted/10 text-muted-foreground">
+              <Activity className="w-2.5 h-2.5" />
+              {runtimes.length} runtimes
+              {runtimes.some((rt) => rt.status === "failed") && (
+                <XCircle className="w-2.5 h-2.5 text-destructive" />
+              )}
+            </span>
+          )}
 
           <Badge
             variant={hasError ? "destructive" : isCompleted ? "secondary" : "outline"}
@@ -512,6 +515,7 @@ function TurnCard({
                     runtime={rt}
                     expanded={rtExpanded}
                     onToggle={() => onToggleRuntime(rtKey)}
+                    filterCategory={filterCategory}
                     onSelectEvent={onSelectEvent}
                     selectedEventSeq={selectedEventSeq}
                   />
@@ -520,22 +524,31 @@ function TurnCard({
             </div>
           )}
 
-          {/* Event Stream */}
-          <div className="divide-y divide-border/50">
-            {filteredEvents.map((evt) => (
-              <EventRow
-                key={evt.seq}
-                event={evt}
-                selected={selectedEventSeq === evt.seq}
-                onClick={() => onSelectEvent(evt)}
-              />
-            ))}
-            {filteredEvents.length === 0 && (
-              <div className="px-3 py-4 text-center text-[11px] text-muted-foreground italic">
-                No events matching filter
-              </div>
-            )}
-          </div>
+          {/* Orphan Events (not belonging to any runtime) */}
+          {orphanEvents.length > 0 && (
+            <div className="divide-y divide-border/50">
+              {runtimes.length > 0 && (
+                <div className="px-3 py-1.5 bg-muted/5">
+                  <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    Flow Events
+                  </h4>
+                </div>
+              )}
+              {orphanEvents.map((evt) => (
+                <EventRow
+                  key={evt.seq}
+                  event={evt}
+                  selected={selectedEventSeq === evt.seq}
+                  onClick={() => onSelectEvent(evt)}
+                />
+              ))}
+            </div>
+          )}
+          {orphanEvents.length === 0 && runtimes.length === 0 && (
+            <div className="px-3 py-4 text-center text-[11px] text-muted-foreground italic">
+              No events matching filter
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -548,12 +561,14 @@ function RuntimeRow({
   runtime,
   expanded,
   onToggle,
+  filterCategory,
   onSelectEvent,
   selectedEventSeq,
 }: {
   runtime: RuntimeInfo;
   expanded: boolean;
   onToggle: () => void;
+  filterCategory: EventCategory | null;
   onSelectEvent: (event: api.TraceEvent) => void;
   selectedEventSeq?: number;
 }) {
@@ -565,6 +580,13 @@ function RuntimeRow({
   const toolCalls = runtime.events.filter((e) =>
     (e.payload.type as string) === "tool.calling" || (e.payload.type as string) === "tool.completed"
   ).length;
+
+  const filteredRuntimeEvents = useMemo(() => {
+    const events = filterCategory
+      ? runtime.events.filter((e) => categorize(e.type) === filterCategory || categorize((e.payload.type as string) || e.type) === filterCategory)
+      : runtime.events;
+    return aggregateDeltas(events);
+  }, [runtime.events, filterCategory]);
 
   return (
     <div className={`border ${
@@ -608,9 +630,9 @@ function RuntimeRow({
         </div>
       </button>
 
-      {expanded && runtime.events.length > 0 && (
+      {expanded && filteredRuntimeEvents.length > 0 && (
         <div className="border-t border-border/30 divide-y divide-border/30">
-          {aggregateDeltas(runtime.events).map((evt) => (
+          {filteredRuntimeEvents.map((evt) => (
             <EventRow
               key={evt.seq}
               event={evt}
@@ -679,6 +701,102 @@ function EventRow({
   );
 }
 
+// ── Structured Data Renderer ─────────────────────────────────────
+
+function renderStructuredData(type: string, payload: Record<string, unknown>) {
+  const data = payload.data as Record<string, unknown> | undefined;
+
+  if (type === "llm.calling" && data?.messages) {
+    const messages = data.messages as Array<{ role: string; content?: string; toolCalls?: unknown[]; toolCallId?: string }>;
+    return (
+      <div className="space-y-1.5">
+        <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+          <MessageSquare className="w-3 h-3" /> Prompt Messages ({messages.length})
+        </h4>
+        <div className="space-y-1 max-h-[400px] overflow-y-auto">
+          {messages.map((msg, i) => (
+            <div key={i} className={`border p-2 text-[10px] ${
+              msg.role === "system" ? "border-blue-500/20 bg-blue-500/5"
+              : msg.role === "user" ? "border-emerald-500/20 bg-emerald-500/5"
+              : msg.role === "tool" ? "border-violet-500/20 bg-violet-500/5"
+              : "border-amber-500/20 bg-amber-500/5"
+            }`}>
+              <span className="font-mono font-bold text-[9px] uppercase">{msg.role}</span>
+              {msg.toolCallId && <span className="text-[9px] text-muted-foreground ml-1">({msg.toolCallId})</span>}
+              <pre className="mt-1 whitespace-pre-wrap break-all text-muted-foreground leading-relaxed max-h-[150px] overflow-y-auto">
+                {msg.content || (msg.toolCalls ? JSON.stringify(msg.toolCalls, null, 2) : "")}
+              </pre>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (type === "llm.responded" && data) {
+    const usage = data.usage as { inputTokens?: number; outputTokens?: number } | undefined;
+    const toolCalls = data.toolCalls as Array<{ id: string; name: string; arguments: string }> | undefined;
+    return (
+      <div className="space-y-1.5">
+        {usage && (
+          <div className="flex gap-3 text-[10px] text-muted-foreground">
+            <span>Input: {usage.inputTokens ?? 0} tokens</span>
+            <span>Output: {usage.outputTokens ?? 0} tokens</span>
+          </div>
+        )}
+        {typeof data.text === "string" && (
+          <div>
+            <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Response Text</h4>
+            <pre className="text-[10px] font-mono text-muted-foreground bg-muted/20 border border-border p-2 whitespace-pre-wrap break-all leading-relaxed max-h-[200px] overflow-y-auto">
+              {data.text as string}
+            </pre>
+          </div>
+        )}
+        {toolCalls && toolCalls.length > 0 && (
+          <div>
+            <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Tool Calls ({toolCalls.length})</h4>
+            {toolCalls.map((tc, i) => (
+              <div key={i} className="border border-violet-500/20 bg-violet-500/5 p-2 text-[10px] mb-1">
+                <span className="font-mono font-bold">{tc.name}</span>
+                <pre className="mt-1 whitespace-pre-wrap break-all text-muted-foreground">{tc.arguments}</pre>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (type === "tool.completed" && data?.result) {
+    const resultStr = typeof data.result === "string" ? data.result : JSON.stringify(data.result, null, 2);
+    return (
+      <div>
+        <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1 flex items-center gap-1">
+          <Wrench className="w-3 h-3" /> Tool Result
+        </h4>
+        <pre className="text-[10px] font-mono text-muted-foreground bg-muted/20 border border-border p-2 whitespace-pre-wrap break-all leading-relaxed max-h-[200px] overflow-y-auto">
+          {resultStr}
+        </pre>
+      </div>
+    );
+  }
+
+  if (type === "tool.calling" && payload.detail) {
+    return (
+      <div>
+        <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1 flex items-center gap-1">
+          <Wrench className="w-3 h-3" /> Tool Input
+        </h4>
+        <pre className="text-[10px] font-mono text-muted-foreground bg-muted/20 border border-border p-2 whitespace-pre-wrap break-all leading-relaxed">
+          {(() => { try { return JSON.stringify(JSON.parse(payload.detail as string), null, 2); } catch { return payload.detail as string; } })()}
+        </pre>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 // ── Event Detail Panel ────────────────────────────────────────────
 
 function EventDetail({ event }: { event: api.TraceEvent }) {
@@ -706,15 +824,18 @@ function EventDetail({ event }: { event: api.TraceEvent }) {
         <MetaField label="requestId" value={event.requestId} mono />
       </div>
 
-      {/* Payload */}
-      <div>
-        <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1">
-          <FileJson className="w-3 h-3" /> Payload
-        </h4>
+      {/* Structured data (messages, tool results) */}
+      {renderStructuredData(displayType, event.payload)}
+
+      {/* Raw Payload */}
+      <details className="group">
+        <summary className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1 cursor-pointer">
+          <FileJson className="w-3 h-3" /> Raw Payload
+        </summary>
         <pre className="text-[10px] font-mono text-muted-foreground bg-muted/20 border border-border p-2 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
           {JSON.stringify(event.payload, null, 2)}
         </pre>
-      </div>
+      </details>
     </div>
   );
 }
@@ -797,12 +918,30 @@ function extractDetail(event: api.TraceEvent): string {
       return (p.pluginId as string) || "";
     case "runtime.failed":
       return `${p.pluginId || ""} — ${p.detail || "error"}`;
-    case "llm.calling":
-      return (p.detail as string) || "";
+    case "llm.calling": {
+      const data = p.data as Record<string, unknown> | undefined;
+      const msgCount = Array.isArray(data?.messages) ? (data.messages as unknown[]).length : 0;
+      return `${p.detail || ""} ${msgCount > 0 ? `(${msgCount} messages)` : ""}`.trim();
+    }
+    case "llm.responded": {
+      const data = p.data as Record<string, unknown> | undefined;
+      const text = (data?.text as string) || "";
+      const tcs = Array.isArray(data?.toolCalls) ? (data.toolCalls as unknown[]).length : 0;
+      const usage = data?.usage as { inputTokens?: number; outputTokens?: number } | undefined;
+      const usageStr = usage ? ` [${usage.inputTokens ?? 0}→${usage.outputTokens ?? 0} tok]` : "";
+      if (tcs > 0) return `${tcs} tool calls${usageStr}`;
+      const preview = text.slice(0, 80);
+      return `${preview}${text.length > 80 ? "..." : ""}${usageStr}`;
+    }
     case "tool.calling":
-      return (p.detail as string) || "";
-    case "tool.completed":
-      return (p.detail as string) || "";
+      return `${p.label || ""} ${(p.detail as string) || ""}`.trim();
+    case "tool.completed": {
+      const data = p.data as Record<string, unknown> | undefined;
+      const result = data?.result;
+      const resultStr = typeof result === "string" ? result : JSON.stringify(result ?? "");
+      const preview = resultStr.slice(0, 80);
+      return `${p.label || ""} → ${preview}${resultStr.length > 80 ? "..." : ""}`;
+    }
     case "message.delta":
       return `${p.runtimeId || ""} +${String((p.delta as string) || "").length} chars`;
     case "message.completed": {

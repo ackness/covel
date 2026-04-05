@@ -60,6 +60,7 @@ export interface KernelProgressEvent {
     | "runtime.completed"
     | "runtime.failed"
     | "llm.calling"
+    | "llm.responded"
     | "tool.calling"
     | "tool.completed"
     | "message.delta";
@@ -69,6 +70,8 @@ export interface KernelProgressEvent {
   label?: string;
   /** Extra detail (e.g. preset name, tool name, or text delta content). */
   detail?: string;
+  /** Structured payload for rich trace data (prompt messages, tool results, etc.). */
+  data?: Record<string, unknown>;
   timestamp: string;
 }
 

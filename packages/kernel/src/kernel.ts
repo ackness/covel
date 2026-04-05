@@ -637,17 +637,6 @@ function createKernelSession(
             ? options.slotOverrides[binding].presetId
             : undefined;
 
-          // Emit llm.calling for LLM-backed runtimes (no handler = LLM path)
-          if (!runtime.handler) {
-            emitProgress({
-              type: "llm.calling",
-              runtimeId: spec.id,
-              pluginId: runtime.pluginId,
-              label: `${runtime.pluginId}/${spec.kind}`,
-              detail: resolvedPresetId ?? spec.providerBinding,
-            });
-          }
-
           // Run the runtime
           const result = await runRuntime(
             {

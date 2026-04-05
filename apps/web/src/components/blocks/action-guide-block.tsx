@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.js";
 import { Button } from "@/components/ui/button.js";
 import { Shield, Sword, Lightbulb, Zap } from "lucide-react";
@@ -45,6 +46,7 @@ const STYLE_CONFIG: Record<SuggestionStyle, {
 };
 
 export function ActionGuideBlock({ data, onSubmit, onSelect, selectedValue, disabled }: BlockRendererProps) {
+  const { t } = useTranslation();
   const [customInput, setCustomInput] = useState("");
   const topic = data.topic as string | undefined;
   const categories = (data.categories as ActionCategory[]) ?? [];
@@ -70,7 +72,7 @@ export function ActionGuideBlock({ data, onSubmit, onSelect, selectedValue, disa
     <Card className="max-w-lg">
       <CardHeader className="py-3 px-4 border-b border-border">
         <CardTitle className="text-xs uppercase tracking-widest text-muted-foreground">
-          {topic ?? "Actions"}
+          {topic ?? t("blocks.actions")}
         </CardTitle>
       </CardHeader>
       <CardContent className="p-2 space-y-2">
@@ -115,7 +117,7 @@ export function ActionGuideBlock({ data, onSubmit, onSelect, selectedValue, disa
                 handleCustomSubmit();
               }
             }}
-            placeholder="Or type your own action..."
+            placeholder={t("blocks.actionPlaceholder")}
             disabled={disabled}
             className="flex-1 min-w-0 bg-background border border-border px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
           />
@@ -126,7 +128,7 @@ export function ActionGuideBlock({ data, onSubmit, onSelect, selectedValue, disa
             disabled={disabled || !customInput.trim()}
             onClick={handleCustomSubmit}
           >
-            Go
+            {t("blocks.actionGo")}
           </Button>
         </div>
       </CardContent>

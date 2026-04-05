@@ -166,6 +166,15 @@ export async function runRuntime(
 
   // If no tools, use streaming path for real-time token display
   if (!hasTools) {
+    // Emit llm.calling for streaming path (no messages detail available via executor.stream)
+    options.onProgress?.({
+      type: "llm.calling",
+      runtimeId: runtime.spec.id,
+      pluginId: runtime.pluginId,
+      label: `${runtime.pluginId}/${runtime.spec.kind}`,
+      detail: presetId,
+    });
+
     let fullText = "";
     const streamUsage = { inputTokens: 0, outputTokens: 0 };
 
@@ -237,6 +246,16 @@ export async function runRuntime(
 
   try {
     for (let step = 0; step < maxSteps; step++) {
+      // Emit llm.calling with the current messages (prompt) for each loop step
+      options.onProgress?.({
+        type: "llm.calling",
+        runtimeId: runtime.spec.id,
+        pluginId: runtime.pluginId,
+        label: `${runtime.pluginId}/${runtime.spec.kind}`,
+        detail: presetId,
+        data: { messages: messages.map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content.slice(0, 4000) : m.content, ...(m.toolCalls ? { toolCalls: m.toolCalls } : {}), ...(m.toolCallId ? { toolCallId: m.toolCallId } : {}) })) },
+      });
+
       const result = await deps.gateway.generateText(
         {
           presetId,
@@ -253,6 +272,19 @@ export async function runRuntime(
 
       totalUsage.inputTokens += result.usage.inputTokens;
       totalUsage.outputTokens += result.usage.outputTokens;
+
+      // Emit llm.responded with the LLM response
+      options.onProgress?.({
+        type: "llm.responded",
+        runtimeId: runtime.spec.id,
+        pluginId: runtime.pluginId,
+        label: `${runtime.pluginId}/${runtime.spec.kind}`,
+        data: {
+          text: result.text?.slice(0, 4000),
+          toolCalls: result.toolCalls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })),
+          usage: result.usage,
+        },
+      });
 
       // No tool calls — final response
       if (!result.toolCalls || result.toolCalls.length === 0) {
@@ -340,6 +372,11 @@ export async function runRuntime(
           runtimeId: runtime.spec.id,
           pluginId: runtime.pluginId,
           label: qualifiedToolId,
+          data: {
+            result: typeof toolOutput === "string"
+              ? toolOutput.slice(0, 4000)
+              : JSON.parse(JSON.stringify(toolOutput ?? null)),
+          },
         });
 
         // Append tool result message
