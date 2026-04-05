@@ -10,7 +10,7 @@ import type {
   RuntimeExecutorInput,
 } from "@covel/runtime";
 import type {
-  SlotRegistry,
+  ModelParameterOverrides,
   ToolDefinition,
   TextMessage,
   ToolCallPart,
@@ -30,7 +30,7 @@ export interface RuntimeRunnerDeps {
   gateway: GatewayLike;
   toolRegistry: ScopedToolRegistry;
   hookRegistry: ScopedHookRegistry;
-  slotRegistry?: SlotRegistry;
+  slotRegistry?: RuntimeRunnerSlotRegistry;
 }
 
 export interface RuntimeRunResult {
@@ -43,6 +43,12 @@ export interface RuntimeRunResult {
 export type RuntimeProgressCallback = (
   evt: Omit<KernelProgressEvent, "timestamp">
 ) => void;
+
+interface RuntimeRunnerSlotRegistry {
+  resolveSlot(slotId: string): string | undefined;
+  listSlotsByTag?(tag: string): Array<{ slotId: string; presetId: string }>;
+  getParameterOverrides?(slotId: string): ModelParameterOverrides | undefined;
+}
 
 /**
  * Drive a single runtime's execution.
@@ -63,8 +69,12 @@ export async function runRuntime(
     traceId?: string;
     contextFragments?: ContextFragment[];
     dataAccess?: PluginDataAccess;
-    /** Pre-resolved preset ID (from per-request slot overrides). Takes priority over slot registry. */
-    resolvedPresetId?: string;
+    /** Pre-resolved slot ID (from per-runtime bindings). */
+    resolvedSlotId?: string;
+    /** Per-slot preset overrides (slotName → presetId). */
+    slotPresetOverrides?: Record<string, string>;
+    /** Per-slot generation parameter overrides. */
+    slotParameterOverrides?: Record<string, ModelParameterOverrides>;
     /** Progress callback for tool-calling events. */
     onProgress?: RuntimeProgressCallback;
   }
@@ -93,12 +103,13 @@ export async function runRuntime(
   if (runtime.handler) {
     // Provide a generateText helper so handlers can optionally call the LLM
     const generateText = async (prompt: string): Promise<string> => {
-      const binding = runtime.spec.providerBinding;
-      let presetId: string | undefined = options.resolvedPresetId ?? binding;
-      if (!options.resolvedPresetId && binding && deps.slotRegistry) {
-        const resolved = deps.slotRegistry.resolveSlot(binding);
-        if (resolved) presetId = resolved;
-      }
+      const { presetId } = resolveRuntimeSlotSelection(
+        deps.slotRegistry,
+        runtime.spec.providerTag,
+        options.resolvedSlotId,
+        options.slotPresetOverrides,
+        options.slotParameterOverrides,
+      );
       const result = await deps.gateway.generateText(
         { presetId, messages: [{ role: "user", content: prompt }] },
         { apiKeys: options.apiKeys, traceId: options.traceId }
@@ -126,21 +137,19 @@ export async function runRuntime(
   // ── LLM path with tool-calling loop ────────────────────────────
   const executor = createRuntimeExecutor(deps.gateway);
 
-  // Resolve providerBinding to an actual presetId.
-  const binding = runtime.spec.providerBinding;
-  let presetId: string | undefined = options.resolvedPresetId ?? binding;
-  let providerRequestMetadata: Record<string, unknown> | undefined;
-
-  if (!options.resolvedPresetId && binding && deps.slotRegistry) {
-    const resolved = deps.slotRegistry.resolveSlot(binding);
-    if (resolved) {
-      presetId = resolved;
-    }
-    const overrides = deps.slotRegistry.getParameterOverrides(binding);
-    if (overrides) {
-      providerRequestMetadata = { parameterOverrides: overrides };
-    }
-  }
+  const {
+    presetId,
+    parameterOverrides,
+  } = resolveRuntimeSlotSelection(
+    deps.slotRegistry,
+    runtime.spec.providerTag,
+    options.resolvedSlotId,
+    options.slotPresetOverrides,
+    options.slotParameterOverrides,
+  );
+  const providerRequestMetadata = parameterOverrides
+    ? { parameterOverrides }
+    : undefined;
 
   // Resolve tool definitions for this runtime
   const toolDefs = resolveToolDefinitions(
@@ -525,6 +534,45 @@ function safeParseJson(str: string): unknown | ParseError {
   } catch {
     return { _parseError: true, raw: str } satisfies ParseError;
   }
+}
+
+function resolveRuntimeSlotSelection(
+  slotRegistry: RuntimeRunnerSlotRegistry | undefined,
+  providerTag: string | undefined,
+  resolvedSlotId: string | undefined,
+  slotPresetOverrides: Record<string, string> | undefined,
+  slotParameterOverrides: Record<string, ModelParameterOverrides> | undefined,
+): {
+  slotId?: string;
+  presetId?: string;
+  parameterOverrides?: ModelParameterOverrides;
+} {
+  if (!slotRegistry) return {};
+
+  const slotId = resolvedSlotId ?? firstCompatibleSlotId(slotRegistry, providerTag);
+  if (!slotId) return {};
+
+  const presetId = slotPresetOverrides?.[slotId] ?? slotRegistry.resolveSlot(slotId);
+  if (!presetId) return {};
+
+  const parameterOverrides =
+    slotParameterOverrides?.[slotId] ?? slotRegistry.getParameterOverrides?.(slotId);
+
+  return {
+    slotId,
+    presetId,
+    ...(parameterOverrides ? { parameterOverrides } : {}),
+  };
+}
+
+function firstCompatibleSlotId(
+  slotRegistry: RuntimeRunnerSlotRegistry,
+  providerTag: string | undefined,
+): string | undefined {
+  const tag = providerTag ?? "text";
+  const compatibleSlots = slotRegistry.listSlotsByTag?.(tag);
+  if (!compatibleSlots || compatibleSlots.length === 0) return undefined;
+  return compatibleSlots[0]?.slotId;
 }
 
 function isParseError(value: unknown): value is ParseError {

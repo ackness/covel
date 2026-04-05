@@ -513,8 +513,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (!state.world) return;
     try {
       const slotConfig = api.getSlotConfig();
+      const configuredSlotIds = state.llmConfig?.configured
+        ? Object.keys(state.llmConfig.slots)
+        : [];
+      const primarySlotId = configuredSlotIds[0];
+      const primaryPresetId = primarySlotId
+        ? slotConfig[primarySlotId]?.presetId ?? `slot-${primarySlotId}`
+        : undefined;
       const defaultPresetId = slotConfig.default?.presetId;
-      const presetId = defaultPresetId
+      const presetId = primaryPresetId
+        ?? defaultPresetId
         ?? state.presets.find((p) => p.isDefault)?.id
         ?? state.presets[0]?.id;
       const session = await ds.createSession(state.world.id, presetId);
@@ -525,7 +533,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       dispatch({ type: "SET_EXECUTION_ERROR", error: (err as Error).message });
     }
-  }, [state.world, state.presets]);
+  }, [state.world, state.presets, state.llmConfig]);
 
   /** Send the start_session action to kick off the narrative. Called from GameView. */
   const beginAdventure = useCallback(() => {

@@ -33,7 +33,9 @@ export function buildRetryOptions(
   return {
     ...callerOptions,
     apiKeys: callerOptions.apiKeys ?? cache.apiKeys,
-    slotOverrides: callerOptions.slotOverrides ?? cache.slotOverrides,
+    runtimeBindings: callerOptions.runtimeBindings ?? cache.runtimeBindings,
+    slotPresetOverrides: callerOptions.slotPresetOverrides ?? cache.slotPresetOverrides,
+    slotParameterOverrides: callerOptions.slotParameterOverrides ?? cache.slotParameterOverrides,
     retryFromRuntimeId: fromRuntimeId,
   };
 }

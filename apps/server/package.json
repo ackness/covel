@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:pg": "STORE_BACKEND=pg tsx watch src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "tsc -b",

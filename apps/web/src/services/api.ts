@@ -67,7 +67,7 @@ export interface RuntimeSummary {
   kind: string;
   priority: number;
   trigger: { mode: string; onEvents?: string[] };
-  providerBinding?: string;
+  providerTag?: string;
 }
 
 export interface ToolSummary {
@@ -158,12 +158,12 @@ function buildAiHeaders(): Record<string, string> {
 function buildSlotConfigHeaderInternal(): Record<string, string> {
   const slotConfigRaw = localStorage.getItem(SLOT_CONFIG_KEY);
   const paramOverridesRaw = localStorage.getItem(PARAM_OVERRIDES_KEY);
-  let slots: Record<string, unknown> = {};
+  let slotConfig: Record<string, SlotConfigEntry> = {};
   let overrides: Record<string, unknown> = {};
   try {
-    slots = slotConfigRaw ? JSON.parse(slotConfigRaw) : {};
+    slotConfig = slotConfigRaw ? JSON.parse(slotConfigRaw) : {};
   } catch {
-    slots = {};
+    slotConfig = {};
   }
   try {
     overrides = paramOverridesRaw ? JSON.parse(paramOverridesRaw) : {};
@@ -171,11 +171,16 @@ function buildSlotConfigHeaderInternal(): Record<string, string> {
     overrides = {};
   }
 
-  // Include custom preset definitions for any custom presets referenced by slots
+  const slotPresetOverrides = Object.fromEntries(
+    Object.entries(slotConfig)
+      .filter(([, entry]) => typeof entry?.presetId === "string" && entry.presetId.length > 0)
+      .map(([slotId, entry]) => [slotId, entry.presetId]),
+  );
+
+  // Include custom preset definitions for any custom presets referenced by slot overrides.
   const customPresets = getCustomPresets();
   const referencedCustomIds = new Set(
-    Object.values(slots as Record<string, { presetId: string }>)
-      .map((s) => s.presetId)
+    Object.values(slotPresetOverrides)
       .filter((id) => id?.startsWith("custom_"))
   );
   const customPresetDefs = customPresets
@@ -187,15 +192,15 @@ function buildSlotConfigHeaderInternal(): Record<string, string> {
   // Include runtime priority overrides (qualified "pluginId:runtimeId" → number)
   const runtimePriority = getRuntimePriorityOverrides();
 
-  const hasSlots = Object.keys(slots).length > 0;
+  const hasSlotPresetOverrides = Object.keys(slotPresetOverrides).length > 0;
   const hasOverrides = Object.keys(overrides).length > 0;
   const hasCustom = customPresetDefs.length > 0;
   const hasPriority = Object.keys(runtimePriority).length > 0;
-  if (!hasSlots && !hasOverrides && !hasCustom && !hasPriority) return {};
+  if (!hasSlotPresetOverrides && !hasOverrides && !hasCustom && !hasPriority) return {};
   return {
     "X-Slot-Config": btoa(JSON.stringify({
-      slots,
-      paramOverrides: overrides,
+      ...(hasSlotPresetOverrides ? { slotPresetOverrides } : {}),
+      ...(hasOverrides ? { paramOverrides: overrides } : {}),
       ...(hasCustom ? { customPresets: customPresetDefs } : {}),
       ...(hasPriority ? { runtimePriority } : {}),
     })),

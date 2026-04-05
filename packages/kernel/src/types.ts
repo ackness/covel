@@ -1,3 +1,4 @@
+import type { ModelParameterOverrides } from "@covel/ai-provider";
 import type { KernelInput, RuntimeTriggerEvent } from "@covel/shared";
 import type { RegisteredRuntime } from "@covel/plugin-runtime";
 
@@ -48,10 +49,12 @@ export interface TurnState {
   renderBlocks: Array<{ type: string; content: unknown; source?: { runtimeId: string; pluginId: string } }>;
 }
 
-/** Per-request slot override from the frontend X-Slot-Config header. */
-export interface SlotOverride {
-  presetId: string;
-}
+/** Per-runtime model binding map: qualifiedRuntimeId → slotName. */
+export type RuntimeBindingMap = Record<string, string>;
+/** Per-slot preset override map: slotName → presetId. */
+export type SlotPresetOverrideMap = Record<string, string>;
+/** Per-slot generation parameter override map: slotName → overrides. */
+export type SlotParameterOverrideMap = Record<string, ModelParameterOverrides>;
 
 /** Progress event emitted during kernel execution for real-time UI feedback. */
 export interface KernelProgressEvent {
@@ -92,8 +95,12 @@ export interface BackgroundTask {
 export interface KernelExecuteOptions {
   apiKeys?: Record<string, string>;
   traceId?: string;
-  /** Slot overrides from the frontend (maps slot name → preset ID). */
-  slotOverrides?: Record<string, SlotOverride>;
+  /** Per-runtime model bindings from the frontend (qualifiedRuntimeId → slotName). */
+  runtimeBindings?: RuntimeBindingMap;
+  /** Per-slot preset overrides from the frontend (slotName → presetId). */
+  slotPresetOverrides?: SlotPresetOverrideMap;
+  /** Per-slot generation parameter overrides from the frontend. */
+  slotParameterOverrides?: SlotParameterOverrideMap;
   /**
    * Per-turn runtime priority overrides keyed by qualified runtime ID
    * ("pluginId:runtimeId"). Merged on top of session-level overrides.
@@ -130,7 +137,9 @@ export interface TurnCache {
   runtimeResults: CachedRuntimeResult[];
   /** The original execution options (minus callbacks). */
   apiKeys?: Record<string, string>;
-  slotOverrides?: Record<string, SlotOverride>;
+  runtimeBindings?: RuntimeBindingMap;
+  slotPresetOverrides?: SlotPresetOverrideMap;
+  slotParameterOverrides?: SlotParameterOverrideMap;
   /** Snapshot of kernelContext.state before proposals were committed (for retry state revert). */
   preCommitState: Record<string, unknown>;
 }

@@ -40,7 +40,7 @@ export interface RuntimeExecutorInput {
   context: RuntimeContextView;
   /** System instructions (PLUGIN.md content). */
   instructions?: string;
-  /** Override preset ID (default: resolved from providerBinding). */
+  /** Override preset ID (default: resolved from runtime binding). */
   presetId?: string;
   /** Runtime API keys from browser. */
   apiKeys?: Record<string, string>;
@@ -116,8 +116,5 @@ function buildMessages(input: RuntimeExecutorInput): TextMessage[] {
 }
 
 function resolvePresetId(input: RuntimeExecutorInput): string | undefined {
-  // Explicit override takes priority
-  if (input.presetId) return input.presetId;
-  // Fall back to the runtime's provider binding
-  return input.context.runtime.providerBinding;
+  return input.presetId;
 }

@@ -18,8 +18,21 @@ const customPresetSchema = z.object({
   protocol: z.string().max(64).optional(),
 });
 
+const paramOverrideSchema = z.object({
+  temperature: z.number().optional(),
+  topP: z.number().optional(),
+  maxOutputTokens: z.number().int().positive().optional(),
+  frequencyPenalty: z.number().optional(),
+  presencePenalty: z.number().optional(),
+});
+
 const slotConfigSchema = z.object({
-  slots: z.record(z.string(), z.object({ presetId: z.string().min(1).max(128) })).optional(),
+  /** Per-runtime model bindings: qualifiedRuntimeId → slotName. */
+  runtimeBindings: z.record(z.string(), z.string().min(1).max(128)).optional(),
+  /** Per-slot preset overrides: slotName → presetId. */
+  slotPresetOverrides: z.record(z.string(), z.string().min(1).max(128)).optional(),
+  /** Per-slot generation parameter overrides. */
+  paramOverrides: z.record(z.string(), paramOverrideSchema).optional(),
   customPresets: z.array(customPresetSchema).max(20).optional(),
   runtimePriority: z.record(z.string(), z.number().int().min(0).max(1000)).optional(),
 });
@@ -119,8 +132,10 @@ export function createActionsRoute(deps: {
 
     const apiKeys = c.get("apiKeys") ?? {};
 
-    // Parse X-Slot-Config header for per-request slot overrides, custom presets, and runtime priority
-    let slotOverrides: Record<string, { presetId: string }> | undefined;
+    // Parse X-Slot-Config header for runtime bindings, slot overrides, custom presets, and runtime priority
+    let runtimeBindings: Record<string, string> | undefined;
+    let slotPresetOverrides: Record<string, string> | undefined;
+    let slotParameterOverrides: Record<string, z.infer<typeof paramOverrideSchema>> | undefined;
     let customPresetDefs: z.infer<typeof customPresetSchema>[] | undefined;
     let runtimePriorityOverrides: Record<string, number> | undefined;
     const slotConfigHeader = c.req.header("x-slot-config");
@@ -130,8 +145,14 @@ export function createActionsRoute(deps: {
       try {
         const raw = JSON.parse(atob(slotConfigHeader));
         const decoded = slotConfigSchema.parse(raw);
-        if (decoded.slots && Object.keys(decoded.slots).length > 0) {
-          slotOverrides = decoded.slots;
+        if (decoded.runtimeBindings && Object.keys(decoded.runtimeBindings).length > 0) {
+          runtimeBindings = decoded.runtimeBindings;
+        }
+        if (decoded.slotPresetOverrides && Object.keys(decoded.slotPresetOverrides).length > 0) {
+          slotPresetOverrides = decoded.slotPresetOverrides;
+        }
+        if (decoded.paramOverrides && Object.keys(decoded.paramOverrides).length > 0) {
+          slotParameterOverrides = decoded.paramOverrides;
         }
         if (decoded.customPresets && decoded.customPresets.length > 0) {
           customPresetDefs = decoded.customPresets;
@@ -228,13 +249,11 @@ export function createActionsRoute(deps: {
           });
           registeredCustomIds.push(scopedId);
         }
-        // Remap slot overrides to use scoped preset IDs
-        if (slotOverrides) {
-          for (const [slotName, slotDef] of Object.entries(slotOverrides)) {
-            const originalId = slotDef.presetId;
-            const matchingDef = customPresetDefs.find((d) => d.id === originalId);
+        if (slotPresetOverrides) {
+          for (const [slotName, presetId] of Object.entries(slotPresetOverrides)) {
+            const matchingDef = customPresetDefs.find((def) => def.id === presetId);
             if (matchingDef) {
-              slotOverrides[slotName] = { presetId: originalId + reqSuffix };
+              slotPresetOverrides[slotName] = presetId + reqSuffix;
             }
           }
         }
@@ -335,7 +354,9 @@ export function createActionsRoute(deps: {
           let retryTurnResult: KernelTurnResult | undefined;
           retryTurnResult = await kernelSession.retryTurn(retryRuntimeId, {
             apiKeys,
-            slotOverrides,
+            runtimeBindings,
+            slotPresetOverrides,
+            slotParameterOverrides,
             runtimePriorityOverrides,
             onProgress: async (evt) => {
               if (evt.type === "message.delta") {
@@ -550,7 +571,9 @@ export function createActionsRoute(deps: {
           },
           {
             apiKeys,
-            slotOverrides,
+            runtimeBindings,
+            slotPresetOverrides,
+            slotParameterOverrides,
             runtimePriorityOverrides,
             onProgress: async (evt) => {
               if (evt.type === "message.delta") {

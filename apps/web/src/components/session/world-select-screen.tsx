@@ -38,7 +38,14 @@ export function WorldSelectScreen({
   onWorldCreated,
 }: WorldSelectScreenProps) {
   const { t } = useTranslation();
-  const defaultSlot = resolvedSlots.find((s) => s.slotId === "default");
+  const primarySlot = resolvedSlots[0] ?? null;
+  const primarySlotLabel = primarySlot
+    ? primarySlot.preset
+      ? `${primarySlot.preset.name} (${primarySlot.preset.model})`
+      : primarySlot.serverModel
+        ? `${primarySlot.slotId} (${primarySlot.serverModel})`
+        : null
+    : null;
 
   const [mode, setMode] = useState<ViewMode>("list");
   const [selectedWorldId, setSelectedWorldId] = useState<string | null>(null);
@@ -184,10 +191,10 @@ export function WorldSelectScreen({
                 {t("session.pluginsLoaded", { count: packages.filter((p) => p.enabled).length })}
               </span>
             )}
-            {defaultSlot?.preset && (
+            {primarySlotLabel && (
               <span className="flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5" />
-                {defaultSlot.preset.name} ({defaultSlot.preset.model})
+                {primarySlotLabel}
               </span>
             )}
           </div>

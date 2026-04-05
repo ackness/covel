@@ -37,13 +37,48 @@ function makeContext(
       kind: "story",
       phase: "story",
       allowedTools: [],
-      providerBinding: "default",
+      providerTag: "text",
     },
     ...overrides,
   };
 }
 
 describe("runtime-executor", () => {
+  it("should NOT pass providerTag as presetId when no explicit presetId is given", async () => {
+    let capturedPresetId: string | undefined = "SENTINEL";
+    const gateway = makeGateway({
+      async *streamText(input) {
+        capturedPresetId = input.presetId;
+        yield { type: "done" as const, finishReason: "stop", usage: { inputTokens: 1, outputTokens: 1 } };
+      },
+    });
+
+    const executor = createRuntimeExecutor(gateway);
+    for await (const _ of executor.stream({ context: makeContext() })) {
+      // consume
+    }
+
+    // providerTag ("text") must NOT leak into presetId
+    expect(capturedPresetId).toBeUndefined();
+  });
+
+  it("should pass explicit presetId when provided", async () => {
+    let capturedPresetId: string | undefined;
+    const gateway = makeGateway({
+      async *streamText(input) {
+        capturedPresetId = input.presetId;
+        yield { type: "done" as const, finishReason: "stop", usage: { inputTokens: 1, outputTokens: 1 } };
+      },
+    });
+
+    const executor = createRuntimeExecutor(gateway);
+    for await (const _ of executor.stream({ context: makeContext(), presetId: "my-preset" })) {
+      // consume
+    }
+
+    expect(capturedPresetId).toBe("my-preset");
+  });
+
   it("streams events from gateway", async () => {
     const executor = createRuntimeExecutor(makeGateway());
     const events: StreamEvent[] = [];

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { ModelParameterOverrides } from "@covel/ai-provider";
 import type { CharacterCard, KernelInput, KernelTurnResult } from "@covel/shared";
 import type { PluginHost } from "@covel/plugin-runtime";
 import {
@@ -38,17 +39,28 @@ import {
 
 // ── Public types ───────────────────────────────────────────────────
 
+export interface KernelSlotRegistry {
+  resolveSlot(slotId: string): string | undefined;
+  getSlotTag?(slotId: string): string | undefined;
+  listSlotsByTag?(tag: string): Array<{ slotId: string; presetId: string }>;
+  getParameterOverrides?(slotId: string): ModelParameterOverrides | undefined;
+  listSlots?(): Record<string, { slotId: string; presetId: string }>;
+}
+
 export interface KernelBootstrapConfig {
   pluginHost: PluginHost;
   gateway: GatewayLike;
   /** Trust policy for runtime/tool/proposal gates. Default: allow-all. */
   trustPolicy?: TrustPolicy;
+  /** Slot registry for resolving runtime model bindings. */
+  slotRegistry?: KernelSlotRegistry;
 }
 
 /** @deprecated Use KernelBootstrapConfig */
 export interface KernelDeps {
   pluginHost: PluginHost;
   gateway: GatewayLike;
+  slotRegistry?: KernelSlotRegistry;
 }
 
 export interface KernelContext {
@@ -92,7 +104,7 @@ export interface CreateSessionOptions {
 }
 
 export function bootstrapKernel(config: KernelBootstrapConfig): KernelInstance {
-  const { pluginHost, gateway } = config;
+  const { pluginHost, gateway, slotRegistry } = config;
   const trustPolicy = config.trustPolicy ?? createPermissiveTrustPolicy();
 
   function createSession(optionsOrContext?: CreateSessionOptions | Partial<KernelContext>): KernelSession {
@@ -103,7 +115,7 @@ export function bootstrapKernel(config: KernelBootstrapConfig): KernelInstance {
         : { initialContext: optionsOrContext as Partial<KernelContext> | undefined };
 
     return createKernelSession(
-      { pluginHost, gateway, trustPolicy },
+      { pluginHost, gateway, trustPolicy, slotRegistry },
       opts,
     );
   }
@@ -202,10 +214,29 @@ function resolveLocale(
 
 // ── Session implementation ─────────────────────────────────────────
 
+/**
+ * Resolve a runtime's slot name from the slot registry, with tag validation.
+ * Returns undefined if: no binding, slot not found, or tag mismatch.
+ */
+function resolveTagValidatedSlotName(
+  slotRegistry: KernelSlotRegistry,
+  slotName: string,
+  providerTag: string | undefined,
+): string | undefined {
+  const presetId = slotRegistry.resolveSlot(slotName);
+  if (!presetId) return undefined;
+  if (providerTag !== undefined && slotRegistry.getSlotTag) {
+    const slotTag = slotRegistry.getSlotTag(slotName);
+    if (slotTag !== undefined && slotTag !== providerTag) return undefined;
+  }
+  return slotName;
+}
+
 interface ResolvedDeps {
   pluginHost: PluginHost;
   gateway: GatewayLike;
   trustPolicy: TrustPolicy;
+  slotRegistry?: KernelSlotRegistry;
 }
 
 function createKernelSession(
@@ -409,7 +440,7 @@ function createKernelSession(
                 kind: spec.kind,
                 priority: spec.priority ?? DEFAULT_RUNTIME_PRIORITY,
                 allowedTools: spec.tools,
-                providerBinding: spec.providerBinding,
+                providerTag: spec.providerTag,
                 budget: spec.budget,
                 isolation: spec.isolation,
               };
@@ -451,16 +482,19 @@ function createKernelSession(
                 })),
               });
 
-              const binding = spec.providerBinding;
-              const resolvedPresetId = binding && options.slotOverrides?.[binding]
-                ? options.slotOverrides[binding].presetId
-                : undefined;
+              const qualifiedId = `${runtime.pluginId}:${spec.id}`;
+              const boundSlot = options.runtimeBindings?.[qualifiedId];
+              const resolvedSlotId =
+                boundSlot && deps.slotRegistry
+                  ? resolveTagValidatedSlotName(deps.slotRegistry, boundSlot, spec.providerTag)
+                  : undefined;
 
               const result = await runRuntime(
                 {
                   gateway: deps.gateway,
                   toolRegistry: scopedTools,
                   hookRegistry: scopedHooks,
+                  slotRegistry: deps.slotRegistry,
                 },
                 runtime,
                 context,
@@ -469,7 +503,9 @@ function createKernelSession(
                   traceId,
                   contextFragments: fragments,
                   dataAccess,
-                  resolvedPresetId,
+                  resolvedSlotId,
+                  slotPresetOverrides: options.slotPresetOverrides,
+                  slotParameterOverrides: options.slotParameterOverrides,
                   onProgress: emitProgress,
                 }
               );
@@ -582,7 +618,7 @@ function createKernelSession(
             runtimeId: spec.id,
             pluginId: runtime.pluginId,
             label: `${runtime.pluginId}/${spec.kind}`,
-            detail: spec.providerBinding,
+            detail: spec.providerTag,
           });
 
           // Build RuntimeInfo for prompt assembler
@@ -592,7 +628,7 @@ function createKernelSession(
             kind: spec.kind,
             priority: spec.priority ?? DEFAULT_RUNTIME_PRIORITY,
             allowedTools: spec.tools,
-            providerBinding: spec.providerBinding,
+            providerTag: spec.providerTag,
             budget: spec.budget,
             isolation: spec.isolation,
           };
@@ -632,11 +668,13 @@ function createKernelSession(
             })),
           });
 
-          // Resolve per-request slot override for this runtime's providerBinding
-          const binding = spec.providerBinding;
-          const resolvedPresetId = binding && options.slotOverrides?.[binding]
-            ? options.slotOverrides[binding].presetId
-            : undefined;
+          // Resolve per-runtime model binding (with tag compatibility check)
+          const bgQualifiedId = `${runtime.pluginId}:${spec.id}`;
+          const bgBoundSlot = options.runtimeBindings?.[bgQualifiedId];
+          const resolvedSlotId =
+            bgBoundSlot && deps.slotRegistry
+              ? resolveTagValidatedSlotName(deps.slotRegistry, bgBoundSlot, spec.providerTag)
+              : undefined;
 
           // Run the runtime
           const result = await runRuntime(
@@ -644,6 +682,7 @@ function createKernelSession(
               gateway: deps.gateway,
               toolRegistry: scopedTools,
               hookRegistry: scopedHooks,
+              slotRegistry: deps.slotRegistry,
             },
             runtime,
             context,
@@ -652,7 +691,9 @@ function createKernelSession(
               traceId,
               contextFragments: fragments,
               dataAccess,
-              resolvedPresetId,
+              resolvedSlotId,
+              slotPresetOverrides: options.slotPresetOverrides,
+              slotParameterOverrides: options.slotParameterOverrides,
               onProgress: emitProgress,
             }
           );
@@ -808,7 +849,9 @@ function createKernelSession(
       input,
       runtimeResults: turnRuntimeResults,
       apiKeys: options.apiKeys,
-      slotOverrides: options.slotOverrides,
+      runtimeBindings: options.runtimeBindings,
+      slotPresetOverrides: options.slotPresetOverrides,
+      slotParameterOverrides: options.slotParameterOverrides,
       preCommitState,
     };
 
@@ -865,7 +908,9 @@ function createKernelSession(
     const retryOptions: KernelExecuteOptions = {
       ...options,
       apiKeys: options.apiKeys ?? lastTurnCache.apiKeys,
-      slotOverrides: options.slotOverrides ?? lastTurnCache.slotOverrides,
+      runtimeBindings: options.runtimeBindings ?? lastTurnCache.runtimeBindings,
+      slotPresetOverrides: options.slotPresetOverrides ?? lastTurnCache.slotPresetOverrides,
+      slotParameterOverrides: options.slotParameterOverrides ?? lastTurnCache.slotParameterOverrides,
       retryFromRuntimeId: fromRuntimeId,
     };
 
