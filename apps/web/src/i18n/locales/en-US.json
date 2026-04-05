@@ -83,6 +83,7 @@
     "commands": "Commands",
     "startingUp": "Starting up...",
     "retryFrom": "Retry from {{label}}",
+    "executionSummary": "Execution · {{count}} runtimes",
     "retryAll": "Retry All",
     "retryAllTitle": "Re-execute all",
     "statusLlm": "Calling model",
@@ -95,6 +96,11 @@
     "runtimeInitWizard": "Character Creation",
     "runtimeGuide": "Guide",
     "runtimeCharTracker": "Character Tracker"
+  },
+  "blocks": {
+    "actionPlaceholder": "Or type your own action...",
+    "actionGo": "Go",
+    "actions": "Actions"
   },
   "world": {
     "dimensions": "World Dimensions",

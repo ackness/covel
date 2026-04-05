@@ -305,7 +305,9 @@ export function createActionsRoute(deps: {
                 }
               : undefined,
             chat: chatHistory,
-            ...(retrySnapshot ? { state: retrySnapshot } : {}),
+            ...(retrySnapshot
+              ? { state: ((retrySnapshot as Record<string, unknown>).state ?? retrySnapshot) as Record<string, unknown> }
+              : {}),
           });
 
           const provTurnId = `turn_${Date.now().toString(36)}`;
@@ -508,7 +510,9 @@ export function createActionsRoute(deps: {
               }
             : undefined,
           chat: chatHistory,
-          ...(stateSnapshot ? { state: stateSnapshot } : {}),
+          ...(stateSnapshot
+          ? { state: ((stateSnapshot as Record<string, unknown>).state ?? stateSnapshot) as Record<string, unknown> }
+          : {}),
         });
 
         // Provisional IDs for progress events emitted before turn completes

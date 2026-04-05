@@ -83,6 +83,7 @@
     "commands": "命令",
     "startingUp": "正在启动...",
     "retryFrom": "从 {{label}} 重试",
+    "executionSummary": "执行 · {{count}} 个运行时",
     "retryAll": "重试全部",
     "retryAllTitle": "重新执行所有",
     "statusLlm": "调用模型",
@@ -95,6 +96,11 @@
     "runtimeInitWizard": "角色创建",
     "runtimeGuide": "引导系统",
     "runtimeCharTracker": "角色追踪"
+  },
+  "blocks": {
+    "actionPlaceholder": "或输入自定义行动...",
+    "actionGo": "执行",
+    "actions": "行动"
   },
   "world": {
     "dimensions": "世界维度",

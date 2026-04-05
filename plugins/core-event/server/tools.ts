@@ -92,8 +92,7 @@ export async function createEventTool(
         {
           kind: "state.patch",
           payload: {
-            scope: "core-event",
-            patch: { events: result.state.events },
+            "core-event": { events: result.state.events },
           },
         },
         {
@@ -155,8 +154,7 @@ export async function evolveEventTool(
         {
           kind: "state.patch",
           payload: {
-            scope: "core-event",
-            patch: { events: newState.events },
+            "core-event": { events: newState.events },
           },
         },
         {
@@ -213,8 +211,7 @@ export async function resolveEventTool(
         {
           kind: "state.patch",
           payload: {
-            scope: "core-event",
-            patch: { events: newState.events },
+            "core-event": { events: newState.events },
           },
         },
         {
@@ -274,8 +271,7 @@ export async function endEventTool(
         {
           kind: "state.patch",
           payload: {
-            scope: "core-event",
-            patch: { events: newState.events },
+            "core-event": { events: newState.events },
           },
         },
         {

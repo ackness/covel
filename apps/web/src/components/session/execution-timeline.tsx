@@ -12,6 +12,8 @@ interface RuntimeStatus {
   detail?: string;
   /** Qualified tool name when status is "tool" (e.g. "core-init-wizard:emit-character-form"). */
   toolName?: string;
+  /** Duration in milliseconds (only set when completed or failed). */
+  durationMs?: number;
 }
 
 function deriveStatuses(
@@ -19,6 +21,7 @@ function deriveStatuses(
   runtimeLabels: Record<string, string>,
 ): RuntimeStatus[] {
   const map = new Map<string, RuntimeStatus>();
+  const startTimes = new Map<string, number>();
 
   const runtimeLabel = (step: ExecutionStep): string => {
     if (runtimeLabels[step.runtimeId]) return runtimeLabels[step.runtimeId];
@@ -36,7 +39,9 @@ function deriveStatuses(
           pluginId: step.pluginId,
           label: runtimeLabel(step),
           status: "running",
+          durationMs: undefined,
         });
+        startTimes.set(step.runtimeId, new Date(step.timestamp).getTime());
         break;
       case "llm.calling":
         if (existing) {
@@ -54,16 +59,22 @@ function deriveStatuses(
           map.set(step.runtimeId, { ...existing, status: "running", toolName: undefined, detail: undefined });
         }
         break;
-      case "runtime.completed":
+      case "runtime.completed": {
         if (existing) {
-          map.set(step.runtimeId, { ...existing, status: "completed", detail: undefined });
+          const start = startTimes.get(step.runtimeId);
+          const dur = start ? new Date(step.timestamp).getTime() - start : undefined;
+          map.set(step.runtimeId, { ...existing, status: "completed", detail: undefined, durationMs: dur });
         }
         break;
-      case "runtime.failed":
+      }
+      case "runtime.failed": {
         if (existing) {
-          map.set(step.runtimeId, { ...existing, status: "failed", detail: step.detail });
+          const start = startTimes.get(step.runtimeId);
+          const dur = start ? new Date(step.timestamp).getTime() - start : undefined;
+          map.set(step.runtimeId, { ...existing, status: "failed", detail: step.detail, durationMs: dur });
         }
         break;
+      }
     }
   }
 
@@ -83,6 +94,12 @@ function StatusIcon({ status }: { status: RuntimeStatus["status"] }) {
     case "failed":
       return <XCircle className="w-3 h-3 text-destructive" />;
   }
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const s = ms / 1000;
+  return s < 60 ? `${s.toFixed(1)}s` : `${Math.floor(s / 60)}m${Math.round(s % 60)}s`;
 }
 
 function RuntimeChip({
@@ -117,6 +134,11 @@ function RuntimeChip({
       )}
       {rt.detail === "[cached]" && (
         <span className="text-[10px] text-muted-foreground/60 italic">cached</span>
+      )}
+      {rt.durationMs != null && (
+        <span className="text-[10px] text-muted-foreground/70 tabular-nums">
+          {formatDuration(rt.durationMs)}
+        </span>
       )}
       {canRetry && onRetry && (
         <button
@@ -193,7 +215,7 @@ export function ExecutionTimeline({
           >
             {collapsed ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
             <span className="uppercase tracking-wider">
-              Execution · {statuses.length} runtimes
+              {t("session.executionSummary", { count: statuses.length })}
             </span>
           </button>
           {onRetryAll && (

@@ -263,8 +263,9 @@ function FilterButton({ active, onClick, label, count }: {
 // ── Helpers ──────────────────────────────────────────────────────
 
 function extractEvents(gameState: Record<string, unknown>): GameEvent[] {
-  // Events can be stored in gameState.events (array or object map)
-  const raw = gameState.events;
+  // Events are stored under the core-event plugin's namespaced state
+  const coreEvent = gameState["core-event"] as Record<string, unknown> | undefined;
+  const raw = coreEvent?.events;
   if (!raw) return [];
 
   const list: unknown[] = Array.isArray(raw)
@@ -276,13 +277,13 @@ function extractEvents(gameState: Record<string, unknown>): GameEvent[] {
   return list
     .filter((e): e is Record<string, unknown> => typeof e === "object" && e !== null)
     .map((e) => ({
-      id: String(e.id ?? ""),
-      title: String(e.title ?? e.name ?? "Untitled"),
+      id: String(e.eventId ?? e.id ?? ""),
+      title: String(e.name ?? e.title ?? ""),
       description: e.description ? String(e.description) : undefined,
-      type: e.type ? String(e.type) : undefined,
+      type: e.eventType ? String(e.eventType) : e.type ? String(e.type) : undefined,
       status: (e.status as EventStatus) ?? "active",
       visibility: e.visibility as EventVisibility | undefined,
-      parentId: e.parentId ? String(e.parentId) : null,
+      parentId: e.parentEventId ? String(e.parentEventId) : e.parentId ? String(e.parentId) : null,
       tags: Array.isArray(e.tags) ? e.tags.map(String) : undefined,
       turnCreated: typeof e.turnCreated === "number" ? e.turnCreated : undefined,
       turnResolved: typeof e.turnResolved === "number" ? e.turnResolved : undefined,
