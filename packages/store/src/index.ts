@@ -8,6 +8,9 @@ export type {
   EventRecord,
   DomainRecord,
   SnapshotRecord,
+  TraceEventRecord,
+  StatePatchRecord,
+  StateSnapshotRecord,
   StoreSnapshot,
 } from "./types.js";
 

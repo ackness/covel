@@ -5,7 +5,7 @@ import { z } from "zod";
 import { LOCALE_PATTERN, worldDimensionsSchema } from "@covel/shared";
 import { loadPrompt, interpolate } from "@covel/context";
 import type { AiStack } from "../../ai-setup.js";
-import type { ServerStore } from "../../store/types.js";
+import type { StoreService } from "../../store-service.js";
 import type { ApiKeyEnv } from "../../middleware/api-key-injection.js";
 
 const requestSchema = z.object({
@@ -57,7 +57,7 @@ const worldOutputSchema = z.object({
  *   - { type: "done", world: WorldRecord }          — success
  *   - { type: "error", message: string }            — failure
  */
-export function createGenerateWorldRoute(ai: AiStack, store: ServerStore) {
+export function createGenerateWorldRoute(ai: AiStack, store: StoreService) {
   const route = new Hono<ApiKeyEnv>();
 
   route.post("/", async (c) => {

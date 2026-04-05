@@ -10,6 +10,9 @@ import type {
   EventRecord,
   DomainRecord,
   SnapshotRecord,
+  TraceEventRecord,
+  StatePatchRecord,
+  StateSnapshotRecord,
   StoreSnapshot,
 } from "../types.js";
 import * as schema from "./schema.js";
@@ -38,8 +41,12 @@ export class PgStore implements DataStore {
           name JSONB NOT NULL,
           description JSONB NOT NULL DEFAULT '""',
           lore JSONB,
+          locale TEXT,
           tags JSONB,
-          created_at TEXT NOT NULL
+          dimensions JSONB,
+          package_id TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT
         )
       `;
       // Migration: ensure worlds name/description/lore columns are JSONB (C1 fix)
@@ -55,6 +62,17 @@ export class PgStore implements DataStore {
           END IF;
         END $$
       `;
+      // Migration: add new columns to worlds (v2)
+      await tx`
+        DO $$ BEGIN
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'worlds' AND column_name = 'locale') THEN
+            ALTER TABLE worlds ADD COLUMN locale TEXT;
+            ALTER TABLE worlds ADD COLUMN dimensions JSONB;
+            ALTER TABLE worlds ADD COLUMN package_id TEXT;
+            ALTER TABLE worlds ADD COLUMN updated_at TEXT;
+          END IF;
+        END $$
+      `;
       await tx`
         CREATE TABLE IF NOT EXISTS sessions (
           id TEXT PRIMARY KEY,
@@ -63,8 +81,17 @@ export class PgStore implements DataStore {
           phase TEXT NOT NULL DEFAULT 'init',
           preset_id TEXT,
           settings JSONB,
+          task_bindings JSONB,
           created_at TEXT NOT NULL
         )
+      `;
+      // Migration: add task_bindings to sessions (v2)
+      await tx`
+        DO $$ BEGIN
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sessions' AND column_name = 'task_bindings') THEN
+            ALTER TABLE sessions ADD COLUMN task_bindings JSONB;
+          END IF;
+        END $$
       `;
       await tx`
         CREATE TABLE IF NOT EXISTS messages (
@@ -126,6 +153,42 @@ export class PgStore implements DataStore {
           created_at TEXT NOT NULL
         )
       `;
+      await tx`
+        CREATE TABLE IF NOT EXISTS trace_events_store (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          request_id TEXT NOT NULL,
+          trace_id TEXT NOT NULL,
+          turn_id TEXT NOT NULL,
+          flow_id TEXT NOT NULL,
+          seq INTEGER NOT NULL,
+          payload JSONB NOT NULL,
+          created_at TEXT NOT NULL
+        )
+      `;
+      await tx`
+        CREATE TABLE IF NOT EXISTS state_patches (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          package_name TEXT NOT NULL,
+          data JSONB,
+          created_at TEXT NOT NULL
+        )
+      `;
+      await tx`
+        CREATE TABLE IF NOT EXISTS state_snapshots (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          data JSONB NOT NULL,
+          created_at TEXT NOT NULL
+        )
+      `;
+      // Indexes for new session-scoped tables
+      await tx`CREATE INDEX IF NOT EXISTS idx_trace_events_store_session ON trace_events_store (session_id)`;
+      await tx`CREATE INDEX IF NOT EXISTS idx_state_patches_session ON state_patches (session_id)`;
+      await tx`CREATE UNIQUE INDEX IF NOT EXISTS idx_state_snapshots_session ON state_snapshots (session_id)`;
     });
   }
 
@@ -157,8 +220,12 @@ export class PgStore implements DataStore {
         name: world.name,
         description: world.description,
         lore: world.lore ?? null,
+        locale: world.locale ?? null,
         tags: world.tags ?? null,
+        dimensions: (world.dimensions as Record<string, unknown>) ?? null,
+        packageId: world.packageId ?? null,
         createdAt: world.createdAt,
+        updatedAt: world.updatedAt ?? null,
       })
       .onConflictDoUpdate({
         target: schema.worlds.id,
@@ -166,7 +233,11 @@ export class PgStore implements DataStore {
           name: world.name,
           description: world.description,
           lore: world.lore ?? null,
+          locale: world.locale ?? null,
           tags: world.tags ?? null,
+          dimensions: (world.dimensions as Record<string, unknown>) ?? null,
+          packageId: world.packageId ?? null,
+          updatedAt: world.updatedAt ?? null,
         },
       });
   }
@@ -207,6 +278,7 @@ export class PgStore implements DataStore {
         phase: session.phase,
         presetId: session.presetId ?? null,
         settings: session.settings ?? null,
+        taskBindings: session.taskBindings ?? null,
         createdAt: session.createdAt,
       })
       .onConflictDoUpdate({
@@ -217,6 +289,7 @@ export class PgStore implements DataStore {
           phase: session.phase,
           presetId: session.presetId ?? null,
           settings: session.settings ?? null,
+          taskBindings: session.taskBindings ?? null,
         },
       });
   }
@@ -409,10 +482,88 @@ export class PgStore implements DataStore {
     return rows.map(toSnapshotRecord);
   }
 
+  // ── Trace Events ────────────────────────────────────────────────
+
+  async addTraceEvent(event: TraceEventRecord): Promise<void> {
+    await this.db.insert(schema.traceEvents).values({
+      id: event.id,
+      sessionId: event.sessionId,
+      type: event.type,
+      requestId: event.requestId,
+      traceId: event.traceId,
+      turnId: event.turnId,
+      flowId: event.flowId,
+      seq: event.seq,
+      payload: event.payload,
+      createdAt: event.createdAt,
+    });
+  }
+
+  async listTraceEvents(sessionId: string): Promise<TraceEventRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.traceEvents)
+      .where(eq(schema.traceEvents.sessionId, sessionId))
+      .orderBy(asc(schema.traceEvents.seq));
+    return rows.map(toTraceEventRecord);
+  }
+
+  // ── State Patches ──────────────────────────────────────────────
+
+  async addStatePatch(patch: StatePatchRecord): Promise<void> {
+    await this.db.insert(schema.statePatches).values({
+      id: patch.id,
+      sessionId: patch.sessionId,
+      summary: patch.summary,
+      packageName: patch.packageName,
+      data: patch.data != null ? patch.data as Record<string, unknown> : null,
+      createdAt: patch.createdAt,
+    });
+  }
+
+  async listStatePatches(sessionId: string): Promise<StatePatchRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.statePatches)
+      .where(eq(schema.statePatches.sessionId, sessionId))
+      .orderBy(asc(schema.statePatches.createdAt));
+    return rows.map(toStatePatchRecord);
+  }
+
+  // ── State Snapshots ────────────────────────────────────────────
+
+  async saveStateSnapshot(snapshot: StateSnapshotRecord): Promise<void> {
+    // Atomic upsert — session_id has a UNIQUE index
+    await this.db
+      .insert(schema.stateSnapshots)
+      .values({
+        id: snapshot.id,
+        sessionId: snapshot.sessionId,
+        data: snapshot.data,
+        createdAt: snapshot.createdAt,
+      })
+      .onConflictDoUpdate({
+        target: schema.stateSnapshots.sessionId,
+        set: {
+          id: snapshot.id,
+          data: snapshot.data,
+          createdAt: snapshot.createdAt,
+        },
+      });
+  }
+
+  async getStateSnapshot(sessionId: string): Promise<StateSnapshotRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.stateSnapshots)
+      .where(eq(schema.stateSnapshots.sessionId, sessionId));
+    return rows.length > 0 ? toStateSnapshotRecord(rows[0]) : null;
+  }
+
   // ── Bulk ────────────────────────────────────────────────────────
 
   async exportAll(): Promise<StoreSnapshot> {
-    const [w, s, m, c, e, r, sn] = await Promise.all([
+    const [w, s, m, c, e, r, sn, te, sp, ss] = await Promise.all([
       this.listWorlds(),
       this.listSessions(),
       this.db.select().from(schema.messages).then((rows) => rows.map(toMessageRecord)),
@@ -420,6 +571,9 @@ export class PgStore implements DataStore {
       this.db.select().from(schema.events).then((rows) => rows.map(toEventRecord)),
       this.db.select().from(schema.domainRecords).then((rows) => rows.map(toDomainRecord)),
       this.db.select().from(schema.snapshots).then((rows) => rows.map(toSnapshotRecord)),
+      this.db.select().from(schema.traceEvents).then((rows) => rows.map(toTraceEventRecord)),
+      this.db.select().from(schema.statePatches).then((rows) => rows.map(toStatePatchRecord)),
+      this.db.select().from(schema.stateSnapshots).then((rows) => rows.map(toStateSnapshotRecord)),
     ]);
     return {
       version: "covel-export/v1",
@@ -432,6 +586,9 @@ export class PgStore implements DataStore {
         events: e,
         records: r,
         snapshots: sn,
+        traceEvents: te,
+        statePatches: sp,
+        stateSnapshots: ss,
       },
       config: {},
     };
@@ -445,6 +602,9 @@ export class PgStore implements DataStore {
     await this.sql.begin(async (_tx) => {
       const tx = _tx as unknown as typeof this.sql;
       // Clear all tables inside the transaction
+      await tx`DELETE FROM state_snapshots`;
+      await tx`DELETE FROM state_patches`;
+      await tx`DELETE FROM trace_events_store`;
       await tx`DELETE FROM snapshots`;
       await tx`DELETE FROM domain_records`;
       await tx`DELETE FROM events`;
@@ -456,12 +616,12 @@ export class PgStore implements DataStore {
       // Import all data — JSONB columns need JSON.stringify + ::jsonb cast
       const jsonVal = (v: unknown) => v != null ? JSON.stringify(v) : null;
       for (const w of data.data.worlds) {
-        await tx`INSERT INTO worlds (id, name, description, lore, tags, created_at)
-          VALUES (${w.id}, ${jsonVal(w.name ?? "")}::jsonb, ${jsonVal(w.description ?? "")}::jsonb, ${jsonVal(w.lore)}::jsonb, ${jsonVal(w.tags)}::jsonb, ${w.createdAt})`;
+        await tx`INSERT INTO worlds (id, name, description, lore, locale, tags, dimensions, package_id, created_at, updated_at)
+          VALUES (${w.id}, ${jsonVal(w.name ?? "")}::jsonb, ${jsonVal(w.description ?? "")}::jsonb, ${jsonVal(w.lore)}::jsonb, ${w.locale ?? null}, ${jsonVal(w.tags)}::jsonb, ${jsonVal(w.dimensions)}::jsonb, ${w.packageId ?? null}, ${w.createdAt}, ${w.updatedAt ?? null})`;
       }
       for (const s of data.data.sessions) {
-        await tx`INSERT INTO sessions (id, world_id, status, phase, preset_id, settings, created_at)
-          VALUES (${s.id}, ${s.worldId}, ${s.status}, ${s.phase}, ${s.presetId ?? null}, ${jsonVal(s.settings)}::jsonb, ${s.createdAt})`;
+        await tx`INSERT INTO sessions (id, world_id, status, phase, preset_id, settings, task_bindings, created_at)
+          VALUES (${s.id}, ${s.worldId}, ${s.status}, ${s.phase}, ${s.presetId ?? null}, ${jsonVal(s.settings)}::jsonb, ${jsonVal(s.taskBindings)}::jsonb, ${s.createdAt})`;
       }
       for (const m of data.data.messages) {
         await tx`INSERT INTO messages (id, session_id, role, content, metadata, created_at)
@@ -484,6 +644,18 @@ export class PgStore implements DataStore {
         await tx`INSERT INTO snapshots (id, branch_id, turn_id, label, summary, data, created_at)
           VALUES (${s.id}, ${s.branchId}, ${s.turnId}, ${s.label ?? null}, ${s.summary ?? null}, ${jsonVal(s.data)}::jsonb, ${s.createdAt})`;
       }
+      for (const t of data.data.traceEvents ?? []) {
+        await tx`INSERT INTO trace_events_store (id, session_id, type, request_id, trace_id, turn_id, flow_id, seq, payload, created_at)
+          VALUES (${t.id}, ${t.sessionId}, ${t.type}, ${t.requestId}, ${t.traceId}, ${t.turnId}, ${t.flowId}, ${t.seq}, ${jsonVal(t.payload)}::jsonb, ${t.createdAt})`;
+      }
+      for (const p of data.data.statePatches ?? []) {
+        await tx`INSERT INTO state_patches (id, session_id, summary, package_name, data, created_at)
+          VALUES (${p.id}, ${p.sessionId}, ${p.summary}, ${p.packageName}, ${jsonVal(p.data)}::jsonb, ${p.createdAt})`;
+      }
+      for (const s of data.data.stateSnapshots ?? []) {
+        await tx`INSERT INTO state_snapshots (id, session_id, data, created_at)
+          VALUES (${s.id}, ${s.sessionId}, ${jsonVal(s.data)}::jsonb, ${s.createdAt})`;
+      }
     });
   }
 
@@ -491,6 +663,9 @@ export class PgStore implements DataStore {
     // Delete all tables in a single transaction to avoid partial state on interruption.
     await this.sql.begin(async (_tx) => {
       const tx = _tx as unknown as typeof this.sql;
+      await tx`DELETE FROM state_snapshots`;
+      await tx`DELETE FROM state_patches`;
+      await tx`DELETE FROM trace_events_store`;
       await tx`DELETE FROM snapshots`;
       await tx`DELETE FROM domain_records`;
       await tx`DELETE FROM events`;
@@ -516,8 +691,12 @@ function toWorldRecord(row: typeof schema.worlds.$inferSelect): WorldRecord {
     name: row.name,
     description: row.description,
     ...(row.lore != null ? { lore: row.lore } : {}),
+    ...(row.locale != null ? { locale: row.locale } : {}),
     ...(row.tags != null ? { tags: row.tags } : {}),
+    ...(row.dimensions != null ? { dimensions: row.dimensions as WorldRecord["dimensions"] } : {}),
+    ...(row.packageId != null ? { packageId: row.packageId } : {}),
     createdAt: row.createdAt,
+    ...(row.updatedAt != null ? { updatedAt: row.updatedAt } : {}),
   };
 }
 
@@ -531,6 +710,7 @@ function toSessionRecord(row: typeof schema.sessions.$inferSelect): SessionRecor
     phase,
     ...(row.presetId != null ? { presetId: row.presetId } : {}),
     ...(row.settings != null ? { settings: row.settings } : {}),
+    ...(row.taskBindings != null ? { taskBindings: row.taskBindings } : {}),
     createdAt: row.createdAt,
   };
 }
@@ -597,6 +777,41 @@ function toSnapshotRecord(row: typeof schema.snapshots.$inferSelect): SnapshotRe
     turnId: row.turnId,
     ...(row.label != null ? { label: row.label } : {}),
     ...(row.summary != null ? { summary: row.summary } : {}),
+    data: row.data,
+    createdAt: row.createdAt,
+  };
+}
+
+function toTraceEventRecord(row: typeof schema.traceEvents.$inferSelect): TraceEventRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    type: row.type,
+    requestId: row.requestId,
+    traceId: row.traceId,
+    turnId: row.turnId,
+    flowId: row.flowId,
+    seq: row.seq,
+    payload: row.payload,
+    createdAt: row.createdAt,
+  };
+}
+
+function toStatePatchRecord(row: typeof schema.statePatches.$inferSelect): StatePatchRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    summary: row.summary,
+    packageName: row.packageName,
+    ...(row.data != null ? { data: row.data } : {}),
+    createdAt: row.createdAt,
+  };
+}
+
+function toStateSnapshotRecord(row: typeof schema.stateSnapshots.$inferSelect): StateSnapshotRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
     data: row.data,
     createdAt: row.createdAt,
   };

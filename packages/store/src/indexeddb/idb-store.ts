@@ -8,6 +8,9 @@ import type {
   EventRecord,
   DomainRecord,
   SnapshotRecord,
+  TraceEventRecord,
+  StatePatchRecord,
+  StateSnapshotRecord,
   StoreSnapshot,
 } from "../types.js";
 
@@ -19,6 +22,9 @@ const STORE_NAMES = [
   "events",
   "records",
   "snapshots",
+  "traceEvents",
+  "statePatches",
+  "stateSnapshots",
 ] as const;
 
 type StoreName = (typeof STORE_NAMES)[number];
@@ -37,37 +43,50 @@ export class IdbStore implements DataStore {
     this.dbName = options?.dbName ?? "covel";
     // NOTE: Increment dbVersion when adding new object stores or indexes.
     // Existing clients with version 1 won't get schema updates unless version increases.
-    this.dbVersion = options?.dbVersion ?? 1;
+    this.dbVersion = options?.dbVersion ?? 2;
   }
 
   private getDb(): Promise<IDBPDatabase> {
     if (this.dbPromise == null) {
       this.dbPromise = openDB(this.dbName, this.dbVersion, {
-        upgrade(db) {
-          db.createObjectStore("worlds", { keyPath: "id" });
+        upgrade(db, oldVersion) {
+          if (oldVersion < 1) {
+            db.createObjectStore("worlds", { keyPath: "id" });
 
-          const sessions = db.createObjectStore("sessions", { keyPath: "id" });
-          sessions.createIndex("worldId", "worldId");
+            const sessions = db.createObjectStore("sessions", { keyPath: "id" });
+            sessions.createIndex("worldId", "worldId");
 
-          const messages = db.createObjectStore("messages", { keyPath: "id" });
-          messages.createIndex("sessionId", "sessionId");
+            const messages = db.createObjectStore("messages", { keyPath: "id" });
+            messages.createIndex("sessionId", "sessionId");
 
-          const characters = db.createObjectStore("characters", {
-            keyPath: "id",
-          });
-          characters.createIndex("sessionId", "sessionId");
+            const characters = db.createObjectStore("characters", {
+              keyPath: "id",
+            });
+            characters.createIndex("sessionId", "sessionId");
 
-          const events = db.createObjectStore("events", { keyPath: "id" });
-          events.createIndex("branchId", "branchId");
+            const events = db.createObjectStore("events", { keyPath: "id" });
+            events.createIndex("branchId", "branchId");
 
-          const records = db.createObjectStore("records", { keyPath: "id" });
-          records.createIndex("branchId", "branchId");
-          records.createIndex("branchId_kind", ["branchId", "kind"]);
+            const records = db.createObjectStore("records", { keyPath: "id" });
+            records.createIndex("branchId", "branchId");
+            records.createIndex("branchId_kind", ["branchId", "kind"]);
 
-          const snapshots = db.createObjectStore("snapshots", {
-            keyPath: "id",
-          });
-          snapshots.createIndex("branchId", "branchId");
+            const snapshots = db.createObjectStore("snapshots", {
+              keyPath: "id",
+            });
+            snapshots.createIndex("branchId", "branchId");
+          }
+
+          if (oldVersion < 2) {
+            const traceEvents = db.createObjectStore("traceEvents", { keyPath: "id" });
+            traceEvents.createIndex("sessionId", "sessionId");
+
+            const statePatches = db.createObjectStore("statePatches", { keyPath: "id" });
+            statePatches.createIndex("sessionId", "sessionId");
+
+            const stateSnapshots = db.createObjectStore("stateSnapshots", { keyPath: "id" });
+            stateSnapshots.createIndex("sessionId", "sessionId");
+          }
         },
       });
     }
@@ -209,11 +228,57 @@ export class IdbStore implements DataStore {
     return db.getAllFromIndex("snapshots", "branchId", branchId);
   }
 
+  // Trace Events
+
+  async addTraceEvent(event: TraceEventRecord): Promise<void> {
+    const db = await this.getDb();
+    await db.put("traceEvents", event);
+  }
+
+  async listTraceEvents(sessionId: string): Promise<TraceEventRecord[]> {
+    const db = await this.getDb();
+    return db.getAllFromIndex("traceEvents", "sessionId", sessionId);
+  }
+
+  // State Patches
+
+  async addStatePatch(patch: StatePatchRecord): Promise<void> {
+    const db = await this.getDb();
+    await db.put("statePatches", patch);
+  }
+
+  async listStatePatches(sessionId: string): Promise<StatePatchRecord[]> {
+    const db = await this.getDb();
+    return db.getAllFromIndex("statePatches", "sessionId", sessionId);
+  }
+
+  // State Snapshots
+
+  async saveStateSnapshot(snapshot: StateSnapshotRecord): Promise<void> {
+    const db = await this.getDb();
+    // Remove previous snapshot for this session, then insert new one
+    const tx = db.transaction("stateSnapshots", "readwrite");
+    const index = tx.store.index("sessionId");
+    let cursor = await index.openCursor(snapshot.sessionId);
+    while (cursor) {
+      await cursor.delete();
+      cursor = await cursor.continue();
+    }
+    await tx.store.put(snapshot);
+    await tx.done;
+  }
+
+  async getStateSnapshot(sessionId: string): Promise<StateSnapshotRecord | null> {
+    const db = await this.getDb();
+    const results = await db.getAllFromIndex("stateSnapshots", "sessionId", sessionId);
+    return results[0] ?? null;
+  }
+
   // Bulk
 
   async exportAll(): Promise<StoreSnapshot> {
     const db = await this.getDb();
-    const [worlds, sessions, messages, characters, events, records, snapshots] =
+    const [worlds, sessions, messages, characters, events, records, snapshots, traceEvents, statePatches, stateSnapshots] =
       await Promise.all([
         db.getAll("worlds"),
         db.getAll("sessions"),
@@ -222,6 +287,9 @@ export class IdbStore implements DataStore {
         db.getAll("events"),
         db.getAll("records"),
         db.getAll("snapshots"),
+        db.getAll("traceEvents"),
+        db.getAll("statePatches"),
+        db.getAll("stateSnapshots"),
       ]);
 
     return {
@@ -235,6 +303,9 @@ export class IdbStore implements DataStore {
         events,
         records,
         snapshots,
+        traceEvents,
+        statePatches,
+        stateSnapshots,
       },
       config: {},
     };
@@ -263,6 +334,9 @@ export class IdbStore implements DataStore {
     addAll("events", data.data.events);
     addAll("records", data.data.records);
     addAll("snapshots", data.data.snapshots);
+    addAll("traceEvents", data.data.traceEvents ?? []);
+    addAll("statePatches", data.data.statePatches ?? []);
+    addAll("stateSnapshots", data.data.stateSnapshots ?? []);
 
     await Promise.all(puts);
     await tx.done;

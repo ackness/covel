@@ -1,12 +1,17 @@
-import type { I18nText } from "@covel/shared";
+import type { I18nText, WorldDimensions } from "@covel/shared";
 
 export interface WorldRecord {
   id: string;
   name: I18nText;
   description: I18nText;
   lore?: I18nText;
+  locale?: string;
   tags?: string[];
+  dimensions?: WorldDimensions;
+  /** Source world package ID (set for seed/file-based worlds, absent for user-created). */
+  packageId?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface SessionRecord {
@@ -16,6 +21,7 @@ export interface SessionRecord {
   phase: "init" | "character_creation" | "playing" | "ended";
   presetId?: string;
   settings?: Record<string, unknown>;
+  taskBindings?: Record<string, string>;
   createdAt: string;
 }
 
@@ -74,6 +80,35 @@ export interface SnapshotRecord {
   createdAt: string;
 }
 
+export interface TraceEventRecord {
+  id: string;
+  sessionId: string;
+  type: string;
+  requestId: string;
+  traceId: string;
+  turnId: string;
+  flowId: string;
+  seq: number;
+  payload: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface StatePatchRecord {
+  id: string;
+  sessionId: string;
+  summary: string;
+  packageName: string;
+  data?: unknown;
+  createdAt: string;
+}
+
+export interface StateSnapshotRecord {
+  id: string;
+  sessionId: string;
+  data: Record<string, unknown>;
+  createdAt: string;
+}
+
 export interface StoreSnapshot {
   version: "covel-export/v1";
   exportedAt: string;
@@ -85,6 +120,9 @@ export interface StoreSnapshot {
     events: EventRecord[];
     records: DomainRecord[];
     snapshots: SnapshotRecord[];
+    traceEvents: TraceEventRecord[];
+    statePatches: StatePatchRecord[];
+    stateSnapshots: StateSnapshotRecord[];
   };
   config: Record<string, unknown>;
 }
@@ -124,6 +162,18 @@ export interface DataStore {
   createSnapshot(snapshot: SnapshotRecord): Promise<void>;
   getSnapshot(id: string): Promise<SnapshotRecord | null>;
   listSnapshots(branchId: string): Promise<SnapshotRecord[]>;
+
+  // Trace Events
+  addTraceEvent(event: TraceEventRecord): Promise<void>;
+  listTraceEvents(sessionId: string): Promise<TraceEventRecord[]>;
+
+  // State Patches
+  addStatePatch(patch: StatePatchRecord): Promise<void>;
+  listStatePatches(sessionId: string): Promise<StatePatchRecord[]>;
+
+  // State Snapshots (session-keyed latest state)
+  saveStateSnapshot(snapshot: StateSnapshotRecord): Promise<void>;
+  getStateSnapshot(sessionId: string): Promise<StateSnapshotRecord | null>;
 
   // Bulk
   exportAll(): Promise<StoreSnapshot>;

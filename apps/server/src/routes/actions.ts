@@ -5,7 +5,7 @@ import type { KernelSession } from "@covel/kernel";
 import type { CommandBus } from "@covel/plugin-runtime";
 import type { KernelTurnResult } from "@covel/shared";
 import type { ApiKeyEnv } from "../middleware/api-key-injection.js";
-import type { ServerStore } from "../store/types.js";
+import type { StoreService } from "../store-service.js";
 import { toBlockEnvelope } from "./actions/block-envelope.js";
 import { isPrivateHost } from "./actions/ssrf-guard.js";
 
@@ -53,7 +53,7 @@ export function createStatePatchId(turnId: string, seq: number): string {
 export function createActionsRoute(deps: {
   getOrCreateSession: (sessionId: string) => KernelSession;
   commandBus: CommandBus;
-  store: ServerStore;
+  store: StoreService;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   presetRegistry?: {
     addPreset: (preset: any) => void;

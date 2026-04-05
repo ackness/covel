@@ -21,6 +21,9 @@ import type {
   EventRecord,
   DomainRecord,
   SnapshotRecord,
+  TraceEventRecord,
+  StatePatchRecord,
+  StateSnapshotRecord,
 } from "../src/types.js";
 
 // ── Test Fixture Factories ───────────────────────────────────────
@@ -125,6 +128,54 @@ function createTestSnapshot(
     branchId,
     turnId: "turn_1",
     data: { state: "saved" },
+    createdAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function createTestTraceEvent(
+  sessionId: string,
+  overrides?: Partial<TraceEventRecord>,
+): TraceEventRecord {
+  const seqNum = ++counter;
+  return {
+    id: uid("trace"),
+    sessionId,
+    type: "runtime.started",
+    requestId: uid("req"),
+    traceId: uid("tr"),
+    turnId: "turn_1",
+    flowId: uid("flow"),
+    seq: seqNum,
+    payload: { label: "test-runtime" },
+    createdAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function createTestStatePatch(
+  sessionId: string,
+  overrides?: Partial<StatePatchRecord>,
+): StatePatchRecord {
+  return {
+    id: uid("patch"),
+    sessionId,
+    summary: "HP decreased by 10",
+    packageName: "core-combat",
+    data: { op: "replace", path: "/hp", value: 90 },
+    createdAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function createTestStateSnapshot(
+  sessionId: string,
+  overrides?: Partial<StateSnapshotRecord>,
+): StateSnapshotRecord {
+  return {
+    id: uid("ss"),
+    sessionId,
+    data: { hp: 100, mp: 50, level: 1 },
     createdAt: new Date().toISOString(),
     ...overrides,
   };
@@ -973,6 +1024,9 @@ export function runDataStoreContractTests(
             events: [],
             records: [],
             snapshots: [],
+            traceEvents: [],
+            statePatches: [],
+            stateSnapshots: [],
           },
           config: {},
         };
@@ -982,6 +1036,162 @@ export function runDataStoreContractTests(
         const worlds = await store.listWorlds();
         expect(worlds).toHaveLength(1);
         expect(worlds[0].name).toBe("Imported World");
+      });
+    });
+
+    // ── Trace Event operations ──────────────────────────────────
+
+    describe("Trace Event operations", () => {
+      it("addTraceEvent + listTraceEvents returns events for the session", async () => {
+        const t1 = createTestTraceEvent("sess_1", { type: "runtime.started" });
+        const t2 = createTestTraceEvent("sess_1", { type: "llm.calling", seq: 2 });
+        await store.addTraceEvent(t1);
+        await store.addTraceEvent(t2);
+
+        const events = await store.listTraceEvents("sess_1");
+        expect(events).toHaveLength(2);
+        const ids = events.map((e) => e.id);
+        expect(ids).toContain(t1.id);
+        expect(ids).toContain(t2.id);
+      });
+
+      it("listTraceEvents returns empty array for unknown session", async () => {
+        const events = await store.listTraceEvents("nonexistent");
+        expect(events).toEqual([]);
+      });
+
+      it("trace events are isolated by sessionId", async () => {
+        await store.addTraceEvent(createTestTraceEvent("sess_a"));
+        await store.addTraceEvent(createTestTraceEvent("sess_a"));
+        await store.addTraceEvent(createTestTraceEvent("sess_b"));
+
+        expect(await store.listTraceEvents("sess_a")).toHaveLength(2);
+        expect(await store.listTraceEvents("sess_b")).toHaveLength(1);
+      });
+
+      it("preserves payload and all fields", async () => {
+        const evt = createTestTraceEvent("sess_1", {
+          type: "tool.completed",
+          payload: { result: "damage: 50", toolName: "roll_dice" },
+        });
+        await store.addTraceEvent(evt);
+
+        const events = await store.listTraceEvents("sess_1");
+        expect(events[0].type).toBe("tool.completed");
+        expect(events[0].payload).toEqual({ result: "damage: 50", toolName: "roll_dice" });
+        expect(events[0].traceId).toBe(evt.traceId);
+        expect(events[0].flowId).toBe(evt.flowId);
+        expect(events[0].seq).toBe(evt.seq);
+      });
+    });
+
+    // ── State Patch operations ────────────────────────────────────
+
+    describe("State Patch operations", () => {
+      it("addStatePatch + listStatePatches returns patches for the session", async () => {
+        const p1 = createTestStatePatch("sess_1", { summary: "HP -10" });
+        const p2 = createTestStatePatch("sess_1", { summary: "MP -5" });
+        await store.addStatePatch(p1);
+        await store.addStatePatch(p2);
+
+        const patches = await store.listStatePatches("sess_1");
+        expect(patches).toHaveLength(2);
+        const ids = patches.map((p) => p.id);
+        expect(ids).toContain(p1.id);
+        expect(ids).toContain(p2.id);
+      });
+
+      it("listStatePatches returns empty array for unknown session", async () => {
+        const patches = await store.listStatePatches("nonexistent");
+        expect(patches).toEqual([]);
+      });
+
+      it("patches are isolated by sessionId", async () => {
+        await store.addStatePatch(createTestStatePatch("sess_a"));
+        await store.addStatePatch(createTestStatePatch("sess_b"));
+
+        expect(await store.listStatePatches("sess_a")).toHaveLength(1);
+        expect(await store.listStatePatches("sess_b")).toHaveLength(1);
+      });
+
+      it("preserves all fields including optional data", async () => {
+        const patch = createTestStatePatch("sess_1", {
+          packageName: "core-inventory",
+          data: { items: [{ name: "Sword", qty: 1 }] },
+        });
+        await store.addStatePatch(patch);
+
+        const patches = await store.listStatePatches("sess_1");
+        expect(patches[0].packageName).toBe("core-inventory");
+        expect(patches[0].data).toEqual({ items: [{ name: "Sword", qty: 1 }] });
+      });
+
+      it("handles patch without data field", async () => {
+        const patch = createTestStatePatch("sess_1", { data: undefined });
+        await store.addStatePatch(patch);
+
+        const patches = await store.listStatePatches("sess_1");
+        expect(patches[0].data ?? undefined).toBeUndefined();
+      });
+    });
+
+    // ── State Snapshot operations ─────────────────────────────────
+
+    describe("State Snapshot operations", () => {
+      it("saveStateSnapshot + getStateSnapshot returns the latest snapshot", async () => {
+        const snap = createTestStateSnapshot("sess_1", {
+          data: { hp: 100, location: "tavern" },
+        });
+        await store.saveStateSnapshot(snap);
+
+        const fetched = await store.getStateSnapshot("sess_1");
+        expect(fetched).not.toBeNull();
+        expect(fetched!.sessionId).toBe("sess_1");
+        expect(fetched!.data).toEqual({ hp: 100, location: "tavern" });
+      });
+
+      it("getStateSnapshot returns null for unknown session", async () => {
+        const snap = await store.getStateSnapshot("nonexistent");
+        expect(snap).toBeNull();
+      });
+
+      it("saveStateSnapshot overwrites previous snapshot for same session", async () => {
+        const snap1 = createTestStateSnapshot("sess_1", { data: { hp: 100 } });
+        await store.saveStateSnapshot(snap1);
+
+        const snap2 = createTestStateSnapshot("sess_1", { data: { hp: 50 } });
+        await store.saveStateSnapshot(snap2);
+
+        const fetched = await store.getStateSnapshot("sess_1");
+        expect(fetched!.data).toEqual({ hp: 50 });
+      });
+
+      it("snapshots are isolated by sessionId", async () => {
+        await store.saveStateSnapshot(
+          createTestStateSnapshot("sess_a", { data: { hp: 100 } }),
+        );
+        await store.saveStateSnapshot(
+          createTestStateSnapshot("sess_b", { data: { hp: 200 } }),
+        );
+
+        const a = await store.getStateSnapshot("sess_a");
+        expect(a!.data).toEqual({ hp: 100 });
+
+        const b = await store.getStateSnapshot("sess_b");
+        expect(b!.data).toEqual({ hp: 200 });
+      });
+
+      it("preserves complex nested data", async () => {
+        const data = {
+          characters: [{ id: "c1", stats: { str: 10, dex: 15 } }],
+          worldState: { weather: "storm", events: ["flood", "earthquake"] },
+        };
+        await store.saveStateSnapshot(
+          createTestStateSnapshot("sess_1", { data }),
+        );
+
+        const fetched = await store.getStateSnapshot("sess_1");
+        expect(fetched!.data).toEqual(data);
       });
     });
 

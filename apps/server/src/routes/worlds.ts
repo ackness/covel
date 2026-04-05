@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { worldRecordCreateSchema, worldRecordUpdateSchema } from "@covel/shared";
-import type { ServerStore } from "../store/types.js";
+import type { StoreService } from "../store-service.js";
 
-export function createWorldsRoute(store: ServerStore) {
+export function createWorldsRoute(store: StoreService) {
   const route = new Hono();
 
   route.get("/", async (c) => {

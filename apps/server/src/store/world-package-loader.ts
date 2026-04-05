@@ -13,7 +13,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { worldPackageMetaSchema } from "@covel/shared";
-import type { WorldRecord } from "./types.js";
+import type { WorldRecord } from "@covel/store";
 
 /** Short lang code → BCP-47 locale mapping. */
 const LANG_TO_LOCALE: Record<string, string> = {

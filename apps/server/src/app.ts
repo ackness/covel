@@ -28,8 +28,9 @@ import { createCompatCommandsRoute } from "./routes/compat/commands.js";
 import { createCharactersRoute } from "./routes/characters.js";
 import { createSessionPluginsRoute } from "./routes/session-plugins.js";
 import { initKernelStack } from "./kernel-setup.js";
-import { createMemoryStore } from "./store/memory-store.js";
-import { createPgServerStore } from "./store/pg-server-store.js";
+import { createStore, type StoreBackend } from "@covel/store";
+import { createStoreService } from "./store-service.js";
+import { loadWorldPackages } from "./store/world-package-loader.js";
 
 const app = new Hono();
 
@@ -66,12 +67,37 @@ app.use("/actions", apiKeyInjection);
 const ai = createAiStack();
 const kernelStack = await initKernelStack(ai.gateway);
 
-// Store backend: use PG when DATABASE_URL is set and STORE_BACKEND=pg
-const storeBackend = process.env.STORE_BACKEND ?? "memory";
+// Store backend: STORE_BACKEND=memory|idb|pg (default: memory)
+const storeBackendEnv = (process.env.STORE_BACKEND ?? "memory") as string;
+const BACKEND_ALIASES: Record<string, StoreBackend> = {
+  memory: "memory",
+  idb: "indexeddb",
+  indexeddb: "indexeddb",
+  pg: "postgres",
+  postgres: "postgres",
+};
+const storeBackend: StoreBackend = BACKEND_ALIASES[storeBackendEnv] ?? "memory";
 const worldsDir = process.env.COVEL_WORLDS_DIR ?? resolve(import.meta.dirname, "../../../worlds");
-const store = storeBackend === "pg" && process.env.DATABASE_URL
-  ? await createPgServerStore({ databaseUrl: process.env.DATABASE_URL, worldsDir })
-  : await createMemoryStore(worldsDir);
+const dataStore = await createStore({
+  backend: storeBackend,
+  databaseUrl: process.env.DATABASE_URL,
+});
+const store = createStoreService(dataStore);
+
+// Seed worlds from worlds/ directory
+const seeds = await loadWorldPackages(worldsDir);
+for (const seed of seeds) {
+  const existing = await store.getWorld(seed.id);
+  if (!existing) {
+    await store.createWorld(seed.name, seed.description, {
+      id: seed.id,
+      lore: seed.lore,
+      locale: seed.locale,
+      tags: seed.tags,
+      dimensions: seed.dimensions,
+    });
+  }
+}
 
 // ── Internal API routes (programmatic access) ────────────────────
 app.route("/api/health", healthRoute);

@@ -14,8 +14,12 @@ export const worlds = pgTable("worlds", {
   name: jsonb("name").notNull().$type<string | Record<string, string>>(),
   description: jsonb("description").notNull().$type<string | Record<string, string>>().default(""),
   lore: jsonb("lore").$type<string | Record<string, string>>(),
+  locale: text("locale"),
   tags: jsonb("tags").$type<string[]>(),
+  dimensions: jsonb("dimensions").$type<Record<string, unknown>>(),
+  packageId: text("package_id"),
   createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at"),
 });
 
 // ── Sessions ────────────────────────────────────────────────────
@@ -27,6 +31,7 @@ export const sessions = pgTable("sessions", {
   phase: text("phase").notNull().default("init"),
   presetId: text("preset_id"),
   settings: jsonb("settings").$type<Record<string, unknown>>(),
+  taskBindings: jsonb("task_bindings").$type<Record<string, string>>(),
   createdAt: text("created_at").notNull(),
 });
 
@@ -91,6 +96,41 @@ export const snapshots = pgTable("snapshots", {
   turnId: text("turn_id").notNull(),
   label: text("label"),
   summary: text("summary"),
+  data: jsonb("data").notNull().$type<Record<string, unknown>>(),
+  createdAt: text("created_at").notNull(),
+});
+
+// ── Trace Events ───────────────────────────────────────────────
+
+export const traceEvents = pgTable("trace_events_store", {
+  id: text("id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  type: text("type").notNull(),
+  requestId: text("request_id").notNull(),
+  traceId: text("trace_id").notNull(),
+  turnId: text("turn_id").notNull(),
+  flowId: text("flow_id").notNull(),
+  seq: integer("seq").notNull(),
+  payload: jsonb("payload").notNull().$type<Record<string, unknown>>(),
+  createdAt: text("created_at").notNull(),
+});
+
+// ── State Patches ──────────────────────────────────────────────
+
+export const statePatches = pgTable("state_patches", {
+  id: text("id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  summary: text("summary").notNull(),
+  packageName: text("package_name").notNull(),
+  data: jsonb("data"),
+  createdAt: text("created_at").notNull(),
+});
+
+// ── State Snapshots ────────────────────────────────────────────
+
+export const stateSnapshots = pgTable("state_snapshots", {
+  id: text("id").primaryKey(),
+  sessionId: text("session_id").notNull().unique(),
   data: jsonb("data").notNull().$type<Record<string, unknown>>(),
   createdAt: text("created_at").notNull(),
 });

@@ -38,6 +38,9 @@ importers:
       '@covel/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@covel/store':
+        specifier: workspace:*
+        version: link:../../packages/store
       '@hono/node-server':
         specifier: ^1.19.12
         version: 1.19.12(hono@4.12.10)

@@ -7,6 +7,9 @@ import type {
   EventRecord,
   DomainRecord,
   SnapshotRecord,
+  TraceEventRecord,
+  StatePatchRecord,
+  StateSnapshotRecord,
   StoreSnapshot,
 } from "../types.js";
 
@@ -18,6 +21,9 @@ export class MemoryStore implements DataStore {
   private events = new Map<string, EventRecord>();
   private records = new Map<string, DomainRecord>();
   private snapshots = new Map<string, SnapshotRecord>();
+  private traceEvents = new Map<string, TraceEventRecord>();
+  private statePatches = new Map<string, StatePatchRecord>();
+  private stateSnapshots = new Map<string, StateSnapshotRecord>();
 
   // World
 
@@ -137,6 +143,49 @@ export class MemoryStore implements DataStore {
     );
   }
 
+  // Trace Events
+
+  async addTraceEvent(event: TraceEventRecord): Promise<void> {
+    this.traceEvents.set(event.id, event);
+  }
+
+  async listTraceEvents(sessionId: string): Promise<TraceEventRecord[]> {
+    return [...this.traceEvents.values()]
+      .filter((e) => e.sessionId === sessionId)
+      .sort((a, b) => a.seq - b.seq);
+  }
+
+  // State Patches
+
+  async addStatePatch(patch: StatePatchRecord): Promise<void> {
+    this.statePatches.set(patch.id, patch);
+  }
+
+  async listStatePatches(sessionId: string): Promise<StatePatchRecord[]> {
+    return [...this.statePatches.values()].filter(
+      (p) => p.sessionId === sessionId,
+    );
+  }
+
+  // State Snapshots
+
+  async saveStateSnapshot(snapshot: StateSnapshotRecord): Promise<void> {
+    // Overwrite by sessionId — only keep latest per session
+    for (const [id, existing] of this.stateSnapshots) {
+      if (existing.sessionId === snapshot.sessionId) {
+        this.stateSnapshots.delete(id);
+      }
+    }
+    this.stateSnapshots.set(snapshot.id, snapshot);
+  }
+
+  async getStateSnapshot(sessionId: string): Promise<StateSnapshotRecord | null> {
+    for (const snap of this.stateSnapshots.values()) {
+      if (snap.sessionId === sessionId) return snap;
+    }
+    return null;
+  }
+
   // Bulk
 
   async exportAll(): Promise<StoreSnapshot> {
@@ -151,6 +200,9 @@ export class MemoryStore implements DataStore {
         events: [...this.events.values()],
         records: [...this.records.values()],
         snapshots: [...this.snapshots.values()],
+        traceEvents: [...this.traceEvents.values()],
+        statePatches: [...this.statePatches.values()],
+        stateSnapshots: [...this.stateSnapshots.values()],
       },
       config: {},
     };
@@ -166,6 +218,9 @@ export class MemoryStore implements DataStore {
     for (const e of data.data.events) this.events.set(e.id, e);
     for (const r of data.data.records) this.records.set(r.id, r);
     for (const s of data.data.snapshots) this.snapshots.set(s.id, s);
+    for (const t of data.data.traceEvents ?? []) this.traceEvents.set(t.id, t);
+    for (const p of data.data.statePatches ?? []) this.statePatches.set(p.id, p);
+    for (const s of data.data.stateSnapshots ?? []) this.stateSnapshots.set(s.id, s);
   }
 
   async clear(): Promise<void> {
@@ -176,5 +231,8 @@ export class MemoryStore implements DataStore {
     this.events.clear();
     this.records.clear();
     this.snapshots.clear();
+    this.traceEvents.clear();
+    this.statePatches.clear();
+    this.stateSnapshots.clear();
   }
 }

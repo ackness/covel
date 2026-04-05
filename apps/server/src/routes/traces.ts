@@ -1,11 +1,11 @@
 import { Hono } from "hono";
-import type { ServerStore } from "../store/types.js";
+import type { StoreService } from "../store-service.js";
 
 /**
  * GET /api/traces/:sessionId — Return all trace events for a session.
  * GET /api/traces/:sessionId/turns — Return trace events grouped by turnId.
  */
-export function createTracesRoute(store: ServerStore) {
+export function createTracesRoute(store: StoreService) {
   const route = new Hono();
 
   // All events for a session (flat list, chronological)
@@ -32,8 +32,8 @@ export function createTracesRoute(store: ServerStore) {
       turnId,
       flowId: turnEvents[0]?.flowId ?? "",
       traceId: turnEvents[0]?.traceId ?? "",
-      startedAt: turnEvents[0]?.timestamp ?? "",
-      completedAt: turnEvents[turnEvents.length - 1]?.timestamp ?? "",
+      startedAt: turnEvents[0]?.createdAt ?? "",
+      completedAt: turnEvents[turnEvents.length - 1]?.createdAt ?? "",
       eventCount: turnEvents.length,
       events: turnEvents,
     }));
