@@ -44,19 +44,24 @@ const STYLE_CONFIG: Record<SuggestionStyle, {
   },
 };
 
-export function ActionGuideBlock({ data, onSubmit, disabled }: BlockRendererProps) {
+export function ActionGuideBlock({ data, onSubmit, onSelect, selectedValue, disabled }: BlockRendererProps) {
   const [customInput, setCustomInput] = useState("");
   const topic = data.topic as string | undefined;
   const categories = (data.categories as ActionCategory[]) ?? [];
+  const handleClick = onSelect ?? onSubmit;
 
   const handleSuggestionClick = (suggestion: string) => {
-    if (!disabled) onSubmit(suggestion);
+    if (!disabled) handleClick(suggestion);
   };
 
   const handleCustomSubmit = () => {
     const val = customInput.trim();
     if (val && !disabled) {
-      onSubmit(val);
+      if (onSelect) {
+        onSelect(val);
+      } else {
+        onSubmit(val);
+      }
       setCustomInput("");
     }
   };
@@ -85,7 +90,7 @@ export function ActionGuideBlock({ data, onSubmit, disabled }: BlockRendererProp
                 {cat.suggestions.map((suggestion, i) => (
                   <Button
                     key={i}
-                    variant="ghost"
+                    variant={selectedValue === suggestion ? "default" : "ghost"}
                     className="w-full justify-start text-left text-xs h-auto py-2 px-3 rounded-none hover:bg-background/50"
                     disabled={disabled}
                     onClick={() => handleSuggestionClick(suggestion)}

@@ -92,7 +92,12 @@
       },
       "providerBinding": "fast",
       "tools": ["core-guide:generate-choices", "core-guide:generate-action-guide"],
-      "hooks": []
+      "hooks": [],
+      "budget": {
+        "maxSteps": 3,
+        "timeoutMs": 15000,
+        "maxToolCalls": 2
+      }
     }
   ],
   "tools": [

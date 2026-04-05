@@ -15,6 +15,8 @@ const runtimeBudgetSchema = z.object({
   maxSteps: z.number().int().positive().optional(),
   timeoutMs: z.number().int().positive().optional(),
   maxTokens: z.number().int().positive().optional(),
+  maxToolCalls: z.number().int().positive().optional(),
+  toolTimeoutMs: z.number().int().positive().optional(),
 });
 
 const runtimeIsolationSchema = z.object({

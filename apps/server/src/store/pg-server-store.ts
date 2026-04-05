@@ -69,6 +69,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       content TEXT NOT NULL,
       turn_id TEXT,
       runtime_id TEXT,
+      kind TEXT,
       block JSONB,
       created_at TEXT NOT NULL
     )
@@ -148,6 +149,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
   // ── Migrate: add columns added after initial schema ───────────────
   await sql`ALTER TABLE sv_worlds ADD COLUMN IF NOT EXISTS dimensions JSONB`;
   await sql`ALTER TABLE sv_worlds ADD COLUMN IF NOT EXISTS package_id TEXT`;
+  await sql`ALTER TABLE sv_messages ADD COLUMN IF NOT EXISTS kind TEXT`;
 
   // ── Worlds ──────────────────────────────────────────────────────
 
@@ -313,7 +315,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
   // Raw row type matching PG snake_case columns
   interface MessageRow {
     id: string; session_id: string; role: string; content: string;
-    turn_id: string | null; runtime_id: string | null;
+    turn_id: string | null; runtime_id: string | null; kind: string | null;
     block: Record<string, unknown> | null; created_at: string;
   }
 
@@ -325,6 +327,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       content: r.content,
       turnId: r.turn_id ?? undefined,
       runtimeId: r.runtime_id ?? undefined,
+      kind: r.kind ?? undefined,
       block: r.block ?? undefined,
       createdAt: r.created_at,
     };
@@ -341,7 +344,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
     sessionId: string,
     role: MessageRecord["role"],
     content: string,
-    meta?: { turnId?: string; runtimeId?: string; block?: Record<string, unknown> },
+    meta?: { turnId?: string; runtimeId?: string; kind?: string; block?: Record<string, unknown> },
   ): Promise<MessageRecord> {
     const msg: MessageRecord = {
       id: uid("msg"),
@@ -350,6 +353,7 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
       content,
       ...(meta?.turnId ? { turnId: meta.turnId } : {}),
       ...(meta?.runtimeId ? { runtimeId: meta.runtimeId } : {}),
+      ...(meta?.kind ? { kind: meta.kind } : {}),
       ...(meta?.block ? { block: meta.block } : {}),
       createdAt: new Date().toISOString(),
     };
@@ -359,9 +363,9 @@ export async function createPgServerStore(opts: PgServerStoreOptions): Promise<S
 
   async function persistMessage(m: MessageRecord): Promise<void> {
     await sql`
-      INSERT INTO sv_messages (id, session_id, role, content, turn_id, runtime_id, block, created_at)
+      INSERT INTO sv_messages (id, session_id, role, content, turn_id, runtime_id, kind, block, created_at)
       VALUES (${m.id}, ${m.sessionId}, ${m.role}, ${m.content},
-              ${m.turnId ?? null}, ${m.runtimeId ?? null},
+              ${m.turnId ?? null}, ${m.runtimeId ?? null}, ${m.kind ?? null},
               ${m.block ? sql.json(m.block as JSONValue) : null}, ${m.createdAt})
     `;
   }

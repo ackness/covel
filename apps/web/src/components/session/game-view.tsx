@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "@tanstack/react-router";
 import {
@@ -51,7 +51,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable.js";
-import type { ImperativePanelHandle } from "react-resizable-panels";
+import type { PanelImperativeHandle } from "react-resizable-panels";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { SettingsDialog } from "@/components/settings-dialog.js";
@@ -460,6 +460,10 @@ function RightPanel({
       </div>
       <ScrollArea className="flex-1 min-h-0 min-w-0">
         <TabsContent value="game" className="p-4 m-0">
+          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
+            <Gamepad2 className="w-4 h-4 shrink-0" />{" "}
+            {t("session.game", "Game")}
+          </h3>
           <GameStatusPanel gameState={gameState} />
         </TabsContent>
         <TabsContent value="events" className="p-4 m-0">
@@ -634,11 +638,45 @@ export function GameView({
   const [inputValue, setInputValue] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // ── Multi-block selection state ──────────────────────────────────
+  // Collect selections from interactive blocks, submit together.
+  const [blockSelections, setBlockSelections] = useState<Record<string, string>>({});
+
+  const INTERACTIVE_BLOCK_TYPES = useMemo(() => new Set(["choice_set", "action_guide"]), []);
+
+  // Find pending (unsubmitted) interactive blocks in current messages
+  const pendingInteractiveBlocks = useMemo(() => {
+    return messages.filter(
+      (m) =>
+        m.block &&
+        INTERACTIVE_BLOCK_TYPES.has(m.block.type as string) &&
+        !submittedBlockIds.has(m.id),
+    );
+  }, [messages, submittedBlockIds, INTERACTIVE_BLOCK_TYPES]);
+
+  const hasSelections = Object.keys(blockSelections).length > 0;
+
+  const handleBlockSelect = useCallback((blockId: string, value: string) => {
+    setBlockSelections((prev) => ({ ...prev, [blockId]: value }));
+  }, []);
+
+  const handleConfirmSelections = useCallback(() => {
+    if (!hasSelections) return;
+    const values = Object.values(blockSelections);
+    const combined = values.join("\n");
+    // Mark all pending interactive blocks as submitted
+    for (const msg of pendingInteractiveBlocks) {
+      onSubmitBlock(msg.id);
+    }
+    onSendMessage(combined);
+    setBlockSelections({});
+  }, [blockSelections, hasSelections, pendingInteractiveBlocks, onSubmitBlock, onSendMessage]);
+
   const isMobile = useMediaQuery("(max-width: 768px)");
   const isTablet = useMediaQuery("(max-width: 1024px)");
 
-  const leftPanelRef = useRef<ImperativePanelHandle>(null);
-  const rightPanelRef = useRef<ImperativePanelHandle>(null);
+  const leftPanelRef = useRef<PanelImperativeHandle>(null);
+  const rightPanelRef = useRef<PanelImperativeHandle>(null);
   const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
   const [isRightCollapsed, setIsRightCollapsed] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -706,6 +744,9 @@ export function GameView({
   function renderMessage(msg: StreamMessage) {
     if (msg.block) return renderBlock(msg);
 
+    // Hide non-story assistant messages (plugin output) — same filter as live play
+    if (msg.role === "assistant" && msg.kind && msg.kind !== "story") return null;
+
     const isUser = msg.role === "user";
     const isSystem = msg.role === "system";
 
@@ -753,7 +794,10 @@ export function GameView({
     const hasCustomRenderer = viewMode === "parsed" && Renderer && data;
     const isSubmitted = submittedBlockIds.has(msg.id);
     const blockDisabled = executing || isSubmitted;
+    const isInteractive = INTERACTIVE_BLOCK_TYPES.has(blockType);
 
+    // For interactive blocks: use select mode (collect, then confirm together).
+    // For non-interactive blocks: direct submit as before.
     const handleBlockSubmit = (value: string) => {
       onSubmitBlock(msg.id);
       onSendMessage(value);
@@ -761,7 +805,6 @@ export function GameView({
 
     return (
       <div key={msg.id} className="flex flex-col gap-1.5">
-        {/* Hide label for interactive blocks with custom renderers (they're inline) */}
         {!hasCustomRenderer && (
           <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
             Block: {blockType}
@@ -772,6 +815,12 @@ export function GameView({
             data={data}
             onSubmit={handleBlockSubmit}
             disabled={blockDisabled}
+            {...(isInteractive && !isSubmitted
+              ? {
+                  onSelect: (value: string) => handleBlockSelect(msg.id, value),
+                  selectedValue: blockSelections[msg.id] ?? null,
+                }
+              : {})}
           />
         ) : (
           <RawJsonBlock content={JSON.stringify(block, null, 2)} />
@@ -800,17 +849,17 @@ export function GameView({
         onOpenChange={handleSettingsOpenChange}
       />
 
-      <ResizablePanelGroup direction={direction} className="w-full h-full">
+      <ResizablePanelGroup id="game-layout" orientation={direction} className="w-full h-full">
         {/* Left Panel */}
         <ResizablePanel
-          ref={leftPanelRef}
-          defaultSize={isMobile ? 0 : 20}
-          minSize={15}
-          maxSize={isMobile ? 80 : 40}
+          id="left-panel"
+          panelRef={leftPanelRef}
+          defaultSize={isMobile ? "0%" : "20%"}
+          minSize="15%"
+          maxSize={isMobile ? "80%" : "40%"}
           collapsible={true}
-          collapsedSize={0}
-          onCollapse={() => setIsLeftCollapsed(true)}
-          onExpand={() => setIsLeftCollapsed(false)}
+          collapsedSize="0%"
+          onResize={() => setIsLeftCollapsed(leftPanelRef.current?.isCollapsed() ?? false)}
           className="bg-muted/10 flex flex-col min-h-0 min-w-0"
         >
           <LeftPanel
@@ -835,6 +884,7 @@ export function GameView({
 
         <ResizableHandle
           withHandle
+          orientation={direction}
           className={isLeftCollapsed ? "hidden" : ""}
         />
 
@@ -842,14 +892,14 @@ export function GameView({
         {isMobile && (
           <>
             <ResizablePanel
-              ref={rightPanelRef}
-              defaultSize={0}
-              minSize={20}
-              maxSize={80}
+              id="right-panel-mobile"
+              panelRef={rightPanelRef}
+              defaultSize="0%"
+              minSize="20%"
+              maxSize="80%"
               collapsible={true}
-              collapsedSize={0}
-              onCollapse={() => setIsRightCollapsed(true)}
-              onExpand={() => setIsRightCollapsed(false)}
+              collapsedSize="0%"
+              onResize={() => setIsRightCollapsed(rightPanelRef.current?.isCollapsed() ?? false)}
               className="bg-muted/10 flex flex-col min-h-0 min-w-0"
             >
               <RightPanel
@@ -861,6 +911,7 @@ export function GameView({
             </ResizablePanel>
             <ResizableHandle
               withHandle
+              orientation={direction}
               className={isRightCollapsed ? "hidden" : ""}
             />
           </>
@@ -868,8 +919,9 @@ export function GameView({
 
         {/* Center Panel */}
         <ResizablePanel
-          defaultSize={isMobile ? 100 : 55}
-          minSize={isMobile ? 20 : 30}
+          id="center-panel"
+          defaultSize={isMobile ? "100%" : "55%"}
+          minSize={isMobile ? "20%" : "30%"}
           className="bg-background flex flex-col min-w-0 min-h-0"
         >
           {/* Header */}
@@ -1035,6 +1087,29 @@ export function GameView({
             </div>
           </ScrollArea>
 
+          {/* Confirm selections bar */}
+          {pendingInteractiveBlocks.length > 0 && hasSelections && (
+            <div className="px-3 md:px-4 py-2 border-t border-border bg-primary/5 shrink-0">
+              <div className="flex items-center justify-between max-w-4xl mx-auto">
+                <span className="text-xs text-muted-foreground">
+                  {t("session.selectionsReady", {
+                    count: Object.keys(blockSelections).length,
+                    defaultValue: "{{count}} selection(s) ready",
+                  })}
+                </span>
+                <Button
+                  size="sm"
+                  className="rounded-none gap-1.5"
+                  disabled={executing}
+                  onClick={handleConfirmSelections}
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  {t("session.confirmSelections", "Confirm")}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Input — always fixed at bottom */}
           <div className="p-3 md:p-4 border-t border-border bg-muted/5 shrink-0">
             {phase === "ended" ? (
@@ -1081,17 +1156,18 @@ export function GameView({
           <>
             <ResizableHandle
               withHandle
+              orientation={direction}
               className={isRightCollapsed ? "hidden" : ""}
             />
             <ResizablePanel
-              ref={rightPanelRef}
-              defaultSize={25}
-              minSize={20}
-              maxSize={50}
+              id="right-panel"
+              panelRef={rightPanelRef}
+              defaultSize="25%"
+              minSize="20%"
+              maxSize="50%"
               collapsible={true}
-              collapsedSize={0}
-              onCollapse={() => setIsRightCollapsed(true)}
-              onExpand={() => setIsRightCollapsed(false)}
+              collapsedSize="0%"
+              onResize={() => setIsRightCollapsed(rightPanelRef.current?.isCollapsed() ?? false)}
               className="bg-muted/10 flex flex-col min-h-0 min-w-0"
             >
               <RightPanel

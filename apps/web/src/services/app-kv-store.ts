@@ -9,13 +9,14 @@
  */
 
 const DB_NAME = "covel-app";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 const STORE_STATE_SNAPSHOTS = "stateSnapshots"; // key: sessionId
 const STORE_WORLD_OVERLAYS = "worldOverlays"; // key: worldId
 const STORE_STATE_PATCHES = "statePatches"; // key: sessionId
+const STORE_SUBMITTED_BLOCKS = "submittedBlocks"; // key: sessionId
 
-type StoreNames = typeof STORE_STATE_SNAPSHOTS | typeof STORE_WORLD_OVERLAYS | typeof STORE_STATE_PATCHES;
+type StoreNames = typeof STORE_STATE_SNAPSHOTS | typeof STORE_WORLD_OVERLAYS | typeof STORE_STATE_PATCHES | typeof STORE_SUBMITTED_BLOCKS;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -33,6 +34,9 @@ function openAppDb(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_STATE_PATCHES)) {
         db.createObjectStore(STORE_STATE_PATCHES);
+      }
+      if (!db.objectStoreNames.contains(STORE_SUBMITTED_BLOCKS)) {
+        db.createObjectStore(STORE_SUBMITTED_BLOCKS);
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -119,6 +123,20 @@ export async function setWorldOverlay(worldId: string, overlay: WorldOverlay): P
 
 export async function removeWorldOverlay(worldId: string): Promise<void> {
   return idbDelete(STORE_WORLD_OVERLAYS, worldId);
+}
+
+// ── Submitted Blocks ────────────────────────────────────────────
+
+export async function getSubmittedBlocks(sessionId: string): Promise<string[]> {
+  return (await idbGet<string[]>(STORE_SUBMITTED_BLOCKS, sessionId)) ?? [];
+}
+
+export async function saveSubmittedBlocks(sessionId: string, blockIds: string[]): Promise<void> {
+  return idbPut(STORE_SUBMITTED_BLOCKS, sessionId, blockIds);
+}
+
+export async function removeSubmittedBlocks(sessionId: string): Promise<void> {
+  return idbDelete(STORE_SUBMITTED_BLOCKS, sessionId);
 }
 
 // ── Migration ────────────────────────────────────────────────────

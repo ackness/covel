@@ -278,7 +278,35 @@ describe("MemoryStore — Messages", () => {
     const msg = await store.addMessage(session.id, "user", "plain");
     expect(msg.turnId).toBeUndefined();
     expect(msg.runtimeId).toBeUndefined();
+    expect(msg.kind).toBeUndefined();
     expect(msg.block).toBeUndefined();
+  });
+
+  /** Messages include kind metadata for display filtering. */
+  it("should store kind metadata", async () => {
+    const world = await store.createWorld("W", "d");
+    const session = await store.createSession({ worldId: world.id });
+
+    const storyMsg = await store.addMessage(session.id, "assistant", "Once upon a time", {
+      turnId: "turn-1",
+      runtimeId: "rt-narrator",
+      kind: "story",
+    });
+    expect(storyMsg.kind).toBe("story");
+
+    const pluginMsg = await store.addMessage(session.id, "assistant", "plugin output", {
+      turnId: "turn-1",
+      runtimeId: "rt-plugin",
+      kind: "plugin",
+    });
+    expect(pluginMsg.kind).toBe("plugin");
+
+    // Verify kind survives round-trip through listMessages
+    const msgs = await store.listMessages(session.id);
+    const storyFound = msgs.find((m) => m.runtimeId === "rt-narrator");
+    const pluginFound = msgs.find((m) => m.runtimeId === "rt-plugin");
+    expect(storyFound?.kind).toBe("story");
+    expect(pluginFound?.kind).toBe("plugin");
   });
 });
 

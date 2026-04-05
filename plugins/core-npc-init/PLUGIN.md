@@ -23,7 +23,7 @@ Call `define-character-schema` with appropriate fields for this world:
 **Add genre-specific fields based on the world setting:**
 - Fantasy/RPG: hp, maxHp, mana, maxMana, level, exp, alignment, class
 - Cyberpunk: implants, reputation, credits, hackSkill
-- Cultivation/Xianxia: realm, qi, spiritualRoot, sect
+- Cultivation/Xianxia: realm (enum), qi, spiritualRoot (enum, options from lore e.g. 金/木/水/火/土), sect (enum)
 - Harbor noir/mystery: connections, suspicion, resources
 - General adventure: health, skills, equipment, gold
 
@@ -33,6 +33,12 @@ Call `define-character-schema` with appropriate fields for this world:
 - For number fields representing resources (hp, mana, etc.), set `min: 0` and a reasonable `max`.
 - Set `visible: true` for the most important fields (max 6), others default to expanded view only.
 - Match the locale of the world lore for labels (Chinese labels for Chinese worlds, English for English worlds).
+
+**CRITICAL — prefer `enum` over `string` for bio fields:**
+- Bio fields shown in the player character creation form MUST use `enum` type with an `options` array whenever the field has a finite, lore-defined set of valid values.
+- Examples: spiritual roots, classes, races, factions, alignments, bloodlines, sects — these should ALL be `enum` with 3–8 options derived from the world lore.
+- Only use `string` type for truly free-form bio fields (e.g., name, backstory, personal motto).
+- This prevents players from entering nonsensical or lore-breaking values during character creation.
 
 ### Step 3: Create NPCs from the lore
 

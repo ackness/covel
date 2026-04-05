@@ -15,14 +15,14 @@
     "test:live": "LIVE_LLM_ENABLED=1 vitest run"
   },
   "dependencies": {
-    "@covel/shared": "workspace:*",
     "@covel/context": "workspace:*",
     "@covel/plugin-runtime": "workspace:*",
+    "@covel/shared": "workspace:*",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@covel/plugin-test-utils": "workspace:*",
-    "typescript": "^5.8.0",
-    "vitest": "^3.0.0"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
   }
 }

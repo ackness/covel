@@ -166,7 +166,7 @@ export async function createMemoryStore(worldsDir?: string): Promise<ServerStore
     sessionId: string,
     role: MessageRecord["role"],
     content: string,
-    meta?: { turnId?: string; runtimeId?: string; block?: Record<string, unknown> },
+    meta?: { turnId?: string; runtimeId?: string; kind?: string; block?: Record<string, unknown> },
   ): Promise<MessageRecord> {
     const msg: MessageRecord = {
       id: uid("msg"),
@@ -175,6 +175,7 @@ export async function createMemoryStore(worldsDir?: string): Promise<ServerStore
       content,
       ...(meta?.turnId ? { turnId: meta.turnId } : {}),
       ...(meta?.runtimeId ? { runtimeId: meta.runtimeId } : {}),
+      ...(meta?.kind ? { kind: meta.kind } : {}),
       ...(meta?.block ? { block: meta.block } : {}),
       createdAt: new Date().toISOString(),
     };

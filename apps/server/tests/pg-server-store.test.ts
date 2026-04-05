@@ -131,6 +131,47 @@ describe("PgServerStore — Messages", () => {
     const msgs = await store.listMessages(session.id);
     expect(msgs[0].block).toEqual({ type: "choice_set", data: { options: ["a", "b"] } });
   });
+
+  it("should store and retrieve kind metadata", async () => {
+    const world = await store.createWorld("W", "d");
+    const session = await store.createSession({ worldId: world.id });
+
+    await store.addMessage(session.id, "assistant", "story text", {
+      turnId: "t1",
+      runtimeId: "rt-narrator",
+      kind: "story",
+    });
+    await store.addMessage(session.id, "assistant", "plugin output", {
+      turnId: "t1",
+      runtimeId: "rt-plugin",
+      kind: "plugin",
+    });
+    await store.addMessage(session.id, "user", "user msg");
+
+    const msgs = await store.listMessages(session.id);
+    expect(msgs).toHaveLength(3);
+
+    const story = msgs.find((m) => m.runtimeId === "rt-narrator");
+    const plugin = msgs.find((m) => m.runtimeId === "rt-plugin");
+    const user = msgs.find((m) => m.role === "user");
+    expect(story?.kind).toBe("story");
+    expect(plugin?.kind).toBe("plugin");
+    expect(user?.kind).toBeUndefined();
+  });
+
+  it("should persist kind to PG column", async () => {
+    const world = await store.createWorld("W", "d");
+    const session = await store.createSession({ worldId: world.id });
+
+    const msg = await store.addMessage(session.id, "assistant", "narrative", {
+      turnId: "t-kind",
+      kind: "story",
+    });
+
+    const rows = await pgSql`SELECT kind FROM sv_messages WHERE id = ${msg.id}`;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].kind).toBe("story");
+  });
 });
 
 describe("PgServerStore — Characters", () => {
@@ -301,5 +342,100 @@ describe("PgServerStore — Persistence", () => {
     const rows = await pgSql`SELECT * FROM sv_characters WHERE id = ${char.id}`;
     expect(rows).toHaveLength(1);
     expect(rows[0].name).toBe("Persistent Hero");
+  });
+});
+
+// ─── Cross-Store Consistency: PG vs Memory ──────────────────────────────────
+
+describe("Cross-Store Consistency — PG vs Memory", () => {
+  let memStore: ServerStore;
+
+  beforeAll(async () => {
+    const { createMemoryStore } = await import("../src/store/memory-store.js");
+    memStore = await createMemoryStore(WORLDS_DIR);
+  });
+
+  it("kind field round-trips identically in both stores", async () => {
+    const memWorld = await memStore.createWorld("W", "d");
+    const memSession = await memStore.createSession({ worldId: memWorld.id });
+    const pgWorld = await store.createWorld("W", "d");
+    const pgSession = await store.createSession({ worldId: pgWorld.id });
+
+    for (const s of [
+      { st: memStore, sid: memSession.id },
+      { st: store, sid: pgSession.id },
+    ]) {
+      await s.st.addMessage(s.sid, "assistant", "story text", {
+        turnId: "t1", runtimeId: "rt-1", kind: "story",
+      });
+      await s.st.addMessage(s.sid, "assistant", "plugin out", {
+        turnId: "t1", runtimeId: "rt-2", kind: "plugin",
+      });
+      await s.st.addMessage(s.sid, "user", "hello");
+    }
+
+    const memMsgs = await memStore.listMessages(memSession.id);
+    const pgMsgs = await store.listMessages(pgSession.id);
+
+    expect(memMsgs).toHaveLength(3);
+    expect(pgMsgs).toHaveLength(3);
+
+    for (let i = 0; i < memMsgs.length; i++) {
+      expect(memMsgs[i].role).toBe(pgMsgs[i].role);
+      expect(memMsgs[i].content).toBe(pgMsgs[i].content);
+      expect(memMsgs[i].kind).toBe(pgMsgs[i].kind);
+      expect(memMsgs[i].runtimeId).toBe(pgMsgs[i].runtimeId);
+    }
+  });
+
+  it("phase update persists identically in both stores", async () => {
+    const memWorld = await memStore.createWorld("W", "d");
+    const memSession = await memStore.createSession({ worldId: memWorld.id });
+    const pgWorld = await store.createWorld("W", "d");
+    const pgSession = await store.createSession({ worldId: pgWorld.id });
+
+    await memStore.updateSessionPhase(memSession.id, "playing");
+    await store.updateSessionPhase(pgSession.id, "playing");
+
+    const memFetched = await memStore.getSession(memSession.id);
+    const pgFetched = await store.getSession(pgSession.id);
+
+    expect(memFetched?.phase).toBe("playing");
+    expect(pgFetched?.phase).toBe("playing");
+  });
+
+  it("full turn message lifecycle matches between stores", async () => {
+    const memWorld = await memStore.createWorld("W", "d");
+    const memSession = await memStore.createSession({ worldId: memWorld.id });
+    const pgWorld = await store.createWorld("W", "d");
+    const pgSession = await store.createSession({ worldId: pgWorld.id });
+
+    // Simulate a complete game turn
+    for (const s of [
+      { st: memStore, sid: memSession.id },
+      { st: store, sid: pgSession.id },
+    ]) {
+      await s.st.addMessage(s.sid, "user", "I attack");
+      await s.st.addMessage(s.sid, "assistant", "The dragon roars...", {
+        turnId: "t1", runtimeId: "rt-narrator", kind: "story",
+      });
+      await s.st.addMessage(s.sid, "assistant", "", {
+        turnId: "t1", block: { type: "choice_set", data: { options: ["flee", "fight"] } },
+      });
+    }
+
+    const memMsgs = await memStore.listMessages(memSession.id);
+    const pgMsgs = await store.listMessages(pgSession.id);
+
+    expect(memMsgs).toHaveLength(pgMsgs.length);
+
+    for (let i = 0; i < memMsgs.length; i++) {
+      expect(memMsgs[i].role).toBe(pgMsgs[i].role);
+      expect(memMsgs[i].content).toBe(pgMsgs[i].content);
+      expect(memMsgs[i].kind).toBe(pgMsgs[i].kind);
+      if (memMsgs[i].block) {
+        expect(memMsgs[i].block).toEqual(pgMsgs[i].block);
+      }
+    }
   });
 });

@@ -16,6 +16,8 @@ export interface StreamMessage {
   turnId?: string;
   /** Source runtime ID for retry tracking. */
   runtimeId?: string;
+  /** Runtime kind (e.g. "story", "plugin") — controls main chat visibility. */
+  kind?: string;
   /** For UI blocks (choice_set, etc.) */
   block?: Record<string, unknown>;
 }
@@ -378,10 +380,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // Dispatch a deduplicated action — the reducer checks for existing stream messages.
         const content = (payload.content as string) ?? "";
         const runtimeId = (payload.runtimeId as string) ?? "unknown";
-        // Only show story-kind runtime text in main chat; plugin text goes to debug only
+        const msgId = (payload.messageId as string) ?? api.uid();
+
+        // Display in main chat: only story-kind runtime text
         const completedKind = runtimeKindRef.current.get(runtimeId);
         if (content && completedKind === "story") {
-          const msgId = (payload.messageId as string) ?? api.uid();
           const msg: StreamMessage = {
             id: msgId,
             role: "assistant",
@@ -391,11 +394,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             runtimeId: runtimeId !== "unknown" ? runtimeId : undefined,
           };
           dispatch({ type: "COMPLETE_MESSAGE", turnId: turnId ?? "unknown", runtimeId, message: msg });
-          // Persist to IDB (fire-and-forget). Use the final content for the stream message.
+        }
+
+        // Always persist to IDB regardless of kind — ensures full session restore on refresh.
+        // Store the kind so restore can filter display correctly.
+        if (content) {
           const sid = sessionIdRef.current;
           if (sid) {
-            // For streamed messages, the reducer may skip COMPLETE_MESSAGE if stream exists.
-            // We persist the final content regardless — IDB uses msgId as key for dedup.
             ds.addMessage({
               id: msgId,
               sessionId: sid,
@@ -403,6 +408,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               content,
               turnId,
               runtimeId: runtimeId !== "unknown" ? runtimeId : undefined,
+              kind: completedKind,
               createdAt: envelope.timestamp,
             }).catch(() => {});
           }
@@ -475,6 +481,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const phase = payload.phase as api.SessionPhase;
         if (phase) {
           dispatch({ type: "SET_PHASE", phase });
+          // Persist phase to IDB session record so it survives refresh
+          const sid = sessionIdRef.current;
+          if (sid) {
+            ds.updateSession(sid, { phase }).catch(() => {});
+          }
         }
         break;
       }
@@ -616,6 +627,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         timestamp: m.createdAt,
         turnId: m.turnId,
         runtimeId: m.runtimeId,
+        kind: m.kind,
         ...(m.block ? { block: m.block } : {}),
       }));
       dispatch({ type: "LOAD_MESSAGES", messages: streamMessages });
@@ -637,6 +649,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "SET_GAME_STATE", state: snapshotState });
       }
     }
+
+    // Restore submitted block IDs via DataService
+    try {
+      const blockIds = await ds.loadSubmittedBlocks(session.id);
+      for (const blockId of blockIds) {
+        dispatch({ type: "SUBMIT_BLOCK", blockId });
+      }
+    } catch { /* ignore load errors */ }
 
     // Restore last turn's execution steps from sessionStorage (survives F5 refresh)
     try {
@@ -742,6 +762,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const submitBlock = useCallback((blockId: string) => {
     dispatch({ type: "SUBMIT_BLOCK", blockId });
+    // Persist via DataService so submitted state survives refresh
+    const sid = sessionIdRef.current;
+    if (sid) {
+      ds.loadSubmittedBlocks(sid).then((existing) => {
+        if (!existing.includes(blockId)) {
+          ds.saveSubmittedBlocks(sid, [...existing, blockId]).catch(() => {});
+        }
+      }).catch(() => {});
+    }
   }, []);
 
   const executeCommand = useCallback((command: string) => {

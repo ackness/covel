@@ -20,13 +20,13 @@
   },
   "dependencies": {
     "@covel/shared": "workspace:*",
-    "drizzle-orm": "^0.41.0",
+    "drizzle-orm": "^0.45.2",
     "idb": "^8.0.2",
     "postgres": "^3.4.0"
   },
   "devDependencies": {
     "fake-indexeddb": "^6.2.5",
-    "typescript": "^5.8.3",
-    "vitest": "^3.1.1"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
   }
 }

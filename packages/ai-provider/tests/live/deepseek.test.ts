@@ -33,6 +33,7 @@ describe.skipIf(!LIVE)("live: deepseek", () => {
 
   it(
     "generateText returns a response",
+    { timeout: 30_000 },
     async () => {
       const { gateway, apiKeys } = setup();
       const result = await gateway.generateText(
@@ -45,12 +46,12 @@ describe.skipIf(!LIVE)("live: deepseek", () => {
 
       expect(result.text.length).toBeGreaterThan(0);
       expect(result.usage.inputTokens).toBeGreaterThan(0);
-    },
-    { timeout: 30_000 }
+    }
   );
 
   it(
     "streamText yields deltas then done",
+    { timeout: 30_000 },
     async () => {
       const { gateway, apiKeys } = setup();
       const events: StreamEvent[] = [];
@@ -71,7 +72,6 @@ describe.skipIf(!LIVE)("live: deepseek", () => {
       expect(deltas.length).toBeGreaterThan(0);
       expect(done).toBeDefined();
       expect(done!.type).toBe("done");
-    },
-    { timeout: 30_000 }
+    }
   );
 });

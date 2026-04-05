@@ -37,6 +37,8 @@ export interface MessageRecord {
   content: string;
   turnId?: string;
   runtimeId?: string;
+  /** Runtime kind (e.g. "story", "plugin") — used to filter display on restore. */
+  kind?: string;
   block?: Record<string, unknown>;
   createdAt: string;
 }
@@ -366,7 +368,7 @@ export async function createSession(worldId: string, presetId?: string, id?: str
 
 export async function updateSession(
   sessionId: string,
-  updates: Partial<Pick<SessionRecord, "status" | "presetId">>
+  updates: Partial<Pick<SessionRecord, "status" | "presetId" | "phase">>
 ): Promise<SessionRecord> {
   return request<SessionRecord>(`/sessions/${sessionId}`, {
     method: "PATCH",

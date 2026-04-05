@@ -14,10 +14,10 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@covel/shared": "workspace:*",
-    "@covel/ai-provider": "workspace:*"
+    "@covel/ai-provider": "workspace:*",
+    "@covel/shared": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.8.0"
+    "typescript": "^6.0.2"
   }
 }

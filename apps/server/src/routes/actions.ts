@@ -322,6 +322,7 @@ export function createActionsRoute(deps: {
           });
 
           const streamedRuntimeIds = new Set<string>();
+          const runtimeKindMap = new Map<string, string>();
           let resolveBackgroundDone: (() => void) | undefined;
           let backgroundTaskCount = 0;
           let backgroundTaskDoneCount = 0;
@@ -346,6 +347,12 @@ export function createActionsRoute(deps: {
                   });
                 }
               } else {
+                if (evt.type === "runtime.started" && evt.label) {
+                  const slashIdx = evt.label.indexOf("/");
+                  if (slashIdx >= 0) {
+                    runtimeKindMap.set(evt.runtimeId, evt.label.slice(slashIdx + 1));
+                  }
+                }
                 await emit("runtime.progress", provTurnId, provTraceId, { ...evt });
               }
             },
@@ -396,16 +403,14 @@ export function createActionsRoute(deps: {
                 ?? narrativeSourceRuntimeIds[narrativeIndex]
                 ?? "";
               narrativeIndex++;
-              // For retry: emit all non-cached, non-streamed narrative
-              if (!streamedRuntimeIds.has(sourceRuntimeId)) {
-                await store.addMessage(sessionId, "assistant", block.content as string, { turnId, runtimeId: sourceRuntimeId });
-                const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-                await emit("message.completed", turnId, traceId, {
-                  messageId: msgId,
-                  content: block.content,
-                  runtimeId: sourceRuntimeId,
-                });
-              }
+              const retryNarrativeKind = runtimeKindMap.get(sourceRuntimeId);
+              await store.addMessage(sessionId, "assistant", block.content as string, { turnId, runtimeId: sourceRuntimeId, kind: retryNarrativeKind });
+              const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+              await emit("message.completed", turnId, traceId, {
+                messageId: msgId,
+                content: block.content,
+                runtimeId: sourceRuntimeId,
+              });
             } else {
               const blockEnvelope = toBlockEnvelope(block, { turnId, sessionId, requestId, traceId });
               await store.addMessage(sessionId, "assistant", "", { turnId, block: blockEnvelope });
@@ -514,6 +519,8 @@ export function createActionsRoute(deps: {
 
         // Track which runtimes had their narrative streamed via message.delta
         const streamedRuntimeIds = new Set<string>();
+        // Track runtime kind (e.g. "story", "plugin") for message metadata
+        const runtimeKindMap = new Map<string, string>();
 
         // Track background task completion for SSE streaming.
         // Resolved when all background tasks finish (or immediately if none).
@@ -548,6 +555,13 @@ export function createActionsRoute(deps: {
                   delta: evt.detail ?? "",
                 });
               } else {
+                // Track runtime kind from runtime.started label (format: "pluginId/kind")
+                if (evt.type === "runtime.started" && evt.label) {
+                  const slashIdx = evt.label.indexOf("/");
+                  if (slashIdx >= 0) {
+                    runtimeKindMap.set(evt.runtimeId, evt.label.slice(slashIdx + 1));
+                  }
+                }
                 await emit("runtime.progress", provTurnId, provTraceId, { ...evt });
               }
             },
@@ -647,14 +661,17 @@ export function createActionsRoute(deps: {
               ?? narrativeSourceRuntimeIds[narrativeIndex]
               ?? "";
             narrativeIndex++;
-            await store.addMessage(sessionId, "assistant", block.content as string, { turnId, runtimeId: sourceRuntimeId });
-            if (!streamedRuntimeIds.has(sourceRuntimeId)) {
-              const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-              await emit("message.completed", turnId, traceId, {
-                messageId: msgId,
-                content: block.content,
-              });
-            }
+            const narrativeKind = runtimeKindMap.get(sourceRuntimeId);
+            await store.addMessage(sessionId, "assistant", block.content as string, { turnId, runtimeId: sourceRuntimeId, kind: narrativeKind });
+            // Always emit message.completed with runtimeId so the frontend can persist
+            // to IndexedDB. The frontend deduplicates streamed vs completed messages
+            // in the reducer, but IDB persistence only happens in this handler.
+            const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+            await emit("message.completed", turnId, traceId, {
+              messageId: msgId,
+              content: block.content,
+              runtimeId: sourceRuntimeId,
+            });
           } else {
             const blockEnvelope = toBlockEnvelope(block, {
               turnId,

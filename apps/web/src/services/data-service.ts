@@ -39,7 +39,7 @@ export interface DataService {
   createSession(worldId: string, presetId?: string): Promise<SessionRecord>;
   updateSession(
     sessionId: string,
-    updates: Partial<Pick<SessionRecord, "status" | "presetId">>,
+    updates: Partial<Pick<SessionRecord, "status" | "presetId" | "phase">>,
   ): Promise<SessionRecord>;
   deleteSession(sessionId: string): Promise<void>;
 
@@ -63,6 +63,19 @@ export interface DataService {
    * Returns null if no snapshot exists (fresh session).
    */
   loadStateSnapshot(sessionId: string): Promise<Record<string, unknown> | null>;
+
+  /**
+   * Persist submitted block IDs for a session.
+   * Tracks which interactive blocks (choice_set, character_creation, etc.)
+   * have been submitted by the player — permanently locks their UI.
+   */
+  saveSubmittedBlocks(sessionId: string, blockIds: string[]): Promise<void>;
+
+  /**
+   * Load submitted block IDs for a session.
+   * Returns an empty array if none exist.
+   */
+  loadSubmittedBlocks(sessionId: string): Promise<string[]>;
 
   /**
    * Sync session context to server MemoryStore before sending actions.
@@ -125,7 +138,7 @@ class RemoteDataService implements DataService {
   }
   async updateSession(
     sessionId: string,
-    updates: Partial<Pick<SessionRecord, "status" | "presetId">>,
+    updates: Partial<Pick<SessionRecord, "status" | "presetId" | "phase">>,
   ) {
     return api.updateSession(sessionId, updates);
   }
@@ -158,6 +171,16 @@ class RemoteDataService implements DataService {
     } catch {
       return null;
     }
+  }
+
+  async saveSubmittedBlocks(sessionId: string, blockIds: string[]) {
+    // T3: use client-side IDB — submitted block state is a UI concern.
+    // Could be promoted to a server endpoint if cross-device resume is needed.
+    await appKv.saveSubmittedBlocks(sessionId, blockIds);
+  }
+
+  async loadSubmittedBlocks(sessionId: string) {
+    return appKv.getSubmittedBlocks(sessionId);
   }
 
   async syncToServer() {
@@ -371,7 +394,7 @@ class LocalDataService implements DataService {
 
   async updateSession(
     sessionId: string,
-    updates: Partial<Pick<SessionRecord, "status" | "presetId">>,
+    updates: Partial<Pick<SessionRecord, "status" | "presetId" | "phase">>,
   ): Promise<SessionRecord> {
     const store = await this.getStore();
     const existing = await store.getSession(sessionId);
@@ -380,7 +403,7 @@ class LocalDataService implements DataService {
       id: existing.id,
       worldId: existing.worldId,
       status: updates.status ?? existing.status,
-      phase: existing.phase as SessionPhase,
+      phase: (updates.phase ?? existing.phase) as SessionPhase,
       presetId: updates.presetId ?? existing.presetId,
       createdAt: existing.createdAt,
     };
@@ -404,6 +427,7 @@ class LocalDataService implements DataService {
     // (fire-and-forget — non-critical)
     appKv.removeStateSnapshot(sessionId).catch(() => {});
     appKv.removeStatePatches(sessionId).catch(() => {});
+    appKv.removeSubmittedBlocks(sessionId).catch(() => {});
   }
 
   // ── Messages ────────────────────────────────────────────────────
@@ -417,7 +441,7 @@ class LocalDataService implements DataService {
         sessionId: m.sessionId,
         role: m.role,
         content: m.content,
-        ...(m.metadata as { turnId?: string; runtimeId?: string; block?: Record<string, unknown> } ?? {}),
+        ...(m.metadata as { turnId?: string; runtimeId?: string; kind?: string; block?: Record<string, unknown> } ?? {}),
         createdAt: m.createdAt,
       }))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -433,6 +457,7 @@ class LocalDataService implements DataService {
       metadata: {
         ...(msg.turnId ? { turnId: msg.turnId } : {}),
         ...(msg.runtimeId ? { runtimeId: msg.runtimeId } : {}),
+        ...(msg.kind ? { kind: msg.kind } : {}),
         ...(msg.block ? { block: msg.block } : {}),
       },
       createdAt: msg.createdAt,
@@ -463,6 +488,16 @@ class LocalDataService implements DataService {
 
   async loadStateSnapshot(sessionId: string): Promise<Record<string, unknown> | null> {
     return appKv.getStateSnapshot(sessionId);
+  }
+
+  // ── Submitted blocks ────────────────────────────────────────────
+
+  async saveSubmittedBlocks(sessionId: string, blockIds: string[]): Promise<void> {
+    await appKv.saveSubmittedBlocks(sessionId, blockIds);
+  }
+
+  async loadSubmittedBlocks(sessionId: string): Promise<string[]> {
+    return appKv.getSubmittedBlocks(sessionId);
   }
 
   // ── Sync to server ──────────────────────────────────────────────

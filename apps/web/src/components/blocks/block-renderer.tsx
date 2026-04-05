@@ -50,6 +50,10 @@ export interface BlockRendererProps {
   data: Record<string, unknown>;
   /** Callback to send a message/response back to the server. */
   onSubmit: (value: string) => void;
+  /** Callback to record a selection without submitting (for multi-block collect-then-submit). */
+  onSelect?: (value: string) => void;
+  /** The currently selected value (controlled by parent for multi-block mode). */
+  selectedValue?: string | null;
   /** Whether the session is currently executing (disable interactions). */
   disabled?: boolean;
 }
@@ -142,9 +146,10 @@ export function getBlockRenderer(blockType: string): BlockRendererComponent | nu
 
 // ── choice_set ─────────────────────────────────────────────────────
 
-function ChoiceSetBlock({ data, onSubmit, disabled }: BlockRendererProps) {
+function ChoiceSetBlock({ data, onSubmit, onSelect, selectedValue, disabled }: BlockRendererProps) {
   const title = data.title as string | undefined;
   const options = (data.options as Array<{ id: string; label: string }>) ?? [];
+  const handleClick = onSelect ?? onSubmit;
 
   return (
     <Card className="max-w-md">
@@ -155,10 +160,10 @@ function ChoiceSetBlock({ data, onSubmit, disabled }: BlockRendererProps) {
         {options.map((opt) => (
           <Button
             key={opt.id}
-            variant="ghost"
+            variant={selectedValue === opt.label ? "default" : "ghost"}
             className="w-full justify-start rounded-none text-sm h-auto py-3 px-4"
             disabled={disabled}
-            onClick={() => onSubmit(opt.label)}
+            onClick={() => handleClick(opt.label)}
           >
             {opt.label}
           </Button>

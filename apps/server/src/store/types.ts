@@ -37,6 +37,8 @@ export interface MessageRecord {
   content: string;
   turnId?: string;
   runtimeId?: string;
+  /** Runtime kind (e.g. "story", "plugin") — used to filter display on restore. */
+  kind?: string;
   block?: Record<string, unknown>;
   createdAt: string;
 }
@@ -99,7 +101,7 @@ export interface ServerStore {
     sessionId: string,
     role: MessageRecord["role"],
     content: string,
-    meta?: { turnId?: string; runtimeId?: string; block?: Record<string, unknown> },
+    meta?: { turnId?: string; runtimeId?: string; kind?: string; block?: Record<string, unknown> },
   ): Promise<MessageRecord>;
   clearMessages(sessionId: string): Promise<void>;
 

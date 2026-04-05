@@ -413,6 +413,56 @@ export function runDataStoreContractTests(
         expect(msgs[0].metadata).toEqual({ turnId: "t1", blocks: [1, 2, 3] });
       });
 
+      it("preserves kind in metadata (DataService round-trip pattern)", async () => {
+        // This mirrors how LocalDataService stores messages:
+        // kind, turnId, runtimeId, and block are packed into metadata.
+        const storyMsg = createTestMessage("sess_kind", {
+          role: "assistant",
+          content: "The dragon roars...",
+          metadata: { turnId: "t1", runtimeId: "rt-narrator", kind: "story" },
+        });
+        const pluginMsg = createTestMessage("sess_kind", {
+          role: "assistant",
+          content: "combat tracked",
+          metadata: { turnId: "t1", runtimeId: "rt-combat", kind: "plugin" },
+        });
+        const blockMsg = createTestMessage("sess_kind", {
+          role: "assistant",
+          content: "",
+          metadata: {
+            turnId: "t1",
+            block: { type: "choice_set", data: { options: ["flee", "fight"] } },
+          },
+        });
+        const userMsg = createTestMessage("sess_kind", {
+          role: "user",
+          content: "I attack",
+        });
+
+        await store.addMessage(storyMsg);
+        await store.addMessage(pluginMsg);
+        await store.addMessage(blockMsg);
+        await store.addMessage(userMsg);
+
+        const msgs = await store.listMessages("sess_kind");
+        expect(msgs).toHaveLength(4);
+
+        const story = msgs.find((m) => m.id === storyMsg.id)!;
+        const plugin = msgs.find((m) => m.id === pluginMsg.id)!;
+        const block = msgs.find((m) => m.id === blockMsg.id)!;
+        const user = msgs.find((m) => m.id === userMsg.id)!;
+
+        // kind round-trips through metadata
+        expect((story.metadata as Record<string, unknown>)?.kind).toBe("story");
+        expect((plugin.metadata as Record<string, unknown>)?.kind).toBe("plugin");
+        // block round-trips through metadata
+        expect((block.metadata as Record<string, unknown>)?.block).toEqual({
+          type: "choice_set", data: { options: ["flee", "fight"] },
+        });
+        // user message has no metadata
+        expect(user.metadata).toBeUndefined();
+      });
+
       it("stores all role variants (system, user, assistant)", async () => {
         const m1 = createTestMessage("sess_1", { role: "system", content: "System" });
         const m2 = createTestMessage("sess_1", { role: "user", content: "User" });

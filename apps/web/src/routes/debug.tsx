@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Terminal, Activity, ChevronDown, ChevronRight, RefreshCw,
   Zap, Wrench, CheckCircle2, XCircle, MessageSquare, Database,
-  Layers, Clock, Filter, Radio, Box, ArrowRight, FileJson,
+  Layers, Clock, Filter, Radio, Box, ArrowRight, FileJson, Gamepad2,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Badge } from "@/components/ui/badge.js";
@@ -229,6 +229,17 @@ function DebugPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {selectedSessionId && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-[11px] text-muted-foreground gap-1"
+              onClick={() => navigate({ to: "/session", search: { sid: selectedSessionId } })}
+            >
+              <Gamepad2 className="w-3 h-3" />
+              Session
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"

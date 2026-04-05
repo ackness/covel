@@ -4,6 +4,17 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { scanPluginDirectory } from "../src/loader/fs-scanner.js";
 
+const VALID_MANIFEST = {
+  schemaVersion: "1.0",
+  id: "my-plugin",
+  displayName: "My Plugin",
+  version: "0.1.0",
+  author: "test",
+  description: "desc",
+  defaultLocale: "zh-CN",
+  supportedLocales: ["zh-CN"],
+};
+
 describe("fs-scanner", () => {
   let tempDir: string;
 
@@ -20,28 +31,19 @@ describe("fs-scanner", () => {
     await mkdir(pluginDir, { recursive: true });
     await writeFile(
       join(pluginDir, "plugin.json"),
-      JSON.stringify({
-        schemaVersion: "1.0",
-        id: "my-plugin",
-        displayName: "My Plugin",
-        version: "0.1.0",
-        author: "test",
-        description: "desc",
-        defaultLocale: "zh-CN",
-        supportedLocales: ["zh-CN"],
-      })
+      JSON.stringify(VALID_MANIFEST),
     );
 
-    const results = await scanPluginDirectory(tempDir);
-    expect(results).toHaveLength(1);
-    expect(results[0].manifest.id).toBe("my-plugin");
-    expect(results[0].dir).toBe(pluginDir);
+    const { plugins } = await scanPluginDirectory(tempDir);
+    expect(plugins).toHaveLength(1);
+    expect(plugins[0].manifest.id).toBe("my-plugin");
+    expect(plugins[0].dir).toBe(pluginDir);
   });
 
   it("skips directories without plugin.json", async () => {
     await mkdir(join(tempDir, "no-manifest"), { recursive: true });
-    const results = await scanPluginDirectory(tempDir);
-    expect(results).toHaveLength(0);
+    const { plugins } = await scanPluginDirectory(tempDir);
+    expect(plugins).toHaveLength(0);
   });
 
   it("skips directories with invalid JSON", async () => {
@@ -49,8 +51,10 @@ describe("fs-scanner", () => {
     await mkdir(pluginDir, { recursive: true });
     await writeFile(join(pluginDir, "plugin.json"), "not valid json");
 
-    const results = await scanPluginDirectory(tempDir);
-    expect(results).toHaveLength(0);
+    const { plugins, scanErrors } = await scanPluginDirectory(tempDir);
+    expect(plugins).toHaveLength(0);
+    expect(scanErrors).toHaveLength(1);
+    expect(scanErrors[0].dirName).toBe("bad-json");
   });
 
   it("skips directories with invalid manifest schema", async () => {
@@ -58,11 +62,13 @@ describe("fs-scanner", () => {
     await mkdir(pluginDir, { recursive: true });
     await writeFile(
       join(pluginDir, "plugin.json"),
-      JSON.stringify({ schemaVersion: "1.0" })
+      JSON.stringify({ schemaVersion: "1.0" }),
     );
 
-    const results = await scanPluginDirectory(tempDir);
-    expect(results).toHaveLength(0);
+    const { plugins, scanErrors } = await scanPluginDirectory(tempDir);
+    expect(plugins).toHaveLength(0);
+    expect(scanErrors).toHaveLength(1);
+    expect(scanErrors[0].dirName).toBe("bad-schema");
   });
 
   it("skips hidden directories", async () => {
@@ -70,20 +76,11 @@ describe("fs-scanner", () => {
     await mkdir(pluginDir, { recursive: true });
     await writeFile(
       join(pluginDir, "plugin.json"),
-      JSON.stringify({
-        schemaVersion: "1.0",
-        id: "hidden",
-        displayName: "Hidden",
-        version: "0.1.0",
-        author: "test",
-        description: "desc",
-        defaultLocale: "zh-CN",
-        supportedLocales: ["zh-CN"],
-      })
+      JSON.stringify({ ...VALID_MANIFEST, id: "hidden" }),
     );
 
-    const results = await scanPluginDirectory(tempDir);
-    expect(results).toHaveLength(0);
+    const { plugins } = await scanPluginDirectory(tempDir);
+    expect(plugins).toHaveLength(0);
   });
 
   it("discovers multiple plugins", async () => {
@@ -92,20 +89,11 @@ describe("fs-scanner", () => {
       await mkdir(dir, { recursive: true });
       await writeFile(
         join(dir, "plugin.json"),
-        JSON.stringify({
-          schemaVersion: "1.0",
-          id: name,
-          displayName: name,
-          version: "0.1.0",
-          author: "test",
-          description: "desc",
-          defaultLocale: "zh-CN",
-          supportedLocales: ["zh-CN"],
-        })
+        JSON.stringify({ ...VALID_MANIFEST, id: name, displayName: name }),
       );
     }
 
-    const results = await scanPluginDirectory(tempDir);
-    expect(results).toHaveLength(2);
+    const { plugins } = await scanPluginDirectory(tempDir);
+    expect(plugins).toHaveLength(2);
   });
 });

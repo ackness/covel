@@ -33,6 +33,7 @@ describe.skipIf(!LIVE)("live: dashscope", () => {
 
   it(
     "generateText via dashscope fallback preset",
+    { timeout: 30_000 },
     async () => {
       const { gateway, apiKeys } = setup();
       const result = await gateway.generateText(
@@ -47,12 +48,12 @@ describe.skipIf(!LIVE)("live: dashscope", () => {
 
       expect(result.text.length).toBeGreaterThan(0);
       expect(result.usage.inputTokens).toBeGreaterThan(0);
-    },
-    { timeout: 30_000 }
+    }
   );
 
   it(
     "streamText via dashscope qwen3.5-flash",
+    { timeout: 30_000 },
     async () => {
       const { gateway, apiKeys } = setup();
       const events: StreamEvent[] = [];
@@ -72,7 +73,6 @@ describe.skipIf(!LIVE)("live: dashscope", () => {
 
       expect(deltas.length).toBeGreaterThan(0);
       expect(done).toBeDefined();
-    },
-    { timeout: 30_000 }
+    }
   );
 });

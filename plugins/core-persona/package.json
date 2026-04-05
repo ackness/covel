@@ -14,13 +14,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@covel/shared": "workspace:*",
     "@covel/context": "workspace:*",
-    "@covel/plugin-runtime": "workspace:*"
+    "@covel/plugin-runtime": "workspace:*",
+    "@covel/shared": "workspace:*"
   },
   "devDependencies": {
     "@covel/plugin-test-utils": "workspace:*",
-    "typescript": "^5.8.0",
-    "vitest": "^3.0.0"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
   }
 }

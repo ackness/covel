@@ -77,14 +77,25 @@ export function commitProposals(
         }
         case "ui.render": {
           const block = item.payload as { type: string; content: unknown };
-          turnState.renderBlocks.push({
-            type: block.type,
-            content: block.content,
-            source: {
-              runtimeId: envelope.runtimeId,
-              pluginId: envelope.pluginId,
-            },
-          });
+          // Deduplicate: skip if the same runtime already emitted a block
+          // with identical type and content
+          const contentKey = JSON.stringify(block.content);
+          const isDuplicate = turnState.renderBlocks.some(
+            (rb) =>
+              rb.type === block.type &&
+              rb.source?.runtimeId === envelope.runtimeId &&
+              JSON.stringify(rb.content) === contentKey,
+          );
+          if (!isDuplicate) {
+            turnState.renderBlocks.push({
+              type: block.type,
+              content: block.content,
+              source: {
+                runtimeId: envelope.runtimeId,
+                pluginId: envelope.pluginId,
+              },
+            });
+          }
           break;
         }
         case "asset.generate":
