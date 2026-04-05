@@ -463,7 +463,7 @@ function MemorySection({ data }: { data: unknown }) {
 
 // ── Unknown Sections (catch-all for plugin data not handled above) ─
 
-const KNOWN_KEYS = new Set(["worldState", "characters", "quests", "inventory", "combat", "memoryArchive", "characterFieldSchema", "core-npc-init", "events", "codex", "state", "records", "path", "value", "scope", "patch", "core-codex", "core-inventory"]);
+const KNOWN_KEYS = new Set(["worldState", "characters", "quests", "inventory", "combat", "memoryArchive", "characterFieldSchema", "core-npc-init", "events", "codex", "state", "records", "path", "value", "scope", "patch", "core-codex", "core-inventory", "core-event"]);
 
 function UnknownSections({ gameState }: { gameState: Record<string, unknown> }) {
   const unknownEntries = Object.entries(gameState).filter(([k]) => !KNOWN_KEYS.has(k));
