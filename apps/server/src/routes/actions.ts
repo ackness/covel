@@ -407,12 +407,14 @@ export function createActionsRoute(deps: {
               narrativeIndex++;
               const retryNarrativeKind = runtimeKindMap.get(sourceRuntimeId);
               await store.addMessage(sessionId, "assistant", block.content as string, { turnId, runtimeId: sourceRuntimeId, kind: retryNarrativeKind });
-              const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-              await emit("message.completed", turnId, traceId, {
-                messageId: msgId,
-                content: block.content,
-                runtimeId: sourceRuntimeId,
-              });
+              if (!streamedRuntimeIds.has(sourceRuntimeId)) {
+                const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+                await emit("message.completed", turnId, traceId, {
+                  messageId: msgId,
+                  content: block.content,
+                  runtimeId: sourceRuntimeId,
+                });
+              }
             } else {
               const blockEnvelope = toBlockEnvelope(block, { turnId, sessionId, requestId, traceId });
               await store.addMessage(sessionId, "assistant", "", { turnId, block: blockEnvelope });
@@ -667,15 +669,18 @@ export function createActionsRoute(deps: {
             narrativeIndex++;
             const narrativeKind = runtimeKindMap.get(sourceRuntimeId);
             await store.addMessage(sessionId, "assistant", block.content as string, { turnId, runtimeId: sourceRuntimeId, kind: narrativeKind });
-            // Always emit message.completed with runtimeId so the frontend can persist
-            // to IndexedDB. The frontend deduplicates streamed vs completed messages
-            // in the reducer, but IDB persistence only happens in this handler.
-            const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-            await emit("message.completed", turnId, traceId, {
-              messageId: msgId,
-              content: block.content,
-              runtimeId: sourceRuntimeId,
-            });
+            // Only emit message.completed for narratives that were NOT already streamed
+            // via message.delta. Streamed narratives are already displayed in the frontend;
+            // emitting again causes duplicates because the provisional turnId used during
+            // streaming differs from the final turnId here, breaking deduplication.
+            if (!streamedRuntimeIds.has(sourceRuntimeId)) {
+              const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+              await emit("message.completed", turnId, traceId, {
+                messageId: msgId,
+                content: block.content,
+                runtimeId: sourceRuntimeId,
+              });
+            }
           } else {
             const blockEnvelope = toBlockEnvelope(block, {
               turnId,
