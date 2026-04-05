@@ -19,7 +19,7 @@
       "id": "world-state-tracker",
       "pluginId": "core-world-state",
       "kind": "plugin",
-      "priority": 550,
+      "priority": 500,
       "trigger": {
         "mode": "event",
         "onEvents": ["user.input"]
@@ -30,7 +30,12 @@
         "core-world-state:advance-time",
         "core-world-state:set-weather"
       ],
-      "hooks": []
+      "hooks": [],
+      "budget": {
+        "maxSteps": 3,
+        "timeoutMs": 15000,
+        "maxToolCalls": 5
+      }
     }
   ],
   "tools": [

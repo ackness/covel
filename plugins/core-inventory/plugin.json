@@ -59,7 +59,7 @@
       "id": "inventory-tracker",
       "pluginId": "core-inventory",
       "kind": "plugin",
-      "priority": 600,
+      "priority": 500,
       "trigger": {
         "mode": "event",
         "onEvents": ["user.input"]
@@ -72,7 +72,12 @@
         "core-inventory:equip-item",
         "core-inventory:modify-currency"
       ],
-      "hooks": []
+      "hooks": [],
+      "budget": {
+        "maxSteps": 3,
+        "timeoutMs": 15000,
+        "maxToolCalls": 8
+      }
     }
   ],
   "tools": [

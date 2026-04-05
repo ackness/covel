@@ -31,7 +31,12 @@
         "core-event:resolve-event",
         "core-event:end-event"
       ],
-      "hooks": []
+      "hooks": [],
+      "budget": {
+        "maxSteps": 3,
+        "timeoutMs": 15000,
+        "maxToolCalls": 6
+      }
     }
   ],
   "tools": [

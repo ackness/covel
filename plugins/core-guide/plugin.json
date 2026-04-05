@@ -85,7 +85,7 @@
       "id": "guide",
       "pluginId": "core-guide",
       "kind": "plugin",
-      "priority": 600,
+      "priority": 500,
       "trigger": {
         "mode": "event",
         "onEvents": ["user.input"]

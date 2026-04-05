@@ -19,14 +19,19 @@
       "id": "char-tracker",
       "pluginId": "core-char-tracker",
       "kind": "plugin",
-      "priority": 600,
+      "priority": 500,
       "trigger": {
         "mode": "event",
         "onEvents": ["user.input"]
       },
       "providerBinding": "fast",
       "tools": ["upsert-character"],
-      "hooks": []
+      "hooks": [],
+      "budget": {
+        "maxSteps": 3,
+        "timeoutMs": 15000,
+        "maxToolCalls": 8
+      }
     }
   ],
   "tools": [

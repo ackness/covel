@@ -20,7 +20,7 @@
       "id": "combat-engine",
       "pluginId": "core-combat",
       "kind": "plugin",
-      "priority": 420,
+      "priority": 500,
       "trigger": {
         "mode": "event",
         "onEvents": ["user.input", "combat_started"]

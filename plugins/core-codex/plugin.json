@@ -19,7 +19,7 @@
       "id": "codex-tracker",
       "pluginId": "core-codex",
       "kind": "plugin",
-      "priority": 700,
+      "priority": 650,
       "trigger": {
         "mode": "event",
         "onEvents": ["user.input"]
@@ -29,7 +29,12 @@
         "core-codex:unlock-codex-entry",
         "core-codex:update-codex-entry"
       ],
-      "hooks": []
+      "hooks": [],
+      "budget": {
+        "maxSteps": 3,
+        "timeoutMs": 15000,
+        "maxToolCalls": 6
+      }
     }
   ],
   "tools": [

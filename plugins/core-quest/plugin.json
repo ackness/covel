@@ -33,7 +33,12 @@
         "core-quest:complete-quest",
         "core-quest:fail-quest"
       ],
-      "hooks": []
+      "hooks": [],
+      "budget": {
+        "maxSteps": 3,
+        "timeoutMs": 15000,
+        "maxToolCalls": 6
+      }
     }
   ],
   "tools": [
