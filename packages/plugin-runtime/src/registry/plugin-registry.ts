@@ -1,3 +1,4 @@
+import { createMapRegistry } from "@covel/shared";
 import type { PluginManifest } from "@covel/shared";
 import type { LoadedPlugin } from "../types.js";
 
@@ -5,47 +6,47 @@ import type { LoadedPlugin } from "../types.js";
  * Manage loaded plugins: add, remove, enable, disable, query.
  */
 export function createPluginRegistry() {
-  const plugins = new Map<string, LoadedPlugin>();
+  const store = createMapRegistry<LoadedPlugin>();
 
   function add(manifest: PluginManifest, dir: string): LoadedPlugin {
-    if (plugins.has(manifest.id)) {
+    if (store.has(manifest.id)) {
       throw new Error(`Plugin "${manifest.id}" is already registered.`);
     }
     const loaded: LoadedPlugin = { manifest, dir, enabled: true };
-    plugins.set(manifest.id, loaded);
+    store.add(manifest.id, loaded);
     return loaded;
   }
 
   function remove(pluginId: string): boolean {
-    return plugins.delete(pluginId);
+    return store.remove(pluginId);
   }
 
   function get(pluginId: string): LoadedPlugin | undefined {
-    return plugins.get(pluginId);
+    return store.get(pluginId);
   }
 
   function enable(pluginId: string): void {
-    const plugin = plugins.get(pluginId);
+    const plugin = store.get(pluginId);
     if (!plugin) throw new Error(`Plugin "${pluginId}" not found.`);
-    plugins.set(pluginId, { ...plugin, enabled: true });
+    store.add(pluginId, { ...plugin, enabled: true }, true);
   }
 
   function disable(pluginId: string): void {
-    const plugin = plugins.get(pluginId);
+    const plugin = store.get(pluginId);
     if (!plugin) throw new Error(`Plugin "${pluginId}" not found.`);
-    plugins.set(pluginId, { ...plugin, enabled: false });
+    store.add(pluginId, { ...plugin, enabled: false }, true);
   }
 
   function list(): LoadedPlugin[] {
-    return Array.from(plugins.values());
+    return store.list();
   }
 
   function listEnabled(): LoadedPlugin[] {
-    return Array.from(plugins.values()).filter((p) => p.enabled);
+    return store.list().filter((p) => p.enabled);
   }
 
   function has(pluginId: string): boolean {
-    return plugins.has(pluginId);
+    return store.has(pluginId);
   }
 
   /**
@@ -69,7 +70,7 @@ export function createPluginRegistry() {
     const errors: string[] = [];
 
     for (const req of manifest.requires ?? []) {
-      const known = allKnownIds ? allKnownIds.has(req) : plugins.has(req);
+      const known = allKnownIds ? allKnownIds.has(req) : store.has(req);
       if (!known) {
         errors.push(`Missing required plugin: "${req}"`);
       }
@@ -81,7 +82,7 @@ export function createPluginRegistry() {
     for (const conflict of manifest.conflicts ?? []) {
       const conflicted = conflictSet
         ? conflictSet.has(conflict)
-        : plugins.has(conflict);
+        : store.has(conflict);
       if (conflicted) {
         errors.push(`Conflicts with loaded plugin: "${conflict}"`);
       }

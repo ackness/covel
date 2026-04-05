@@ -11,10 +11,12 @@
   },
   "scripts": {
     "lint": "tsc --noEmit",
+    "test": "vitest",
     "clean": "rm -rf dist"
   },
   "devDependencies": {
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
   },
   "dependencies": {
     "zod": "^4.3.6"

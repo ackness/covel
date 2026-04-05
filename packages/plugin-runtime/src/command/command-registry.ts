@@ -1,3 +1,4 @@
+import { createMapRegistry } from "@covel/shared";
 import { CommandError } from "./error.js";
 
 /** Execution context passed to command handlers. */
@@ -69,7 +70,7 @@ export interface CommandRegistry {
 }
 
 export function createCommandRegistry(): CommandRegistry {
-  const commands = new Map<string, RegisteredCommand>();
+  const store = createMapRegistry<RegisteredCommand>();
 
   function register(cmd: RegisteredCommand): void {
     if (!/^[a-z][a-z0-9-]*$/.test(cmd.name)) {
@@ -80,7 +81,7 @@ export function createCommandRegistry(): CommandRegistry {
       });
     }
 
-    if (commands.has(cmd.name)) {
+    if (store.has(cmd.name)) {
       throw new CommandError({
         code: "DUPLICATE_COMMAND",
         message: `Command "${cmd.name}" is already registered.`,
@@ -88,15 +89,15 @@ export function createCommandRegistry(): CommandRegistry {
       });
     }
 
-    commands.set(cmd.name, cmd);
+    store.add(cmd.name, cmd);
   }
 
   function get(name: string): RegisteredCommand | undefined {
-    return commands.get(name);
+    return store.get(name);
   }
 
   function getOrThrow(name: string): RegisteredCommand {
-    const cmd = commands.get(name);
+    const cmd = store.get(name);
     if (!cmd) {
       throw new CommandError({
         code: "COMMAND_NOT_FOUND",
@@ -108,9 +109,7 @@ export function createCommandRegistry(): CommandRegistry {
   }
 
   function list(): RegisteredCommand[] {
-    return Array.from(commands.values()).sort((a, b) =>
-      a.name.localeCompare(b.name)
-    );
+    return store.list().sort((a, b) => a.name.localeCompare(b.name));
   }
 
   function listSummaries(): CommandSummary[] {

@@ -1,34 +1,10 @@
+import { deepMerge } from "@covel/shared";
 import type { CharacterCard } from "@covel/shared";
 import type {
   TurnContextInit,
   RuntimeOutput,
   ProposalItem,
 } from "../types.js";
-
-/** Recursively merge plain objects; non-object values are overwritten. */
-function deepMergeState(
-  target: Record<string, unknown>,
-  source: Record<string, unknown>,
-): Record<string, unknown> {
-  const result = { ...target };
-  for (const key of Object.keys(source)) {
-    const tVal = result[key];
-    const sVal = source[key];
-    if (
-      tVal && sVal &&
-      typeof tVal === "object" && !Array.isArray(tVal) &&
-      typeof sVal === "object" && !Array.isArray(sVal)
-    ) {
-      result[key] = deepMergeState(
-        tVal as Record<string, unknown>,
-        sVal as Record<string, unknown>,
-      );
-    } else {
-      result[key] = Array.isArray(sVal) ? [...sVal as unknown[]] : sVal;
-    }
-  }
-  return result;
-}
 
 export interface TurnContextStore {
   /** Initialize with static context at turn start */
@@ -156,7 +132,7 @@ export function createTurnContextStore(): TurnContextStore {
     getState(): Record<string, unknown> {
       let merged: Record<string, unknown> = { ...initialState };
       for (const patch of accumulatedPatches) {
-        merged = deepMergeState(merged, patch);
+        merged = deepMerge(merged, patch);
       }
       return merged;
     },

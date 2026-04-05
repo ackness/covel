@@ -1,5 +1,5 @@
 import type { TurnCache, TurnState, CachedRuntimeResult, KernelExecuteOptions, DEFAULT_RUNTIME_PRIORITY } from "./types.js";
-import { deepMerge } from "./commit/commit-service.js";
+import { deepMerge } from "@covel/shared";
 
 /**
  * Resolve the retry-from priority given a target runtime ID and the last turn cache.

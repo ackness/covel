@@ -7,3 +7,5 @@ export * from "./types/world.js";
 export * from "./types/world-dimensions.js";
 export * from "./types/field-schema.js";
 export * from "./schemas/world.js";
+export { deepMerge } from "./utils/deep-merge.js";
+export { createMapRegistry, type MapRegistry } from "./utils/map-registry.js";

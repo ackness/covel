@@ -6,6 +6,7 @@
  */
 
 import { resolve } from "node:path";
+import { deepMerge } from "@covel/shared";
 import type { RuntimeContextView, ToolExecutionContext } from "@covel/shared";
 import type {
   RuntimeHandlerContext,
@@ -63,7 +64,10 @@ const DEFAULT_CONTEXT_VIEW: RuntimeContextView = {
 export function createMockContextView(
   overrides?: DeepPartial<RuntimeContextView>
 ): RuntimeContextView {
-  return deepMerge(DEFAULT_CONTEXT_VIEW, overrides ?? {}) as RuntimeContextView;
+  return deepMerge(
+    DEFAULT_CONTEXT_VIEW as unknown as Record<string, unknown>,
+    (overrides ?? {}) as Record<string, unknown>,
+  ) as unknown as RuntimeContextView;
 }
 
 // ── Mock RuntimeHandlerContext ───────────────────────────────────
@@ -279,27 +283,3 @@ export const LIVE = process.env.LIVE_LLM_ENABLED === "1";
 type DeepPartial<T> = T extends object
   ? { [P in keyof T]?: DeepPartial<T[P]> }
   : T;
-
-function deepMerge(target: unknown, source: unknown): unknown {
-  if (
-    typeof target !== "object" ||
-    target === null ||
-    typeof source !== "object" ||
-    source === null
-  ) {
-    return source;
-  }
-  if (Array.isArray(source)) {
-    return source;
-  }
-  const result: Record<string, unknown> = { ...(target as Record<string, unknown>) };
-  for (const key of Object.keys(source as Record<string, unknown>)) {
-    const srcVal = (source as Record<string, unknown>)[key];
-    if (key in result) {
-      result[key] = deepMerge(result[key], srcVal);
-    } else {
-      result[key] = srcVal;
-    }
-  }
-  return result;
-}

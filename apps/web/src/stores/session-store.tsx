@@ -4,6 +4,7 @@ import * as api from "@/services/api";
 import { getDataService } from "@/services/data-service";
 import { migrateLocalStorageToIdb } from "@/services/app-kv-store";
 import { setBlockSchemas } from "@/components/blocks/block-renderer.js";
+import { deepMerge } from "@covel/shared";
 import type { BlockSchemaDeclaration } from "@covel/shared";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -118,30 +119,6 @@ const initialState: SessionState = {
   submittedBlockIds: new Set<string>(),
 };
 
-/** Recursively merge plain objects; non-object values are overwritten. */
-function deepMerge(
-  target: Record<string, unknown>,
-  source: Record<string, unknown>,
-): Record<string, unknown> {
-  const result = { ...target };
-  for (const key of Object.keys(source)) {
-    const tVal = result[key];
-    const sVal = source[key];
-    if (
-      tVal && sVal &&
-      typeof tVal === "object" && !Array.isArray(tVal) &&
-      typeof sVal === "object" && !Array.isArray(sVal)
-    ) {
-      result[key] = deepMerge(
-        tVal as Record<string, unknown>,
-        sVal as Record<string, unknown>,
-      );
-    } else {
-      result[key] = sVal;
-    }
-  }
-  return result;
-}
 
 function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
