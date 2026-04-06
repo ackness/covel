@@ -8,6 +8,8 @@ debugs/
 audits/
 plans/
 .playwright-mcp/
+.bg-shell
+.gsd/
 
 
 # Cursor
@@ -68,3 +70,16 @@ logs/
 *.swp
 *.swo
 *~
+
+# ── GSD baseline (auto-generated) ──
+.gsd
+.gsd-id
+*.code-workspace
+.next/
+__pycache__/
+*.pyc
+.venv/
+venv/
+target/
+vendor/
+tmp/
