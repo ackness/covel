@@ -64,7 +64,7 @@
         "mode": "event",
         "onEvents": ["user.input"]
       },
-      "providerBinding": "fast",
+      "providerTag": "text",
       "tools": [
         "core-inventory:add-item",
         "core-inventory:remove-item",
@@ -75,7 +75,7 @@
       "hooks": [],
       "budget": {
         "maxSteps": 3,
-        "timeoutMs": 15000,
+        "timeoutMs": 30000,
         "maxToolCalls": 8
       }
     }

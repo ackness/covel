@@ -8,6 +8,7 @@ import type {
   RuntimeKind,
   RuntimePhase,
   RuntimeTriggerSpec,
+  SlotTag,
   UiSlot,
 } from "./common.js";
 
@@ -46,7 +47,8 @@ export interface PublicRuntimeSpec {
   /** Execution priority (0-1000). 0 = highest = runs first. Default: 500. */
   priority?: number;
   trigger: RuntimeTriggerSpec;
-  providerBinding?: string;
+  /** Required model capability tag (e.g., "text", "image"). Used to filter compatible slots. */
+  providerTag?: SlotTag;
   instructionsRef?: string;
   tools: string[];
   hooks: string[];

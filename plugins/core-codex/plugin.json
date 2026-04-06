@@ -24,7 +24,7 @@
         "mode": "event",
         "onEvents": ["user.input"]
       },
-      "providerBinding": "fast",
+      "providerTag": "text",
       "tools": [
         "core-codex:unlock-codex-entry",
         "core-codex:update-codex-entry"
@@ -32,7 +32,7 @@
       "hooks": [],
       "budget": {
         "maxSteps": 3,
-        "timeoutMs": 15000,
+        "timeoutMs": 30000,
         "maxToolCalls": 6
       }
     }

@@ -16,7 +16,7 @@ export interface RuntimeInfo {
   kind: string;
   priority: number;
   allowedTools: string[];
-  providerBinding?: string;
+  providerTag?: string;
   budget?: { maxSteps?: number; timeoutMs?: number; maxTokens?: number };
   isolation?: { readScopes?: string[]; writeScopes?: string[] };
 }
@@ -251,7 +251,7 @@ export function buildContextView(
       // Map numeric priority to phase field for backward compatibility
       priority: runtime.priority,
       allowedTools: runtime.allowedTools,
-      providerBinding: runtime.providerBinding,
+      providerTag: runtime.providerTag,
       budget: runtime.budget,
       isolation: runtime.isolation,
     } as RuntimeContextView["runtime"],

@@ -34,7 +34,6 @@ export type {
   ResolvedTarget,
   ProviderLifecycleHook,
   AiConfig,
-  ModelSlotId,
   ModelSlotConfig,
   ModelParameterOverrides,
   ModelSlotMap,

@@ -62,7 +62,7 @@ export function assembleContext(input: ContextAssemblyInput): RuntimeContextView
       kind: spec.kind,
       priority: spec.priority ?? DEFAULT_RUNTIME_PRIORITY,
       allowedTools: spec.tools,
-      providerBinding: spec.providerBinding,
+      providerTag: spec.providerTag,
       budget: spec.budget,
       isolation: spec.isolation,
     },

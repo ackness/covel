@@ -30,12 +30,8 @@ interface SettingsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const MODEL_SLOTS = [
-  { id: "default", label: "Default", labelKey: "settings.modelDefault", descKey: "settings.descDefault", required: true },
-  { id: "fast", label: "Fast", labelKey: "settings.modelFast", descKey: "settings.descFast", required: false },
-  { id: "balance", label: "Balance", labelKey: "settings.modelBalance", descKey: "settings.descBalance", required: false },
-  { id: "image", label: "Image", labelKey: "settings.modelImage", descKey: "settings.descImage", required: false },
-] as const;
+/** Fallback slot list when llm.toml is not configured (legacy mode). */
+const LEGACY_SLOTS = ["default", "fast", "balance", "image"];
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const { t } = useTranslation();
@@ -384,22 +380,21 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 </div>
                 {configuredSlots.map((slotId) => {
                   const slot = llm!.slots[slotId];
-                  const meta = MODEL_SLOTS.find((s) => s.id === slotId);
                   const presetId = `slot-${slotId}`;
                   const ping = pingResults[presetId];
                   const isTesting = ping?.testing;
                   const cap = slot.capability;
+                  const isFirst = slotId === configuredSlots[0];
                   return (
                     <div key={slotId} className="border border-border p-3 space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium">
-                            {meta ? t(meta.labelKey) : slotId}
+                            {slotId}
                           </span>
-                          <span className="text-xs text-muted-foreground">({slotId})</span>
                         </div>
                         <div className="flex items-center gap-1">
-                          {meta?.required && <Badge variant="default" className="text-[10px]">required</Badge>}
+                          {isFirst && <Badge variant="default" className="text-[10px]">default</Badge>}
                           {slot.fallback && (
                             <Badge variant="secondary" className="text-[10px]">
                               fallback: {slot.fallback}
@@ -533,19 +528,19 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             {/* ── Legacy mode: Manual Slot Assignment ── */}
             {!isConfigured && (
               <TabsContent value="slots" className="space-y-3 mt-0">
-                {MODEL_SLOTS.map((slot) => {
-                  const selectedPresetId = slotConfig[slot.id]?.presetId ?? "";
+                {LEGACY_SLOTS.map((slotId) => {
+                  const selectedPresetId = slotConfig[slotId]?.presetId ?? "";
                   const selectedPreset = allPresets.find((p) => p.id === selectedPresetId);
-                  const isFallback = !selectedPresetId && slot.id !== "default";
+                  const isRequired = slotId === "default";
+                  const isFallback = !selectedPresetId && slotId !== "default";
                   return (
-                    <div key={slot.id} className="border border-border p-3 space-y-2">
+                    <div key={slotId} className="border border-border p-3 space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{t(slot.labelKey)}</span>
-                          <span className="text-xs text-muted-foreground">({slot.label})</span>
+                          <span className="text-sm font-medium">{slotId}</span>
                         </div>
                         <div className="flex items-center gap-1">
-                          {slot.required && <Badge variant="default" className="text-[10px]">required</Badge>}
+                          {isRequired && <Badge variant="default" className="text-[10px]">required</Badge>}
                           {isFallback && (
                             <Badge variant="secondary" className="text-[10px]">
                               fallback: default
@@ -553,22 +548,21 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                           )}
                         </div>
                       </div>
-                      <p className="text-xs text-muted-foreground">{t(slot.descKey)}</p>
                       <select
                         value={selectedPresetId}
                         onChange={(e) => {
                           const val = e.target.value;
                           if (val) {
-                            setSlotConfigLocal({ ...slotConfig, [slot.id]: { presetId: val } });
+                            setSlotConfigLocal({ ...slotConfig, [slotId]: { presetId: val } });
                           } else {
                             const updated = { ...slotConfig };
-                            delete updated[slot.id];
+                            delete updated[slotId];
                             setSlotConfigLocal(updated);
                           }
                         }}
                         className="w-full bg-background border border-border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
                       >
-                        <option value="">-- {slot.required ? t("settings.selectPreset") : t("settings.noPresetFallback")} --</option>
+                        <option value="">-- {isRequired ? t("settings.selectPreset") : t("settings.noPresetFallback")} --</option>
                         {state.presets.length > 0 && (
                           <optgroup label="Built-in">
                             {state.presets.map((p) => (
@@ -714,11 +708,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   onChange={(e) => setSelectedOverrideSlot(e.target.value)}
                   className="w-full bg-background border border-border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
                 >
-                  {(isConfigured ? configuredSlots : MODEL_SLOTS.map((s) => s.id)).map((slotId) => {
-                    const meta = MODEL_SLOTS.find((s) => s.id === slotId);
+                  {(isConfigured ? configuredSlots : LEGACY_SLOTS).map((slotId) => {
                     return (
                       <option key={slotId} value={slotId}>
-                        {meta ? t(meta.labelKey) : slotId} ({slotId})
+                        {slotId}
                       </option>
                     );
                   })}

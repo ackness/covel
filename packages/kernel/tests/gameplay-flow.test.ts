@@ -258,7 +258,7 @@ function setupGameSession() {
     phase: "story",
     priority: 400,
     trigger: { mode: "always" },
-    providerBinding: "default",
+    providerTag: "text",
     tools: [],
     hooks: [],
   });

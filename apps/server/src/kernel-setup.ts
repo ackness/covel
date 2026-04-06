@@ -11,7 +11,7 @@ import {
   type KernelInstance,
   type KernelSession,
 } from "@covel/kernel";
-import type { GatewayLike } from "@covel/runtime";
+import type { AiStack } from "./ai-setup.js";
 
 export interface KernelStack {
   pluginHost: PluginHost;
@@ -34,7 +34,8 @@ export interface KernelStack {
 /**
  * Initialize the kernel stack: load plugins and bootstrap the kernel.
  */
-export async function initKernelStack(gateway: GatewayLike): Promise<KernelStack> {
+export async function initKernelStack(aiStack: AiStack): Promise<KernelStack> {
+  const gateway = aiStack.gateway;
   const pluginHost = createPluginHost();
 
   // Load plugins from the plugins/ directory
@@ -50,7 +51,7 @@ export async function initKernelStack(gateway: GatewayLike): Promise<KernelStack
   }
 
   // Bootstrap kernel instance (shared infra)
-  const instance = bootstrapKernel({ pluginHost, gateway });
+  const instance = bootstrapKernel({ pluginHost, gateway, slotRegistry: aiStack.slotRegistry });
 
   // Create a default session for backward-compat routes
   const defaultSession = instance.createSession();

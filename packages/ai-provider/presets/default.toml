@@ -10,11 +10,6 @@ protocol = "openai-chat-v1"
 baseUrl = "${DASHSCOPE_BASE_URL}"
 protocol = "openai-chat-v1"
 
-[providers.fast]
-model = "qwen3.5-flash"
-baseUrl = "${DASHSCOPE_BASE_URL}"
-protocol = "openai-chat-v1"
-
 
 # ── Presets ──────────────────────────────────────────────────────
 
@@ -28,7 +23,6 @@ defaultSlot = "default"
 supportedModes = ["text", "object", "stream"]
 enabled = true
 isDefault = true
-fallbackPresetIds = ["dashscope-qwen-flash"]
 
 [[presets]]
 id = "dashscope-qwen-flash"
@@ -36,6 +30,5 @@ name = "DashScope Qwen 3.5 Flash"
 provider = "dashscope"
 model = "qwen3.5-flash"
 tier = "medium"
-defaultSlot = "fast"
 supportedModes = ["text", "object", "stream"]
 enabled = true

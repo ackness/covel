@@ -527,6 +527,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         ?? state.presets[0]?.id;
       const session = await ds.createSession(state.world.id, presetId);
       dispatch({ type: "SET_SESSION", session });
+      // Copy prep-phase runtime bindings to the real session
+      const prepBindings = api.getRuntimeBindings(`prep:${state.world.id}`);
+      if (Object.keys(prepBindings).length > 0) {
+        api.setRuntimeBindings(session.id, prepBindings);
+      }
       // Sync context to server so the stateless server can process the first turn
       await ds.syncToServer(session.id);
       api.markServerAck();
@@ -684,6 +689,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const deleteSession = useCallback(async (sessionId: string) => {
     await ds.deleteSession(sessionId);
+    api.clearRuntimeBindings(sessionId);
     dispatch({ type: "REMOVE_SESSION", sessionId });
   }, []);
 

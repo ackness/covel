@@ -136,10 +136,12 @@ export interface PresetConfig {
   enabled: boolean;
   isDefault?: boolean;
   scope?: string;
-  defaultSlot?: ModelSlotId;
+  defaultSlot?: string;
   providerRequestMetadata?: Record<string, unknown>;
   /** Multimodal capability descriptor. Auto-inferred or manually set. */
   capability?: ModelCapability;
+  /** Capability tag for slot compatibility. */
+  tag?: string;
 }
 
 // ── Tool Calling ──────────────────────────────────────────────────
@@ -324,11 +326,13 @@ export interface ProviderLifecycleHook {
 
 // ── Model Slot ────────────────────────────────────────────────────
 
-export type ModelSlotId = "default" | "fast" | "balance" | "image" | (string & {});
+import type { SlotTag } from "@covel/shared";
 
 export interface ModelSlotConfig {
-  slotId: ModelSlotId;
+  slotId: string;
   presetId: string;
+  /** Capability tag — determines compatibility with runtime providerTag. */
+  tag: SlotTag;
   parameterOverrides?: ModelParameterOverrides;
 }
 
@@ -343,7 +347,6 @@ export interface ModelParameterOverrides {
 
 export interface ModelSlotMap {
   slots: Record<string, ModelSlotConfig>;
-  defaultSlot: string;
 }
 
 // ── AI Config (parsed from TOML) ───────────────────────────────────

@@ -5,6 +5,10 @@
       "persistent": true,
       "cache": false
     },
+    "dev:pg": {
+      "persistent": true,
+      "cache": false
+    },
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]

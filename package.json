@@ -6,6 +6,7 @@
     "dev": "node ./scripts/dev-supervisor.mjs turbo dev",
     "dev:web": "node ./scripts/dev-supervisor.mjs turbo dev --filter=@covel/web",
     "dev:server": "node ./scripts/dev-supervisor.mjs turbo dev --filter=@covel/server",
+    "dev:pg": "node ./scripts/dev-supervisor.mjs turbo dev:pg --filter=@covel/server",
     "build": "turbo build",
     "lint": "turbo lint",
     "clean": "turbo clean",

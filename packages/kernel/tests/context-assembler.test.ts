@@ -22,7 +22,7 @@ const dummyRuntime: RegisteredRuntime = {
     tools: ["test-plugin:query-tool"],
     hooks: [],
     budget: { maxSteps: 5 },
-    providerBinding: "default",
+    providerTag: "text",
   },
 };
 
@@ -58,7 +58,7 @@ describe("context-assembler", () => {
     expect(ctx.runtime.pluginId).toBe("test-plugin");
     expect(ctx.runtime.allowedTools).toEqual(["test-plugin:query-tool"]);
     expect(ctx.runtime.budget?.maxSteps).toBe(5);
-    expect(ctx.runtime.providerBinding).toBe("default");
+    expect(ctx.runtime.providerTag).toBe("text");
   });
 
   it("includes accumulated narrative from turn state", () => {

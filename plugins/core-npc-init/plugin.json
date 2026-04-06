@@ -29,7 +29,7 @@
           "session_start"
         ]
       },
-      "providerBinding": "default",
+      "providerTag": "text",
       "tools": [
         "core-npc-init:define-character-schema",
         "core-npc-init:create-npc",

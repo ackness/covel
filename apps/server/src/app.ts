@@ -65,7 +65,7 @@ app.use("/actions", apiKeyInjection);
 
 // Initialize stacks
 const ai = createAiStack();
-const kernelStack = await initKernelStack(ai.gateway);
+const kernelStack = await initKernelStack(ai);
 
 // Store backend: STORE_BACKEND=memory|idb|pg (default: memory)
 const storeBackendEnv = (process.env.STORE_BACKEND ?? "memory") as string;

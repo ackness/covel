@@ -58,6 +58,8 @@ export const slotDefinitionSchema = z.object({
   protocol: providerProtocolSchema,
   /** Optional: slot name to fall back to on failure */
   fallback: z.string().optional(),
+  /** Capability tag. Auto-inferred from output modalities if omitted. */
+  tag: z.string().optional(),
 
   // ── Capability overrides (all optional, auto-inferred from known model DB) ──
 

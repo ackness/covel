@@ -23,7 +23,7 @@ export function createCompatPackagesRoute(pluginHost: PluginHost) {
           kind: r.spec.kind,
           priority: r.spec.priority ?? 500,
           trigger: r.spec.trigger,
-          providerBinding: r.spec.providerBinding,
+          providerTag: r.spec.providerTag,
         }));
 
       const pluginTools = (p.manifest.tools ?? []).map((t) => ({

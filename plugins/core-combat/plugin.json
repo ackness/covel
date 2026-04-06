@@ -25,7 +25,7 @@
         "mode": "event",
         "onEvents": ["user.input", "combat_started"]
       },
-      "providerBinding": "default",
+      "providerTag": "text",
       "tools": [
         "core-combat:start-combat",
         "core-combat:attack",

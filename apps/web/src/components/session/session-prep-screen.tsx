@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MapIcon, Play, ArrowLeft, ChevronDown, ChevronUp, FileText,
-  Cpu, KeyRound, History, Trash2,
+  Cpu, KeyRound, History, Trash2, Link2,
 } from "lucide-react";
 import * as api from "@/services/api.js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.js";
@@ -14,7 +14,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { SessionBreadcrumb } from "./session-breadcrumb.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { ActiveModelSlots } from "./active-model-slots.js";
+import { RuntimeBindingPanel } from "./runtime-binding-panel.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
+import { useRuntimeBindings } from "@/hooks/use-runtime-bindings.js";
 
 interface SessionPrepScreenProps {
   world: api.WorldRecord;
@@ -43,6 +45,8 @@ export function SessionPrepScreen({
 }: SessionPrepScreenProps) {
   const { t } = useTranslation();
   const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(presets, llmConfig);
+  const enabledPackages = packages.filter((p) => p.enabled);
+  const bindingState = useRuntimeBindings(`prep:${world.id}`, enabledPackages, resolvedSlots);
 
   const [priorityOverrides, setPriorityOverrides] = useState<Record<string, number>>(() =>
     api.getRuntimePriorityOverrides()
@@ -124,7 +128,6 @@ export function SessionPrepScreen({
     if (!v) refreshSlots();
   };
 
-  const enabledPackages = packages.filter((p) => p.enabled);
   const activeSessions = existingSessions.filter((s) => s.status !== "archived");
 
   return (
@@ -275,6 +278,24 @@ export function SessionPrepScreen({
             </CardContent>
           </Card>
 
+          {/* Runtime Model Bindings */}
+          <Card className="mb-6">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Link2 className="w-4 h-4" />
+                {t("session.runtimeBindings", "Runtime Model Bindings")}
+                {!bindingState.allBound && (
+                  <Badge variant="secondary" className="text-[10px] ml-1 bg-amber-500/10 text-amber-600">
+                    {t("session.needsConfig", "Needs config")}
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RuntimeBindingPanel bindingState={bindingState} />
+            </CardContent>
+          </Card>
+
           {/* Plugin & Runtime Configuration */}
           <Card className="mb-8">
             <CardHeader className="pb-2">
@@ -344,8 +365,8 @@ export function SessionPrepScreen({
                                     <div className="flex items-center gap-2 min-w-0">
                                       <span className="text-xs font-mono truncate">{rt.id}</span>
                                       <Badge variant="secondary" className="text-[10px] shrink-0">{rt.kind}</Badge>
-                                      {rt.providerBinding && (
-                                        <Badge variant="outline" className="text-[10px] shrink-0">{rt.providerBinding}</Badge>
+                                      {rt.providerTag && (
+                                        <Badge variant="outline" className="text-[10px] shrink-0">{rt.providerTag}</Badge>
                                       )}
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">

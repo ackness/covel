@@ -35,7 +35,7 @@ const publicRuntimeSpecSchema = z.object({
   phase: z.enum(["pre_story", "story", "post_story", "background"]).optional(),
   priority: z.number().int().min(0).max(1000).optional(),
   trigger: runtimeTriggerSpecSchema,
-  providerBinding: z.string().optional(),
+  providerTag: z.string().optional(),
   instructionsRef: z.string().optional(),
   tools: z.array(z.string()),
   hooks: z.array(z.string()),

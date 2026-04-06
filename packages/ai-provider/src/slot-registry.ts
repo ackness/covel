@@ -13,7 +13,12 @@ export interface SlotRegistryDeps {
 
 export interface SlotRegistry {
   configure(slotMap: ModelSlotMap): void;
+  /** Direct lookup only — returns undefined if slot not found (no fallback). */
   resolveSlot(slotId: string): string | undefined;
+  /** Return all slots matching the given tag. */
+  listSlotsByTag(tag: string): ModelSlotConfig[];
+  /** Return the tag for a given slot, or undefined if slot not found. */
+  getSlotTag(slotId: string): string | undefined;
   getParameterOverrides(slotId: string): ModelParameterOverrides | undefined;
   listSlots(): Record<string, ModelSlotConfig>;
 }
@@ -21,10 +26,11 @@ export interface SlotRegistry {
 /**
  * Create a slot registry that maps named model slots to preset IDs.
  *
- * Fallback chain: requested slot -> "default" slot -> first available preset.
+ * Tag-aware: slots have tags (e.g., "text", "image").
+ * No cross-tag fallback. Direct lookup only.
  */
 export function createSlotRegistry(deps: SlotRegistryDeps): SlotRegistry {
-  let slotMap: ModelSlotMap = { slots: {}, defaultSlot: "default" };
+  let slotMap: ModelSlotMap = { slots: {} };
 
   function configure(map: ModelSlotMap): void {
     slotMap = map;
@@ -33,20 +39,19 @@ export function createSlotRegistry(deps: SlotRegistryDeps): SlotRegistry {
   function resolveSlot(slotId: string): string | undefined {
     const slot = slotMap.slots[slotId];
     if (slot) return slot.presetId;
+    return undefined;
+  }
 
-    if (slotId !== slotMap.defaultSlot) {
-      const fallback = slotMap.slots[slotMap.defaultSlot];
-      if (fallback) return fallback.presetId;
-    }
+  function listSlotsByTag(tag: string): ModelSlotConfig[] {
+    return Object.values(slotMap.slots).filter((s) => s.tag === tag);
+  }
 
-    // Last resort: first available preset
-    const presets = deps.presetRegistry.listPresets();
-    const first = presets.find((p) => p.enabled);
-    return first?.id;
+  function getSlotTag(slotId: string): string | undefined {
+    return slotMap.slots[slotId]?.tag;
   }
 
   function getParameterOverrides(
-    slotId: string
+    slotId: string,
   ): ModelParameterOverrides | undefined {
     return slotMap.slots[slotId]?.parameterOverrides;
   }
@@ -55,5 +60,12 @@ export function createSlotRegistry(deps: SlotRegistryDeps): SlotRegistry {
     return { ...slotMap.slots };
   }
 
-  return { configure, resolveSlot, getParameterOverrides, listSlots };
+  return {
+    configure,
+    resolveSlot,
+    listSlotsByTag,
+    getSlotTag,
+    getParameterOverrides,
+    listSlots,
+  };
 }

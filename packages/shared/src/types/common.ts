@@ -82,3 +82,10 @@ export type UiSlot =
   | "message_block"
   | "world_panel"
   | "action_panel";
+
+/**
+ * Model slot capability tag.
+ * Determines compatibility between model slots and plugin runtimes.
+ * Cross-tag fallback is forbidden (e.g., an image runtime cannot use a text model).
+ */
+export type SlotTag = "text" | "image" | (string & {});

@@ -24,7 +24,7 @@
         "mode": "event",
         "onEvents": ["image.requested"]
       },
-      "providerBinding": "default",
+      "providerTag": "image",
       "tools": [],
       "hooks": [],
       "budget": {

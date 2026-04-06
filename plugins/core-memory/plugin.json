@@ -25,7 +25,7 @@
         "mode": "interval",
         "intervalTurns": 5
       },
-      "providerBinding": "fast",
+      "providerTag": "text",
       "tools": ["update-memory-archive", "record-key-event"],
       "hooks": []
     }

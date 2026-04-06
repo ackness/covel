@@ -24,7 +24,7 @@
         "mode": "event",
         "onEvents": ["user.input"]
       },
-      "providerBinding": "fast",
+      "providerTag": "text",
       "tools": [
         "core-world-state:update-location",
         "core-world-state:advance-time",
@@ -33,7 +33,7 @@
       "hooks": [],
       "budget": {
         "maxSteps": 3,
-        "timeoutMs": 15000,
+        "timeoutMs": 30000,
         "maxToolCalls": 5
       }
     }

@@ -25,7 +25,7 @@
         "mode": "event",
         "onEvents": ["user.input"]
       },
-      "providerBinding": "fast",
+      "providerTag": "text",
       "tools": [
         "core-quest:create-quest",
         "core-quest:update-quest",
@@ -36,7 +36,7 @@
       "hooks": [],
       "budget": {
         "maxSteps": 3,
-        "timeoutMs": 15000,
+        "timeoutMs": 30000,
         "maxToolCalls": 6
       }
     }

@@ -89,6 +89,9 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
     // Derive supportedModes from capability output modalities
     const supportedModes = deriveSupportedModes(capability.output);
 
+    // Derive tag: explicit > inferred from output modalities
+    const tag = def.tag ?? inferTag(capability.output);
+
     const presetId = `slot-${slotName}`;
     const fallbackIds = def.fallback ? [`slot-${def.fallback}`] : [];
 
@@ -109,6 +112,7 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
       isDefault: isFirstSlot,
       fallbackPresetIds: fallbackIds.length > 0 ? fallbackIds : undefined,
       capability,
+      tag,
     });
   }
 
@@ -142,6 +146,15 @@ function deriveSupportedModes(outputModalities: readonly string[]): OperationMod
     }
   }
   return modes.length > 0 ? modes : ["text", "object", "stream"];
+}
+
+/**
+ * Infer slot tag from output modalities.
+ * If any output is "image", tag is "image". Otherwise "text".
+ */
+function inferTag(outputModalities: readonly string[]): string {
+  if (outputModalities.includes("image")) return "image";
+  return "text";
 }
 
 function formatPresetName(slotName: string, def: SlotDefinition): string {

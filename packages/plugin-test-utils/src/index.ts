@@ -55,7 +55,7 @@ const DEFAULT_CONTEXT_VIEW: RuntimeContextView = {
     kind: "plugin",
     priority: 500,
     allowedTools: [],
-    providerBinding: "fast",
+    providerTag: "text",
     budget: { maxSteps: 5, timeoutMs: 30_000, maxTokens: 4096 },
   },
 };

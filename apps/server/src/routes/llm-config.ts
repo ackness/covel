@@ -55,6 +55,7 @@ export function createLlmConfigRoute(
       model: string;
       protocol: string;
       fallback?: string;
+      tag: string;
       capability?: ModelCapability;
     }> = {};
 
@@ -64,10 +65,14 @@ export function createLlmConfigRoute(
       // Look up the generated preset for this slot to get capability
       const preset = presetMap.get(`slot-${slotId}`);
 
+      // Tag: prefer preset's tag (inferred from output modalities), fall back to "text"
+      const tag = preset?.tag ?? "text";
+
       slots[slotId] = {
         provider: def.provider,
         model: def.model,
         protocol: def.protocol,
+        tag,
         ...(def.fallback ? { fallback: def.fallback } : {}),
         ...(preset?.capability ? { capability: preset.capability } : {}),
       };

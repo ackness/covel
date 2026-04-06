@@ -60,7 +60,7 @@
         "mode": "event",
         "onEvents": ["session_start"]
       },
-      "providerBinding": "default",
+      "providerTag": "text",
       "tools": ["emit-character-form"],
       "hooks": []
     }

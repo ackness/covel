@@ -14,16 +14,12 @@ export interface ResolvedSlot {
   preset: PresetSummary | null;
   /** i18n key like "session.slotDefault" for known slots, raw slotId otherwise. */
   label: string;
+  /** Capability tag ("text" | "image") — used for runtime binding compatibility. */
+  tag: string;
   /** Server-configured model for this slot (from llm.toml). */
   serverModel?: string;
 }
 
-const SLOT_I18N_KEYS: Record<string, string> = {
-  default: "session.slotDefault",
-  fast: "session.slotFast",
-  balance: "session.slotBalance",
-  image: "session.slotImage",
-};
 
 /**
  * Hook that reads slot config + custom presets from localStorage,
@@ -87,7 +83,8 @@ export function useSlotConfig(
           slotId,
           presetId,
           preset,
-          label: SLOT_I18N_KEYS[slotId] ?? slotId,
+          label: slotId,
+          tag: slotInfo.tag ?? "text",
           serverModel: slotInfo.model,
         };
       });
@@ -99,7 +96,7 @@ export function useSlotConfig(
       // No user config — synthesize a default slot
       const defaultPreset = serverPresets.find((p) => p.isDefault) ?? serverPresets[0] ?? null;
       return defaultPreset
-        ? [{ slotId: "default", presetId: defaultPreset.id, preset: defaultPreset, label: "default" }]
+        ? [{ slotId: "default", presetId: defaultPreset.id, preset: defaultPreset, label: "default", tag: "text" }]
         : [];
     }
     return entries.map(([slotId, entry]) => ({
@@ -107,6 +104,7 @@ export function useSlotConfig(
       presetId: entry.presetId,
       preset: allPresets.find((p) => p.id === entry.presetId) ?? null,
       label: slotId,
+      tag: "text",
     }));
   }, [slotConfig, allPresets, serverPresets, llmConfig]);
 

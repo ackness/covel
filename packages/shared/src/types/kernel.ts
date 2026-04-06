@@ -2,6 +2,7 @@ import type {
   RuntimeBudget,
   RuntimeIsolationSpec,
   RuntimeTriggerEvent,
+  SlotTag,
 } from "./common.js";
 import type { CharacterCard } from "./character.js";
 
@@ -152,7 +153,7 @@ export interface RuntimeContextView {
     kind: string;
     priority: number;
     allowedTools: string[];
-    providerBinding?: string;
+    providerTag?: SlotTag;
     budget?: RuntimeBudget;
     isolation?: RuntimeIsolationSpec;
   };

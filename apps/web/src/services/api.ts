@@ -3,6 +3,7 @@
  */
 
 import type { I18nText } from "@covel/shared";
+import { sanitizeRuntimeBindingsForHeader } from "../lib/runtime-binding-utils.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -148,14 +149,14 @@ function buildProviderKeysHeader(): Record<string, string> {
   return headers;
 }
 
-function buildAiHeaders(): Record<string, string> {
+function buildAiHeaders(sessionId?: string): Record<string, string> {
   return {
     ...buildProviderKeysHeader(),
-    ...buildSlotConfigHeaderInternal(),
+    ...buildSlotConfigHeaderInternal(sessionId),
   };
 }
 
-function buildSlotConfigHeaderInternal(): Record<string, string> {
+function buildSlotConfigHeaderInternal(sessionId?: string): Record<string, string> {
   const slotConfigRaw = localStorage.getItem(SLOT_CONFIG_KEY);
   const paramOverridesRaw = localStorage.getItem(PARAM_OVERRIDES_KEY);
   let slotConfig: Record<string, SlotConfigEntry> = {};
@@ -192,17 +193,24 @@ function buildSlotConfigHeaderInternal(): Record<string, string> {
   // Include runtime priority overrides (qualified "pluginId:runtimeId" → number)
   const runtimePriority = getRuntimePriorityOverrides();
 
+  // Include per-session runtime bindings (qualifiedRuntimeId → slotName)
+  const runtimeBindings = sessionId
+    ? sanitizeRuntimeBindingsForHeader(getRuntimeBindings(sessionId))
+    : {};
+
   const hasSlotPresetOverrides = Object.keys(slotPresetOverrides).length > 0;
   const hasOverrides = Object.keys(overrides).length > 0;
   const hasCustom = customPresetDefs.length > 0;
   const hasPriority = Object.keys(runtimePriority).length > 0;
-  if (!hasSlotPresetOverrides && !hasOverrides && !hasCustom && !hasPriority) return {};
+  const hasBindings = Object.keys(runtimeBindings).length > 0;
+  if (!hasSlotPresetOverrides && !hasOverrides && !hasCustom && !hasPriority && !hasBindings) return {};
   return {
     "X-Slot-Config": btoa(JSON.stringify({
       ...(hasSlotPresetOverrides ? { slotPresetOverrides } : {}),
       ...(hasOverrides ? { paramOverrides: overrides } : {}),
       ...(hasCustom ? { customPresets: customPresetDefs } : {}),
       ...(hasPriority ? { runtimePriority } : {}),
+      ...(hasBindings ? { runtimeBindings } : {}),
     })),
   };
 }
@@ -462,6 +470,7 @@ export interface LlmSlotInfo {
   model: string;
   protocol: string;
   fallback?: string;
+  tag: string;
   capability?: ModelCapabilityInfo;
 }
 
@@ -630,7 +639,7 @@ export function sendAction(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...buildAiHeaders(),
+          ...buildAiHeaders(req.sessionId),
         },
         body: JSON.stringify(req),
         signal: controller.signal,
@@ -794,6 +803,31 @@ export function getRuntimePriorityOverrides(): Record<string, number> {
 
 export function setRuntimePriorityOverrides(overrides: Record<string, number>): void {
   localStorage.setItem(RUNTIME_PRIORITY_KEY, JSON.stringify(overrides));
+}
+
+// ── Runtime Bindings (localStorage, per-session) ────────────────
+
+const RUNTIME_BINDINGS_PREFIX = "covel:runtimeBindings:";
+
+/** Get saved runtime bindings for a session. */
+export function getRuntimeBindings(sessionId: string): Record<string, string> {
+  const stored = localStorage.getItem(RUNTIME_BINDINGS_PREFIX + sessionId);
+  if (!stored) return {};
+  try {
+    return JSON.parse(stored);
+  } catch {
+    return {};
+  }
+}
+
+/** Save runtime bindings for a session. */
+export function setRuntimeBindings(sessionId: string, bindings: Record<string, string>): void {
+  localStorage.setItem(RUNTIME_BINDINGS_PREFIX + sessionId, JSON.stringify(bindings));
+}
+
+/** Clear saved runtime bindings for a session (e.g., on session delete). */
+export function clearRuntimeBindings(sessionId: string): void {
+  localStorage.removeItem(RUNTIME_BINDINGS_PREFIX + sessionId);
 }
 
 // ── World Overlay (IndexedDB via app-kv-store) ─────────────────

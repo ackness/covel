@@ -81,9 +81,9 @@ function PluginItem({ pkg }: { pkg: PackageSummary }) {
                         ? t(TRIGGER_LABELS[rt.trigger.mode].key, TRIGGER_LABELS[rt.trigger.mode].fallback)
                         : rt.trigger.mode}
                     </span>
-                    {rt.providerBinding && (
+                    {rt.providerTag && (
                       <span className="text-muted-foreground/60">
-                        @ {rt.providerBinding}
+                        @ {rt.providerTag}
                       </span>
                     )}
                   </div>
