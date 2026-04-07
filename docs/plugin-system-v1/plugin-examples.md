@@ -169,3 +169,63 @@ core-states/
 - 表 ownership 清晰
 - 同优先级并行时写冲突大幅减少
 - 动态 schema 的演进点也集中在 owner 插件中
+
+## 示例 6：异步图像工作流插件
+
+这是第二个参考插件：一个真正的多 runtime、手动触发、前后端联动工作流插件。
+
+### 插件结构
+
+```text
+image-workflow-demo/
+  plugin.json
+  PLUGIN.md
+  runtimes/
+    prompt-optimizer/
+      runtime.json
+      llm.toml
+      instructions.md
+      output.schema.json
+    image-generator/
+      runtime.json
+      llm.toml
+      instructions.md
+      output.schema.json
+```
+
+### 插件级 action
+
+```json
+{
+  "id": "generate-story-image",
+  "uiSlot": "message.quick-actions",
+  "async": true,
+  "workflow": {
+    "steps": ["prompt-optimizer", "image-generator"],
+    "resultRuntimeId": "image-generator"
+  }
+}
+```
+
+前端行为：
+
+- 在消息快捷按钮区渲染一个统一按钮
+- 玩家点击一次后，框架启动异步 workflow
+- 前端显示阶段状态：
+  - `Prompt 优化中`
+  - `图片生成中`
+  - `完成`
+
+### runtime 设计
+
+| runtime | priority | trigger | 说明 |
+|---------|----------|---------|------|
+| `prompt-optimizer` | 710 | `manual` | 收集当前上下文，生成结构化图片 prompt |
+| `image-generator` | 720 | `manual` | 接收上一 runtime 的显式输入，用图片模型生成图片 |
+
+### 关键点
+
+- 不是靠事件链串起来，而是一次 action 启动一条标准 workflow
+- `image-generator` 直接拿到 `prompt-optimizer` 的结构化输出
+- 两个 runtime 各自产生一条 published record
+- 前端主界面只显示图片，详细 prompt / 模型参数 / 错误信息在 debug 中查看

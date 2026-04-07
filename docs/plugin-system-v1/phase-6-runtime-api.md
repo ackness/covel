@@ -12,6 +12,7 @@
 - 手动触发图片生成
 - 单独调试某个 runtime
 - 审批回调后恢复执行
+- 通过插件声明的 action 启动异步多 runtime workflow
 
 ## 1. API 端点
 
@@ -78,7 +79,68 @@ GET /api/sessions/:sessionId/runtimes
 - 可用 system tools
 - 已解析导入的外部 tools
 
-## 3. 查询最近结果
+## 3. 执行插件 Action
+
+```http
+POST /api/sessions/:sessionId/actions/:pluginId/:actionId/execute
+```
+
+### Request
+
+```json
+{
+  "payload": {
+    "messageId": "msg-123",
+    "style": "cinematic"
+  }
+}
+```
+
+### Response
+
+```json
+{
+  "workflowRunId": "wf-001",
+  "status": "queued",
+  "currentStep": null
+}
+```
+
+说明：
+
+- 适用于插件在 `plugin.json` 中声明的统一前端 action
+- 对异步 workflow，前端不需要阻塞等待最终图片
+
+## 4. 查询 workflow 状态
+
+```http
+GET /api/sessions/:sessionId/workflows/:workflowRunId
+```
+
+### Response
+
+```json
+{
+  "workflowRunId": "wf-001",
+  "pluginId": "image-workflow-demo",
+  "actionId": "generate-story-image",
+  "status": "running",
+  "currentStep": "image-generator",
+  "steps": [
+    {
+      "runtimeId": "prompt-optimizer",
+      "status": "completed"
+    },
+    {
+      "runtimeId": "image-generator",
+      "status": "running"
+    }
+  ],
+  "progressLabel": "图片生成中"
+}
+```
+
+## 5. 查询最近结果
 
 ```http
 GET /api/sessions/:sessionId/runtimes/:pluginId/:runtimeId/last-record
@@ -86,7 +148,7 @@ GET /api/sessions/:sessionId/runtimes/:pluginId/:runtimeId/last-record
 
 返回最近一次 published record，而不是内部 proposals 或原始 trace。
 
-## 4. 审批回调
+## 6. 审批回调
 
 ```http
 POST /api/sessions/:sessionId/approvals/callback
@@ -98,9 +160,11 @@ POST /api/sessions/:sessionId/approvals/callback
 - 系统触发 `approval.callback`
 - 可继续唤起等待中的 runtime 或后续 runtime
 
-## 5. API 设计约束
+## 7. API 设计约束
 
 - API 对外返回的是标准化记录
 - 不直接返回底层 trace 原始结构
 - standalone runtime 执行也必须写入 trace
 - standalone runtime 执行也必须生成 published record
+- workflow action 也必须写入 trace
+- workflow 中每个 runtime 都必须生成自己的 published record

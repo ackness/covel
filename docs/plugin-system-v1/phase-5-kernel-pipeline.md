@@ -98,5 +98,23 @@ V1 默认：
 interface KernelSession {
   executeTurn(input: KernelInput): Promise<KernelTurnResult>;
   executeRuntime(runtimeId: string, options?: RuntimeExecuteOptions): Promise<RuntimeExecuteResult>;
+  executeAction(actionId: string, options?: ActionExecuteOptions): Promise<ActionExecuteResult>;
 }
 ```
+
+## 9. 手动 action workflow
+
+对于插件声明的 `actions`：
+
+- action 本身不是 runtime
+- action 是一次统一的手动工作流入口
+- workflow steps 由框架顺序执行
+
+建议语义：
+
+1. 前端点击 action
+2. 框架创建 `workflowRunId`
+3. 按步骤串行执行 runtime
+4. 每一步都写 trace 和 published record
+5. 下一步显式收到上一 runtime 的结构化输出
+6. 前端按 workflow 状态展示 `queued -> running -> completed / failed`

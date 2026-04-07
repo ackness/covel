@@ -42,6 +42,20 @@ V1 不把 `server/` / `client/` 作为插件核心模型。插件的核心能力
 - `runtimes/<runtime-id>/references/`：按需加载的参考材料
 - `runtimes/<runtime-id>/tests/`：runtime 测试
 
+### 3. 前端入口也是声明式合同
+
+插件还可以声明统一前端入口，而不是自己注入前端代码：
+
+- `actions`：按钮、快捷动作、手动 workflow 入口
+- `blockSchemas`：结果展示 block 的 schema
+
+前端负责按合同渲染，插件只声明：
+
+- 注入到哪里
+- 如何显示
+- 点击后启动什么 workflow
+- 异步阶段状态如何展示
+
 ## 编排模型
 
 ### 优先级区间
@@ -187,6 +201,20 @@ runtime 自己只负责产出符合 `output.schema.json` 的结构化 payload。
 - 热重载后的重新绑定
 
 插件不能直接加载其他插件的代码或工具文件。
+
+## 插件动作与统一 UI
+
+除了 runtime 本身，插件还可以声明：
+
+- `actions`
+- `blockSchemas`
+
+设计原则：
+
+- 插件不为了一个按钮单独写前端代码
+- 前端统一渲染 action/button
+- action 可以启动异步多 runtime workflow
+- workflow 进度状态也由插件声明文案、前端统一渲染
 
 ## 审批模型
 

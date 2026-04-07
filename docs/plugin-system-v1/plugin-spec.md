@@ -83,6 +83,8 @@ plugin-name/
   },
   "defaultLocale": "zh-CN",
   "supportedLocales": ["zh-CN", "en-US"],
+  "actions": [],
+  "blockSchemas": [],
   "runtimeIds": [
     "schema-builder",
     "data-initializer",
@@ -104,7 +106,96 @@ plugin-name/
 | `description` | i18n 文本 |
 | `defaultLocale` | 默认语言 |
 | `supportedLocales` | 支持的语言列表 |
+| `actions` | 插件声明的统一前端动作入口 |
+| `blockSchemas` | 插件声明的 schema-driven UI block |
 | `runtimeIds` | 该插件包含的 runtime 列表 |
+
+### 3.3 actions
+
+`actions` 用于声明由前端统一渲染的按钮和手动工作流入口。
+
+建议结构：
+
+```json
+{
+  "id": "generate-story-image",
+  "label": {
+    "zh-CN": "生成插画",
+    "en-US": "Generate Image"
+  },
+  "uiSlot": "message.quick-actions",
+  "async": true,
+  "workflow": {
+    "steps": [
+      "prompt-optimizer",
+      "image-generator"
+    ],
+    "resultRuntimeId": "image-generator"
+  },
+  "progressLabels": {
+    "queued": {
+      "zh-CN": "等待开始",
+      "en-US": "Queued"
+    },
+    "prompt-optimizer.running": {
+      "zh-CN": "Prompt 优化中",
+      "en-US": "Optimizing prompt"
+    },
+    "image-generator.running": {
+      "zh-CN": "图片生成中",
+      "en-US": "Generating image"
+    },
+    "completed": {
+      "zh-CN": "完成",
+      "en-US": "Completed"
+    },
+    "failed": {
+      "zh-CN": "失败",
+      "en-US": "Failed"
+    }
+  },
+  "resultBlock": {
+    "type": "story_image",
+    "uiSlot": "message.inline-result"
+  }
+}
+```
+
+规则：
+
+- `actions` 是插件级声明，不放到 runtime 里
+- 前端只负责统一渲染，不要求插件自带前端代码
+- `workflow.steps` 按顺序串行执行
+- 第一步拿到 action payload
+- 后续步骤会额外拿到上一 runtime 的结构化输出作为显式输入
+- `async: true` 时，前端应展示进度状态，而不是同步阻塞等待
+
+### 3.4 blockSchemas
+
+`blockSchemas` 用于声明统一结果块的 schema。
+
+建议结构：
+
+```json
+{
+  "type": "story_image",
+  "interactive": false,
+  "meta": {
+    "displayName": {
+      "zh-CN": "故事插画",
+      "en-US": "Story Image"
+    }
+  },
+  "dataSchema": {
+    "type": "object",
+    "properties": {
+      "imageUrl": { "type": "string" },
+      "status": { "type": "string" }
+    },
+    "required": ["imageUrl", "status"]
+  }
+}
+```
 
 ## 4. 公共 Prompt
 
@@ -234,6 +325,33 @@ V1 支持：
 - `maxRunsPerSession` 按 session 单独计数
 - `maxRunsPerTurn` 表示单 turn 上限
 - 同一 turn 内多次运行必须由新的触发再次唤起
+
+### 6.3 手动 workflow
+
+当 `actions` 启动一个多 runtime workflow 时，框架按声明顺序串行执行这些 runtime。
+
+输入规则：
+
+- 第一步输入来自 action payload
+- 第二步及之后的 runtime，会额外收到：
+
+```json
+{
+  "previousStep": {
+    "runtimeId": "prompt-optimizer",
+    "status": "success",
+    "payload": {
+      "enhancedPrompt": "..."
+    }
+  }
+}
+```
+
+约束：
+
+- 这不是插件特例，而是通用手动 workflow 机制
+- 每个 runtime 仍然独立执行、独立产出自己的 published record
+- 框架只负责显式传递上一步的结构化输出
 
 ## 7. tools/
 
