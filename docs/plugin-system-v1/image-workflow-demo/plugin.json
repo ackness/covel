@@ -78,7 +78,12 @@
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["queued", "running", "ready", "error"]
+            "enum": [
+              "queued",
+              "running",
+              "ready",
+              "error"
+            ]
           },
           "imageUrl": {
             "type": "string"
@@ -90,7 +95,11 @@
             "type": "string"
           }
         },
-        "required": ["status", "imageUrl", "messageId", "caption"]
+        "required": [
+          "status",
+          "messageId",
+          "caption"
+        ]
       }
     }
   ],
