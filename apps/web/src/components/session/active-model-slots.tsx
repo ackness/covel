@@ -31,7 +31,7 @@ export function ActiveModelSlots({
             <div key={slot.slotId} className="flex items-center justify-between py-1.5 px-2 bg-muted/30 text-xs">
               <div className="flex items-center gap-1.5 min-w-0">
                 <span className="text-[10px] uppercase tracking-wider text-muted-foreground w-16 shrink-0">
-                  {t(slot.label)}
+                  {slot.label}
                 </span>
                 <span className="truncate font-medium">
                   {modelName}
@@ -64,7 +64,7 @@ export function ActiveModelSlots({
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
-                <Badge variant="outline" className="text-[10px]">{t(slot.label)}</Badge>
+                <Badge variant="outline" className="text-[10px] uppercase">{slot.label}</Badge>
                 <Badge variant="default" className="shrink-0">
                   {modelName}
                 </Badge>

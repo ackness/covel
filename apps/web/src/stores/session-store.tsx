@@ -31,7 +31,11 @@ export interface ExecutionStep {
   label?: string;
   detail?: string;
   timestamp: string;
+  /** Turn this step belongs to — enables grouping across multiple turns. */
+  turnId?: string;
 }
+
+const EXEC_STEPS_MAX = 500;
 
 interface SessionState {
   // Boot data
@@ -45,6 +49,9 @@ interface SessionState {
   llmConfig: api.LlmConfigResponse | null;
   booted: boolean;
   bootError: string | null;
+
+  /** Session-scoped plugin list (active + available). Loaded after session is set. */
+  sessionPlugins: api.SessionPluginInfo[];
 
   // Active session
   world: api.WorldRecord | null;
@@ -95,7 +102,9 @@ type Action =
   | { type: "RESET_TO_WORLD_SELECT" }
   | { type: "REMOVE_MESSAGES_FROM_TURN"; turnId: string; keepRuntimeIds: ReadonlySet<string> }
   | { type: "SET_GAME_STATE"; state: Record<string, unknown> }
-  | { type: "REMOVE_SESSION"; sessionId: string };
+  | { type: "REMOVE_SESSION"; sessionId: string }
+  | { type: "LOAD_SESSION_PLUGINS"; plugins: api.SessionPluginInfo[] }
+  | { type: "TOGGLE_SESSION_PLUGIN"; pluginId: string; isActive: boolean };
 
 const initialState: SessionState = {
   presets: [],
@@ -117,6 +126,7 @@ const initialState: SessionState = {
   statePatches: [],
   gameState: {},
   submittedBlockIds: new Set<string>(),
+  sessionPlugins: [],
 };
 
 
@@ -206,20 +216,29 @@ function reducer(state: SessionState, action: Action): SessionState {
     case "SET_GAME_STATE":
       return { ...state, gameState: action.state };
     case "ADD_EXECUTION_STEP": {
-      const updated = [...state.executionSteps, action.step];
-      if (state.session?.id) {
-        try { sessionStorage.setItem(`covel:execSteps:${state.session.id}`, JSON.stringify(updated)); } catch { /* quota */ }
-      }
+      const raw = [...state.executionSteps, action.step];
+      // Cap to prevent unbounded growth
+      const updated = raw.length > EXEC_STEPS_MAX ? raw.slice(raw.length - EXEC_STEPS_MAX) : raw;
       return { ...state, executionSteps: updated };
     }
     case "CLEAR_EXECUTION_STEPS":
+      // Only clear in-memory — localStorage is preserved for session history
       return { ...state, executionSteps: [] };
     case "SUBMIT_BLOCK":
       return { ...state, submittedBlockIds: new Set([...state.submittedBlockIds, action.blockId]) };
     case "RESET_SESSION":
-      return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>() };
+      return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), sessionPlugins: [] };
     case "RESET_TO_WORLD_SELECT":
-      return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>() };
+      return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), sessionPlugins: [] };
+    case "LOAD_SESSION_PLUGINS":
+      return { ...state, sessionPlugins: action.plugins };
+    case "TOGGLE_SESSION_PLUGIN":
+      return {
+        ...state,
+        sessionPlugins: state.sessionPlugins.map((p) =>
+          p.id === action.pluginId ? { ...p, isActive: action.isActive } : p,
+        ),
+      };
     case "REMOVE_MESSAGES_FROM_TURN": {
       // Remove messages from a specific turn, except those from cached runtimes
       const filtered = state.messages.filter((m) => {
@@ -269,6 +288,12 @@ interface SessionContextValue {
   updateWorldLocal: (world: api.WorldRecord) => void;
   /** Add a newly created world to the local worlds list. */
   addWorldLocal: (world: api.WorldRecord) => void;
+  /** Load the session-scoped plugin list from the server. */
+  loadSessionPlugins: () => Promise<void>;
+  /** Enable or disable a plugin for the current session (optimistic update). */
+  toggleSessionPlugin: (pluginId: string, enable: boolean) => Promise<void>;
+  /** Trigger a custom kernel event (e.g. image generation from a message button). */
+  triggerEvent: (eventType: string, eventData: Record<string, unknown>) => void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -474,6 +499,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           label: payload.label as string | undefined,
           detail: payload.detail as string | undefined,
           timestamp: payload.timestamp as string,
+          turnId,
         };
         // Track runtime kind from runtime.started label (format: "pluginId/kind")
         if (step.type === "runtime.started" && step.label) {
@@ -546,7 +572,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const sessionId = state.session.id;
     void api.getWorldOverlay(state.world?.id ?? "").then((overlay) => {
       const loreOverride = overlay?.lore;
-      dispatch({ type: "CLEAR_EXECUTION_STEPS" });
       dispatch({ type: "SET_EXECUTING", value: true });
       api.sendAction(
         {
@@ -567,7 +592,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       );
     }).catch(() => {
       // Proceed without overlay if fetch fails
-      dispatch({ type: "CLEAR_EXECUTION_STEPS" });
       dispatch({ type: "SET_EXECUTING", value: true });
       api.sendAction(
         {
@@ -648,16 +672,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
     } catch { /* ignore load errors */ }
 
-    // Restore last turn's execution steps from sessionStorage (survives F5 refresh)
+    // Restore accumulated execution steps from DataService (persisted across refreshes)
     try {
-      const raw = sessionStorage.getItem(`covel:execSteps:${session.id}`);
-      if (raw) {
-        const steps = JSON.parse(raw) as ExecutionStep[];
+      const steps = (await ds.loadExecutionSteps(session.id)) as ExecutionStep[];
+      if (steps.length > 0) {
         for (const step of steps) {
           dispatch({ type: "ADD_EXECUTION_STEP", step });
         }
       }
-    } catch { /* ignore parse errors */ }
+    } catch { /* ignore load errors */ }
 
     // Sync session context to server so subsequent turns can be processed
     ds.syncToServer(session.id).then(() => {
@@ -720,7 +743,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       createdAt: userTimestamp,
     }).catch(() => {});
 
-    dispatch({ type: "CLEAR_EXECUTION_STEPS" });
     dispatch({ type: "SET_EXECUTING", value: true });
     dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
@@ -769,7 +791,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     const sessionId = state.session.id;
 
-    dispatch({ type: "CLEAR_EXECUTION_STEPS" });
     dispatch({ type: "SET_EXECUTING", value: true });
     dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
@@ -819,7 +840,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     const sessionId = state.session.id;
 
-    dispatch({ type: "CLEAR_EXECUTION_STEPS" });
     dispatch({ type: "SET_EXECUTING", value: true });
     dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
@@ -855,6 +875,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, [boot, state.booted, state.bootError]);
 
+  // Persist execution steps to DataService whenever they change
+  useEffect(() => {
+    const sid = state.session?.id;
+    if (!sid || state.executionSteps.length === 0) return;
+    ds.saveExecutionSteps(sid, state.executionSteps).catch(() => {});
+  }, [state.executionSteps, state.session?.id, ds]);
+
   const resetSession = useCallback(() => {
     dispatch({ type: "RESET_SESSION" });
   }, []);
@@ -870,6 +897,63 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const addWorldLocal = useCallback((world: api.WorldRecord) => {
     dispatch({ type: "ADD_WORLD", world });
   }, []);
+
+  const loadSessionPlugins = useCallback(async () => {
+    const sid = sessionIdRef.current;
+    if (!sid) return;
+    try {
+      const res = await api.listSessionPlugins(sid);
+      dispatch({ type: "LOAD_SESSION_PLUGINS", plugins: res.available });
+    } catch {
+      // Non-critical: silently fail — plugins panel is optional
+    }
+  }, []);
+
+  const toggleSessionPlugin = useCallback(async (pluginId: string, enable: boolean) => {
+    const sid = sessionIdRef.current;
+    if (!sid) return;
+    // Optimistic update first
+    dispatch({ type: "TOGGLE_SESSION_PLUGIN", pluginId, isActive: enable });
+    try {
+      if (enable) {
+        await api.enableSessionPlugin(sid, pluginId);
+      } else {
+        await api.disableSessionPlugin(sid, pluginId);
+      }
+    } catch {
+      // Revert optimistic update on failure
+      dispatch({ type: "TOGGLE_SESSION_PLUGIN", pluginId, isActive: !enable });
+    }
+  }, []);
+
+  const triggerEvent = useCallback((eventType: string, eventData: Record<string, unknown>) => {
+    if (!state.session || state.executing) return;
+
+    const sessionId = state.session.id;
+    dispatch({ type: "SET_EXECUTING", value: true });
+    dispatch({ type: "SET_EXECUTION_ERROR", error: null });
+
+    const fireAction = () => {
+      api.triggerEvent(
+        sessionId,
+        eventType,
+        eventData,
+        i18n.language,
+        handleSseEvent,
+        (err) => {
+          dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
+          dispatch({ type: "SET_EXECUTING", value: false });
+        },
+        () => {
+          dispatch({ type: "SET_EXECUTING", value: false });
+        },
+      );
+    };
+
+    api.ensureServerSession(sessionId, (sid) => ds.syncToServer(sid))
+      .then(fireAction)
+      .catch(fireAction);
+  }, [state.session, state.executing, handleSseEvent]);
 
   const value: SessionContextValue = {
     state,
@@ -889,6 +973,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     backToWorldSelect,
     updateWorldLocal,
     addWorldLocal,
+    loadSessionPlugins,
+    toggleSessionPlugin,
+    triggerEvent,
   };
 
   return (

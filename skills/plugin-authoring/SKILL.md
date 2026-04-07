@@ -176,8 +176,108 @@ All state changes go through proposals. 6 kinds:
 
 1. **Context-Only** (core-persona): No tools. Registers context provider only. Priority ~100.
 2. **LLM + Tools** (core-combat): PLUGIN.md instructs LLM to call tools. Priority 400-600.
-3. **Code-Path** (core-char-tracker): RuntimeHandler for deterministic logic. Optional `ctx.generateText`. Priority 600+.
+3. **Code-Path** (core-char-tracker): RuntimeHandler for deterministic logic. Optional `ctx.generateText` / `ctx.generateImage`. Priority 600+.
 4. **Background** (core-memory): `trigger.mode: "interval"`, `kind: "background"`. Priority 900+.
+5. **Two-Step Event Chain** (core-image): Two runtimes chained via events. Runtime 1 uses text slot for processing, Runtime 2 uses image slot for generation.
+
+## Two-Step Event Chain Pattern (core-image)
+
+Use this when a task needs **different model slots** for different steps:
+
+```
+Frontend button / LLM tool
+  → emit: my.step1.requested
+  → Runtime 1 (providerTag: "text", kind: "plugin", priority: 800)
+    → ctx.generateText(systemPrompt)
+    → emit: my.step2.ready { result, settings }
+  → Runtime 2 (providerTag: "image", kind: "background", priority: 801)
+    → ctx.generateImage(prompt, { referenceUrl?, providerRequestMetadata? })
+    → proposals: ui.render + state.patch
+```
+
+```json
+// plugin.json runtimes
+[
+  { "id": "step1", "trigger": { "mode": "event", "onEvents": ["my.step1.requested"] }, "providerTag": "text" },
+  { "id": "step2", "trigger": { "mode": "event", "onEvents": ["my.step2.ready"] },     "providerTag": "image" }
+]
+```
+
+### `ctx.generateImage` API
+
+```typescript
+// Available in RuntimeHandlerContext when an image slot is configured
+ctx.generateImage?(
+  prompt: string,
+  options?: {
+    referenceUrl?: string;                        // Previous image for visual continuity
+    providerRequestMetadata?: Record<string, unknown>;  // imageFormat, size, n, etc.
+  }
+): Promise<{ url: string }>
+```
+
+`providerRequestMetadata.imageFormat` selects the API format:
+- `"dashscope-wan"` — DashScope WAN async task API (Chinese prompts recommended)
+- `"openai-chat"` — OpenAI chat completions with image output (English prompts recommended)
+- `"dalle"` / omit — Standard `/images/generations` endpoint (DALL-E style)
+
+### World Context Extraction
+
+For image generation plugins, use `extractWorldContext(ctx.context)` and
+`extractCharacterContext(ctx.context)` from `image-logic.ts` to build rich prompts:
+
+```typescript
+const worldContext = extractWorldContext(ctx.context);   // world lore + dimensions
+const characters = extractCharacterContext(ctx.context); // character appearances
+const prompt = buildEnhancePromptZh(request, worldContext, characters, settings);
+```
+
+These helpers read `ctx.context.world` and `ctx.context.characters` which are
+automatically injected by the kernel from the session's world package and character records.
+
+## Manual Trigger Button Pattern
+
+To add a frontend button that triggers a plugin event:
+
+```typescript
+// Frontend: game-view.tsx passes onTriggerEvent callback
+onTriggerEvent?.("image.generation.requested", {
+  scenePrompt: messageContent,
+  storyBackground: "",  // kernel context provides full world context
+});
+
+// Server: actions.ts handles trigger_event type
+// → calls kernelSession.executeTurn({ type: "image.generation.requested", payload: eventData })
+// → kernel router matches runtime trigger.onEvents
+
+// API: api.ts
+import { triggerEvent } from "@/services/api";
+const controller = triggerEvent(sessionId, "image.generation.requested", { scenePrompt }, locale, onEvent);
+```
+
+## Settings Panel (UI Slot: settings_panel)
+
+Plugins can expose a settings UI via `blockSchemas` with `uiSlot: "settings_panel"`:
+
+```json
+{
+  "type": "core_image_settings",
+  "interactive": true,
+  "uiSlot": "settings_panel",
+  "dataSchema": {
+    "type": "object",
+    "properties": {
+      "style": { "type": "string", "enum": ["cinematic", "anime", ...] },
+      "multiPanel": { "type": "boolean" },
+      "includeText": { "type": "boolean" },
+      "promptLanguage": { "type": "string", "enum": ["auto", "zh", "en"] }
+    }
+  }
+}
+```
+
+Settings are persisted via `state.patch` proposals in the block's `onSubmit` handler.
+Handlers read settings from `ctx.context.state["plugin-id"].settings`.
 
 ## I18nText
 

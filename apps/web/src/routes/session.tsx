@@ -35,6 +35,9 @@ function SessionPage() {
     backToWorldSelect,
     updateWorldLocal,
     addWorldLocal,
+    loadSessionPlugins,
+    toggleSessionPlugin,
+    triggerEvent,
   } = useSession();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { resolvedSlots } = useSlotConfig(state.presets, state.llmConfig);
@@ -125,6 +128,7 @@ function SessionPage() {
         executionError={state.executionError}
         packages={state.packages}
         pluginLoadErrors={state.pluginLoadErrors}
+        sessionPlugins={state.sessionPlugins}
         presets={state.presets}
         commands={state.commands}
         llmConfig={state.llmConfig}
@@ -142,6 +146,9 @@ function SessionPage() {
         onSwitchSession={resumeSession}
         onDeleteSession={deleteSession}
         onLoadWorldSessions={loadWorldSessions}
+        onLoadSessionPlugins={loadSessionPlugins}
+        onTogglePlugin={toggleSessionPlugin}
+        onTriggerEvent={triggerEvent}
       />
     );
   }

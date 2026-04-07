@@ -25,6 +25,7 @@ import {
   Trash2,
   Flame,
   Library,
+  ImageIcon,
 } from "lucide-react";
 import {
   Tabs,
@@ -58,6 +59,7 @@ import { SettingsDialog } from "@/components/settings-dialog.js";
 import { ActiveModelSlots } from "./active-model-slots.js";
 import { SessionBreadcrumb } from "./session-breadcrumb.js";
 import { getBlockRenderer } from "@/components/blocks/block-renderer.js";
+import { resolveBlockSubmission } from "@/lib/block-submission-utils.js";
 import { ExecutionTimeline } from "./execution-timeline.js";
 import { GameStatusPanel } from "./game-status-panel.js";
 import { EventPanel } from "./event-panel.js";
@@ -72,6 +74,7 @@ import type {
   CommandSummary,
   LlmConfigResponse,
   PluginLoadError,
+  SessionPluginInfo,
 } from "@/services/api.js";
 import { fetchServerHealth } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
@@ -87,6 +90,8 @@ interface LeftPanelProps {
   otherSessions: SessionRecord[];
   enabledPackages: PackageSummary[];
   pluginLoadErrors: PluginLoadError[];
+  sessionPlugins: SessionPluginInfo[];
+  executing: boolean;
   commands: CommandSummary[];
   resolvedSlots: ResolvedSlot[];
   onToggleLeftPanel: () => void;
@@ -96,6 +101,7 @@ interface LeftPanelProps {
   onCloseSessionList: () => void;
   onOpenSettings: () => void;
   onResetSession: () => void;
+  onTogglePlugin: (pluginId: string, enable: boolean) => void;
 }
 
 function LeftPanel({
@@ -106,6 +112,8 @@ function LeftPanel({
   otherSessions,
   enabledPackages,
   pluginLoadErrors,
+  sessionPlugins,
+  executing,
   commands,
   resolvedSlots,
   onToggleLeftPanel,
@@ -115,6 +123,7 @@ function LeftPanel({
   onCloseSessionList,
   onOpenSettings,
   onResetSession,
+  onTogglePlugin,
 }: LeftPanelProps) {
   const { t } = useTranslation();
   const [deleteTarget, setDeleteTarget] = useState<SessionRecord | null>(null);
@@ -254,6 +263,9 @@ function LeftPanel({
             <PluginListPanel
               packages={enabledPackages}
               loadErrors={pluginLoadErrors}
+              sessionPlugins={sessionPlugins}
+              executing={executing}
+              onTogglePlugin={onTogglePlugin}
             />
           </div>
 
@@ -573,6 +585,8 @@ interface GameViewProps {
   executionError: string | null;
   packages: PackageSummary[];
   pluginLoadErrors: PluginLoadError[];
+  /** Session-scoped plugin list with live isActive state. */
+  sessionPlugins: SessionPluginInfo[];
   presets: PresetSummary[];
   commands: CommandSummary[];
   llmConfig?: LlmConfigResponse | null;
@@ -599,6 +613,12 @@ interface GameViewProps {
   onSwitchSession: (session: SessionRecord) => void;
   onDeleteSession: (sessionId: string) => Promise<void>;
   onLoadWorldSessions: () => void;
+  /** Load session-scoped plugin list from the server. */
+  onLoadSessionPlugins: () => Promise<void>;
+  /** Enable or disable a plugin for the current session. */
+  onTogglePlugin: (pluginId: string, enable: boolean) => Promise<void>;
+  /** Trigger a custom kernel event (e.g. image generation from a message). */
+  onTriggerEvent?: (eventType: string, eventData: Record<string, unknown>) => void;
 }
 
 export function GameView({
@@ -610,6 +630,7 @@ export function GameView({
   executionError,
   packages,
   pluginLoadErrors,
+  sessionPlugins,
   presets,
   commands,
   llmConfig,
@@ -627,6 +648,9 @@ export function GameView({
   onSwitchSession,
   onDeleteSession,
   onLoadWorldSessions,
+  onLoadSessionPlugins,
+  onTogglePlugin,
+  onTriggerEvent,
 }: GameViewProps) {
   const { t } = useTranslation();
   const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(
@@ -671,6 +695,11 @@ export function GameView({
     onSendMessage(combined);
     setBlockSelections({});
   }, [blockSelections, hasSelections, pendingInteractiveBlocks, onSubmitBlock, onSendMessage]);
+
+  // Load session-scoped plugin list whenever the session changes.
+  useEffect(() => {
+    onLoadSessionPlugins().catch(() => {});
+  }, [session.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isMobile = useMediaQuery("(max-width: 768px)");
   const isTablet = useMediaQuery("(max-width: 1024px)");
@@ -741,6 +770,26 @@ export function GameView({
 
   // ── Message Rendering ──────────────────────────────────────────
 
+  // Whether the core-image plugin is currently active in this session
+  const isCoreImageActive = sessionPlugins.some(
+    (p) => p.id === "core-image" && p.isActive,
+  );
+
+  function handleGenerateImage(messageContent: string) {
+    if (!onTriggerEvent) return;
+    // Truncate to avoid exhausting the enhancement LLM's token budget.
+    // The kernel will inject full world + character context automatically.
+    const scenePrompt = messageContent.slice(0, 800);
+    onTriggerEvent("image.generation.requested", {
+      scenePrompt,
+      storyBackground: world?.description
+        ? (typeof world.description === "string"
+            ? world.description
+            : Object.values(world.description as Record<string, string>)[0] ?? "")
+        : "",
+    });
+  }
+
   function renderMessage(msg: StreamMessage) {
     if (msg.block) return renderBlock(msg);
 
@@ -749,6 +798,7 @@ export function GameView({
 
     const isUser = msg.role === "user";
     const isSystem = msg.role === "system";
+    const showImageButton = !isUser && !isSystem && isCoreImageActive && msg.content && onTriggerEvent;
 
     return (
       <div
@@ -780,6 +830,21 @@ export function GameView({
             )}
           </div>
         )}
+        {showImageButton && (
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1"
+              disabled={executing}
+              onClick={() => handleGenerateImage(msg.content)}
+              title={t("coreImage.generateButton", "生成插画")}
+            >
+              <ImageIcon className="h-3 w-3" />
+              {t("coreImage.generateButton", "生成插画")}
+            </Button>
+          </div>
+        )}
       </div>
     );
   }
@@ -799,8 +864,19 @@ export function GameView({
     // For interactive blocks: use select mode (collect, then confirm together).
     // For non-interactive blocks: direct submit as before.
     const handleBlockSubmit = (value: string) => {
+      const submission = resolveBlockSubmission(blockType, value);
+
+      if (submission.kind === "trigger_event") {
+        if (onTriggerEvent) {
+          onTriggerEvent(submission.eventType, submission.eventData);
+        } else {
+          onSendMessage(value);
+        }
+        return;
+      }
+
       onSubmitBlock(msg.id);
-      onSendMessage(value);
+      onSendMessage(submission.content);
     };
 
     return (
@@ -870,6 +946,8 @@ export function GameView({
             otherSessions={otherSessions}
             enabledPackages={enabledPackages}
             pluginLoadErrors={pluginLoadErrors}
+            sessionPlugins={sessionPlugins}
+            executing={executing}
             commands={commands}
             resolvedSlots={resolvedSlots}
             onToggleLeftPanel={toggleLeftPanel}
@@ -879,6 +957,7 @@ export function GameView({
             onCloseSessionList={() => setShowSessionList(false)}
             onOpenSettings={() => setSettingsOpen(true)}
             onResetSession={onResetSession}
+            onTogglePlugin={onTogglePlugin}
           />
         </ResizablePanel>
 
@@ -1055,21 +1134,74 @@ export function GameView({
                 </div>
               )}
 
-              {messages.map(renderMessage)}
+              {/* Render messages with per-turn execution timelines inline */}
+              {(() => {
+                // Group execution steps by turnId for inline rendering
+                const stepsByTurn = new Map<string, ExecutionStep[]>();
+                for (const step of executionSteps) {
+                  const tid = step.turnId ?? "__unknown__";
+                  if (!stepsByTurn.has(tid)) stepsByTurn.set(tid, []);
+                  stepsByTurn.get(tid)!.push(step);
+                }
 
-              {executionSteps.length > 0 && (
-                <ExecutionTimeline
-                  steps={executionSteps}
-                  executing={executing}
-                  packages={packages}
-                  onRetryRuntime={
-                    onRetryRuntime ? (id) => onRetryRuntime(id) : undefined
+                // Collect the last message index per turnId so we know where to insert
+                const lastMsgIndexByTurn = new Map<string, number>();
+                messages.forEach((msg, idx) => {
+                  if (msg.turnId) lastMsgIndexByTurn.set(msg.turnId, idx);
+                });
+
+                const rendered: React.ReactNode[] = [];
+                const insertedTurnIds = new Set<string>();
+
+                messages.forEach((msg, idx) => {
+                  const node = renderMessage(msg);
+                  if (node) rendered.push(node);
+
+                  // After the last message of a turn, insert that turn's execution timeline
+                  if (msg.turnId && lastMsgIndexByTurn.get(msg.turnId) === idx) {
+                    const turnSteps = stepsByTurn.get(msg.turnId);
+                    if (turnSteps && turnSteps.length > 0) {
+                      insertedTurnIds.add(msg.turnId);
+                      const isActiveTurn = executing && msg.turnId === [...lastMsgIndexByTurn.keys()].at(-1);
+                      rendered.push(
+                        <ExecutionTimeline
+                          key={`exec-${msg.turnId}`}
+                          steps={turnSteps}
+                          executing={isActiveTurn ? executing : false}
+                          packages={packages}
+                          onRetryRuntime={
+                            isActiveTurn && onRetryRuntime ? (id) => onRetryRuntime(id) : undefined
+                          }
+                          onRetryAll={
+                            isActiveTurn && onRetryRuntime ? () => onRetryRuntime(undefined) : undefined
+                          }
+                        />
+                      );
+                    }
                   }
-                  onRetryAll={
-                    onRetryRuntime ? () => onRetryRuntime(undefined) : undefined
-                  }
-                />
-              )}
+                });
+
+                // If the current turn is executing and has no messages yet (startup),
+                // or steps belong to a turn with no messages, show at the bottom
+                const activeTurnSteps = executionSteps.filter((s) => {
+                  const tid = s.turnId ?? "__unknown__";
+                  return !insertedTurnIds.has(tid);
+                });
+                if (activeTurnSteps.length > 0) {
+                  rendered.push(
+                    <ExecutionTimeline
+                      key="exec-active"
+                      steps={activeTurnSteps}
+                      executing={executing}
+                      packages={packages}
+                      onRetryRuntime={onRetryRuntime ? (id) => onRetryRuntime(id) : undefined}
+                      onRetryAll={onRetryRuntime ? () => onRetryRuntime(undefined) : undefined}
+                    />
+                  );
+                }
+
+                return rendered;
+              })()}
 
               {executionError && (
                 <div className="flex items-start gap-2 border border-destructive/50 bg-destructive/5 p-4 text-sm">

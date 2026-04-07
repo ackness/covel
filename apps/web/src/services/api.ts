@@ -347,6 +347,49 @@ export function generateWorld(
   return controller;
 }
 
+// ── Session Plugin API ─────────────────────────────────────────────
+
+export interface SessionPluginInfo {
+  id: string;
+  displayName: I18nText;
+  description?: I18nText;
+  isActive: boolean;
+  /** Core plugins that are always required and cannot be disabled. */
+  locked?: boolean;
+}
+
+export interface SessionPluginsResponse {
+  active: string[];
+  available: SessionPluginInfo[];
+}
+
+/** Fetch the active + available plugins for a session. */
+export async function listSessionPlugins(sessionId: string): Promise<SessionPluginsResponse> {
+  return request<SessionPluginsResponse>(`/sessions/${encodeURIComponent(sessionId)}/plugins`);
+}
+
+/** Enable a plugin for a session. Returns updated active list. */
+export async function enableSessionPlugin(
+  sessionId: string,
+  pluginId: string,
+): Promise<{ ok: boolean; active: string[] }> {
+  return request<{ ok: boolean; active: string[] }>(
+    `/sessions/${encodeURIComponent(sessionId)}/plugins/enable`,
+    { method: "POST", body: JSON.stringify({ pluginId }) },
+  );
+}
+
+/** Disable a plugin for a session. Returns updated active list. */
+export async function disableSessionPlugin(
+  sessionId: string,
+  pluginId: string,
+): Promise<{ ok: boolean; active: string[] }> {
+  return request<{ ok: boolean; active: string[] }>(
+    `/sessions/${encodeURIComponent(sessionId)}/plugins/disable`,
+    { method: "POST", body: JSON.stringify({ pluginId }) },
+  );
+}
+
 // ── Session API ────────────────────────────────────────────────────
 
 export async function listSessions(worldId: string): Promise<SessionRecord[]> {
@@ -611,7 +654,7 @@ export async function pingPreset(presetId: string): Promise<PingResult> {
 
 // ── Actions (SSE) ──────────────────────────────────────────────────
 
-export type ActionType = "send_message" | "execute_command" | "submit_block_response" | "start_session" | "retry_runtime";
+export type ActionType = "send_message" | "execute_command" | "submit_block_response" | "start_session" | "retry_runtime" | "trigger_event";
 
 export interface ActionRequest {
   requestId: string;
@@ -688,6 +731,33 @@ export function sendAction(
   })();
 
   return controller;
+}
+
+/**
+ * Trigger a custom kernel event for the given session.
+ * Useful for manual plugin triggers (e.g., image generation button).
+ */
+export function triggerEvent(
+  sessionId: string,
+  eventType: string,
+  eventData: Record<string, unknown>,
+  locale: string,
+  onEvent: (envelope: SseEnvelope) => void,
+  onError?: (err: Error) => void,
+  onDone?: () => void,
+): AbortController {
+  return sendAction(
+    {
+      requestId: `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+      type: "trigger_event",
+      sessionId,
+      locale,
+      payload: { eventType, eventData },
+    },
+    onEvent,
+    onError,
+    onDone,
+  );
 }
 
 // ── Provider Keys (localStorage) ───────────────────────────────────

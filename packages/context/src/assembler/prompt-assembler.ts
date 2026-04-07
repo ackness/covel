@@ -1,4 +1,4 @@
-import type { RuntimeContextView } from "@covel/shared";
+import type { RuntimeContextView, RuntimeTriggerEvent } from "@covel/shared";
 import type { TextMessage } from "@covel/ai-provider";
 import type { TurnContextStore } from "../store/turn-context-store.js";
 import type {
@@ -224,7 +224,8 @@ export function assemblePrompt(input: AssembleInput): PromptResult {
  */
 export function buildContextView(
   store: TurnContextStore,
-  runtime: RuntimeInfo
+  runtime: RuntimeInfo,
+  triggerEvent?: RuntimeTriggerEvent,
 ): RuntimeContextView {
   return {
     run: {
@@ -233,12 +234,13 @@ export function buildContextView(
       turnId: store.getTurnId(),
     },
     locale: store.getLocale(),
+    event: triggerEvent,
     world: store.getWorld(),
     chat: store.getChat(),
     characters: store.getCharacters(),
     state: store.getState(),
     record: [],
-    events: [],
+    events: triggerEvent ? [triggerEvent] : [],
     runtimeSettings: store.getRuntimeSettings(),
     narrative: store.getNarrative()
       ? { content: store.getNarrative() }

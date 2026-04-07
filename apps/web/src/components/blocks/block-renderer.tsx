@@ -35,6 +35,7 @@ import {
 import { ActionGuideBlock } from "./action-guide-block.js";
 import { CodexEntryBlock } from "./codex-entry-block.js";
 import { StoryImageBlock } from "./story-image-block.js";
+import { CoreImageSettingsBlock } from "./core-image-settings-block.js";
 import { NotificationBlock } from "./notification-block.js";
 import { LootBlock } from "./loot-block.js";
 import { ItemUpdateBlock } from "./item-update-block.js";
@@ -73,6 +74,7 @@ const CUSTOM_RENDERERS: Record<string, BlockRendererComponent> = {
   action_guide: ActionGuideBlock,
   codex_entry: CodexEntryBlock,
   story_image: StoryImageBlock,
+  core_image_settings: CoreImageSettingsBlock,
   notification: NotificationBlock,
   loot: LootBlock,
   item_update: ItemUpdateBlock,

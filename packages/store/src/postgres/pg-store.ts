@@ -26,7 +26,7 @@ export class PgStore implements DataStore {
   private readonly sql;
 
   constructor(opts: PgStoreOptions) {
-    this.sql = pgClient(opts.databaseUrl);
+    this.sql = pgClient(opts.databaseUrl, { onnotice: () => {} });
     this.db = drizzle(this.sql, { schema });
   }
 

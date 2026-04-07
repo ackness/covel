@@ -63,6 +63,156 @@ function serializeMessages(
   });
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function asArray<T = unknown>(value: unknown): T[] | undefined {
+  return Array.isArray(value) ? (value as T[]) : undefined;
+}
+
+// ── DashScope WAN async image generation ──────────────────────────
+
+const DASHSCOPE_POLL_INTERVAL_MS = 2000;
+const DASHSCOPE_POLL_MAX_ATTEMPTS = 30; // ~60s
+
+async function generateImageDashscopeWan(
+  config: import("../types.js").ProviderConfig,
+  params: import("../types.js").ImageGenerationParams,
+): Promise<import("../types.js").ImageGenerationResult> {
+  const meta = params.providerRequestMetadata ?? {};
+  const { imageFormat: _drop, size, n, watermark, thinking_mode, ...restMeta } = meta as Record<string, unknown>;
+
+  // Step 1: Submit async task (pass signal so it can be cancelled)
+  const submitResponse = await postJson(
+    config,
+    "/api/v1/services/aigc/image-generation/generation",
+    {
+      model: params.model,
+      input: {
+        messages: [
+          { role: "user", content: [{ text: params.prompt }] },
+        ],
+      },
+      parameters: {
+        ...(size !== undefined ? { size } : {}),
+        n: n ?? 1,
+        watermark: watermark ?? false,
+        ...(thinking_mode !== undefined ? { thinking_mode } : {}),
+        ...sanitizeOpenAiMetadata(restMeta),
+      },
+    },
+    config.signal,
+    { "X-DashScope-Async": "enable" },
+  );
+
+  const submitPayload = await parseJson(submitResponse);
+  assertSuccess(submitResponse, submitPayload, "dashscope-wan");
+
+  const submitOutput = asRecord(submitPayload.output);
+  const taskId = typeof submitOutput?.task_id === "string"
+    ? submitOutput.task_id
+    : undefined;
+  if (!taskId) {
+    throw new Error("DashScope WAN: no task_id in response");
+  }
+
+  // Step 2: Poll until SUCCEEDED or FAILED
+  for (let attempt = 0; attempt < DASHSCOPE_POLL_MAX_ATTEMPTS; attempt++) {
+    await new Promise((r) => setTimeout(r, DASHSCOPE_POLL_INTERVAL_MS));
+
+    const pollResponse = await fetch(
+      `${config.baseUrl}/api/v1/tasks/${taskId}`,
+      {
+        headers: {
+          authorization: `Bearer ${config.apiKey}`,
+          ...(config.headers ?? {}),
+        },
+        signal: config.signal,
+      },
+    );
+    const pollPayload = await parseJson(pollResponse);
+    const pollOutput = asRecord(pollPayload.output);
+
+    const status = typeof pollOutput?.task_status === "string"
+      ? pollOutput.task_status
+      : undefined;
+
+    if (status === "SUCCEEDED") {
+      const results = asArray<{ url?: string }>(pollOutput?.results) ?? [];
+      return {
+        images: results
+          .filter((r) => r.url)
+          .map((r) => ({ mimeType: "image/png", url: r.url! })),
+        usage: null,
+      };
+    }
+
+    if (status === "FAILED") {
+      const msg = typeof pollOutput?.message === "string"
+        ? pollOutput.message
+        : "Task FAILED";
+      throw new Error(`DashScope WAN generation FAILED: ${msg}`);
+    }
+    // PENDING / RUNNING → keep polling
+  }
+
+  throw new Error("DashScope WAN: polling timed out");
+}
+
+// ── OpenAI chat completions image format ──────────────────────────
+
+async function generateImageOpenAiChat(
+  config: import("../types.js").ProviderConfig,
+  params: import("../types.js").ImageGenerationParams,
+): Promise<import("../types.js").ImageGenerationResult> {
+  const meta = params.providerRequestMetadata ?? {};
+  const { imageFormat: _drop, ...restMeta } = meta as Record<string, unknown>;
+
+  const response = await postJson(config, "/chat/completions", {
+    model: params.model,
+    stream: false,
+    messages: [{ role: "user", content: params.prompt }],
+    ...sanitizeOpenAiMetadata(restMeta),
+  });
+  const payload = await parseJson(response);
+  assertSuccess(response, payload, "openai-chat-image");
+
+  // Some providers return image_url at top level
+  if (typeof payload.image_url === "string") {
+    return { images: [{ mimeType: "image/png", url: payload.image_url }], usage: null };
+  }
+
+  // Some return images array
+  if (Array.isArray(payload.images)) {
+    return {
+      images: (payload.images as Array<{ url?: string; b64_json?: string; mime_type?: string }>)
+        .filter((img) => img.url || img.b64_json)
+        .map((img) => ({
+          mimeType: typeof img.mime_type === "string" ? img.mime_type : "image/png",
+          ...(img.url ? { url: img.url } : {}),
+          ...(img.b64_json ? { dataBase64: img.b64_json } : {}),
+        })),
+      usage: readOpenAiChatUsage(payload),
+    };
+  }
+
+  // Fallback: check choices[0].message.content for URLs
+  const firstChoice = asArray(payload.choices)?.[0];
+  const firstMessage = asRecord(asRecord(firstChoice)?.message);
+  const content = firstMessage?.content;
+  if (typeof content === "string") {
+    const urlMatch = content.match(/https?:\/\/\S+\.(png|jpg|jpeg|webp|gif)/i);
+    if (urlMatch) {
+      return { images: [{ mimeType: "image/png", url: urlMatch[0] }], usage: readOpenAiChatUsage(payload) };
+    }
+  }
+
+  return { images: [], usage: readOpenAiChatUsage(payload) };
+}
+
 /**
  * OpenAI Chat Completions v1 adapter.
  * Works with any OpenAI-compatible API (DeepSeek, DashScope, etc.).
@@ -185,31 +335,18 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
     },
 
     async generateImage(config, params) {
-      const response = await postJson(config, "/images/generations", {
-        model: params.model,
-        prompt: params.prompt,
-        ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
-      });
-      const payload = await parseJson(response);
-      assertSuccess(response, payload, "openai-chat");
+      const meta = params.providerRequestMetadata ?? {};
+      // imageFormat is set by the kernel from llm.toml's `imageApi` field.
+      // Supported: "dashscope-wan" | "openai-chat" (default).
+      const imageFormat = (meta.imageFormat as string | undefined) ?? "openai-chat";
 
-      const data = Array.isArray(payload.data) ? payload.data : [];
-      return {
-        images: data
-          .map((entry: { b64_json?: string; url?: string; revised_prompt?: string; mime_type?: string }) => ({
-            mimeType:
-              typeof entry.mime_type === "string" ? entry.mime_type : "image/png",
-            ...(typeof entry.b64_json === "string"
-              ? { dataBase64: entry.b64_json }
-              : {}),
-            ...(typeof entry.url === "string" ? { url: entry.url } : {}),
-          }))
-          .filter(
-            (entry: { dataBase64?: string; url?: string }) =>
-              entry.dataBase64 || entry.url
-          ),
-        usage: readOpenAiChatUsage(payload),
-      };
+      // ── DashScope WAN async task API ─────────────────────────────
+      if (imageFormat === "dashscope-wan") {
+        return generateImageDashscopeWan(config, params);
+      }
+
+      // ── OpenAI chat completions image format (default) ────────────
+      return generateImageOpenAiChat(config, params);
     },
 
     async synthesizeSpeech(config, params) {

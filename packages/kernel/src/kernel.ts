@@ -445,7 +445,11 @@ function createKernelSession(
                 isolation: spec.isolation,
               };
 
-              const context = buildContextView(contextStore, runtimeInfo);
+              const context = buildContextView(
+                contextStore,
+                runtimeInfo,
+                scheduled.triggerEvent,
+              );
               const contextFragments = await gatherContextFragments(
                 scopedContextProviders,
                 {
@@ -656,7 +660,11 @@ function createKernelSession(
           }));
 
           // Build context view for the runtime (backward compat for custom handlers)
-          const context = buildContextView(contextStore, runtimeInfo);
+          const context = buildContextView(
+            contextStore,
+            runtimeInfo,
+            scheduled.triggerEvent,
+          );
 
           // Create data access scoped to this runtime
           const dataAccess = createPluginDataAccess({

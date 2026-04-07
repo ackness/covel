@@ -68,7 +68,8 @@ export function useRuntimeBindings(
     for (const pkg of packages) {
       if (!pkg.enabled || !pkg.runtimes) continue;
       for (const rt of pkg.runtimes) {
-        const tag = rt.providerTag ?? "text";
+        // Skip runtimes without providerTag — they don't need an LLM slot
+        if (!rt.providerTag) continue;
         result.push({
           qualifiedId: `${pkg.name}:${rt.id}`,
           pluginId: pkg.name,
@@ -78,7 +79,7 @@ export function useRuntimeBindings(
               ? Object.values(pkg.displayName)[0]
               : pkg.name,
           kind: rt.kind,
-          providerTag: tag,
+          providerTag: rt.providerTag,
         });
       }
     }
@@ -134,19 +135,27 @@ export function useRuntimeBindings(
     }));
   }, [runtimeTargets, bindings]);
 
-  // Filter slots by tag
+  // Filter slots compatible with a providerTag.
+  // Priority: tag match first, then include name-matched slot (slotId === tag).
   const compatibleSlots = useCallback(
     (tag: string): ResolvedSlot[] => {
-      return resolvedSlots.filter((s) => s.tag === tag);
+      const byTag = resolvedSlots.filter((s) => s.tag === tag);
+      if (byTag.length > 0) return byTag;
+      // Name match: treat the slot whose slotId matches the tag as compatible
+      const byName = resolvedSlots.filter((s) => s.slotId === tag);
+      return byName;
     },
     [resolvedSlots],
   );
 
-  // Check if all runtimes are bound to a compatible slot
+  // Check if all runtimes are bound to a compatible slot.
+  // A slot is compatible if its tag matches OR its slotId matches the providerTag (name match).
   const allBound = useMemo(() => {
     return entries.every((e) => {
       if (!e.slotName) return false;
-      return resolvedSlots.some((s) => s.slotId === e.slotName && s.tag === e.providerTag);
+      return resolvedSlots.some(
+        (s) => s.slotId === e.slotName && (s.tag === e.providerTag || s.slotId === e.providerTag),
+      );
     });
   }, [entries, resolvedSlots]);
 

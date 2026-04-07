@@ -153,6 +153,17 @@ export interface RuntimeHandlerContext {
   data?: PluginDataAccess;
   /** Optional LLM text generation (injected by kernel when gateway is available). */
   generateText?: (prompt: string) => Promise<string>;
+  /**
+   * Optional image generation (injected by kernel when an image-capable gateway slot is available).
+   * Uses the runtime's configured providerTag slot.
+   */
+  generateImage?: (
+    prompt: string,
+    options?: {
+      referenceUrl?: string;
+      providerRequestMetadata?: Record<string, unknown>;
+    },
+  ) => Promise<{ url: string }>;
 }
 
 /** Result from a custom runtime handler. */

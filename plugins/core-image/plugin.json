@@ -5,11 +5,11 @@
     "zh-CN": "故事插画",
     "en-US": "Story Image"
   },
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "covel",
   "description": {
-    "zh-CN": "通过 LLM 增强提示词，生成故事插画",
-    "en-US": "Generate story illustrations with LLM-enhanced prompts"
+    "zh-CN": "玩家点击后生成故事插画：LLM 优化提示词并调用图片模型生成插画",
+    "en-US": "Player-triggered story illustration generation with LLM prompt enhancement and image model rendering"
   },
   "defaultLocale": "zh-CN",
   "supportedLocales": ["zh-CN", "en-US"],
@@ -18,57 +18,35 @@
     {
       "id": "image-generator",
       "pluginId": "core-image",
-      "kind": "background",
-      "priority": 800,
+      "kind": "plugin",
+      "priority": 700,
       "trigger": {
         "mode": "event",
-        "onEvents": ["image.requested"]
+        "onEvents": ["image.generation.requested"]
       },
-      "providerTag": "image",
+      "providerTag": "text",
       "tools": [],
       "hooks": [],
       "budget": {
-        "maxSteps": 3,
-        "timeoutMs": 60000
+        "maxSteps": 1,
+        "timeoutMs": 120000,
+        "maxTokens": 2048
       }
-    }
-  ],
-  "tools": [
+    },
     {
-      "id": "request-story-image",
-      "kind": "generate",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "storyBackground": {
-            "type": "string",
-            "description": "World/scene context"
-          },
-          "scenePrompt": {
-            "type": "string",
-            "description": "Current scene to illustrate"
-          },
-          "continuityNotes": {
-            "type": "string",
-            "description": "Visual consistency hints"
-          },
-          "layoutPreference": {
-            "type": "string",
-            "enum": ["single", "comic", "auto"]
-          },
-          "stylePreset": {
-            "type": "string",
-            "description": "Art style preset"
-          },
-          "negativePrompt": {
-            "type": "string",
-            "description": "Things to avoid"
-          }
-        },
-        "required": ["storyBackground", "scenePrompt"]
-      }
+      "id": "settings-updater",
+      "pluginId": "core-image",
+      "kind": "plugin",
+      "priority": 200,
+      "trigger": {
+        "mode": "event",
+        "onEvents": ["image.settings.updated"]
+      },
+      "tools": [],
+      "hooks": []
     }
   ],
+  "tools": [],
   "blockSchemas": [
     {
       "type": "story_image",
@@ -94,6 +72,41 @@
           "stylePreset": { "type": "string" },
           "imageUrl": { "type": "string" },
           "error": { "type": "string" }
+        }
+      }
+    },
+    {
+      "type": "core_image_settings",
+      "interactive": true,
+      "uiSlot": "settings_panel",
+      "meta": {
+        "displayName": {
+          "zh-CN": "插画生成设置",
+          "en-US": "Image Generation Settings"
+        },
+        "description": "Configure style, layout and prompt language for image generation"
+      },
+      "dataSchema": {
+        "type": "object",
+        "properties": {
+          "style": {
+            "type": "string",
+            "enum": ["cinematic", "anime", "oil-painting", "watercolor", "pixel-art", "photoreal"],
+            "default": "cinematic"
+          },
+          "multiPanel": {
+            "type": "boolean",
+            "default": false
+          },
+          "includeText": {
+            "type": "boolean",
+            "default": false
+          },
+          "promptLanguage": {
+            "type": "string",
+            "enum": ["auto", "zh", "en"],
+            "default": "auto"
+          }
         }
       }
     }

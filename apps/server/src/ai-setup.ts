@@ -66,7 +66,7 @@ export function createAiStack(): AiStack {
 
   // Build slot map from preset tags. No hardcoded "default" alias.
   {
-    const slots: Record<string, { slotId: string; presetId: string; tag: string }> = {};
+    const slots: Record<string, import("@covel/ai-provider").ModelSlotConfig> = {};
 
     for (const preset of config.presets) {
       if (preset.defaultSlot && preset.enabled) {
@@ -74,6 +74,7 @@ export function createAiStack(): AiStack {
           slotId: preset.defaultSlot,
           presetId: preset.id,
           tag: preset.tag ?? "text",
+          ...(preset.imageApi !== undefined ? { imageApi: preset.imageApi } : {}),
         };
       }
     }

@@ -162,6 +162,21 @@ function resolveDisplayName(
   return displayName[locale] ?? displayName["en-US"] ?? Object.values(displayName)[0];
 }
 
+/** Group steps by turnId, preserving insertion order. */
+function groupStepsByTurn(steps: ExecutionStep[]): Array<{ turnId: string; steps: ExecutionStep[] }> {
+  const order: string[] = [];
+  const map = new Map<string, ExecutionStep[]>();
+  for (const step of steps) {
+    const tid = step.turnId ?? "unknown";
+    if (!map.has(tid)) {
+      order.push(tid);
+      map.set(tid, []);
+    }
+    map.get(tid)!.push(step);
+  }
+  return order.map((tid) => ({ turnId: tid, steps: map.get(tid)! }));
+}
+
 export function ExecutionTimeline({
   steps,
   executing,
@@ -176,7 +191,8 @@ export function ExecutionTimeline({
   onRetryAll?: () => void;
 }) {
   const { i18n, t } = useTranslation();
-  const [collapsed, setCollapsed] = useState(false);
+  // Collapsed state: set of turnIds that are folded. Latest turn is always expanded.
+  const [collapsedTurns, setCollapsedTurns] = useState<Set<string>>(new Set());
 
   // Build label map from plugin manifests (pluginId → display name)
   const RUNTIME_LABELS: Record<string, string> = {};
@@ -185,9 +201,9 @@ export function ExecutionTimeline({
     if (name) RUNTIME_LABELS[pkg.name] = name;
   }
 
-  const statuses = deriveStatuses(steps, RUNTIME_LABELS);
+  const turnGroups = groupStepsByTurn(steps);
 
-  if (statuses.length === 0 && executing) {
+  if (turnGroups.length === 0 && executing) {
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
         <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -196,69 +212,89 @@ export function ExecutionTimeline({
     );
   }
 
-  if (statuses.length === 0) return null;
+  if (turnGroups.length === 0) return null;
 
-  const active = statuses.find(
-    (r) => r.status === "running" || r.status === "llm" || r.status === "tool"
-  );
-  const allDone = !executing && !active;
-  const canRetry = allDone && !!onRetryRuntime;
+  const latestTurnId = turnGroups[turnGroups.length - 1]?.turnId;
+
+  const toggleTurn = (turnId: string) => {
+    setCollapsedTurns((prev) => {
+      const next = new Set(prev);
+      if (next.has(turnId)) next.delete(turnId);
+      else next.add(turnId);
+      return next;
+    });
+  };
 
   return (
-    <div className={`space-y-1 py-1 ${allDone ? "opacity-70 hover:opacity-100 transition-opacity" : ""}`}>
-      {/* Header (clickable to collapse when done) */}
-      {allDone && (
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setCollapsed((v) => !v)}
-            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {collapsed ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
-            <span className="uppercase tracking-wider">
-              {t("session.executionSummary", { count: statuses.length })}
-            </span>
-          </button>
-          {onRetryAll && (
-            <button
-              onClick={onRetryAll}
-              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
-              title={t("session.retryAllTitle")}
-            >
-              <RotateCw className="w-3 h-3" />
-              <span>{t("session.retryAll")}</span>
-            </button>
-          )}
-        </div>
-      )}
+    <div className="space-y-2 py-1">
+      {turnGroups.map((group, groupIdx) => {
+        const statuses = deriveStatuses(group.steps, RUNTIME_LABELS);
+        const isLatest = group.turnId === latestTurnId;
+        const active = statuses.find(
+          (r) => r.status === "running" || r.status === "llm" || r.status === "tool"
+        );
+        const allDone = !executing || !isLatest ? !active : false;
+        const canRetry = allDone && isLatest && !!onRetryRuntime;
+        const isCollapsed = collapsedTurns.has(group.turnId);
+        const turnNumber = groupIdx + 1;
 
-      {/* Chips row */}
-      {!collapsed && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {statuses.map((rt) => (
-            <RuntimeChip
-              key={rt.runtimeId}
-              rt={rt}
-              canRetry={canRetry}
-              onRetry={onRetryRuntime}
-              retryFromLabel={t("session.retryFrom", { label: rt.label })}
-            />
-          ))}
-        </div>
-      )}
+        return (
+          <div key={group.turnId} className={`space-y-1 ${!isLatest ? "opacity-50 hover:opacity-80 transition-opacity" : ""}`}>
+            {/* Turn header */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => toggleTurn(group.turnId)}
+                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {isCollapsed ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
+                <span className="uppercase tracking-wider font-mono">
+                  {t("session.executionSummary", { count: statuses.length })}
+                </span>
+                <span className="text-[9px] text-muted-foreground/50 font-mono">#{turnNumber}</span>
+              </button>
+              {isLatest && onRetryAll && allDone && (
+                <button
+                  onClick={onRetryAll}
+                  className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+                  title={t("session.retryAllTitle")}
+                >
+                  <RotateCw className="w-3 h-3" />
+                  <span>{t("session.retryAll")}</span>
+                </button>
+              )}
+            </div>
 
-      {/* Active detail line */}
-      {active && (
-        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground animate-pulse">
-          <Loader2 className="w-3 h-3 animate-spin shrink-0" />
-          <span className="truncate">
-            {active.label}
-            {active.status === "llm" && ` — ${t("session.statusLlm")}`}
-            {active.status === "tool" && active.toolName && ` — ${active.toolName}`}
-            {active.status === "running" && ` — ${t("session.statusPreparing")}`}
-            ...
-          </span>
-        </div>
-      )}
+            {/* Chips row */}
+            {!isCollapsed && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {statuses.map((rt) => (
+                  <RuntimeChip
+                    key={rt.runtimeId}
+                    rt={rt}
+                    canRetry={canRetry}
+                    onRetry={onRetryRuntime}
+                    retryFromLabel={t("session.retryFrom", { label: rt.label })}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Active detail line (latest turn only) */}
+            {isLatest && active && (
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground animate-pulse">
+                <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                <span className="truncate">
+                  {active.label}
+                  {active.status === "llm" && ` — ${t("session.statusLlm")}`}
+                  {active.status === "tool" && active.toolName && ` — ${active.toolName}`}
+                  {active.status === "running" && ` — ${t("session.statusPreparing")}`}
+                  ...
+                </span>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

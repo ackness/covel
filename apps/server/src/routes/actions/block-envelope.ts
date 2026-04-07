@@ -18,6 +18,8 @@ export function toBlockEnvelope(
     version: "1.0",
     meta: {
       package: block.source?.pluginId ?? "kernel",
+      pluginId: block.source?.pluginId,
+      runtimeId: block.source?.runtimeId,
       requestId: meta.requestId,
       traceId: meta.traceId,
       sessionId: meta.sessionId,

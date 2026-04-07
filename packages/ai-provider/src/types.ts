@@ -142,6 +142,12 @@ export interface PresetConfig {
   capability?: ModelCapability;
   /** Capability tag for slot compatibility. */
   tag?: string;
+  /**
+   * Image generation API format. Carried from llm.toml `imageApi` field.
+   * Only meaningful for image slots. Passed through to slot config and
+   * ultimately to the adapter via providerRequestMetadata.imageFormat.
+   */
+  imageApi?: ImageApiFormat;
 }
 
 // ── Tool Calling ──────────────────────────────────────────────────
@@ -328,12 +334,19 @@ export interface ProviderLifecycleHook {
 
 import type { SlotTag } from "@covel/shared";
 
+export type ImageApiFormat = "dashscope-wan" | "openai-chat";
+
 export interface ModelSlotConfig {
   slotId: string;
   presetId: string;
   /** Capability tag — determines compatibility with runtime providerTag. */
   tag: SlotTag;
   parameterOverrides?: ModelParameterOverrides;
+  /**
+   * Image generation API format. Only used for slots with tag "image".
+   * If omitted, the adapter defaults to "dalle" (standard /images/generations).
+   */
+  imageApi?: ImageApiFormat;
 }
 
 export interface ModelParameterOverrides {

@@ -4,10 +4,22 @@ import type { RegisteredRuntime } from "@covel/plugin-runtime";
 import type { CandidateRuntime } from "../types.js";
 
 /**
+ * Input types that are considered "user-facing" turns.
+ * Only these trigger runtimes with mode: "always".
+ * Custom events (image generation, settings updates, etc.) must NOT trigger
+ * "always" runtimes — they would cause unintended narrative generation.
+ */
+const USER_TURN_TYPES = new Set<string>([
+  "user.input",
+  "session_start",
+  "manual_action",
+]);
+
+/**
  * Convert KernelInput into a trigger event and select candidate runtimes.
  *
  * Filtering logic per runtime trigger.mode:
- * - "always": always included
+ * - "always": only on user-facing turns (user.input, session_start, manual_action)
  * - "event": included if trigger.onEvents matches the event type
  * - "manual": only on explicit manual_action
  * - "interval": included only when turnNumber % intervalTurns === 0
@@ -28,6 +40,9 @@ export function routeTrigger(
   const candidates: CandidateRuntime[] = [];
   const seen = new Set<string>();
 
+  // Determine if this is a user-facing turn (where "always" runtimes should fire)
+  const isUserTurn = USER_TURN_TYPES.has(input.type);
+
   for (const registered of allRuntimes) {
     const runtimeKey = `${registered.pluginId}:${registered.spec.id}`;
     if (seen.has(runtimeKey)) continue;
@@ -36,8 +51,11 @@ export function routeTrigger(
 
     switch (trigger.mode) {
       case "always":
-        seen.add(runtimeKey);
-        candidates.push({ registered, triggerEvent });
+        // Only fire on user-initiated turns, not on custom plugin events
+        if (isUserTurn) {
+          seen.add(runtimeKey);
+          candidates.push({ registered, triggerEvent });
+        }
         break;
 
       case "event":

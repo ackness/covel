@@ -11,6 +11,7 @@ import type {
 } from "@covel/runtime";
 import type {
   ModelParameterOverrides,
+  ImageGenerationResult,
   ToolDefinition,
   TextMessage,
   ToolCallPart,
@@ -46,8 +47,23 @@ export type RuntimeProgressCallback = (
 
 interface RuntimeRunnerSlotRegistry {
   resolveSlot(slotId: string): string | undefined;
-  listSlotsByTag?(tag: string): Array<{ slotId: string; presetId: string }>;
+  listSlotsByTag?(tag: string): Array<{ slotId: string; presetId: string; imageApi?: string }>;
   getParameterOverrides?(slotId: string): ModelParameterOverrides | undefined;
+}
+
+interface ImageCapableGateway extends GatewayLike {
+  generateImage(
+    input: {
+      presetId?: string;
+      prompt: string;
+      providerRequestMetadata?: Record<string, unknown>;
+    },
+    options?: {
+      apiKeys?: Record<string, string>;
+      traceId?: string;
+      signal?: AbortSignal;
+    },
+  ): Promise<ImageGenerationResult>;
 }
 
 /**
@@ -117,6 +133,54 @@ export async function runRuntime(
       return result.text;
     };
 
+    // Provide a generateImage helper only when an image-capable slot is resolvable.
+    // If no image slot is configured in llm.toml, the helper is not injected (undefined),
+    // so handlers can guard with `if (!ctx.generateImage)` and return a clean error.
+    const imageSlotResolution = resolveRuntimeSlotSelection(
+      deps.slotRegistry,
+      "image",
+      undefined, // image slot is always resolved by tag, not by runtime's own slot
+      options.slotPresetOverrides,
+      options.slotParameterOverrides,
+    );
+    // Read imageApi from the slot config (set via llm.toml `imageApi` field).
+    // This tells the adapter which image generation API to use for this slot.
+    const imageSlotConfig = imageSlotResolution.slotId
+      ? deps.slotRegistry?.listSlotsByTag?.("image")?.find((s) => s.slotId === imageSlotResolution.slotId)
+      : undefined;
+    const slotImageApi = imageSlotConfig?.imageApi;
+
+    const generateImage = imageSlotResolution.presetId
+      ? async (
+          prompt: string,
+          imageOptions?: {
+            referenceUrl?: string;
+            providerRequestMetadata?: Record<string, unknown>;
+          },
+        ): Promise<{ url: string }> => {
+          // Merge slot-level imageApi into providerRequestMetadata so the adapter
+          // knows which API format to use. Caller-supplied metadata takes precedence.
+          const providerMeta: Record<string, unknown> = {
+            ...(slotImageApi ? { imageFormat: slotImageApi } : {}),
+            ...imageOptions?.providerRequestMetadata,
+          };
+          const imageGateway = deps.gateway as ImageCapableGateway;
+          const result = await imageGateway.generateImage(
+            {
+              presetId: imageSlotResolution.presetId,
+              prompt,
+              providerRequestMetadata: Object.keys(providerMeta).length > 0 ? providerMeta : undefined,
+            },
+            { apiKeys: options.apiKeys, traceId: options.traceId }
+          );
+          const first = result.images[0];
+          if (!first) throw new Error("Image generation returned no images");
+          const url = first.url ?? (first.dataBase64 ? `data:${first.mimeType};base64,${first.dataBase64}` : undefined);
+          if (!url) throw new Error("Image generation returned no URL or data");
+          return { url };
+        }
+      : undefined;
+
     const result = await runtime.handler({
       runtimeId: runtime.spec.id,
       pluginId: runtime.pluginId,
@@ -125,6 +189,7 @@ export async function runRuntime(
       instructions,
       data: options.dataAccess,
       generateText,
+      generateImage,
     });
 
     return {
@@ -570,6 +635,14 @@ function firstCompatibleSlotId(
   providerTag: string | undefined,
 ): string | undefined {
   const tag = providerTag ?? "text";
+
+  // Priority 1: direct slot name match — if a slot is named exactly as the providerTag,
+  // use it directly regardless of its tag (e.g., providerTag: "plugin" → slot named "plugin")
+  if (slotRegistry.resolveSlot(tag)) {
+    return tag;
+  }
+
+  // Priority 2: tag-based match — find first slot with matching tag
   const compatibleSlots = slotRegistry.listSlotsByTag?.(tag);
   if (!compatibleSlots || compatibleSlots.length === 0) return undefined;
   return compatibleSlots[0]?.slotId;

@@ -95,7 +95,25 @@
     "runtimeNarrator": "叙事生成",
     "runtimeInitWizard": "角色创建",
     "runtimeGuide": "引导系统",
-    "runtimeCharTracker": "角色追踪"
+    "runtimeCharTracker": "角色追踪",
+    "runtimeBindings": "模型绑定",
+    "needsConfig": "待配置",
+    "allBound": "已全部绑定",
+    "unboundRuntimes": "存在未绑定",
+    "noCompatibleSlot": "无兼容插槽",
+    "selectSlot": "-- 选择插槽 --",
+    "autoAssign": "自动分配",
+    "activeModels": "活跃模型",
+    "plugins": "插件与运行时",
+    "deleteConfirmTitle": "删除会话",
+    "deleteConfirmDesc": "此操作将永久删除该会话及其所有数据（消息、游戏状态等），无法撤销。",
+    "slotsConfigured": "{{count}} 个插槽已配置",
+    "slotsUnconfigured": "未配置",
+    "bindingsAllBound": "全部已绑定",
+    "bindingsPartial": "部分未绑定",
+    "historySummary": "{{count}} 个历史存档",
+    "loreSummary": "{{count}} 字符",
+    "pluginsSummary": "{{pluginCount}} 个插件，共 {{runtimeCount}} 个 runtime"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -289,7 +307,33 @@
     "triggerAlways": "每回合",
     "triggerInterval": "间隔",
     "triggerManual": "手动",
-    "triggerEvent": "事件触发"
+    "triggerEvent": "事件触发",
+    "locked": "核心插件 — 不可关闭",
+    "enable": "开启插件",
+    "disable": "关闭插件"
+  },
+  "coreImage": {
+    "generateButton": "生成插画",
+    "settings": {
+      "title": "插画生成设置",
+      "style": "画面风格",
+      "multiPanel": "多格组图",
+      "includeText": "图中含文字",
+      "promptLanguage": "Prompt 语言"
+    },
+    "style": {
+      "cinematic": "电影感",
+      "anime": "动漫风格",
+      "oil-painting": "油画风格",
+      "watercolor": "水彩风格",
+      "pixel-art": "像素艺术",
+      "photoreal": "超写实摄影"
+    },
+    "promptLang": {
+      "auto": "自动（跟随语言设置）",
+      "zh": "中文（推荐 DashScope）",
+      "en": "英文（推荐 GPT/Gemini）"
+    }
   },
   "common": {
     "loading": "加载中...",

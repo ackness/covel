@@ -1,9 +1,4 @@
 import { serve } from "@hono/node-server";
-import dotenv from "dotenv";
-
-dotenv.config({ path: "../../.env" });
-dotenv.config({ path: "../../.env.llm", override: true });
-
 import { app } from "./app.js";
 import { registerGracefulShutdown } from "./graceful-shutdown.js";
 

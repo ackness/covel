@@ -3,6 +3,13 @@ import type { KernelSession } from "@covel/kernel";
 import type { PluginHost } from "@covel/plugin-runtime";
 
 /**
+ * Plugins that are essential for every turn and must never be disabled.
+ * core-narrator: always-trigger story runtime — without it there is no narrative output.
+ * core-persona: always-trigger plugin runtime — without it the AI has no persona config.
+ */
+const LOCKED_PLUGINS = new Set(["core-narrator", "core-persona"]);
+
+/**
  * Session-scoped plugin management API.
  *
  * GET  /:sessionId/plugins          — list active + available plugins
@@ -30,6 +37,7 @@ export function createSessionPluginsRoute(deps: {
         displayName: p.manifest.displayName,
         description: p.manifest.description,
         isActive: active.has(p.manifest.id),
+        locked: LOCKED_PLUGINS.has(p.manifest.id),
       })),
     });
   });
@@ -73,6 +81,10 @@ export function createSessionPluginsRoute(deps: {
 
     if (!pluginId) {
       return c.json({ code: "INVALID_REQUEST", message: "pluginId is required" }, 400);
+    }
+
+    if (LOCKED_PLUGINS.has(pluginId)) {
+      return c.json({ code: "PLUGIN_LOCKED", message: `Plugin "${pluginId}" is a core plugin and cannot be disabled` }, 403);
     }
 
     const session = getOrCreateSession(sessionId);

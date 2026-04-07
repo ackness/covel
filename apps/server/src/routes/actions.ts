@@ -105,7 +105,7 @@ export function createActionsRoute(deps: {
   route.post("/", async (c) => {
     let body: {
       requestId: string;
-      type: "send_message" | "execute_command" | "submit_block_response" | "start_session" | "retry_runtime";
+      type: "send_message" | "execute_command" | "submit_block_response" | "start_session" | "retry_runtime" | "trigger_event";
       sessionId: string;
       locale?: string;
       payload: Record<string, unknown>;
@@ -487,7 +487,7 @@ export function createActionsRoute(deps: {
           return;
         }
 
-        // ── start_session / send_message / submit_block_response → kernel turn
+        // ── start_session / send_message / submit_block_response / trigger_event → kernel turn
         const runInfo = getRunInfo(sessionId);
         const userContent = (payload.content ?? "") as string;
 
@@ -495,11 +495,15 @@ export function createActionsRoute(deps: {
         let inputType: string;
         if (type === "start_session") {
           inputType = "session_start";
+        } else if (type === "trigger_event") {
+          // trigger_event: send a custom event directly to the kernel.
+          // The kernel router will match it against runtime trigger.onEvents lists.
+          inputType = (payload.eventType as string | undefined) ?? "trigger.event";
         } else {
           inputType = "user.input";
         }
 
-        // Store user message (not for start_session — no user content)
+        // Store user message (not for start_session or trigger_event — no user content)
         if (userContent && type === "send_message") {
           await store.addMessage(sessionId, "user", userContent);
         }
@@ -567,7 +571,11 @@ export function createActionsRoute(deps: {
             actorId: "player",
             type: inputType,
             locale: locale ?? "zh-CN",
-            payload: type === "submit_block_response" ? payload : { text: userContent },
+            payload: type === "submit_block_response"
+              ? payload
+              : type === "trigger_event"
+                ? ((payload.eventData as Record<string, unknown>) ?? {})
+                : { text: userContent },
           },
           {
             apiKeys,

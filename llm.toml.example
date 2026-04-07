@@ -42,13 +42,31 @@ fallback = "story"
 
 # ── Image Slot (optional) ───────────────────────────────────────
 #
+# Image generation requires `imageApi` to specify which API format the model uses.
+# Two formats are supported:
+#   "dashscope-wan" — DashScope WAN async task API (wan2.x models, Chinese prompts)
+#   "openai-chat"   — Chat completions returning image (gpt-4o-image etc., English prompts)
+# Default when omitted: "openai-chat"
+#
+# Option A: DashScope WAN (async task API, Chinese prompts recommended)
 # [slots.image]
-# provider = "openai"
-# model    = "dall-e-3"
-# baseUrl  = "https://api.openai.com/v1"
-# protocol = "openai-chat-v1"
-# tag      = "image"                     # explicit tag for image generation
-# output   = ["image"]                   # or inferred from output modality
+# provider  = "dashscope"
+# model     = "wan2.7-image-pro"
+# baseUrl   = "https://dashscope.aliyuncs.com"
+# protocol  = "openai-chat-v1"
+# tag       = "image"
+# output    = ["image"]
+# imageApi  = "dashscope-wan"          # ← required: selects WAN async task API
+#
+# Option B: OpenAI chat completions image format (English prompts recommended)
+# [slots.image]
+# provider  = "openai"
+# model     = "gpt-image-1.5"
+# baseUrl   = "https://api.openai.com"
+# protocol  = "openai-chat-v1"
+# tag       = "image"
+# output    = ["image"]
+# imageApi  = "openai-chat"            # ← optional: this is the default
 
 # ── Capability Override (optional) ───────────────────────────────
 #

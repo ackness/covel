@@ -40,7 +40,7 @@ export async function requestStoryImageTool(
       {
         kind: "event.emit",
         payload: {
-          type: "image.requested",
+          type: "image.generation.requested",
           storyBackground: input.storyBackground,
           scenePrompt: input.scenePrompt,
           continuityNotes: input.continuityNotes,

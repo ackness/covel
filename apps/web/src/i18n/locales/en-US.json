@@ -95,7 +95,25 @@
     "runtimeNarrator": "Narrative",
     "runtimeInitWizard": "Character Creation",
     "runtimeGuide": "Guide",
-    "runtimeCharTracker": "Character Tracker"
+    "runtimeCharTracker": "Character Tracker",
+    "runtimeBindings": "Model Bindings",
+    "needsConfig": "Needs config",
+    "allBound": "All bound",
+    "unboundRuntimes": "Unbound runtimes",
+    "noCompatibleSlot": "No compatible slot",
+    "selectSlot": "-- Select slot --",
+    "autoAssign": "Auto Assign",
+    "activeModels": "Active Models",
+    "plugins": "Plugins & Runtimes",
+    "deleteConfirmTitle": "Delete Session",
+    "deleteConfirmDesc": "This will permanently delete the session and all its data (messages, game state, etc.). This action cannot be undone.",
+    "slotsConfigured": "{{count}} slot(s) configured",
+    "slotsUnconfigured": "Not configured",
+    "bindingsAllBound": "All bound",
+    "bindingsPartial": "Some unbound",
+    "historySummary": "{{count}} session(s)",
+    "loreSummary": "{{count}} chars",
+    "pluginsSummary": "{{pluginCount}} plugins, {{runtimeCount}} runtimes"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -289,7 +307,33 @@
     "triggerAlways": "Always",
     "triggerInterval": "Interval",
     "triggerManual": "Manual",
-    "triggerEvent": "Event"
+    "triggerEvent": "Event",
+    "locked": "Core plugin — cannot be disabled",
+    "enable": "Enable plugin",
+    "disable": "Disable plugin"
+  },
+  "coreImage": {
+    "generateButton": "Generate Illustration",
+    "settings": {
+      "title": "Image Generation Settings",
+      "style": "Art Style",
+      "multiPanel": "Multi-panel",
+      "includeText": "Include Text",
+      "promptLanguage": "Prompt Language"
+    },
+    "style": {
+      "cinematic": "Cinematic",
+      "anime": "Anime",
+      "oil-painting": "Oil Painting",
+      "watercolor": "Watercolor",
+      "pixel-art": "Pixel Art",
+      "photoreal": "Photorealistic"
+    },
+    "promptLang": {
+      "auto": "Auto (follow locale)",
+      "zh": "Chinese (recommended for DashScope)",
+      "en": "English (recommended for GPT/Gemini)"
+    }
   },
   "common": {
     "loading": "Loading...",

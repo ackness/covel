@@ -128,6 +128,8 @@ export interface RuntimeContextView {
     activeBranchId?: string;
   };
   locale: string;
+  /** The specific event that triggered this runtime, when applicable. */
+  event?: RuntimeTriggerEvent;
   world?: unknown;
   chat?: unknown;
   characters?: CharacterCard[];

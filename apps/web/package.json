@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@covel/shared": "workspace:*",
@@ -41,11 +43,16 @@
     "@tailwindcss/vite": "^4.1.0",
     "@tanstack/react-router-devtools": "^1.120.0",
     "@tanstack/router-plugin": "^1.167.12",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^6.0.0",
+    "@vitest/coverage-v8": "^4.1.2",
+    "jsdom": "^26.1.0",
     "tailwindcss": "^4.1.0",
     "typescript": "^6.0.2",
-    "vite": "^8.0.0"
+    "vite": "^8.0.0",
+    "vitest": "^4.1.2"
   }
 }

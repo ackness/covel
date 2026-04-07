@@ -46,17 +46,17 @@ export function RuntimeBindingPanel({ bindingState }: RuntimeBindingPanelProps) 
         <div className="flex items-center gap-2">
           {allBound ? (
             <Badge variant="secondary" className="text-[10px] bg-green-500/10 text-green-600">
-              {t("session.allBound", "All bound")}
+              {t("session.allBound")}
             </Badge>
           ) : (
             <Badge variant="secondary" className="text-[10px] bg-amber-500/10 text-amber-600">
-              {t("session.unboundRuntimes", "Unbound runtimes")}
+              {t("session.unboundRuntimes")}
             </Badge>
           )}
         </div>
         <Button variant="ghost" size="sm" className="text-xs" onClick={autoAssign}>
           <Wand2 className="w-3.5 h-3.5 mr-1" />
-          {t("session.autoAssign", "Auto Assign")}
+          {t("session.autoAssign")}
         </Button>
       </div>
 
@@ -90,7 +90,7 @@ export function RuntimeBindingPanel({ bindingState }: RuntimeBindingPanelProps) 
                   <div className="shrink-0">
                     {slots.length === 0 ? (
                       <span className="text-[10px] text-muted-foreground italic">
-                        {t("session.noCompatibleSlot", "No compatible slot")}
+                        {t("session.noCompatibleSlot")}
                       </span>
                     ) : (
                       <select
@@ -99,7 +99,7 @@ export function RuntimeBindingPanel({ bindingState }: RuntimeBindingPanelProps) 
                         className="bg-background border border-border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary min-w-[120px]"
                       >
                         <option value="">
-                          {t("session.selectSlot", "-- Select --")}
+                          {t("session.selectSlot")}
                         </option>
                         {slots.map((slot) => (
                           <option key={slot.slotId} value={slot.slotId}>

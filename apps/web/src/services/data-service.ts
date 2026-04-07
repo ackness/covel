@@ -83,6 +83,11 @@ export interface DataService {
    * world + session + messages so the stateless server can process the turn.
    */
   syncToServer(sessionId: string): Promise<void>;
+
+  /** Persist accumulated execution timeline steps for a session. */
+  saveExecutionSteps(sessionId: string, steps: unknown[]): Promise<void>;
+  /** Load persisted execution timeline steps for a session. */
+  loadExecutionSteps(sessionId: string): Promise<unknown[]>;
 }
 
 // ── Storage mode ──────────────────────────────────────────────────
@@ -186,6 +191,14 @@ class RemoteDataService implements DataService {
   async syncToServer() {
     // No-op: server already has the data
   }
+
+  async saveExecutionSteps(sessionId: string, steps: unknown[]) {
+    await appKv.saveExecutionSteps(sessionId, steps);
+  }
+
+  async loadExecutionSteps(sessionId: string) {
+    return appKv.getExecutionSteps(sessionId);
+  }
 }
 
 // ── Local implementation (IndexedDB) ──────────────────────────────
@@ -251,7 +264,7 @@ class LocalDataService implements DataService {
       this.initPromise = (async () => {
         const { IdbStore } = await import("@covel/store/idb");
         this.idbStore = new IdbStore({ dbName: "covel-game" });
-        // Seed worlds on first use
+        // Seed minimal worlds for offline/no-server scenarios
         const existing = await this.idbStore.listWorlds();
         if (existing.length === 0) {
           for (const seed of LOCAL_SEED_WORLDS) {
@@ -275,7 +288,6 @@ class LocalDataService implements DataService {
   async listWorlds(): Promise<WorldRecord[]> {
     const store = await this.getStore();
     const worlds = await store.listWorlds();
-    // Map DataStore WorldRecord to api.WorldRecord (superset with extra fields)
     return worlds.map((w) => ({
       id: w.id,
       name: w.name,
@@ -556,6 +568,14 @@ class LocalDataService implements DataService {
         // Non-critical: server may not have state-snapshot endpoint in T1 mode
       }
     }
+  }
+
+  async saveExecutionSteps(sessionId: string, steps: unknown[]): Promise<void> {
+    await appKv.saveExecutionSteps(sessionId, steps);
+  }
+
+  async loadExecutionSteps(sessionId: string): Promise<unknown[]> {
+    return appKv.getExecutionSteps(sessionId);
   }
 }
 

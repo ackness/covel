@@ -429,7 +429,20 @@ interface RuntimeHandlerContext {
   context: unknown;               // Read-only runtime context view
   instructions?: string;          // PLUGIN.md content
   data?: PluginDataAccess;        // Unified data access for reads + proposal helpers
-  generateText?: (prompt: string) => Promise<string>;  // Optional LLM access
+  /** Optional text generation — uses runtime's providerTag slot. */
+  generateText?: (prompt: string) => Promise<string>;
+  /**
+   * Optional image generation — uses runtime's providerTag slot.
+   * Only available when an image-capable slot is configured in llm.toml.
+   * providerRequestMetadata.imageFormat: "dashscope-wan" | "openai-chat" | "dalle"
+   */
+  generateImage?: (
+    prompt: string,
+    options?: {
+      referenceUrl?: string;
+      providerRequestMetadata?: Record<string, unknown>;
+    },
+  ) => Promise<{ url: string }>;
 }
 
 // Result

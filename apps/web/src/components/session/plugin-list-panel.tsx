@@ -1,13 +1,19 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronRight, Puzzle, Wrench, Zap, Link, AlertTriangle } from "lucide-react";
+import { ChevronRight, Puzzle, Wrench, Zap, Link, AlertTriangle, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import { text } from "@/components/world/editor-helpers.js";
-import type { PackageSummary, PluginLoadError } from "@/services/api.js";
+import type { PackageSummary, PluginLoadError, SessionPluginInfo } from "@/services/api.js";
 
 interface PluginListPanelProps {
   packages: PackageSummary[];
   loadErrors?: PluginLoadError[];
+  /** Session-scoped plugin info with live isActive state. */
+  sessionPlugins?: SessionPluginInfo[];
+  /** Whether a turn is currently executing (disables toggles mid-turn). */
+  executing?: boolean;
+  /** Called when the user flips the enable/disable switch. */
+  onTogglePlugin?: (pluginId: string, enable: boolean) => void;
 }
 
 const TRIGGER_LABELS: Record<string, { key: string; fallback: string }> = {
@@ -17,7 +23,14 @@ const TRIGGER_LABELS: Record<string, { key: string; fallback: string }> = {
   event: { key: "plugin.triggerEvent", fallback: "Event" },
 };
 
-function PluginItem({ pkg }: { pkg: PackageSummary }) {
+interface PluginItemProps {
+  pkg: PackageSummary;
+  sessionPlugin?: SessionPluginInfo;
+  executing?: boolean;
+  onToggle?: (pluginId: string, enable: boolean) => void;
+}
+
+function PluginItem({ pkg, sessionPlugin, executing, onToggle }: PluginItemProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
@@ -27,6 +40,11 @@ function PluginItem({ pkg }: { pkg: PackageSummary }) {
   const tools = pkg.tools ?? [];
   const requires = pkg.requires ?? [];
   const mainRuntime = runtimes[0];
+
+  const hasSessionScope = sessionPlugin !== undefined;
+  const isActive = sessionPlugin?.isActive ?? true;
+  const isLocked = sessionPlugin?.locked === true;
+  const toggleDisabled = executing === true || isLocked;
 
   return (
     <div className="border border-border rounded-md overflow-hidden">
@@ -45,6 +63,45 @@ function PluginItem({ pkg }: { pkg: PackageSummary }) {
           <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 shrink-0">
             P{mainRuntime.priority}
           </Badge>
+        )}
+        {/* Lock icon for core plugins */}
+        {isLocked && (
+          <span title={t("plugin.locked", "Core plugin — cannot be disabled")}>
+            <Lock className="w-3 h-3 shrink-0 text-muted-foreground/50" />
+          </span>
+        )}
+        {/* Toggle switch — only shown when session plugin data is available and not locked */}
+        {hasSessionScope && onToggle && !isLocked && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={isActive}
+            aria-label={isActive
+              ? t("plugin.disable", "Disable plugin")
+              : t("plugin.enable", "Enable plugin")}
+            disabled={toggleDisabled}
+            className={[
+              "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent",
+              "transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2",
+              "focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              isActive ? "bg-primary" : "bg-input",
+              toggleDisabled ? "opacity-50 cursor-not-allowed" : "",
+            ].join(" ")}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!toggleDisabled) {
+                onToggle(pkg.name, !isActive);
+              }
+            }}
+          >
+            <span
+              className={[
+                "pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow-lg",
+                "ring-0 transition duration-200 ease-in-out",
+                isActive ? "translate-x-3" : "translate-x-0",
+              ].join(" ")}
+            />
+          </button>
         )}
       </button>
 
@@ -167,7 +224,13 @@ function PluginErrorItem({ error }: { error: PluginLoadError }) {
   );
 }
 
-export function PluginListPanel({ packages, loadErrors = [] }: PluginListPanelProps) {
+export function PluginListPanel({
+  packages,
+  loadErrors = [],
+  sessionPlugins,
+  executing,
+  onTogglePlugin,
+}: PluginListPanelProps) {
   const { t } = useTranslation();
 
   if (packages.length === 0 && loadErrors.length === 0) {
@@ -175,6 +238,11 @@ export function PluginListPanel({ packages, loadErrors = [] }: PluginListPanelPr
       <p className="text-xs text-muted-foreground italic">{t("session.noPluginsLoaded")}</p>
     );
   }
+
+  // Build a lookup map from plugin id → session plugin info
+  const sessionPluginMap = new Map<string, SessionPluginInfo>(
+    (sessionPlugins ?? []).map((p) => [p.id, p]),
+  );
 
   return (
     <div className="space-y-1.5">
@@ -186,7 +254,13 @@ export function PluginListPanel({ packages, loadErrors = [] }: PluginListPanelPr
         </div>
       )}
       {packages.map((pkg) => (
-        <PluginItem key={pkg.name} pkg={pkg} />
+        <PluginItem
+          key={pkg.name}
+          pkg={pkg}
+          sessionPlugin={sessionPluginMap.get(pkg.name)}
+          executing={executing}
+          onToggle={onTogglePlugin}
+        />
       ))}
     </div>
   );

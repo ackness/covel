@@ -14,14 +14,15 @@ Detailed architecture docs: `docs/system-architecture-v0/` (read order: framewor
 pnpm install              # Install dependencies
 pnpm dev                  # Start both web (5173) and server (3001) in dev mode
 pnpm dev:web              # Start only web frontend
-pnpm dev:server           # Start only API server
+pnpm dev:server           # Start only API server (MemoryStore backend)
+pnpm dev:pg               # Start only API server with STORE_BACKEND=pg
 pnpm build                # Build all packages
 pnpm lint                 # Lint all packages (tsc --noEmit)
 pnpm clean                # Clean all dist directories
 
 # Database (PostgreSQL via Docker)
-pnpm db:up                # Start PostgreSQL container
-pnpm db:down              # Stop PostgreSQL container
+pnpm db:up                # Start PostgreSQL container only
+pnpm db:down              # Stop all containers
 pnpm db:generate          # Generate Drizzle migrations
 pnpm db:migrate           # Run Drizzle migrations
 pnpm db:studio            # Open Drizzle Studio
@@ -35,11 +36,33 @@ pnpm --filter @covel/store test            # Run store tests
 pnpm --filter @covel/server test           # Run server tests
 # Add --watch for watch mode, --run for single run
 
+# E2E tests (Playwright)
+pnpm e2e                  # Run all E2E tests headless
+pnpm e2e:ui               # Open Playwright UI mode
+pnpm e2e:docker           # Build+start full Docker stack, run E2E, then tear down
+
 # Docker (full-stack production image)
-docker compose -f docker/docker-compose.yml build   # Build app image
-docker compose -f docker/docker-compose.yml up -d    # Start PostgreSQL + app
-docker compose -f docker/docker-compose.yml logs app  # View app logs
+pnpm docker:build         # Build and start app + PostgreSQL containers
+pnpm docker:up            # Start app + PostgreSQL containers (no rebuild)
+pnpm docker:down          # Stop containers (keep volumes)
+pnpm docker:logs          # Tail container logs
 ```
+
+## Config File Setup
+
+Three config files are needed (copy from examples):
+
+```bash
+cp .env.example .env               # DB, store backend, server settings
+cp llm.toml.example llm.toml       # LLM provider slots (story, utility, image…)
+cp .env.llm.example .env.llm       # LLM provider API keys
+```
+
+- `.env` — infrastructure config (`STORE_BACKEND`, `DATABASE_URL`, `SERVER_PORT`, etc.)
+- `llm.toml` — slot-based model routing (see `llm.toml.example` for provider examples)
+- `.env.llm` — API keys per provider (e.g. `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`); loaded alongside `.env` by the dev server
+
+The dev server (`tsx watch`) loads both `../../.env` and `../../.env.llm` from the repo root.
 
 ## Monorepo Structure
 
@@ -282,6 +305,14 @@ Two route sets:
 - Vite plugins: `@tailwindcss/vite` + `@tanstack/router-plugin/vite` + `@vitejs/plugin-react`
 - Game messages support markdown rendering (react-markdown + remark-gfm)
 - Session messages/state persist to IndexedDB for refresh survival
+
+**Frontend DataService layer** (`apps/web/src/services/data-service.ts`):
+
+Two implementations selected at runtime:
+- `LocalDataService` — all game data (worlds, sessions, messages) stored in browser IndexedDB; used for T1/T2 self-deploy. Before each action, `syncToServer()` pushes local state to server's MemoryStore so the stateless server can process the turn.
+- `RemoteDataService` — delegates all CRUD to the server API; used when `STORE_BACKEND=pg`.
+
+Storage mode is auto-detected on startup: `main.tsx` calls `GET /api/health`, reads `storeBackend` from the response, and sets `storageMode = "remote"` when it equals `"pg"`. LLM execution, plugin, and config APIs always go through the server regardless of storage mode.
 
 ### Deployment Tiers
 

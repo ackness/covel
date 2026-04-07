@@ -9,14 +9,15 @@
  */
 
 const DB_NAME = "covel-app";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 const STORE_STATE_SNAPSHOTS = "stateSnapshots"; // key: sessionId
 const STORE_WORLD_OVERLAYS = "worldOverlays"; // key: worldId
 const STORE_STATE_PATCHES = "statePatches"; // key: sessionId
 const STORE_SUBMITTED_BLOCKS = "submittedBlocks"; // key: sessionId
+const STORE_EXECUTION_STEPS = "executionSteps"; // key: sessionId
 
-type StoreNames = typeof STORE_STATE_SNAPSHOTS | typeof STORE_WORLD_OVERLAYS | typeof STORE_STATE_PATCHES | typeof STORE_SUBMITTED_BLOCKS;
+type StoreNames = typeof STORE_STATE_SNAPSHOTS | typeof STORE_WORLD_OVERLAYS | typeof STORE_STATE_PATCHES | typeof STORE_SUBMITTED_BLOCKS | typeof STORE_EXECUTION_STEPS;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -37,6 +38,9 @@ function openAppDb(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_SUBMITTED_BLOCKS)) {
         db.createObjectStore(STORE_SUBMITTED_BLOCKS);
+      }
+      if (!db.objectStoreNames.contains(STORE_EXECUTION_STEPS)) {
+        db.createObjectStore(STORE_EXECUTION_STEPS);
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -137,6 +141,20 @@ export async function saveSubmittedBlocks(sessionId: string, blockIds: string[])
 
 export async function removeSubmittedBlocks(sessionId: string): Promise<void> {
   return idbDelete(STORE_SUBMITTED_BLOCKS, sessionId);
+}
+
+// ── Execution Steps (Timeline) ───────────────────────────────────
+
+export async function getExecutionSteps(sessionId: string): Promise<unknown[]> {
+  return (await idbGet<unknown[]>(STORE_EXECUTION_STEPS, sessionId)) ?? [];
+}
+
+export async function saveExecutionSteps(sessionId: string, steps: unknown[]): Promise<void> {
+  return idbPut(STORE_EXECUTION_STEPS, sessionId, steps);
+}
+
+export async function removeExecutionSteps(sessionId: string): Promise<void> {
+  return idbDelete(STORE_EXECUTION_STEPS, sessionId);
 }
 
 // ── Migration ────────────────────────────────────────────────────
