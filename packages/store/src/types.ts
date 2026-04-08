@@ -1,182 +1,275 @@
-import type { I18nText, WorldDimensions } from "@covel/shared";
+/**
+ * Unified DataStore interface and record types.
+ *
+ * All data is session-scoped. Switching backends requires only changing
+ * the STORE_BACKEND environment variable (memory | sqlite | pg).
+ */
+
+// ── Record types ─────────────────────────────────────────────────
 
 export interface WorldRecord {
-  id: string;
-  name: I18nText;
-  description: I18nText;
-  lore?: I18nText;
-  locale?: string;
-  tags?: string[];
-  dimensions?: WorldDimensions;
-  /** Source world package ID (set for seed/file-based worlds, absent for user-created). */
-  packageId?: string;
-  createdAt: string;
-  updatedAt?: string;
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly locale?: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+  readonly createdAt: string;
+  readonly updatedAt?: string;
 }
 
 export interface SessionRecord {
-  id: string;
-  worldId: string;
-  status: "active" | "waiting_for_input" | "archived";
-  phase: "init" | "character_creation" | "playing" | "ended";
-  presetId?: string;
-  settings?: Record<string, unknown>;
-  taskBindings?: Record<string, string>;
-  createdAt: string;
+  readonly id: string;
+  readonly worldId?: string;
+  readonly phase: string;
+  readonly turnCount: number;
+  readonly locale: string;
+  readonly activePlugins: readonly string[];
+  readonly createdAt: string;
+  readonly updatedAt: string;
 }
 
-export interface MessageRecord {
-  id: string;
-  sessionId: string;
-  role: "system" | "user" | "assistant";
-  content: string;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
+export interface TurnResultRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly runtimeResults: unknown; // JSON — RuntimeResult[]
+  readonly conflicts?: unknown;     // JSON — WriteConflict[]
+  readonly auditResult?: unknown;   // JSON — RuntimeResult
+  readonly durationMs: number;
+  readonly createdAt: string;
 }
 
-export interface CharacterRecord {
-  id: string;
-  worldId: string;
-  sessionId?: string;
-  name: string;
-  type: "player" | "npc" | "companion";
-  description?: string;
-  fields?: Record<string, unknown>;
-  extensions?: Record<string, unknown>;
-  version: number;
-  createdAt: string;
-  updatedAt: string;
+export interface RuntimeResultRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly pluginId: string;
+  readonly runtimeId: string;
+  readonly status: string;
+  readonly output: unknown;        // JSON
+  readonly toolCalls: unknown;     // JSON — ToolCallRecord[]
+  readonly durationMs: number;
+  readonly tokenUsage?: unknown;   // JSON — { input, output }
+  readonly error?: string;
+  readonly createdAt: string;
+}
+
+export interface ToolCallRecordRow {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly toolName: string;
+  readonly pluginId: string;
+  readonly runtimeId: string;
+  readonly input: unknown;         // JSON
+  readonly output: unknown;        // JSON
+  readonly durationMs: number;
+  readonly approvalStatus: string;
+  readonly createdAt: string;
+}
+
+export interface StateSchemaRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly tableName: string;
+  readonly schema: unknown;        // JSON — StateTableSchema
+  readonly createdAt: string;
+}
+
+export interface StateEntryRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly tableName: string;
+  readonly fieldName: string;
+  readonly value: unknown;         // JSON
+  readonly updatedAt: string;
+}
+
+export interface StateChangeRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly tableName: string;
+  readonly fieldName: string;
+  readonly value: unknown;         // JSON
+  readonly changedBy: string;
+  readonly turnId: string;
+  readonly reason?: string;
+  readonly createdAt: string;
 }
 
 export interface EventRecord {
-  id: string;
-  branchId: string;
-  turnId: string;
-  type: string;
-  source: string;
-  locale?: string;
-  payload?: Record<string, unknown>;
-  createdAt: string;
+  readonly id: string;
+  readonly sessionId: string;
+  readonly type: string;
+  readonly topic: string;
+  readonly payload: unknown;       // JSON
+  readonly targetRuntime?: string;
+  readonly turnId?: string;
+  readonly createdAt: string;
 }
 
-export interface DomainRecord {
-  id: string;
-  branchId: string;
-  kind: string;
-  key: string;
-  value: unknown;
-  summary?: string;
-  locale?: string;
-  updatedAt: string;
+export interface ApprovalRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly toolName: string;
+  readonly decision: string;
+  readonly turnId: string;
+  readonly createdAt: string;
 }
 
-export interface SnapshotRecord {
-  id: string;
-  branchId: string;
-  turnId: string;
-  label?: string;
-  summary?: string;
-  data: Record<string, unknown>;
-  createdAt: string;
+export interface MessageRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly role: string;
+  readonly content: string;
+  readonly metadata?: unknown;     // JSON
+  readonly createdAt: string;
+}
+
+export interface CharacterRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly name: string;
+  readonly type: string;
+  readonly description?: string;
+  readonly fields?: unknown;       // JSON
+  readonly version: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface PluginConfigRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly pluginId: string;
+  readonly config: unknown;        // JSON
+  readonly updatedAt: string;
 }
 
 export interface TraceEventRecord {
-  id: string;
-  sessionId: string;
-  type: string;
-  requestId: string;
-  traceId: string;
-  turnId: string;
-  flowId: string;
-  seq: number;
-  payload: Record<string, unknown>;
-  createdAt: string;
+  readonly id: string;
+  readonly sessionId: string;
+  readonly type: string;
+  readonly traceId: string;
+  readonly turnId: string;
+  readonly payload: unknown;       // JSON
+  readonly createdAt: string;
 }
 
-export interface StatePatchRecord {
-  id: string;
-  sessionId: string;
-  summary: string;
-  packageName: string;
-  data?: unknown;
-  createdAt: string;
-}
-
-export interface StateSnapshotRecord {
-  id: string;
-  sessionId: string;
-  data: Record<string, unknown>;
-  createdAt: string;
-}
-
-export interface StoreSnapshot {
-  version: "covel-export/v1";
-  exportedAt: string;
-  data: {
-    worlds: WorldRecord[];
-    sessions: SessionRecord[];
-    messages: MessageRecord[];
-    characters: CharacterRecord[];
-    events: EventRecord[];
-    records: DomainRecord[];
-    snapshots: SnapshotRecord[];
-    traceEvents: TraceEventRecord[];
-    statePatches: StatePatchRecord[];
-    stateSnapshots: StateSnapshotRecord[];
-  };
-  config: Record<string, unknown>;
-}
+// ── DataStore interface ──────────────────────────────────────────
 
 export interface DataStore {
-  // World
-  listWorlds(): Promise<WorldRecord[]>;
-  getWorld(id: string): Promise<WorldRecord | null>;
-  upsertWorld(world: WorldRecord): Promise<void>;
-  deleteWorld(id: string): Promise<void>;
-
-  // Session
-  listSessions(worldId?: string): Promise<SessionRecord[]>;
+  // ── Session ──
+  createSession(session: SessionRecord): Promise<void>;
   getSession(id: string): Promise<SessionRecord | null>;
-  upsertSession(session: SessionRecord): Promise<void>;
+  updateSession(id: string, patch: Partial<Pick<SessionRecord, 'phase' | 'turnCount' | 'activePlugins' | 'updatedAt'>>): Promise<void>;
+  listSessions(): Promise<SessionRecord[]>;
   deleteSession(id: string): Promise<void>;
 
-  // Message
+  // ── Turn Results ──
+  saveTurnResult(record: TurnResultRecord): Promise<void>;
+  getTurnResult(sessionId: string, turnId: string): Promise<TurnResultRecord | null>;
+  listTurnResults(sessionId: string, limit?: number): Promise<TurnResultRecord[]>;
+
+  // ── Runtime Results ──
+  saveRuntimeResult(record: RuntimeResultRecord): Promise<void>;
+  listRuntimeResults(sessionId: string, turnId: string): Promise<RuntimeResultRecord[]>;
+
+  // ── Tool Calls ──
+  saveToolCall(record: ToolCallRecordRow): Promise<void>;
+  listToolCalls(sessionId: string, turnId?: string): Promise<ToolCallRecordRow[]>;
+
+  // ── State Schemas ──
+  saveStateSchema(record: StateSchemaRecord): Promise<void>;
+  listStateSchemas(sessionId: string): Promise<StateSchemaRecord[]>;
+  deleteStateSchema(sessionId: string, tableName: string): Promise<void>;
+
+  // ── State Entries ──
+  getStateEntry(sessionId: string, tableName: string, fieldName: string): Promise<StateEntryRecord | null>;
+  upsertStateEntry(record: StateEntryRecord): Promise<void>;
+  listStateEntries(sessionId: string, tableName: string): Promise<StateEntryRecord[]>;
+
+  // ── State Changes ──
+  addStateChange(record: StateChangeRecord): Promise<void>;
+  listStateChanges(sessionId: string, tableName: string, fieldName: string): Promise<StateChangeRecord[]>;
+
+  // ── Events ──
+  saveEvent(record: EventRecord): Promise<void>;
+  listEvents(sessionId: string, options?: { topic?: string; limit?: number }): Promise<EventRecord[]>;
+
+  // ── Approvals ──
+  saveApproval(record: ApprovalRecord): Promise<void>;
+  listApprovals(sessionId: string): Promise<ApprovalRecord[]>;
+
+  // ── Messages ──
+  addMessage(record: MessageRecord): Promise<void>;
   listMessages(sessionId: string): Promise<MessageRecord[]>;
-  addMessage(msg: MessageRecord): Promise<void>;
-  clearMessages(sessionId: string): Promise<void>;
 
-  // Character
-  listCharacters(sessionId?: string): Promise<CharacterRecord[]>;
-  upsertCharacter(char: CharacterRecord): Promise<void>;
-  deleteCharacter(id: string): Promise<void>;
+  // ── Characters ──
+  upsertCharacter(record: CharacterRecord): Promise<void>;
+  listCharacters(sessionId: string): Promise<CharacterRecord[]>;
 
-  // Event
-  appendEvent(event: EventRecord): Promise<void>;
-  listEvents(branchId: string): Promise<EventRecord[]>;
+  // ── Plugin Configs ──
+  savePluginConfig(record: PluginConfigRecord): Promise<void>;
+  getPluginConfig(sessionId: string, pluginId: string): Promise<PluginConfigRecord | null>;
 
-  // Record
-  upsertRecord(record: DomainRecord): Promise<void>;
-  listRecords(branchId: string, kind?: string): Promise<DomainRecord[]>;
+  // ── Worlds ──
+  listWorlds(): Promise<WorldRecord[]>;
+  getWorld(id: string): Promise<WorldRecord | null>;
+  upsertWorld(record: WorldRecord): Promise<void>;
 
-  // Snapshot
-  createSnapshot(snapshot: SnapshotRecord): Promise<void>;
-  getSnapshot(id: string): Promise<SnapshotRecord | null>;
-  listSnapshots(branchId: string): Promise<SnapshotRecord[]>;
-
-  // Trace Events
-  addTraceEvent(event: TraceEventRecord): Promise<void>;
+  // ── Trace ──
+  addTraceEvent(record: TraceEventRecord): Promise<void>;
   listTraceEvents(sessionId: string): Promise<TraceEventRecord[]>;
 
-  // State Patches
-  addStatePatch(patch: StatePatchRecord): Promise<void>;
-  listStatePatches(sessionId: string): Promise<StatePatchRecord[]>;
+  // ── Turn Messages (append-only) ──
+  appendTurnMessage(record: TurnMessageRecord): Promise<void>;
+  listTurnMessages(sessionId: string): Promise<TurnMessageRecord[]>;
 
-  // State Snapshots (session-keyed latest state)
-  saveStateSnapshot(snapshot: StateSnapshotRecord): Promise<void>;
-  getStateSnapshot(sessionId: string): Promise<StateSnapshotRecord | null>;
+  // ── Player Inputs ──
+  savePlayerInput(record: PlayerInputRecord): Promise<void>;
+  getPlayerInput(sessionId: string, formId: string): Promise<PlayerInputRecord | null>;
+  listPlayerInputs(sessionId: string): Promise<PlayerInputRecord[]>;
 
-  // Bulk
-  exportAll(): Promise<StoreSnapshot>;
-  importAll(data: StoreSnapshot): Promise<void>;
-  clear(): Promise<void>;
+  // ── Lifecycle ──
+  close(): Promise<void>;
+}
+
+// ── Turn Messages (append-only conversation history) ─────────────
+
+export interface TurnMessageRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly sourceType: string;     // 'system' | 'runtime' | 'player' | 'tool' | 'player-input'
+  readonly sourcePluginId?: string;
+  readonly sourceRuntimeId?: string;
+  readonly role: string;           // 'system' | 'user' | 'assistant'
+  readonly name?: string;
+  readonly content: string;
+  readonly ui?: unknown;           // JSON — UIRenderInstruction[]
+  readonly pendingInput?: unknown;  // JSON — PlayerInputForm
+  readonly order: number;
+  readonly createdAt: string;
+}
+
+export interface PlayerInputRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly formId: string;
+  readonly values: unknown;        // JSON — Record<string, unknown>
+  readonly createdAt: string;
+}
+
+// ── Store config ─────────────────────────────────────────────────
+
+export type StoreBackend = 'memory' | 'sqlite' | 'pg';
+
+export interface StoreConfig {
+  readonly backend: StoreBackend;
+  /** SQLite file path (default: ./data/covel.db) */
+  readonly sqlitePath?: string;
+  /** PostgreSQL connection URL */
+  readonly databaseUrl?: string;
 }

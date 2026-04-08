@@ -1,238 +1,292 @@
+/**
+ * In-memory DataStore implementation.
+ * Used for testing and ephemeral sessions.
+ */
+
 import type {
   DataStore,
-  WorldRecord,
   SessionRecord,
+  TurnResultRecord,
+  RuntimeResultRecord,
+  ToolCallRecordRow,
+  StateSchemaRecord,
+  StateEntryRecord,
+  StateChangeRecord,
+  EventRecord,
+  ApprovalRecord,
   MessageRecord,
   CharacterRecord,
-  EventRecord,
-  DomainRecord,
-  SnapshotRecord,
+  PluginConfigRecord,
+  WorldRecord,
   TraceEventRecord,
-  StatePatchRecord,
-  StateSnapshotRecord,
-  StoreSnapshot,
-} from "../types.js";
+  TurnMessageRecord,
+  PlayerInputRecord,
+} from '../types.js';
 
-export class MemoryStore implements DataStore {
-  private worlds = new Map<string, WorldRecord>();
-  private sessions = new Map<string, SessionRecord>();
-  private messages = new Map<string, MessageRecord>();
-  private characters = new Map<string, CharacterRecord>();
-  private events = new Map<string, EventRecord>();
-  private records = new Map<string, DomainRecord>();
-  private snapshots = new Map<string, SnapshotRecord>();
-  private traceEvents = new Map<string, TraceEventRecord>();
-  private statePatches = new Map<string, StatePatchRecord>();
-  private stateSnapshots = new Map<string, StateSnapshotRecord>();
+export function createMemoryStore(): DataStore {
+  const sessions = new Map<string, SessionRecord>();
+  const turnResults: TurnResultRecord[] = [];
+  const runtimeResults: RuntimeResultRecord[] = [];
+  const toolCalls: ToolCallRecordRow[] = [];
+  const stateSchemas: StateSchemaRecord[] = [];
+  const stateEntries = new Map<string, StateEntryRecord>();
+  const stateChanges: StateChangeRecord[] = [];
+  const events: EventRecord[] = [];
+  const approvals: ApprovalRecord[] = [];
+  const messages: MessageRecord[] = [];
+  const characters = new Map<string, CharacterRecord>();
+  const pluginConfigs = new Map<string, PluginConfigRecord>();
+  const worlds = new Map<string, WorldRecord>();
+  const traceEvents: TraceEventRecord[] = [];
+  const turnMessages: TurnMessageRecord[] = [];
+  const playerInputs: PlayerInputRecord[] = [];
 
-  // World
-
-  async listWorlds(): Promise<WorldRecord[]> {
-    return [...this.worlds.values()];
+  function stateEntryKey(sessionId: string, tableName: string, fieldName: string): string {
+    return `${sessionId}:${tableName}:${fieldName}`;
   }
 
-  async getWorld(id: string): Promise<WorldRecord | null> {
-    return this.worlds.get(id) ?? null;
+  function pluginConfigKey(sessionId: string, pluginId: string): string {
+    return `${sessionId}:${pluginId}`;
   }
 
-  async upsertWorld(world: WorldRecord): Promise<void> {
-    this.worlds.set(world.id, world);
-  }
+  const store: DataStore = {
+    // ── Session ──
 
-  async deleteWorld(id: string): Promise<void> {
-    this.worlds.delete(id);
-  }
+    async createSession(session) {
+      sessions.set(session.id, session);
+    },
 
-  // Session
+    async getSession(id) {
+      return sessions.get(id) ?? null;
+    },
 
-  async listSessions(worldId?: string): Promise<SessionRecord[]> {
-    const all = [...this.sessions.values()];
-    if (worldId != null) {
-      return all.filter((s) => s.worldId === worldId);
-    }
-    return all;
-  }
+    async updateSession(id, patch) {
+      const existing = sessions.get(id);
+      if (!existing) return;
+      sessions.set(id, { ...existing, ...patch });
+    },
 
-  async getSession(id: string): Promise<SessionRecord | null> {
-    return this.sessions.get(id) ?? null;
-  }
+    async listSessions() {
+      return [...sessions.values()];
+    },
 
-  async upsertSession(session: SessionRecord): Promise<void> {
-    this.sessions.set(session.id, session);
-  }
+    async deleteSession(id) {
+      sessions.delete(id);
+    },
 
-  async deleteSession(id: string): Promise<void> {
-    this.sessions.delete(id);
-  }
+    // ── Turn Results ──
 
-  // Message
+    async saveTurnResult(record) {
+      turnResults.push(record);
+    },
 
-  async listMessages(sessionId: string): Promise<MessageRecord[]> {
-    return [...this.messages.values()].filter(
-      (m) => m.sessionId === sessionId,
-    );
-  }
+    async getTurnResult(sessionId, turnId) {
+      return (
+        turnResults.find((r) => r.sessionId === sessionId && r.turnId === turnId) ?? null
+      );
+    },
 
-  async addMessage(msg: MessageRecord): Promise<void> {
-    this.messages.set(msg.id, msg);
-  }
+    async listTurnResults(sessionId, limit?) {
+      const filtered = turnResults
+        .filter((r) => r.sessionId === sessionId)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      return limit !== undefined ? filtered.slice(0, limit) : filtered;
+    },
 
-  async clearMessages(sessionId: string): Promise<void> {
-    for (const [id, msg] of this.messages) {
-      if (msg.sessionId === sessionId) {
-        this.messages.delete(id);
+    // ── Runtime Results ──
+
+    async saveRuntimeResult(record) {
+      runtimeResults.push(record);
+    },
+
+    async listRuntimeResults(sessionId, turnId) {
+      return runtimeResults.filter(
+        (r) => r.sessionId === sessionId && r.turnId === turnId,
+      );
+    },
+
+    // ── Tool Calls ──
+
+    async saveToolCall(record) {
+      toolCalls.push(record);
+    },
+
+    async listToolCalls(sessionId, turnId?) {
+      return toolCalls.filter(
+        (r) => r.sessionId === sessionId && (turnId === undefined || r.turnId === turnId),
+      );
+    },
+
+    // ── State Schemas ──
+
+    async saveStateSchema(record) {
+      stateSchemas.push(record);
+    },
+
+    async listStateSchemas(sessionId) {
+      return stateSchemas.filter((r) => r.sessionId === sessionId);
+    },
+
+    async deleteStateSchema(sessionId, tableName) {
+      const idx = stateSchemas.findIndex(
+        (r) => r.sessionId === sessionId && r.tableName === tableName,
+      );
+      if (idx !== -1) stateSchemas.splice(idx, 1);
+    },
+
+    // ── State Entries ──
+
+    async getStateEntry(sessionId, tableName, fieldName) {
+      return stateEntries.get(stateEntryKey(sessionId, tableName, fieldName)) ?? null;
+    },
+
+    async upsertStateEntry(record) {
+      stateEntries.set(
+        stateEntryKey(record.sessionId, record.tableName, record.fieldName),
+        record,
+      );
+    },
+
+    async listStateEntries(sessionId, tableName) {
+      return [...stateEntries.values()].filter(
+        (r) => r.sessionId === sessionId && r.tableName === tableName,
+      );
+    },
+
+    // ── State Changes ──
+
+    async addStateChange(record) {
+      stateChanges.push(record);
+    },
+
+    async listStateChanges(sessionId, tableName, fieldName) {
+      return stateChanges
+        .filter(
+          (r) =>
+            r.sessionId === sessionId &&
+            r.tableName === tableName &&
+            r.fieldName === fieldName,
+        )
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    },
+
+    // ── Events ──
+
+    async saveEvent(record) {
+      events.push(record);
+    },
+
+    async listEvents(sessionId, options?) {
+      let filtered = events.filter((r) => r.sessionId === sessionId);
+      if (options?.topic !== undefined) {
+        filtered = filtered.filter((r) => r.topic === options.topic);
       }
-    }
-  }
-
-  // Character
-
-  async listCharacters(sessionId?: string): Promise<CharacterRecord[]> {
-    const all = [...this.characters.values()];
-    if (sessionId != null) {
-      return all.filter((c) => c.sessionId === sessionId);
-    }
-    return all;
-  }
-
-  async upsertCharacter(char: CharacterRecord): Promise<void> {
-    this.characters.set(char.id, char);
-  }
-
-  async deleteCharacter(id: string): Promise<void> {
-    this.characters.delete(id);
-  }
-
-  // Event
-
-  async appendEvent(event: EventRecord): Promise<void> {
-    this.events.set(event.id, event);
-  }
-
-  async listEvents(branchId: string): Promise<EventRecord[]> {
-    return [...this.events.values()].filter((e) => e.branchId === branchId);
-  }
-
-  // Record
-
-  async upsertRecord(record: DomainRecord): Promise<void> {
-    this.records.set(record.id, record);
-  }
-
-  async listRecords(branchId: string, kind?: string): Promise<DomainRecord[]> {
-    return [...this.records.values()].filter((r) => {
-      if (r.branchId !== branchId) return false;
-      if (kind != null && r.kind !== kind) return false;
-      return true;
-    });
-  }
-
-  // Snapshot
-
-  async createSnapshot(snapshot: SnapshotRecord): Promise<void> {
-    this.snapshots.set(snapshot.id, snapshot);
-  }
-
-  async getSnapshot(id: string): Promise<SnapshotRecord | null> {
-    return this.snapshots.get(id) ?? null;
-  }
-
-  async listSnapshots(branchId: string): Promise<SnapshotRecord[]> {
-    return [...this.snapshots.values()].filter(
-      (s) => s.branchId === branchId,
-    );
-  }
-
-  // Trace Events
-
-  async addTraceEvent(event: TraceEventRecord): Promise<void> {
-    this.traceEvents.set(event.id, event);
-  }
-
-  async listTraceEvents(sessionId: string): Promise<TraceEventRecord[]> {
-    return [...this.traceEvents.values()]
-      .filter((e) => e.sessionId === sessionId)
-      .sort((a, b) => a.seq - b.seq);
-  }
-
-  // State Patches
-
-  async addStatePatch(patch: StatePatchRecord): Promise<void> {
-    this.statePatches.set(patch.id, patch);
-  }
-
-  async listStatePatches(sessionId: string): Promise<StatePatchRecord[]> {
-    return [...this.statePatches.values()].filter(
-      (p) => p.sessionId === sessionId,
-    );
-  }
-
-  // State Snapshots
-
-  async saveStateSnapshot(snapshot: StateSnapshotRecord): Promise<void> {
-    // Overwrite by sessionId — only keep latest per session
-    for (const [id, existing] of this.stateSnapshots) {
-      if (existing.sessionId === snapshot.sessionId) {
-        this.stateSnapshots.delete(id);
+      if (options?.limit !== undefined) {
+        filtered = filtered.slice(0, options.limit);
       }
-    }
-    this.stateSnapshots.set(snapshot.id, snapshot);
-  }
+      return filtered;
+    },
 
-  async getStateSnapshot(sessionId: string): Promise<StateSnapshotRecord | null> {
-    for (const snap of this.stateSnapshots.values()) {
-      if (snap.sessionId === sessionId) return snap;
-    }
-    return null;
-  }
+    // ── Approvals ──
 
-  // Bulk
+    async saveApproval(record) {
+      approvals.push(record);
+    },
 
-  async exportAll(): Promise<StoreSnapshot> {
-    return {
-      version: "covel-export/v1",
-      exportedAt: new Date().toISOString(),
-      data: {
-        worlds: [...this.worlds.values()],
-        sessions: [...this.sessions.values()],
-        messages: [...this.messages.values()],
-        characters: [...this.characters.values()],
-        events: [...this.events.values()],
-        records: [...this.records.values()],
-        snapshots: [...this.snapshots.values()],
-        traceEvents: [...this.traceEvents.values()],
-        statePatches: [...this.statePatches.values()],
-        stateSnapshots: [...this.stateSnapshots.values()],
-      },
-      config: {},
-    };
-  }
+    async listApprovals(sessionId) {
+      return approvals.filter((r) => r.sessionId === sessionId);
+    },
 
-  async importAll(data: StoreSnapshot): Promise<void> {
-    await this.clear();
+    // ── Messages ──
 
-    for (const w of data.data.worlds) this.worlds.set(w.id, w);
-    for (const s of data.data.sessions) this.sessions.set(s.id, s);
-    for (const m of data.data.messages) this.messages.set(m.id, m);
-    for (const c of data.data.characters) this.characters.set(c.id, c);
-    for (const e of data.data.events) this.events.set(e.id, e);
-    for (const r of data.data.records) this.records.set(r.id, r);
-    for (const s of data.data.snapshots) this.snapshots.set(s.id, s);
-    for (const t of data.data.traceEvents ?? []) this.traceEvents.set(t.id, t);
-    for (const p of data.data.statePatches ?? []) this.statePatches.set(p.id, p);
-    for (const s of data.data.stateSnapshots ?? []) this.stateSnapshots.set(s.id, s);
-  }
+    async addMessage(record) {
+      messages.push(record);
+    },
 
-  async clear(): Promise<void> {
-    this.worlds.clear();
-    this.sessions.clear();
-    this.messages.clear();
-    this.characters.clear();
-    this.events.clear();
-    this.records.clear();
-    this.snapshots.clear();
-    this.traceEvents.clear();
-    this.statePatches.clear();
-    this.stateSnapshots.clear();
-  }
+    async listMessages(sessionId) {
+      return messages
+        .filter((r) => r.sessionId === sessionId)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    },
+
+    // ── Characters ──
+
+    async upsertCharacter(record) {
+      characters.set(record.id, record);
+    },
+
+    async listCharacters(sessionId) {
+      return [...characters.values()].filter((r) => r.sessionId === sessionId);
+    },
+
+    // ── Plugin Configs ──
+
+    async savePluginConfig(record) {
+      pluginConfigs.set(pluginConfigKey(record.sessionId, record.pluginId), record);
+    },
+
+    async getPluginConfig(sessionId, pluginId) {
+      return pluginConfigs.get(pluginConfigKey(sessionId, pluginId)) ?? null;
+    },
+
+    // ── Worlds ──
+
+    async listWorlds() {
+      return [...worlds.values()];
+    },
+
+    async getWorld(id) {
+      return worlds.get(id) ?? null;
+    },
+
+    async upsertWorld(record) {
+      worlds.set(record.id, record);
+    },
+
+    // ── Trace ──
+
+    async addTraceEvent(record) {
+      traceEvents.push(record);
+    },
+
+    async listTraceEvents(sessionId) {
+      return traceEvents.filter((r) => r.sessionId === sessionId);
+    },
+
+    // ── Turn Messages ──
+
+    async appendTurnMessage(record) {
+      turnMessages.push(record);
+    },
+
+    async listTurnMessages(sessionId) {
+      return turnMessages
+        .filter((r) => r.sessionId === sessionId)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    },
+
+    // ── Player Inputs ──
+
+    async savePlayerInput(record) {
+      playerInputs.push(record);
+    },
+
+    async getPlayerInput(sessionId, formId) {
+      return playerInputs.find(
+        (r) => r.sessionId === sessionId && r.formId === formId,
+      ) ?? null;
+    },
+
+    async listPlayerInputs(sessionId) {
+      return playerInputs.filter((r) => r.sessionId === sessionId);
+    },
+
+    // ── Lifecycle ──
+
+    async close() {
+      // No-op for in-memory store
+    },
+  };
+
+  return store;
 }

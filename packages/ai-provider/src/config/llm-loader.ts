@@ -58,9 +58,9 @@ export function parseLlmConfig(toml: string): { llmConfig: LlmConfig; aiConfig: 
 function convertToAiConfig(llm: LlmConfig): AiConfig {
   const providers: Record<string, ProviderDefaults> = {};
   const presets: PresetConfig[] = [];
-  const slotNames = Object.keys(llm.slots);
+  const slotNames = Object.keys(llm.covel);
 
-  for (const [slotName, _def] of Object.entries(llm.slots)) {
+  for (const [slotName, _def] of Object.entries(llm.covel)) {
     const def = _def as SlotDefinition;
     // Register provider (first occurrence wins for baseUrl/protocol)
     if (!providers[def.provider]) {

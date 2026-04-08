@@ -1,351 +1,334 @@
-import { openDB, type IDBPDatabase } from "idb";
+/**
+ * IndexedDB DataStore implementation using the `idb` library.
+ * Used for browser-side storage (T1/T2 deployment tiers).
+ */
+
+import { openDB, type IDBPDatabase } from 'idb';
 import type {
   DataStore,
-  WorldRecord,
   SessionRecord,
+  TurnResultRecord,
+  RuntimeResultRecord,
+  ToolCallRecordRow,
+  StateSchemaRecord,
+  StateEntryRecord,
+  StateChangeRecord,
+  EventRecord,
+  ApprovalRecord,
   MessageRecord,
   CharacterRecord,
-  EventRecord,
-  DomainRecord,
-  SnapshotRecord,
+  PluginConfigRecord,
+  WorldRecord,
   TraceEventRecord,
-  StatePatchRecord,
-  StateSnapshotRecord,
-  StoreSnapshot,
-} from "../types.js";
+  TurnMessageRecord,
+  PlayerInputRecord,
+} from '../types.js';
 
-const STORE_NAMES = [
-  "worlds",
-  "sessions",
-  "messages",
-  "characters",
-  "events",
-  "records",
-  "snapshots",
-  "traceEvents",
-  "statePatches",
-  "stateSnapshots",
-] as const;
+const DB_VERSION = 2;
 
-type StoreName = (typeof STORE_NAMES)[number];
+async function initDb(dbName: string): Promise<IDBPDatabase> {
+  return openDB(dbName, DB_VERSION, {
+    upgrade(db, oldVersion) {
+      if (oldVersion < 1) {
+        db.createObjectStore('sessions', { keyPath: 'id' });
 
-export interface IdbStoreOptions {
-  dbName?: string;
-  dbVersion?: number;
+        const turnResults = db.createObjectStore('turnResults', { keyPath: 'id' });
+        turnResults.createIndex('sessionId', 'sessionId');
+
+        const runtimeResults = db.createObjectStore('runtimeResults', { keyPath: 'id' });
+        runtimeResults.createIndex('sessionId_turnId', ['sessionId', 'turnId']);
+
+        const toolCalls = db.createObjectStore('toolCalls', { keyPath: 'id' });
+        toolCalls.createIndex('sessionId', 'sessionId');
+        toolCalls.createIndex('sessionId_turnId', ['sessionId', 'turnId']);
+
+        const stateSchemas = db.createObjectStore('stateSchemas', { keyPath: 'id' });
+        stateSchemas.createIndex('sessionId', 'sessionId');
+
+        const stateEntries = db.createObjectStore('stateEntries', { keyPath: 'id' });
+        stateEntries.createIndex('sessionId', 'sessionId');
+        stateEntries.createIndex('lookup', ['sessionId', 'tableName', 'fieldName']);
+
+        const stateChanges = db.createObjectStore('stateChanges', { keyPath: 'id' });
+        stateChanges.createIndex('sessionId', 'sessionId');
+
+        const events = db.createObjectStore('events', { keyPath: 'id' });
+        events.createIndex('sessionId', 'sessionId');
+
+        const approvals = db.createObjectStore('approvals', { keyPath: 'id' });
+        approvals.createIndex('sessionId', 'sessionId');
+
+        const messages = db.createObjectStore('messages', { keyPath: 'id' });
+        messages.createIndex('sessionId', 'sessionId');
+
+        const characters = db.createObjectStore('characters', { keyPath: 'id' });
+        characters.createIndex('sessionId', 'sessionId');
+
+        const pluginConfigs = db.createObjectStore('pluginConfigs', { keyPath: 'id' });
+        pluginConfigs.createIndex('lookup', ['sessionId', 'pluginId']);
+
+        db.createObjectStore('worlds', { keyPath: 'id' });
+
+        const traceEvents = db.createObjectStore('traceEvents', { keyPath: 'id' });
+        traceEvents.createIndex('sessionId', 'sessionId');
+      }
+
+      if (oldVersion < 2) {
+        const turnMsgs = db.createObjectStore('turnMessages', { keyPath: 'id' });
+        turnMsgs.createIndex('sessionId', 'sessionId');
+
+        const playerInputs = db.createObjectStore('playerInputs', { keyPath: 'id' });
+        playerInputs.createIndex('sessionId', 'sessionId');
+        playerInputs.createIndex('lookup', ['sessionId', 'formId']);
+      }
+    },
+  });
 }
 
-export class IdbStore implements DataStore {
-  private dbPromise: Promise<IDBPDatabase> | null = null;
-  private readonly dbName: string;
-  private readonly dbVersion: number;
+export async function createIdbStore(dbName?: string): Promise<DataStore> {
+  const db = await initDb(dbName ?? 'covel-store');
 
-  constructor(options?: IdbStoreOptions) {
-    this.dbName = options?.dbName ?? "covel";
-    // NOTE: Increment dbVersion when adding new object stores or indexes.
-    // Existing clients with version 1 won't get schema updates unless version increases.
-    this.dbVersion = options?.dbVersion ?? 2;
-  }
+  const store: DataStore = {
+    // ── Session ──
 
-  private getDb(): Promise<IDBPDatabase> {
-    if (this.dbPromise == null) {
-      this.dbPromise = openDB(this.dbName, this.dbVersion, {
-        upgrade(db, oldVersion) {
-          if (oldVersion < 1) {
-            db.createObjectStore("worlds", { keyPath: "id" });
+    async createSession(session: SessionRecord): Promise<void> {
+      await db.put('sessions', structuredClone(session));
+    },
 
-            const sessions = db.createObjectStore("sessions", { keyPath: "id" });
-            sessions.createIndex("worldId", "worldId");
+    async getSession(id: string): Promise<SessionRecord | null> {
+      return (await db.get('sessions', id)) ?? null;
+    },
 
-            const messages = db.createObjectStore("messages", { keyPath: "id" });
-            messages.createIndex("sessionId", "sessionId");
+    async updateSession(id, patch): Promise<void> {
+      const existing = await db.get('sessions', id);
+      if (!existing) return;
+      await db.put('sessions', { ...existing, ...patch });
+    },
 
-            const characters = db.createObjectStore("characters", {
-              keyPath: "id",
-            });
-            characters.createIndex("sessionId", "sessionId");
+    async listSessions(): Promise<SessionRecord[]> {
+      return db.getAll('sessions');
+    },
 
-            const events = db.createObjectStore("events", { keyPath: "id" });
-            events.createIndex("branchId", "branchId");
+    async deleteSession(id: string): Promise<void> {
+      await db.delete('sessions', id);
+    },
 
-            const records = db.createObjectStore("records", { keyPath: "id" });
-            records.createIndex("branchId", "branchId");
-            records.createIndex("branchId_kind", ["branchId", "kind"]);
+    // ── Turn Results ──
 
-            const snapshots = db.createObjectStore("snapshots", {
-              keyPath: "id",
-            });
-            snapshots.createIndex("branchId", "branchId");
-          }
+    async saveTurnResult(record: TurnResultRecord): Promise<void> {
+      await db.put('turnResults', structuredClone(record));
+    },
 
-          if (oldVersion < 2) {
-            const traceEvents = db.createObjectStore("traceEvents", { keyPath: "id" });
-            traceEvents.createIndex("sessionId", "sessionId");
+    async getTurnResult(sessionId: string, turnId: string): Promise<TurnResultRecord | null> {
+      const all = await db.getAllFromIndex('turnResults', 'sessionId', sessionId);
+      return all.find((r) => r.turnId === turnId) ?? null;
+    },
 
-            const statePatches = db.createObjectStore("statePatches", { keyPath: "id" });
-            statePatches.createIndex("sessionId", "sessionId");
+    async listTurnResults(sessionId: string, limit?: number): Promise<TurnResultRecord[]> {
+      const all = await db.getAllFromIndex('turnResults', 'sessionId', sessionId);
+      const sorted = all.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      return limit !== undefined ? sorted.slice(0, limit) : sorted;
+    },
 
-            const stateSnapshots = db.createObjectStore("stateSnapshots", { keyPath: "id" });
-            stateSnapshots.createIndex("sessionId", "sessionId");
-          }
-        },
-      });
-    }
-    return this.dbPromise;
-  }
+    // ── Runtime Results ──
 
-  // World
+    async saveRuntimeResult(record: RuntimeResultRecord): Promise<void> {
+      await db.put('runtimeResults', structuredClone(record));
+    },
 
-  async listWorlds(): Promise<WorldRecord[]> {
-    const db = await this.getDb();
-    return db.getAll("worlds");
-  }
+    async listRuntimeResults(sessionId: string, turnId: string): Promise<RuntimeResultRecord[]> {
+      return db.getAllFromIndex('runtimeResults', 'sessionId_turnId', [sessionId, turnId]);
+    },
 
-  async getWorld(id: string): Promise<WorldRecord | null> {
-    const db = await this.getDb();
-    return (await db.get("worlds", id)) ?? null;
-  }
+    // ── Tool Calls ──
 
-  async upsertWorld(world: WorldRecord): Promise<void> {
-    const db = await this.getDb();
-    await db.put("worlds", world);
-  }
+    async saveToolCall(record: ToolCallRecordRow): Promise<void> {
+      await db.put('toolCalls', structuredClone(record));
+    },
 
-  async deleteWorld(id: string): Promise<void> {
-    const db = await this.getDb();
-    await db.delete("worlds", id);
-  }
-
-  // Session
-
-  async listSessions(worldId?: string): Promise<SessionRecord[]> {
-    const db = await this.getDb();
-    if (worldId != null) {
-      return db.getAllFromIndex("sessions", "worldId", worldId);
-    }
-    return db.getAll("sessions");
-  }
-
-  async getSession(id: string): Promise<SessionRecord | null> {
-    const db = await this.getDb();
-    return (await db.get("sessions", id)) ?? null;
-  }
-
-  async upsertSession(session: SessionRecord): Promise<void> {
-    const db = await this.getDb();
-    await db.put("sessions", session);
-  }
-
-  async deleteSession(id: string): Promise<void> {
-    const db = await this.getDb();
-    await db.delete("sessions", id);
-  }
-
-  // Message
-
-  async listMessages(sessionId: string): Promise<MessageRecord[]> {
-    const db = await this.getDb();
-    return db.getAllFromIndex("messages", "sessionId", sessionId);
-  }
-
-  async addMessage(msg: MessageRecord): Promise<void> {
-    const db = await this.getDb();
-    await db.put("messages", msg);
-  }
-
-  async clearMessages(sessionId: string): Promise<void> {
-    const db = await this.getDb();
-    const tx = db.transaction("messages", "readwrite");
-    const index = tx.store.index("sessionId");
-    let cursor = await index.openCursor(sessionId);
-    while (cursor) {
-      await cursor.delete();
-      cursor = await cursor.continue();
-    }
-    await tx.done;
-  }
-
-  // Character
-
-  async listCharacters(sessionId?: string): Promise<CharacterRecord[]> {
-    const db = await this.getDb();
-    if (sessionId != null) {
-      return db.getAllFromIndex("characters", "sessionId", sessionId);
-    }
-    return db.getAll("characters");
-  }
-
-  async upsertCharacter(char: CharacterRecord): Promise<void> {
-    const db = await this.getDb();
-    await db.put("characters", char);
-  }
-
-  async deleteCharacter(id: string): Promise<void> {
-    const db = await this.getDb();
-    await db.delete("characters", id);
-  }
-
-  // Event
-
-  async appendEvent(event: EventRecord): Promise<void> {
-    const db = await this.getDb();
-    await db.put("events", event);
-  }
-
-  async listEvents(branchId: string): Promise<EventRecord[]> {
-    const db = await this.getDb();
-    return db.getAllFromIndex("events", "branchId", branchId);
-  }
-
-  // Record
-
-  async upsertRecord(record: DomainRecord): Promise<void> {
-    const db = await this.getDb();
-    await db.put("records", record);
-  }
-
-  async listRecords(branchId: string, kind?: string): Promise<DomainRecord[]> {
-    const db = await this.getDb();
-    if (kind != null) {
-      return db.getAllFromIndex("records", "branchId_kind", [branchId, kind]);
-    }
-    return db.getAllFromIndex("records", "branchId", branchId);
-  }
-
-  // Snapshot
-
-  async createSnapshot(snapshot: SnapshotRecord): Promise<void> {
-    const db = await this.getDb();
-    await db.put("snapshots", snapshot);
-  }
-
-  async getSnapshot(id: string): Promise<SnapshotRecord | null> {
-    const db = await this.getDb();
-    return (await db.get("snapshots", id)) ?? null;
-  }
-
-  async listSnapshots(branchId: string): Promise<SnapshotRecord[]> {
-    const db = await this.getDb();
-    return db.getAllFromIndex("snapshots", "branchId", branchId);
-  }
-
-  // Trace Events
-
-  async addTraceEvent(event: TraceEventRecord): Promise<void> {
-    const db = await this.getDb();
-    await db.put("traceEvents", event);
-  }
-
-  async listTraceEvents(sessionId: string): Promise<TraceEventRecord[]> {
-    const db = await this.getDb();
-    return db.getAllFromIndex("traceEvents", "sessionId", sessionId);
-  }
-
-  // State Patches
-
-  async addStatePatch(patch: StatePatchRecord): Promise<void> {
-    const db = await this.getDb();
-    await db.put("statePatches", patch);
-  }
-
-  async listStatePatches(sessionId: string): Promise<StatePatchRecord[]> {
-    const db = await this.getDb();
-    return db.getAllFromIndex("statePatches", "sessionId", sessionId);
-  }
-
-  // State Snapshots
-
-  async saveStateSnapshot(snapshot: StateSnapshotRecord): Promise<void> {
-    const db = await this.getDb();
-    // Remove previous snapshot for this session, then insert new one
-    const tx = db.transaction("stateSnapshots", "readwrite");
-    const index = tx.store.index("sessionId");
-    let cursor = await index.openCursor(snapshot.sessionId);
-    while (cursor) {
-      await cursor.delete();
-      cursor = await cursor.continue();
-    }
-    await tx.store.put(snapshot);
-    await tx.done;
-  }
-
-  async getStateSnapshot(sessionId: string): Promise<StateSnapshotRecord | null> {
-    const db = await this.getDb();
-    const results = await db.getAllFromIndex("stateSnapshots", "sessionId", sessionId);
-    return results[0] ?? null;
-  }
-
-  // Bulk
-
-  async exportAll(): Promise<StoreSnapshot> {
-    const db = await this.getDb();
-    const [worlds, sessions, messages, characters, events, records, snapshots, traceEvents, statePatches, stateSnapshots] =
-      await Promise.all([
-        db.getAll("worlds"),
-        db.getAll("sessions"),
-        db.getAll("messages"),
-        db.getAll("characters"),
-        db.getAll("events"),
-        db.getAll("records"),
-        db.getAll("snapshots"),
-        db.getAll("traceEvents"),
-        db.getAll("statePatches"),
-        db.getAll("stateSnapshots"),
-      ]);
-
-    return {
-      version: "covel-export/v1",
-      exportedAt: new Date().toISOString(),
-      data: {
-        worlds,
-        sessions,
-        messages,
-        characters,
-        events,
-        records,
-        snapshots,
-        traceEvents,
-        statePatches,
-        stateSnapshots,
-      },
-      config: {},
-    };
-  }
-
-  async importAll(data: StoreSnapshot): Promise<void> {
-    const db = await this.getDb();
-    const tx = db.transaction([...STORE_NAMES], "readwrite");
-
-    // Clear all stores
-    await Promise.all(STORE_NAMES.map((name) => tx.objectStore(name).clear()));
-
-    // Populate stores
-    const puts: Promise<unknown>[] = [];
-    const addAll = (storeName: StoreName, items: unknown[]) => {
-      const store = tx.objectStore(storeName);
-      for (const item of items) {
-        puts.push(store.put(item));
+    async listToolCalls(sessionId: string, turnId?: string): Promise<ToolCallRecordRow[]> {
+      if (turnId !== undefined) {
+        return db.getAllFromIndex('toolCalls', 'sessionId_turnId', [sessionId, turnId]);
       }
-    };
+      return db.getAllFromIndex('toolCalls', 'sessionId', sessionId);
+    },
 
-    addAll("worlds", data.data.worlds);
-    addAll("sessions", data.data.sessions);
-    addAll("messages", data.data.messages);
-    addAll("characters", data.data.characters);
-    addAll("events", data.data.events);
-    addAll("records", data.data.records);
-    addAll("snapshots", data.data.snapshots);
-    addAll("traceEvents", data.data.traceEvents ?? []);
-    addAll("statePatches", data.data.statePatches ?? []);
-    addAll("stateSnapshots", data.data.stateSnapshots ?? []);
+    // ── State Schemas ──
 
-    await Promise.all(puts);
-    await tx.done;
-  }
+    async saveStateSchema(record: StateSchemaRecord): Promise<void> {
+      await db.put('stateSchemas', structuredClone(record));
+    },
 
-  async clear(): Promise<void> {
-    const db = await this.getDb();
-    const tx = db.transaction([...STORE_NAMES], "readwrite");
-    await Promise.all(STORE_NAMES.map((name) => tx.objectStore(name).clear()));
-    await tx.done;
-  }
+    async listStateSchemas(sessionId: string): Promise<StateSchemaRecord[]> {
+      return db.getAllFromIndex('stateSchemas', 'sessionId', sessionId);
+    },
+
+    async deleteStateSchema(sessionId: string, tableName: string): Promise<void> {
+      const all = await db.getAllFromIndex('stateSchemas', 'sessionId', sessionId);
+      const target = all.find((r) => r.tableName === tableName);
+      if (target) {
+        await db.delete('stateSchemas', target.id);
+      }
+    },
+
+    // ── State Entries ──
+
+    async getStateEntry(sessionId: string, tableName: string, fieldName: string): Promise<StateEntryRecord | null> {
+      const results = await db.getAllFromIndex('stateEntries', 'lookup', [sessionId, tableName, fieldName]);
+      return results[0] ?? null;
+    },
+
+    async upsertStateEntry(record: StateEntryRecord): Promise<void> {
+      // Delete existing entry with same composite key, then insert the new one
+      const existing = await db.getAllFromIndex('stateEntries', 'lookup', [record.sessionId, record.tableName, record.fieldName]);
+      const tx = db.transaction('stateEntries', 'readwrite');
+      for (const old of existing) {
+        await tx.store.delete(old.id);
+      }
+      await tx.store.put(structuredClone(record));
+      await tx.done;
+    },
+
+    async listStateEntries(sessionId: string, tableName: string): Promise<StateEntryRecord[]> {
+      const all = await db.getAllFromIndex('stateEntries', 'sessionId', sessionId);
+      return all.filter((r) => r.tableName === tableName);
+    },
+
+    // ── State Changes ──
+
+    async addStateChange(record: StateChangeRecord): Promise<void> {
+      await db.put('stateChanges', structuredClone(record));
+    },
+
+    async listStateChanges(sessionId: string, tableName: string, fieldName: string): Promise<StateChangeRecord[]> {
+      const all = await db.getAllFromIndex('stateChanges', 'sessionId', sessionId);
+      return all
+        .filter((r) => r.tableName === tableName && r.fieldName === fieldName)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    },
+
+    // ── Events ──
+
+    async saveEvent(record: EventRecord): Promise<void> {
+      await db.put('events', structuredClone(record));
+    },
+
+    async listEvents(sessionId: string, options?: { topic?: string; limit?: number }): Promise<EventRecord[]> {
+      let filtered = await db.getAllFromIndex('events', 'sessionId', sessionId);
+      if (options?.topic !== undefined) {
+        filtered = filtered.filter((r) => r.topic === options.topic);
+      }
+      if (options?.limit !== undefined) {
+        filtered = filtered.slice(0, options.limit);
+      }
+      return filtered;
+    },
+
+    // ── Approvals ──
+
+    async saveApproval(record: ApprovalRecord): Promise<void> {
+      await db.put('approvals', structuredClone(record));
+    },
+
+    async listApprovals(sessionId: string): Promise<ApprovalRecord[]> {
+      return db.getAllFromIndex('approvals', 'sessionId', sessionId);
+    },
+
+    // ── Messages ──
+
+    async addMessage(record: MessageRecord): Promise<void> {
+      await db.put('messages', structuredClone(record));
+    },
+
+    async listMessages(sessionId: string): Promise<MessageRecord[]> {
+      const all = await db.getAllFromIndex('messages', 'sessionId', sessionId);
+      return all.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    },
+
+    // ── Characters ──
+
+    async upsertCharacter(record: CharacterRecord): Promise<void> {
+      await db.put('characters', structuredClone(record));
+    },
+
+    async listCharacters(sessionId: string): Promise<CharacterRecord[]> {
+      return db.getAllFromIndex('characters', 'sessionId', sessionId);
+    },
+
+    // ── Plugin Configs ──
+
+    async savePluginConfig(record: PluginConfigRecord): Promise<void> {
+      // Delete existing config with same composite key, then insert
+      const existing = await db.getAllFromIndex('pluginConfigs', 'lookup', [record.sessionId, record.pluginId]);
+      const tx = db.transaction('pluginConfigs', 'readwrite');
+      for (const old of existing) {
+        await tx.store.delete(old.id);
+      }
+      await tx.store.put(structuredClone(record));
+      await tx.done;
+    },
+
+    async getPluginConfig(sessionId: string, pluginId: string): Promise<PluginConfigRecord | null> {
+      const results = await db.getAllFromIndex('pluginConfigs', 'lookup', [sessionId, pluginId]);
+      return results[0] ?? null;
+    },
+
+    // ── Worlds ──
+
+    async listWorlds(): Promise<WorldRecord[]> {
+      return db.getAll('worlds');
+    },
+
+    async getWorld(id: string): Promise<WorldRecord | null> {
+      return (await db.get('worlds', id)) ?? null;
+    },
+
+    async upsertWorld(record: WorldRecord): Promise<void> {
+      await db.put('worlds', structuredClone(record));
+    },
+
+    // ── Trace ──
+
+    async addTraceEvent(record: TraceEventRecord): Promise<void> {
+      await db.put('traceEvents', structuredClone(record));
+    },
+
+    async listTraceEvents(sessionId: string): Promise<TraceEventRecord[]> {
+      return db.getAllFromIndex('traceEvents', 'sessionId', sessionId);
+    },
+
+    // ── Turn Messages ──
+
+    async appendTurnMessage(record: TurnMessageRecord): Promise<void> {
+      await db.put('turnMessages', structuredClone(record));
+    },
+
+    async listTurnMessages(sessionId: string): Promise<TurnMessageRecord[]> {
+      const all = await db.getAllFromIndex('turnMessages', 'sessionId', sessionId);
+      return all.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    },
+
+    // ── Player Inputs ──
+
+    async savePlayerInput(record: PlayerInputRecord): Promise<void> {
+      await db.put('playerInputs', structuredClone(record));
+    },
+
+    async getPlayerInput(sessionId: string, formId: string): Promise<PlayerInputRecord | null> {
+      const results = await db.getAllFromIndex('playerInputs', 'lookup', [sessionId, formId]);
+      return results[0] ?? null;
+    },
+
+    async listPlayerInputs(sessionId: string): Promise<PlayerInputRecord[]> {
+      return db.getAllFromIndex('playerInputs', 'sessionId', sessionId);
+    },
+
+    // ── Lifecycle ──
+
+    async close(): Promise<void> {
+      db.close();
+    },
+  };
+
+  return store;
 }

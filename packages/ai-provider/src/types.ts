@@ -332,7 +332,8 @@ export interface ProviderLifecycleHook {
 
 // ── Model Slot ────────────────────────────────────────────────────
 
-import type { SlotTag } from "@covel/shared";
+// SlotTag was in @covel/shared v1 — inlined here after v2 type refactor
+type SlotTag = "text" | "image" | "embed" | "speech" | string;
 
 export type ImageApiFormat = "dashscope-wan" | "openai-chat";
 

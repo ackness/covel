@@ -3,7 +3,7 @@
 # Copy this file to `llm.toml` and edit to match your provider setup.
 # API keys go in `.env.llm` (not here).
 #
-# Each [slots.<name>] defines a model slot.
+# Each [covel.<name>] defines a model slot.
 # Slot names are user-defined (e.g., "story", "utility", "image").
 # Each slot has a `tag` (auto-inferred from output modalities if omitted):
 #   - "text"  — text generation models (default)
@@ -27,13 +27,13 @@
 
 # ── Text Slots ──────────────────────────────────────────────────
 
-[slots.story]
+[covel.story]
 provider = "deepseek"
 model    = "deepseek-chat"
 baseUrl  = "https://api.deepseek.com"
 protocol = "openai-chat-v1"
 
-[slots.utility]
+[covel.utility]
 provider = "dashscope"
 model    = "qwen3.5-flash"
 baseUrl  = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -49,7 +49,7 @@ fallback = "story"
 # Default when omitted: "openai-chat"
 #
 # Option A: DashScope WAN (async task API, Chinese prompts recommended)
-# [slots.image]
+# [covel.image]
 # provider  = "dashscope"
 # model     = "wan2.7-image-pro"
 # baseUrl   = "https://dashscope.aliyuncs.com"
@@ -59,7 +59,7 @@ fallback = "story"
 # imageApi  = "dashscope-wan"          # ← required: selects WAN async task API
 #
 # Option B: OpenAI chat completions image format (English prompts recommended)
-# [slots.image]
+# [covel.image]
 # provider  = "openai"
 # model     = "gpt-image-1.5"
 # baseUrl   = "https://api.openai.com"
@@ -77,7 +77,7 @@ fallback = "story"
 # NOTE: "image" in input = vision (can see images), NOT image generation.
 #       "image" in output = image generation. Same logic for audio/video.
 #
-# [slots.multimodal]
+# [covel.multimodal]
 # provider = "dashscope"
 # model    = "qwen-omni-turbo"
 # baseUrl  = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -88,19 +88,19 @@ fallback = "story"
 # contextWindow   = 131072
 # maxOutputTokens = 8192
 #
-# [slots.multimodal.pricing]
+# [covel.multimodal.pricing]
 # inputPerMToken  = 0.6
 # outputPerMToken = 1.5
 
 # ── Examples for other providers ─────────────────────────────────
 #
-# [slots.story]
+# [covel.story]
 # provider = "openai"
 # model    = "gpt-5.4"
 # baseUrl  = "https://api.openai.com/v1"
 # protocol = "openai-chat-v1"
 #
-# [slots.story]
+# [covel.story]
 # provider = "anthropic"
 # model    = "claude-sonnet-4-6"
 # baseUrl  = "https://api.anthropic.com"

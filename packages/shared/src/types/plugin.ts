@@ -1,168 +1,127 @@
-import type {
-  FailurePolicy,
-  HookEvent,
-  I18nText,
-  Locale,
-  RuntimeBudget,
-  RuntimeIsolationSpec,
-  RuntimeKind,
-  RuntimePhase,
-  RuntimeTriggerSpec,
-  SlotTag,
-  UiSlot,
-} from "./common.js";
+/**
+ * Plugin & Runtime manifest types.
+ *
+ * These types represent the parsed result of PLUGIN.md frontmatter.
+ * All runtime configuration is defined via YAML frontmatter in PLUGIN.md files.
+ */
 
-/** Plugin manifest (plugin.json) */
+// ── Plugin classification ────────────────────────────────────────
+
+export type PluginType = 'core-plugin' | 'plugin';
+
+// ── Trigger system ───────────────────────────────────────────────
+
+export type TriggerType =
+  | 'auto'
+  | 'manual'
+  | 'scheduled'
+  | 'conditional'
+  | 'event'
+  | 'error-retry';
+
+export interface TriggerConfig {
+  readonly type: TriggerType;
+  /** Interval in turns for `scheduled` mode. */
+  readonly interval?: number;
+  /** Condition expression for `conditional` mode. */
+  readonly condition?: string;
+  /** Event topic for `event` mode. */
+  readonly topic?: string;
+  /** Max trigger count within a session. */
+  readonly maxTriggerCount?: number;
+  /** Max retry count for `error-retry` mode. */
+  readonly maxRetryCount?: number;
+  /** Min turns between two triggers. */
+  readonly cooldownTurns?: number;
+}
+
+// ── Input declarations ───────────────────────────────────────────
+
+export interface InputInjectDecl {
+  /** Source: `pluginId/runtimeId` */
+  readonly from: string;
+  /** Field name to extract from source output. */
+  readonly field: string;
+  /** XML tag name to wrap the injected data. */
+  readonly as: string;
+}
+
+export interface InputToolDecl {
+  readonly plugin: string;
+  readonly runtime: string;
+}
+
+export interface InputConfig {
+  readonly inject?: readonly InputInjectDecl[];
+  readonly tools?: readonly InputToolDecl[];
+}
+
+// ── Output declarations ──────────────────────────────────────────
+
+export interface OutputConfig {
+  /** Relative path to output.schema.json. */
+  readonly schema?: string;
+  /** Record name for other runtimes to query. */
+  readonly recordAs?: string;
+}
+
+// ── Tool declarations ────────────────────────────────────────────
+
+export interface ToolsConfig {
+  /** Builtin tool IDs to enable. */
+  readonly builtin?: readonly string[];
+  /** Relative paths to local tool modules. */
+  readonly local?: readonly string[];
+}
+
+// ── Plugin config fields ─────────────────────────────────────────
+
+export type ConfigFieldType =
+  | 'string'
+  | 'integer'
+  | 'number'
+  | 'boolean'
+  | 'enum';
+
+export interface PluginConfigField {
+  readonly type: ConfigFieldType;
+  readonly default?: unknown;
+  readonly min?: number;
+  readonly max?: number;
+  readonly options?: readonly string[];
+  readonly label?: string;
+  readonly description?: string;
+}
+
+// ── Runtime manifest ─────────────────────────────────────────────
+
+export interface RuntimeManifest {
+  readonly name: string;
+  readonly description: string;
+  readonly priority: number;
+  readonly version?: string;
+  readonly model?: string;
+  readonly pluginType?: PluginType;
+  readonly trigger?: TriggerConfig;
+  readonly tools?: ToolsConfig;
+  readonly input?: InputConfig;
+  readonly output?: OutputConfig;
+  readonly config?: Readonly<Record<string, PluginConfigField>>;
+  readonly i18n?: Readonly<Record<string, string>>;
+}
+
+// ── Plugin manifest ──────────────────────────────────────────────
+
 export interface PluginManifest {
-  schemaVersion: string;
-  id: string;
-  displayName: I18nText;
-  version: string;
-  author: string;
-  description: I18nText;
-  defaultLocale: Locale;
-  supportedLocales: Locale[];
-  loadingOrder?: number;
-  requires?: string[];
-  supersedes?: string[];
-  conflicts?: string[];
-  compatibility?: Record<string, string>;
-  runtimes?: PublicRuntimeSpec[];
-  tools?: PublicToolDefinition[];
-  hooks?: PublicHookDefinition[];
-  ui?: PublicUiExtension[];
-  runtimeSettings?: RuntimeSettingField[];
-  permissions?: string[];
-  providers?: PublicProviderBinding[];
-  blockSchemas?: BlockSchemaDeclaration[];
-}
-
-/** Public runtime spec */
-export interface PublicRuntimeSpec {
-  id: string;
-  pluginId: string;
-  kind: RuntimeKind;
-  /** @deprecated Use `priority` instead. Kept for backward compatibility. */
-  phase?: RuntimePhase;
-  /** Execution priority (0-1000). 0 = highest = runs first. Default: 500. */
-  priority?: number;
-  trigger: RuntimeTriggerSpec;
-  /** Required model capability tag (e.g., "text", "image"). Used to filter compatible slots. */
-  providerTag?: SlotTag;
-  instructionsRef?: string;
-  tools: string[];
-  hooks: string[];
-  budget?: RuntimeBudget;
-  output?: RuntimeOutputSpec;
-  failurePolicy?: FailurePolicy;
-  isolation?: RuntimeIsolationSpec;
-}
-
-/** Runtime output spec */
-export interface RuntimeOutputSpec {
-  proposalKinds?: string[];
-}
-
-/** Public tool definition */
-export interface PublicToolDefinition {
-  id: string;
-  kind:
-    | "query"
-    | "mutate"
-    | "emit"
-    | "render"
-    | "generate"
-    | "orchestration"
-    | "script"
-    | "proxy";
-  schema?: unknown;
-  permissions?: string[];
-}
-
-/** Tool execution context */
-export interface ToolExecutionContext<I = unknown> {
-  input: I;
-  runtimeId: string;
-  pluginId: string;
-  locale: string;
-  /** Current plugin-scoped state injected by the kernel. */
-  state?: Record<string, unknown>;
-}
-
-/** Tool execution result */
-export interface ToolExecutionResult<O = unknown> {
-  output: O;
-  proposals?: Array<{
-    kind: string;
-    payload: unknown;
-  }>;
-}
-
-/** Public hook definition */
-export interface PublicHookDefinition {
-  id: string;
-  event: HookEvent;
-  handlerKind: "command" | "prompt" | "async-command";
-  match?: HookMatch;
-}
-
-/** Hook match criteria */
-export interface HookMatch {
-  toolIds?: string[];
-  runtimeIds?: string[];
-  pluginIds?: string[];
-}
-
-/** Public UI extension */
-export interface PublicUiExtension {
-  id: string;
-  slot: UiSlot;
-  component: unknown;
-  propsSchema?: unknown;
-}
-
-/** Public provider binding */
-export interface PublicProviderBinding {
-  id: string;
-  kind: "llm" | "image" | "tts" | "script-host";
-  configRef?: string;
-  permissions?: string[];
-}
-
-/** Runtime setting field */
-export interface RuntimeSettingField {
-  key: string;
-  type: "string" | "number" | "integer" | "boolean" | "enum";
-  label: I18nText;
-  description?: I18nText;
-  scope?: "project" | "run" | "request";
-  component?: "input" | "textarea" | "toggle" | "select";
-  default?: unknown;
-  options?: Array<{ label: I18nText; value: string | number | boolean }>;
-  affects?: string[];
-}
-
-/** Block schema declaration for schema-driven rendering */
-export interface BlockSchemaDeclaration {
-  type: string;
-  interactive: boolean;
-  meta: {
-    displayName: I18nText;
-    description: string;
-    icon?: string;
-  };
-  dataSchema: Record<string, unknown>;
-  submitSchema?: Record<string, unknown>;
-}
-
-/** Proposal output contract */
-export interface PublicProposalOutput {
-  items: Array<
-    | { kind: "narrative.append"; payload: unknown }
-    | { kind: "state.patch"; payload: unknown }
-    | { kind: "event.emit"; payload: unknown }
-    | { kind: "record.upsert"; payload: unknown }
-    | { kind: "ui.render"; payload: unknown }
-    | { kind: "asset.generate"; payload: unknown }
-  >;
+  /** Plugin unique identifier (directory name). */
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly pluginType: PluginType;
+  readonly version?: string;
+  /** Single-runtime plugin: inline runtime config. */
+  readonly runtime?: RuntimeManifest;
+  /** Multi-runtime plugin: list of runtimes. */
+  readonly runtimes?: readonly RuntimeManifest[];
+  readonly config?: Readonly<Record<string, PluginConfigField>>;
 }

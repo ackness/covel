@@ -11,7 +11,7 @@ import {
   setModelDatabase,
 } from "@covel/ai-provider";
 import type { AiConfig, LlmConfig, SlotRegistry, ModelDatabase, ModelDbFile } from "@covel/ai-provider";
-import { createRuntimeExecutor } from "@covel/runtime";
+// Note: createRuntimeExecutor was part of the v1 runtime. In v2, use createGatewayAdapter instead.
 
 /**
  * Initialize AI provider stack.
@@ -41,7 +41,7 @@ export function createAiStack(): AiStack {
     llmConfig = llmResult.llmConfig;
     console.log(
       `[ai-setup] Loaded llm.toml with slots:`,
-      Object.keys(llmResult.llmConfig.slots).join(", "),
+      Object.keys(llmResult.llmConfig.covel).join(", "),
     );
   } else {
     // Fallback to legacy default.toml
@@ -83,7 +83,6 @@ export function createAiStack(): AiStack {
   }
 
   const gateway = createGateway({ providerRegistry, presetRegistry, slotRegistry });
-  const executor = createRuntimeExecutor(gateway);
 
   return {
     config,
@@ -93,7 +92,6 @@ export function createAiStack(): AiStack {
     presetRegistry,
     slotRegistry,
     gateway,
-    executor,
   };
 }
 
@@ -135,5 +133,4 @@ export interface AiStack {
   presetRegistry: ReturnType<typeof createPresetRegistry>;
   slotRegistry: SlotRegistry;
   gateway: ReturnType<typeof createGateway>;
-  executor: ReturnType<typeof createRuntimeExecutor>;
 }

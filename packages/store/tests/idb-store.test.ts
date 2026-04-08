@@ -1,16 +1,11 @@
-import "fake-indexeddb/auto";
-import { IdbStore } from "../src/indexeddb/idb-store.js";
-import { runDataStoreContractTests } from "./store-contract.js";
+import 'fake-indexeddb/auto'; // Must be first import — polyfills global indexedDB
+import { runStoreContractTests } from '../src/contract/store-contract.js';
+import { createIdbStore } from '../src/indexeddb/idb-store.js';
 
-// Each test gets a unique DB name to avoid cross-test interference.
 let dbCounter = 0;
 
-runDataStoreContractTests("IdbStore", async () => {
-  const store = new IdbStore({ dbName: `test-${++dbCounter}` });
-  return {
-    store,
-    cleanup: async () => {
-      await store.clear();
-    },
-  };
+runStoreContractTests('IdbStore', async () => {
+  // Each test gets a unique DB name to avoid state leakage
+  dbCounter++;
+  return createIdbStore(`test-db-${dbCounter}`);
 });

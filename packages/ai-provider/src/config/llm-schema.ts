@@ -28,7 +28,7 @@ const pricingSchema = z.object({
  *
  * Example:
  * ```toml
- * [slots.main]
+ * [covel.main]
  * provider = "deepseek"
  * model    = "deepseek-chat"
  * baseUrl  = "https://api.deepseek.com"
@@ -42,7 +42,7 @@ const pricingSchema = z.object({
  * contextWindow   = 131072
  * maxOutputTokens = 8192
  *
- * [slots.main.pricing]
+ * [covel.main.pricing]
  * inputPerMToken  = 0.27
  * outputPerMToken = 1.1
  * ```
@@ -61,7 +61,7 @@ export const slotDefinitionSchema = z.object({
   /** Capability tag. Auto-inferred from output modalities if omitted. */
   tag: z.string().optional(),
   /**
-   * Image generation API format for image slots.
+   * Image generation API format for image covel.
    * Only relevant when tag = "image" (or output = ["image"]).
    *   "dashscope-wan" — DashScope WAN async task API (wan2.x models, Chinese prompts)
    *   "openai-chat"   — OpenAI chat completions returning image output (gpt-4o-image etc., English prompts)
@@ -91,18 +91,18 @@ export type SlotDefinition = z.infer<typeof slotDefinitionSchema>;
  * Root schema for llm.toml.
  *
  * ```toml
- * [slots.main]
+ * [covel.main]
  * provider = "deepseek"
  * ...
  *
- * [slots.fast]
+ * [covel.fast]
  * provider = "dashscope"
  * ...
  * ```
  */
 export const llmConfigSchema = z.object({
-  slots: z.record(z.string(), slotDefinitionSchema).refine(
-    (slots) => Object.keys(slots).length > 0,
+  covel: z.record(z.string(), slotDefinitionSchema).refine(
+    (covel) => Object.keys(covel).length > 0,
     { message: "llm.toml must define at least one slot" },
   ),
 });

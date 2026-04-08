@@ -53,6 +53,9 @@ apps/web/src/routeTree.gen.ts
 # ── Drizzle ORM ─────────────────────────────────────────────────
 apps/server/drizzle/
 
+# ── Local data (SQLite, etc.) ───────────────────────────────────
+data/
+
 # ── Docker volumes (local dev) ──────────────────────────────────
 docker/data/
 

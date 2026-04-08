@@ -1,11 +1,18 @@
-export * from "./types/common.js";
-export * from "./types/character.js";
-export * from "./types/data-access.js";
-export * from "./types/kernel.js";
-export * from "./types/plugin.js";
-export * from "./types/world.js";
-export * from "./types/world-dimensions.js";
-export * from "./types/field-schema.js";
-export * from "./schemas/world.js";
-export { deepMerge } from "./utils/deep-merge.js";
-export { createMapRegistry, type MapRegistry } from "./utils/map-registry.js";
+// ── Types ─────────────────────────────────────────────────────────
+export * from './types/index.js';
+
+// ── Schemas ──────────────────────────────────────────────────────
+export {
+  triggerTypeSchema,
+  triggerConfigSchema,
+  inputInjectDeclSchema,
+  inputToolDeclSchema,
+  inputConfigSchema,
+  outputConfigSchema,
+  toolsConfigSchema,
+  configFieldTypeSchema,
+  pluginConfigFieldSchema,
+  runtimeManifestSchema,
+} from './schemas/plugin.js';
+
+export type { RuntimeManifestInput } from './schemas/plugin.js';

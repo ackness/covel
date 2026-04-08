@@ -1,26 +1,25 @@
-// Types
+export { createStore, createStoreFromEnv } from './factory.js';
+export { createMemoryStore } from './memory/memory-store.js';
+export { createSqliteStore } from './sqlite/sqlite-store.js';
+export { createPgStore } from './postgres/pg-store.js';
 export type {
   DataStore,
+  StoreBackend,
+  StoreConfig,
   WorldRecord,
   SessionRecord,
+  TurnResultRecord,
+  RuntimeResultRecord,
+  ToolCallRecordRow,
+  StateSchemaRecord,
+  StateEntryRecord,
+  StateChangeRecord,
+  EventRecord,
+  ApprovalRecord,
   MessageRecord,
   CharacterRecord,
-  EventRecord,
-  DomainRecord,
-  SnapshotRecord,
+  PluginConfigRecord,
   TraceEventRecord,
-  StatePatchRecord,
-  StateSnapshotRecord,
-  StoreSnapshot,
-} from "./types.js";
-
-// Factory
-export { createStore } from "./factory.js";
-export type { StoreBackend, StoreConfig } from "./factory.js";
-
-// Store implementations
-export { MemoryStore } from "./memory/memory-store.js";
-export { IdbStore } from "./indexeddb/idb-store.js";
-export type { IdbStoreOptions } from "./indexeddb/idb-store.js";
-export { PgStore } from "./postgres/pg-store.js";
-export type { PgStoreOptions } from "./postgres/pg-store.js";
+  TurnMessageRecord,
+  PlayerInputRecord,
+} from './types.js';

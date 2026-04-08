@@ -1,10 +1,41 @@
-export {
-  createRuntimeExecutor,
-  type GatewayLike,
-  type RuntimeExecutorInput,
-  type RuntimeExecutorResult,
-} from "./executor.js";
+// ── Trigger Router ───────────────────────────────────────────────
+export { shouldTrigger } from './trigger.js';
 
-export { buildPrompt, type PromptBuilderOptions } from "./prompt-builder.js";
+// ── Scheduler ────────────────────────────────────────────────────
+export { scheduleByPriority, extractDependencies, detectCycles } from './scheduler.js';
 
-export { createBudgetEnforcer, type BudgetState } from "./budget.js";
+// ── Context Builder ──────────────────────────────────────────────
+export { interpolateTemplate, buildInjectBlocks, buildContext } from './context-builder.js';
+
+// ── Parallel Executor ────────────────────────────────────────────
+export { executeParallel, resolveFailure } from './parallel-executor.js';
+export type { RuntimeExecuteFn, FailureResolution } from './parallel-executor.js';
+
+// ── Turn Executor ────────────────────────────────────────────────
+export { executeTurn } from './turn-executor.js';
+export type { TurnExecutorDeps, TurnExecutorOptions } from './turn-executor.js';
+
+// ── LLM Adapter ─────────────────────────────────────────────────
+export type { LLMAdapter, LLMMessage as LLMAdapterMessage, LLMResponse, LLMToolCall, LLMToolDefinition } from './llm-adapter.js';
+
+// ── Tool Executor ────────────────────────────────────────────────
+export { createToolExecutor } from './tool-executor.js';
+export type { ToolExecutor, ToolInfo, ToolCall, ToolCallContext, ToolCallResult, ToolExecutorConfig } from './tool-executor.js';
+
+// ── Model Resolver ──────────────────────────────────────────────
+export { createModelResolver } from './model-resolver.js';
+
+// ── Gateway Bridge ──────────────────────────────────────────────
+export { createGatewayAdapter } from './gateway-llm-adapter.js';
+export type { GatewayLike, GatewayAdapterConfig } from './gateway-llm-adapter.js';
+
+// ── Types ────────────────────────────────────────────────────────
+export type {
+  TriggerContext,
+  ScheduledGroup,
+  DependencyEdge,
+  AssembledContext,
+  ContextBuildParams,
+} from './types.js';
+
+export type { LLMMessage } from './types.js';

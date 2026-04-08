@@ -16,15 +16,18 @@
   "scripts": {
     "lint": "tsc --noEmit",
     "test": "vitest run",
+    "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@covel/shared": "workspace:*",
+    "better-sqlite3": "^11.9.1",
     "drizzle-orm": "^0.45.2",
     "idb": "^8.0.2",
     "postgres": "^3.4.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "fake-indexeddb": "^6.2.5",
     "typescript": "^6.0.2",
     "vitest": "^4.1.2"

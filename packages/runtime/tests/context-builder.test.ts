@@ -1,0 +1,334 @@
+import { describe, it, expect } from 'vitest';
+import { interpolateTemplate, buildInjectBlocks, buildContext } from '../src/context-builder.js';
+import type { RuntimeManifest, RuntimeResult, TurnInput } from '@covel/shared';
+import type { TurnMessageRecord } from '@covel/store';
+import type { ContextBuildParams } from '../src/types.js';
+
+// ── Helpers ─────────────────────────────────────────────────────
+
+function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
+  return { name: 'test-rt', description: 'test', priority: 500, ...overrides };
+}
+
+function makeRuntimeResult(overrides?: Partial<RuntimeResult>): RuntimeResult {
+  return {
+    pluginId: 'test-plugin',
+    runtimeId: 'test-rt',
+    runId: 'run-1',
+    turnId: 'turn-1',
+    status: 'success',
+    output: {},
+    toolCalls: [],
+    durationMs: 100,
+    timestamp: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
+  return {
+    sessionId: 'sess-1',
+    turnId: 'turn-1',
+    playerMessage: 'I attack the dragon',
+    ...overrides,
+  };
+}
+
+// ── interpolateTemplate ─────────────────────────────────────────
+
+describe('interpolateTemplate', () => {
+  it('should replace a simple variable', () => {
+    const result = interpolateTemplate('Hello {{ player.message }}', {
+      player: { message: 'hi' },
+    });
+    expect(result).toBe('Hello hi');
+  });
+
+  it('should replace a nested path variable', () => {
+    const result = interpolateTemplate(
+      '{{ inputs.narrator.main.narrativeOutput }}',
+      { inputs: { narrator: { main: { narrativeOutput: 'story' } } } },
+    );
+    expect(result).toBe('story');
+  });
+
+  it('should replace a config variable', () => {
+    const result = interpolateTemplate('Length: {{ config.outputLength }}', {
+      config: { outputLength: 150 },
+    });
+    expect(result).toBe('Length: 150');
+  });
+
+  it('should replace a missing variable with empty string', () => {
+    const result = interpolateTemplate('{{ missing.var }}', {});
+    expect(result).toBe('');
+  });
+
+  it('should replace multiple variables in one template', () => {
+    const result = interpolateTemplate(
+      '{{ player.name }} says {{ player.message }} in {{ session.id }}',
+      {
+        player: { name: 'Alice', message: 'hello' },
+        session: { id: 'sess-1' },
+      },
+    );
+    expect(result).toBe('Alice says hello in sess-1');
+  });
+
+  it('should return plain text unchanged when no variables present', () => {
+    const result = interpolateTemplate('no variables here', { foo: 'bar' });
+    expect(result).toBe('no variables here');
+  });
+
+  it('should handle variable patterns with extra spaces', () => {
+    const result = interpolateTemplate('{{  player.message  }}', {
+      player: { message: 'works' },
+    });
+    expect(result).toBe('works');
+  });
+});
+
+// ── buildInjectBlocks ───────────────────────────────────────────
+
+describe('buildInjectBlocks', () => {
+  it('should build a single inject block', () => {
+    const params: ContextBuildParams = {
+      promptTemplate: '',
+      manifest: makeManifest({
+        input: {
+          inject: [
+            { from: 'narrator/main', field: 'narrativeOutput', as: '<narrator-output>' },
+          ],
+        },
+      }),
+      turnInput: makeTurnInput(),
+      completedResults: new Map([
+        [
+          'narrator/main',
+          makeRuntimeResult({ output: { narrativeOutput: 'the story' } }),
+        ],
+      ]),
+      config: {},
+    };
+
+    const result = buildInjectBlocks(params);
+    expect(result).toBe('<narrator-output>the story</narrator-output>');
+  });
+
+  it('should build multiple inject blocks', () => {
+    const params: ContextBuildParams = {
+      promptTemplate: '',
+      manifest: makeManifest({
+        input: {
+          inject: [
+            { from: 'narrator/main', field: 'narrativeOutput', as: '<narrator-output>' },
+            { from: 'combat/engine', field: 'combatLog', as: '<combat-log>' },
+          ],
+        },
+      }),
+      turnInput: makeTurnInput(),
+      completedResults: new Map([
+        [
+          'narrator/main',
+          makeRuntimeResult({ output: { narrativeOutput: 'the story' } }),
+        ],
+        [
+          'combat/engine',
+          makeRuntimeResult({ output: { combatLog: 'hit for 10 damage' } }),
+        ],
+      ]),
+      config: {},
+    };
+
+    const result = buildInjectBlocks(params);
+    expect(result).toBe(
+      '<narrator-output>the story</narrator-output>\n<combat-log>hit for 10 damage</combat-log>',
+    );
+  });
+
+  it('should return empty string when inject references a missing result', () => {
+    const params: ContextBuildParams = {
+      promptTemplate: '',
+      manifest: makeManifest({
+        input: {
+          inject: [
+            { from: 'missing/runtime', field: 'data', as: '<missing>' },
+          ],
+        },
+      }),
+      turnInput: makeTurnInput(),
+      completedResults: new Map(),
+      config: {},
+    };
+
+    const result = buildInjectBlocks(params);
+    expect(result).toBe('');
+  });
+
+  it('should return empty string when manifest has no injects', () => {
+    const params: ContextBuildParams = {
+      promptTemplate: '',
+      manifest: makeManifest(),
+      turnInput: makeTurnInput(),
+      completedResults: new Map(),
+      config: {},
+    };
+
+    const result = buildInjectBlocks(params);
+    expect(result).toBe('');
+  });
+});
+
+// ── buildContext ─────────────────────────────────────────────────
+
+describe('buildContext', () => {
+  it('should assemble full context with inject and interpolation', () => {
+    const params: ContextBuildParams = {
+      promptTemplate: 'You are a narrator.\n{{ player.message }}\n',
+      manifest: makeManifest({
+        input: {
+          inject: [
+            { from: 'narrator/main', field: 'narrativeOutput', as: '<narrator-output>' },
+          ],
+        },
+      }),
+      turnInput: makeTurnInput({ playerMessage: 'I open the door' }),
+      completedResults: new Map([
+        [
+          'narrator/main',
+          makeRuntimeResult({ output: { narrativeOutput: 'the story' } }),
+        ],
+      ]),
+      config: {},
+    };
+
+    const ctx = buildContext(params);
+
+    expect(ctx.systemPrompt).toContain('<narrator-output>the story</narrator-output>');
+    expect(ctx.systemPrompt).toContain('I open the door');
+    expect(ctx.messages).toEqual([
+      { role: 'user', content: 'I open the door' },
+    ]);
+  });
+
+  it('should return raw template as systemPrompt when no inject and no vars', () => {
+    const params: ContextBuildParams = {
+      promptTemplate: 'Plain instructions.',
+      manifest: makeManifest(),
+      turnInput: makeTurnInput({ playerMessage: 'hello' }),
+      completedResults: new Map(),
+      config: {},
+    };
+
+    const ctx = buildContext(params);
+
+    expect(ctx.systemPrompt).toBe('Plain instructions.');
+    expect(ctx.messages).toEqual([{ role: 'user', content: 'hello' }]);
+  });
+
+  it('should interpolate config variables in the system prompt', () => {
+    const params: ContextBuildParams = {
+      promptTemplate: 'Write in {{ config.style }} style.',
+      manifest: makeManifest(),
+      turnInput: makeTurnInput({ playerMessage: 'go' }),
+      completedResults: new Map(),
+      config: { style: 'dramatic' },
+    };
+
+    const ctx = buildContext(params);
+
+    expect(ctx.systemPrompt).toBe('Write in dramatic style.');
+  });
+
+  it('should include message history before current user message', () => {
+    const history: TurnMessageRecord[] = [
+      {
+        id: 'msg-1',
+        sessionId: 'sess-1',
+        turnId: 'turn-0',
+        sourceType: 'player',
+        role: 'user',
+        content: 'I enter the cave',
+        order: 0,
+        createdAt: '2024-01-01T00:00:00Z',
+      },
+      {
+        id: 'msg-2',
+        sessionId: 'sess-1',
+        turnId: 'turn-0',
+        sourceType: 'runtime',
+        sourcePluginId: 'core-narrator',
+        role: 'assistant',
+        name: 'core-narrator',
+        content: 'The cave is dark and damp.',
+        order: 500,
+        createdAt: '2024-01-01T00:00:01Z',
+      },
+    ];
+
+    const params: ContextBuildParams = {
+      promptTemplate: 'You are a narrator.',
+      manifest: makeManifest(),
+      turnInput: makeTurnInput({ playerMessage: 'I look around' }),
+      completedResults: new Map(),
+      config: {},
+      messageHistory: history,
+    };
+
+    const ctx = buildContext(params);
+
+    // History messages come first, then current user message
+    expect(ctx.messages).toHaveLength(3);
+    expect(ctx.messages[0]).toEqual({ role: 'user', content: 'I enter the cave' });
+    expect(ctx.messages[1]).toEqual({ role: 'assistant', content: 'The cave is dark and damp.', name: 'core-narrator' });
+    expect(ctx.messages[2]).toEqual({ role: 'user', content: 'I look around' });
+  });
+
+  it('should preserve name field on history messages', () => {
+    const history: TurnMessageRecord[] = [
+      {
+        id: 'msg-1',
+        sessionId: 'sess-1',
+        turnId: 'turn-0',
+        sourceType: 'runtime',
+        sourcePluginId: 'core-narrator',
+        role: 'assistant',
+        name: 'core-narrator',
+        content: 'A story begins.',
+        order: 500,
+        createdAt: '2024-01-01T00:00:00Z',
+      },
+    ];
+
+    const params: ContextBuildParams = {
+      promptTemplate: 'Narrator prompt.',
+      manifest: makeManifest(),
+      turnInput: makeTurnInput({ playerMessage: 'continue' }),
+      completedResults: new Map(),
+      config: {},
+      messageHistory: history,
+    };
+
+    const ctx = buildContext(params);
+
+    expect(ctx.messages[0]).toEqual({
+      role: 'assistant',
+      content: 'A story begins.',
+      name: 'core-narrator',
+    });
+  });
+
+  it('should behave as before when no message history provided', () => {
+    const params: ContextBuildParams = {
+      promptTemplate: 'Instructions.',
+      manifest: makeManifest(),
+      turnInput: makeTurnInput({ playerMessage: 'hello' }),
+      completedResults: new Map(),
+      config: {},
+    };
+
+    const ctx = buildContext(params);
+
+    expect(ctx.messages).toEqual([{ role: 'user', content: 'hello' }]);
+  });
+});

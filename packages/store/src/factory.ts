@@ -1,40 +1,43 @@
-import type { DataStore } from "./types.js";
+/**
+ * Store factory — creates the appropriate DataStore based on config.
+ *
+ * Usage:
+ *   const store = await createStore({ backend: 'sqlite' });
+ *   const store = await createStore({ backend: 'pg', databaseUrl: '...' });
+ *   const store = await createStore({ backend: 'memory' });
+ *
+ * Environment variable shortcut:
+ *   const store = await createStoreFromEnv();
+ *   // Reads STORE_BACKEND, SQLITE_PATH, DATABASE_URL from process.env
+ */
 
-export type StoreBackend = "memory" | "indexeddb" | "postgres";
-
-export interface StoreConfig {
-  backend: StoreBackend;
-  /** PostgreSQL connection URL (required for postgres backend) */
-  databaseUrl?: string;
-  /** IndexedDB database name (default: "covel") */
-  dbName?: string;
-  /** IndexedDB schema version (default: 1) */
-  dbVersion?: number;
-}
+import type { DataStore, StoreConfig } from './types.js';
 
 export async function createStore(config: StoreConfig): Promise<DataStore> {
   switch (config.backend) {
-    case "memory": {
-      const { MemoryStore } = await import("./memory/memory-store.js");
-      return new MemoryStore();
+    case 'memory': {
+      const { createMemoryStore } = await import('./memory/memory-store.js');
+      return createMemoryStore();
     }
-    case "indexeddb": {
-      const { IdbStore } = await import("./indexeddb/idb-store.js");
-      return new IdbStore({
-        dbName: config.dbName,
-        dbVersion: config.dbVersion,
-      });
+    case 'sqlite': {
+      const { createSqliteStore } = await import('./sqlite/sqlite-store.js');
+      return createSqliteStore(config.sqlitePath ?? './data/covel.db');
     }
-    case "postgres": {
-      if (!config.databaseUrl) {
-        throw new Error("databaseUrl is required for postgres backend");
-      }
-      const { PgStore } = await import("./postgres/pg-store.js");
-      const store = new PgStore({ databaseUrl: config.databaseUrl });
-      await store.initialize();
-      return store;
+    case 'pg': {
+      const { createPgStore } = await import('./postgres/pg-store.js');
+      if (!config.databaseUrl) throw new Error('DATABASE_URL required for pg backend');
+      return createPgStore(config.databaseUrl);
     }
     default:
-      throw new Error(`Unknown store backend: ${config.backend as string}`);
+      throw new Error(`Unknown store backend: ${String(config.backend)}`);
   }
+}
+
+export function createStoreFromEnv(): Promise<DataStore> {
+  const backend = (process.env.STORE_BACKEND ?? 'sqlite') as StoreConfig['backend'];
+  return createStore({
+    backend,
+    sqlitePath: process.env.SQLITE_PATH ?? './data/covel.db',
+    databaseUrl: process.env.DATABASE_URL,
+  });
 }
