@@ -31,6 +31,10 @@ import { initKernelStack } from "./kernel-setup.js";
 import { createStore, type StoreBackend } from "@covel/store";
 import { createStoreService } from "./store-service.js";
 import { loadWorldPackages } from "./store/world-package-loader.js";
+import { initV1KernelStack } from "./v1-kernel-setup.js";
+import { createV1RuntimeRoutes } from "./routes/v1/runtimes.js";
+import { createV1ActionRoutes } from "./routes/v1/actions.js";
+import { createV1ApprovalRoutes } from "./routes/v1/approvals.js";
 
 const app = new Hono();
 
@@ -66,6 +70,7 @@ app.use("/actions", apiKeyInjection);
 // Initialize stacks
 const ai = createAiStack();
 const kernelStack = await initKernelStack(ai);
+const v1KernelStack = await initV1KernelStack(ai);
 
 // Store backend: STORE_BACKEND=memory|idb|pg (default: memory)
 const storeBackendEnv = (process.env.STORE_BACKEND ?? "memory") as string;
@@ -113,6 +118,15 @@ app.route("/api/plugins", createPluginsRoute(kernelStack.pluginHost));
 app.route("/api/block-schemas", createBlockSchemasRoute(kernelStack.pluginHost));
 app.route("/api/commands", createCommandsListRoute(kernelStack.pluginHost.commandRegistry));
 app.route("/api/commands/execute", createCommandExecuteRoute(kernelStack.commandBus));
+app.route("/api", createV1RuntimeRoutes({
+  getOrCreateSession: (sessionId) => v1KernelStack.getOrCreateSession(sessionId),
+}));
+app.route("/api", createV1ActionRoutes({
+  getOrCreateSession: (sessionId) => v1KernelStack.getOrCreateSession(sessionId),
+}));
+app.route("/api", createV1ApprovalRoutes({
+  getOrCreateSession: (sessionId) => v1KernelStack.getOrCreateSession(sessionId),
+}));
 
 // ── Frontend-compatible routes (match what apps/web expects) ─────
 app.route("/worlds", createWorldsRoute(store));

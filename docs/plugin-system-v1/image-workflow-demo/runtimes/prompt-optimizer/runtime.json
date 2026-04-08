@@ -63,5 +63,10 @@
       "image-workflow-demo.*"
     ],
     "writeOwnedOnly": true
+  },
+  "budget": {
+    "maxSteps": 3,
+    "timeoutMs": 30000,
+    "maxToolCalls": 5
   }
 }

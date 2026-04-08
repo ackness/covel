@@ -19,9 +19,13 @@
   "dependencies": {
     "@covel/ai-provider": "workspace:*",
     "@covel/context": "workspace:*",
+    "@covel/event-bus": "workspace:*",
     "@covel/kernel": "workspace:*",
+    "@covel/plugin-manager": "workspace:*",
     "@covel/plugin-runtime": "workspace:*",
     "@covel/runtime": "workspace:*",
+    "@covel/runtime-context": "workspace:*",
+    "@covel/services": "workspace:*",
     "@covel/shared": "workspace:*",
     "@covel/store": "workspace:*",
     "@hono/node-server": "^1.19.12",

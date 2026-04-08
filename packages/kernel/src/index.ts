@@ -73,3 +73,21 @@ export { executeHooks, type HookContext, type HookExecutionResult } from "./hook
 
 // ── Render ──────────────────────────────────────────────────────────
 export { buildRenderResult } from "./render/render-builder.js";
+
+// ── V1 Kernel ──────────────────────────────────────────────────────
+export { createV1KernelSession } from "./v1/kernel-session-v1.js";
+export { routeTriggerV1 } from "./v1/trigger-router-v1.js";
+export { buildV1ExecutionPlan } from "./v1/scheduler-v1.js";
+export type {
+  V1TriggerInput,
+  V1Candidate,
+  V1ExecutionPlan,
+  V1PriorityGroup,
+  V1RuntimeResult,
+  V1TurnResult,
+  V1WorkflowState,
+  V1RuntimeSummary,
+  V1ApprovalCallbackResult,
+  V1SessionState,
+  V1KernelSession,
+} from "./v1/types.js";

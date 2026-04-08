@@ -21,6 +21,10 @@
     "@covel/plugin-runtime": "workspace:*",
     "@covel/runtime": "workspace:*",
     "@covel/shared": "workspace:*",
+    "@covel/event-bus": "workspace:*",
+    "@covel/services": "workspace:*",
+    "@covel/plugin-manager": "workspace:*",
+    "@covel/runtime-context": "workspace:*",
     "zod": "^4.3.6"
   },
   "devDependencies": {

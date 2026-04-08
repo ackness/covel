@@ -106,10 +106,10 @@ interface EventMeta {
 
 ## 4. 调度相关约束
 
-- 同优先级 runtime 并行执行
-- 同优先级并行 runtime 只能看到更高优先级已经提交的结果
-- runtime 完成提交后，后续更低优先级 runtime 可见其数据和记录
-- schema 变更也是同样规则：提交后才对后续更低优先级可见
+- 同 priority runtime 并行执行
+- 同 priority 并行 runtime 只能看到更小 priority（更先执行）已经提交的结果
+- runtime 完成提交后，后续较大 priority 的 runtime 可见其数据和记录
+- schema 变更也是同样规则：提交后才对后续较大 priority 可见
 
 ## 5. ScopedLogger
 

@@ -17,6 +17,9 @@
     "zh-CN",
     "en-US"
   ],
+  "dependencies": [
+    "core-states"
+  ],
   "actions": [
     {
       "id": "generate-story-image",

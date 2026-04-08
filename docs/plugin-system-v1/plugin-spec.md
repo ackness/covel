@@ -83,6 +83,7 @@ plugin-name/
   },
   "defaultLocale": "zh-CN",
   "supportedLocales": ["zh-CN", "en-US"],
+  "dependencies": [],
   "actions": [],
   "blockSchemas": [],
   "runtimeIds": [
@@ -106,6 +107,7 @@ plugin-name/
 | `description` | i18n 文本 |
 | `defaultLocale` | 默认语言 |
 | `supportedLocales` | 支持的语言列表 |
+| `dependencies` | 该插件依赖的其他插件 ID 列表，用于 PluginManager 拓扑排序和缺失检测 |
 | `actions` | 插件声明的统一前端动作入口 |
 | `blockSchemas` | 插件声明的 schema-driven UI block |
 | `runtimeIds` | 该插件包含的 runtime 列表 |
@@ -272,6 +274,11 @@ plugin-name/
       "plugin.*"
     ],
     "writeOwnedOnly": true
+  },
+  "budget": {
+    "maxSteps": 5,
+    "timeoutMs": 60000,
+    "maxToolCalls": 10
   }
 }
 ```
@@ -282,7 +289,7 @@ plugin-name/
 |------|------|
 | `id` | runtime 唯一 ID，插件内唯一 |
 | `displayName` | i18n 文本 |
-| `priority` | 0-1000 |
+| `priority` | 0-1000，lower number = higher priority = executes first |
 | `trigger` | 触发方式 |
 | `limits` | 每 session / 每 turn 次数限制 |
 | `instructionsRef` | runtime 指令文件 |
@@ -291,8 +298,12 @@ plugin-name/
 | `settings` | runtime 级配置 schema |
 | `systemTools` | 该 runtime 申请使用的内置工具 |
 | `toolImports` | 该 runtime 声明需要导入的外部 plugin tools |
-| `tableAccess.read` | 申请读取的表名或正则模式 |
+| `tableAccess.read` | 申请读取的表名模式（见下方 table pattern 语法） |
 | `tableAccess.writeOwnedOnly` | 是否仅允许写 owner 为本插件的表，V1 固定应为 `true` |
+| `budget` | runtime 执行预算约束（可选） |
+| `budget.maxSteps` | LLM 最大轮次数 |
+| `budget.timeoutMs` | 执行超时时间（毫秒） |
+| `budget.maxToolCalls` | 单次执行最大 tool call 次数 |
 
 ## 6. Trigger 规格
 
@@ -543,8 +554,25 @@ runtime 自己声明的是 `payload schema`。框架统一包一层固定 envelo
 - 只有 owner 可以直接写表
 - 其他插件只能读，或通过 owner 暴露的 tool 间接修改
 - schema 变更允许发生在正式游戏阶段
-- schema 变更一旦提交，立刻对本轮后续更低优先级 runtime 可见
-- 同优先级并行 runtime 看不到这次变更
+- schema 变更一旦提交，立刻对本轮后续较大 priority 的 runtime 可见
+- 同 priority 并行 runtime 看不到这次变更
+
+### 11.3 Table Pattern 语法
+
+`tableAccess.read` 中的每个条目采用 **点分 glob** 语法：
+
+| 模式 | 含义 | 示例 |
+|------|------|------|
+| `<pluginId>.<tableName>` | 精确匹配某插件的某张表 | `core-states.character` |
+| `<pluginId>.*` | 匹配某插件拥有的所有表 | `core-states.*` |
+| `plugin.*` | 特殊关键字，匹配当前插件自己拥有的所有表 | `plugin.*` |
+
+规则：
+
+- 第一段是插件 ID 或特殊关键字 `plugin`（代表当前插件）
+- 第二段是表名或通配符 `*`
+- V1 不支持更复杂的 glob（如 `core-*.*`）或正则表达式
+- 框架在 runtime 加载时解析并缓存匹配规则，运行时直接查表
 
 ## 12. 配置系统
 

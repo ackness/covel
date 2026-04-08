@@ -90,8 +90,8 @@ core-states/
 ### 关键点
 
 - `persona`、`narrator`、`guide` 虽然属于同一插件，但仍然是独立 runtime
-- 低优先级的 `guide` 可以读取更高优先级 `narrator` 已经发布的记录
-- 同优先级 runtime 不共享本轮未提交结果
+- 较大 priority 的 `guide`（650）可以读取较小 priority 的 `narrator`（500）已经发布的记录
+- 同 priority runtime 不共享本轮未提交结果
 
 ## 示例 3：core-session
 

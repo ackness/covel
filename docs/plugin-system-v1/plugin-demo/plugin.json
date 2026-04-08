@@ -1,23 +1,26 @@
 {
-  "schemaVersion": "covel.plugin/v1",
-  "id": "demo-plugin",
-  "pluginType": "plugin",
-  "displayName": {
-    "zh-CN": "示例插件：幸运事件",
-    "en-US": "Demo Plugin: Luck Events"
-  },
-  "version": "0.1.0",
-  "author": "covel",
-  "description": {
-    "zh-CN": "展示 runtime-first 插件结构、runtime 级配置、tools/scripts 分层、结构化输出和表所有权。",
-    "en-US": "Demonstrates the runtime-first plugin layout, runtime settings, tools/scripts separation, structured outputs, and table ownership."
-  },
-  "defaultLocale": "zh-CN",
-  "supportedLocales": [
-    "zh-CN",
-    "en-US"
-  ],
-  "runtimeIds": [
-    "luck-roller"
-  ]
+    "schemaVersion": "covel.plugin/v1",
+    "id": "demo-plugin",
+    "pluginType": "plugin",
+    "displayName": {
+        "zh-CN": "示例插件：幸运事件",
+        "en-US": "Demo Plugin: Luck Events"
+    },
+    "version": "0.1.0",
+    "author": "covel",
+    "description": {
+        "zh-CN": "展示 runtime-first 插件结构、runtime 级配置、tools/scripts 分层、结构化输出和表所有权。",
+        "en-US": "Demonstrates the runtime-first plugin layout, runtime settings, tools/scripts separation, structured outputs, and table ownership."
+    },
+    "defaultLocale": "zh-CN",
+    "supportedLocales": [
+        "zh-CN",
+        "en-US"
+    ],
+    "dependencies": [
+        "core-states"
+    ],
+    "runtimeIds": [
+        "luck-roller"
+    ]
 }

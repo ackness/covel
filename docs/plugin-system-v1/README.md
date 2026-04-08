@@ -60,23 +60,23 @@ V1 不把 `server/` / `client/` 作为插件核心模型。插件的核心能力
 
 ### 优先级区间
 
-所有 runtime 按优先级从小到大执行，区间固定为 `0-1000`。
+所有 runtime 按 `priority` 值从小到大执行（`lower number = higher priority = executes first`），区间固定为 `0-1000`。
 
 ```text
-0-99     pre-game / turn0
+0-99     pre-game / turn0（最先执行）
 100      开始游戏边界
-101-1000 正式 turn 循环
+101-1000 正式 turn 循环（越小越先执行）
 ```
 
 关键规则：
 
-- `0` 优先级最高，`1000` 最低
+- `priority` 数值越小，执行越靠前
 - `<100` 是 `pre-game` 阶段，只在开局前执行
-- `100` 是点击“开始游戏”的硬边界
+- `100` 是点击"开始游戏"的硬边界
 - `100-1000` 是正式主循环：`turn1 -> turn2 -> turn3 -> ...`
-- 同优先级 runtime 并行执行
-- 较低优先级 runtime 可以读取较高优先级**已经提交**的结果
-- 同优先级并行 runtime 不能读取彼此本轮正在产生的结果
+- 同 priority runtime 并行执行
+- 较大 priority 的 runtime 可以读取较小 priority **已经提交**的结果
+- 同 priority 并行 runtime 不能读取彼此本轮正在产生的结果
 
 ### 触发模型
 

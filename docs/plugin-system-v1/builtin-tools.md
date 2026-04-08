@@ -131,6 +131,24 @@ V1 的内置工具只提供**最小可组合的系统能力**。
   - pluginId / runtimeId / runId
   - 时间戳
 
+### 兼容性变更白名单
+
+V1 允许的兼容性修改：
+
+| 操作 | 是否允许 | 说明 |
+|------|----------|------|
+| 新增可选字段 | ✅ | 不影响现有消费者 |
+| 放宽 enum（增加新值） | ✅ | 现有值仍然有效 |
+| 将 required 字段改为 optional | ⚠️ 有条件 | 必须提供 default 值，框架填充 |
+| 放宽类型约束（如 int → number） | ✅ | 超集兼容 |
+| 新增 required 字段 | ❌ | 会破坏现有数据 |
+| 删除字段 | ❌ | 消费者可能依赖 |
+| 缩小 enum（移除值） | ❌ | 现有数据可能包含被移除的值 |
+| 改变字段类型（如 string → number） | ❌ | 不兼容 |
+| 重命名字段 | ❌ | 等同于删除 + 新增 |
+
+框架在 `patch_table_schema` 执行时必须自动校验变更是否属于白名单内操作，不合规则直接拒绝。
+
 ## 5. kernel:emit_domain_event
 
 写入业务事件。
@@ -201,21 +219,99 @@ V1 的内置工具只提供**最小可组合的系统能力**。
 
 - 请求审批
 - 展示表单
-- 请求继续执行
+- 请求用户选择
 - 等待某个前端回调
+
+### 交互类型
+
+| type | 说明 |
+|------|------|
+| `approval` | 请求审批某个受控操作 |
+| `form` | 展示表单让用户填写 |
+| `choice` | 展示选项让用户选择 |
+| `confirm` | 展示确认对话框 |
 
 ### 建议参数
 
 ```json
 {
   "type": "approval",
-  "title": "Allow plugin tool call",
+  "title": {
+    "zh-CN": "允许插件调用外部工具",
+    "en-US": "Allow plugin tool call"
+  },
   "payload": {
     "pluginId": "third-party-search",
     "toolId": "web.search"
-  }
+  },
+  "timeoutMs": 300000
 }
 ```
+
+### 执行模型：suspend-and-resume
+
+V1 采用 **runtime 挂起 → 回调恢复** 模型，而非 coroutine。
+
+完整流程：
+
+```text
+1. runtime 执行过程中调用 kernel:request_interaction
+2. 框架将当前 runtime 标记为 suspended
+3. 框架记录挂起点上下文：
+   - runtimeId
+   - sessionId
+   - turnId
+   - runId
+   - interactionId（唯一标识本次交互）
+   - 已完成的 tool calls 和中间状态
+4. 框架通知前端展示交互 UI
+5. runtime 执行暂停，不占用执行资源
+6. 用户在前端操作后，前端发送回调到 /api/sessions/:sessionId/approvals/callback
+7. 框架触发 approval.callback trigger
+8. 框架恢复 runtime，将用户回复注入为 tool call 的返回值
+9. runtime 从挂起点继续执行
+```
+
+### 挂起上下文
+
+```typescript
+interface SuspendedRuntimeContext {
+  interactionId: string;
+  runtimeId: string;
+  pluginId: string;
+  sessionId: string;
+  turnId: string;
+  runId: string;
+  suspendedAt: string;       // ISO timestamp
+  interactionType: string;   // approval | form | choice | confirm
+  pendingMessages: unknown[]; // LLM 对话历史快照
+  pendingToolCalls: unknown[]; // 已完成但未提交的 tool call 结果
+  timeoutMs: number;
+}
+```
+
+### 超时策略
+
+- 默认超时 `300000ms`（5 分钟），可通过参数覆盖
+- 超时后框架自动将 runtime 标记为 `failed`，生成 published record：
+  - `status: "failed"`
+  - `failureReason: "interaction_timeout"`
+- 已完成的中间写操作不提交（遵循 runtime 原子提交规则）
+
+### 与 approval-callback trigger 的关系
+
+- `kernel:request_interaction` 是 runtime **主动发起**交互的工具
+- `approval-callback` trigger 是框架**自动拦截**受控操作后产生的审批流
+- 两者回调路径相同（`/api/sessions/:sessionId/approvals/callback`），但来源不同：
+  - `request_interaction` → runtime 显式调用
+  - `approval-callback` → 框架自动拦截
+
+### 约束
+
+- 一个 runtime 同一时刻只能有一个 pending interaction
+- 挂起期间不阻塞其他 runtime 的调度
+- 挂起的 runtime 不计入同优先级并行执行组
+- 回调恢复后的 runtime 独立执行，不重新进入原优先级分组
 
 ## 不进入 V1 内置工具的能力
 

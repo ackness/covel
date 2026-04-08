@@ -81,9 +81,37 @@ interface TableService {
 interface ScriptHostService {
   exec(input: ScriptExecInput): Promise<ScriptExecResult>;
 }
+
+interface ScriptExecInput {
+  script: string;              // 脚本文件名（相对于 runtime 的 scripts/ 目录）
+  args: Record<string, unknown>;
+  timeoutMs?: number;          // 默认 30000ms
+}
+
+interface ScriptExecResult {
+  success: boolean;
+  output: unknown;             // JSON 或 string
+  durationMs: number;
+  error?: string;
+}
 ```
 
-规则：
+### 执行模型
+
+| 脚本类型 | 执行方式 | 说明 |
+|----------|----------|------|
+| `.js` / `.mjs` | Node.js `worker_threads` | 在独立 worker 中执行，避免阻塞主线程 |
+| `.py` | `child_process.spawn` | 以子进程方式调用 Python 解释器 |
+
+### 安全约束
+
+- 路径解析后必须确认脚本位于当前 runtime 的 `scripts/` 目录内，禁止目录穿越
+- 超时后强制终止进程 / worker
+- 脚本不能访问框架内部 API，只能通过标准输入输出与框架交互
+- JS 脚本通过 `workerData` 接收参数，通过 `parentPort.postMessage` 返回结果
+- Python 脚本通过 `stdin` 接收 JSON 参数，通过 `stdout` 返回 JSON 结果
+
+### 基本规则
 
 - 只执行当前 runtime 目录下的脚本
 - 输出可为 JSON 或 string
@@ -192,5 +220,5 @@ V1 建议以 **runtime 为原子提交单位**：
 
 这个模型有两个好处：
 
-- 同优先级并行 runtime 隔离更清晰
-- 低优先级 runtime 只读取已经提交的稳定结果
+- 同 priority 并行 runtime 隔离更清晰
+- 较大 priority 的 runtime 只读取已经提交的稳定结果
