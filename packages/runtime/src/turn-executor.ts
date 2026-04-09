@@ -308,11 +308,16 @@ async function executeOneRuntime(
   const startTime = Date.now();
   const runId = crypto.randomUUID();
 
-  await deps.onRuntimeStart?.({
-    runtimeId: manifest.name,
-    pluginId: manifest.name,
-    priority: manifest.priority,
-  });
+  // H2: Safe callback — don't let SSE write failures crash the runtime
+  try {
+    await deps.onRuntimeStart?.({
+      runtimeId: manifest.name,
+      pluginId: manifest.name,
+      priority: manifest.priority,
+    });
+  } catch {
+    // onRuntimeStart failure (e.g. SSE write) must not kill the runtime
+  }
 
   emitSubEvent(deps.eventBus, 'runtime', 'runtime.started', input.sessionId, {
     runtimeId: manifest.name,
@@ -447,11 +452,16 @@ async function executeOneRuntime(
         })) {
           if (event.type === 'text-delta') {
             streamedContent += event.textDelta;
-            await deps.onDelta!({
-              runtimeId: manifest.name,
-              pluginId: manifest.name,
-              textDelta: event.textDelta,
-            });
+            // M1: Wrap onDelta — client disconnect should not kill the runtime
+            try {
+              await deps.onDelta!({
+                runtimeId: manifest.name,
+                pluginId: manifest.name,
+                textDelta: event.textDelta,
+              });
+            } catch {
+              // Client disconnected — continue streaming to collect full content
+            }
           } else if (event.type === 'done') {
             streamFinishReason = event.finishReason;
           }
@@ -461,6 +471,10 @@ async function executeOneRuntime(
           content: streamedContent || null,
           toolCalls: [],
           finishReason: streamFinishReason as 'stop' | 'tool_calls' | 'length' | 'error',
+          // M5: Streaming responses don't carry token usage from most providers.
+          // The LLMStreamEvent 'done' type only has finishReason, not usage.
+          // TODO: Extend LLMStreamEvent 'done' to include optional usage field
+          // when providers support it (e.g. OpenAI stream_options.include_usage).
           usage: { inputTokens: 0, outputTokens: 0 },
         };
       } else {

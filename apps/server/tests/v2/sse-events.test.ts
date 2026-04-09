@@ -99,6 +99,36 @@ describe('V2 SSE Events', () => {
     });
   });
 
+  describe('GET /v2/events/stream (subscribe route)', () => {
+    it('M2: should return 400 for invalid topics parameter', async () => {
+      // We need a session for this — create a test app with subscribe routes
+      const { subscribeRoutes } = await import('../../src/routes/v2/subscribe.js');
+      const subApp = new Hono();
+      const store = createMemoryStore();
+      // Create a session so the route can find it
+      await store.createSession({
+        id: 'sess-topic',
+        worldId: null,
+        status: 'active',
+        phase: 'playing',
+        presetId: null,
+        activePlugins: [],
+        createdAt: new Date().toISOString(),
+      });
+      subApp.use('*', async (c, next) => {
+        c.set('eventBus', eventBus);
+        c.set('store', store);
+        await next();
+      });
+      subApp.route('/v2/events', subscribeRoutes);
+
+      const res = await subApp.request('/v2/events/stream?sessionId=sess-topic&topics=runtime,bogus_topic');
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.error).toContain('bogus_topic');
+    });
+  });
+
   describe('GET /v2/events/subscribe', () => {
     it('should require sessionId parameter', async () => {
       const res = await app.request('/v2/events/subscribe');

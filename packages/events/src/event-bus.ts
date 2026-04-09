@@ -57,10 +57,9 @@ export function createEventBus(store?: DataStore): EventBus {
       sessionEventBuffers.set(sessionId, buffer);
     }
     buffer.push(event);
-    // Trim ring buffer to max size
-    if (buffer.length > RING_BUFFER_MAX) {
-      const overflow = buffer.length - RING_BUFFER_MAX;
-      buffer.splice(0, overflow);
+    // M3: Trim ring buffer to max size — use shift() instead of splice(0, n) for O(1) typical case
+    while (buffer.length > RING_BUFFER_MAX) {
+      buffer.shift();
     }
   }
 
@@ -195,6 +194,9 @@ export function createEventBus(store?: DataStore): EventBus {
         }
         pendingEvents.delete(sessionId);
       }
+      // M4: Clean up ring buffer and seq counter to prevent memory leaks
+      sessionEventBuffers.delete(sessionId);
+      sessionSeqCounters.delete(sessionId);
     },
 
     getEventsAfter(sessionId: string, afterSeq: number): SubscriptionEvent[] {

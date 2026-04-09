@@ -145,6 +145,27 @@ describe('EventBus', () => {
 
       expect(bus.getPendingEvents('sess-1')).toEqual([]);
     });
+
+    it('M4: should clean up ring buffer and seq counter on clearSession', () => {
+      // Emit some events to populate ring buffer and seq counter
+      bus.emit(makeMessage({ id: 'msg-1', sessionId: 'sess-1' }));
+      bus.emit(makeMessage({ id: 'msg-2', sessionId: 'sess-1' }));
+      bus.emit(makeMessage({ id: 'msg-3', sessionId: 'sess-1' }));
+
+      // Verify events exist in ring buffer
+      expect(bus.getEventsAfter('sess-1', 0)).toHaveLength(3);
+
+      bus.clearSession('sess-1');
+
+      // Ring buffer should be empty after clearSession
+      expect(bus.getEventsAfter('sess-1', 0)).toHaveLength(0);
+
+      // After clearing, new events should start from seq 1 (reset counter)
+      const events: import('@covel/shared').SubscriptionEvent[] = [];
+      bus.onEmit((e) => events.push(e));
+      bus.emit(makeMessage({ id: 'msg-4', sessionId: 'sess-1' }));
+      expect(events[0]!.id).toBe('1');
+    });
   });
 
   describe('wildcard support', () => {

@@ -31,6 +31,15 @@ subscribeRoutes.get('/stream', async (c) => {
   if (!session) return c.json({ error: 'Session not found' }, 404);
 
   const topicsParam = c.req.query('topics');
+  // M2: Validate topics parameter against known SubscriptionTopic values
+  const VALID_TOPICS = new Set<string>(['runtime', 'state', 'game', 'plugin', 'session', 'store', 'system']);
+  if (topicsParam) {
+    const parsed = topicsParam.split(',').map((t) => t.trim());
+    const invalid = parsed.filter((t) => !VALID_TOPICS.has(t));
+    if (invalid.length > 0) {
+      return c.json({ error: `Invalid topics: ${invalid.join(', ')}` }, 400);
+    }
+  }
   const topics = topicsParam
     ? new Set(topicsParam.split(',').map((t) => t.trim()) as SubscriptionTopic[])
     : null; // null = all topics

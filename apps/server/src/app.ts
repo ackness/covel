@@ -153,12 +153,21 @@ app.get('/sessions/:id/plugins', async (c) => {
 
 app.post('/sessions/:id/plugins/enable', async (c) => {
   const id = c.req.param('id');
-  const body = await c.req.json<{ pluginId: string }>();
+  // H3: Validate request body
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+  const pluginId = body.pluginId;
+  if (typeof pluginId !== 'string' || !pluginId) {
+    return c.json({ error: 'pluginId must be a non-empty string' }, 400);
+  }
   const session = await v2.store.getSession(id);
   if (!session) {
     return c.json({ error: 'Session not found' }, 404);
   }
-  const pluginId = body.pluginId;
   if (!v2.registry.get(pluginId)) {
     return c.json({ error: 'Plugin not found' }, 404);
   }
@@ -173,12 +182,26 @@ app.post('/sessions/:id/plugins/enable', async (c) => {
 
 app.post('/sessions/:id/plugins/disable', async (c) => {
   const id = c.req.param('id');
-  const body = await c.req.json<{ pluginId: string }>();
+  // H3: Validate request body
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+  const pluginId = body.pluginId;
+  if (typeof pluginId !== 'string' || !pluginId) {
+    return c.json({ error: 'pluginId must be a non-empty string' }, 400);
+  }
   const session = await v2.store.getSession(id);
   if (!session) {
     return c.json({ error: 'Session not found' }, 404);
   }
-  const pluginId = body.pluginId;
+  // H1: Prevent disabling core plugins
+  const entry = v2.registry.get(pluginId);
+  if (entry && entry.summary.pluginType === 'core-plugin') {
+    return c.json({ error: 'Cannot disable core plugin' }, 403);
+  }
   const activeSet = new Set(session.activePlugins);
   if (activeSet.has(pluginId)) {
     activeSet.delete(pluginId);
