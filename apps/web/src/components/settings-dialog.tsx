@@ -405,7 +405,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       <div className="text-xs text-muted-foreground grid grid-cols-3 gap-1">
                         <span>Provider: {slot.provider}</span>
                         <span>Model: {slot.model}</span>
-                        <span>Protocol: {slot.protocol.replace("-v1", "")}</span>
+                        <span>Protocol: {(slot.protocol ?? "").replace("-v1", "")}</span>
                       </div>
 
                       {/* ── Capability Tags ── */}

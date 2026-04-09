@@ -203,7 +203,8 @@ app.get('/api/llm-config', (c) => {
     const preset = presets.find((p) => p.id === slot.presetId);
     const provider = preset?.provider ?? 'unknown';
     const model = preset?.model ?? 'unknown';
-    slotInfo[slotId] = { presetId: slot.presetId, provider, model };
+    const protocol = preset?.protocol ?? 'openai-chat';
+    slotInfo[slotId] = { presetId: slot.presetId, provider, model, protocol };
     providerSet.add(provider);
   }
 
