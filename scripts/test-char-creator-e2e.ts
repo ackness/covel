@@ -23,7 +23,7 @@ import { createGatewayAdapter } from '../packages/runtime/src/gateway-llm-adapte
 import { createSqliteStore } from '../packages/store/src/sqlite/sqlite-store.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const PLUGINS_DIR = path.join(ROOT, 'plugins-v2');
+const PLUGINS_DIR = path.join(ROOT, 'plugins');
 const WORLDS_DIR = path.join(ROOT, 'worlds');
 const DATA_DIR = path.join(ROOT, 'data');
 const DB_PATH = path.join(DATA_DIR, 'char-creator-e2e.db');

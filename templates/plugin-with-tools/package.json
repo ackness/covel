@@ -1,0 +1,16 @@
+{
+  "name": "@covel/plugin-{{pluginName}}",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@covel/plugin-loader": "workspace:*",
+    "@covel/plugin-test-utils": "workspace:*",
+    "@covel/tools": "workspace:*",
+    "vitest": "^4.1.2"
+  }
+}

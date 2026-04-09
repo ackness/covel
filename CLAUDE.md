@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Covel is an AI RPG plugin-based framework (modular monolith architecture). Core philosophy: **plugins carry gameplay logic, the kernel provides primitives and orchestration**. The system provides a workbench UI for interactive storytelling/gameplay, backed by a plugin-driven kernel that orchestrates LLM calls, context assembly, and turn execution.
 
-Detailed architecture docs: `docs/system-architecture-v0/` (read order: framework-architecture → execution-flow → runtime-kernel-spec → public-plugin-api-spec → agent-runtime-alignment → deployment-security-model). Also see `docs/prompt-externalization-spec.md` and `docs/world-package-spec.md`.
+Detailed architecture docs: `devs/docs/` (refactor plans, plugin system requirements, prompt/world specs). Framework reference: `docs/reference/` (plugins, tools registries).
 
 ## Commands
 
@@ -28,13 +28,17 @@ pnpm db:migrate           # Run Drizzle migrations
 pnpm db:studio            # Open Drizzle Studio
 
 # Tests (vitest — all packages)
-pnpm --filter @covel/kernel test           # Run kernel tests
-pnpm --filter @covel/plugin-runtime test   # Run plugin-runtime tests
 pnpm --filter @covel/runtime test          # Run runtime tests
-pnpm --filter @covel/ai-provider test      # Run ai-provider tests
+pnpm --filter @covel/context test          # Run context tests
+pnpm --filter @covel/plugin-loader test    # Run plugin-loader tests
 pnpm --filter @covel/store test            # Run store tests
+pnpm --filter @covel/ai-provider test      # Run ai-provider tests
 pnpm --filter @covel/server test           # Run server tests
+pnpm --filter @covel/plugin-test-utils test # Run test-utils tests
 # Add --watch for watch mode, --run for single run
+
+# E2E scripts (real LLM, requires .env.llm)
+npx tsx --env-file=.env --env-file=.env.llm scripts/test-full-3plugins.ts
 
 # E2E tests (Playwright)
 pnpm e2e                  # Run all E2E tests headless
@@ -76,44 +80,48 @@ The dev server (`tsx watch`) loads both `../../.env` and `../../.env.llm` from t
 
 ```
 apps/
-  web/        @covel/web              — React 19 + Vite 8 + TailwindCSS v4 + TanStack Router
-  server/     @covel/server           — Hono API server + Drizzle ORM
+  web/              @covel/web              — React 19 + Vite 8 + TailwindCSS v4 + TanStack Router
+  server/           @covel/server           — Hono API server + Drizzle ORM
 
 packages/
-  shared/           @covel/shared           — Shared types and contracts (character, kernel, plugin, world, data-access)
+  shared/           @covel/shared           — Shared types and contracts (pure types, zero runtime deps)
+  context/          @covel/context          — Context assembly (template interpolation, inject blocks, prompt building)
   ai-provider/      @covel/ai-provider      — Multi-provider LLM abstraction (preset routing, model capability auto-detection, 2597-model LiteLLM database)
-  runtime/          @covel/runtime          — Turn runtime execution engine (LLM tool-calling loop + budget enforcement)
-  context/          @covel/context          — Unified context builder (TurnContextStore + PromptAssembler + Compactor + Normalizer + PromptLoader)
-  kernel/           @covel/kernel           — Orchestration kernel (scheduling, tool execution, proposals, rendering)
-  plugin-runtime/   @covel/plugin-runtime   — Plugin loader, registries (tool/hook/runtime/command), host
-  store/            @covel/store            — Data abstraction with 3 backends: MemoryStore, IdbStore (IndexedDB), PgStore (PostgreSQL)
-  plugin-test-utils/ @covel/plugin-test-utils — Testing utilities for plugin authors
+  plugin-loader/    @covel/plugin-loader    — Plugin discovery, PLUGIN.md parsing, progressive loading, registry, session scope
+  runtime/          @covel/runtime          — Turn execution engine (trigger → schedule → context → LLM → tool loop → result)
+  store/            @covel/store            — Data abstraction with 4 backends: MemoryStore, SqliteStore, IdbStore (IndexedDB), PgStore (PostgreSQL)
+  state/            @covel/state            — State management (dynamic tables, change history, write conflict collection)
+  events/           @covel/events           — Event bus (pub/sub, event persistence)
+  tools/            @covel/tools            — Tool system (tool() wrapper, registry, builtin UI tools, output validation)
+  approval/         @covel/approval         — Approval pipeline (permission rules, approval gates)
+  plugin-test-utils/ @covel/plugin-test-utils — Testing utilities for plugin authors (MockLLM, TestHarness, factories)
 
-plugins/                    — 16 core gameplay plugins (see Plugin Inventory below)
+plugins/                    — Core gameplay plugins (PLUGIN.md-centric, see Plugin Inventory below)
+  core-narrator/            — Main narrative generation
+  core-char-creator/        — Character creation onboarding
+  core-codex/               — Knowledge codex with local tools
 
-prompts/                    — Externalized prompt templates (locale-aware markdown, loaded by @covel/context)
+prompts/                    — Externalized prompt templates (locale-aware markdown)
   server/                   — Server route prompts (generate-world, extract-dimensions)
 
 worlds/                     — File-based world packages (YAML manifest + markdown lore)
   cloudmere/                — World package
   mistport/                 — World package
   neonridge/                — World package
-
-modules/                    — Standalone modules (not in pnpm workspace)
-  artifact-store/           — Artifact storage system
-  sdk-package/              — SDK packaging utilities
-
-extensions/                 — Extension packages (not in pnpm workspace)
-  core-presets/             — Preset management
-  core-worldbook/           — World book system
 ```
 
 ### Dependency Flow
 
 ```
-@covel/shared  ←  @covel/ai-provider  ←  @covel/runtime  ←  @covel/context  ←  @covel/kernel
-                  @covel/plugin-runtime →                                        →
-                  @covel/store →                               @covel/server (composes all)
+@covel/shared  ←  @covel/context  ←  @covel/runtime  ←  @covel/server (composes all)
+                  @covel/ai-provider ←─────────────────────┘
+                  @covel/plugin-loader ←────────────────────┘
+                  @covel/store ←────────────────────────────┘
+                  @covel/state ←────────────────────────────┘
+                  @covel/events ←───────────────────────────┘
+                  @covel/tools ←────────────────────────────┘
+                  @covel/approval
+                  @covel/plugin-test-utils (dev/test only)
 ```
 
 ## Architecture
@@ -130,13 +138,13 @@ First-class execution primitives: **Runtime, Tool, Hook, Context, Proposal** —
 4. **Extension Layer** — Plugins, runtimes, tools, hooks, UI slots
 5. **Infrastructure Layer** — Storage, queue, providers, tracing
 
-### Kernel Lifecycle
+### Server Bootstrap
 
-Two-phase initialization: `bootstrapKernel()` creates the kernel instance with global registries, then `createSession()` creates per-session scoped views. `createKernel()` is a compat wrapper combining both steps.
+`bootstrapV2()` in `apps/server/src/routes/v2/bootstrap.ts` creates a fully wired Hono app: discovers plugins, creates registries, injects dependencies into routes via middleware.
 
-### Kernel Execution Pipeline
+### Turn Execution Pipeline
 
-Each turn follows a fixed pipeline (`packages/kernel`):
+Each turn follows a fixed pipeline (`packages/runtime`):
 
 ```
 Input/Event → Trigger Router → Priority Scheduler → [For each priority group:]
@@ -177,26 +185,15 @@ plugin/
 
 ### Plugin Inventory
 
-Default gameplay loop by priority:
+Current plugins (v2 PLUGIN.md-centric format):
 
-| Priority | Plugin | Role |
-|----------|--------|------|
-| 100 | core-persona | Narrator/AI persona configuration (always) |
-| 400 | core-narrator | Main narrative generation (always) |
-| 420 | core-combat | Structured turn-based combat (event-triggered) |
-| 420 | core-npc-init | NPC initialization (event-triggered) |
-| 450 | core-init-wizard | Character creation onboarding (event-triggered) |
-| 550 | core-world-state | World state tracking (event-triggered) |
-| 600 | core-char-tracker | Character identification/parsing (event-triggered) |
-| 600 | core-guide | Story guidance and choice panels (event-triggered) |
-| 600 | core-inventory | Item/equipment management (event-triggered) |
-| 650 | core-event | Event tracking system (event-triggered) |
-| 650 | core-quest | Quest tracking + tools (event-triggered) |
-| 700 | core-codex | Knowledge/lore codex (event-triggered) |
-| 800 | core-image | Story image generation (event-triggered) |
-| 900 | core-memory | Memory summarizer (interval) |
-| — | core-dice | Randomness/dice rolls (utility, no runtime) |
-| — | core-notification | Event notifications + block renderers (utility, no runtime) |
+| Priority | Plugin | Role | Trigger |
+|----------|--------|------|---------|
+| 500 | core-narrator | Main narrative generation | auto (every turn) |
+| 650 | core-codex | Knowledge/lore codex with local tools | auto |
+| 700 | core-char-creator | Character creation onboarding | conditional (first turn only, maxTriggerCount=1) |
+
+Additional plugins planned for migration from v1: core-persona, core-combat, core-guide, core-inventory, core-quest, core-image, core-memory, etc.
 
 ### Model Slot System
 
@@ -206,7 +203,7 @@ Named slots for provider routing. The first slot defined in `llm.toml` automatic
 - `balance` — referee plugins, complex logic
 - `image` — image generation (optional)
 
-Unconfigured slots fall back to `default`. Primary config via `llm.toml` (slot-centric), legacy fallback to `packages/ai-provider/presets/default.toml`. Supports OpenAI, Anthropic, DeepSeek, Qwen (Aliyun DashScope) protocols.
+Unconfigured slots fall back to `default`. Primary config via `llm.toml` using `[covel.<slot>]` sections (see `llm.toml.example`), legacy fallback to `packages/ai-provider/presets/default.toml`. Supports OpenAI, Anthropic, DeepSeek, Qwen (Aliyun DashScope) protocols.
 
 **API key security**: Keys in browser localStorage only, passed per-request via `X-Provider-Keys` header (base64), never persisted server-side.
 
@@ -231,7 +228,7 @@ Types: `InputModality` = `text | image | audio | video | file`; `OutputModality`
 
 ### Prompt Externalization
 
-All LLM prompts are externalized as locale-aware markdown files (see `docs/prompt-externalization-spec.md`):
+All LLM prompts are externalized as locale-aware markdown files (see `devs/docs/prompt-externalization-spec.md`):
 
 - Server prompts: `prompts/server/<name>.md`
 - Plugin prompts: `plugins/<plugin>/prompts/<name>.{zh,en}.md`
@@ -241,7 +238,7 @@ All LLM prompts are externalized as locale-aware markdown files (see `docs/promp
 
 ### World Package System
 
-File-based world content format (see `docs/world-package-spec.md`):
+File-based world content format (see `devs/docs/world-package-spec.md`):
 
 ```
 worlds/<world-id>/
@@ -316,7 +313,7 @@ Storage mode is auto-detected on startup: `main.tsx` calls `GET /api/health`, re
 
 ### Deployment Tiers
 
-Three deployment tiers (see `docs/system-architecture-v0/deployment-security-model.md`):
+Three deployment tiers:
 
 | Tier | Name | Storage | API Keys |
 |------|------|---------|----------|
@@ -340,10 +337,10 @@ plugins/<plugin>/tests/     # Plugin-specific tests (if any)
 
 ### Test Patterns
 
-- **Contract tests** (`store-contract.ts`): Shared test suite defining behavioral expectations for the `DataStore` interface. Each backend (MemoryStore, IdbStore, PgStore) runs the same contract tests to ensure consistency. New store backends MUST pass the contract suite.
-- **ServerStore tests**: `apps/server/tests/memory-store.test.ts` (in-memory, fast), `pg-server-store.test.ts` (requires local PG — `DATABASE_URL=postgresql://covel:covel_dev@localhost:5432/covel`).
-- **Tool call tests**: `packages/kernel/tests/builtin-data-tools.test.ts` (all 10 builtin data tools), `tool-call-integration.test.ts` (full lifecycle: registration → sanitization → scoping → execution → hooks → proposals).
-- **Plugin API tests**: `packages/plugin-runtime/tests/plugin-registrar-api.test.ts` (PluginRegistrar interface for plugin authors: tool/hook/context/runtime/command registration).
+- **Contract tests** (`store-contract.ts`): Shared test suite defining behavioral expectations for the `DataStore` interface. Each backend (MemoryStore, SqliteStore, IdbStore, PgStore) runs the same contract tests to ensure consistency. New store backends MUST pass the contract suite.
+- **Server tests**: `apps/server/tests/v2/` — V2 API routes, bootstrap, session management, SSE events.
+- **Plugin tests**: Use `@covel/plugin-test-utils` for consistent test setup — `MockLLM`, `createTestHarness`, factory functions (`makeTurnInput`, `makeTriggerContext`, `makeRuntimeResult`).
+- **E2E scripts**: `scripts/test-full-3plugins.ts` (real LLM, 3-plugin integration via HTTP API), `scripts/test-real-llm.ts` (single-plugin real LLM test).
 
 ### Test Style
 
@@ -381,7 +378,21 @@ describe("ComponentName", () => {
 - Hooks guard/rewrite/audit — do NOT carry main gameplay logic
 - UI slots: `settings_panel`, `message_block`, `world_panel`, `action_panel`
 - Provider access through binding declarations, never direct SDK usage
-- Plugin minimum: `plugin.json` + `PLUGIN.md`
+- Plugin minimum: `PLUGIN.md` + `package.json`
+
+### Documentation Sync Rules
+
+**Every code change that affects framework capabilities MUST update the corresponding reference docs.** Reference docs live in `docs/reference/`.
+
+| 变更类型 | 需要更新的文档 |
+|---------|--------------|
+| 添加/修改/删除插件 | `docs/reference/plugins.md` |
+| 添加/修改/删除工具（builtin 或 local） | `docs/reference/tools.md` |
+| 修改审批策略或工具来源分类 | `docs/reference/tools.md` |
+| 添加/修改模型 slot | `docs/reference/slots.md`（创建后） |
+| 修改包结构或依赖关系 | `CLAUDE.md` Workspace Layout + Dependency Flow |
+
+不同步文档的 PR 应被视为未完成。
 
 ### Observability
 

@@ -196,9 +196,6 @@ importers:
 
   packages/ai-provider:
     dependencies:
-      '@covel/shared':
-        specifier: workspace:*
-        version: link:../shared
       smol-toml:
         specifier: ^1.3.1
         version: 1.6.1
@@ -236,6 +233,19 @@ importers:
         specifier: ^4.1.2
         version: 4.1.2(@types/node@25.5.2)(jsdom@26.1.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.2)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
+  packages/context:
+    dependencies:
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.2
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.2(@types/node@25.5.2)(jsdom@26.1.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.2)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+
   packages/events:
     dependencies:
       '@covel/shared':
@@ -244,9 +254,6 @@ importers:
       '@covel/store':
         specifier: workspace:*
         version: link:../store
-      nanoid:
-        specifier: ^5.1.5
-        version: 5.1.7
     devDependencies:
       typescript:
         specifier: ^6.0.2
@@ -263,9 +270,31 @@ importers:
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.2
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.2(@types/node@25.5.2)(jsdom@26.1.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.2)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+
+  packages/plugin-test-utils:
+    dependencies:
+      '@covel/plugin-loader':
+        specifier: workspace:*
+        version: link:../plugin-loader
+      '@covel/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@covel/store':
+        specifier: workspace:*
+        version: link:../store
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../tools
     devDependencies:
       typescript:
         specifier: ^6.0.2
@@ -276,6 +305,12 @@ importers:
 
   packages/runtime:
     dependencies:
+      '@covel/approval':
+        specifier: workspace:*
+        version: link:../approval
+      '@covel/context':
+        specifier: workspace:*
+        version: link:../context
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../plugin-loader
@@ -295,6 +330,9 @@ importers:
       vitest:
         specifier: ^4.1.2
         version: 4.1.2(@types/node@25.5.2)(jsdom@26.1.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.2)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
 
   packages/shared:
     dependencies:
@@ -327,9 +365,6 @@ importers:
 
   packages/store:
     dependencies:
-      '@covel/shared':
-        specifier: workspace:*
-        version: link:../shared
       better-sqlite3:
         specifier: ^11.9.1
         version: 11.10.0
@@ -367,9 +402,6 @@ importers:
       zod:
         specifier: ^4.3.6
         version: 4.3.6
-      zod-to-json-schema:
-        specifier: ^3.24.5
-        version: 3.25.2(zod@4.3.6)
     devDependencies:
       typescript:
         specifier: ^6.0.2
@@ -377,6 +409,44 @@ importers:
       vitest:
         specifier: ^4.1.2
         version: 4.1.2(@types/node@25.5.2)(jsdom@26.1.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.2)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+
+  plugins/core-char-creator:
+    devDependencies:
+      '@covel/plugin-loader':
+        specifier: workspace:*
+        version: link:../../packages/plugin-loader
+      '@covel/plugin-test-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-test-utils
+      '@covel/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
+      '@covel/store':
+        specifier: workspace:*
+        version: link:../../packages/store
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.2(@types/node@25.5.2)(jsdom@26.1.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.2)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+
+  plugins/core-codex:
+    devDependencies:
+      '@covel/plugin-loader':
+        specifier: workspace:*
+        version: link:../../packages/plugin-loader
+      '@covel/plugin-test-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-test-utils
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.2(@types/node@25.5.2)(jsdom@26.1.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.5.2)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+
+  plugins/core-narrator: {}
 
 packages:
 
@@ -2739,11 +2809,6 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  nanoid@5.1.7:
-    resolution: {integrity: sha512-ua3NDgISf6jdwezAheMOk4mbE1LXjm1DfMUDMuJf4AqxLFK3ccGpgWizwa5YV7Yz9EpXwEaWoRXSb/BnV0t5dQ==}
-    engines: {node: ^18 || >=20}
-    hasBin: true
-
   napi-build-utils@2.0.0:
     resolution: {integrity: sha512-GEbrYkbfF7MoNaoh2iGG84Mnf/WZfB0GdGEsM8wz7Expx/LlWf5U8t9nvJKXSp3qr5IsEbK04cBGhol/KwOsWA==}
 
@@ -3409,11 +3474,6 @@ packages:
     resolution: {integrity: sha512-AvbaCLOO2Otw/lW5bmh9d/WEdcDFdQp2Z2ZUH3pX9U2ihyUY0nvLv7J6TrWowklRGPYbB/IuIMfYgxaCPg5Bpg==}
     engines: {node: '>= 14.6'}
     hasBin: true
-
-  zod-to-json-schema@3.25.2:
-    resolution: {integrity: sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA==}
-    peerDependencies:
-      zod: ^3.25.28 || ^4
 
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
@@ -5814,8 +5874,6 @@ snapshots:
 
   nanoid@3.3.11: {}
 
-  nanoid@5.1.7: {}
-
   napi-build-utils@2.0.0: {}
 
   next-themes@0.4.6(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
@@ -6518,10 +6576,6 @@ snapshots:
   yallist@3.1.1: {}
 
   yaml@2.8.3: {}
-
-  zod-to-json-schema@3.25.2(zod@4.3.6):
-    dependencies:
-      zod: 4.3.6
 
   zod@3.25.76: {}
 

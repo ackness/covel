@@ -14,29 +14,12 @@ COPY apps/web/package.json apps/web/
 COPY packages/shared/package.json packages/shared/
 COPY packages/ai-provider/package.json packages/ai-provider/
 COPY packages/runtime/package.json packages/runtime/
-COPY packages/context/package.json packages/context/
-COPY packages/kernel/package.json packages/kernel/
-COPY packages/plugin-runtime/package.json packages/plugin-runtime/
 COPY packages/store/package.json packages/store/
-COPY packages/plugin-test-utils/package.json packages/plugin-test-utils/
-
-# Plugins (each has its own package.json)
-COPY plugins/core-persona/package.json plugins/core-persona/
-COPY plugins/core-narrator/package.json plugins/core-narrator/
-COPY plugins/core-combat/package.json plugins/core-combat/
-COPY plugins/core-init-wizard/package.json plugins/core-init-wizard/
-COPY plugins/core-char-tracker/package.json plugins/core-char-tracker/
-COPY plugins/core-guide/package.json plugins/core-guide/
-COPY plugins/core-inventory/package.json plugins/core-inventory/
-COPY plugins/core-quest/package.json plugins/core-quest/
-COPY plugins/core-dice/package.json plugins/core-dice/
-COPY plugins/core-memory/package.json plugins/core-memory/
-COPY plugins/core-npc-init/package.json plugins/core-npc-init/
-COPY plugins/core-world-state/package.json plugins/core-world-state/
-COPY plugins/core-codex/package.json plugins/core-codex/
-COPY plugins/core-event/package.json plugins/core-event/
-COPY plugins/core-image/package.json plugins/core-image/
-COPY plugins/core-notification/package.json plugins/core-notification/
+COPY packages/plugin-loader/package.json packages/plugin-loader/
+COPY packages/state/package.json packages/state/
+COPY packages/events/package.json packages/events/
+COPY packages/tools/package.json packages/tools/
+COPY packages/approval/package.json packages/approval/
 
 RUN pnpm install --frozen-lockfile
 

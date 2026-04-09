@@ -27,9 +27,7 @@ export function createRuntimeProxyConfig(env: Record<string, string | undefined>
   return Object.fromEntries(
     RUNTIME_PROXY_PATHS.map((path) => [
       path,
-      {
-        target
-      }
+      { target }
     ])
   );
 }

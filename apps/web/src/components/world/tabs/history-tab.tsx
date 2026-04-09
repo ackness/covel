@@ -7,7 +7,7 @@ import type { WorldHistoryEvent, HistorySignificance } from "@covel/shared";
 const SIGNIFICANCE_LEVELS: HistorySignificance[] = ["major", "minor"];
 
 export function HistoryTab({ dimensions, onChange, t }: TabProps) {
-  const events: WorldHistoryEvent[] = dimensions.history ?? [];
+  const events: WorldHistoryEvent[] = [...(dimensions.history ?? [])];
 
   function setEvents(next: WorldHistoryEvent[]) {
     onChange({ ...dimensions, history: next });

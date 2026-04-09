@@ -21,30 +21,40 @@ type Env = {
 
 export const sessionRoutes = new Hono<Env>();
 
+// GET /v2/sessions — List all sessions
+sessionRoutes.get('/', async (c) => {
+  const store = c.get('store');
+  const sessions = await store.listSessions();
+  return c.json({ items: sessions });
+});
+
 // POST /v2/session/start — Start a new game session
 sessionRoutes.post('/start', async (c) => {
   const store = c.get('store');
   const pluginRegistry = c.get('pluginRegistry');
 
-  const body = await c.req.json<{
-    worldId?: string;
-    locale?: string;
-    plugins?: string[];
-  }>();
+  const body = await c.req.json<Record<string, unknown>>();
+
+  // Validate plugins field
+  if (body.plugins !== undefined && !Array.isArray(body.plugins)) {
+    return c.json({ error: 'plugins must be an array of strings' }, 400);
+  }
 
   const id = crypto.randomUUID();
-  const plugins = body.plugins ?? [];
+  const plugins = (Array.isArray(body.plugins) ? body.plugins : []) as string[];
 
-  // Activate requested plugins in registry
+  // Activate requested plugins in registry (skip unknown IDs)
   for (const pluginId of plugins) {
-    pluginRegistry.activate(pluginId, id);
+    if (typeof pluginId === 'string' && pluginRegistry.get(pluginId)) {
+      pluginRegistry.activate(pluginId, id);
+    }
   }
 
   const now = new Date().toISOString();
   const session: SessionRecord = {
     id,
-    worldId: body.worldId,
-    locale: body.locale ?? 'zh-CN',
+    worldId: typeof body.worldId === 'string' ? body.worldId : undefined,
+    locale: typeof body.locale === 'string' ? body.locale : 'zh-CN',
     phase: 'pre-game',
     turnCount: 0,
     activePlugins: plugins,

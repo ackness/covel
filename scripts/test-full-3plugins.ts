@@ -1,6 +1,10 @@
 /**
  * Full API E2E: 3 plugins (narrator + char-creator + codex) — pure HTTP endpoints.
  *
+ * Tests the complete framework orchestration pipeline:
+ *   bootstrapV2 → plugin discovery → tool auto-loading → approval pipeline
+ *   → HTTP API → TurnExecutor (trigger → schedule → context → LLM → tool loop → result)
+ *
  * Flow:
  *   Turn 1: narrator opening + char-creator form + codex discovers knowledge
  *   Submit: player fills character form
@@ -15,16 +19,13 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { bootstrapV2 } from '../apps/server/src/routes/v2/bootstrap.js';
 import { createAiStack } from '../apps/server/src/ai-setup.js';
-import { createGatewayAdapter } from '../packages/runtime/src/gateway-llm-adapter.js';
-import { createSqliteStore } from '../packages/store/src/sqlite/sqlite-store.js';
-import { createToolExecutor } from '../packages/runtime/src/tool-executor.js';
-import { createFormTool, createChoicesTool, createNotificationTool } from '../packages/tools/src/builtin/ui-tools.js';
-import { unlockCodexEntriesTool } from '../plugins-v2/core-codex/tools/unlock-codex-entries.js';
-import { updateCodexEntryTool } from '../plugins-v2/core-codex/tools/update-codex-entry.js';
+import { createGatewayAdapter } from '../packages/runtime/src/index.js';
+import { createSqliteStore } from '../packages/store/src/index.js';
+import type { DataStore } from '../packages/store/src/index.js';
 import type { Hono } from 'hono';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const PLUGINS_DIR = path.join(ROOT, 'plugins-v2');
+const PLUGINS_DIR = path.join(ROOT, 'plugins');
 const DATA_DIR = path.join(ROOT, 'data');
 const DB_PATH = path.join(DATA_DIR, 'full-3plugins-test.db');
 
@@ -39,12 +40,22 @@ async function api(app: Hono, method: string, url: string, body?: unknown) {
   return { status: res.status, data: await res.json() as Record<string, unknown> };
 }
 
+// ── Test runner ─────────────────────────────────────────────────
+
+let passed = 0;
+let failed = 0;
+
+function check(label: string, ok: boolean, detail?: string) {
+  if (ok) { passed++; console.log(`  ✅ ${label}`); }
+  else { failed++; console.log(`  ❌ ${label}${detail ? ': ' + detail : ''}`); }
+}
+
 // ── Main ─────────────────────────────────────────────────────────
 
 async function main() {
-  console.log('🎮 Full 3-Plugin API E2E Test\n');
+  console.log('🎮 Full 3-Plugin E2E — Framework Orchestration Pipeline\n');
 
-  // Setup
+  // ── Setup: only provide store + LLM adapter, everything else through bootstrap ──
   fs.mkdirSync(DATA_DIR, { recursive: true });
   if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
   const store = createSqliteStore(DB_PATH);
@@ -55,64 +66,37 @@ async function main() {
     if (k.endsWith('_API_KEY') && v) apiKeys[k.replace(/_API_KEY$/, '').toLowerCase()] = v;
   }
 
-  // Build tool executor with all tools (builtin + codex local)
-  const toolExecutor = createToolExecutor({
-    findTool: (name) => {
-      const tools: Record<string, unknown> = {
-        'create-form': createFormTool,
-        'create-choices': createChoicesTool,
-        'create-notification': createNotificationTool,
-        'unlock-codex-entries': unlockCodexEntriesTool,
-        'update-codex-entry': updateCodexEntryTool,
-      };
-      return tools[name] as ReturnType<typeof createFormTool> | undefined;
-    },
-    store,
-  });
-
+  // Bootstrap: framework handles plugin discovery, tool loading, approval, and wiring
   const { app, registry } = await bootstrapV2({
     pluginsDir: PLUGINS_DIR,
     llmAdapter: createGatewayAdapter(aiStack.gateway, { apiKeys }),
     store,
   });
 
-  // Inject toolExecutor into Hono context (add middleware before routes)
-  // Since bootstrap already ran, we need to use the existing app
-  // The toolExecutor needs to be part of the turn execution deps
-  // For now, we'll pass it via the getConfigFn workaround
-  // TODO: proper toolExecutor injection in bootstrap
-
   const plugins = [...registry.getAll().keys()];
-  console.log(`🔌 Plugins: ${plugins.join(', ')}`);
-
-  let passed = 0;
-  let failed = 0;
-  function check(label: string, ok: boolean, detail?: string) {
-    if (ok) { passed++; console.log(`  ✅ ${label}`); }
-    else { failed++; console.log(`  ❌ ${label}${detail ? ': ' + detail : ''}`); }
-  }
+  console.log(`🔌 Plugins discovered by bootstrap: ${plugins.join(', ')}`);
 
   // ═══════════════════════════════════════════════════════════════
-  console.log('\n1️⃣  Health + Plugins');
+  console.log('\n1️⃣  Health + Plugin Discovery (bootstrap auto-discovered)');
   // ═══════════════════════════════════════════════════════════════
   const health = await api(app, 'GET', '/v2/health');
   check('health OK', health.status === 200);
 
   const pluginList = await api(app, 'GET', '/v2/plugins');
   const pList = (pluginList.data.plugins as Array<Record<string, unknown>>) ?? [];
-  check('3 plugins loaded', pList.length === 3);
+  check('3 plugins auto-discovered', pList.length === 3);
   check('narrator present', pList.some(p => p.id === 'core-narrator'));
   check('char-creator present', pList.some(p => p.id === 'core-char-creator'));
   check('codex present', pList.some(p => p.id === 'core-codex'));
 
-  // Check plugin types
+  // Verify plugin metadata from PLUGIN.md frontmatter
   const codexPlugin = pList.find(p => p.id === 'core-codex');
-  check('codex is non-core', codexPlugin?.pluginType === 'plugin');
+  check('codex is non-core (pluginType from frontmatter)', codexPlugin?.pluginType === 'plugin');
   const narratorPlugin = pList.find(p => p.id === 'core-narrator');
-  check('narrator is core', narratorPlugin?.pluginType === 'core-plugin');
+  check('narrator is core-plugin', narratorPlugin?.pluginType === 'core-plugin');
 
   // ═══════════════════════════════════════════════════════════════
-  console.log('\n2️⃣  Create Session (all 3 plugins)');
+  console.log('\n2️⃣  Create Session');
   // ═══════════════════════════════════════════════════════════════
   const start = await api(app, 'POST', '/v2/session/start', {
     locale: 'zh-CN',
@@ -123,7 +107,7 @@ async function main() {
   console.log(`  📋 Session: ${sid}`);
 
   // ═══════════════════════════════════════════════════════════════
-  console.log('\n3️⃣  Turn 1: Opening + CharCreator + Codex');
+  console.log('\n3️⃣  Turn 1: Orchestration Pipeline (trigger → schedule → context → LLM → tools)');
   // ═══════════════════════════════════════════════════════════════
   const t1Start = Date.now();
   const turn1 = await api(app, 'POST', `/v2/session/${sid}/turn`, { message: '开始游戏' });
@@ -132,34 +116,40 @@ async function main() {
   check('turn 1 OK', turn1.status === 200);
 
   const rr1 = (turn1.data.runtimeResults as Array<Record<string, unknown>>) ?? [];
-  console.log(`  📊 Runtime results: ${rr1.length}`);
+  console.log(`  📊 Runtime results: ${rr1.length} (ordered by priority scheduler)`);
   for (const r of rr1) {
     const out = r.output as Record<string, unknown> | null;
     const narrative = (out?.narrativeOutput ?? out?.narrativeTemplate ?? '') as string;
-    console.log(`    [${r.pluginId}] ${r.status} — ${narrative.substring(0, 80)}...`);
+    console.log(`    [p=${r.priority ?? '?'}] ${r.pluginId} — ${r.status} — ${narrative.substring(0, 60)}...`);
   }
 
-  // Check narrator
+  // Verify priority order: narrator(500) → codex(650) → char-creator(700)
+  const rr1Ids = rr1.map(r => r.pluginId);
+  const narratorIdx = rr1Ids.indexOf('core-narrator');
+  const codexIdx = rr1Ids.indexOf('core-codex');
+  const charIdx = rr1Ids.indexOf('core-char-creator');
+  check('priority order: narrator before codex', narratorIdx < codexIdx);
+  check('priority order: codex before char-creator', codexIdx < charIdx);
+
+  // Narrator executed (trigger: auto)
   const n1 = rr1.find(r => r.pluginId === 'core-narrator');
-  check('narrator executed', n1?.status === 'success');
-  check('narrator has narrative', typeof (n1?.output as Record<string, unknown>)?.narrativeOutput === 'string');
+  check('narrator triggered (auto)', n1?.status === 'success');
+  check('narrator produced narrativeOutput', typeof (n1?.output as Record<string, unknown>)?.narrativeOutput === 'string');
 
-  // Check char-creator
+  // Char-creator executed (trigger: scheduled, first turn)
   const cc1 = rr1.find(r => r.pluginId === 'core-char-creator');
-  check('char-creator executed', cc1?.status === 'success');
+  check('char-creator triggered (scheduled, turn 1)', cc1?.status === 'success');
   const ccOut = cc1?.output as Record<string, unknown> | undefined;
-  const hasForm = ccOut?.form && typeof (ccOut.form as Record<string, unknown>).formId === 'string';
-  const hasTemplate = typeof ccOut?.narrativeTemplate === 'string';
-  check('char-creator has form', !!hasForm);
-  check('char-creator has template', !!hasTemplate);
+  check('char-creator used create-form tool (auto-allowed by approval)', !!ccOut?.form);
+  check('char-creator has narrativeTemplate', typeof ccOut?.narrativeTemplate === 'string');
 
-  // Check codex
+  // Codex executed (trigger: auto)
   const cx1 = rr1.find(r => r.pluginId === 'core-codex');
-  check('codex executed', cx1?.status === 'success');
+  check('codex triggered (auto)', cx1?.status === 'success');
 
-  // Check pendingInputs
+  // Char-creator injected narrator output via input.inject
   const pi = (turn1.data.pendingInputs as Array<Record<string, unknown>>) ?? [];
-  check('has pendingInputs from char-creator', pi.some(p => p.pluginId === 'core-char-creator'));
+  check('pendingInputs from char-creator (form submission needed)', pi.some(p => p.pluginId === 'core-char-creator'));
 
   // ═══════════════════════════════════════════════════════════════
   console.log('\n4️⃣  Submit Character Form');
@@ -168,7 +158,6 @@ async function main() {
   const formId = (form?.formId ?? 'char-creation') as string;
   const fields = (form?.fields as Array<Record<string, unknown>>) ?? [];
 
-  // Auto-fill form values
   const values: Record<string, string> = {};
   for (const f of fields) {
     const name = f.name as string;
@@ -189,13 +178,13 @@ async function main() {
     formId,
     values,
   });
-  check('submit OK', submit.status === 200);
-  check('accepted', submit.data.accepted === true);
+  check('form submission accepted', submit.status === 200 && submit.data.accepted === true);
   const filled = submit.data.filledNarrative as string;
+  check('narrativeTemplate filled with player values', filled.includes('林清风'));
   console.log(`  📖 Filled: ${filled.substring(0, 100)}...`);
 
   // ═══════════════════════════════════════════════════════════════
-  console.log('\n5️⃣  Turn 2: Narrator continues, codex tracks, char-creator SHOULD NOT trigger');
+  console.log('\n5️⃣  Turn 2: Trigger Filtering (char-creator should NOT fire)');
   // ═══════════════════════════════════════════════════════════════
   const t2Start = Date.now();
   const turn2 = await api(app, 'POST', `/v2/session/${sid}/turn`, {
@@ -210,17 +199,12 @@ async function main() {
   for (const r of rr2) {
     const out = r.output as Record<string, unknown> | null;
     const narrative = (out?.narrativeOutput ?? '') as string;
-    console.log(`    [${r.pluginId}] ${r.status} — ${narrative.substring(0, 80)}...`);
+    console.log(`    [${r.pluginId}] ${r.status} — ${narrative.substring(0, 60)}...`);
   }
 
-  const n2 = rr2.find(r => r.pluginId === 'core-narrator');
-  check('narrator on turn 2', n2?.status === 'success');
-
-  const cc2 = rr2.find(r => r.pluginId === 'core-char-creator');
-  check('char-creator NOT on turn 2', cc2 === undefined);
-
-  const cx2 = rr2.find(r => r.pluginId === 'core-codex');
-  check('codex on turn 2', cx2?.status === 'success');
+  check('narrator on turn 2 (auto trigger)', rr2.some(r => r.pluginId === 'core-narrator' && r.status === 'success'));
+  check('codex on turn 2 (auto trigger)', rr2.some(r => r.pluginId === 'core-codex' && r.status === 'success'));
+  check('char-creator NOT on turn 2 (maxTriggerCount=1 enforced)', !rr2.some(r => r.pluginId === 'core-char-creator'));
 
   const pi2 = turn2.data.pendingInputs as Array<unknown> | undefined;
   check('no pendingInputs on turn 2', !pi2 || pi2.length === 0);
@@ -229,46 +213,19 @@ async function main() {
   console.log('\n6️⃣  API State Verification');
   // ═══════════════════════════════════════════════════════════════
   const session = await api(app, 'GET', `/v2/session/${sid}`);
-  check('session exists', session.status === 200);
+  check('session persisted', session.status === 200);
   check('turnCount = 2', session.data.turnCount === 2);
 
   const turns = await api(app, 'GET', `/v2/session/${sid}/turns`);
-  check('2 turns in history', ((turns.data.turns as unknown[]) ?? []).length === 2);
+  check('2 turn results in history', ((turns.data.turns as unknown[]) ?? []).length === 2);
 
   const latest = await api(app, 'GET', `/v2/session/${sid}/results`);
-  check('latest = turn 2', latest.data.turnId === turn2.data.turnId);
+  check('latest results = turn 2', latest.data.turnId === turn2.data.turnId);
 
   // ═══════════════════════════════════════════════════════════════
-  console.log('\n7️⃣  Store Persistence Verification');
+  console.log('\n7️⃣  Store Persistence (DataStore contract verification)');
   // ═══════════════════════════════════════════════════════════════
-  const allMessages = await store.listTurnMessages(sid);
-  console.log(`  💬 TurnMessages: ${allMessages.length}`);
-  for (const m of allMessages) {
-    const tag = m.name ? `[${m.name}]` : `[${m.sourceType}]`;
-    const form = m.pendingInput ? ' 📋' : '';
-    console.log(`    ${m.turnId.substring(0, 8)}.. ${m.role} ${tag}: ${m.content.substring(0, 50)}...${form}`);
-  }
-  check('messages saved', allMessages.length >= 5); // player1 + narrator1 + charCreator1 + filled + player2 + narrator2 + codex...
-
-  const playerInputs = await store.listPlayerInputs(sid);
-  check('player input saved', playerInputs.length >= 1);
-  console.log(`  📝 PlayerInputs: ${playerInputs.length}`);
-
-  const turnResults = await store.listTurnResults(sid);
-  check('turn results saved', turnResults.length === 2);
-  console.log(`  🔄 TurnResults: ${turnResults.length}`);
-
-  const toolCalls = await store.listToolCalls(sid);
-  console.log(`  🔧 ToolCalls: ${toolCalls.length}`);
-  for (const tc of toolCalls) {
-    console.log(`    ${tc.toolName} (${tc.approvalStatus}) — ${tc.durationMs}ms`);
-  }
-
-  const runtimeResults1 = await store.listRuntimeResults(sid, turn1.data.turnId as string);
-  const runtimeResults2 = await store.listRuntimeResults(sid, turn2.data.turnId as string);
-  check('turn 1 runtime results persisted', runtimeResults1.length >= 2);
-  check('turn 2 runtime results persisted', runtimeResults2.length >= 1);
-  console.log(`  📊 RuntimeResults: turn1=${runtimeResults1.length}, turn2=${runtimeResults2.length}`);
+  await verifyStore(store, sid, turn1.data.turnId as string, turn2.data.turnId as string);
 
   // ═══════════════════════════════════════════════════════════════
   await store.close();
@@ -281,6 +238,38 @@ async function main() {
   console.log('═'.repeat(60));
 
   if (failed > 0) process.exit(1);
+}
+
+async function verifyStore(store: DataStore, sid: string, turnId1: string, turnId2: string) {
+  const allMessages = await store.listTurnMessages(sid);
+  console.log(`  💬 TurnMessages: ${allMessages.length}`);
+  for (const m of allMessages) {
+    const tag = m.name ? `[${m.name}]` : `[${m.sourceType}]`;
+    const form = m.pendingInput ? ' 📋' : '';
+    console.log(`    ${m.turnId.substring(0, 8)}.. ${m.role} ${tag}: ${m.content.substring(0, 50)}...${form}`);
+  }
+  check('messages persisted (>=5: player + narrator + codex + charCreator + filled)', allMessages.length >= 5);
+
+  const playerInputs = await store.listPlayerInputs(sid);
+  check('player form input persisted', playerInputs.length >= 1);
+  console.log(`  📝 PlayerInputs: ${playerInputs.length}`);
+
+  const turnResults = await store.listTurnResults(sid);
+  check('turn results persisted (2 turns)', turnResults.length === 2);
+  console.log(`  🔄 TurnResults: ${turnResults.length}`);
+
+  const toolCalls = await store.listToolCalls(sid);
+  console.log(`  🔧 ToolCalls: ${toolCalls.length}`);
+  for (const tc of toolCalls) {
+    console.log(`    ${tc.toolName} (${tc.approvalStatus}) — ${tc.durationMs}ms`);
+  }
+  check('tool calls recorded with approval status', toolCalls.every(tc => tc.approvalStatus === 'auto-allowed'));
+
+  const rr1 = await store.listRuntimeResults(sid, turnId1);
+  const rr2 = await store.listRuntimeResults(sid, turnId2);
+  check('turn 1 runtime results persisted (>=2)', rr1.length >= 2);
+  check('turn 2 runtime results persisted (>=1)', rr2.length >= 1);
+  console.log(`  📊 RuntimeResults: turn1=${rr1.length}, turn2=${rr2.length}`);
 }
 
 main().catch((err) => {

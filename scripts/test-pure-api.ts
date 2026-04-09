@@ -24,7 +24,7 @@ import { createSqliteStore } from '../packages/store/src/sqlite/sqlite-store.js'
 import type { Hono } from 'hono';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const PLUGINS_DIR = path.join(ROOT, 'plugins-v2');
+const PLUGINS_DIR = path.join(ROOT, 'plugins');
 const DATA_DIR = path.join(ROOT, 'data');
 const DB_PATH = path.join(DATA_DIR, 'pure-api-test.db');
 

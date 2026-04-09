@@ -30,7 +30,7 @@ import type { DataStore } from '../packages/store/src/types.js';
 // ── Paths ────────────────────────────────────────────────────────
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const PLUGINS_DIR = path.join(ROOT, 'plugins-v2');
+const PLUGINS_DIR = path.join(ROOT, 'plugins');
 const WORLDS_DIR = path.join(ROOT, 'worlds');
 const DATA_DIR = path.join(ROOT, 'data');
 const DB_PATH = path.join(DATA_DIR, 'world-e2e-test.db');

@@ -253,17 +253,33 @@ const LOCAL_SEED_WORLDS: Array<{
   },
 ];
 
+/**
+ * IDB store handle type.
+ *
+ * IndexedDB is schemaless — the DataStore returned by createIdbStore()
+ * happily persists any JS object regardless of the TypeScript field types.
+ * LocalDataService exploits this: it writes I18nText names, extra fields
+ * (lore, tags, worldId, status…), and calls schemaless CRUD methods that
+ * don't exist on the strict DataStore contract.
+ *
+ * We intentionally type the handle as `any` to match IDB's runtime
+ * flexibility. All data flowing *out* of the store is re-mapped to the
+ * frontend's typed records inside each method below.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type IdbStoreHandle = any;
+
 class LocalDataService implements DataService {
-  private idbStore: import("@covel/store/idb").IdbStore | null = null;
+  private idbStore: IdbStoreHandle | null = null;
   private statePatches = new Map<string, StatePatchRecord[]>();
   private initPromise: Promise<void> | null = null;
 
-  private async getStore(): Promise<import("@covel/store/idb").IdbStore> {
+  private async getStore(): Promise<IdbStoreHandle> {
     if (this.idbStore) return this.idbStore;
     if (!this.initPromise) {
       this.initPromise = (async () => {
-        const { IdbStore } = await import("@covel/store/idb");
-        this.idbStore = new IdbStore({ dbName: "covel-game" });
+        const { createIdbStore } = await import("@covel/store/idb");
+        this.idbStore = await createIdbStore("covel-game");
         // Seed minimal worlds for offline/no-server scenarios
         const existing = await this.idbStore.listWorlds();
         if (existing.length === 0) {
@@ -284,48 +300,28 @@ class LocalDataService implements DataService {
   }
 
   // ── Worlds ──────────────────────────────────────────────────────
+  // IDB is schemaless — stores I18nText, tags, lore directly despite
+  // the typed DataStore interface only knowing string fields.
 
   async listWorlds(): Promise<WorldRecord[]> {
     const store = await this.getStore();
-    const worlds = await store.listWorlds();
-    return worlds.map((w) => ({
-      id: w.id,
-      name: w.name,
-      description: w.description,
-      lore: w.lore,
-      tags: w.tags,
-      createdAt: w.createdAt,
-    })).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const worlds = await store.listWorlds() as any[];
+    return worlds
+      .map((w: any) => ({ id: w.id, name: w.name, description: w.description, lore: w.lore, tags: w.tags, createdAt: w.createdAt }) as WorldRecord)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async getWorld(id: string): Promise<WorldRecord | null> {
     const store = await this.getStore();
-    const w = await store.getWorld(id);
+    const w = await store.getWorld(id) as any;
     if (!w) return null;
-    return {
-      id: w.id,
-      name: w.name,
-      description: w.description,
-      lore: w.lore,
-      tags: w.tags,
-      createdAt: w.createdAt,
-    };
+    return { id: w.id, name: w.name, description: w.description, lore: w.lore, tags: w.tags, createdAt: w.createdAt } as WorldRecord;
   }
 
   async createWorld(name: string, description: string): Promise<WorldRecord> {
     const store = await this.getStore();
-    const world: WorldRecord = {
-      id: uid("world"),
-      name,
-      description,
-      createdAt: new Date().toISOString(),
-    };
-    await store.upsertWorld({
-      id: world.id,
-      name: world.name,
-      description: world.description,
-      createdAt: world.createdAt,
-    });
+    const world: WorldRecord = { id: uid("world"), name, description, createdAt: new Date().toISOString() };
+    await store.upsertWorld(world as any);
     return world;
   }
 
@@ -334,73 +330,37 @@ class LocalDataService implements DataService {
     patch: Partial<Pick<WorldRecord, "name" | "description" | "lore" | "locale" | "tags" | "dimensions">>,
   ): Promise<WorldRecord> {
     const store = await this.getStore();
-    const existing = await store.getWorld(id);
+    const existing = await store.getWorld(id) as any;
     if (!existing) throw new Error("World not found: " + id);
-    const updated: WorldRecord = {
-      ...existing,
-      ...patch,
-      updatedAt: new Date().toISOString(),
-    };
-    await store.upsertWorld({
-      id: updated.id,
-      name: updated.name,
-      description: updated.description,
-      lore: updated.lore,
-      tags: updated.tags,
-      createdAt: updated.createdAt,
-    });
+    const updated: WorldRecord = { ...existing, ...patch, updatedAt: new Date().toISOString() };
+    await store.upsertWorld(updated as any);
     return updated;
   }
 
   // ── Sessions ────────────────────────────────────────────────────
+  // Frontend SessionRecord has status/presetId not in store's SessionRecord.
+  // IDB stores them anyway (schemaless).
 
   async listSessions(worldId: string): Promise<SessionRecord[]> {
     const store = await this.getStore();
-    const sessions = await store.listSessions(worldId);
+    const sessions = await store.listSessions() as any[];
     return sessions
-      .map((s) => ({
-        id: s.id,
-        worldId: s.worldId,
-        status: s.status,
-        phase: s.phase as SessionPhase,
-        presetId: s.presetId,
-        createdAt: s.createdAt,
-      }))
+      .filter((s: any) => !worldId || s.worldId === worldId)
+      .map((s: any) => ({ id: s.id, worldId: s.worldId ?? '', status: s.status ?? 'active', phase: s.phase ?? 'init', presetId: s.presetId, createdAt: s.createdAt }) as SessionRecord)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async getSession(sessionId: string): Promise<SessionRecord | null> {
     const store = await this.getStore();
-    const s = await store.getSession(sessionId);
+    const s = await store.getSession(sessionId) as any;
     if (!s) return null;
-    return {
-      id: s.id,
-      worldId: s.worldId,
-      status: s.status,
-      phase: s.phase as SessionPhase,
-      presetId: s.presetId,
-      createdAt: s.createdAt,
-    };
+    return { id: s.id, worldId: s.worldId ?? '', status: s.status ?? 'active', phase: s.phase ?? 'init', presetId: s.presetId, createdAt: s.createdAt } as SessionRecord;
   }
 
   async createSession(worldId: string, presetId?: string): Promise<SessionRecord> {
     const store = await this.getStore();
-    const session: SessionRecord = {
-      id: humanSessionId(),
-      worldId,
-      status: "active",
-      phase: "init",
-      presetId,
-      createdAt: new Date().toISOString(),
-    };
-    await store.upsertSession({
-      id: session.id,
-      worldId: session.worldId,
-      status: session.status,
-      phase: session.phase,
-      presetId: session.presetId,
-      createdAt: session.createdAt,
-    });
+    const session: SessionRecord = { id: humanSessionId(), worldId, status: "active", phase: "init", presetId, createdAt: new Date().toISOString() };
+    await store.createSession({ id: session.id, worldId, phase: session.phase, turnCount: 0, locale: 'zh-CN', activePlugins: [], createdAt: session.createdAt, updatedAt: session.createdAt } as any);
     return session;
   }
 
@@ -409,34 +369,19 @@ class LocalDataService implements DataService {
     updates: Partial<Pick<SessionRecord, "status" | "presetId" | "phase">>,
   ): Promise<SessionRecord> {
     const store = await this.getStore();
-    const existing = await store.getSession(sessionId);
+    const existing = await store.getSession(sessionId) as any;
     if (!existing) throw new Error("Session not found: " + sessionId);
     const updated: SessionRecord = {
-      id: existing.id,
-      worldId: existing.worldId,
-      status: updates.status ?? existing.status,
-      phase: (updates.phase ?? existing.phase) as SessionPhase,
-      presetId: updates.presetId ?? existing.presetId,
-      createdAt: existing.createdAt,
+      id: existing.id, worldId: existing.worldId ?? '', status: updates.status ?? existing.status ?? 'active',
+      phase: (updates.phase ?? existing.phase ?? 'init') as SessionPhase, presetId: updates.presetId ?? existing.presetId, createdAt: existing.createdAt,
     };
-    await store.upsertSession({
-      id: updated.id,
-      worldId: updated.worldId,
-      status: updated.status,
-      phase: updated.phase,
-      presetId: updated.presetId,
-      createdAt: updated.createdAt,
-    });
+    await store.updateSession(sessionId, { phase: updated.phase, updatedAt: new Date().toISOString() });
     return updated;
   }
 
   async deleteSession(sessionId: string): Promise<void> {
     const store = await this.getStore();
-    // Clear related data
-    await store.clearMessages(sessionId);
     await store.deleteSession(sessionId);
-    // Also clear state snapshot and patches from app KV store
-    // (fire-and-forget — non-critical)
     appKv.removeStateSnapshot(sessionId).catch(() => {});
     appKv.removeStatePatches(sessionId).catch(() => {});
     appKv.removeSubmittedBlocks(sessionId).catch(() => {});
@@ -446,17 +391,14 @@ class LocalDataService implements DataService {
 
   async listMessages(sessionId: string): Promise<MessageRecord[]> {
     const store = await this.getStore();
-    const messages = await store.listMessages(sessionId);
+    const messages = await store.listMessages(sessionId) as any[];
     return messages
-      .map((m) => ({
-        id: m.id,
-        sessionId: m.sessionId,
-        role: m.role,
-        content: m.content,
+      .map((m: any) => ({
+        id: m.id, sessionId: m.sessionId, role: m.role, content: m.content,
         ...(m.metadata as { turnId?: string; runtimeId?: string; kind?: string; block?: Record<string, unknown> } ?? {}),
         createdAt: m.createdAt,
-      }))
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      }) as MessageRecord)
+      .sort((a: { createdAt: string }, b: { createdAt: string }) => a.createdAt.localeCompare(b.createdAt));
   }
 
   async addMessage(msg: MessageRecord): Promise<void> {

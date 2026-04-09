@@ -18,7 +18,7 @@ import { createGatewayAdapter } from '../packages/runtime/src/gateway-llm-adapte
 const slotArg = process.argv.find((a) => a.startsWith('--slot='));
 const slotOverride = slotArg?.split('=')[1];
 
-const PLUGINS_DIR = path.resolve(import.meta.dirname, '../plugins-v2');
+const PLUGINS_DIR = path.resolve(import.meta.dirname, '../plugins');
 
 async function main() {
   console.log('🚀 Starting real LLM integration test...\n');

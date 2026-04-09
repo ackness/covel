@@ -15,7 +15,7 @@ import { createAiStack } from '../apps/server/src/ai-setup.js';
 import { createGatewayAdapter } from '../packages/runtime/src/gateway-llm-adapter.js';
 import { createMemoryStore } from '../packages/store/src/memory/memory-store.js';
 
-const PLUGINS_DIR = path.resolve(import.meta.dirname, '../plugins-v2');
+const PLUGINS_DIR = path.resolve(import.meta.dirname, '../plugins');
 
 async function main() {
   console.log('🔄 Model Override Test\n');

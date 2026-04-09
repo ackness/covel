@@ -1,6 +1,6 @@
 import { discoverPlugins, loadPluginSummary, loadPluginManifest } from '../packages/plugin-loader/src/index.js';
 
-const dir = 'plugins-v2';
+const dir = 'plugins';
 const discoveries = await discoverPlugins(dir);
 console.log(`Found ${discoveries.length} plugins\n`);
 

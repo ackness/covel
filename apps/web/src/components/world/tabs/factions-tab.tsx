@@ -19,7 +19,7 @@ const INFLUENCE_LEVELS: InfluenceLevel[] = ["major", "minor"];
 let factionCounter = 0;
 
 export function FactionsTab({ dimensions, onChange, t }: TabProps) {
-  const factions: WorldFaction[] = dimensions.factions ?? [];
+  const factions: WorldFaction[] = [...(dimensions.factions ?? [])];
 
   function setFactions(next: WorldFaction[]) {
     onChange({ ...dimensions, factions: next });

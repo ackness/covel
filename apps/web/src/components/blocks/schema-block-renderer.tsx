@@ -47,7 +47,7 @@ function DisplaySchemaBlock({
     <Card className="max-w-md">
       <CardHeader className="py-3 px-4 border-b border-border">
         <CardTitle className="text-sm">
-          {resolveDisplayName(schema.meta.displayName)}
+          {resolveDisplayName(schema.meta.displayName ?? '')}
         </CardTitle>
       </CardHeader>
       <CardContent className="p-4 space-y-3">
@@ -200,7 +200,7 @@ function InteractiveSchemaBlock({
     <Card className="max-w-md">
       <CardHeader className="py-3 px-4 border-b border-border space-y-1">
         <CardTitle className="text-sm">
-          {title ?? resolveDisplayName(schema.meta.displayName)}
+          {title ?? resolveDisplayName(schema.meta.displayName ?? '')}
         </CardTitle>
         {description && (
           <p className="text-xs text-muted-foreground">{description}</p>

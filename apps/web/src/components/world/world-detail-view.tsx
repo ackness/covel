@@ -82,7 +82,7 @@ function GeographySection({ geo, t }: { geo: WorldGeography; t: (k: string) => s
   );
 }
 
-function FactionsSection({ factions, t }: { factions: WorldFaction[]; t: (k: string) => string }) {
+function FactionsSection({ factions, t }: { factions: readonly WorldFaction[]; t: (k: string) => string }) {
   return (
     <WorldDimensionSection title={t("world.factions")} icon={Users}>
       <div className="space-y-2">
@@ -146,7 +146,7 @@ function PowerSystemSection({ ps, t }: { ps: WorldPowerSystem; t: (k: string) =>
   );
 }
 
-function HistorySection({ events, t }: { events: WorldHistoryEvent[]; t: (k: string) => string }) {
+function HistorySection({ events, t }: { events: readonly WorldHistoryEvent[]; t: (k: string) => string }) {
   const sorted = [...events].sort((a, b) => {
     if (a.era !== b.era) return text(a.era).localeCompare(text(b.era));
     return text(a.year).localeCompare(text(b.year));

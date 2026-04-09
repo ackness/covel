@@ -42,7 +42,8 @@ services:
       STATIC_DIR: ./web-dist
       DEPLOYMENT_TIER: self
     env_file:
-      - ../.env.llm
+      - path: ../.env.llm
+        required: false
     depends_on:
       postgres:
         condition: service_healthy

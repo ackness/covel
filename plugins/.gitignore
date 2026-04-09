@@ -1,0 +1,4 @@
+# 插件分享时不需要包含的文件
+node_modules/
+dist/
+*.tsbuildinfo

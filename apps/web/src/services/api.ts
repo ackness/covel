@@ -234,7 +234,8 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 // ── World API ──────────────────────────────────────────────────────
 
 export async function listWorlds(): Promise<WorldRecord[]> {
-  return request<WorldRecord[]>("/worlds");
+  const res = await request<{ items: WorldRecord[] } | WorldRecord[]>("/worlds");
+  return Array.isArray(res) ? res : res.items;
 }
 
 export async function getWorld(id: string): Promise<WorldRecord> {
@@ -393,7 +394,8 @@ export async function disableSessionPlugin(
 // ── Session API ────────────────────────────────────────────────────
 
 export async function listSessions(worldId: string): Promise<SessionRecord[]> {
-  return request<SessionRecord[]>(`/sessions?worldId=${encodeURIComponent(worldId)}`);
+  const res = await request<{ items: SessionRecord[] } | SessionRecord[]>(`/sessions?worldId=${encodeURIComponent(worldId)}`);
+  return Array.isArray(res) ? res : res.items;
 }
 
 export async function getSession(sessionId: string): Promise<SessionRecord> {

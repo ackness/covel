@@ -1,11 +1,11 @@
 # Covel Plugin Authoring Guide
 
-Use this skill when creating, modifying, or reviewing Covel v2 plugins. Applies to any work in `plugins-v2/`.
+Use this skill when creating, modifying, or reviewing Covel v2 plugins. Applies to any work in `plugins/`.
 
 ## Plugin Package Structure
 
 ```
-plugins-v2/<plugin-name>/
+plugins/<plugin-name>/
 ├── PLUGIN.md              # REQUIRED: frontmatter config + LLM prompt
 ├── tools/                 # OPTIONAL: plugin-local tool definitions
 │   ├── my-tool.ts         #   tool() wrapper, exported as default
@@ -118,7 +118,7 @@ export const myTool = tool({
 
 ## Testing Pattern
 
-Tests live in `plugins-v2/<name>/tests/` and run via:
+Tests live in `plugins/<name>/tests/` and run via:
 ```bash
 pnpm --filter @covel/runtime test -- --run
 ```
@@ -158,6 +158,6 @@ npx tsx scripts/validate-plugins.ts    # Validate all plugin frontmatters
 
 ## Examples
 
-- **core-narrator** (`plugins-v2/core-narrator/`) — simplest: just PLUGIN.md, no tools
-- **core-char-creator** (`plugins-v2/core-char-creator/`) — uses `create-form` builtin tool
-- **core-codex** (`plugins-v2/core-codex/`) — has local tools in `tools/`, non-core plugin
+- **core-narrator** (`plugins/core-narrator/`) — simplest: just PLUGIN.md, no tools
+- **core-char-creator** (`plugins/core-char-creator/`) — uses `create-form` builtin tool
+- **core-codex** (`plugins/core-codex/`) — has local tools in `tools/`, non-core plugin

@@ -4,7 +4,7 @@
  * Boots the V2 plugin system with:
  * - DataStore (SQLite by default, configurable via STORE_BACKEND)
  * - AI gateway (multi-provider LLM via llm.toml)
- * - Plugin discovery from plugins-v2/
+ * - Plugin discovery from plugins/
  * - V2 API routes
  */
 
@@ -54,7 +54,7 @@ const llmAdapter = createGatewayAdapter(ai.gateway, { apiKeys });
 
 // ── Bootstrap V2 ─────────────────────────────────────────────────
 const pluginsDir = process.env.COVEL_PLUGINS_DIR
-  ?? resolve(import.meta.dirname, '../../../plugins-v2');
+  ?? resolve(import.meta.dirname, '../../../plugins');
 
 const v2 = await bootstrapV2({
   pluginsDir,
@@ -64,6 +64,69 @@ const v2 = await bootstrapV2({
 
 // Mount V2 API
 app.route('/', v2.app);
+
+// ── V1 compatibility routes ──────────────────────────────────────
+// Frontend uses v1-style paths; mount V2 handlers at v1 paths.
+app.get('/api/health', async (c) => {
+  const res = await v2.app.request('/v2/health');
+  return new Response(res.body, { status: res.status, headers: res.headers });
+});
+app.get('/worlds', async (c) => {
+  const res = await v2.app.request('/v2/worlds');
+  return new Response(res.body, { status: res.status, headers: res.headers });
+});
+app.get('/worlds/:id', async (c) => {
+  const res = await v2.app.request(`/v2/worlds/${c.req.param('id')}`);
+  return new Response(res.body, { status: res.status, headers: res.headers });
+});
+app.get('/sessions', async (c) => {
+  const res = await v2.app.request('/v2/sessions');
+  return new Response(res.body, { status: res.status, headers: res.headers });
+});
+
+// V1 POST session create → proxy to V2 with auto-activated plugins
+app.post('/sessions', async (c) => {
+  const rawBody = await c.req.json<Record<string, unknown>>();
+  // Auto-activate all available plugins if none specified
+  const allPluginIds = [...v2.registry.getAll().keys()];
+  const enriched = {
+    ...rawBody,
+    plugins: rawBody.plugins ?? allPluginIds,
+    locale: rawBody.locale ?? 'zh-CN',
+  };
+  const res = await v2.app.request('/v2/session/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(enriched),
+  });
+  return new Response(res.body, { status: res.status, headers: res.headers });
+});
+
+// V1 session sub-routes → proxy to V2
+app.get('/sessions/:id', async (c) => {
+  const res = await v2.app.request(`/v2/session/${c.req.param('id')}`);
+  return new Response(res.body, { status: res.status, headers: res.headers });
+});
+app.delete('/sessions/:id', async (c) => {
+  const res = await v2.app.request(`/v2/session/${c.req.param('id')}`, { method: 'DELETE' });
+  return new Response(res.body, { status: res.status, headers: res.headers });
+});
+app.patch('/sessions/:id', async (c) => {
+  const body = await c.req.text();
+  const res = await v2.app.request(`/v2/session/${c.req.param('id')}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body });
+  return new Response(res.body, { status: res.status, headers: res.headers });
+});
+
+// V1 endpoints with no V2 equivalent — return empty stubs
+app.get('/presets', (c) => c.json([]));
+app.get('/packages', (c) => c.json([]));
+app.get('/commands', (c) => c.json([]));
+app.get('/api/llm-config', (c) => c.json({ slots: {} }));
+app.get('/api/provider-keys', (c) => c.json({}));
+app.post('/api/provider-keys', (c) => c.json({ ok: true }));
+app.get('/sessions/:id/state-patches', (c) => c.json([]));
+app.get('/sessions/:id/state-snapshot', (c) => c.json(null));
+app.put('/sessions/:id/state-snapshot', (c) => c.json({ ok: true }));
 
 // ── Static file serving (production) ─────────────────────────────
 if (process.env.SERVE_STATIC === 'true') {

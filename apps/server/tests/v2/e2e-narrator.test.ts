@@ -48,7 +48,7 @@ describe('E2E: Narrator game flow via V2 API', () => {
 
   const PLUGINS_DIR = path.resolve(
     import.meta.dirname,
-    '../../../../plugins-v2',
+    '../../../../plugins',
   );
 
   beforeAll(async () => {

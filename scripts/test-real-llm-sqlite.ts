@@ -15,7 +15,7 @@ import { createAiStack } from '../apps/server/src/ai-setup.js';
 import { createGatewayAdapter } from '../packages/runtime/src/gateway-llm-adapter.js';
 import { createSqliteStore } from '../packages/store/src/sqlite/sqlite-store.js';
 
-const PLUGINS_DIR = path.resolve(import.meta.dirname, '../plugins-v2');
+const PLUGINS_DIR = path.resolve(import.meta.dirname, '../plugins');
 const DATA_DIR = path.resolve(import.meta.dirname, '../data');
 const DB_PATH = path.join(DATA_DIR, 'test-e2e.db');
 

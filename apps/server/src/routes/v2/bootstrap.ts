@@ -24,7 +24,10 @@ import { createEventBus, type EventBus } from '@covel/events';
 import type { DataStore } from '@covel/store';
 import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
 import { createToolExecutor } from '@covel/runtime';
-import { builtinUITools, type ToolModule } from '@covel/tools';
+import { builtinUITools, tool, type ToolModule } from '@covel/tools';
+import { z } from 'zod';
+import { createApprovalPipeline } from '@covel/approval';
+import type { PermissionRule } from '@covel/approval';
 
 import { sessionRoutes } from './session.js';
 import { turnRoutes } from './turn.js';
@@ -34,11 +37,15 @@ import { eventRoutes } from './events.js';
 import { runtimeRoutes } from './runtime.js';
 import { healthRoutes } from './health.js';
 import { submitInputsRoutes } from './submit-inputs.js';
+import { worldRoutes } from './worlds.js';
+import { messageRoutes } from './messages.js';
+import { characterRoutes } from './characters.js';
+import { actionRoutes } from './actions.js';
 
 // ── Bootstrap config ─────────────────────────────────────────────
 
 export interface V2BootstrapConfig {
-  /** Path to plugins directory (e.g., 'plugins-v2/'). */
+  /** Path to plugins directory (e.g., 'plugins/'). */
   readonly pluginsDir: string;
   /** LLM adapter (real or mock). */
   readonly llmAdapter: LLMAdapter;
@@ -112,11 +119,19 @@ export async function bootstrapV2(config: V2BootstrapConfig): Promise<V2Bootstra
     return undefined;
   };
 
-  // 4. Create ToolExecutor with builtin + plugin local tools
+  // 4. Create ToolExecutor with builtin + plugin local tools + approval
+  const builtinToolNames = new Set<string>();
+  const localToolNames = new Set<string>();
   const toolMap = new Map<string, ToolModule>();
+
   for (const t of builtinUITools) {
     toolMap.set(t.name, t);
+    builtinToolNames.add(t.name);
   }
+
+  // Injection context for factory-style tools (zero-dep plugin tools)
+  const toolInjection = { tool, z };
+
   // Load plugin local tools from tools/ directories
   for (const [pluginId, discovery] of discoveryMap) {
     const manifests = manifestCache.get(pluginId);
@@ -126,10 +141,31 @@ export async function bootstrapV2(config: V2BootstrapConfig): Promise<V2Bootstra
       for (const localPath of localPaths) {
         try {
           const fullPath = path.resolve(discovery.rootPath, localPath);
+          // Security: prevent path traversal outside plugin root
+          const rel = path.relative(discovery.rootPath, fullPath);
+          if (rel.startsWith('..') || path.isAbsolute(rel)) {
+            console.warn(`[bootstrap] Rejected path traversal: ${localPath} from ${pluginId}`);
+            continue;
+          }
           const mod = await import(fullPath);
-          const toolModule = mod.default ?? Object.values(mod).find((v: unknown) => (v as Record<string, unknown>)?._type === 'covel-tool');
-          if (toolModule && (toolModule as Record<string, unknown>)._type === 'covel-tool') {
-            toolMap.set((toolModule as ToolModule).name, toolModule as ToolModule);
+          const exported = mod.default ?? Object.values(mod)[0];
+
+          let toolModule: ToolModule | undefined;
+
+          if (typeof exported === 'function') {
+            // Factory function: export default function({ tool, z }) { ... }
+            const result = exported(toolInjection);
+            if (result && (result as Record<string, unknown>)._type === 'covel-tool') {
+              toolModule = result as ToolModule;
+            }
+          } else if (exported && (exported as Record<string, unknown>)._type === 'covel-tool') {
+            // Direct ToolModule export (legacy/TS style)
+            toolModule = exported as ToolModule;
+          }
+
+          if (toolModule) {
+            toolMap.set(toolModule.name, toolModule);
+            localToolNames.add(toolModule.name);
           }
         } catch (err) {
           console.warn(`[bootstrap] Failed to load local tool ${localPath} from ${pluginId}:`, err);
@@ -138,9 +174,23 @@ export async function bootstrapV2(config: V2BootstrapConfig): Promise<V2Bootstra
     }
   }
 
+  // Approval: whitelist builtin + known local tools, deny unknown third-party
+  const approvalRules: PermissionRule[] = [
+    { pattern: 'builtin:*', action: 'allow' },
+    { pattern: 'local:*', action: 'allow' },
+    { pattern: 'third-party:*', action: 'deny' },
+  ];
+  const approval = createApprovalPipeline(store, approvalRules);
+
   const toolExecutor = createToolExecutor({
     findTool: (name) => toolMap.get(name),
     store,
+    approval,
+    getToolSource: (name) => {
+      if (builtinToolNames.has(name)) return 'builtin';
+      if (localToolNames.has(name)) return 'local';
+      return 'third-party';
+    },
   });
 
   // 5. Create app with dependency injection middleware
@@ -162,14 +212,19 @@ export async function bootstrapV2(config: V2BootstrapConfig): Promise<V2Bootstra
   });
 
   // 6. Mount routes
+  app.route('/v2/sessions', sessionRoutes);
   app.route('/v2/session', sessionRoutes);
   app.route('/v2/session', turnRoutes);
   app.route('/v2/plugins', pluginRoutes);
   app.route('/v2/session', stateRoutes);
   app.route('/v2/session', submitInputsRoutes);
+  app.route('/v2/session', messageRoutes);
+  app.route('/v2/session', characterRoutes);
   app.route('/v2/events', eventRoutes);
   app.route('/v2/runtime', runtimeRoutes);
+  app.route('/v2/worlds', worldRoutes);
   app.route('/v2/health', healthRoutes);
+  app.route('/actions', actionRoutes);
 
   return { app, registry, stateManager, store, eventBus };
 }

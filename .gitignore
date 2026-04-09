@@ -7,6 +7,7 @@ skills-lock.json
 debugs/
 audits/
 plans/
+.backup/
 .playwright-mcp/
 .bg-shell
 .gsd/
