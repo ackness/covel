@@ -117,6 +117,36 @@ actionRoutes.post('/', async (c) => {
           store,
           toolExecutor,
           resolveModel,
+          onDelta: async (delta) => {
+            await stream.writeSSE({
+              data: JSON.stringify(makeEnvelope('message.delta', {
+                runtimeId: delta.runtimeId,
+                pluginId: delta.pluginId,
+                kind: delta.pluginId === 'core-narrator' ? 'story' : 'plugin',
+                delta: delta.textDelta,
+              })),
+            });
+          },
+          onRuntimeStart: async (info) => {
+            await stream.writeSSE({
+              data: JSON.stringify(makeEnvelope('runtime.progress', {
+                status: 'started',
+                runtimeId: info.runtimeId,
+                pluginId: info.pluginId,
+                label: info.pluginId + '/story',
+              })),
+            });
+          },
+          onRuntimeComplete: async (info) => {
+            await stream.writeSSE({
+              data: JSON.stringify(makeEnvelope('runtime.progress', {
+                status: 'completed',
+                runtimeId: info.runtimeId,
+                pluginId: info.pluginId,
+                durationMs: info.durationMs,
+              })),
+            });
+          },
         },
       );
 

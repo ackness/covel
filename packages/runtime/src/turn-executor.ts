@@ -36,6 +36,13 @@ export interface TurnExecutorDeps {
    * Priority: API modelOverride > plugin llm.toml default > manifest.model > undefined (system default).
    */
   readonly resolveModel?: (manifest: RuntimeManifest, apiOverride?: string) => string | undefined;
+
+  /** Called for each LLM text delta during streaming (narrative-only runtimes). */
+  readonly onDelta?: (delta: { runtimeId: string; pluginId: string; textDelta: string }) => Promise<void>;
+  /** Called when a runtime starts execution. */
+  readonly onRuntimeStart?: (info: { runtimeId: string; pluginId: string; priority: number }) => Promise<void>;
+  /** Called when a runtime completes execution. */
+  readonly onRuntimeComplete?: (info: { runtimeId: string; pluginId: string; status: string; durationMs: number }) => Promise<void>;
 }
 
 export interface TurnExecutorOptions {
@@ -263,6 +270,12 @@ async function executeOneRuntime(
   const startTime = Date.now();
   const runId = crypto.randomUUID();
 
+  await deps.onRuntimeStart?.({
+    runtimeId: manifest.name,
+    pluginId: manifest.name,
+    priority: manifest.priority,
+  });
+
   try {
     // Load the runtime (prompt template, references, handler, etc.)
     const loaded = await deps.loadRuntime(manifest);
@@ -320,6 +333,13 @@ async function executeOneRuntime(
         });
       }
 
+      await deps.onRuntimeComplete?.({
+        runtimeId: manifest.name,
+        pluginId: manifest.name,
+        status: result.status,
+        durationMs: result.durationMs,
+      });
+
       return result;
     }
 
@@ -349,6 +369,12 @@ async function executeOneRuntime(
 
     const deadline = Date.now() + timeoutMs;
 
+    // Build tool definitions from manifest declarations (computed once, reused across steps)
+    const toolDefs = deps.toolExecutor ? buildToolDefinitions(manifest, deps.toolExecutor) : undefined;
+
+    // Use streaming for pure narrative runtimes (no tools) when callbacks are available
+    const useStreaming = !!(deps.onDelta && deps.llm.stream && !toolDefs);
+
     while (steps < maxSteps && Date.now() < deadline) {
       steps++;
 
@@ -357,14 +383,43 @@ async function executeOneRuntime(
         ? deps.resolveModel(manifest, input.modelOverride)
         : (input.modelOverride ?? manifest.model);
 
-      // Build tool definitions from manifest declarations
-      const toolDefs = deps.toolExecutor ? buildToolDefinitions(manifest, deps.toolExecutor) : undefined;
+      let response: import('./llm-adapter.js').LLMResponse;
 
-      const response = await deps.llm.generate({
-        model: effectiveModel,
-        messages,
-        tools: toolDefs,
-      });
+      if (useStreaming) {
+        // Streaming path: accumulate content from text-delta events, forward deltas to caller
+        let streamedContent = '';
+        let streamFinishReason = 'stop';
+
+        for await (const event of deps.llm.stream!({
+          model: effectiveModel,
+          messages,
+        })) {
+          if (event.type === 'text-delta') {
+            streamedContent += event.textDelta;
+            await deps.onDelta!({
+              runtimeId: manifest.name,
+              pluginId: manifest.name,
+              textDelta: event.textDelta,
+            });
+          } else if (event.type === 'done') {
+            streamFinishReason = event.finishReason;
+          }
+        }
+
+        response = {
+          content: streamedContent || null,
+          toolCalls: [],
+          finishReason: streamFinishReason as 'stop' | 'tool_calls' | 'length' | 'error',
+          usage: { inputTokens: 0, outputTokens: 0 },
+        };
+      } else {
+        // Non-streaming path: standard generate()
+        response = await deps.llm.generate({
+          model: effectiveModel,
+          messages,
+          tools: toolDefs,
+        });
+      }
 
       if (response.toolCalls.length > 0) {
         // LLM requested tool calls — execute them and feed results back.
@@ -511,10 +566,24 @@ async function executeOneRuntime(
       });
     }
 
+    await deps.onRuntimeComplete?.({
+      runtimeId: manifest.name,
+      pluginId: manifest.name,
+      status: result.status,
+      durationMs: result.durationMs,
+    });
+
     return result;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    return makeFailedResult(manifest, input, runId, startTime, message);
+    const failedResult = makeFailedResult(manifest, input, runId, startTime, message);
+    await deps.onRuntimeComplete?.({
+      runtimeId: manifest.name,
+      pluginId: manifest.name,
+      status: failedResult.status,
+      durationMs: failedResult.durationMs,
+    });
+    return failedResult;
   }
 }
 

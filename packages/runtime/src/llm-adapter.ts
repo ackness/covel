@@ -33,6 +33,11 @@ export interface LLMToolDefinition {
   readonly parameters: Readonly<Record<string, unknown>>; // JSON Schema
 }
 
+export type LLMStreamEvent =
+  | { readonly type: 'text-delta'; readonly textDelta: string }
+  | { readonly type: 'tool-call'; readonly id: string; readonly name: string; readonly arguments: string }
+  | { readonly type: 'done'; readonly finishReason: string };
+
 export interface LLMAdapter {
   /**
    * Call the LLM with messages and optional tools.
@@ -47,4 +52,14 @@ export interface LLMAdapter {
       readonly schema: Readonly<Record<string, unknown>>;
     };
   }): Promise<LLMResponse>;
+
+  /**
+   * Stream LLM output as an async iterable of events.
+   * Optional — when not provided, callers should fall back to `generate()`.
+   */
+  stream?(params: {
+    readonly model?: string;
+    readonly messages: readonly LLMMessage[];
+    readonly tools?: readonly LLMToolDefinition[];
+  }): AsyncIterable<LLMStreamEvent>;
 }

@@ -16,7 +16,7 @@ export { executeTurn } from './turn-executor.js';
 export type { TurnExecutorDeps, TurnExecutorOptions } from './turn-executor.js';
 
 // ── LLM Adapter ─────────────────────────────────────────────────
-export type { LLMAdapter, LLMMessage as LLMAdapterMessage, LLMResponse, LLMToolCall, LLMToolDefinition } from './llm-adapter.js';
+export type { LLMAdapter, LLMMessage as LLMAdapterMessage, LLMResponse, LLMStreamEvent, LLMToolCall, LLMToolDefinition } from './llm-adapter.js';
 
 // ── Tool Executor ────────────────────────────────────────────────
 export { createToolExecutor } from './tool-executor.js';

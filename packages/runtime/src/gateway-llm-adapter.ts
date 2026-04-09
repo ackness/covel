@@ -7,7 +7,7 @@
  * through the unified slot/preset system.
  */
 
-import type { LLMAdapter, LLMResponse, LLMToolDefinition } from './llm-adapter.js';
+import type { LLMAdapter, LLMResponse, LLMStreamEvent, LLMToolDefinition } from './llm-adapter.js';
 
 /**
  * Minimal gateway interface — only the parts we need.
@@ -36,6 +36,20 @@ export interface GatewayLike {
     usage: { inputTokens: number; outputTokens: number };
     toolCalls?: Array<{ id: string; name: string; arguments: string }>;
   }>;
+
+  streamText?(
+    input: {
+      presetId?: string;
+      messages: Array<{
+        role: string;
+        content: string | null;
+        toolCalls?: Array<{ id: string; name: string; arguments: string }>;
+        toolCallId?: string;
+      }>;
+      providerRequestMetadata?: Record<string, unknown>;
+    },
+    options?: { apiKeys?: Record<string, string>; traceId?: string },
+  ): AsyncIterable<{ type: string; textDelta?: string; finishReason?: string }>;
 }
 
 export interface GatewayAdapterConfig {
@@ -62,13 +76,7 @@ export function createGatewayAdapter(
       const tools = params.tools?.map(toGatewayTool);
 
       // Convert LLMMessage[] → gateway TextMessage[]
-      const messages = params.messages.map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-        ...(msg.name ? { name: msg.name } : {}),
-        ...(msg.toolCallId ? { toolCallId: msg.toolCallId } : {}),
-        ...(msg.toolCalls?.length ? { toolCalls: [...msg.toolCalls] } : {}),
-      }));
+      const messages = toGatewayMessages(params.messages);
 
       const result = await gateway.generateText(
         {
@@ -100,7 +108,42 @@ export function createGatewayAdapter(
         },
       };
     },
+
+    async *stream(params): AsyncIterable<LLMStreamEvent> {
+      if (!gateway.streamText) {
+        throw new Error('Gateway does not support streaming');
+      }
+
+      const messages = toGatewayMessages(params.messages);
+
+      for await (const event of gateway.streamText(
+        {
+          presetId: params.model ?? undefined,
+          messages,
+        },
+        {
+          apiKeys: config?.apiKeys,
+          traceId: config?.traceId,
+        },
+      )) {
+        if (event.type === 'text-delta' && event.textDelta !== undefined) {
+          yield { type: 'text-delta' as const, textDelta: event.textDelta };
+        } else if (event.type === 'done') {
+          yield { type: 'done' as const, finishReason: event.finishReason ?? 'stop' };
+        }
+      }
+    },
   };
+}
+
+function toGatewayMessages(messages: readonly import('./llm-adapter.js').LLMMessage[]) {
+  return messages.map((msg) => ({
+    role: msg.role,
+    content: msg.content,
+    ...(msg.name ? { name: msg.name } : {}),
+    ...(msg.toolCallId ? { toolCallId: msg.toolCallId } : {}),
+    ...(msg.toolCalls?.length ? { toolCalls: [...msg.toolCalls] } : {}),
+  }));
 }
 
 function toGatewayTool(tool: LLMToolDefinition) {

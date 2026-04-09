@@ -129,11 +129,90 @@ app.patch('/sessions/:id', async (c) => {
   return new Response(res.body, { status: res.status, headers: res.headers });
 });
 
+// ── Session plugin routes ────────────────────────────────────────
+app.get('/sessions/:id/plugins', async (c) => {
+  const id = c.req.param('id');
+  const session = await v2.store.getSession(id);
+  if (!session) {
+    return c.json({ error: 'Session not found' }, 404);
+  }
+  const allPlugins = v2.registry.getAll();
+  const activeSet = new Set(session.activePlugins);
+  const available = [...allPlugins.values()].map((entry) => ({
+    id: entry.id,
+    displayName: entry.summary.name,
+    description: entry.summary.description,
+    isActive: activeSet.has(entry.id),
+    locked: entry.summary.pluginType === 'core-plugin',
+  }));
+  return c.json({
+    active: [...session.activePlugins],
+    available,
+  });
+});
+
+app.post('/sessions/:id/plugins/enable', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json<{ pluginId: string }>();
+  const session = await v2.store.getSession(id);
+  if (!session) {
+    return c.json({ error: 'Session not found' }, 404);
+  }
+  const pluginId = body.pluginId;
+  if (!v2.registry.get(pluginId)) {
+    return c.json({ error: 'Plugin not found' }, 404);
+  }
+  const activeSet = new Set(session.activePlugins);
+  if (!activeSet.has(pluginId)) {
+    activeSet.add(pluginId);
+    await v2.store.updateSession(id, { activePlugins: [...activeSet] });
+    v2.registry.activate(pluginId, id);
+  }
+  return c.json({ ok: true, activePlugins: [...activeSet] });
+});
+
+app.post('/sessions/:id/plugins/disable', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json<{ pluginId: string }>();
+  const session = await v2.store.getSession(id);
+  if (!session) {
+    return c.json({ error: 'Session not found' }, 404);
+  }
+  const pluginId = body.pluginId;
+  const activeSet = new Set(session.activePlugins);
+  if (activeSet.has(pluginId)) {
+    activeSet.delete(pluginId);
+    await v2.store.updateSession(id, { activePlugins: [...activeSet] });
+    v2.registry.deactivate(pluginId, id);
+  }
+  return c.json({ ok: true, activePlugins: [...activeSet] });
+});
+
 // V1 endpoints with no V2 equivalent — return empty stubs
 app.get('/presets', (c) => c.json([]));
 app.get('/packages', (c) => c.json([]));
 app.get('/commands', (c) => c.json([]));
-app.get('/api/llm-config', (c) => c.json({ slots: {} }));
+app.get('/api/llm-config', (c) => {
+  const slots = ai.slotRegistry.listSlots();
+  const presets = ai.presetRegistry.listPresets();
+
+  const slotInfo: Record<string, { presetId: string; provider: string; model: string }> = {};
+  const providerSet = new Set<string>();
+
+  for (const [slotId, slot] of Object.entries(slots)) {
+    const preset = presets.find((p) => p.id === slot.presetId);
+    const provider = preset?.provider ?? 'unknown';
+    const model = preset?.model ?? 'unknown';
+    slotInfo[slotId] = { presetId: slot.presetId, provider, model };
+    providerSet.add(provider);
+  }
+
+  return c.json({
+    configured: Object.keys(slots).length > 0,
+    slots: slotInfo,
+    providers: [...providerSet],
+  });
+});
 app.get('/api/provider-keys', (c) => c.json({}));
 app.post('/api/provider-keys', (c) => c.json({ ok: true }));
 app.get('/sessions/:id/state-patches', (c) => c.json([]));
