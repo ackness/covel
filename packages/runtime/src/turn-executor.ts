@@ -10,6 +10,7 @@
 import type { RuntimeManifest, RuntimeResult, TurnInput, TurnResult } from '@covel/shared';
 import type { LoadedRuntime } from '@covel/plugin-loader';
 import type { DataStore, TurnMessageRecord } from '@covel/store';
+import type { EventBus } from '@covel/events';
 import { shouldTrigger } from './trigger.js';
 import { scheduleByPriority } from './scheduler.js';
 import { buildContext } from '@covel/context';
@@ -37,6 +38,9 @@ export interface TurnExecutorDeps {
    */
   readonly resolveModel?: (manifest: RuntimeManifest, apiOverride?: string) => string | undefined;
 
+  /** Optional EventBus for emitting subscription events during turn execution. */
+  readonly eventBus?: EventBus;
+
   /** Called for each LLM text delta during streaming (narrative-only runtimes). */
   readonly onDelta?: (delta: { runtimeId: string; pluginId: string; textDelta: string }) => Promise<void>;
   /** Called when a runtime starts execution. */
@@ -50,6 +54,27 @@ export interface TurnExecutorOptions {
   readonly maxSteps?: number;
   /** Timeout per runtime in ms. Default: 60000. */
   readonly timeoutMs?: number;
+}
+
+// ── Helpers ─────────────────────────────────────────────────────
+
+/** Emit a subscription-style event via the EventBus (if present). */
+function emitSubEvent(
+  eventBus: EventBus | undefined,
+  subTopic: string,
+  subType: string,
+  sessionId: string,
+  payload: Record<string, unknown>,
+): void {
+  if (!eventBus) return;
+  eventBus.emit({
+    id: crypto.randomUUID(),
+    type: 'event',
+    topic: subTopic,
+    sessionId,
+    timestamp: new Date().toISOString(),
+    payload: { ...payload, _subTopic: subTopic, _subType: subType },
+  });
 }
 
 // ── Implementation ───────────────────────────────────────────────
@@ -92,6 +117,12 @@ export async function executeTurn(
   const startTime = Date.now();
   const maxSteps = options?.maxSteps ?? 10;
   const timeoutMs = options?.timeoutMs ?? 60000;
+
+  // Emit turn.started
+  emitSubEvent(deps.eventBus, 'game', 'turn.started', input.sessionId, {
+    turnId: input.turnId,
+    sessionId: input.sessionId,
+  });
 
   // 0. Load message history from store (append-only conversation history)
   let messageHistory: readonly TurnMessageRecord[] = [];
@@ -251,6 +282,13 @@ export async function executeTurn(
     });
   }
 
+  // Emit turn.completed
+  emitSubEvent(deps.eventBus, 'game', 'turn.completed', input.sessionId, {
+    turnId: input.turnId,
+    sessionId: input.sessionId,
+    durationMs: turnResult.durationMs,
+  });
+
   return turnResult;
 }
 
@@ -271,6 +309,12 @@ async function executeOneRuntime(
   const runId = crypto.randomUUID();
 
   await deps.onRuntimeStart?.({
+    runtimeId: manifest.name,
+    pluginId: manifest.name,
+    priority: manifest.priority,
+  });
+
+  emitSubEvent(deps.eventBus, 'runtime', 'runtime.started', input.sessionId, {
     runtimeId: manifest.name,
     pluginId: manifest.name,
     priority: manifest.priority,
@@ -334,6 +378,13 @@ async function executeOneRuntime(
       }
 
       await deps.onRuntimeComplete?.({
+        runtimeId: manifest.name,
+        pluginId: manifest.name,
+        status: result.status,
+        durationMs: result.durationMs,
+      });
+
+      emitSubEvent(deps.eventBus, 'runtime', 'runtime.completed', input.sessionId, {
         runtimeId: manifest.name,
         pluginId: manifest.name,
         status: result.status,
@@ -573,6 +624,13 @@ async function executeOneRuntime(
       durationMs: result.durationMs,
     });
 
+    emitSubEvent(deps.eventBus, 'runtime', 'runtime.completed', input.sessionId, {
+      runtimeId: manifest.name,
+      pluginId: manifest.name,
+      status: result.status,
+      durationMs: result.durationMs,
+    });
+
     return result;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -583,6 +641,15 @@ async function executeOneRuntime(
       status: failedResult.status,
       durationMs: failedResult.durationMs,
     });
+
+    emitSubEvent(deps.eventBus, 'runtime', 'runtime.failed', input.sessionId, {
+      runtimeId: manifest.name,
+      pluginId: manifest.name,
+      status: failedResult.status,
+      durationMs: failedResult.durationMs,
+      error: message,
+    });
+
     return failedResult;
   }
 }

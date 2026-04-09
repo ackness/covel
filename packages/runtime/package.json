@@ -18,6 +18,7 @@
   "dependencies": {
     "@covel/shared": "workspace:*",
     "@covel/approval": "workspace:*",
+    "@covel/events": "workspace:*",
     "@covel/context": "workspace:*",
     "@covel/plugin-loader": "workspace:*",
     "@covel/store": "workspace:*",

@@ -6,6 +6,11 @@ import { migrateLocalStorageToIdb } from "@/services/app-kv-store";
 import { setBlockSchemas } from "@/components/blocks/block-renderer.js";
 import { deepMerge } from "@covel/shared";
 import type { BlockSchemaDeclaration } from "@covel/shared";
+import {
+  createSessionSubscription,
+  type SessionSubscription,
+  type SubscriptionEvent,
+} from "@/services/subscription.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -882,6 +887,99 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (!sid || state.executionSteps.length === 0) return;
     ds.saveExecutionSteps(sid, state.executionSteps).catch(() => {});
   }, [state.executionSteps, state.session?.id, ds]);
+
+  // ── Persistent SSE subscription for lifecycle events ──────────
+  // Separate from /actions SSE which handles message.delta/completed/block.emitted.
+  // This subscription handles runtime.*, state.*, game.*, plugin.* lifecycle events.
+  const subscriptionRef = useRef<SessionSubscription | null>(null);
+
+  useEffect(() => {
+    const sid = state.session?.id;
+    if (!sid) {
+      // No session — tear down any existing subscription
+      if (subscriptionRef.current) {
+        subscriptionRef.current.close();
+        subscriptionRef.current = null;
+      }
+      return;
+    }
+
+    // Close previous subscription if session changed
+    if (subscriptionRef.current) {
+      subscriptionRef.current.close();
+    }
+
+    const sub = createSessionSubscription(sid, {
+      topics: ["runtime", "state", "game", "plugin"],
+    });
+    subscriptionRef.current = sub;
+
+    const handleSubscriptionEvent = (event: SubscriptionEvent) => {
+      switch (event.type) {
+        case "runtime.started":
+        case "runtime.completed":
+        case "runtime.failed": {
+          const step: ExecutionStep = {
+            type: event.type,
+            runtimeId: (event.payload.runtimeId as string) ?? "unknown",
+            pluginId: (event.payload.pluginId as string) ?? "",
+            label: event.payload.label as string | undefined,
+            detail: event.payload.detail as string | undefined,
+            timestamp: event.timestamp,
+            turnId: event.payload.turnId as string | undefined,
+          };
+          dispatch({ type: "ADD_EXECUTION_STEP", step });
+          break;
+        }
+        case "state.entry.changed": {
+          const field = event.payload.key as string | undefined;
+          const value = event.payload.value;
+          if (field !== undefined && value !== undefined) {
+            // Use ADD_STATE_PATCH which deep-merges into existing gameState,
+            // avoiding stale closure over state.gameState.
+            dispatch({
+              type: "ADD_STATE_PATCH",
+              patch: {
+                id: event.id || `sub_${Date.now()}`,
+                summary: `subscription: ${field} changed`,
+                packageName: "subscription",
+                data: { [field]: value },
+              },
+            });
+          }
+          break;
+        }
+        case "game.phase.changed": {
+          const phase = event.payload.phase as api.SessionPhase | undefined;
+          if (phase) {
+            dispatch({ type: "SET_PHASE", phase });
+          }
+          break;
+        }
+        case "plugin.activated":
+        case "plugin.deactivated": {
+          // Reload session plugins from server to get fresh state
+          const currentSid = sessionIdRef.current;
+          if (currentSid) {
+            api.listSessionPlugins(currentSid)
+              .then((res) => dispatch({ type: "LOAD_SESSION_PLUGINS", plugins: res.available }))
+              .catch(() => {});
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    };
+
+    // Subscribe to all topics we care about via wildcard
+    sub.on("*", handleSubscriptionEvent);
+
+    return () => {
+      sub.close();
+      subscriptionRef.current = null;
+    };
+  }, [state.session?.id]);
 
   const resetSession = useCallback(() => {
     dispatch({ type: "RESET_SESSION" });

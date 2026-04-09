@@ -188,6 +188,14 @@ app.post('/sessions/:id/plugins/disable', async (c) => {
   return c.json({ ok: true, activePlugins: [...activeSet] });
 });
 
+// V1 compat: /events/stream → /v2/events/stream
+app.get('/events/stream', async (c) => {
+  const url = new URL(c.req.url);
+  const v2Url = `/v2/events/stream${url.search}`;
+  const res = await v2.app.request(v2Url);
+  return new Response(res.body, { status: res.status, headers: res.headers });
+});
+
 // V1 endpoints with no V2 equivalent — return empty stubs
 app.get('/presets', (c) => c.json([]));
 app.get('/packages', (c) => c.json([]));

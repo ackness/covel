@@ -3,11 +3,17 @@
  */
 
 import type { RuntimeManifest } from '@covel/shared';
+import type { EventBus } from '@covel/events';
 import type {
   PluginRegistryEntry,
   PluginSummary,
   RegistryChangeEvent,
 } from './types.js';
+
+export interface PluginRegistryOptions {
+  /** Optional EventBus for emitting plugin lifecycle subscription events. */
+  readonly eventBus?: EventBus;
+}
 
 export interface PluginRegistry {
   /** Register a plugin. */
@@ -35,15 +41,29 @@ export interface PluginRegistry {
 /**
  * Create an in-memory plugin registry.
  */
-export function createPluginRegistry(): PluginRegistry {
+export function createPluginRegistry(options?: PluginRegistryOptions): PluginRegistry {
   const entries = new Map<string, PluginRegistryEntry>();
   const sessionActivations = new Map<string, Set<string>>();
   const listeners = new Set<(event: RegistryChangeEvent) => void>();
+  const eventBus = options?.eventBus;
 
   function emit(event: RegistryChangeEvent): void {
     for (const handler of listeners) {
       handler(event);
     }
+  }
+
+  /** Emit a subscription event to the EventBus (if present). */
+  function emitToEventBus(subType: string, sessionId: string, payload: Record<string, unknown>): void {
+    if (!eventBus) return;
+    eventBus.emit({
+      id: crypto.randomUUID(),
+      type: 'event',
+      topic: 'plugin',
+      sessionId,
+      timestamp: new Date().toISOString(),
+      payload: { ...payload, _subTopic: 'plugin', _subType: subType },
+    });
   }
 
   return {
@@ -68,6 +88,7 @@ export function createPluginRegistry(): PluginRegistry {
       }
       sessionSet.add(pluginId);
       emit({ type: 'plugin-activated', pluginId, sessionId });
+      emitToEventBus('plugin.activated', sessionId, { pluginId, sessionId });
     },
 
     deactivate(pluginId: string, sessionId: string): void {
@@ -76,6 +97,7 @@ export function createPluginRegistry(): PluginRegistry {
         sessionSet.delete(pluginId);
       }
       emit({ type: 'plugin-deactivated', pluginId, sessionId });
+      emitToEventBus('plugin.deactivated', sessionId, { pluginId, sessionId });
     },
 
     onChange(handler: (event: RegistryChangeEvent) => void): () => void {

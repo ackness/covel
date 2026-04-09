@@ -8,7 +8,7 @@ export { loadPluginSummary, loadPluginManifest, loadRuntime } from './load.js';
 
 // ── Registry ─────────────────────────────────────────────────────
 export { createPluginRegistry } from './registry.js';
-export type { PluginRegistry } from './registry.js';
+export type { PluginRegistry, PluginRegistryOptions } from './registry.js';
 
 // ── Session Scope ────────────────────────────────────────────────
 export { createSessionScope } from './session-scope.js';

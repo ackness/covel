@@ -74,6 +74,12 @@ export type {
 } from './message.js';
 
 export type {
+  SubscriptionTopic,
+  SubscriptionEvent,
+  SubscriptionFilter,
+} from './subscription-events.js';
+
+export type {
   I18nText,
   WorldLandmark,
   WorldRegion,

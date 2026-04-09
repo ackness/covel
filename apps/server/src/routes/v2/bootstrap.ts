@@ -41,6 +41,7 @@ import { worldRoutes } from './worlds.js';
 import { messageRoutes } from './messages.js';
 import { characterRoutes } from './characters.js';
 import { actionRoutes } from './actions.js';
+import { subscribeRoutes } from './subscribe.js';
 
 // ── Bootstrap config ─────────────────────────────────────────────
 
@@ -76,8 +77,13 @@ export interface V2BootstrapResult {
  * 4. Mount all route groups
  */
 export async function bootstrapV2(config: V2BootstrapConfig): Promise<V2BootstrapResult> {
-  // 1. Discover plugins
-  const registry = createPluginRegistry();
+  // 1. Create shared infrastructure first (eventBus needed by registry)
+  const { store } = config;
+  const stateManager = config.stateManager ?? createStateManager(store);
+  const eventBus = createEventBus(store);
+
+  // 2. Discover plugins
+  const registry = createPluginRegistry({ eventBus });
   const discoveries = await discoverPlugins(config.pluginsDir);
 
   // Preload and register each plugin
@@ -101,13 +107,10 @@ export async function bootstrapV2(config: V2BootstrapConfig): Promise<V2Bootstra
     });
   }
 
-  // 2. Create shared state
-  const { store } = config;
-  const stateManager = config.stateManager ?? createStateManager(store);
-  const eventBus = createEventBus(store);
+  // 3. Create remaining shared state
   const sessionScopes = new Map();
 
-  // 3. loadRuntime resolver
+  // 4. loadRuntime resolver
   const loadRuntimeFn = async (manifest: RuntimeManifest): Promise<LoadedRuntime | undefined> => {
     // Find the discovery for this manifest
     for (const [pluginId, discovery] of discoveryMap) {
@@ -119,7 +122,7 @@ export async function bootstrapV2(config: V2BootstrapConfig): Promise<V2Bootstra
     return undefined;
   };
 
-  // 4. Create ToolExecutor with builtin + plugin local tools + approval
+  // 5. Create ToolExecutor with builtin + plugin local tools + approval
   const builtinToolNames = new Set<string>();
   const localToolNames = new Set<string>();
   const toolMap = new Map<string, ToolModule>();
@@ -193,7 +196,7 @@ export async function bootstrapV2(config: V2BootstrapConfig): Promise<V2Bootstra
     },
   });
 
-  // 5. Create app with dependency injection middleware
+  // 6. Create app with dependency injection middleware
   const app = new Hono();
 
   app.use('*', async (c, next) => {
@@ -211,7 +214,7 @@ export async function bootstrapV2(config: V2BootstrapConfig): Promise<V2Bootstra
     await next();
   });
 
-  // 6. Mount routes
+  // 7. Mount routes
   app.route('/v2/sessions', sessionRoutes);
   app.route('/v2/session', sessionRoutes);
   app.route('/v2/session', turnRoutes);
@@ -221,6 +224,7 @@ export async function bootstrapV2(config: V2BootstrapConfig): Promise<V2Bootstra
   app.route('/v2/session', messageRoutes);
   app.route('/v2/session', characterRoutes);
   app.route('/v2/events', eventRoutes);
+  app.route('/v2/events', subscribeRoutes);
   app.route('/v2/runtime', runtimeRoutes);
   app.route('/v2/worlds', worldRoutes);
   app.route('/v2/health', healthRoutes);

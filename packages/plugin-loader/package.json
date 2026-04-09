@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@covel/shared": "workspace:*",
+    "@covel/events": "workspace:*",
     "gray-matter": "^4.0.3"
   },
   "devDependencies": {
