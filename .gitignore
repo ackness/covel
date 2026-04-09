@@ -87,3 +87,5 @@ venv/
 target/
 vendor/
 tmp/
+*.png
+.playwright-mcp/
