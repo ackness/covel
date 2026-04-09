@@ -27,9 +27,12 @@ import { parseReference } from './parse-reference.js';
  *
  * Returns the path of the first existing file, or the default PLUGIN.md.
  */
+/** Only allow safe BCP-47-like locale tags in filesystem paths. */
+const SAFE_LOCALE_RE = /^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{2,8})*$/;
+
 async function resolveLocalizedPluginMd(dir: string, locale?: string): Promise<string> {
   const base = path.join(dir, 'PLUGIN.md');
-  if (!locale) return base;
+  if (!locale || !SAFE_LOCALE_RE.test(locale)) return base;
 
   // Try exact locale: PLUGIN.en-US.md
   const exact = path.join(dir, `PLUGIN.${locale}.md`);
@@ -77,18 +80,21 @@ async function dirExists(p: string): Promise<boolean> {
  */
 export async function loadPluginSummary(discovery: PluginDiscoveryResult, locale?: string): Promise<PluginSummary> {
   // For multi-runtime, prefer root PLUGIN.md; fall back to first runtime's PLUGIN.md
-  const summaryPath = await resolveLocalizedPluginMd(discovery.rootPath, locale);
+  let summaryPath = await resolveLocalizedPluginMd(discovery.rootPath, locale);
+  if (!(await fileExists(summaryPath))) {
+    // Root PLUGIN.md doesn't exist (multi-runtime) — use first runtime's PLUGIN.md
+    const fallbackDir = path.dirname(discovery.pluginMdPaths[0]);
+    summaryPath = await resolveLocalizedPluginMd(fallbackDir, locale);
+  }
 
   const content = await fs.readFile(summaryPath, 'utf-8');
   const { data } = matter(content);
 
-  // Support I18nText: string or { "zh-CN": "...", "en-US": "..." }
-  const name = (typeof data.name === 'string' || (typeof data.name === 'object' && data.name !== null))
-    ? data.name
-    : discovery.id;
-  const description = (typeof data.description === 'string' || (typeof data.description === 'object' && data.description !== null))
-    ? data.description
-    : '';
+  // Support I18nText: string or { "zh-CN": "...", "en-US": "..." } (reject arrays)
+  const isI18n = (v: unknown): v is string | Record<string, string> =>
+    typeof v === 'string' || (typeof v === 'object' && v !== null && !Array.isArray(v));
+  const name = isI18n(data.name) ? data.name : discovery.id;
+  const description = isI18n(data.description) ? data.description : '';
   const pluginType: PluginType =
     data.pluginType === 'core-plugin' ? 'core-plugin' : 'plugin';
 

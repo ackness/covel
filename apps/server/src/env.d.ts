@@ -5,7 +5,7 @@ import type { EventBus } from '@covel/events';
 import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
 import type { RuntimeManifest } from '@covel/shared';
 
-type LoadRuntimeFn = (manifest: RuntimeManifest) => Promise<LoadedRuntime | undefined>;
+type LoadRuntimeFn = (manifest: RuntimeManifest, locale?: string) => Promise<LoadedRuntime | undefined>;
 type GetConfigFn = (pluginId: string, runtimeId: string) => Readonly<Record<string, unknown>>;
 type ResolveModelFn = (slotOrModel: string, pluginId?: string) => string;
 

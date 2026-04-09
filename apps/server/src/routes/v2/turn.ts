@@ -14,7 +14,7 @@ type Env = {
     store: DataStore;
     pluginRegistry: PluginRegistry;
     llmAdapter: LLMAdapter;
-    loadRuntimeFn: (manifest: RuntimeManifest) => Promise<LoadedRuntime | undefined>;
+    loadRuntimeFn: (manifest: RuntimeManifest, locale?: string) => Promise<LoadedRuntime | undefined>;
     toolExecutor?: ToolExecutor;
     resolveModel?: (manifest: RuntimeManifest, apiOverride?: string) => string | undefined;
     getConfigFn?: (pluginId: string, runtimeId: string) => Readonly<Record<string, unknown>>;
