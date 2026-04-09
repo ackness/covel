@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronRight, Puzzle, Wrench, Zap, Link, AlertTriangle, Lock, Cpu } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
@@ -240,13 +240,13 @@ interface V2PluginItemProps {
   sessionId?: string;
 }
 
-const TRIGGER_TYPE_LABELS: Record<string, string> = {
-  auto: "每轮",
-  scheduled: "定时",
-  manual: "手动",
-  event: "事件",
-  conditional: "条件",
-  "error-retry": "重试",
+const TRIGGER_TYPE_I18N: Record<string, { key: string; fallback: string }> = {
+  auto: { key: "plugin.triggerAuto", fallback: "Every turn" },
+  scheduled: { key: "plugin.triggerScheduled", fallback: "Scheduled" },
+  manual: { key: "plugin.triggerManual", fallback: "Manual" },
+  event: { key: "plugin.triggerEvent", fallback: "Event" },
+  conditional: { key: "plugin.triggerConditional", fallback: "Conditional" },
+  "error-retry": { key: "plugin.triggerErrorRetry", fallback: "Error retry" },
 };
 
 const RUNTIME_TYPE_ICONS: Record<string, string> = {
@@ -259,9 +259,9 @@ function V2PluginItem({ plugin, executing, onToggle, resolvedSlots, sessionId }:
   const [expanded, setExpanded] = useState(false);
 
   // Runtime binding: which model slot this plugin uses
-  const runtimeKey = plugin.id; // pluginId as runtime binding key
-  const currentBindings = sessionId ? getRuntimeBindings(sessionId) : {};
-  const [boundSlot, setBoundSlot] = useState<string>(currentBindings[runtimeKey] ?? "");
+  const runtimeKey = plugin.id;
+  const initialSlot = useRef(sessionId ? (getRuntimeBindings(sessionId)[runtimeKey] ?? "") : "");
+  const [boundSlot, setBoundSlot] = useState<string>(initialSlot.current);
 
   const handleSlotChange = useCallback((newSlot: string) => {
     setBoundSlot(newSlot);
@@ -281,55 +281,54 @@ function V2PluginItem({ plugin, executing, onToggle, resolvedSlots, sessionId }:
   const toggleDisabled = executing === true || isLocked;
   const allTools = [...(plugin.tools?.builtin ?? []), ...(plugin.tools?.local ?? [])];
   const configFields = Object.entries(plugin.config ?? {});
-  const triggerLabel = plugin.trigger
-    ? TRIGGER_TYPE_LABELS[plugin.trigger.type] ?? plugin.trigger.type
-    : "auto";
+  const triggerEntry = TRIGGER_TYPE_I18N[plugin.trigger?.type ?? "auto"];
+  const triggerLabel = triggerEntry ? t(triggerEntry.key, triggerEntry.fallback) : (plugin.trigger?.type ?? "auto");
   const runtimeLabel = RUNTIME_TYPE_ICONS[plugin.runtimeType ?? "agent"] ?? "LLM";
 
   return (
     <div className="border border-border rounded-md overflow-hidden">
-      {/* Header */}
-      <button
-        type="button"
-        className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-muted/50 transition-colors"
-        onClick={() => setExpanded((v) => !v)}
-      >
-        <ChevronRight
-          className={`w-3 h-3 shrink-0 text-muted-foreground transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
-        />
-        <Puzzle className="w-3.5 h-3.5 shrink-0 text-primary/60" />
-        <span className="text-xs font-medium truncate flex-1">{displayName}</span>
-        {plugin.priority !== undefined && (
-          <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 shrink-0">
-            P{plugin.priority}
+      {/* Header — flex row with expand button and toggle as siblings (no nested buttons) */}
+      <div className="flex items-center gap-0 hover:bg-muted/50 transition-colors">
+        <button
+          type="button"
+          className="flex-1 flex items-center gap-2 px-2.5 py-2 text-left min-w-0"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <ChevronRight
+            className={`w-3 h-3 shrink-0 text-muted-foreground transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
+          />
+          <Puzzle className="w-3.5 h-3.5 shrink-0 text-primary/60" />
+          <span className="text-xs font-medium truncate flex-1">{displayName}</span>
+          {plugin.priority !== undefined && (
+            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 shrink-0">
+              P{plugin.priority}
+            </Badge>
+          )}
+          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0">
+            {runtimeLabel}
           </Badge>
-        )}
-        <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0">
-          {runtimeLabel}
-        </Badge>
-        {isLocked && (
-          <span title={t("plugin.locked", "Core plugin — cannot be disabled")}>
-            <Lock className="w-3 h-3 shrink-0 text-muted-foreground/50" />
-          </span>
-        )}
-        {/* Toggle switch */}
+          {isLocked && (
+            <span title={t("plugin.locked", "Core plugin — cannot be disabled")}>
+              <Lock className="w-3 h-3 shrink-0 text-muted-foreground/50" />
+            </span>
+          )}
+        </button>
+        {/* Toggle switch — sibling, not nested */}
         {onToggle && !isLocked && (
           <button
             type="button"
             role="switch"
             aria-checked={plugin.isActive}
+            aria-label={plugin.isActive ? t("plugin.disable", "Disable plugin") : t("plugin.enable", "Enable plugin")}
             disabled={toggleDisabled}
             className={[
-              "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent",
+              "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent mr-2.5",
               "transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2",
               "focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               plugin.isActive ? "bg-primary" : "bg-input",
               toggleDisabled ? "opacity-50 cursor-not-allowed" : "",
             ].join(" ")}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!toggleDisabled) onToggle(plugin.id, !plugin.isActive);
-            }}
+            onClick={() => { if (!toggleDisabled) onToggle(plugin.id, !plugin.isActive); }}
           >
             <span
               className={[
@@ -339,7 +338,7 @@ function V2PluginItem({ plugin, executing, onToggle, resolvedSlots, sessionId }:
             />
           </button>
         )}
-      </button>
+      </div>
 
       {/* Expanded detail */}
       {expanded && (
@@ -418,6 +417,7 @@ function V2PluginItem({ plugin, executing, onToggle, resolvedSlots, sessionId }:
           )}
 
           {/* Config fields */}
+          {/* Config schema (read-only display — editing requires PATCH /v2/plugins/:id/config) */}
           {configFields.length > 0 && (
             <div className="space-y-1.5">
               <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
@@ -425,34 +425,20 @@ function V2PluginItem({ plugin, executing, onToggle, resolvedSlots, sessionId }:
                 {t("plugin.config", "Config")}
               </div>
               {configFields.map(([key, field]) => (
-                <div key={key} className="space-y-0.5">
-                  <label className="text-[10px] font-medium text-muted-foreground">
+                <div key={key} className="flex items-center justify-between gap-2 text-[10px]">
+                  <span className="text-muted-foreground">
                     {field.label ?? key}
                     {field.description && (
-                      <span className="ml-1 font-normal text-muted-foreground/60">— {field.description}</span>
+                      <span className="ml-1 text-muted-foreground/50">— {field.description}</span>
                     )}
-                  </label>
-                  {field.type === "boolean" ? (
-                    <div className="flex items-center gap-2">
-                      <input type="checkbox" defaultChecked={field.default as boolean} className="h-3 w-3" />
-                      <span className="text-[10px] text-muted-foreground">{String(field.default ?? false)}</span>
-                    </div>
-                  ) : field.options ? (
-                    <select
-                      defaultValue={String(field.default ?? "")}
-                      className="w-full text-[10px] bg-background border border-border rounded px-1.5 py-1"
-                    >
-                      {field.options.map((opt) => (
-                        <option key={opt} value={opt}>{opt}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type={field.type === "number" || field.type === "integer" ? "number" : "text"}
-                      defaultValue={String(field.default ?? "")}
-                      className="w-full text-[10px] bg-background border border-border rounded px-1.5 py-1"
-                    />
-                  )}
+                  </span>
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-mono shrink-0">
+                    {field.options
+                      ? (String(field.default ?? field.options[0]))
+                      : field.type === "boolean"
+                        ? String(field.default ?? false)
+                        : String(field.default ?? "—")}
+                  </Badge>
                 </div>
               ))}
             </div>
