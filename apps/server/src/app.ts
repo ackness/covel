@@ -138,13 +138,26 @@ app.get('/sessions/:id/plugins', async (c) => {
   }
   const allPlugins = v2.registry.getAll();
   const activeSet = new Set(session.activePlugins);
-  const available = [...allPlugins.values()].map((entry) => ({
-    id: entry.id,
-    displayName: entry.summary.name,
-    description: entry.summary.description,
-    isActive: activeSet.has(entry.id),
-    locked: entry.summary.pluginType === 'core-plugin',
-  }));
+  const available = [...allPlugins.values()].map((entry) => {
+    const m = entry.manifest?.manifest;
+    return {
+      id: entry.id,
+      displayName: entry.summary.name,
+      description: entry.summary.description,
+      isActive: activeSet.has(entry.id),
+      locked: entry.summary.pluginType === 'core-plugin',
+      pluginType: entry.summary.pluginType,
+      priority: m?.priority,
+      runtimeType: m?.runtimeType ?? 'agent',
+      model: m?.model,
+      trigger: m?.trigger,
+      tools: {
+        builtin: m?.tools?.builtin ?? [],
+        local: (m?.tools?.local ?? []).map((p: string) => p.split('/').pop()?.replace(/\.[^.]+$/, '') ?? p),
+      },
+      config: m?.config ?? {},
+    };
+  });
   return c.json({
     active: [...session.activePlugins],
     available,

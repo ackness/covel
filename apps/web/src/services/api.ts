@@ -357,6 +357,13 @@ export interface SessionPluginInfo {
   isActive: boolean;
   /** Core plugins that are always required and cannot be disabled. */
   locked?: boolean;
+  pluginType?: string;
+  priority?: number;
+  runtimeType?: string;
+  model?: string;
+  trigger?: { type: string; interval?: number; maxTriggerCount?: number; cooldownTurns?: number };
+  tools?: { builtin: string[]; local: string[] };
+  config?: Record<string, { type: string; default?: unknown; label?: string; description?: string; options?: string[] }>;
 }
 
 export interface SessionPluginsResponse {

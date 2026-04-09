@@ -224,6 +224,188 @@ function PluginErrorItem({ error }: { error: PluginLoadError }) {
   );
 }
 
+// ── V2 Session Plugin Item (collapsible, configurable, hot-swappable) ──
+
+interface V2PluginItemProps {
+  plugin: SessionPluginInfo;
+  executing?: boolean;
+  onToggle?: (pluginId: string, enable: boolean) => void;
+}
+
+const TRIGGER_TYPE_LABELS: Record<string, string> = {
+  auto: "每轮",
+  scheduled: "定时",
+  manual: "手动",
+  event: "事件",
+  conditional: "条件",
+  "error-retry": "重试",
+};
+
+const RUNTIME_TYPE_ICONS: Record<string, string> = {
+  agent: "LLM",
+  function: "Fn",
+};
+
+function V2PluginItem({ plugin, executing, onToggle }: V2PluginItemProps) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+
+  const displayName = typeof plugin.displayName === "string" ? plugin.displayName : plugin.id;
+  const description = typeof plugin.description === "string" ? plugin.description : undefined;
+  const isLocked = plugin.locked === true;
+  const toggleDisabled = executing === true || isLocked;
+  const allTools = [...(plugin.tools?.builtin ?? []), ...(plugin.tools?.local ?? [])];
+  const configFields = Object.entries(plugin.config ?? {});
+  const triggerLabel = plugin.trigger
+    ? TRIGGER_TYPE_LABELS[plugin.trigger.type] ?? plugin.trigger.type
+    : "auto";
+  const runtimeLabel = RUNTIME_TYPE_ICONS[plugin.runtimeType ?? "agent"] ?? "LLM";
+
+  return (
+    <div className="border border-border rounded-md overflow-hidden">
+      {/* Header */}
+      <button
+        type="button"
+        className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-muted/50 transition-colors"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <ChevronRight
+          className={`w-3 h-3 shrink-0 text-muted-foreground transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
+        />
+        <Puzzle className="w-3.5 h-3.5 shrink-0 text-primary/60" />
+        <span className="text-xs font-medium truncate flex-1">{displayName}</span>
+        {plugin.priority !== undefined && (
+          <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 shrink-0">
+            P{plugin.priority}
+          </Badge>
+        )}
+        <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0">
+          {runtimeLabel}
+        </Badge>
+        {isLocked && (
+          <span title={t("plugin.locked", "Core plugin — cannot be disabled")}>
+            <Lock className="w-3 h-3 shrink-0 text-muted-foreground/50" />
+          </span>
+        )}
+        {/* Toggle switch */}
+        {onToggle && !isLocked && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={plugin.isActive}
+            disabled={toggleDisabled}
+            className={[
+              "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent",
+              "transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2",
+              "focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              plugin.isActive ? "bg-primary" : "bg-input",
+              toggleDisabled ? "opacity-50 cursor-not-allowed" : "",
+            ].join(" ")}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!toggleDisabled) onToggle(plugin.id, !plugin.isActive);
+            }}
+          >
+            <span
+              className={[
+                "pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out",
+                plugin.isActive ? "translate-x-3" : "translate-x-0",
+              ].join(" ")}
+            />
+          </button>
+        )}
+      </button>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div className="px-3 pb-2.5 pt-1 space-y-2 border-t border-border bg-muted/20">
+          {/* Description */}
+          {description && (
+            <p className="text-[11px] text-muted-foreground leading-relaxed">{description}</p>
+          )}
+
+          {/* Meta badges */}
+          <div className="flex flex-wrap gap-1">
+            {plugin.model && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+                model: {plugin.model}
+              </Badge>
+            )}
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+              trigger: {triggerLabel}
+              {plugin.trigger?.interval ? ` (${plugin.trigger.interval})` : ""}
+              {plugin.trigger?.maxTriggerCount ? ` max:${plugin.trigger.maxTriggerCount}` : ""}
+            </Badge>
+            {plugin.pluginType && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+                {plugin.pluginType}
+              </Badge>
+            )}
+          </div>
+
+          {/* Tools */}
+          {allTools.length > 0 && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                <Wrench className="w-3 h-3" />
+                Tools ({allTools.length})
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {allTools.map((tool) => (
+                  <Badge key={tool} variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-mono">
+                    {tool}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Config fields */}
+          {configFields.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                <Zap className="w-3 h-3" />
+                {t("plugin.config", "Config")}
+              </div>
+              {configFields.map(([key, field]) => (
+                <div key={key} className="space-y-0.5">
+                  <label className="text-[10px] font-medium text-muted-foreground">
+                    {field.label ?? key}
+                    {field.description && (
+                      <span className="ml-1 font-normal text-muted-foreground/60">— {field.description}</span>
+                    )}
+                  </label>
+                  {field.type === "boolean" ? (
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" defaultChecked={field.default as boolean} className="h-3 w-3" />
+                      <span className="text-[10px] text-muted-foreground">{String(field.default ?? false)}</span>
+                    </div>
+                  ) : field.options ? (
+                    <select
+                      defaultValue={String(field.default ?? "")}
+                      className="w-full text-[10px] bg-background border border-border rounded px-1.5 py-1"
+                    >
+                      {field.options.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={field.type === "number" || field.type === "integer" ? "number" : "text"}
+                      defaultValue={String(field.default ?? "")}
+                      className="w-full text-[10px] bg-background border border-border rounded px-1.5 py-1"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PluginListPanel({
   packages,
   loadErrors = [],
@@ -247,8 +429,13 @@ export function PluginListPanel({
   );
 
   // V2 path: when packages (V1) are empty but sessionPlugins (V2) are available,
-  // render session plugins directly instead of the legacy package list.
-  const useSessionPluginsView = packages.length === 0 && hasSessionPlugins;
+  // render V2 plugin items with full detail.
+  const useV2View = packages.length === 0 && hasSessionPlugins;
+
+  // Sort V2 plugins by priority
+  const sortedPlugins = useV2View
+    ? [...(sessionPlugins ?? [])].sort((a, b) => (a.priority ?? 500) - (b.priority ?? 500))
+    : [];
 
   return (
     <div className="space-y-1.5">
@@ -259,21 +446,14 @@ export function PluginListPanel({
           ))}
         </div>
       )}
-      {useSessionPluginsView
-        ? (sessionPlugins ?? []).map((sp) => (
-            <div
+      {useV2View
+        ? sortedPlugins.map((sp) => (
+            <V2PluginItem
               key={sp.id}
-              className="flex items-center justify-between gap-2 py-1.5 px-2 rounded text-xs hover:bg-muted/50 transition-colors"
-            >
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Puzzle className="w-3 h-3 shrink-0 text-muted-foreground" />
-                <span className="truncate font-medium">{typeof sp.displayName === "string" ? sp.displayName : sp.id}</span>
-                {sp.locked && <Lock className="w-3 h-3 shrink-0 text-muted-foreground" />}
-              </div>
-              <Badge variant={sp.isActive ? "default" : "secondary"} className="text-[10px] px-1.5 py-0">
-                {sp.isActive ? t("common.active", "active") : t("common.inactive", "inactive")}
-              </Badge>
-            </div>
+              plugin={sp}
+              executing={executing}
+              onToggle={onTogglePlugin}
+            />
           ))
         : packages.map((pkg) => (
             <PluginItem
