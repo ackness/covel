@@ -172,7 +172,21 @@ export function buildContext(
   };
 
   // Interpolate template variables
-  const systemPrompt = interpolateTemplate(rawSystemPrompt, variables);
+  let systemPrompt = interpolateTemplate(rawSystemPrompt, variables);
+
+  // Inject language constraint based on session locale
+  if (turnInput.locale) {
+    const langMap: Record<string, string> = {
+      'zh-CN': '中文',
+      'zh': '中文',
+      'en-US': 'English',
+      'en': 'English',
+      'ja': '日本語',
+      'ko': '한국어',
+    };
+    const langName = langMap[turnInput.locale] ?? turnInput.locale;
+    systemPrompt += `\n\n[LANGUAGE] You MUST respond in ${langName}. All narrative output, tool parameters, and descriptions must be in ${langName}.`;
+  }
 
   // Build messages: history + current user message
   const historyMessages: LLMMessage[] = (params.messageHistory ?? []).map(msg => ({

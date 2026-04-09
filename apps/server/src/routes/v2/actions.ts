@@ -62,6 +62,9 @@ actionRoutes.post('/', async (c) => {
     : (payload.content as string) ?? (payload.command as string) ?? '';
   const turnId = crypto.randomUUID();
 
+  // Locale: prefer session's stored locale (fixed at creation), fallback to request locale
+  const effectiveLocale = session.locale ?? locale ?? 'zh-CN';
+
   // Get active runtimes from plugin registry
   const activeRuntimes: RuntimeManifest[] = [];
   for (const [, entry] of pluginRegistry.getAll()) {
@@ -107,7 +110,7 @@ actionRoutes.post('/', async (c) => {
           sessionId,
           turnId,
           playerMessage,
-          locale,
+          locale: effectiveLocale,
         },
         activeRuntimes,
         {

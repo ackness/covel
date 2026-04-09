@@ -22,8 +22,8 @@ import type { ToolExecutor } from './tool-executor.js';
 // ── Types ────────────────────────────────────────────────────────
 
 export interface TurnExecutorDeps {
-  /** Resolve a runtime manifest to its fully loaded data. */
-  readonly loadRuntime: (manifest: RuntimeManifest) => Promise<LoadedRuntime | undefined>;
+  /** Resolve a runtime manifest to its fully loaded data. Locale enables localized PLUGIN.md (e.g., PLUGIN.en.md). */
+  readonly loadRuntime: (manifest: RuntimeManifest, locale?: string) => Promise<LoadedRuntime | undefined>;
   /** LLM adapter for making model calls. */
   readonly llm: LLMAdapter;
   /** Get effective config for a plugin/runtime. */
@@ -327,7 +327,7 @@ async function executeOneRuntime(
 
   try {
     // Load the runtime (prompt template, references, handler, etc.)
-    const loaded = await deps.loadRuntime(manifest);
+    const loaded = await deps.loadRuntime(manifest, input.locale);
     if (!loaded) {
       return makeFailedResult(manifest, input, runId, startTime, 'Runtime not found');
     }

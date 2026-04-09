@@ -18,6 +18,34 @@ import { parsePluginMd } from './parse-plugin-md.js';
 import { parseReference } from './parse-reference.js';
 
 /**
+ * Resolve a locale-aware PLUGIN.md path.
+ *
+ * Resolution order (e.g., locale = "en-US"):
+ *   1. PLUGIN.en-US.md  (exact locale)
+ *   2. PLUGIN.en.md     (language only)
+ *   3. PLUGIN.md         (default fallback)
+ *
+ * Returns the path of the first existing file, or the default PLUGIN.md.
+ */
+async function resolveLocalizedPluginMd(dir: string, locale?: string): Promise<string> {
+  const base = path.join(dir, 'PLUGIN.md');
+  if (!locale) return base;
+
+  // Try exact locale: PLUGIN.en-US.md
+  const exact = path.join(dir, `PLUGIN.${locale}.md`);
+  if (await fileExists(exact)) return exact;
+
+  // Try language prefix: PLUGIN.en.md
+  const lang = locale.split('-')[0];
+  if (lang !== locale) {
+    const langPath = path.join(dir, `PLUGIN.${lang}.md`);
+    if (await fileExists(langPath)) return langPath;
+  }
+
+  return base;
+}
+
+/**
  * Check whether a path exists and is a file.
  */
 async function fileExists(p: string): Promise<boolean> {
@@ -44,20 +72,23 @@ async function dirExists(p: string): Promise<boolean> {
 /**
  * Level 0: Load lightweight plugin summary.
  * Only reads frontmatter `name` and `description` fields.
+ *
+ * @param locale - Optional locale for loading localized PLUGIN.md
  */
-export async function loadPluginSummary(discovery: PluginDiscoveryResult): Promise<PluginSummary> {
+export async function loadPluginSummary(discovery: PluginDiscoveryResult, locale?: string): Promise<PluginSummary> {
   // For multi-runtime, prefer root PLUGIN.md; fall back to first runtime's PLUGIN.md
-  const rootPluginMd = path.join(discovery.rootPath, 'PLUGIN.md');
-  const summaryPath = (await fileExists(rootPluginMd))
-    ? rootPluginMd
-    : discovery.pluginMdPaths[0];
+  const summaryPath = await resolveLocalizedPluginMd(discovery.rootPath, locale);
 
   const content = await fs.readFile(summaryPath, 'utf-8');
   const { data } = matter(content);
 
-  const name = typeof data.name === 'string' ? data.name : discovery.id;
-  const description =
-    typeof data.description === 'string' ? data.description : '';
+  // Support I18nText: string or { "zh-CN": "...", "en-US": "..." }
+  const name = (typeof data.name === 'string' || (typeof data.name === 'object' && data.name !== null))
+    ? data.name
+    : discovery.id;
+  const description = (typeof data.description === 'string' || (typeof data.description === 'object' && data.description !== null))
+    ? data.description
+    : '';
   const pluginType: PluginType =
     data.pluginType === 'core-plugin' ? 'core-plugin' : 'plugin';
 
@@ -73,13 +104,18 @@ export async function loadPluginSummary(discovery: PluginDiscoveryResult): Promi
 /**
  * Level 1: Load full plugin manifest (all frontmatter fields).
  * Returns parsed PLUGIN.md for single-runtime, or all runtimes for multi-runtime.
+ *
+ * @param locale - Optional locale for loading localized PLUGIN.md
  */
-export async function loadPluginManifest(discovery: PluginDiscoveryResult): Promise<readonly ParsedPluginMd[]> {
+export async function loadPluginManifest(discovery: PluginDiscoveryResult, locale?: string): Promise<readonly ParsedPluginMd[]> {
   const results: ParsedPluginMd[] = [];
 
   for (const mdPath of discovery.pluginMdPaths) {
-    const content = await fs.readFile(mdPath, 'utf-8');
-    const parsed = parsePluginMd(content, mdPath);
+    // Resolve localized version if available
+    const dir = path.dirname(mdPath);
+    const localizedPath = await resolveLocalizedPluginMd(dir, locale);
+    const content = await fs.readFile(localizedPath, 'utf-8');
+    const parsed = parsePluginMd(content, localizedPath);
     results.push(parsed);
   }
 
@@ -126,13 +162,16 @@ async function readReferences(runtimeDir: string): Promise<readonly ParsedRefere
 /**
  * Level 2: Fully load a runtime for execution.
  * Reads prompt template, references, output schema.
+ *
+ * @param locale - Optional locale for loading localized PLUGIN.md (e.g., "en-US" → PLUGIN.en.md)
  */
 export async function loadRuntime(
   discovery: PluginDiscoveryResult,
   runtimeName: string,
+  locale?: string,
 ): Promise<LoadedRuntime> {
   const runtimeDir = resolveRuntimeDir(discovery, runtimeName);
-  const pluginMdPath = path.join(runtimeDir, 'PLUGIN.md');
+  const pluginMdPath = await resolveLocalizedPluginMd(runtimeDir, locale);
 
   const content = await fs.readFile(pluginMdPath, 'utf-8');
   const parsed = parsePluginMd(content, pluginMdPath);

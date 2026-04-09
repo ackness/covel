@@ -110,13 +110,12 @@ export async function bootstrapV2(config: V2BootstrapConfig): Promise<V2Bootstra
   // 3. Create remaining shared state
   const sessionScopes = new Map();
 
-  // 4. loadRuntime resolver
-  const loadRuntimeFn = async (manifest: RuntimeManifest): Promise<LoadedRuntime | undefined> => {
-    // Find the discovery for this manifest
+  // 4. loadRuntime resolver (locale-aware: loads PLUGIN.en.md when locale is "en-US")
+  const loadRuntimeFn = async (manifest: RuntimeManifest, locale?: string): Promise<LoadedRuntime | undefined> => {
     for (const [pluginId, discovery] of discoveryMap) {
       const manifests = manifestCache.get(pluginId);
       if (manifests?.some((m) => m.manifest.name === manifest.name)) {
-        return loadRuntimeFromDisk(discovery, manifest.name);
+        return loadRuntimeFromDisk(discovery, manifest.name, locale);
       }
     }
     return undefined;

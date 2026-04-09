@@ -43,11 +43,14 @@ export interface PluginDiscoveryResult {
 
 // ── Progressive loading results ──────────────────────────────────
 
+/** I18n text: plain string or locale map (e.g. { "zh-CN": "...", "en-US": "..." }). */
+export type I18nText = string | Readonly<Record<string, string>>;
+
 /** Level 0: lightweight summary (loaded at framework startup). */
 export interface PluginSummary {
   readonly id: string;
-  readonly name: string;
-  readonly description: string;
+  readonly name: I18nText;
+  readonly description: I18nText;
   readonly pluginType: PluginType;
   readonly runtimeCount: number;
 }
