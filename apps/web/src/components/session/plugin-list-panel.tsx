@@ -233,7 +233,9 @@ export function PluginListPanel({
 }: PluginListPanelProps) {
   const { t } = useTranslation();
 
-  if (packages.length === 0 && loadErrors.length === 0) {
+  const hasSessionPlugins = (sessionPlugins ?? []).length > 0;
+
+  if (packages.length === 0 && loadErrors.length === 0 && !hasSessionPlugins) {
     return (
       <p className="text-xs text-muted-foreground italic">{t("session.noPluginsLoaded")}</p>
     );
@@ -244,6 +246,10 @@ export function PluginListPanel({
     (sessionPlugins ?? []).map((p) => [p.id, p]),
   );
 
+  // V2 path: when packages (V1) are empty but sessionPlugins (V2) are available,
+  // render session plugins directly instead of the legacy package list.
+  const useSessionPluginsView = packages.length === 0 && hasSessionPlugins;
+
   return (
     <div className="space-y-1.5">
       {loadErrors.length > 0 && (
@@ -253,15 +259,32 @@ export function PluginListPanel({
           ))}
         </div>
       )}
-      {packages.map((pkg) => (
-        <PluginItem
-          key={pkg.name}
-          pkg={pkg}
-          sessionPlugin={sessionPluginMap.get(pkg.name)}
-          executing={executing}
-          onToggle={onTogglePlugin}
-        />
-      ))}
+      {useSessionPluginsView
+        ? (sessionPlugins ?? []).map((sp) => (
+            <div
+              key={sp.id}
+              className="flex items-center justify-between gap-2 py-1.5 px-2 rounded text-xs hover:bg-muted/50 transition-colors"
+            >
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Puzzle className="w-3 h-3 shrink-0 text-muted-foreground" />
+                <span className="truncate font-medium">{typeof sp.displayName === "string" ? sp.displayName : sp.id}</span>
+                {sp.locked && <Lock className="w-3 h-3 shrink-0 text-muted-foreground" />}
+              </div>
+              <Badge variant={sp.isActive ? "default" : "secondary"} className="text-[10px] px-1.5 py-0">
+                {sp.isActive ? t("common.active", "active") : t("common.inactive", "inactive")}
+              </Badge>
+            </div>
+          ))
+        : packages.map((pkg) => (
+            <PluginItem
+              key={pkg.name}
+              pkg={pkg}
+              sessionPlugin={sessionPluginMap.get(pkg.name)}
+              executing={executing}
+              onToggle={onTogglePlugin}
+            />
+          ))
+      }
     </div>
   );
 }
