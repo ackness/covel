@@ -12,6 +12,7 @@ import type {
   LoadedRuntime,
   ParsedPluginMd,
   ParsedReference,
+  FunctionHandler,
 } from './types.js';
 import { parsePluginMd } from './parse-plugin-md.js';
 import { parseReference } from './parse-reference.js';
@@ -145,10 +146,24 @@ export async function loadRuntime(
     outputSchema = JSON.parse(schemaContent) as Record<string, unknown>;
   }
 
+  // Load function handler for runtimeType: 'function'
+  let handler: FunctionHandler | undefined;
+  if (parsed.manifest.runtimeType === 'function' && parsed.manifest.handler) {
+    const handlerPath = path.resolve(runtimeDir, parsed.manifest.handler);
+    // Security: prevent path traversal outside plugin root
+    const rel = path.relative(discovery.rootPath, handlerPath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      throw new Error(`Handler path traversal rejected: ${parsed.manifest.handler}`);
+    }
+    const mod = await import(handlerPath);
+    handler = mod.default as FunctionHandler;
+  }
+
   return {
     manifest: parsed.manifest,
     promptTemplate: parsed.promptTemplate,
     references,
     outputSchema,
+    handler,
   };
 }

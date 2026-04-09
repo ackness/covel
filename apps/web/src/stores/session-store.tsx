@@ -371,7 +371,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const runtimeId = (payload.runtimeId as string) ?? "unknown";
         const pluginId = (payload.pluginId as string) ?? "";
         // Only show story-kind runtime text in main chat; plugin text goes to debug only
-        const deltaKind = runtimeKindRef.current.get(runtimeId);
+        const deltaKind = (payload.kind as string) ?? runtimeKindRef.current.get(runtimeId);
         if (delta && deltaKind === "story") {
           dispatch({ type: "APPEND_DELTA", turnId: turnId ?? "unknown", runtimeId, pluginId, delta });
         }
@@ -384,8 +384,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const runtimeId = (payload.runtimeId as string) ?? "unknown";
         const msgId = (payload.messageId as string) ?? api.uid();
 
-        // Display in main chat: only story-kind runtime text
-        const completedKind = runtimeKindRef.current.get(runtimeId);
+        // Display in main chat: story-kind runtime text
+        // Prefer kind from SSE payload (V2 actions), fall back to runtimeKindRef (V1 streaming)
+        const completedKind = (payload.kind as string) ?? runtimeKindRef.current.get(runtimeId);
         if (content && completedKind === "story") {
           const msg: StreamMessage = {
             id: msgId,

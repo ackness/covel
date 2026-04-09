@@ -99,7 +99,19 @@ app.post('/sessions', async (c) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(enriched),
   });
-  return new Response(res.body, { status: res.status, headers: res.headers });
+  if (!res.ok) {
+    return new Response(res.body, { status: res.status, headers: res.headers });
+  }
+  // V2 returns { sessionId, phase, activePlugins } — convert to V1 SessionRecord format
+  const v2Data = await res.json() as Record<string, unknown>;
+  return c.json({
+    id: v2Data.sessionId,
+    worldId: rawBody.worldId ?? null,
+    status: 'active',
+    phase: v2Data.phase ?? 'pre-game',
+    presetId: rawBody.presetId ?? null,
+    createdAt: new Date().toISOString(),
+  });
 });
 
 // V1 session sub-routes → proxy to V2

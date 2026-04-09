@@ -52,12 +52,31 @@ export interface PluginSummary {
   readonly runtimeCount: number;
 }
 
+/**
+ * Function handler context — passed to `runtimeType: 'function'` handlers.
+ * The handler receives this context and returns a Record<string, unknown> output.
+ */
+export interface FunctionHandlerContext {
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly playerMessage: string;
+  readonly locale?: string;
+  readonly store: unknown;
+  readonly completedResults: ReadonlyMap<string, unknown>;
+  readonly config: Readonly<Record<string, unknown>>;
+}
+
+/** Function handler signature for `runtimeType: 'function'` runtimes. */
+export type FunctionHandler = (ctx: FunctionHandlerContext) => Promise<Record<string, unknown>>;
+
 /** Level 2: fully loaded runtime ready for execution. */
 export interface LoadedRuntime {
   readonly manifest: RuntimeManifest;
   readonly promptTemplate: string;
   readonly references: readonly ParsedReference[];
   readonly outputSchema?: Readonly<Record<string, unknown>>;
+  /** Handler function for `runtimeType: 'function'` runtimes. */
+  readonly handler?: FunctionHandler;
 }
 
 // ── Plugin registry ──────────────────────────────────────────────

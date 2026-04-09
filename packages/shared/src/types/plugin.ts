@@ -9,6 +9,14 @@
 
 export type PluginType = 'core-plugin' | 'plugin';
 
+/**
+ * Runtime execution type.
+ * - `agent` (default): LLM-driven with prompt template, tool calling, context assembly.
+ * - `function`: Pure JS/TS function execution, no LLM call. Handler receives execution
+ *   context and returns a RuntimeResult-compatible output directly.
+ */
+export type RuntimeType = 'agent' | 'function';
+
 // ── Trigger system ───────────────────────────────────────────────
 
 export type TriggerType =
@@ -100,6 +108,13 @@ export interface RuntimeManifest {
   readonly description: string;
   readonly priority: number;
   readonly version?: string;
+  /**
+   * Execution type: 'agent' (default) uses LLM pipeline, 'function' runs a pure handler.
+   * Function runtimes declare `handler` pointing to a JS module with a default export.
+   */
+  readonly runtimeType?: RuntimeType;
+  /** Relative path to handler module (required for runtimeType: 'function'). */
+  readonly handler?: string;
   readonly model?: string;
   readonly pluginType?: PluginType;
   readonly trigger?: TriggerConfig;

@@ -33,4 +33,6 @@ export type {
   RegistryChangeEvent,
   PluginSource,
   PluginTrustInfo,
+  FunctionHandler,
+  FunctionHandlerContext,
 } from './types.js';

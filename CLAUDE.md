@@ -97,6 +97,7 @@ packages/
   plugin-test-utils/ @covel/plugin-test-utils — Testing utilities for plugin authors (MockLLM, TestHarness, factories)
 
 plugins/                    — Core gameplay plugins (PLUGIN.md-centric, see Plugin Inventory below)
+  core-pregame/             — Game initialization (priority 0, first turn only)
   core-narrator/            — Main narrative generation
   core-char-creator/        — Character creation onboarding
   core-codex/               — Knowledge codex with local tools
@@ -156,9 +157,9 @@ Input/Event → Trigger Router → Priority Scheduler → [For each priority gro
 
 Key stages:
 1. **Trigger Router** — event type identification, `RuntimeTriggerEvent` generation, candidate filtering by trigger rules (modes: `always`, `interval`, `manual`, `event`)
-2. **Priority Scheduler** — sort by `priority` (0-1000, default 500). 0 = highest = first. Same priority = parallel group. Priority bands: 0-199 system init, 200-399 preprocessing, 400-599 core narrative, 600-799 post-processing, 800-999 background, 1000 cleanup
+2. **Priority Scheduler** — sort by `priority` (0-1000, default 500). 0 = highest = first. Same priority = parallel group. Priority bands: 0-99 Pre-Game (first turn only), 100-499 Pre-Turn, 500 Narrator, 501-999 After-Turn, 1000 Audit. Normal game loop runs 100-1000; Pre-Game (0-99) runs only on session first turn.
 3. **Context Assembly** — `TurnContextStore` accumulates turn context across 10 slices (chat, world, characters, state, record, events, runtime, runtimeSettings, narrative, archive); `PromptAssembler` builds per-runtime prompts (instructions + sections + previous outputs); `Compactor` handles long-session history compaction
-4. **Runtime Runner** — loads PLUGIN.md, binds provider/tools/hooks/budget, drives LLM tool-calling loop. `maxSteps`/`timeoutMs` = hard limits, `maxTokens` = best-effort
+4. **Runtime Runner** — two modes: `runtimeType: 'agent'` (default) loads PLUGIN.md, binds provider/tools/hooks/budget, drives LLM tool-calling loop; `runtimeType: 'function'` directly calls a JS handler function without LLM. `maxSteps`/`timeoutMs` = hard limits, `maxTokens` = best-effort
 5. **Tool/Hook Loop** — whitelisted tools; hooks at lifecycle points: `TurnStart`, `PreToolUse`, `PostToolUse`, `PreStateCommit`, `PostStateCommit`, `TurnStop`
 6. **Proposal Collector** — normalizes to `KernelProposalEnvelope`: `narrative.append`, `state.patch`, `event.emit`, `record.upsert`, `ui.render`, `asset.generate`
 7. **Commit Chain** — `proposal → validate → commit`. All writes go through this chain. Plugins never write directly to DB.
@@ -189,9 +190,10 @@ Current plugins (v2 PLUGIN.md-centric format):
 
 | Priority | Plugin | Role | Trigger |
 |----------|--------|------|---------|
+| 10 | core-pregame | Game initialization (function runtime, no LLM) | scheduled (first turn only, maxTriggerCount=1) |
 | 500 | core-narrator | Main narrative generation | auto (every turn) |
 | 650 | core-codex | Knowledge/lore codex with local tools | auto |
-| 700 | core-char-creator | Character creation onboarding | conditional (first turn only, maxTriggerCount=1) |
+| 700 | core-char-creator | Character creation onboarding | scheduled (first turn only, maxTriggerCount=1) |
 
 Additional plugins planned for migration from v1: core-persona, core-combat, core-guide, core-inventory, core-quest, core-image, core-memory, etc.
 

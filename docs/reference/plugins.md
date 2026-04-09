@@ -8,9 +8,27 @@
 
 | ID | 类型 | 优先级 | 触发方式 | 模型 slot | 描述 |
 |----|------|--------|----------|-----------|------|
+| core-pregame | core-plugin | 10 | scheduled（仅首轮） | — | 游戏初始化（function runtime） |
 | core-narrator | core-plugin | 500 | auto（每轮） | `ds` | 主叙事生成器 |
 | core-codex | plugin | 650 | auto（每轮） | `fast` | 知识图鉴系统 |
 | core-char-creator | core-plugin | 700 | scheduled（仅首轮） | `ds` | 角色创建引导 |
+
+---
+
+## core-pregame
+
+**路径**: `plugins/core-pregame/`
+
+| 字段 | 值 |
+|------|----|
+| pluginType | `core-plugin`（不可禁用） |
+| priority | 10（Pre-Game 阶段，最先执行） |
+| trigger | `scheduled`，`interval: 1`，`maxTriggerCount: 1` — 仅首轮触发 |
+| runtimeType | `function`（纯函数执行，不调用 LLM） |
+| handler | `./handler.js` |
+| input.inject | 无 |
+
+**职责**: 游戏开始时第一个执行的插件。读取世界观设定，发送欢迎通知，输出世界观摘要供后续叙事插件（narrator、codex、char-creator）作为上下文引导。
 
 ---
 
@@ -103,6 +121,33 @@ plugins/<plugin-id>/
 |----|------|
 | `core-plugin` | 核心插件，Session 中不可禁用 |
 | `plugin` | 普通插件，可按需启用/禁用 |
+
+### runtimeType
+
+| 值 | 含义 |
+|----|------|
+| `agent`（默认） | LLM 驱动：构建上下文 → 调用 LLM → 工具循环 → 结果 |
+| `function` | 纯函数执行：直接调用 `handler` 指定的 JS 模块，不调用 LLM，零延迟 |
+
+`function` 类型 runtime 需要额外声明 `handler` 字段指向 JS 模块路径。
+
+### 优先级分带
+
+```
+0 ──────────── 100 ───────────────── 500 ───────────────── 1000
+    Pre-Game         Pre-Turn          Narrator              After-Turn
+   （游戏初始化）     （玩家操作前）     （主叙事输出）         （操作后处理）
+```
+
+| 区间 | 阶段 | 执行时机 | 说明 |
+|------|------|----------|------|
+| 0-99 | Pre-Game | 仅 session 首轮 | 游戏初始化：世界状态、角色属性、动态表单 |
+| 100-499 | Pre-Turn | 每轮 | 玩家操作后、叙事前的处理 |
+| 500 | Narrator | 每轮 | 主叙事模型输出，Turn 的核心产出 |
+| 501-999 | After-Turn | 每轮 | 叙事后处理：状态更新、图像生成、日志 |
+| 1000 | Audit | 每轮 | 冲突审计（保留位） |
+
+正式游戏循环只执行 **100-1000** 区间的插件。Pre-Game（0-99）仅在首轮执行一次。
 
 ### trigger 类型
 

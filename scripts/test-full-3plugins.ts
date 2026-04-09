@@ -84,7 +84,8 @@ async function main() {
 
   const pluginList = await api(app, 'GET', '/v2/plugins');
   const pList = (pluginList.data.plugins as Array<Record<string, unknown>>) ?? [];
-  check('3 plugins auto-discovered', pList.length === 3);
+  check('4 plugins auto-discovered', pList.length === 4);
+  check('pregame present', pList.some(p => p.id === 'core-pregame'));
   check('narrator present', pList.some(p => p.id === 'core-narrator'));
   check('char-creator present', pList.some(p => p.id === 'core-char-creator'));
   check('codex present', pList.some(p => p.id === 'core-codex'));
@@ -100,7 +101,7 @@ async function main() {
   // ═══════════════════════════════════════════════════════════════
   const start = await api(app, 'POST', '/v2/session/start', {
     locale: 'zh-CN',
-    plugins: ['core-narrator', 'core-char-creator', 'core-codex'],
+    plugins: ['core-pregame', 'core-narrator', 'core-char-creator', 'core-codex'],
   });
   check('session created', start.status === 200);
   const sid = start.data.sessionId as string;
@@ -123,13 +124,20 @@ async function main() {
     console.log(`    [p=${r.priority ?? '?'}] ${r.pluginId} — ${r.status} — ${narrative.substring(0, 60)}...`);
   }
 
-  // Verify priority order: narrator(500) → codex(650) → char-creator(700)
+  // Verify priority order: pregame(0) → narrator(500) → codex(650) → char-creator(700)
   const rr1Ids = rr1.map(r => r.pluginId);
+  const pregameIdx = rr1Ids.indexOf('core-pregame');
   const narratorIdx = rr1Ids.indexOf('core-narrator');
   const codexIdx = rr1Ids.indexOf('core-codex');
   const charIdx = rr1Ids.indexOf('core-char-creator');
+  check('priority order: pregame first', pregameIdx === 0);
   check('priority order: narrator before codex', narratorIdx < codexIdx);
   check('priority order: codex before char-creator', codexIdx < charIdx);
+
+  // Pregame executed (trigger: scheduled, first turn, priority 0)
+  const pg1 = rr1.find(r => r.pluginId === 'core-pregame');
+  check('pregame triggered (scheduled, turn 1)', pg1?.status === 'success');
+  check('pregame produced narrativeOutput', typeof (pg1?.output as Record<string, unknown>)?.narrativeOutput === 'string');
 
   // Narrator executed (trigger: auto)
   const n1 = rr1.find(r => r.pluginId === 'core-narrator');
@@ -204,6 +212,7 @@ async function main() {
 
   check('narrator on turn 2 (auto trigger)', rr2.some(r => r.pluginId === 'core-narrator' && r.status === 'success'));
   check('codex on turn 2 (auto trigger)', rr2.some(r => r.pluginId === 'core-codex' && r.status === 'success'));
+  check('pregame NOT on turn 2 (maxTriggerCount=1 enforced)', !rr2.some(r => r.pluginId === 'core-pregame'));
   check('char-creator NOT on turn 2 (maxTriggerCount=1 enforced)', !rr2.some(r => r.pluginId === 'core-char-creator'));
 
   const pi2 = turn2.data.pendingInputs as Array<unknown> | undefined;

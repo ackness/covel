@@ -47,7 +47,8 @@ actionRoutes.post('/', async (c) => {
   const body = await c.req.json<ActionRequest>();
   const { requestId, type, sessionId, locale, payload } = body;
 
-  if (type !== 'send_message' && type !== 'execute_command' && type !== 'trigger_event') {
+  const SUPPORTED_ACTIONS = ['send_message', 'execute_command', 'trigger_event', 'start_session', 'retry_runtime'];
+  if (!SUPPORTED_ACTIONS.includes(type)) {
     return c.json({ error: `Unsupported action type: ${type}` }, 400);
   }
 
@@ -56,7 +57,9 @@ actionRoutes.post('/', async (c) => {
     return c.json({ error: 'Session not found' }, 404);
   }
 
-  const playerMessage = (payload.content as string) ?? (payload.command as string) ?? '';
+  const playerMessage = type === 'start_session'
+    ? '' // First turn has no player message
+    : (payload.content as string) ?? (payload.command as string) ?? '';
   const turnId = crypto.randomUUID();
 
   // Get active runtimes from plugin registry
@@ -125,9 +128,9 @@ actionRoutes.post('/', async (c) => {
 
       // Emit results as SSE events
       for (const rr of result.runtimeResults) {
+        // Extract narrative text — prefer narrativeOutput; skip narrativeTemplate (has {{placeholders}})
         const narrativeOutput =
           (rr.output as Record<string, unknown>)?.narrativeOutput ??
-          (rr.output as Record<string, unknown>)?.narrativeTemplate ??
           (rr.output as Record<string, unknown>)?.content ?? '';
 
         const content = typeof narrativeOutput === 'string' ? narrativeOutput : JSON.stringify(narrativeOutput);
@@ -145,22 +148,8 @@ actionRoutes.post('/', async (c) => {
           });
         }
 
-        // Emit blocks if present
-        const output = rr.output as Record<string, unknown> | null;
-        if (output?.form) {
-          await stream.writeSSE({
-            data: JSON.stringify(makeEnvelope('block.emitted', {
-              block: {
-                id: crypto.randomUUID(),
-                type: 'interactive_form',
-                data: output.form,
-                meta: { runtimeId: rr.runtimeId, pluginId: rr.pluginId },
-              },
-            })),
-          });
-        }
-
         // Emit state patches from runtime output if present
+        const output = rr.output as Record<string, unknown> | null;
         if (output?.statePatches && Array.isArray(output.statePatches)) {
           for (const patch of output.statePatches as Array<Record<string, unknown>>) {
             await stream.writeSSE({

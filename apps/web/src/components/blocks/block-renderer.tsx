@@ -66,6 +66,8 @@ type BlockRendererComponent = React.ComponentType<BlockRendererProps>;
 const CUSTOM_RENDERERS: Record<string, BlockRendererComponent> = {
   choice_set: ChoiceSetBlock,
   character_creation: CharacterCreationBlock,
+  interactive_form: InteractiveFormBlock,
+  interactive_choice: InteractiveChoiceBlock,
   dice_result: DiceResultBlock,
   combat_status: CombatStatusBlock,
   quest_log: QuestLogBlock,
@@ -776,6 +778,69 @@ function InventoryPanelBlock({ data }: BlockRendererProps) {
             </div>
           );
         })}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── interactive_form (V2 generic interaction protocol) ──────────
+
+/**
+ * Adapts V2 `block.emitted` interactive_form blocks to the existing
+ * CharacterCreationBlock renderer. V2 block shape:
+ *   { id, type: "interactive_form", data: { formId, title, fields, submitLabel, ... }, meta }
+ * Fields use `name` instead of `id`.
+ */
+function InteractiveFormBlock({ data, onSubmit, disabled }: BlockRendererProps) {
+  const formData = (data.data as Record<string, unknown>) ?? data;
+  const rawFields = (formData.fields as Array<Record<string, unknown>>) ?? [];
+
+  const adapted: Record<string, unknown> = {
+    ...formData,
+    fields: rawFields.map((f) => ({
+      id: (f.name as string) ?? (f.id as string) ?? "",
+      type: f.type ?? "text",
+      label: f.label ?? f.name ?? "",
+      placeholder: f.placeholder,
+      required: f.required,
+      options: f.options,
+      defaultValue: f.defaultValue,
+    })),
+  };
+
+  return <CharacterCreationBlock data={adapted} onSubmit={onSubmit} disabled={disabled} />;
+}
+
+// ── interactive_choice (V2 generic interaction protocol) ─────────
+
+function InteractiveChoiceBlock({ data, onSubmit, onSelect, selectedValue, disabled }: BlockRendererProps) {
+  const choiceData = (data.data as Record<string, unknown>) ?? data;
+  const prompt = (choiceData.prompt as string) ?? "";
+  const choices = (choiceData.choices as Array<{ id: string; label: string; description?: string }>) ?? [];
+  const handleClick = onSelect ?? onSubmit;
+
+  return (
+    <Card className="max-w-md">
+      <CardHeader className="py-3 px-4 border-b border-border">
+        <CardTitle className="text-sm">{prompt}</CardTitle>
+      </CardHeader>
+      <CardContent className="p-2">
+        {choices.map((choice) => (
+          <Button
+            key={choice.id}
+            variant={selectedValue === choice.label ? "default" : "ghost"}
+            className="w-full justify-start rounded-none text-sm h-auto py-3 px-4"
+            disabled={disabled}
+            onClick={() => handleClick(choice.label)}
+          >
+            <div>
+              <div>{choice.label}</div>
+              {choice.description && (
+                <div className="text-xs text-muted-foreground mt-0.5">{choice.description}</div>
+              )}
+            </div>
+          </Button>
+        ))}
       </CardContent>
     </Card>
   );

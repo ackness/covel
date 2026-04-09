@@ -103,6 +103,8 @@ export const runtimeManifestSchema = z
     description: z.string().min(1),
     priority: z.number().int().min(0).max(1000),
     version: z.string().optional(),
+    runtimeType: z.enum(['agent', 'function']).optional(),
+    handler: z.string().optional(),
     model: z.string().optional(),
     pluginType: z.enum(['core-plugin', 'plugin']).optional(),
     trigger: triggerConfigSchema.optional(),

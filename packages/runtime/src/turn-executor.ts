@@ -248,7 +248,8 @@ export async function executeTurn(
 }
 
 /**
- * Execute a single runtime: build context → call LLM (with tool loop) → validate output.
+ * Execute a single runtime. Dispatches to function handler or LLM agent pipeline
+ * based on `manifest.runtimeType`.
  */
 async function executeOneRuntime(
   manifest: RuntimeManifest,
@@ -263,12 +264,66 @@ async function executeOneRuntime(
   const runId = crypto.randomUUID();
 
   try {
-    // Load the runtime (prompt template, references, etc.)
+    // Load the runtime (prompt template, references, handler, etc.)
     const loaded = await deps.loadRuntime(manifest);
     if (!loaded) {
       return makeFailedResult(manifest, input, runId, startTime, 'Runtime not found');
     }
 
+    // ── Function runtime: direct handler execution, no LLM ──────
+    if (manifest.runtimeType === 'function') {
+      if (!loaded.handler) {
+        return makeFailedResult(manifest, input, runId, startTime, 'Function runtime missing handler');
+      }
+      const config = deps.getConfig(manifest.name, manifest.name);
+      const output = await loaded.handler({
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        playerMessage: input.playerMessage,
+        locale: input.locale,
+        store: deps.store,
+        completedResults,
+        config,
+      });
+
+      const result: RuntimeResult = {
+        pluginId: manifest.name,
+        runtimeId: manifest.name,
+        runId,
+        turnId: input.turnId,
+        status: 'success',
+        output,
+        toolCalls: [],
+        durationMs: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Save function output as TurnMessage (same as agent runtimes)
+      if (deps.store) {
+        const narrativeContent =
+          typeof output.narrativeOutput === 'string' ? output.narrativeOutput :
+          typeof output.content === 'string' ? output.content :
+          JSON.stringify(output);
+
+        await deps.store.appendTurnMessage({
+          id: crypto.randomUUID(),
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          sourceType: 'runtime',
+          sourcePluginId: manifest.name,
+          sourceRuntimeId: manifest.name,
+          role: 'assistant',
+          name: manifest.name,
+          content: narrativeContent,
+          order: manifest.priority,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      return result;
+    }
+
+    // ── Agent runtime: LLM pipeline ─────────────────────────────
     // Build context
     const config = deps.getConfig(manifest.name, manifest.name);
     const assembled = buildContext({

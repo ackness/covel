@@ -1104,7 +1104,7 @@ export function GameView({
             <div className="p-4 md:p-6 space-y-6 md:space-y-8 max-w-4xl mx-auto w-full">
               {messages.length === 0 && !executing && (
                 <div className="flex flex-col items-center justify-center py-16 text-center space-y-6">
-                  {phase === "init" ? (
+                  {(phase === "init" || phase === "pre-game") ? (
                     <>
                       <div className="space-y-2">
                         <p className="text-base font-semibold">{world ? (typeof world.name === "string" ? world.name : (world.name as Record<string, string>)["zh-CN"] ?? "") : ""}</p>

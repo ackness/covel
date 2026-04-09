@@ -1,5 +1,6 @@
 export type {
   PluginType,
+  RuntimeType,
   TriggerType,
   TriggerConfig,
   InputInjectDecl,
