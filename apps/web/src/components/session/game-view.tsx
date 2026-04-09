@@ -266,6 +266,8 @@ function LeftPanel({
               sessionPlugins={sessionPlugins}
               executing={executing}
               onTogglePlugin={onTogglePlugin}
+              resolvedSlots={resolvedSlots}
+              sessionId={session.id}
             />
           </div>
 

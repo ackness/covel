@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronRight, Puzzle, Wrench, Zap, Link, AlertTriangle, Lock } from "lucide-react";
+import { ChevronRight, Puzzle, Wrench, Zap, Link, AlertTriangle, Lock, Cpu } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import { text } from "@/components/world/editor-helpers.js";
+import { getRuntimeBindings, setRuntimeBindings } from "@/services/api.js";
 import type { PackageSummary, PluginLoadError, SessionPluginInfo } from "@/services/api.js";
+import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 
 interface PluginListPanelProps {
   packages: PackageSummary[];
@@ -14,6 +16,10 @@ interface PluginListPanelProps {
   executing?: boolean;
   /** Called when the user flips the enable/disable switch. */
   onTogglePlugin?: (pluginId: string, enable: boolean) => void;
+  /** Available model slots for runtime binding. */
+  resolvedSlots?: ResolvedSlot[];
+  /** Current session ID (for persisting runtime bindings). */
+  sessionId?: string;
 }
 
 const TRIGGER_LABELS: Record<string, { key: string; fallback: string }> = {
@@ -230,6 +236,8 @@ interface V2PluginItemProps {
   plugin: SessionPluginInfo;
   executing?: boolean;
   onToggle?: (pluginId: string, enable: boolean) => void;
+  resolvedSlots?: ResolvedSlot[];
+  sessionId?: string;
 }
 
 const TRIGGER_TYPE_LABELS: Record<string, string> = {
@@ -246,9 +254,26 @@ const RUNTIME_TYPE_ICONS: Record<string, string> = {
   function: "Fn",
 };
 
-function V2PluginItem({ plugin, executing, onToggle }: V2PluginItemProps) {
+function V2PluginItem({ plugin, executing, onToggle, resolvedSlots, sessionId }: V2PluginItemProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
+
+  // Runtime binding: which model slot this plugin uses
+  const runtimeKey = plugin.id; // pluginId as runtime binding key
+  const currentBindings = sessionId ? getRuntimeBindings(sessionId) : {};
+  const [boundSlot, setBoundSlot] = useState<string>(currentBindings[runtimeKey] ?? "");
+
+  const handleSlotChange = useCallback((newSlot: string) => {
+    setBoundSlot(newSlot);
+    if (!sessionId) return;
+    const bindings = getRuntimeBindings(sessionId);
+    if (newSlot) {
+      bindings[runtimeKey] = newSlot;
+    } else {
+      delete bindings[runtimeKey];
+    }
+    setRuntimeBindings(sessionId, bindings);
+  }, [sessionId, runtimeKey]);
 
   const displayName = typeof plugin.displayName === "string" ? plugin.displayName : plugin.id;
   const description = typeof plugin.description === "string" ? plugin.description : undefined;
@@ -360,6 +385,38 @@ function V2PluginItem({ plugin, executing, onToggle }: V2PluginItemProps) {
             </div>
           )}
 
+          {/* Model slot binding */}
+          {plugin.runtimeType !== "function" && resolvedSlots && resolvedSlots.length > 0 && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                <Cpu className="w-3 h-3" />
+                {t("plugin.modelBinding", "Model")}
+              </div>
+              <select
+                value={boundSlot}
+                onChange={(e) => handleSlotChange(e.target.value)}
+                disabled={executing}
+                className="w-full text-[10px] bg-background border border-border rounded px-1.5 py-1 disabled:opacity-50"
+              >
+                <option value="">
+                  {plugin.model
+                    ? `${t("plugin.defaultSlot", "default")}: ${plugin.model}`
+                    : t("plugin.autoSlot", "auto (system default)")}
+                </option>
+                {resolvedSlots.filter(s => s.tag === "text").map((slot) => (
+                  <option key={slot.slotId} value={slot.slotId}>
+                    {slot.slotId.toUpperCase()} — {slot.serverModel ?? slot.presetId}
+                  </option>
+                ))}
+              </select>
+              {boundSlot && (
+                <p className="text-[9px] text-muted-foreground">
+                  {t("plugin.modelOverrideHint", "Override active — next turn will use this model")}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Config fields */}
           {configFields.length > 0 && (
             <div className="space-y-1.5">
@@ -412,6 +469,8 @@ export function PluginListPanel({
   sessionPlugins,
   executing,
   onTogglePlugin,
+  resolvedSlots,
+  sessionId,
 }: PluginListPanelProps) {
   const { t } = useTranslation();
 
@@ -453,6 +512,8 @@ export function PluginListPanel({
               plugin={sp}
               executing={executing}
               onToggle={onTogglePlugin}
+              resolvedSlots={resolvedSlots}
+              sessionId={sessionId}
             />
           ))
         : packages.map((pkg) => (
