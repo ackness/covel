@@ -409,7 +409,7 @@ export async function disableSessionPlugin(
 // ── Session API ────────────────────────────────────────────────────
 
 export async function listSessions(worldId: string): Promise<SessionRecord[]> {
-  const res = await request<{ items: SessionRecord[] } | SessionRecord[]>(`/sessions?worldId=${encodeURIComponent(worldId)}`);
+  const res = await request<{ items: SessionRecord[] } | SessionRecord[]>(`/api/sessions?worldId=${encodeURIComponent(worldId)}`);
   return Array.isArray(res) ? res : res.items;
 }
 
