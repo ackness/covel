@@ -10,7 +10,7 @@ import { streamSSE } from 'hono/streaming';
 import type { DataStore } from '@covel/store';
 import type { PluginRegistry, LoadedRuntime } from '@covel/plugin-loader';
 import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
-import { executeTurn, processRuntimeResult } from '@covel/runtime';
+import { executeTurn, processRuntimeResult, createTraceRecorder } from '@covel/runtime';
 import type { RuntimeManifest } from '@covel/shared';
 import { loadSessionConfig } from './load-session-config.js';
 
@@ -143,10 +143,14 @@ actionRoutes.post('/', async (c) => {
         });
       }
 
+      // Create trace recorder for this turn (persists all lifecycle events to DB)
+      const trace = createTraceRecorder(store, sessionId, turnId);
+
       // Emit phase change
       await stream.writeSSE({ data: JSON.stringify(makeEnvelope('phase_change', { phase: 'playing' })) });
 
       // Emit runtime progress: starting
+      await trace.turnStarted({ runtimeCount: activeRuntimes.length });
       await stream.writeSSE({
         data: JSON.stringify(makeEnvelope('runtime.progress', {
           status: 'executing',
@@ -181,6 +185,7 @@ actionRoutes.post('/', async (c) => {
             });
           },
           onRuntimeStart: async (info) => {
+            await trace.runtimeStarted({ runtimeId: info.runtimeId, pluginId: info.pluginId, priority: info.priority });
             await stream.writeSSE({
               data: JSON.stringify(makeEnvelope('runtime.progress', {
                 status: 'started',
@@ -191,6 +196,7 @@ actionRoutes.post('/', async (c) => {
             });
           },
           onRuntimeComplete: async (info) => {
+            await trace.runtimeCompleted({ runtimeId: info.runtimeId, pluginId: info.pluginId, status: info.status, durationMs: info.durationMs });
             await stream.writeSSE({
               data: JSON.stringify(makeEnvelope('runtime.progress', {
                 status: 'completed',
@@ -238,7 +244,8 @@ actionRoutes.post('/', async (c) => {
         }
       }
 
-      // Emit runtime progress: complete
+      // Emit runtime progress: complete + persist trace
+      await trace.turnCompleted({ durationMs: result.durationMs, resultCount: result.runtimeResults.length });
       await stream.writeSSE({
         data: JSON.stringify(makeEnvelope('runtime.progress', {
           status: 'completed',

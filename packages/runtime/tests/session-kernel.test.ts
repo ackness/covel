@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { normalizeOutput, createCommitPipeline, processRuntimeResult } from '../src/session-kernel.js';
+import { normalizeOutput, createCommitPipeline, processRuntimeResult, createTraceRecorder } from '../src/session-kernel.js';
 import type { Proposal, SessionEvent, RuntimeResult } from '@covel/shared';
 
 const SOURCE = { pluginId: 'test-plugin', runtimeId: 'test-runtime' };
@@ -454,5 +454,67 @@ describe('processRuntimeResult', () => {
     expect(events[0].source).toEqual({ pluginId: 'core-narrator', runtimeId: 'core-narrator' });
     const msgArg = store.addMessage.mock.calls[0][0];
     expect(msgArg.metadata.runtimeId).toBe('core-narrator');
+  });
+});
+
+// ── TraceRecorder Tests ──────────────────────────────────────────
+
+describe('createTraceRecorder', () => {
+  function createMockStore() {
+    return {
+      addTraceEvent: vi.fn(),
+    };
+  }
+
+  it('should record runtime.started trace events', async () => {
+    const store = createMockStore();
+    const recorder = createTraceRecorder(store as any, SESSION_ID, TURN_ID);
+
+    await recorder.runtimeStarted({ runtimeId: 'core-narrator', pluginId: 'core-narrator', priority: 500 });
+
+    expect(store.addTraceEvent).toHaveBeenCalledOnce();
+    const arg = store.addTraceEvent.mock.calls[0][0];
+    expect(arg.type).toBe('runtime.started');
+    expect(arg.sessionId).toBe(SESSION_ID);
+    expect(arg.turnId).toBe(TURN_ID);
+    expect(arg.payload.runtimeId).toBe('core-narrator');
+    expect(arg.payload.priority).toBe(500);
+  });
+
+  it('should record runtime.completed trace events', async () => {
+    const store = createMockStore();
+    const recorder = createTraceRecorder(store as any, SESSION_ID, TURN_ID);
+
+    await recorder.runtimeCompleted({ runtimeId: 'core-narrator', pluginId: 'core-narrator', status: 'success', durationMs: 1500 });
+
+    expect(store.addTraceEvent).toHaveBeenCalledOnce();
+    const arg = store.addTraceEvent.mock.calls[0][0];
+    expect(arg.type).toBe('runtime.completed');
+    expect(arg.payload.durationMs).toBe(1500);
+  });
+
+  it('should record runtime.failed trace events', async () => {
+    const store = createMockStore();
+    const recorder = createTraceRecorder(store as any, SESSION_ID, TURN_ID);
+
+    await recorder.runtimeFailed({ runtimeId: 'r1', pluginId: 'p1', error: 'LLM timeout' });
+
+    const arg = store.addTraceEvent.mock.calls[0][0];
+    expect(arg.type).toBe('runtime.failed');
+    expect(arg.payload.error).toBe('LLM timeout');
+  });
+
+  it('should record turn.started and turn.completed', async () => {
+    const store = createMockStore();
+    const recorder = createTraceRecorder(store as any, SESSION_ID, TURN_ID);
+
+    await recorder.turnStarted({ runtimeCount: 5 });
+    await recorder.turnCompleted({ durationMs: 3000, resultCount: 4 });
+
+    expect(store.addTraceEvent).toHaveBeenCalledTimes(2);
+    expect(store.addTraceEvent.mock.calls[0][0].type).toBe('turn.started');
+    expect(store.addTraceEvent.mock.calls[0][0].payload.runtimeCount).toBe(5);
+    expect(store.addTraceEvent.mock.calls[1][0].type).toBe('turn.completed');
+    expect(store.addTraceEvent.mock.calls[1][0].payload.durationMs).toBe(3000);
   });
 });

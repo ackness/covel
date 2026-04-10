@@ -282,6 +282,46 @@ export async function processRuntimeResult(
     .map(r => r.event!);
 }
 
+// ── Trace Recorder ──────────────────────────────────────────────
+
+/**
+ * Records structured trace events for runtime execution lifecycle.
+ * All events are persisted to trace_events table for debug/audit.
+ */
+export interface TraceRecorder {
+  turnStarted(info: { runtimeCount: number }): Promise<void>;
+  turnCompleted(info: { durationMs: number; resultCount: number }): Promise<void>;
+  runtimeStarted(info: { runtimeId: string; pluginId: string; priority: number }): Promise<void>;
+  runtimeCompleted(info: { runtimeId: string; pluginId: string; status: string; durationMs: number }): Promise<void>;
+  runtimeFailed(info: { runtimeId: string; pluginId: string; error: string }): Promise<void>;
+}
+
+export function createTraceRecorder(
+  store: Pick<KernelStore, 'addTraceEvent'>,
+  sessionId: string,
+  turnId: string,
+): TraceRecorder {
+  async function record(type: string, payload: Record<string, unknown>): Promise<void> {
+    await store.addTraceEvent({
+      id: crypto.randomUUID(),
+      sessionId,
+      type,
+      traceId: turnId,
+      turnId,
+      payload,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  return {
+    turnStarted: (info) => record('turn.started', info),
+    turnCompleted: (info) => record('turn.completed', info),
+    runtimeStarted: (info) => record('runtime.started', info),
+    runtimeCompleted: (info) => record('runtime.completed', info),
+    runtimeFailed: (info) => record('runtime.failed', info),
+  };
+}
+
 // ── Helpers ──────────────────────────────────────────────────────
 
 function makeEvent(type: string, proposal: Proposal, payload: Record<string, unknown>): SessionEvent {
