@@ -34,7 +34,12 @@ export function parsePluginMd(content: string, filePath: string): ParsedPluginMd
 
   let manifest;
   try {
-    manifest = runtimeManifestSchema.parse(data);
+    const parsed = runtimeManifestSchema.parse(data);
+    // Derive pluginId from name: "core-world-init/schema-gen" → "core-world-init"
+    // Single-runtime plugins: pluginId === name
+    const slashIdx = parsed.name.indexOf('/');
+    const pluginId = slashIdx >= 0 ? parsed.name.slice(0, slashIdx) : parsed.name;
+    manifest = { ...parsed, pluginId };
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : String(error);

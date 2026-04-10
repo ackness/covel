@@ -62,6 +62,8 @@ export interface PluginSummary {
 export interface FunctionHandlerContext {
   readonly sessionId: string;
   readonly turnId: string;
+  /** Plugin ID this handler belongs to (derived from manifest). */
+  readonly pluginId: string;
   readonly playerMessage: string;
   readonly locale?: string;
   readonly store: unknown;
@@ -80,6 +82,8 @@ export interface LoadedRuntime {
   readonly outputSchema?: Readonly<Record<string, unknown>>;
   /** Handler function for `runtimeType: 'function'` runtimes. */
   readonly handler?: FunctionHandler;
+  /** Guard function — runs before agent execution, returns `{ skip: true }` to bypass LLM. */
+  readonly guard?: FunctionHandler;
 }
 
 // ── Plugin registry ──────────────────────────────────────────────
@@ -94,7 +98,10 @@ export type PluginEntryStatus =
 export interface PluginRegistryEntry {
   readonly id: string;
   readonly summary: PluginSummary;
+  /** Primary manifest (first runtime). */
   readonly manifest?: ParsedPluginMd;
+  /** All manifests for multi-runtime plugins. */
+  readonly manifests?: readonly ParsedPluginMd[];
   readonly loadedRuntimes: ReadonlyMap<string, LoadedRuntime>;
   readonly status: PluginEntryStatus;
   readonly error?: string;

@@ -312,7 +312,7 @@ async function executeOneRuntime(
   try {
     await deps.onRuntimeStart?.({
       runtimeId: manifest.name,
-      pluginId: manifest.name,
+      pluginId: manifest.pluginId,
       priority: manifest.priority,
     });
   } catch {
@@ -321,7 +321,7 @@ async function executeOneRuntime(
 
   emitSubEvent(deps.eventBus, 'runtime', 'runtime.started', input.sessionId, {
     runtimeId: manifest.name,
-    pluginId: manifest.name,
+    pluginId: manifest.pluginId,
     priority: manifest.priority,
   });
 
@@ -337,10 +337,11 @@ async function executeOneRuntime(
       if (!loaded.handler) {
         return makeFailedResult(manifest, input, runId, startTime, 'Function runtime missing handler');
       }
-      const config = deps.getConfig(manifest.name, manifest.name);
+      const config = deps.getConfig(manifest.pluginId, manifest.name);
       const output = await loaded.handler({
         sessionId: input.sessionId,
         turnId: input.turnId,
+        pluginId: manifest.pluginId,
         playerMessage: input.playerMessage,
         locale: input.locale,
         store: deps.store,
@@ -349,7 +350,7 @@ async function executeOneRuntime(
       });
 
       const result: RuntimeResult = {
-        pluginId: manifest.name,
+        pluginId: manifest.pluginId,
         runtimeId: manifest.name,
         runId,
         turnId: input.turnId,
@@ -372,7 +373,7 @@ async function executeOneRuntime(
           sessionId: input.sessionId,
           turnId: input.turnId,
           sourceType: 'runtime',
-          sourcePluginId: manifest.name,
+          sourcePluginId: manifest.pluginId,
           sourceRuntimeId: manifest.name,
           role: 'assistant',
           name: manifest.name,
@@ -384,14 +385,14 @@ async function executeOneRuntime(
 
       await deps.onRuntimeComplete?.({
         runtimeId: manifest.name,
-        pluginId: manifest.name,
+        pluginId: manifest.pluginId,
         status: result.status,
         durationMs: result.durationMs,
       });
 
       emitSubEvent(deps.eventBus, 'runtime', 'runtime.completed', input.sessionId, {
         runtimeId: manifest.name,
-        pluginId: manifest.name,
+        pluginId: manifest.pluginId,
         status: result.status,
         durationMs: result.durationMs,
       });
@@ -399,9 +400,63 @@ async function executeOneRuntime(
       return result;
     }
 
+    // ── Guard: pre-execution gate for agent runtimes ────────────
+    if (loaded.guard) {
+      const guardConfig = deps.getConfig(manifest.pluginId, manifest.name);
+      const guardOutput = await loaded.guard({
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        pluginId: manifest.pluginId,
+        playerMessage: input.playerMessage,
+        locale: input.locale,
+        store: deps.store,
+        completedResults,
+        config: guardConfig,
+      });
+
+      if (guardOutput.skip === true) {
+        const result: RuntimeResult = {
+          pluginId: manifest.pluginId,
+          runtimeId: manifest.name,
+          runId,
+          turnId: input.turnId,
+          status: 'success',
+          output: guardOutput,
+          toolCalls: [],
+          durationMs: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+        };
+
+        if (deps.store && typeof guardOutput.narrativeOutput === 'string' && guardOutput.narrativeOutput) {
+          await deps.store.appendTurnMessage({
+            id: crypto.randomUUID(),
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            sourceType: 'runtime',
+            sourcePluginId: manifest.pluginId,
+            sourceRuntimeId: manifest.name,
+            role: 'assistant',
+            name: manifest.name,
+            content: guardOutput.narrativeOutput as string,
+            order: manifest.priority,
+            createdAt: new Date().toISOString(),
+          });
+        }
+
+        emitSubEvent(deps.eventBus, 'runtime', 'runtime.completed', input.sessionId, {
+          runtimeId: manifest.name,
+          pluginId: manifest.pluginId,
+          status: 'success',
+          durationMs: result.durationMs,
+        });
+
+        return result;
+      }
+    }
+
     // ── Agent runtime: LLM pipeline ─────────────────────────────
     // Build context
-    const config = deps.getConfig(manifest.name, manifest.name);
+    const config = deps.getConfig(manifest.pluginId, manifest.name);
     const assembled = buildContext({
       promptTemplate: loaded.promptTemplate,
       manifest,
@@ -456,7 +511,7 @@ async function executeOneRuntime(
             try {
               await deps.onDelta!({
                 runtimeId: manifest.name,
-                pluginId: manifest.name,
+                pluginId: manifest.pluginId,
                 textDelta: event.textDelta,
               });
             } catch {
@@ -506,7 +561,7 @@ async function executeOneRuntime(
           if (deps.toolExecutor) {
             const result = await deps.toolExecutor.execute(
               { toolCallId: tc.id, name: tc.name, arguments: tc.arguments },
-              { sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.name, runtimeId: manifest.name },
+              { sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name },
             );
 
             executedToolCalls.push({
@@ -584,7 +639,7 @@ async function executeOneRuntime(
     }
 
     const result: RuntimeResult = {
-      pluginId: manifest.name,
+      pluginId: manifest.pluginId,
       runtimeId: manifest.name,
       runId,
       turnId: input.turnId,
@@ -619,7 +674,7 @@ async function executeOneRuntime(
         sessionId: input.sessionId,
         turnId: input.turnId,
         sourceType: 'runtime',
-        sourcePluginId: manifest.name,
+        sourcePluginId: manifest.pluginId,
         sourceRuntimeId: manifest.name,
         role: 'assistant',
         name: manifest.name,
@@ -633,14 +688,14 @@ async function executeOneRuntime(
 
     await deps.onRuntimeComplete?.({
       runtimeId: manifest.name,
-      pluginId: manifest.name,
+      pluginId: manifest.pluginId,
       status: result.status,
       durationMs: result.durationMs,
     });
 
     emitSubEvent(deps.eventBus, 'runtime', 'runtime.completed', input.sessionId, {
       runtimeId: manifest.name,
-      pluginId: manifest.name,
+      pluginId: manifest.pluginId,
       status: result.status,
       durationMs: result.durationMs,
     });
@@ -651,14 +706,14 @@ async function executeOneRuntime(
     const failedResult = makeFailedResult(manifest, input, runId, startTime, message);
     await deps.onRuntimeComplete?.({
       runtimeId: manifest.name,
-      pluginId: manifest.name,
+      pluginId: manifest.pluginId,
       status: failedResult.status,
       durationMs: failedResult.durationMs,
     });
 
     emitSubEvent(deps.eventBus, 'runtime', 'runtime.failed', input.sessionId, {
       runtimeId: manifest.name,
-      pluginId: manifest.name,
+      pluginId: manifest.pluginId,
       status: failedResult.status,
       durationMs: failedResult.durationMs,
       error: message,
@@ -718,7 +773,7 @@ function makeFailedResult(
   error: string,
 ): RuntimeResult {
   return {
-    pluginId: manifest.name,
+    pluginId: manifest.pluginId,
     runtimeId: manifest.name,
     runId,
     turnId: input.turnId,

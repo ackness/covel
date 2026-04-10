@@ -6,9 +6,12 @@
  *   - pluginRegistry: PluginRegistry
  */
 
+import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import type { PluginRegistry } from '@covel/plugin-loader';
 import type { DataStore, SessionRecord } from '@covel/store';
+
+const SAFE_WORLD_ID_RE = /^[a-z0-9_-]{1,64}$/i;
 
 // ── Env type for DI ─────────────────────────────────────────────────
 
@@ -40,7 +43,20 @@ sessionRoutes.post('/start', async (c) => {
     return c.json({ error: 'plugins must be an array of strings' }, 400);
   }
 
-  const id = crypto.randomUUID();
+  const rawWorldId = typeof body.worldId === 'string' ? body.worldId : undefined;
+
+  // Validate worldId format — only alphanumeric, hyphens, underscores (max 64 chars)
+  if (rawWorldId !== undefined && !SAFE_WORLD_ID_RE.test(rawWorldId)) {
+    return c.json({ error: 'Invalid worldId: must match /^[a-z0-9_-]{1,64}$/i' }, 400);
+  }
+
+  const worldId = rawWorldId;
+
+  // Generate session ID with random suffix to prevent enumeration (IDOR)
+  const prefix = worldId ?? 'session';
+  const suffix = randomUUID().slice(0, 8);
+  const id = `${prefix}-${suffix}`;
+
   const plugins = (Array.isArray(body.plugins) ? body.plugins : []) as string[];
 
   // Activate requested plugins in registry (skip unknown IDs)
@@ -53,7 +69,7 @@ sessionRoutes.post('/start', async (c) => {
   const now = new Date().toISOString();
   const session: SessionRecord = {
     id,
-    worldId: typeof body.worldId === 'string' ? body.worldId : undefined,
+    worldId,
     locale: typeof body.locale === 'string' ? body.locale : 'zh-CN',
     phase: 'pre-game',
     turnCount: 0,

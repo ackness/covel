@@ -14,6 +14,7 @@ import {
   loadPluginSummary,
   loadPluginManifest,
   loadRuntime as loadRuntimeFromDisk,
+  getPluginTrustInfo,
   type PluginRegistry,
   type LoadedRuntime,
   type PluginDiscoveryResult,
@@ -24,7 +25,7 @@ import { createEventBus, type EventBus } from '@covel/events';
 import type { DataStore } from '@covel/store';
 import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
 import { createToolExecutor } from '@covel/runtime';
-import { builtinUITools, tool, type ToolModule } from '@covel/tools';
+import { builtinUITools, createPluginDataTools, tool, shortId, shortIdBatch, type ToolModule } from '@covel/tools';
 import { z } from 'zod';
 import { createApprovalPipeline } from '@covel/approval';
 import type { PermissionRule } from '@covel/approval';
@@ -42,6 +43,8 @@ import { messageRoutes } from './messages.js';
 import { characterRoutes } from './characters.js';
 import { actionRoutes } from './actions.js';
 import { subscribeRoutes } from './subscribe.js';
+import { pluginDataRoutes } from './plugin-data.js';
+import { createRoutes } from './create.js';
 
 // ── Bootstrap config ─────────────────────────────────────────────
 
@@ -91,20 +94,35 @@ export async function bootstrapV2(config: V2BootstrapConfig): Promise<V2Bootstra
   const manifestCache = new Map<string, readonly ParsedPluginMd[]>();
 
   for (const discovery of discoveries) {
-    discoveryMap.set(discovery.id, discovery);
+    try {
+      const summary = await loadPluginSummary(discovery);
+      const manifests = await loadPluginManifest(discovery);
 
-    const summary = await loadPluginSummary(discovery);
-    const manifests = await loadPluginManifest(discovery);
-    manifestCache.set(discovery.id, manifests);
+      discoveryMap.set(discovery.id, discovery);
+      manifestCache.set(discovery.id, manifests);
 
-    // Register with first manifest for getActiveRuntimes
-    registry.register({
-      id: discovery.id,
-      summary,
-      manifest: manifests[0],
-      loadedRuntimes: new Map(),
-      status: 'registered',
-    });
+      // Register with all manifests (first is primary for getActiveRuntimes)
+      registry.register({
+        id: discovery.id,
+        summary,
+        manifest: manifests[0],
+        manifests,
+        loadedRuntimes: new Map(),
+        status: 'registered',
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[bootstrap] Failed to load plugin ${discovery.id}:`, message);
+
+      // Register as error so the frontend can display it — don't crash the whole server
+      registry.register({
+        id: discovery.id,
+        summary: { id: discovery.id, name: discovery.id, description: '', pluginType: 'plugin', runtimeCount: 0 },
+        loadedRuntimes: new Map(),
+        status: 'error',
+        error: message,
+      });
+    }
   }
 
   // 3. Create remaining shared state
@@ -131,11 +149,26 @@ export async function bootstrapV2(config: V2BootstrapConfig): Promise<V2Bootstra
     builtinToolNames.add(t.name);
   }
 
+  // Register plugin-data tools (store-bound via closure)
+  for (const t of createPluginDataTools(store)) {
+    toolMap.set(t.name, t);
+    builtinToolNames.add(t.name);
+  }
+
   // Injection context for factory-style tools (zero-dep plugin tools)
-  const toolInjection = { tool, z };
+  const toolInjection = { tool, z, shortId, shortIdBatch, store };
 
   // Load plugin local tools from tools/ directories
+  // SECURITY: Only auto-load tools from trusted plugins (builtin/official).
+  // Community plugins register metadata only; their tools are deferred until
+  // explicit approval via the plugin management API.
   for (const [pluginId, discovery] of discoveryMap) {
+    const trust = getPluginTrustInfo(pluginId);
+    if (!trust.autoLoad) {
+      // Community plugin — skip import(), tools registered on approval
+      continue;
+    }
+
     const manifests = manifestCache.get(pluginId);
     if (!manifests) continue;
     for (const parsed of manifests) {
@@ -195,8 +228,23 @@ export async function bootstrapV2(config: V2BootstrapConfig): Promise<V2Bootstra
     },
   });
 
-  // 6. Create app with dependency injection middleware
+  // 6. getConfigFn — per-request config injection
+  //    Actual config pre-loading happens in route handlers (actions.ts, turn.ts)
+  //    before calling executeTurn, bridging async store reads to sync getConfig interface.
+  const getConfigFn = config.getConfigFn ?? ((_pluginId: string, _runtimeId: string): Readonly<Record<string, unknown>> => ({}));
+
+  // 7. Create app with dependency injection middleware
   const app = new Hono();
+
+  const isDev = process.env.NODE_ENV !== 'production';
+  app.onError((err, c) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[v2] Route error:`, err);
+    return c.json(
+      { error: isDev ? message : 'Internal server error' },
+      { status: 500 },
+    );
+  });
 
   app.use('*', async (c, next) => {
     c.set('store', store);
@@ -207,9 +255,7 @@ export async function bootstrapV2(config: V2BootstrapConfig): Promise<V2Bootstra
     c.set('llmAdapter', config.llmAdapter);
     c.set('loadRuntimeFn', loadRuntimeFn);
     c.set('toolExecutor', toolExecutor);
-    if (config.getConfigFn) {
-      c.set('getConfigFn', config.getConfigFn);
-    }
+    c.set('getConfigFn', getConfigFn);
     await next();
   });
 
@@ -222,11 +268,13 @@ export async function bootstrapV2(config: V2BootstrapConfig): Promise<V2Bootstra
   app.route('/v2/session', submitInputsRoutes);
   app.route('/v2/session', messageRoutes);
   app.route('/v2/session', characterRoutes);
+  app.route('/v2/session', pluginDataRoutes);
   app.route('/v2/events', eventRoutes);
   app.route('/v2/events', subscribeRoutes);
   app.route('/v2/runtime', runtimeRoutes);
   app.route('/v2/worlds', worldRoutes);
   app.route('/v2/health', healthRoutes);
+  app.route('/v2/create', createRoutes);
   app.route('/actions', actionRoutes);
 
   return { app, registry, stateManager, store, eventBus };

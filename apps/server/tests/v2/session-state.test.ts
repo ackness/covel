@@ -106,6 +106,66 @@ describe('V2 Session Routes', () => {
       expect(session!.turnCount).toBe(0);
     });
 
+    it('rejects worldId with invalid characters', async () => {
+      const res = await app.request('/v2/session/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ worldId: '../../etc' }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await json(res) as Record<string, unknown>;
+      expect(body.error).toBeDefined();
+    });
+
+    it('rejects worldId with special characters', async () => {
+      const res = await app.request('/v2/session/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ worldId: '<script>alert(1)</script>' }),
+      });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects worldId exceeding max length', async () => {
+      const res = await app.request('/v2/session/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ worldId: 'a'.repeat(65) }),
+      });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('generates non-sequential session IDs', async () => {
+      // Create two sessions — IDs should not be predictable sequential numbers
+      const res1 = await app.request('/v2/session/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ worldId: 'testworld' }),
+      });
+      const res2 = await app.request('/v2/session/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ worldId: 'testworld' }),
+      });
+
+      const body1 = await json(res1) as { sessionId: string };
+      const body2 = await json(res2) as { sessionId: string };
+
+      // Both should start with the worldId prefix
+      expect(body1.sessionId).toMatch(/^testworld-/);
+      expect(body2.sessionId).toMatch(/^testworld-/);
+
+      // But should NOT be sequential numbers
+      expect(body1.sessionId).not.toBe('testworld-1');
+      expect(body2.sessionId).not.toBe('testworld-2');
+
+      // And should be different from each other
+      expect(body1.sessionId).not.toBe(body2.sessionId);
+    });
+
     it('accepts optional plugins list', async () => {
       const res = await app.request('/v2/session/start', {
         method: 'POST',

@@ -66,6 +66,14 @@ export interface InputConfig {
 
 // ── Output declarations ──────────────────────────────────────────
 
+/**
+ * How the framework treats this runtime's output in the UI.
+ * - `story` — main narrative content, shown in the chat stream.
+ * - `plugin` (default) — auxiliary content, may be hidden from main chat.
+ * - `system` — system-level output, not shown to the player.
+ */
+export type OutputKind = 'story' | 'plugin' | 'system';
+
 export interface OutputConfig {
   /** Relative path to output.schema.json. */
   readonly schema?: string;
@@ -105,6 +113,13 @@ export interface PluginConfigField {
 
 export interface RuntimeManifest {
   readonly name: string;
+  /**
+   * Plugin ID this runtime belongs to.
+   * For single-runtime plugins: same as `name`.
+   * For multi-runtime plugins (name = "plugin/sub-runtime"): the part before `/`.
+   * Set by the plugin loader during manifest parsing — not declared in PLUGIN.md.
+   */
+  readonly pluginId: string;
   readonly description: string;
   readonly priority: number;
   readonly version?: string;
@@ -115,8 +130,26 @@ export interface RuntimeManifest {
   readonly runtimeType?: RuntimeType;
   /** Relative path to handler module (required for runtimeType: 'function'). */
   readonly handler?: string;
+  /**
+   * Relative path to a guard function module.
+   * Runs before agent execution — if it returns `{ skip: true }`, the LLM call is skipped.
+   * The guard receives the same `FunctionHandlerContext` as function runtimes.
+   * Guard output is merged into the runtime result's `output` field.
+   */
+  readonly guard?: string;
   readonly model?: string;
   readonly pluginType?: PluginType;
+  /**
+   * How the framework treats this runtime's output in the UI.
+   * Defaults to `'plugin'`. Only `'story'` outputs are shown in the main chat stream.
+   */
+  readonly outputKind?: OutputKind;
+  /**
+   * Capability tags declared by this plugin/runtime.
+   * The framework uses these to discover plugins by capability instead of by ID.
+   * Examples: `['narrative']`, `['world-data-provider']`, `['image-generation']`.
+   */
+  readonly capabilities?: readonly string[];
   readonly trigger?: TriggerConfig;
   readonly tools?: ToolsConfig;
   readonly input?: InputConfig;

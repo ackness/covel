@@ -3,6 +3,100 @@ import type { ProviderConfig, UsageSummary } from "../types.js";
 /** Maximum characters to include in error message previews. */
 const ERROR_PREVIEW_MAX_CHARS = 200;
 
+// ── SSRF Protection ─────────────────────────────────────────────────
+
+/** Known LLM provider domains (and subdomains). */
+const KNOWN_PROVIDER_DOMAINS = [
+  'api.openai.com',
+  'openai.com',
+  'anthropic.com',
+  'api.anthropic.com',
+  'api.deepseek.com',
+  'deepseek.com',
+  'dashscope.aliyuncs.com',
+  'openrouter.ai',
+  'api.groq.com',
+  'generativelanguage.googleapis.com',
+  'api.mistral.ai',
+  'api.together.xyz',
+  'api.fireworks.ai',
+  'api.cohere.com',
+];
+
+/** RFC1918, link-local, and cloud metadata IP patterns. */
+const BLOCKED_IP_PATTERNS = [
+  /^10\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+  /^192\.168\./,
+  /^169\.254\./,
+  /^127\./,
+  /^0\./,
+  /^fc00:/i,
+  /^fe80:/i,
+  /^::1$/,
+];
+
+const BLOCKED_HOSTNAMES = [
+  'metadata.google.internal',
+  'metadata.internal',
+];
+
+function getCustomAllowedHosts(): string[] {
+  const raw = process.env.COVEL_ALLOWED_LLM_HOSTS;
+  if (!raw) return [];
+  return raw.split(',').map((h) => h.trim()).filter(Boolean);
+}
+
+function isDomainAllowed(hostname: string): boolean {
+  // localhost is always allowed (dev)
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
+
+  // Check blocked hostnames
+  if (BLOCKED_HOSTNAMES.includes(hostname)) return false;
+
+  // Check blocked IP ranges
+  for (const pattern of BLOCKED_IP_PATTERNS) {
+    if (pattern.test(hostname)) return false;
+  }
+
+  // Check known providers (exact or subdomain match)
+  for (const domain of KNOWN_PROVIDER_DOMAINS) {
+    if (hostname === domain || hostname.endsWith(`.${domain}`)) return true;
+  }
+
+  // Check custom allowed hosts from env
+  for (const host of getCustomAllowedHosts()) {
+    if (hostname === host || hostname.endsWith(`.${host}`)) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Validate a base URL against SSRF protections.
+ * Returns true if the URL is safe to use for server-side requests.
+ */
+export function validateBaseUrl(url: string): boolean {
+  if (!url) return false;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+
+  // Only http/https allowed
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+
+  // http only for localhost
+  if (parsed.protocol === 'http:' && parsed.hostname !== 'localhost' && parsed.hostname !== '127.0.0.1') {
+    return false;
+  }
+
+  return isDomainAllowed(parsed.hostname);
+}
+
 /**
  * POST JSON body to a provider endpoint.
  */
@@ -15,6 +109,9 @@ export async function postJson(
 ): Promise<Response> {
   if (!config.baseUrl) {
     throw new Error("Provider error: baseUrl is required.");
+  }
+  if (!validateBaseUrl(config.baseUrl)) {
+    throw new Error(`Provider error: baseUrl "${config.baseUrl}" is not allowed. Add it to COVEL_ALLOWED_LLM_HOSTS if this is a legitimate provider.`);
   }
 
   const headers: Record<string, string> = {
