@@ -7,7 +7,7 @@
  * to replace Record<string, unknown> assertions throughout.
  */
 
-import type { RuntimeManifest, RuntimeResult, TurnInput, TurnResult } from '@covel/shared';
+import type { RuntimeManifest, RuntimeResult, TurnInput, TurnResult, ToolCallRecord } from '@covel/shared';
 import type { LoadedRuntime } from '@covel/plugin-loader';
 import type { DataStore, TurnMessageRecord } from '@covel/store';
 import type { EventBus } from '@covel/events';
@@ -203,41 +203,41 @@ export async function executeTurn(
     }
   }
 
-  // Collect pending inputs from stored TurnMessages (populated by executeOneRuntime)
+  // Collect pending inputs from completed RuntimeResults (avoids redundant DB reload)
   const pendingInputs: import('@covel/shared').PendingInputInfo[] = [];
-  if (deps.store) {
-    const turnMessages = await deps.store.listTurnMessages(input.sessionId);
-    const thisTurnMessages = turnMessages.filter((m) => m.turnId === input.turnId);
-    for (const msg of thisTurnMessages) {
-      if (msg.pendingInput && msg.sourcePluginId) {
-        const raw = msg.pendingInput;
-        if (Array.isArray(raw)) {
-          // New format: array of InteractionPayload
-          for (const interaction of raw as Array<Record<string, unknown>>) {
-            pendingInputs.push({
-              pluginId: msg.sourcePluginId,
-              runtimeId: msg.sourceRuntimeId ?? msg.sourcePluginId,
-              interaction: interaction as unknown as import('@covel/shared').InteractionPayload,
-              form: interaction.type === 'form' ? interaction as Record<string, unknown> : undefined,
-              narrativeTemplate: (interaction.narrativeTemplate as string) ?? msg.content,
-            });
-          }
-        } else {
-          // Legacy format: single form object
-          const form = raw as Record<string, unknown>;
-          pendingInputs.push({
-            pluginId: msg.sourcePluginId,
-            runtimeId: msg.sourceRuntimeId ?? msg.sourcePluginId,
-            interaction: {
-              type: 'form',
-              interactionId: (form.formId ?? '') as string,
-              ...(form as object),
-            } as import('@covel/shared').InteractionPayload,
-            form,
-            narrativeTemplate: msg.content,
-          });
-        }
+  for (const [, result] of completedResults) {
+    if (!result.output) continue;
+    const out = result.output as Record<string, unknown>;
+    const interactions = out.interactions as Array<Record<string, unknown>> | undefined;
+    const form = out.form as Record<string, unknown> | undefined;
+    const narrativeFallback =
+      typeof out.narrativeTemplate === 'string' ? out.narrativeTemplate :
+      typeof out.narrativeOutput === 'string' ? out.narrativeOutput :
+      '';
+
+    if (interactions && interactions.length > 0) {
+      for (const interaction of interactions) {
+        pendingInputs.push({
+          pluginId: result.pluginId,
+          runtimeId: result.runtimeId,
+          interaction: interaction as unknown as import('@covel/shared').InteractionPayload,
+          form: interaction.type === 'form' ? interaction as Record<string, unknown> : undefined,
+          narrativeTemplate: (interaction.narrativeTemplate as string) ?? narrativeFallback,
+        });
       }
+    } else if (form?.formId) {
+      // Legacy format: single form object
+      pendingInputs.push({
+        pluginId: result.pluginId,
+        runtimeId: result.runtimeId,
+        interaction: {
+          type: 'form',
+          interactionId: (form.formId ?? '') as string,
+          ...(form as object),
+        } as import('@covel/shared').InteractionPayload,
+        form,
+        narrativeTemplate: narrativeFallback,
+      });
     }
   }
 
@@ -383,12 +383,14 @@ async function executeOneRuntime(
         });
       }
 
-      await deps.onRuntimeComplete?.({
-        runtimeId: manifest.name,
-        pluginId: manifest.pluginId,
-        status: result.status,
-        durationMs: result.durationMs,
-      });
+      try {
+        await deps.onRuntimeComplete?.({
+          runtimeId: manifest.name,
+          pluginId: manifest.pluginId,
+          status: result.status,
+          durationMs: result.durationMs,
+        });
+      } catch { /* callback error must not kill runtime */ }
 
       emitSubEvent(deps.eventBus, 'runtime', 'runtime.completed', input.sessionId, {
         runtimeId: manifest.name,
@@ -474,7 +476,7 @@ async function executeOneRuntime(
 
     // LLM call with tool-calling loop
     let finalContent: string | null = null;
-    const toolCalls: RuntimeResult['toolCalls'] = [];
+    const collectedToolCalls: ToolCallRecord[] = [];
     const executedToolCalls: Array<{ name: string; arguments: string; result: unknown; success: boolean }> = [];
     let steps = 0;
 
@@ -559,6 +561,7 @@ async function executeOneRuntime(
 
         for (const tc of response.toolCalls) {
           if (deps.toolExecutor) {
+            const tcStart = Date.now();
             const result = await deps.toolExecutor.execute(
               { toolCallId: tc.id, name: tc.name, arguments: tc.arguments },
               { sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name },
@@ -569,6 +572,22 @@ async function executeOneRuntime(
               arguments: tc.arguments,
               result: result.parsedResult,
               success: result.success,
+            });
+
+            // Build ToolCallRecord for RuntimeResult.toolCalls
+            let parsedInput: Record<string, unknown> = {};
+            try { parsedInput = JSON.parse(tc.arguments) as Record<string, unknown>; } catch { /* keep empty */ }
+            collectedToolCalls.push({
+              toolCallId: tc.id,
+              toolName: tc.name,
+              pluginId: manifest.pluginId,
+              runtimeId: manifest.name,
+              turnId: input.turnId,
+              input: parsedInput,
+              output: result.parsedResult,
+              durationMs: Date.now() - tcStart,
+              approvalStatus: result.success ? 'auto-allowed' : 'auto-allowed',
+              timestamp: new Date().toISOString(),
             });
 
             messages.push({
@@ -645,7 +664,7 @@ async function executeOneRuntime(
       turnId: input.turnId,
       status: 'success',
       output,
-      toolCalls,
+      toolCalls: collectedToolCalls,
       durationMs: Date.now() - startTime,
       timestamp: new Date().toISOString(),
     };
@@ -686,12 +705,14 @@ async function executeOneRuntime(
       });
     }
 
-    await deps.onRuntimeComplete?.({
-      runtimeId: manifest.name,
-      pluginId: manifest.pluginId,
-      status: result.status,
-      durationMs: result.durationMs,
-    });
+    try {
+      await deps.onRuntimeComplete?.({
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        status: result.status,
+        durationMs: result.durationMs,
+      });
+    } catch { /* callback error must not kill runtime */ }
 
     emitSubEvent(deps.eventBus, 'runtime', 'runtime.completed', input.sessionId, {
       runtimeId: manifest.name,

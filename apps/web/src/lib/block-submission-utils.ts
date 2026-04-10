@@ -4,30 +4,30 @@ export type BlockSubmission =
 
 /**
  * Convert a block submission into either a normal chat message or a custom kernel event.
+ *
+ * Plugin blocks can declare event-based submission by embedding a JSON payload with:
+ *   { _eventType: "some.event.type", ...rest }
+ *
+ * This removes the need for framework code to know about specific plugin block types.
  */
 export function resolveBlockSubmission(
-  blockType: string,
+  _blockType: string,
   value: string,
 ): BlockSubmission {
-  if (blockType === "core_image_settings") {
-    try {
-      const parsed = JSON.parse(value) as Record<string, unknown>;
-      if (
-        parsed.type === "core_image_settings.update" &&
-        parsed.settings &&
-        typeof parsed.settings === "object"
-      ) {
-        return {
-          kind: "trigger_event",
-          eventType: "image.settings.updated",
-          eventData: {
-            settings: parsed.settings as Record<string, unknown>,
-          },
-        };
-      }
-    } catch {
-      // Fall through to normal message handling.
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    // Generic event dispatch: any block can trigger a kernel event
+    // by including `_eventType` in its submission payload
+    if (typeof parsed._eventType === "string" && parsed._eventType.length > 0) {
+      const { _eventType, ...eventData } = parsed;
+      return {
+        kind: "trigger_event",
+        eventType: _eventType,
+        eventData,
+      };
     }
+  } catch {
+    // Not valid JSON — treat as normal message
   }
 
   return { kind: "message", content: value };

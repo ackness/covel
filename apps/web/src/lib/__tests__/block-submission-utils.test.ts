@@ -2,11 +2,11 @@ import { describe, it, expect } from "vitest";
 import { resolveBlockSubmission } from "../block-submission-utils.js";
 
 describe("resolveBlockSubmission", () => {
-  it("routes core image settings updates to a trigger event", () => {
+  it("routes event submissions via _eventType convention", () => {
     const result = resolveBlockSubmission(
-      "core_image_settings",
+      "any_block_type",
       JSON.stringify({
-        type: "core_image_settings.update",
+        _eventType: "image.settings.updated",
         settings: { style: "anime", multiPanel: true },
       }),
     );
@@ -20,12 +20,34 @@ describe("resolveBlockSubmission", () => {
     });
   });
 
-  it("falls back to a normal chat message for invalid settings payloads", () => {
-    const result = resolveBlockSubmission("core_image_settings", "not-json");
+  it("falls back to a normal chat message for invalid JSON", () => {
+    const result = resolveBlockSubmission("some_block", "not-json");
     expect(result).toEqual({ kind: "message", content: "not-json" });
   });
 
-  it("leaves other block types as normal chat messages", () => {
+  it("treats JSON without _eventType as normal chat message", () => {
+    const result = resolveBlockSubmission(
+      "choice_set",
+      JSON.stringify({ action: "attack" }),
+    );
+    expect(result).toEqual({
+      kind: "message",
+      content: JSON.stringify({ action: "attack" }),
+    });
+  });
+
+  it("treats empty _eventType as normal chat message", () => {
+    const result = resolveBlockSubmission(
+      "any_block",
+      JSON.stringify({ _eventType: "", data: 123 }),
+    );
+    expect(result).toEqual({
+      kind: "message",
+      content: JSON.stringify({ _eventType: "", data: 123 }),
+    });
+  });
+
+  it("leaves plain text as normal chat messages", () => {
     const result = resolveBlockSubmission("choice_set", "attack");
     expect(result).toEqual({ kind: "message", content: "attack" });
   });

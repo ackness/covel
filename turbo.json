@@ -13,6 +13,11 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "test": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": ["src/**", "tests/**", "vitest.config.ts"]
+    },
     "lint": {
       "dependsOn": ["^build"]
     },

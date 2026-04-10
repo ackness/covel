@@ -4,49 +4,16 @@ import { Link } from "@tanstack/react-router";
 import {
   SlidersHorizontal,
   Database,
-  MessageSquare,
-  Settings2,
-  History,
   Send,
   Code,
   LayoutTemplate,
   Loader2,
-  AlertCircle,
   KeyRound,
-  Plus,
-  PanelLeftClose,
-  PanelRightClose,
-  BookOpen,
-  MapIcon,
-  Copy,
   Check,
-  Gamepad2,
   Bug,
-  Trash2,
-  Flame,
-  Library,
-  ImageIcon,
 } from "lucide-react";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs.js";
-import { ScrollArea } from "@/components/ui/scroll-area.js";
-import { Card, CardContent } from "@/components/ui/card.js";
-import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogClose,
-} from "@/components/ui/dialog.js";
 import { Toggle } from "@/components/ui/toggle.js";
-import { Markdown } from "@/components/ui/markdown.js";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -56,16 +23,9 @@ import type { PanelImperativeHandle } from "react-resizable-panels";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { SettingsDialog } from "@/components/settings-dialog.js";
-import { ActiveModelSlots } from "./active-model-slots.js";
 import { SessionBreadcrumb } from "./session-breadcrumb.js";
-import { getBlockRenderer } from "@/components/blocks/block-renderer.js";
-import { resolveBlockSubmission } from "@/lib/block-submission-utils.js";
-import { ExecutionTimeline } from "./execution-timeline.js";
-import { GameStatusPanel } from "./game-status-panel.js";
-import { EventPanel } from "./event-panel.js";
-import { CodexPanel } from "./codex-panel.js";
+import { ChatMessages } from "./chat-messages.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
-import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 import type {
   SessionRecord,
   WorldRecord,
@@ -76,505 +36,11 @@ import type {
   PluginLoadError,
   SessionPluginInfo,
 } from "@/services/api.js";
-import { fetchServerHealth } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
-import { PluginListPanel } from "./plugin-list-panel.js";
+import { LeftPanel } from "./left-panel.js";
+import { RightPanel } from "./right-panel.js";
 
-// ── Extracted Panel Components ──────────────────────────────────
-
-interface LeftPanelProps {
-  session: SessionRecord;
-  phase: string;
-  isLeftCollapsed: boolean;
-  showSessionList: boolean;
-  otherSessions: SessionRecord[];
-  enabledPackages: PackageSummary[];
-  pluginLoadErrors: PluginLoadError[];
-  sessionPlugins: SessionPluginInfo[];
-  executing: boolean;
-  commands: CommandSummary[];
-  resolvedSlots: ResolvedSlot[];
-  onToggleLeftPanel: () => void;
-  onToggleSessionList: () => void;
-  onSwitchSession: (session: SessionRecord) => void;
-  onDeleteSession: (sessionId: string) => Promise<void>;
-  onCloseSessionList: () => void;
-  onOpenSettings: () => void;
-  onResetSession: () => void;
-  onTogglePlugin: (pluginId: string, enable: boolean) => void;
-}
-
-function LeftPanel({
-  session,
-  phase,
-  isLeftCollapsed,
-  showSessionList,
-  otherSessions,
-  enabledPackages,
-  pluginLoadErrors,
-  sessionPlugins,
-  executing,
-  commands,
-  resolvedSlots,
-  onToggleLeftPanel,
-  onToggleSessionList,
-  onSwitchSession,
-  onDeleteSession,
-  onCloseSessionList,
-  onOpenSettings,
-  onResetSession,
-  onTogglePlugin,
-}: LeftPanelProps) {
-  const { t } = useTranslation();
-  const [deleteTarget, setDeleteTarget] = useState<SessionRecord | null>(null);
-  const [deleting, setDeleting] = useState(false);
-
-  const handleConfirmDelete = useCallback(async () => {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    try {
-      await onDeleteSession(deleteTarget.id);
-    } finally {
-      setDeleting(false);
-      setDeleteTarget(null);
-    }
-  }, [deleteTarget, onDeleteSession]);
-
-  return (
-    <>
-      <div className="h-14 px-3 border-b border-border bg-background flex items-center justify-between shrink-0">
-        <h2 className="font-display font-bold text-sm uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
-          <SlidersHorizontal className="w-4 h-4 shrink-0" />
-          <span
-            className={isLeftCollapsed ? "hidden" : "hidden sm:inline-block"}
-          >
-            {t("session.config", "Studio Config")}
-          </span>
-        </h2>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 rounded-sm ml-2 shrink-0"
-          onClick={onToggleLeftPanel}
-        >
-          <PanelLeftClose className="w-4 h-4" />
-        </Button>
-      </div>
-
-      <ScrollArea className="flex-1 min-h-0">
-        <div className="flex flex-col">
-          {/* ── Current Session ── */}
-          <div className="px-3 py-2.5 border-b border-border space-y-1.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
-                <div
-                  className={`w-2 h-2 rounded-full shrink-0 ${session ? "bg-green-500 animate-pulse" : "bg-muted-foreground"}`}
-                />
-                <Badge variant="secondary" className="text-[10px]">
-                  {phase}
-                </Badge>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
-                onClick={onToggleSessionList}
-                title={t("session.switchSession")}
-              >
-                <History className="w-3 h-3" />
-              </Button>
-            </div>
-            <p className="text-[11px] font-mono text-foreground break-all leading-relaxed">
-              {session.id}
-            </p>
-          </div>
-
-          {/* ── Session List (expandable) ── */}
-          {showSessionList && (
-            <div className="px-3 py-2.5 border-b border-border space-y-1.5 bg-muted/20">
-              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {t("session.sessions")}
-              </h3>
-              {otherSessions.length === 0 ? (
-                <p className="text-[11px] text-muted-foreground italic">
-                  {t("session.noOtherSessions")}
-                </p>
-              ) : (
-                <div className="space-y-1">
-                  {otherSessions.map((s) => (
-                    <div
-                      key={s.id}
-                      className="flex items-center gap-1 bg-background border border-border hover:border-primary/50 transition-colors"
-                    >
-                      <button
-                        onClick={() => {
-                          onSwitchSession(s);
-                          onCloseSessionList();
-                        }}
-                        className="flex-1 text-left px-2 py-1.5 text-[11px] font-mono truncate min-w-0"
-                      >
-                        <span className="block truncate">{s.id}</span>
-                        <span className="text-[10px] text-muted-foreground">
-                          {s.phase} · {new Date(s.createdAt).toLocaleString()}
-                        </span>
-                      </button>
-                      <button
-                        onClick={() => setDeleteTarget(s)}
-                        className="shrink-0 p-1.5 text-muted-foreground hover:text-destructive transition-colors"
-                        title={t("common.delete", "Delete")}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Models ── */}
-          <div className="px-3 py-3 border-b border-border space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {t("session.activeModels", "Models")}
-              </h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
-                onClick={onOpenSettings}
-              >
-                <Settings2 className="w-3 h-3" />
-              </Button>
-            </div>
-            <ActiveModelSlots slots={resolvedSlots} variant="compact" />
-          </div>
-
-          {/* ── Plugins ── */}
-          <div className="px-3 py-3 border-b border-border space-y-2">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {t("session.plugins", "Plugins")}
-              {enabledPackages.length > 0 && (
-                <span className="ml-1 font-normal">
-                  ({enabledPackages.length})
-                </span>
-              )}
-            </h3>
-            <PluginListPanel
-              packages={enabledPackages}
-              loadErrors={pluginLoadErrors}
-              sessionPlugins={sessionPlugins}
-              executing={executing}
-              onTogglePlugin={onTogglePlugin}
-              resolvedSlots={resolvedSlots}
-              sessionId={session.id}
-            />
-          </div>
-
-          {/* ── Commands ── */}
-          {commands.length > 0 && (
-            <div className="px-3 py-3 border-b border-border space-y-2">
-              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {t("session.commands")}
-              </h3>
-              <div className="space-y-0.5">
-                {commands.map((cmd) => (
-                  <div
-                    key={cmd.name}
-                    className="flex items-center gap-2 py-1 text-xs"
-                  >
-                    <span className="font-mono text-primary shrink-0">
-                      /{cmd.name}
-                    </span>
-                    <span className="text-muted-foreground truncate text-[11px]">
-                      {cmd.description}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </ScrollArea>
-
-      {/* ── Bottom Actions (sticky) ── */}
-      <div className="px-3 py-2 border-t border-border bg-background shrink-0 space-y-1.5">
-        <Button
-          className="w-full rounded-none h-8 text-xs"
-          variant="outline"
-          onClick={onOpenSettings}
-        >
-          <KeyRound className="w-3.5 h-3.5 mr-1.5" />
-          {t("nav.settings", "Settings")}
-        </Button>
-        <Button
-          className="w-full rounded-none h-8 text-xs"
-          variant="ghost"
-          onClick={onResetSession}
-        >
-          <Plus className="w-3.5 h-3.5 mr-1.5" />
-          {t("common.newSession")}
-        </Button>
-      </div>
-
-      {/* Delete session confirmation */}
-      <Dialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
-        }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>
-              {t("session.deleteConfirmTitle", "Delete Session")}
-            </DialogTitle>
-            <DialogDescription>
-              {t(
-                "session.deleteConfirmDesc",
-                "This will permanently delete the session and all its data (messages, game state, etc.). This action cannot be undone.",
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          {deleteTarget && (
-            <p className="text-xs font-mono text-muted-foreground bg-muted px-2 py-1.5 break-all">
-              {deleteTarget.id}
-            </p>
-          )}
-          <div className="flex justify-end gap-2 mt-2">
-            <DialogClose asChild>
-              <Button variant="outline" size="sm" disabled={deleting}>
-                {t("common.cancel", "Cancel")}
-              </Button>
-            </DialogClose>
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={deleting}
-              onClick={handleConfirmDelete}
-            >
-              {deleting
-                ? t("common.deleting", "Deleting...")
-                : t("common.delete", "Delete")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
-interface RightPanelProps {
-  world: WorldRecord | null;
-  gameState: Record<string, unknown>;
-  statePatches: Array<{
-    id: string;
-    summary: string;
-    packageName: string;
-    data?: unknown;
-  }>;
-  onToggleRightPanel: () => void;
-}
-
-function RightPanel({
-  world,
-  gameState,
-  statePatches,
-  onToggleRightPanel,
-}: RightPanelProps) {
-  const { t } = useTranslation();
-  const [storeBackend, setStoreBackend] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchServerHealth()
-      .then((h) => setStoreBackend(h.storeBackend))
-      .catch(() => {});
-  }, []);
-
-  return (
-    <div className="flex-1 flex flex-col min-h-0 min-w-0">
-    <Tabs
-      defaultValue="game"
-      className="flex-1 flex min-h-0 min-w-0"
-      orientation="vertical"
-    >
-      <div className="flex flex-col border-r border-border bg-background shrink-0 w-12 items-center py-2 gap-1">
-        <TabsList className="flex flex-col rounded-none gap-1 bg-transparent h-auto p-0">
-          <TabsTrigger
-            value="game"
-            className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title={t("session.game", "Game")}
-          >
-            <Gamepad2 className="w-4 h-4" />
-            <span className="text-[9px] leading-none">
-              {t("session.game", "Game")}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="events"
-            className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title={t("session.events", "Events")}
-          >
-            <Flame className="w-4 h-4" />
-            <span className="text-[9px] leading-none">
-              {t("session.events", "Events")}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="codex"
-            className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title={t("session.codex", "Codex")}
-          >
-            <Library className="w-4 h-4" />
-            <span className="text-[9px] leading-none">
-              {t("session.codex", "Codex")}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="state"
-            className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title={t("session.state", "State")}
-          >
-            <Database className="w-4 h-4" />
-            <span className="text-[9px] leading-none">
-              {t("session.state", "State")}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="world"
-            className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title={t("session.world", "World")}
-          >
-            <MapIcon className="w-4 h-4" />
-            <span className="text-[9px] leading-none">
-              {t("session.world", "World")}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="records"
-            className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title={t("session.lore", "Lore")}
-          >
-            <BookOpen className="w-4 h-4" />
-            <span className="text-[9px] leading-none">
-              {t("session.lore", "Lore")}
-            </span>
-          </TabsTrigger>
-        </TabsList>
-        <div className="mt-auto">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 rounded-sm"
-            onClick={onToggleRightPanel}
-          >
-            <PanelRightClose className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
-      <ScrollArea className="flex-1 min-h-0 min-w-0">
-        <TabsContent value="game" className="p-4 m-0">
-          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <Gamepad2 className="w-4 h-4 shrink-0" />{" "}
-            {t("session.game", "Game")}
-          </h3>
-          <GameStatusPanel gameState={gameState} />
-        </TabsContent>
-        <TabsContent value="events" className="p-4 m-0">
-          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <Flame className="w-4 h-4 shrink-0" />{" "}
-            {t("session.eventsTitle", "Events")}
-          </h3>
-          <EventPanel gameState={gameState} />
-        </TabsContent>
-        <TabsContent value="codex" className="p-4 m-0">
-          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <Library className="w-4 h-4 shrink-0" />{" "}
-            {t("session.codexTitle", "Codex")}
-          </h3>
-          <CodexPanel gameState={gameState} />
-        </TabsContent>
-        <TabsContent value="state" className="p-4 m-0 space-y-4">
-          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <Database className="w-4 h-4 shrink-0" />{" "}
-            {t("session.statePatchesTitle", "State Patches")}
-          </h3>
-          {statePatches.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">
-              {t("session.noStatePatches", "No state changes yet.")}
-            </p>
-          ) : (
-            statePatches.map((patch) => (
-              <Card key={patch.id}>
-                <CardContent className="p-4 text-xs space-y-1">
-                  <span className="font-medium">{patch.summary}</span>
-                  <Badge variant="outline" className="text-[10px] ml-2">
-                    {patch.packageName}
-                  </Badge>
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </TabsContent>
-        <TabsContent value="world" className="p-4 m-0">
-          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <MapIcon className="w-4 h-4 shrink-0" />{" "}
-            {t("session.world", "World")}
-          </h3>
-          {world ? (
-            <Card>
-              <CardContent className="p-4 space-y-2">
-                <span className="font-bold text-sm">{text(world.name)}</span>
-                <p className="text-muted-foreground text-xs">
-                  {text(world.description)}
-                </p>
-                <span className="text-[10px] text-muted-foreground font-mono">
-                  {world.id}
-                </span>
-              </CardContent>
-            </Card>
-          ) : (
-            <p className="text-xs text-muted-foreground italic">
-              No world loaded.
-            </p>
-          )}
-        </TabsContent>
-        <TabsContent value="records" className="p-4 m-0">
-          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <BookOpen className="w-4 h-4 shrink-0" />{" "}
-            {t("session.recordsTitle", "Records")}
-          </h3>
-          <p className="text-xs text-muted-foreground italic">
-            {t(
-              "session.noRecords",
-              "Long-term records will appear here as the story progresses.",
-            )}
-          </p>
-        </TabsContent>
-      </ScrollArea>
-    </Tabs>
-    {storeBackend && (
-      <div className="border-t border-border px-3 py-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0">
-        <Database className="w-3 h-3" />
-        <span>Store:</span>
-        <Badge
-          variant="outline"
-          className={`text-[9px] rounded-none ${
-            storeBackend === "pg"
-              ? "border-green-500/40 text-green-600 dark:text-green-400"
-              : "border-amber-500/40 text-amber-600 dark:text-amber-400"
-          }`}
-        >
-          {storeBackend === "pg" ? "PostgreSQL" : "Memory"}
-        </Badge>
-        {storeBackend === "memory" && (
-          <span className="text-amber-600 dark:text-amber-400">{t("session.memoryStoreWarning", "Data lost on restart")}</span>
-        )}
-      </div>
-    )}
-    </div>
-  );
-}
+// ── Extracted Panel Components (see left-panel.tsx, right-panel.tsx) ──
 
 // ── Main Component ──────────────────────────────────────────────
 
@@ -770,143 +236,6 @@ export function GameView({
 
   const direction = isMobile ? "vertical" : "horizontal";
 
-  // ── Message Rendering ──────────────────────────────────────────
-
-  // Whether the core-image plugin is currently active in this session
-  const isCoreImageActive = sessionPlugins.some(
-    (p) => p.id === "core-image" && p.isActive,
-  );
-
-  function handleGenerateImage(messageContent: string) {
-    if (!onTriggerEvent) return;
-    // Truncate to avoid exhausting the enhancement LLM's token budget.
-    // The kernel will inject full world + character context automatically.
-    const scenePrompt = messageContent.slice(0, 800);
-    onTriggerEvent("image.generation.requested", {
-      scenePrompt,
-      storyBackground: world?.description
-        ? (typeof world.description === "string"
-            ? world.description
-            : Object.values(world.description as Record<string, string>)[0] ?? "")
-        : "",
-    });
-  }
-
-  function renderMessage(msg: StreamMessage) {
-    if (msg.block) return renderBlock(msg);
-
-    // Hide non-story assistant messages (plugin output) — same filter as live play
-    if (msg.role === "assistant" && msg.kind && msg.kind !== "story") return null;
-
-    const isUser = msg.role === "user";
-    const isSystem = msg.role === "system";
-    const showImageButton = !isUser && !isSystem && isCoreImageActive && msg.content && onTriggerEvent;
-
-    return (
-      <div
-        key={msg.id}
-        className={`flex flex-col gap-1.5 ${isUser ? "items-end" : ""}`}
-      >
-        <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-          {isUser ? "Player" : isSystem ? "System" : "Assistant"}
-          {msg.turnId && (
-            <span className="ml-2 font-mono text-[10px]">{msg.turnId}</span>
-          )}
-        </span>
-        {viewMode === "parsed" ? (
-          <div
-            className={`border border-border p-4 text-sm wrap-break-words max-w-[90%] md:max-w-[85%] ${
-              isUser
-                ? "bg-primary text-primary-foreground"
-                : "bg-card text-card-foreground prose prose-sm dark:prose-invert max-w-none"
-            }`}
-          >
-            <Markdown>{msg.content}</Markdown>
-          </div>
-        ) : (
-          <div className="border border-border p-4 bg-muted/10 text-xs font-mono text-muted-foreground whitespace-pre-wrap break-all max-w-[90%] md:max-w-[85%]">
-            {JSON.stringify(
-              { role: msg.role, content: msg.content, turnId: msg.turnId },
-              null,
-              2,
-            )}
-          </div>
-        )}
-        {showImageButton && (
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1"
-              disabled={executing}
-              onClick={() => handleGenerateImage(msg.content)}
-              title={t("coreImage.generateButton", "生成插画")}
-            >
-              <ImageIcon className="h-3 w-3" />
-              {t("coreImage.generateButton", "生成插画")}
-            </Button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  function renderBlock(msg: StreamMessage) {
-    const block = msg.block;
-    if (!block) return null;
-    const blockType = block.type as string;
-    const data = block.data as Record<string, unknown> | undefined;
-    const Renderer = getBlockRenderer(blockType);
-
-    const hasCustomRenderer = viewMode === "parsed" && Renderer && data;
-    const isSubmitted = submittedBlockIds.has(msg.id);
-    const blockDisabled = executing || isSubmitted;
-    const isInteractive = INTERACTIVE_BLOCK_TYPES.has(blockType);
-
-    // For interactive blocks: use select mode (collect, then confirm together).
-    // For non-interactive blocks: direct submit as before.
-    const handleBlockSubmit = (value: string) => {
-      const submission = resolveBlockSubmission(blockType, value);
-
-      if (submission.kind === "trigger_event") {
-        if (onTriggerEvent) {
-          onTriggerEvent(submission.eventType, submission.eventData);
-        } else {
-          onSendMessage(value);
-        }
-        return;
-      }
-
-      onSubmitBlock(msg.id);
-      onSendMessage(submission.content);
-    };
-
-    return (
-      <div key={msg.id} className="flex flex-col gap-1.5">
-        {!hasCustomRenderer && (
-          <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-            Block: {blockType}
-          </span>
-        )}
-        {hasCustomRenderer ? (
-          <Renderer
-            data={data}
-            onSubmit={handleBlockSubmit}
-            disabled={blockDisabled}
-            {...(isInteractive && !isSubmitted
-              ? {
-                  onSelect: (value: string) => handleBlockSelect(msg.id, value),
-                  selectedValue: blockSelections[msg.id] ?? null,
-                }
-              : {})}
-          />
-        ) : (
-          <RawJsonBlock content={JSON.stringify(block, null, 2)} />
-        )}
-      </div>
-    );
-  }
-
   // ── Left Panel ─────────────────────────────────────────────────
 
   const enabledPackages = packages.filter((p) => p.enabled);
@@ -984,6 +313,7 @@ export function GameView({
               className="bg-muted/10 flex flex-col min-h-0 min-w-0"
             >
               <RightPanel
+                sessionId={session.id}
                 world={world}
                 gameState={gameState}
                 statePatches={statePatches}
@@ -1102,124 +432,26 @@ export function GameView({
           </div>
 
           {/* Messages */}
-          <ScrollArea className="flex-1 min-h-0">
-            <div className="p-4 md:p-6 space-y-6 md:space-y-8 max-w-4xl mx-auto w-full">
-              {messages.length === 0 && !executing && (
-                <div className="flex flex-col items-center justify-center py-16 text-center space-y-6">
-                  {(phase === "init" || phase === "pre-game") ? (
-                    <>
-                      <div className="space-y-2">
-                        <p className="text-base font-semibold">{world ? (typeof world.name === "string" ? world.name : (world.name as Record<string, string>)["zh-CN"] ?? "") : ""}</p>
-                        <p className="text-sm text-muted-foreground max-w-xs">
-                          {t("session.beginAdventureHint", "准备好了吗？点击下方按钮，让故事开始。")}
-                        </p>
-                      </div>
-                      <Button
-                        size="lg"
-                        className="px-10 py-5 text-sm uppercase tracking-widest font-bold"
-                        onClick={onBeginAdventure}
-                      >
-                        <Flame className="w-4 h-4 mr-2" />
-                        {t("session.beginAdventure", "开始冒险")}
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <MessageSquare className="w-8 h-8 text-muted-foreground/50" />
-                      <p className="text-sm text-muted-foreground">
-                        {phase === "character_creation" && t("session.emptyCharCreate")}
-                        {phase === "playing" && t("session.emptyPlaying")}
-                        {phase === "ended" && t("session.emptyEnded")}
-                      </p>
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* Render messages with per-turn execution timelines inline */}
-              {(() => {
-                // Group execution steps by turnId for inline rendering
-                const stepsByTurn = new Map<string, ExecutionStep[]>();
-                for (const step of executionSteps) {
-                  const tid = step.turnId ?? "__unknown__";
-                  if (!stepsByTurn.has(tid)) stepsByTurn.set(tid, []);
-                  stepsByTurn.get(tid)!.push(step);
-                }
-
-                // Collect the last message index per turnId so we know where to insert
-                const lastMsgIndexByTurn = new Map<string, number>();
-                messages.forEach((msg, idx) => {
-                  if (msg.turnId) lastMsgIndexByTurn.set(msg.turnId, idx);
-                });
-
-                const rendered: React.ReactNode[] = [];
-                const insertedTurnIds = new Set<string>();
-
-                messages.forEach((msg, idx) => {
-                  const node = renderMessage(msg);
-                  if (node) rendered.push(node);
-
-                  // After the last message of a turn, insert that turn's execution timeline
-                  if (msg.turnId && lastMsgIndexByTurn.get(msg.turnId) === idx) {
-                    const turnSteps = stepsByTurn.get(msg.turnId);
-                    if (turnSteps && turnSteps.length > 0) {
-                      insertedTurnIds.add(msg.turnId);
-                      const isActiveTurn = executing && msg.turnId === [...lastMsgIndexByTurn.keys()].at(-1);
-                      rendered.push(
-                        <ExecutionTimeline
-                          key={`exec-${msg.turnId}`}
-                          steps={turnSteps}
-                          executing={isActiveTurn ? executing : false}
-                          packages={packages}
-                          onRetryRuntime={
-                            isActiveTurn && onRetryRuntime ? (id) => onRetryRuntime(id) : undefined
-                          }
-                          onRetryAll={
-                            isActiveTurn && onRetryRuntime ? () => onRetryRuntime(undefined) : undefined
-                          }
-                        />
-                      );
-                    }
-                  }
-                });
-
-                // If the current turn is executing and has no messages yet (startup),
-                // or steps belong to a turn with no messages, show at the bottom
-                const activeTurnSteps = executionSteps.filter((s) => {
-                  const tid = s.turnId ?? "__unknown__";
-                  return !insertedTurnIds.has(tid);
-                });
-                if (activeTurnSteps.length > 0) {
-                  rendered.push(
-                    <ExecutionTimeline
-                      key="exec-active"
-                      steps={activeTurnSteps}
-                      executing={executing}
-                      packages={packages}
-                      onRetryRuntime={onRetryRuntime ? (id) => onRetryRuntime(id) : undefined}
-                      onRetryAll={onRetryRuntime ? () => onRetryRuntime(undefined) : undefined}
-                    />
-                  );
-                }
-
-                return rendered;
-              })()}
-
-              {executionError && (
-                <div className="flex items-start gap-2 border border-destructive/50 bg-destructive/5 p-4 text-sm">
-                  <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-destructive">Error</p>
-                    <p className="text-xs text-muted-foreground mt-1 break-all">
-                      {executionError}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <div ref={messagesEndRef} />
-            </div>
-          </ScrollArea>
+          <ChatMessages
+            messages={messages}
+            executionSteps={executionSteps}
+            executionError={executionError}
+            executing={executing}
+            phase={phase}
+            world={world}
+            packages={packages}
+            sessionPlugins={sessionPlugins}
+            submittedBlockIds={submittedBlockIds}
+            viewMode={viewMode}
+            blockSelections={blockSelections}
+            onSendMessage={onSendMessage}
+            onSubmitBlock={onSubmitBlock}
+            onRetryRuntime={onRetryRuntime}
+            onTriggerEvent={onTriggerEvent}
+            onBlockSelect={handleBlockSelect}
+            onBeginAdventure={onBeginAdventure}
+            messagesEndRef={messagesEndRef}
+          />
 
           {/* Confirm selections bar */}
           {pendingInteractiveBlocks.length > 0 && hasSelections && (
@@ -1305,6 +537,7 @@ export function GameView({
               className="bg-muted/10 flex flex-col min-h-0 min-w-0"
             >
               <RightPanel
+                sessionId={session.id}
                 world={world}
                 gameState={gameState}
                 statePatches={statePatches}
@@ -1314,41 +547,6 @@ export function GameView({
           </>
         )}
       </ResizablePanelGroup>
-    </div>
-  );
-}
-
-function RawJsonBlock({ content }: { content: string }) {
-  const [copied, setCopied] = useState(false);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  useEffect(() => {
-    return () => clearTimeout(copyTimerRef.current);
-  }, []);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(content);
-    setCopied(true);
-    clearTimeout(copyTimerRef.current);
-    copyTimerRef.current = setTimeout(() => setCopied(false), 1500);
-  };
-
-  return (
-    <div className="relative group border border-border bg-muted/10">
-      <button
-        onClick={handleCopy}
-        className="absolute top-2 right-2 p-1 border border-border bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity"
-        title="Copy"
-      >
-        {copied ? (
-          <Check className="w-3 h-3 text-green-500" />
-        ) : (
-          <Copy className="w-3 h-3 text-muted-foreground" />
-        )}
-      </button>
-      <pre className="p-4 text-xs font-mono text-muted-foreground whitespace-pre-wrap break-all">
-        {content}
-      </pre>
     </div>
   );
 }

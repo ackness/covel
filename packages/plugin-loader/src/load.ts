@@ -138,7 +138,10 @@ function resolveRuntimeDir(
   if (!discovery.isMultiRuntime) {
     return discovery.rootPath;
   }
-  return path.join(discovery.rootPath, 'runtimes', runtimeName);
+  // runtimeName may be 'pluginId/subName' — extract the subName for directory resolution
+  const slashIdx = runtimeName.indexOf('/');
+  const subName = slashIdx >= 0 ? runtimeName.slice(slashIdx + 1) : runtimeName;
+  return path.join(discovery.rootPath, 'runtimes', subName);
 }
 
 /**
@@ -204,11 +207,24 @@ export async function loadRuntime(
     handler = mod.default as FunctionHandler;
   }
 
+  // Load guard function for agent runtimes with pre-execution gate
+  let guard: FunctionHandler | undefined;
+  if (parsed.manifest.guard) {
+    const guardPath = path.resolve(runtimeDir, parsed.manifest.guard);
+    const rel = path.relative(discovery.rootPath, guardPath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      throw new Error(`Guard path traversal rejected: ${parsed.manifest.guard}`);
+    }
+    const mod = await import(guardPath);
+    guard = mod.default as FunctionHandler;
+  }
+
   return {
     manifest: parsed.manifest,
     promptTemplate: parsed.promptTemplate,
     references,
     outputSchema,
     handler,
+    guard,
   };
 }

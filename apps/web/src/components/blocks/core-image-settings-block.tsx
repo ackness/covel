@@ -34,7 +34,7 @@ export function CoreImageSettingsBlock({ data, onSubmit }: BlockRendererProps) {
 
   function handleChange(patch: Partial<ImageSettingsData>) {
     const next = { ...settings, ...patch };
-    onSubmit?.(JSON.stringify({ type: "core_image_settings.update", settings: next }));
+    onSubmit?.(JSON.stringify({ _eventType: "image.settings.updated", settings: next }));
   }
 
   const selectClass =

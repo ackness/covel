@@ -18,6 +18,8 @@ pnpm dev:server           # Start only API server (MemoryStore backend)
 pnpm dev:pg               # Start only API server with STORE_BACKEND=pg
 pnpm build                # Build all packages
 pnpm lint                 # Lint all packages (tsc --noEmit)
+pnpm test                 # Run all tests (vitest via turbo, cached)
+pnpm test:coverage        # Run all tests with coverage report
 pnpm clean                # Clean all dist directories
 
 # Database (PostgreSQL via Docker)
@@ -92,12 +94,13 @@ packages/
   store/            @covel/store            — Data abstraction with 4 backends: MemoryStore, SqliteStore, IdbStore (IndexedDB), PgStore (PostgreSQL)
   state/            @covel/state            — State management (dynamic tables, change history, write conflict collection)
   events/           @covel/events           — Event bus (pub/sub, event persistence)
-  tools/            @covel/tools            — Tool system (tool() wrapper, registry, builtin UI tools, output validation)
+  tools/            @covel/tools            — Tool system (tool() wrapper, registry, builtin UI tools, short ID generator, output validation)
   approval/         @covel/approval         — Approval pipeline (permission rules, approval gates)
   plugin-test-utils/ @covel/plugin-test-utils — Testing utilities for plugin authors (MockLLM, TestHarness, factories)
 
 plugins/                    — Core gameplay plugins (PLUGIN.md-centric, see Plugin Inventory below)
   core-pregame/             — Game initialization (priority 0, first turn only)
+  core-world-init/          — World dimension initialization (guard + agent runtime)
   core-narrator/            — Main narrative generation
   core-char-creator/        — Character creation onboarding
   core-codex/               — Knowledge codex with local tools
@@ -141,7 +144,7 @@ First-class execution primitives: **Runtime, Tool, Hook, Context, Proposal** —
 
 ### Server Bootstrap
 
-`bootstrapV2()` in `apps/server/src/routes/v2/bootstrap.ts` creates a fully wired Hono app: discovers plugins, creates registries, injects dependencies into routes via middleware.
+`bootstrapV2()` in `apps/server/src/routes/v2/bootstrap.ts` creates a fully wired Hono app: discovers plugins, creates registries, injects dependencies into routes via middleware. `app.ts` is a thin composition root (~90 lines): middleware → init → mount routes. V1 compat routes live in `routes/v1-compat.ts`, model DB routes in `routes/model-db.ts`.
 
 ### Turn Execution Pipeline
 
@@ -191,11 +194,25 @@ Current plugins (v2 PLUGIN.md-centric format):
 | Priority | Plugin | Role | Trigger |
 |----------|--------|------|---------|
 | 10 | core-pregame | Game initialization (function runtime, no LLM) | scheduled (first turn only, maxTriggerCount=1) |
+| 85 | core-world-init/schema-gen | World dimension schema + entries via LLM (guard skips if data exists) | scheduled (first turn only) |
 | 500 | core-narrator | Main narrative generation | auto (every turn) |
 | 650 | core-codex | Knowledge/lore codex with local tools | auto |
 | 700 | core-char-creator | Character creation onboarding | scheduled (first turn only, maxTriggerCount=1) |
 
 Additional plugins planned for migration from v1: core-persona, core-combat, core-guide, core-inventory, core-quest, core-image, core-memory, etc.
+
+### Plugin Data Storage
+
+Plugins have session-scoped persistent KV storage via the `plugin_data` table. Data is isolated by `(sessionId, pluginId, namespace, key)`.
+
+**Builtin tools** (available to all agent runtimes):
+- `plugin-data-set` — write plugin data
+- `plugin-data-get` — read own plugin's data (cross-plugin read removed for security)
+- `plugin-data-list` — list own plugin's entries in a namespace
+
+**REST API**: `GET/PUT/DELETE /v2/session/:id/plugin-data/:pluginId/:namespace/:key`
+
+**Context injection**: Plugin data from `core-world-init` is pre-loaded at turn start and injected via `getConfig` → `{{ config.worldSchema }}`, `{{ config.worldEntries }}`, `{{ config.worldDimensions }}`.
 
 ### Model Slot System
 
@@ -272,6 +289,7 @@ Core runtime objects (never collapse into single JSON):
 - **Event** — append-only business events
 - **Record** — searchable long-term knowledge (characters, quests, etc.)
 - **Character** — dynamic character cards (evolved through gameplay, not static templates)
+- **PluginData** — plugin-scoped persistent KV storage, isolated by `(sessionId, pluginId, namespace, key)`
 
 Store backends (`@covel/store`): MemoryStore (dev/test), IdbStore (browser IndexedDB), PgStore (production PostgreSQL via Drizzle ORM).
 
@@ -327,7 +345,7 @@ Key env vars: `DEPLOYMENT_TIER`, `CORS_ORIGIN`, `ENABLE_DEBUG_PAGE`, `RATE_LIMIT
 
 ## Testing Conventions
 
-All packages use **vitest** as the test runner (`vitest run` for CI, `vitest` for watch mode). No package uses Node's built-in `node:test`.
+All packages use **vitest** as the test runner (`vitest run` for CI, `vitest` for watch mode). No package uses Node's built-in `node:test`. Turborepo orchestrates test runs with caching (`turbo test`). Coverage via `@vitest/coverage-v8` is configured in all packages — run with `--coverage` flag.
 
 ### Test Organization
 
@@ -368,7 +386,7 @@ describe("ComponentName", () => {
 ## Conventions
 
 - Validation uses Zod schemas throughout
-- Database access via Drizzle ORM (PostgreSQL); 8 tables: runs, branches, snapshots, state_entries, events, records, characters, trace_events
+- Database access via Drizzle ORM (PostgreSQL/SQLite); 17 tables: worlds, sessions, turn_results, runtime_results, tool_calls, state_schemas, state_entries, state_changes, events, approvals, messages, characters, plugin_data, plugin_configs, trace_events, turn_messages, player_inputs
 - Locale is a **system capability**: enters execution chain via `KernelInput.locale` → `RuntimeContextView.locale`. Resolution: request → run → world default → app default (`zh-CN`)
 - Plugin manifests use `I18nText` (`string | Record<string, string>`) for display fields
 
@@ -381,6 +399,62 @@ describe("ComponentName", () => {
 - UI slots: `settings_panel`, `message_block`, `world_panel`, `action_panel`
 - Provider access through binding declarations, never direct SDK usage
 - Plugin minimum: `PLUGIN.md` + `package.json`
+- Declare `outputKind` in frontmatter: `story` (main narrative), `plugin` (default), `system` (hidden)
+- Declare `capabilities` in frontmatter for framework discovery (e.g. `[narrative]`, `[world-data-provider]`, `[image-generation]`)
+
+### Framework–Plugin Isolation Rule (CRITICAL)
+
+**框架代码（`packages/`、`apps/server/src/`、`apps/web/src/`）中禁止出现任何具体插件 ID 或插件名称。**
+
+违规示例：
+- `pluginId === 'core-narrator'` — 禁止
+- `store.listPluginData(sessionId, 'core-world-init', ...)` — 禁止
+- `p.id === "core-image"` — 禁止
+- `KNOWN_KEYS.has("core-codex")` — 禁止
+
+正确做法：
+- 通过 `RuntimeManifest.outputKind` 判断输出类型（如 `story` vs `plugin`）
+- 通过 `RuntimeManifest.capabilities` 发现插件能力（如 `world-data-provider`、`image-generation`）
+- 通过 `pluginType` 判断是否为核心插件
+- 测试文件中可以使用具体插件名作为测试数据，但不能在生产代码中硬编码
+
+此规则确保框架完全独立于任何具体插件实现，任何插件都可以被替换而不修改框架代码。
+
+**Block 提交约定**：插件 block 通过 `_eventType` 字段触发内核事件，而非框架硬编码 block 类型：
+```json
+{ "_eventType": "image.settings.updated", "settings": { ... } }
+```
+
+**角色创建约定**：插件通过 `_createCharacter: true` 标记表单为角色创建，框架据此自动创建 CharacterRecord。
+
+### Identity Model: pluginId vs runtimeId
+
+`RuntimeManifest` 包含两个独立标识符：
+- `pluginId` — 插件包 ID（如 `core-world-init`），从 `name` 中的 `/` 前部分派生
+- `name` (即 runtimeId) — 运行时全名（如 `core-world-init/schema-gen`）
+
+单运行时插件中两者相同。多运行时插件中 `pluginId` 用于数据隔离、工具作用域、信任检查；`runtimeId` 用于 LLM 调用追踪和日志。所有 store 写入使用 `pluginId`，所有追踪日志使用 `runtimeId`。
+
+### Tool Scoping
+
+工具按插件作用域隔离。`bootstrap.ts` 构建 `pluginToolAccess: Map<string, Set<string>>`，将每个插件声明的 local tools 映射到该插件。`findTool(name, context)` 检查：
+- Builtin tools → 所有插件可访问
+- Local tools → 仅声明该工具的插件可访问
+
+### Security Conventions
+
+- **SSRF 防护**：`ai-provider/adapters/http.ts` 中 `validateBaseUrl()` 对用户提供的 LLM baseUrl 进行域名白名单校验（已知提供商 + localhost + `COVEL_ALLOWED_LLM_HOSTS` 环境变量），阻止 RFC1918/元数据服务地址
+- **Session ID**：格式为 `{worldId}-{uuid8}`，使用 `crypto.randomUUID()` 后缀防止枚举
+- **worldId 校验**：`/^[a-z0-9_-]{1,64}$/i` 正则白名单
+- **Plugin 信任**：`builtin`/`official` 自动加载，`community` 延迟到显式审批后才 `import()`
+- **速率限制**：`middleware/rate-limit.ts` 提供 `rateLimiter()` 和 `singleFlight()` 中间件
+- **错误消息**：`middleware/sanitize-error.ts` 在生产环境剥离文件路径和堆栈信息
+
+### Store File Organization
+
+每个 SQL store backend 分为两个文件：
+- `*-store-mappers.ts` — DDL 常量 + Row→Record 转换函数
+- `*-store.ts` — Factory 函数 + DataStore 方法实现
 
 ### Documentation Sync Rules
 

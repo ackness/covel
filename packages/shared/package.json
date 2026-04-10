@@ -11,7 +11,7 @@
   },
   "scripts": {
     "lint": "tsc --noEmit",
-    "test": "vitest",
+    "test": "vitest run --passWithNoTests",
     "clean": "rm -rf dist"
   },
   "devDependencies": {

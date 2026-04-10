@@ -121,6 +121,32 @@ submitInputsRoutes.post('/:id/submit-inputs', async (c) => {
       createdAt: new Date().toISOString(),
     });
 
+    // 5. Auto-create CharacterRecord when a character-creation form is submitted (idempotent).
+    // Detection uses plugin convention: form values include `_createCharacter: true`.
+    // Framework NEVER hardcodes specific plugin IDs or interaction ID patterns.
+    const isCharCreation = sub.type === 'form' && sub.values._createCharacter === true;
+    if (isCharCreation) {
+      const charName = (sub.values.characterName as string) ?? (sub.values.name as string) ?? '未命名';
+      const now = new Date().toISOString();
+      // Reuse existing player character ID to avoid duplicates on resubmission
+      const existingChars = await store.listCharacters(sessionId);
+      const existingPlayer = existingChars.find((ch) => ch.type === 'player');
+      await store.upsertCharacter({
+        id: existingPlayer?.id ?? crypto.randomUUID(),
+        sessionId,
+        name: charName,
+        type: 'player',
+        description: Object.entries(sub.values)
+          .filter(([k]) => k !== 'characterName' && k !== 'name')
+          .map(([k, v]) => `${k}: ${String(v)}`)
+          .join(', '),
+        fields: sub.values,
+        version: (existingPlayer?.version ?? 0) + 1,
+        createdAt: existingPlayer?.createdAt ?? now,
+        updatedAt: now,
+      });
+    }
+
     results.push({ submissionId, interactionId: sub.interactionId, filledNarrative, accepted: true });
   }
 

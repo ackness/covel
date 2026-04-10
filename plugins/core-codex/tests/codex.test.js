@@ -13,12 +13,12 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import path from 'node:path';
 import { MockLLM, createTestHarness } from '@covel/plugin-test-utils';
 import { discoverPlugins, loadPluginManifest, loadRuntime } from '@covel/plugin-loader';
-import { tool, z } from '@covel/tools';
+import { tool, z, shortIdBatch } from '@covel/tools';
 import createUnlockCodexEntries from '../tools/unlock-codex-entries.js';
 import createUpdateCodexEntry from '../tools/update-codex-entry.js';
 
 // Instantiate tools from factory functions
-const unlockCodexEntriesTool = createUnlockCodexEntries({ tool, z });
+const unlockCodexEntriesTool = createUnlockCodexEntries({ tool, z, shortIdBatch });
 const updateCodexEntryTool = createUpdateCodexEntry({ tool, z });
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, '../..');

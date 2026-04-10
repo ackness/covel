@@ -172,22 +172,20 @@ function reducer(state: SessionState, action: Action): SessionState {
       const streamId = `stream_${action.turnId}_${action.runtimeId}`;
       const idx = state.messages.findIndex((m) => m.id === streamId);
       if (idx >= 0) {
-        const updated = [...state.messages];
-        updated[idx] = { ...updated[idx], content: updated[idx].content + action.delta };
-        return { ...state, messages: updated };
+        // Mutate the content string only, create new message + array ref for React
+        const prev = state.messages[idx];
+        const newMessages = state.messages.with(idx, { ...prev, content: prev.content + action.delta });
+        return { ...state, messages: newMessages };
       }
-      // Create new streaming message
+      // Create new streaming message — append without spreading existing array
       return {
         ...state,
-        messages: [
-          ...state.messages,
-          {
-            id: streamId,
-            role: "assistant",
-            content: action.delta,
-            timestamp: new Date().toISOString(),
-          },
-        ],
+        messages: state.messages.concat({
+          id: streamId,
+          role: "assistant",
+          content: action.delta,
+          timestamp: new Date().toISOString(),
+        }),
       };
     }
     case "SET_EXECUTING":
@@ -312,6 +310,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const sessionIdRef = useRef<string | null>(null);
   // Track runtime kind (story vs plugin) so we can filter non-story text from main chat
   const runtimeKindRef = useRef<Map<string, string>>(new Map());
+  // Batch streaming deltas: accumulate per-runtime and flush once per animation frame
+  const deltaBufferRef = useRef<Map<string, { turnId: string; runtimeId: string; pluginId: string; text: string }>>(new Map());
+  const deltaRafRef = useRef<number | null>(null);
   useEffect(() => {
     sessionIdRef.current = state.session?.id ?? null;
   }, [state.session]);
@@ -378,7 +379,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // Only show story-kind runtime text in main chat; plugin text goes to debug only
         const deltaKind = (payload.kind as string) ?? runtimeKindRef.current.get(runtimeId);
         if (delta && deltaKind === "story") {
-          dispatch({ type: "APPEND_DELTA", turnId: turnId ?? "unknown", runtimeId, pluginId, delta });
+          // Buffer deltas and flush once per animation frame to avoid per-token array copies
+          const bufKey = `${turnId ?? "unknown"}_${runtimeId}`;
+          const existing = deltaBufferRef.current.get(bufKey);
+          if (existing) {
+            existing.text += delta;
+          } else {
+            deltaBufferRef.current.set(bufKey, { turnId: turnId ?? "unknown", runtimeId, pluginId, text: delta });
+          }
+          if (deltaRafRef.current === null) {
+            deltaRafRef.current = requestAnimationFrame(() => {
+              for (const entry of deltaBufferRef.current.values()) {
+                dispatch({ type: "APPEND_DELTA", turnId: entry.turnId, runtimeId: entry.runtimeId, pluginId: entry.pluginId, delta: entry.text });
+              }
+              deltaBufferRef.current.clear();
+              deltaRafRef.current = null;
+            });
+          }
         }
         break;
       }
@@ -498,13 +515,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         break;
       }
       case "runtime.progress": {
+        // Server sends `status` ("started"/"completed"/"executing"), map to ExecutionStep type
+        const statusToType: Record<string, ExecutionStep["type"]> = {
+          started: "runtime.started",
+          completed: "runtime.completed",
+          failed: "runtime.failed",
+          executing: "runtime.started",
+        };
+        const stepType = statusToType[payload.status as string] ?? (payload.type as ExecutionStep["type"]);
         const step: ExecutionStep = {
-          type: payload.type as ExecutionStep["type"],
+          type: stepType,
           runtimeId: payload.runtimeId as string,
           pluginId: payload.pluginId as string,
           label: payload.label as string | undefined,
           detail: payload.detail as string | undefined,
-          timestamp: payload.timestamp as string,
+          timestamp: envelope.timestamp,
           turnId,
         };
         // Track runtime kind from runtime.started label (format: "pluginId/kind")
@@ -631,12 +656,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
     dispatch({ type: "SET_SESSION", session });
 
+    // Guard: track intended session ID so stale async results are discarded
+    const targetSessionId = session.id;
+    sessionIdRef.current = targetSessionId;
+
     // Load messages, state patches, and state snapshot in parallel
     const [messagesResult, patchesResult, snapshotResult] = await Promise.allSettled([
       ds.listMessages(session.id),
       ds.listStatePatches(session.id),
       ds.loadStateSnapshot(session.id),
     ]);
+
+    // Discard if session changed during async loading
+    if (sessionIdRef.current !== targetSessionId) return;
 
     // Restore messages (including block data)
     if (messagesResult.status === "fulfilled") {
@@ -670,9 +702,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // Discard if session changed during restore
+    if (sessionIdRef.current !== targetSessionId) return;
+
     // Restore submitted block IDs via DataService
     try {
       const blockIds = await ds.loadSubmittedBlocks(session.id);
+      if (sessionIdRef.current !== targetSessionId) return;
       for (const blockId of blockIds) {
         dispatch({ type: "SUBMIT_BLOCK", blockId });
       }
@@ -681,6 +717,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // Restore accumulated execution steps from DataService (persisted across refreshes)
     try {
       const steps = (await ds.loadExecutionSteps(session.id)) as ExecutionStep[];
+      if (sessionIdRef.current !== targetSessionId) return;
       if (steps.length > 0) {
         for (const step of steps) {
           dispatch({ type: "ADD_EXECUTION_STEP", step });
@@ -690,7 +727,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     // Sync session context to server so subsequent turns can be processed
     ds.syncToServer(session.id).then(() => {
-      api.markServerAck();
+      if (sessionIdRef.current === targetSessionId) {
+        api.markServerAck();
+      }
     }).catch((err: unknown) => {
       console.warn("[session] syncToServer failed:", err);
     });
@@ -1002,6 +1041,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (!sid) return;
     try {
       const res = await api.listSessionPlugins(sid);
+      // Discard if session changed during async call
+      if (sessionIdRef.current !== sid) return;
       dispatch({ type: "LOAD_SESSION_PLUGINS", plugins: res.available });
     } catch {
       // Non-critical: silently fail — plugins panel is optional
