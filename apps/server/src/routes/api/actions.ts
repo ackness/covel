@@ -66,9 +66,20 @@ actionRoutes.post('/', async (c) => {
   // Locale: prefer session's stored locale (fixed at creation), fallback to request locale
   const effectiveLocale = session.locale ?? locale ?? 'zh-CN';
 
-  // Ensure session's plugins are activated in the registry (idempotent, needed after server restart)
-  const sessionPlugins = session.activePlugins as readonly string[] | undefined;
-  if (sessionPlugins) {
+  // Ensure session's plugins are activated in the registry (idempotent, needed after server restart).
+  // On start_session with no plugins yet, auto-activate all registered plugins and persist.
+  let sessionPlugins = session.activePlugins as readonly string[] | undefined;
+  if (type === 'start_session' && (!sessionPlugins || sessionPlugins.length === 0)) {
+    const allPluginIds = Array.from(pluginRegistry.getAll().keys());
+    for (const pid of allPluginIds) {
+      pluginRegistry.activate(pid, sessionId);
+    }
+    await store.updateSession(sessionId, {
+      activePlugins: allPluginIds,
+      updatedAt: new Date().toISOString(),
+    });
+    sessionPlugins = allPluginIds;
+  } else if (sessionPlugins) {
     for (const pid of sessionPlugins) {
       pluginRegistry.activate(pid, sessionId);
     }

@@ -18,6 +18,7 @@ import { createGatewayAdapter } from '@covel/runtime';
 import { bootstrapApi } from './routes/api/bootstrap.js';
 import { seedWorlds } from './world-seed-loader.js';
 import { createModelDbRoutes } from './routes/model-db.js';
+import { createMiscApiRoutes } from './routes/misc-api.js';
 
 const app = new Hono();
 
@@ -72,6 +73,8 @@ await seedWorlds(store, worldsDir);
 // ── Mount routes ─────────────────────────────────────────────────
 app.route('/', api.app);
 app.route('/', createModelDbRoutes(ai));
+app.route('/', createMiscApiRoutes(ai, api.registry));
+
 
 // ── Static file serving (production) ─────────────────────────────
 if (process.env.SERVE_STATIC === 'true') {

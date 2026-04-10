@@ -109,7 +109,8 @@ type Action =
   | { type: "SET_GAME_STATE"; state: Record<string, unknown> }
   | { type: "REMOVE_SESSION"; sessionId: string }
   | { type: "LOAD_SESSION_PLUGINS"; plugins: api.SessionPluginInfo[] }
-  | { type: "TOGGLE_SESSION_PLUGIN"; pluginId: string; isActive: boolean };
+  | { type: "TOGGLE_SESSION_PLUGIN"; pluginId: string; isActive: boolean }
+  | { type: "BACKFILL_TURN_ID"; turnId: string };
 
 const initialState: SessionState = {
   presets: [],
@@ -242,6 +243,26 @@ function reducer(state: SessionState, action: Action): SessionState {
           p.id === action.pluginId ? { ...p, isActive: action.isActive } : p,
         ),
       };
+    case "BACKFILL_TURN_ID": {
+      // Assign turnId to the last user message that has no turnId.
+      // This links the player's input to the server-generated turnId so the
+      // execution timeline can be inserted inline after the player message.
+      const msgs = state.messages;
+      let targetIdx = -1;
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i].role === "user" && !msgs[i].turnId) {
+          targetIdx = i;
+          break;
+        }
+      }
+      if (targetIdx < 0) return state;
+      return {
+        ...state,
+        messages: msgs.map((m, i) =>
+          i === targetIdx ? { ...m, turnId: action.turnId } : m,
+        ),
+      };
+    }
     case "REMOVE_MESSAGES_FROM_TURN": {
       // Remove messages from a specific turn, except those from cached runtimes
       const filtered = state.messages.filter((m) => {
@@ -368,8 +389,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const lastBackfilledTurnIdRef = useRef<string | null>(null);
+
   const handleSseEvent = useCallback((envelope: api.SseEnvelope) => {
     const { type, payload, turnId } = envelope;
+
+    // Backfill turnId on the most recent user message so execution timelines
+    // render inline after the player's input instead of stacking at the bottom.
+    if (turnId && turnId !== lastBackfilledTurnIdRef.current) {
+      lastBackfilledTurnIdRef.current = turnId;
+      dispatch({ type: "BACKFILL_TURN_ID", turnId });
+    }
 
     switch (type) {
       case "message.delta": {
@@ -519,6 +549,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const statusToType: Record<string, ExecutionStep["type"]> = {
           started: "runtime.started",
           completed: "runtime.completed",
+          skipped: "runtime.completed",
           failed: "runtime.failed",
           executing: "runtime.started",
         };

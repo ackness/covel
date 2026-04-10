@@ -45,6 +45,7 @@ import { actionRoutes } from './actions.js';
 import { subscribeRoutes } from './subscribe.js';
 import { pluginDataRoutes } from './plugin-data.js';
 import { createRoutes } from './create.js';
+import { traceRoutes } from './traces.js';
 
 // ── Bootstrap config ─────────────────────────────────────────────
 
@@ -285,22 +286,25 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   });
 
   // 7. Mount routes — all under /api/ prefix
+  // Session routes: frontend uses /api/sessions (plural) for all session operations
   app.route('/api/sessions', sessionRoutes);
-  app.route('/api/session', sessionRoutes);
-  app.route('/api/session', turnRoutes);
+  app.route('/api/sessions', turnRoutes);
+  app.route('/api/sessions', stateRoutes);
+  app.route('/api/sessions', submitInputsRoutes);
+  app.route('/api/sessions', messageRoutes);
+  app.route('/api/sessions', characterRoutes);
+  app.route('/api/sessions', pluginDataRoutes);
   app.route('/api/plugins', pluginRoutes);
-  app.route('/api/session', stateRoutes);
-  app.route('/api/session', submitInputsRoutes);
-  app.route('/api/session', messageRoutes);
-  app.route('/api/session', characterRoutes);
-  app.route('/api/session', pluginDataRoutes);
   app.route('/api/events', eventRoutes);
   app.route('/api/events', subscribeRoutes);
   app.route('/api/runtime', runtimeRoutes);
   app.route('/api/worlds', worldRoutes);
   app.route('/api/health', healthRoutes);
   app.route('/api/create', createRoutes);
+  // Frontend calls POST /api/ai/generate-world; createRoutes defines POST /world
+  app.route('/api/ai/generate-', createRoutes);
   app.route('/api/actions', actionRoutes);
+  app.route('/api/traces', traceRoutes);
 
   return { app, registry, stateManager, store, eventBus };
 }

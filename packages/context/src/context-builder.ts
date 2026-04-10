@@ -159,10 +159,22 @@ export function buildContext(
     }
   }
 
+  // Build a `world` convenience object from config.world* keys so that
+  // plugin templates can use `{{ world.lore }}`, `{{ world.dimensions }}`, etc.
+  const world: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(config)) {
+    if (key.startsWith('world') && key.length > 5) {
+      // worldLore → lore, worldDimensions → dimensions, worldEntries → entries, etc.
+      const shortKey = key[5].toLowerCase() + key.slice(6);
+      world[shortKey] = value;
+    }
+  }
+
   const variables: Record<string, unknown> = {
     inputs: inputsMap,
     config,
     ...config,
+    world,
     session: {
       id: turnInput.sessionId,
     },

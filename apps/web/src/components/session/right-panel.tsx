@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Database,
@@ -9,6 +9,9 @@ import {
   Flame,
   Library,
   User,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
 } from "lucide-react";
 import {
   Tabs,
@@ -24,8 +27,9 @@ import { GameStatusPanel } from "./game-status-panel.js";
 import { EventPanel } from "./event-panel.js";
 import { CodexPanel } from "./codex-panel.js";
 import { text } from "@/components/world/editor-helpers.js";
-import { fetchServerHealth } from "@/services/api.js";
-import type { WorldRecord } from "@/services/api.js";
+import { fetchServerHealth, listPluginData } from "@/services/api.js";
+import type { WorldRecord, PluginDataEntry } from "@/services/api.js";
+import { useSession } from "@/stores/session-store.js";
 
 export interface RightPanelProps {
   sessionId: string;
@@ -48,14 +52,57 @@ export function RightPanel({
   onToggleRightPanel,
 }: RightPanelProps) {
   const { t } = useTranslation();
+  const { state } = useSession();
   const [storeBackend, setStoreBackend] = useState<string | null>(null);
   const [characters, setCharacters] = useState<Array<Record<string, unknown>>>([]);
+  const [worldSchema, setWorldSchema] = useState<PluginDataEntry[]>([]);
+  const [worldEntries, setWorldEntries] = useState<PluginDataEntry[]>([]);
+  const [worldDataLoading, setWorldDataLoading] = useState(false);
+  const [worldDataLoaded, setWorldDataLoaded] = useState(false);
 
   useEffect(() => {
     fetchServerHealth()
       .then((h) => setStoreBackend(h.storeBackend))
       .catch(() => {});
   }, []);
+
+  // Reset world data when session changes
+  useEffect(() => {
+    setWorldSchema([]);
+    setWorldEntries([]);
+    setWorldDataLoaded(false);
+  }, [sessionId]);
+
+  // Discover world-data-provider plugin ID via capabilities (never hardcode plugin IDs)
+  const worldDataPluginId = useMemo(() => {
+    const plugin = state.sessionPlugins.find(
+      (p) => p.isActive && p.capabilities?.includes("world-data-provider"),
+    );
+    return plugin?.id;
+  }, [state.sessionPlugins]);
+
+  // Fetch world dimension data when plugin is discovered
+  const loadWorldData = useCallback(async () => {
+    if (!sessionId || !worldDataPluginId || worldDataLoaded) return;
+    setWorldDataLoading(true);
+    try {
+      const [schema, entries] = await Promise.all([
+        listPluginData(sessionId, worldDataPluginId, "schema"),
+        listPluginData(sessionId, worldDataPluginId, "entries"),
+      ]);
+      setWorldSchema(schema);
+      setWorldEntries(entries);
+      setWorldDataLoaded(true);
+    } catch {
+      // Non-critical: world data may not exist yet
+    } finally {
+      setWorldDataLoading(false);
+    }
+  }, [sessionId, worldDataPluginId, worldDataLoaded]);
+
+  useEffect(() => {
+    loadWorldData();
+  }, [loadWorldData]);
 
   // Load characters from API and merge with SSE gameState updates
   useEffect(() => {
@@ -239,17 +286,37 @@ export function RightPanel({
             {t("session.world", "World")}
           </h3>
           {world ? (
-            <Card>
-              <CardContent className="p-4 space-y-2">
-                <span className="font-bold text-sm">{text(world.name)}</span>
-                <p className="text-muted-foreground text-xs">
-                  {text(world.description)}
-                </p>
-                <span className="text-[10px] text-muted-foreground font-mono">
-                  {world.id}
-                </span>
-              </CardContent>
-            </Card>
+            <div className="space-y-3">
+              <Card>
+                <CardContent className="p-4 space-y-2">
+                  <span className="font-bold text-sm">{text(world.name)}</span>
+                  <p className="text-muted-foreground text-xs">
+                    {text(world.description)}
+                  </p>
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    {world.id}
+                  </span>
+                </CardContent>
+              </Card>
+              {worldDataLoading && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  {t("session.loadingWorldData", "Loading world data...")}
+                </div>
+              )}
+              {worldSchema.length > 0 && (
+                <WorldDataSection
+                  title={t("session.worldSchema", "Character Attributes")}
+                  entries={worldSchema}
+                />
+              )}
+              {worldEntries.length > 0 && (
+                <WorldDataSection
+                  title={t("session.worldEntries", "World Dimensions")}
+                  entries={worldEntries}
+                />
+              )}
+            </div>
           ) : (
             <p className="text-xs text-muted-foreground italic">
               No world loaded.
@@ -289,6 +356,160 @@ export function RightPanel({
         )}
       </div>
     )}
+    </div>
+  );
+}
+
+// ── World Data Section ──────────────────────────────────────────
+
+/** Dimension name labels for well-known keys. */
+const DIMENSION_LABELS: Record<string, string> = {
+  geography: "Geography",
+  factions: "Factions",
+  history: "History",
+  mechanics: "Mechanics",
+  powerSystem: "Power System",
+  socialStructure: "Social Structure",
+  economy: "Economy",
+  tone: "Tone & Atmosphere",
+  startingConditions: "Starting Conditions",
+  "character-attributes": "Character Attributes",
+};
+
+interface WorldDataSectionProps {
+  title: string;
+  entries: PluginDataEntry[];
+}
+
+function WorldDataSection({ title, entries }: WorldDataSectionProps) {
+  return (
+    <div className="space-y-2">
+      <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {title}
+      </h4>
+      {entries.map((entry) => (
+        <WorldDataEntryCard key={`${entry.namespace}/${entry.key}`} entry={entry} />
+      ))}
+    </div>
+  );
+}
+
+function WorldDataEntryCard({ entry }: { entry: PluginDataEntry }) {
+  const [expanded, setExpanded] = useState(false);
+  const label = DIMENSION_LABELS[entry.key] ?? entry.key;
+  const value = entry.value;
+
+  // For simple string values, show inline
+  if (typeof value === "string") {
+    return (
+      <Card>
+        <CardContent className="p-3">
+          <button
+            type="button"
+            className="w-full text-left flex items-center gap-2 hover:bg-muted/30 transition-colors"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded
+              ? <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+              : <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
+            }
+            <span className="text-xs font-medium">{label}</span>
+          </button>
+          {expanded && (
+            <p className="mt-2 text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap pl-5">
+              {value}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // For object/array values, render key-value pairs or list items
+  if (typeof value === "object" && value !== null) {
+    const obj = value as Record<string, unknown>;
+    // Extract a summary text from common fields
+    const summary = typeof obj.description === "string"
+      ? obj.description
+      : typeof obj.summary === "string"
+        ? obj.summary
+        : null;
+
+    return (
+      <Card>
+        <CardContent className="p-3">
+          <button
+            type="button"
+            className="w-full text-left flex items-center gap-2 hover:bg-muted/30 transition-colors"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded
+              ? <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+              : <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
+            }
+            <span className="text-xs font-medium">{label}</span>
+            {!expanded && summary && (
+              <span className="text-[11px] text-muted-foreground truncate flex-1 min-w-0">
+                {summary.length > 60 ? summary.slice(0, 60) + "..." : summary}
+              </span>
+            )}
+          </button>
+          {expanded && (
+            <div className="mt-2 pl-5 space-y-1.5">
+              {Array.isArray(value)
+                ? value.map((item, i) => (
+                    <div key={i} className="text-xs text-muted-foreground">
+                      {typeof item === "object" && item !== null
+                        ? <ObjectRenderer data={item as Record<string, unknown>} />
+                        : String(item)
+                      }
+                    </div>
+                  ))
+                : Object.entries(obj).map(([k, v]) => (
+                    <div key={k} className="text-xs">
+                      <span className="font-medium text-foreground">{k}:</span>{" "}
+                      <span className="text-muted-foreground">
+                        {typeof v === "object" && v !== null
+                          ? JSON.stringify(v, null, 2)
+                          : String(v ?? "")}
+                      </span>
+                    </div>
+                  ))
+              }
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Fallback: simple scalar
+  return (
+    <Card>
+      <CardContent className="p-3">
+        <div className="text-xs">
+          <span className="font-medium">{label}:</span>{" "}
+          <span className="text-muted-foreground">{String(value)}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Render a nested object with indented key-value pairs. */
+function ObjectRenderer({ data }: { data: Record<string, unknown> }) {
+  return (
+    <div className="space-y-0.5">
+      {Object.entries(data).map(([k, v]) => (
+        <div key={k} className="text-[11px]">
+          <span className="font-medium text-foreground">{k}:</span>{" "}
+          <span className="text-muted-foreground">
+            {typeof v === "object" && v !== null
+              ? JSON.stringify(v)
+              : String(v ?? "")}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

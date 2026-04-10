@@ -297,20 +297,25 @@ Store backends (`@covel/store`): MemoryStore (dev/test), IdbStore (browser Index
 
 ### Server Route Layout
 
-All endpoints under `/api/` prefix (Vite dev server proxies `/api` → backend):
+All endpoints under `/api/` prefix (Vite dev server proxies `/api` → backend). RESTful convention: resources use plural nouns.
 
-- Sessions: `/api/sessions`, `/api/session/:id`, `/api/session/:id/turn`, `/api/session/:id/messages`
-- Worlds: `/api/worlds`, `/api/worlds/:id`
-- Plugins: `/api/plugins`, `/api/session/:id/plugins/enable`, `/api/session/:id/plugins/disable`
-- Actions: `/api/actions` (SSE action bridge)
-- Events: `/api/events/stream` (SSE), `/api/events/emit`
-- State: `/api/session/:id/state`, `/api/session/:id/state/:table`
-- Plugin Data: `/api/session/:id/plugin-data/:pluginId/:namespace/:key`
-- AI: `/api/ai/generate`, `/api/ai/stream`, `/api/ai/ping`, `/api/ai/generate-world`
-- Model DB: `/api/model-db`, `/api/model-db/search`, `/api/model-db/lookup`
-- Config: `/api/llm-config`, `/api/provider-keys`
-- Trace: `/api/traces`
-- Health: `/api/health`
+- Sessions (CRUD): `GET/POST /api/sessions`, `GET/PATCH/DELETE /api/sessions/:id`
+- Session Turn: `POST /api/sessions/:id/turn`, `GET /api/sessions/:id/turns`, `GET /api/sessions/:id/results`
+- Session Messages: `GET /api/sessions/:id/messages`, `POST /api/sessions/:id/messages/sync`
+- Session Plugins: `GET /api/sessions/:id/plugins`, `POST /api/sessions/:id/plugins/enable`, `POST /api/sessions/:id/plugins/disable`
+- Session State: `GET /api/sessions/:id/state`, `GET /api/sessions/:id/state/:table`, `GET /api/sessions/:id/state/:table/:field/history`
+- Session State Persistence: `GET/PUT /api/sessions/:id/state-snapshot`, `GET /api/sessions/:id/state-patches`
+- Session Plugin Data: `GET/PUT/DELETE /api/sessions/:id/plugin-data/:pluginId/:namespace/:key`
+- Session Characters: `GET/POST /api/sessions/:id/characters`
+- Session Submit: `POST /api/sessions/:id/submit-inputs`
+- Worlds: `GET/POST /api/worlds`, `GET/PATCH /api/worlds/:id`
+- Plugins (global): `GET /api/plugins`, `GET /api/plugins/:id`
+- Actions: `POST /api/actions` (SSE action bridge)
+- Events: `GET /api/events/stream` (SSE), `POST /api/events/emit`
+- AI: `POST /api/ai/ping`, `POST /api/ai/generate-world`
+- Model DB: `GET /api/model-db`, `GET /api/model-db/search`, `GET /api/model-db/lookup`, `POST /api/model-db/refresh`
+- Config: `GET /api/presets`, `GET /api/packages`, `GET /api/commands`, `GET /api/block-schemas`, `GET /api/llm-config`, `GET /api/provider-keys`
+- Health: `GET /api/health`
 
 ### Frontend
 

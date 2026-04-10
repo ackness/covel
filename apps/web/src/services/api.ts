@@ -940,6 +940,44 @@ export async function removeWorldOverlay(worldId: string): Promise<void> {
   return idbRemoveWorldOverlay(worldId);
 }
 
+// ── Plugin Data API ──────────────────────────────────────────────
+
+export interface PluginDataEntry {
+  namespace: string;
+  key: string;
+  value: unknown;
+  updatedAt: string;
+}
+
+/** List all plugin data entries for a given plugin and optional namespace. */
+export async function listPluginData(
+  sessionId: string,
+  pluginId: string,
+  namespace?: string,
+): Promise<PluginDataEntry[]> {
+  const path = namespace
+    ? `/api/sessions/${encodeURIComponent(sessionId)}/plugin-data/${encodeURIComponent(pluginId)}/${encodeURIComponent(namespace)}`
+    : `/api/sessions/${encodeURIComponent(sessionId)}/plugin-data/${encodeURIComponent(pluginId)}`;
+  const res = await request<{ items: PluginDataEntry[] }>(path);
+  return res.items;
+}
+
+/** Get a single plugin data entry. */
+export async function getPluginData(
+  sessionId: string,
+  pluginId: string,
+  namespace: string,
+  key: string,
+): Promise<PluginDataEntry | null> {
+  try {
+    return await request<PluginDataEntry>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/plugin-data/${encodeURIComponent(pluginId)}/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`,
+    );
+  } catch {
+    return null;
+  }
+}
+
 // ── Trace API ────────────────────────────────────────────────────
 
 export interface TraceEvent {

@@ -105,10 +105,14 @@ subscribeRoutes.get('/stream', async (c) => {
       }
     }, 30000);
 
-    // Cleanup on disconnect
-    stream.onAbort(() => {
-      unsubscribe();
-      clearInterval(heartbeatInterval);
+    // Keep the stream open until the client disconnects.
+    // Without this, the async callback returns immediately and Hono closes the stream.
+    await new Promise<void>((resolve) => {
+      stream.onAbort(() => {
+        unsubscribe();
+        clearInterval(heartbeatInterval);
+        resolve();
+      });
     });
   });
 });

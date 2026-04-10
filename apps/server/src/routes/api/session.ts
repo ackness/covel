@@ -1,9 +1,16 @@
 /**
- * API Session routes — create, get, delete game sessions.
+ * Session routes — RESTful CRUD + session-scoped plugin management.
  *
- * Dependencies are injected via Hono context variables:
- *   - store: DataStore
- *   - pluginRegistry: PluginRegistry
+ * All routes are mounted at `/api/sessions` by bootstrap.ts.
+ *
+ *   GET    /api/sessions                      — list sessions (optional ?worldId= filter)
+ *   POST   /api/sessions                      — create a new session
+ *   GET    /api/sessions/:id                  — get session by ID
+ *   PATCH  /api/sessions/:id                  — update session fields
+ *   DELETE /api/sessions/:id                  — delete session
+ *   GET    /api/sessions/:id/plugins          — list active + available plugins
+ *   POST   /api/sessions/:id/plugins/enable   — enable a plugin
+ *   POST   /api/sessions/:id/plugins/disable  — disable a plugin
  */
 
 import { randomUUID } from 'node:crypto';
@@ -12,8 +19,7 @@ import type { PluginRegistry } from '@covel/plugin-loader';
 import type { DataStore, SessionRecord } from '@covel/store';
 
 const SAFE_WORLD_ID_RE = /^[a-z0-9_-]{1,64}$/i;
-
-// ── Env type for DI ─────────────────────────────────────────────────
+const SAFE_SESSION_ID_RE = /^[a-z0-9_-]{1,128}$/i;
 
 type Env = {
   Variables: {
@@ -24,52 +30,46 @@ type Env = {
 
 export const sessionRoutes = new Hono<Env>();
 
-// GET /sessions — List all sessions
+// ── Collection endpoints ────────────────────────────────────────
+
+// GET /sessions(?worldId=xxx)
 sessionRoutes.get('/', async (c) => {
   const store = c.get('store');
+  const worldId = c.req.query('worldId');
   const sessions = await store.listSessions();
-  return c.json({ items: sessions });
+  const filtered = worldId
+    ? sessions.filter((s) => s.worldId === worldId)
+    : sessions;
+  return c.json({ items: filtered });
 });
 
-// POST /session/start — Start a new game session
-sessionRoutes.post('/start', async (c) => {
+// POST /sessions
+sessionRoutes.post('/', async (c) => {
   const store = c.get('store');
   const pluginRegistry = c.get('pluginRegistry');
-
   const body = await c.req.json<Record<string, unknown>>();
 
-  // Validate plugins field
-  if (body.plugins !== undefined && !Array.isArray(body.plugins)) {
-    return c.json({ error: 'plugins must be an array of strings' }, 400);
-  }
-
   const rawWorldId = typeof body.worldId === 'string' ? body.worldId : undefined;
-
-  // Validate worldId format — only alphanumeric, hyphens, underscores (max 64 chars)
   if (rawWorldId !== undefined && !SAFE_WORLD_ID_RE.test(rawWorldId)) {
     return c.json({ error: 'Invalid worldId: must match /^[a-z0-9_-]{1,64}$/i' }, 400);
   }
 
-  const worldId = rawWorldId;
+  // Validate client-supplied session ID
+  const rawId = typeof body.id === 'string' && body.id.length > 0 ? body.id : undefined;
+  if (rawId !== undefined && !SAFE_SESSION_ID_RE.test(rawId)) {
+    return c.json({ error: 'Invalid session id: must match /^[a-z0-9_-]{1,128}$/i' }, 400);
+  }
 
-  // Generate session ID with random suffix to prevent enumeration (IDOR)
-  const prefix = worldId ?? 'session';
+  const prefix = rawWorldId ?? 'session';
   const suffix = randomUUID().slice(0, 8);
-  const id = `${prefix}-${suffix}`;
+  const id = rawId ?? `${prefix}-${suffix}`;
 
   const plugins = (Array.isArray(body.plugins) ? body.plugins : []) as string[];
-
-  // Activate requested plugins in registry (skip unknown IDs)
-  for (const pluginId of plugins) {
-    if (typeof pluginId === 'string' && pluginRegistry.get(pluginId)) {
-      pluginRegistry.activate(pluginId, id);
-    }
-  }
 
   const now = new Date().toISOString();
   const session: SessionRecord = {
     id,
-    worldId,
+    worldId: rawWorldId,
     locale: typeof body.locale === 'string' ? body.locale : 'zh-CN',
     phase: 'pre-game',
     turnCount: 0,
@@ -78,39 +78,124 @@ sessionRoutes.post('/start', async (c) => {
     updatedAt: now,
   };
 
+  // Persist BEFORE activating plugins to avoid registry/store inconsistency
   await store.createSession(session);
 
-  return c.json({
-    sessionId: id,
-    phase: session.phase,
-    activePlugins: [...session.activePlugins],
-  });
-});
-
-// GET /session/:id — Get session info
-sessionRoutes.get('/:id', async (c) => {
-  const store = c.get('store');
-  const id = c.req.param('id');
-  const session = await store.getSession(id);
-
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
+  for (const pluginId of plugins) {
+    if (typeof pluginId === 'string' && pluginRegistry.get(pluginId)) {
+      pluginRegistry.activate(pluginId, id);
+    }
   }
 
   return c.json(session);
 });
 
-// DELETE /session/:id — End a session
-sessionRoutes.delete('/:id', async (c) => {
+// ── Instance endpoints ──────────────────────────────────────────
+
+// GET /sessions/:id
+sessionRoutes.get('/:id', async (c) => {
   const store = c.get('store');
   const id = c.req.param('id');
   const session = await store.getSession(id);
+  if (!session) {
+    return c.json({ error: `Session not found: ${id}` }, 404);
+  }
+  return c.json(session);
+});
 
+// PATCH /sessions/:id
+sessionRoutes.patch('/:id', async (c) => {
+  const store = c.get('store');
+  const id = c.req.param('id');
+  const session = await store.getSession(id);
   if (!session) {
     return c.json({ error: `Session not found: ${id}` }, 404);
   }
 
-  await store.deleteSession(id);
+  const body = await c.req.json<Record<string, unknown>>();
+  const now = new Date().toISOString();
+  const updates: Record<string, unknown> = { updatedAt: now };
+  if (typeof body.phase === 'string') updates.phase = body.phase;
 
+  await store.updateSession(id, updates as Partial<Pick<SessionRecord, 'phase' | 'turnCount' | 'activePlugins' | 'updatedAt'>>);
+  // Return merged result to avoid a second DB read
+  return c.json({ ...session, ...updates });
+});
+
+// DELETE /sessions/:id
+sessionRoutes.delete('/:id', async (c) => {
+  const store = c.get('store');
+  const id = c.req.param('id');
+  const session = await store.getSession(id);
+  if (!session) {
+    return c.json({ error: `Session not found: ${id}` }, 404);
+  }
+  await store.deleteSession(id);
   return c.json({ deleted: true });
+});
+
+// ── Session plugin management ───────────────────────────────────
+
+// GET /sessions/:id/plugins
+sessionRoutes.get('/:id/plugins', async (c) => {
+  const store = c.get('store');
+  const pluginRegistry = c.get('pluginRegistry');
+  const id = c.req.param('id');
+  const session = await store.getSession(id);
+  if (!session) {
+    return c.json({ error: `Session not found: ${id}` }, 404);
+  }
+
+  const active = [...(session.activePlugins ?? [])];
+  const all = pluginRegistry.getAll();
+  const available = Array.from(all.values()).map((entry) => ({
+    id: entry.id,
+    name: entry.summary.name,
+    description: entry.summary.description,
+    pluginType: entry.summary.pluginType,
+    active: active.includes(entry.id),
+  }));
+
+  return c.json({ active, available });
+});
+
+// POST /sessions/:id/plugins/enable
+sessionRoutes.post('/:id/plugins/enable', async (c) => {
+  const store = c.get('store');
+  const pluginRegistry = c.get('pluginRegistry');
+  const id = c.req.param('id');
+  const session = await store.getSession(id);
+  if (!session) {
+    return c.json({ error: `Session not found: ${id}` }, 404);
+  }
+
+  const body = await c.req.json<{ pluginId: string }>();
+  if (!body.pluginId || !pluginRegistry.get(body.pluginId)) {
+    return c.json({ error: `Plugin "${body.pluginId}" not found` }, 404);
+  }
+
+  pluginRegistry.activate(body.pluginId, id);
+  const active = [...new Set([...(session.activePlugins ?? []), body.pluginId])];
+  await store.updateSession(id, { activePlugins: active, updatedAt: new Date().toISOString() });
+  return c.json({ ok: true, active });
+});
+
+// POST /sessions/:id/plugins/disable
+sessionRoutes.post('/:id/plugins/disable', async (c) => {
+  const store = c.get('store');
+  const pluginRegistry = c.get('pluginRegistry');
+  const id = c.req.param('id');
+  const session = await store.getSession(id);
+  if (!session) {
+    return c.json({ error: `Session not found: ${id}` }, 404);
+  }
+
+  const body = await c.req.json<{ pluginId: string }>();
+  if (!body.pluginId || typeof body.pluginId !== 'string') {
+    return c.json({ error: 'pluginId is required' }, 400);
+  }
+  pluginRegistry.deactivate(body.pluginId, id);
+  const active = (session.activePlugins ?? []).filter((p) => p !== body.pluginId);
+  await store.updateSession(id, { activePlugins: active, updatedAt: new Date().toISOString() });
+  return c.json({ ok: true, active });
 });

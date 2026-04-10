@@ -54,29 +54,31 @@ function PluginItem({ pkg, sessionPlugin, executing, onToggle }: PluginItemProps
 
   return (
     <div className="border border-border rounded-md overflow-hidden">
-      {/* Header row */}
-      <button
-        type="button"
-        className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-muted/50 transition-colors"
-        onClick={() => setExpanded((v) => !v)}
-      >
-        <ChevronRight
-          className={`w-3 h-3 shrink-0 text-muted-foreground transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
-        />
-        <Puzzle className="w-3.5 h-3.5 shrink-0 text-primary/60" />
-        <span className="text-xs font-medium truncate flex-1">{displayName}</span>
-        {mainRuntime && (
-          <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 shrink-0">
-            P{mainRuntime.priority}
-          </Badge>
-        )}
-        {/* Lock icon for core plugins */}
-        {isLocked && (
-          <span title={t("plugin.locked", "Core plugin — cannot be disabled")}>
-            <Lock className="w-3 h-3 shrink-0 text-muted-foreground/50" />
-          </span>
-        )}
-        {/* Toggle switch — only shown when session plugin data is available and not locked */}
+      {/* Header — flex row with expand button and toggle as siblings (no nested buttons) */}
+      <div className="flex items-center gap-0 hover:bg-muted/50 transition-colors">
+        <button
+          type="button"
+          className="flex-1 flex items-center gap-2 px-2.5 py-2 text-left min-w-0"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <ChevronRight
+            className={`w-3 h-3 shrink-0 text-muted-foreground transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
+          />
+          <Puzzle className="w-3.5 h-3.5 shrink-0 text-primary/60" />
+          <span className="text-xs font-medium truncate flex-1">{displayName}</span>
+          {mainRuntime && (
+            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 shrink-0">
+              P{mainRuntime.priority}
+            </Badge>
+          )}
+          {/* Lock icon for core plugins */}
+          {isLocked && (
+            <span title={t("plugin.locked", "Core plugin — cannot be disabled")}>
+              <Lock className="w-3 h-3 shrink-0 text-muted-foreground/50" />
+            </span>
+          )}
+        </button>
+        {/* Toggle switch — sibling, not nested */}
         {hasSessionScope && onToggle && !isLocked && (
           <button
             type="button"
@@ -87,29 +89,23 @@ function PluginItem({ pkg, sessionPlugin, executing, onToggle }: PluginItemProps
               : t("plugin.enable", "Enable plugin")}
             disabled={toggleDisabled}
             className={[
-              "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent",
+              "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent mr-2.5",
               "transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2",
               "focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               isActive ? "bg-primary" : "bg-input",
               toggleDisabled ? "opacity-50 cursor-not-allowed" : "",
             ].join(" ")}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!toggleDisabled) {
-                onToggle(pkg.name, !isActive);
-              }
-            }}
+            onClick={() => { if (!toggleDisabled) onToggle(pkg.name, !isActive); }}
           >
             <span
               className={[
-                "pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow-lg",
-                "ring-0 transition duration-200 ease-in-out",
+                "pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out",
                 isActive ? "translate-x-3" : "translate-x-0",
               ].join(" ")}
             />
           </button>
         )}
-      </button>
+      </div>
 
       {/* Expanded detail */}
       {expanded && (

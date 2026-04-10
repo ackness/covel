@@ -308,23 +308,6 @@ async function executeOneRuntime(
   const startTime = Date.now();
   const runId = crypto.randomUUID();
 
-  // H2: Safe callback — don't let SSE write failures crash the runtime
-  try {
-    await deps.onRuntimeStart?.({
-      runtimeId: manifest.name,
-      pluginId: manifest.pluginId,
-      priority: manifest.priority,
-    });
-  } catch {
-    // onRuntimeStart failure (e.g. SSE write) must not kill the runtime
-  }
-
-  emitSubEvent(deps.eventBus, 'runtime', 'runtime.started', input.sessionId, {
-    runtimeId: manifest.name,
-    pluginId: manifest.pluginId,
-    priority: manifest.priority,
-  });
-
   try {
     // Load the runtime (prompt template, references, handler, etc.)
     const loaded = await deps.loadRuntime(manifest, input.locale);
@@ -334,6 +317,19 @@ async function executeOneRuntime(
 
     // ── Function runtime: direct handler execution, no LLM ──────
     if (manifest.runtimeType === 'function') {
+      // Emit start for function runtimes (no guard to check)
+      try {
+        await deps.onRuntimeStart?.({
+          runtimeId: manifest.name,
+          pluginId: manifest.pluginId,
+          priority: manifest.priority,
+        });
+      } catch { /* callback error must not kill runtime */ }
+      emitSubEvent(deps.eventBus, 'runtime', 'runtime.started', input.sessionId, {
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        priority: manifest.priority,
+      });
       if (!loaded.handler) {
         return makeFailedResult(manifest, input, runId, startTime, 'Function runtime missing handler');
       }
@@ -445,10 +441,21 @@ async function executeOneRuntime(
           });
         }
 
+        // Guard skipped: emit completed (without ever emitting started) so frontend
+        // shows "skipped" instead of an infinite spinner.
+        try {
+          await deps.onRuntimeComplete?.({
+            runtimeId: manifest.name,
+            pluginId: manifest.pluginId,
+            status: 'skipped',
+            durationMs: result.durationMs,
+          });
+        } catch { /* callback error must not kill runtime */ }
+
         emitSubEvent(deps.eventBus, 'runtime', 'runtime.completed', input.sessionId, {
           runtimeId: manifest.name,
           pluginId: manifest.pluginId,
-          status: 'success',
+          status: 'skipped',
           durationMs: result.durationMs,
         });
 
@@ -457,6 +464,20 @@ async function executeOneRuntime(
     }
 
     // ── Agent runtime: LLM pipeline ─────────────────────────────
+    // Emit start AFTER guard passes (or no guard exists) — prevents
+    // frontend showing an infinite spinner for guard-skipped runtimes.
+    try {
+      await deps.onRuntimeStart?.({
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        priority: manifest.priority,
+      });
+    } catch { /* callback error must not kill runtime */ }
+    emitSubEvent(deps.eventBus, 'runtime', 'runtime.started', input.sessionId, {
+      runtimeId: manifest.name,
+      pluginId: manifest.pluginId,
+      priority: manifest.priority,
+    });
     // Build context
     const config = deps.getConfig(manifest.pluginId, manifest.name);
     const assembled = buildContext({

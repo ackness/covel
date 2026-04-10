@@ -1,5 +1,5 @@
 /**
- * V2 Session, State, and Health route tests.
+ * Session, State, and Health route tests.
  *
  * Tests use Hono's `app.request()` with dependency injection via context variables.
  */
@@ -29,8 +29,8 @@ function createTestApp(deps: {
     await next();
   });
 
-  app.route('/api/session', sessionRoutes);
-  app.route('/api/session', stateRoutes);
+  app.route('/api/sessions', sessionRoutes);
+  app.route('/api/sessions', stateRoutes);
   app.route('/api/health', healthRoutes);
 
   return app;
@@ -73,9 +73,9 @@ describe('Session Routes', () => {
     app = createTestApp({ store, stateManager, pluginRegistry });
   });
 
-  describe('POST /api/session/start', () => {
-    it('creates a new session and returns sessionId', async () => {
-      const res = await app.request('/api/session/start', {
+  describe('POST /api/sessions', () => {
+    it('creates a new session and returns full record', async () => {
+      const res = await app.request('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ worldId: 'cloudmere', locale: 'en-US' }),
@@ -84,21 +84,21 @@ describe('Session Routes', () => {
       expect(res.status).toBe(200);
 
       const body = await json(res) as Record<string, unknown>;
-      expect(body.sessionId).toBeDefined();
-      expect(typeof body.sessionId).toBe('string');
+      expect(body.id).toBeDefined();
+      expect(typeof body.id).toBe('string');
       expect(body.phase).toBe('pre-game');
       expect(body.activePlugins).toEqual([]);
     });
 
     it('stores the session in the data store', async () => {
-      const res = await app.request('/api/session/start', {
+      const res = await app.request('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
 
       const body = await json(res) as Record<string, unknown>;
-      const sessionId = body.sessionId as string;
+      const sessionId = body.id as string;
 
       const session = await store.getSession(sessionId);
       expect(session).not.toBeNull();
@@ -107,7 +107,7 @@ describe('Session Routes', () => {
     });
 
     it('rejects worldId with invalid characters', async () => {
-      const res = await app.request('/api/session/start', {
+      const res = await app.request('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ worldId: '../../etc' }),
@@ -119,7 +119,7 @@ describe('Session Routes', () => {
     });
 
     it('rejects worldId with special characters', async () => {
-      const res = await app.request('/api/session/start', {
+      const res = await app.request('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ worldId: '<script>alert(1)</script>' }),
@@ -129,7 +129,7 @@ describe('Session Routes', () => {
     });
 
     it('rejects worldId exceeding max length', async () => {
-      const res = await app.request('/api/session/start', {
+      const res = await app.request('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ worldId: 'a'.repeat(65) }),
@@ -140,34 +140,34 @@ describe('Session Routes', () => {
 
     it('generates non-sequential session IDs', async () => {
       // Create two sessions — IDs should not be predictable sequential numbers
-      const res1 = await app.request('/api/session/start', {
+      const res1 = await app.request('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ worldId: 'testworld' }),
       });
-      const res2 = await app.request('/api/session/start', {
+      const res2 = await app.request('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ worldId: 'testworld' }),
       });
 
-      const body1 = await json(res1) as { sessionId: string };
-      const body2 = await json(res2) as { sessionId: string };
+      const body1 = await json(res1) as { id: string };
+      const body2 = await json(res2) as { id: string };
 
       // Both should start with the worldId prefix
-      expect(body1.sessionId).toMatch(/^testworld-/);
-      expect(body2.sessionId).toMatch(/^testworld-/);
+      expect(body1.id).toMatch(/^testworld-/);
+      expect(body2.id).toMatch(/^testworld-/);
 
       // But should NOT be sequential numbers
-      expect(body1.sessionId).not.toBe('testworld-1');
-      expect(body2.sessionId).not.toBe('testworld-2');
+      expect(body1.id).not.toBe('testworld-1');
+      expect(body2.id).not.toBe('testworld-2');
 
       // And should be different from each other
-      expect(body1.sessionId).not.toBe(body2.sessionId);
+      expect(body1.id).not.toBe(body2.id);
     });
 
     it('accepts optional plugins list', async () => {
-      const res = await app.request('/api/session/start', {
+      const res = await app.request('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plugins: ['core-narrator', 'core-combat'] }),
@@ -179,18 +179,18 @@ describe('Session Routes', () => {
     });
   });
 
-  describe('GET /api/session/:id', () => {
+  describe('GET /api/sessions/:id', () => {
     it('returns session data for existing session', async () => {
       // Create session first
-      const createRes = await app.request('/api/session/start', {
+      const createRes = await app.request('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ worldId: 'mistport' }),
       });
-      const { sessionId } = await json(createRes) as { sessionId: string };
+      const { id: sessionId } = await json(createRes) as { id: string };
 
       // Get session
-      const res = await app.request(`/api/session/${sessionId}`);
+      const res = await app.request(`/api/sessions/${sessionId}`);
       expect(res.status).toBe(200);
 
       const body = await json(res) as Record<string, unknown>;
@@ -200,7 +200,7 @@ describe('Session Routes', () => {
     });
 
     it('returns 404 for unknown session', async () => {
-      const res = await app.request('/api/session/nonexistent');
+      const res = await app.request('/api/sessions/nonexistent');
       expect(res.status).toBe(404);
 
       const body = await json(res) as Record<string, unknown>;
@@ -208,18 +208,18 @@ describe('Session Routes', () => {
     });
   });
 
-  describe('DELETE /api/session/:id', () => {
+  describe('DELETE /api/sessions/:id', () => {
     it('deletes an existing session', async () => {
       // Create session first
-      const createRes = await app.request('/api/session/start', {
+      const createRes = await app.request('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
-      const { sessionId } = await json(createRes) as { sessionId: string };
+      const { id: sessionId } = await json(createRes) as { id: string };
 
       // Delete session
-      const res = await app.request(`/api/session/${sessionId}`, {
+      const res = await app.request(`/api/sessions/${sessionId}`, {
         method: 'DELETE',
       });
       expect(res.status).toBe(200);
@@ -233,7 +233,7 @@ describe('Session Routes', () => {
     });
 
     it('returns 404 for unknown session', async () => {
-      const res = await app.request('/api/session/nonexistent', {
+      const res = await app.request('/api/sessions/nonexistent', {
         method: 'DELETE',
       });
       expect(res.status).toBe(404);
@@ -241,7 +241,7 @@ describe('Session Routes', () => {
   });
 });
 
-describe('V2 State Routes', () => {
+describe('State Routes', () => {
   let app: ReturnType<typeof createTestApp>;
   let store: DataStore;
   let stateManager: StateManager;
@@ -255,18 +255,18 @@ describe('V2 State Routes', () => {
     app = createTestApp({ store, stateManager, pluginRegistry });
 
     // Create a session for state tests
-    const res = await app.request('/api/session/start', {
+    const res = await app.request('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     });
-    const body = await json(res) as { sessionId: string };
-    sessionId = body.sessionId;
+    const body = await json(res) as { id: string };
+    sessionId = body.id;
   });
 
-  describe('GET /api/session/:id/state', () => {
+  describe('GET /api/sessions/:id/state', () => {
     it('returns empty tables when no state exists', async () => {
-      const res = await app.request(`/api/session/${sessionId}/state`);
+      const res = await app.request(`/api/sessions/${sessionId}/state`);
       expect(res.status).toBe(200);
 
       const body = await json(res) as Record<string, unknown>;
@@ -282,7 +282,7 @@ describe('V2 State Routes', () => {
         ],
       });
 
-      const res = await app.request(`/api/session/${sessionId}/state`);
+      const res = await app.request(`/api/sessions/${sessionId}/state`);
       expect(res.status).toBe(200);
 
       const body = await json(res) as {
@@ -295,12 +295,12 @@ describe('V2 State Routes', () => {
     });
 
     it('returns 404 for unknown session', async () => {
-      const res = await app.request('/api/session/nonexistent/state');
+      const res = await app.request('/api/sessions/nonexistent/state');
       expect(res.status).toBe(404);
     });
   });
 
-  describe('GET /api/session/:id/state/:table', () => {
+  describe('GET /api/sessions/:id/state/:table', () => {
     it('returns table snapshot', async () => {
       await stateManager.createTable(sessionId, {
         name: 'character',
@@ -310,7 +310,7 @@ describe('V2 State Routes', () => {
         ],
       });
 
-      const res = await app.request(`/api/session/${sessionId}/state/character`);
+      const res = await app.request(`/api/sessions/${sessionId}/state/character`);
       expect(res.status).toBe(200);
 
       const body = await json(res) as { table: string; data: Record<string, unknown> };
@@ -320,7 +320,7 @@ describe('V2 State Routes', () => {
     });
 
     it('returns 404 for unknown table', async () => {
-      const res = await app.request(`/api/session/${sessionId}/state/nonexistent`);
+      const res = await app.request(`/api/sessions/${sessionId}/state/nonexistent`);
       expect(res.status).toBe(404);
 
       const body = await json(res) as Record<string, unknown>;
@@ -328,12 +328,12 @@ describe('V2 State Routes', () => {
     });
 
     it('returns 404 for unknown session', async () => {
-      const res = await app.request('/api/session/nonexistent/state/character');
+      const res = await app.request('/api/sessions/nonexistent/state/character');
       expect(res.status).toBe(404);
     });
   });
 
-  describe('GET /api/session/:id/state/:table/:field/history', () => {
+  describe('GET /api/sessions/:id/state/:table/:field/history', () => {
     it('returns change history for a field', async () => {
       await stateManager.createTable(sessionId, {
         name: 'character',
@@ -353,7 +353,7 @@ describe('V2 State Routes', () => {
       });
 
       const res = await app.request(
-        `/api/session/${sessionId}/state/character/hp/history`,
+        `/api/sessions/${sessionId}/state/character/hp/history`,
       );
       expect(res.status).toBe(200);
 
@@ -371,7 +371,7 @@ describe('V2 State Routes', () => {
 
     it('returns 404 for unknown table', async () => {
       const res = await app.request(
-        `/api/session/${sessionId}/state/nonexistent/hp/history`,
+        `/api/sessions/${sessionId}/state/nonexistent/hp/history`,
       );
       expect(res.status).toBe(404);
     });
@@ -383,14 +383,14 @@ describe('V2 State Routes', () => {
       });
 
       const res = await app.request(
-        `/api/session/${sessionId}/state/character/nonexistent/history`,
+        `/api/sessions/${sessionId}/state/character/nonexistent/history`,
       );
       expect(res.status).toBe(404);
     });
 
     it('returns 404 for unknown session', async () => {
       const res = await app.request(
-        '/api/session/nonexistent/state/character/hp/history',
+        '/api/sessions/nonexistent/state/character/hp/history',
       );
       expect(res.status).toBe(404);
     });

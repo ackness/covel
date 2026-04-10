@@ -1,11 +1,11 @@
 /**
- * E2E test: Complete narrator game flow through V2 API.
+ * E2E test: Complete narrator game flow through the API.
  *
  * Flow:
- *   POST /api/session/start → create session, activate core-narrator
- *   POST /api/session/:id/turn → execute turn with narrator
- *   GET /api/session/:id/results → verify narrative output
- *   GET /api/session/:id/turns → verify turn history
+ *   POST /api/sessions           → create session, activate core-narrator
+ *   POST /api/sessions/:id/turn  → execute turn with narrator
+ *   GET  /api/sessions/:id/results → verify narrative output
+ *   GET  /api/sessions/:id/turns   → verify turn history
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -42,7 +42,7 @@ class MockNarratorLLM implements LLMAdapter {
 
 // ── Tests ─────────────────────────────────────────────────────────
 
-describe('E2E: Narrator game flow via V2 API', () => {
+describe('E2E: Narrator game flow', () => {
   let app: Hono;
   let mockLLM: MockNarratorLLM;
 
@@ -65,22 +65,22 @@ describe('E2E: Narrator game flow via V2 API', () => {
   });
 
   it('should complete a full game turn through the API', async () => {
-    // 1. Start session
-    const startRes = await app.request('/api/session/start', {
+    // 1. Create session
+    const startRes = await app.request('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ locale: 'zh-CN', plugins: ['core-narrator'] }),
     });
     expect(startRes.status).toBe(200);
 
-    const startBody = await startRes.json() as { sessionId: string; phase: string };
-    expect(startBody.sessionId).toBeDefined();
-    expect(startBody.phase).toBe('pre-game');
+    const session = await startRes.json() as { id: string; phase: string };
+    expect(session.id).toBeDefined();
+    expect(session.phase).toBe('pre-game');
 
-    const sessionId = startBody.sessionId;
+    const sessionId = session.id;
 
     // 2. Execute a turn
-    const turnRes = await app.request(`/api/session/${sessionId}/turn`, {
+    const turnRes = await app.request(`/api/sessions/${sessionId}/turn`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: '走进了黑暗的森林' }),
@@ -106,7 +106,7 @@ describe('E2E: Narrator game flow via V2 API', () => {
     expect(narratorResult.output.narrativeOutput).toContain('泥土气息');
 
     // 3. Get results
-    const resultsRes = await app.request(`/api/session/${sessionId}/results`);
+    const resultsRes = await app.request(`/api/sessions/${sessionId}/results`);
     expect(resultsRes.status).toBe(200);
 
     const resultsBody = await resultsRes.json() as { turnId: string };
@@ -122,16 +122,16 @@ describe('E2E: Narrator game flow via V2 API', () => {
   });
 
   it('should handle multiple turns in sequence', async () => {
-    // Start session
-    const startRes = await app.request('/api/session/start', {
+    // Create session
+    const startRes = await app.request('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ plugins: ['core-narrator'] }),
     });
-    const { sessionId } = await startRes.json() as { sessionId: string };
+    const session = await startRes.json() as { id: string };
 
     // Turn 1
-    const turn1Res = await app.request(`/api/session/${sessionId}/turn`, {
+    const turn1Res = await app.request(`/api/sessions/${session.id}/turn`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: '拔出长剑' }),
@@ -139,7 +139,7 @@ describe('E2E: Narrator game flow via V2 API', () => {
     expect(turn1Res.status).toBe(200);
 
     // Turn 2
-    const turn2Res = await app.request(`/api/session/${sessionId}/turn`, {
+    const turn2Res = await app.request(`/api/sessions/${session.id}/turn`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: '向巨龙发起攻击' }),
@@ -147,7 +147,7 @@ describe('E2E: Narrator game flow via V2 API', () => {
     expect(turn2Res.status).toBe(200);
 
     // Get turn history
-    const historyRes = await app.request(`/api/session/${sessionId}/turns`);
+    const historyRes = await app.request(`/api/sessions/${session.id}/turns`);
     expect(historyRes.status).toBe(200);
 
     const historyBody = await historyRes.json() as { turns: Array<{ turnId: string }> };
@@ -155,7 +155,7 @@ describe('E2E: Narrator game flow via V2 API', () => {
   });
 
   it('should return 404 for turn on non-existent session', async () => {
-    const res = await app.request('/api/session/nonexistent/turn', {
+    const res = await app.request('/api/sessions/nonexistent/turn', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: 'test' }),

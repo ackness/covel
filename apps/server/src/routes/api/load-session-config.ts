@@ -42,8 +42,18 @@ export async function loadSessionConfig(
     if (worldId) {
       const world = await store.getWorld(worldId);
       if (world?.metadata) {
-        const dims = (world.metadata as Record<string, unknown>).dimensions;
-        if (dims) configData.worldDimensions = dims;
+        const meta = world.metadata as Record<string, unknown>;
+        const dims = meta.dimensions;
+        if (dims) {
+          configData.worldDimensions = dims;
+          // Extract nested fields for template convenience
+          if (typeof dims === 'object' && dims !== null) {
+            const d = dims as Record<string, unknown>;
+            if (d.tone) configData.worldTone = d.tone;
+            const sc = d.startingConditions as Record<string, unknown> | undefined;
+            if (sc?.openingScenario) configData.worldOpeningScenario = sc.openingScenario;
+          }
+        }
       }
       if (world?.lore) configData.worldLore = world.lore;
     }
