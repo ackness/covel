@@ -4,7 +4,7 @@
  * JSON fields use native `jsonb` type — no manual serialization needed.
  */
 
-import { pgTable, text, integer, jsonb, index } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, jsonb, index, uniqueIndex } from 'drizzle-orm/pg-core';
 
 // ── Worlds (not session-scoped) ─────────────────────────────────
 
@@ -12,6 +12,8 @@ export const worlds = pgTable('worlds', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   description: text('description').notNull(),
+  lore: text('lore'),
+  tags: jsonb('tags'), // JSON string[]
   locale: text('locale'),
   metadata: jsonb('metadata'), // JSON
   createdAt: text('created_at').notNull(),
@@ -235,6 +237,31 @@ export const characters = pgTable(
   ],
 );
 
+// ── Plugin Data ─────────────────────────────────────────────────
+
+export const pluginData = pgTable(
+  'plugin_data',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id').notNull(),
+    pluginId: text('plugin_id').notNull(),
+    namespace: text('namespace').notNull(),
+    key: text('key').notNull(),
+    value: jsonb('value'), // JSON
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    index('pg_plugin_data_session_id_idx').on(table.sessionId),
+    uniqueIndex('pg_plugin_data_unique_idx').on(
+      table.sessionId,
+      table.pluginId,
+      table.namespace,
+      table.key,
+    ),
+  ],
+);
+
 // ── Plugin Configs ──────────────────────────────────────────────
 
 export const pluginConfigs = pgTable(
@@ -267,6 +294,8 @@ export const traceEvents = pgTable(
   },
   (table) => [
     index('pg_trace_events_session_id_idx').on(table.sessionId),
+    index('pg_trace_events_trace_id_idx').on(table.sessionId, table.traceId),
+    index('pg_trace_events_turn_id_idx').on(table.sessionId, table.turnId),
   ],
 );
 
@@ -291,6 +320,7 @@ export const turnMessages = pgTable(
   },
   (table) => [
     index('pg_turn_messages_session_id_idx').on(table.sessionId),
+    index('pg_turn_messages_turn_id_idx').on(table.sessionId, table.turnId),
   ],
 );
 

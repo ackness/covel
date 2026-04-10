@@ -805,6 +805,33 @@ export function runStoreContractTests(
         expect(list[1].id).toBe(m3.id);
         expect(list[2].id).toBe(m1.id);
       });
+
+      it('should support pagination with limit and offset', async () => {
+        const m1 = makeTurnMessage({ sessionId: 'sess-pg', createdAt: ts(10) });
+        const m2 = makeTurnMessage({ sessionId: 'sess-pg', createdAt: ts(20) });
+        const m3 = makeTurnMessage({ sessionId: 'sess-pg', createdAt: ts(30) });
+        const m4 = makeTurnMessage({ sessionId: 'sess-pg', createdAt: ts(40) });
+        await store.appendTurnMessage(m1);
+        await store.appendTurnMessage(m2);
+        await store.appendTurnMessage(m3);
+        await store.appendTurnMessage(m4);
+
+        // limit only
+        const first2 = await store.listTurnMessages('sess-pg', { limit: 2 });
+        expect(first2).toHaveLength(2);
+        expect(first2[0].id).toBe(m1.id);
+        expect(first2[1].id).toBe(m2.id);
+
+        // limit + offset
+        const page2 = await store.listTurnMessages('sess-pg', { limit: 2, offset: 2 });
+        expect(page2).toHaveLength(2);
+        expect(page2[0].id).toBe(m3.id);
+        expect(page2[1].id).toBe(m4.id);
+
+        // offset beyond end
+        const empty = await store.listTurnMessages('sess-pg', { limit: 10, offset: 100 });
+        expect(empty).toHaveLength(0);
+      });
     });
 
     // ── Player Inputs ────────────────────────────────────────

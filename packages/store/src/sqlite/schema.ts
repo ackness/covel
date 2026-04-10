@@ -5,7 +5,7 @@
  * at the application layer.
  */
 
-import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 // ── Worlds (not session-scoped) ─────────────────────────────────
 
@@ -13,6 +13,8 @@ export const worlds = sqliteTable('worlds', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   description: text('description').notNull(),
+  lore: text('lore'),
+  tags: text('tags'), // JSON string[]
   locale: text('locale'),
   metadata: text('metadata'), // JSON
   createdAt: text('created_at').notNull(),
@@ -236,6 +238,31 @@ export const characters = sqliteTable(
   ],
 );
 
+// ── Plugin Data ─────────────────────────────────────────────────
+
+export const pluginData = sqliteTable(
+  'plugin_data',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id').notNull(),
+    pluginId: text('plugin_id').notNull(),
+    namespace: text('namespace').notNull(),
+    key: text('key').notNull(),
+    value: text('value'), // JSON
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    index('plugin_data_session_id_idx').on(table.sessionId),
+    uniqueIndex('plugin_data_unique_idx').on(
+      table.sessionId,
+      table.pluginId,
+      table.namespace,
+      table.key,
+    ),
+  ],
+);
+
 // ── Plugin Configs ──────────────────────────────────────────────
 
 export const pluginConfigs = sqliteTable(
@@ -268,6 +295,8 @@ export const traceEvents = sqliteTable(
   },
   (table) => [
     index('trace_events_session_id_idx').on(table.sessionId),
+    index('trace_events_trace_id_idx').on(table.sessionId, table.traceId),
+    index('trace_events_turn_id_idx').on(table.sessionId, table.turnId),
   ],
 );
 
@@ -292,6 +321,7 @@ export const turnMessages = sqliteTable(
   },
   (table) => [
     index('turn_messages_session_id_idx').on(table.sessionId),
+    index('turn_messages_turn_id_idx').on(table.sessionId, table.turnId),
   ],
 );
 

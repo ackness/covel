@@ -3,6 +3,17 @@
  * Used for testing and ephemeral sessions.
  */
 
+import type { PaginationOpts } from '../types.js';
+
+function applyPagination<T>(items: T[], pagination?: PaginationOpts): T[] {
+  if (!pagination) return items;
+  const offset = pagination.offset ?? 0;
+  const limit = pagination.limit;
+  if (limit !== undefined) return items.slice(offset, offset + limit);
+  if (offset > 0) return items.slice(offset);
+  return items;
+}
+
 import type {
   DataStore,
   SessionRecord,
@@ -230,10 +241,11 @@ export function createMemoryStore(): DataStore {
       messages.push(record);
     },
 
-    async listMessages(sessionId) {
-      return messages
+    async listMessages(sessionId, pagination?) {
+      const filtered = messages
         .filter((r) => r.sessionId === sessionId)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      return applyPagination(filtered, pagination);
     },
 
     // ── Characters ──
@@ -262,13 +274,14 @@ export function createMemoryStore(): DataStore {
       return pluginData.get(pluginDataKey(sessionId, pluginId, namespace, key)) ?? null;
     },
 
-    async listPluginData(sessionId, pluginId, namespace?) {
-      return [...pluginData.values()].filter(
+    async listPluginData(sessionId, pluginId, namespace?, pagination?) {
+      const filtered = [...pluginData.values()].filter(
         (r) =>
           r.sessionId === sessionId &&
           r.pluginId === pluginId &&
           (namespace === undefined || r.namespace === namespace),
       );
+      return applyPagination(filtered, pagination);
     },
 
     async deletePluginData(sessionId, pluginId, namespace, key) {
@@ -305,8 +318,9 @@ export function createMemoryStore(): DataStore {
       traceEvents.push(record);
     },
 
-    async listTraceEvents(sessionId) {
-      return traceEvents.filter((r) => r.sessionId === sessionId);
+    async listTraceEvents(sessionId, pagination?) {
+      const filtered = traceEvents.filter((r) => r.sessionId === sessionId);
+      return applyPagination(filtered, pagination);
     },
 
     // ── Turn Messages ──
@@ -315,10 +329,11 @@ export function createMemoryStore(): DataStore {
       turnMessages.push(record);
     },
 
-    async listTurnMessages(sessionId) {
-      return turnMessages
+    async listTurnMessages(sessionId, pagination?) {
+      const filtered = turnMessages
         .filter((r) => r.sessionId === sessionId)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      return applyPagination(filtered, pagination);
     },
 
     // ── Player Inputs ──

@@ -11,6 +11,7 @@ import { eq, and, asc } from 'drizzle-orm';
 import * as schema from './schema.js';
 import type {
   DataStore,
+  PaginationOpts,
   SessionRecord,
   TurnResultRecord,
   RuntimeResultRecord,
@@ -878,13 +879,16 @@ export function createSqliteStore(dbPath: string): DataStore {
         .run();
     },
 
-    async listMessages(sessionId: string): Promise<MessageRecord[]> {
-      const rows = db
+    async listMessages(sessionId: string, pagination?: PaginationOpts): Promise<MessageRecord[]> {
+      let query = db
         .select()
         .from(schema.messages)
         .where(eq(schema.messages.sessionId, sessionId))
-        .all();
-      return rows.map(toMessageRecord);
+        .orderBy(asc(schema.messages.createdAt))
+        .$dynamic();
+      if (pagination?.limit !== undefined) query = query.limit(pagination.limit);
+      if (pagination?.offset) query = query.offset(pagination.offset);
+      return query.all().map(toMessageRecord);
     },
 
     // ── Characters ───────────────────────────────────────────
@@ -1011,6 +1015,7 @@ export function createSqliteStore(dbPath: string): DataStore {
       sessionId: string,
       pluginId: string,
       namespace?: string,
+      pagination?: PaginationOpts,
     ): Promise<PluginDataRecord[]> {
       const conditions = [
         eq(schema.pluginData.sessionId, sessionId),
@@ -1020,12 +1025,14 @@ export function createSqliteStore(dbPath: string): DataStore {
         conditions.push(eq(schema.pluginData.namespace, namespace));
       }
 
-      const rows = db
+      let query = db
         .select()
         .from(schema.pluginData)
         .where(and(...conditions))
-        .all();
-      return rows.map(toPluginDataRecord);
+        .$dynamic();
+      if (pagination?.limit !== undefined) query = query.limit(pagination.limit);
+      if (pagination?.offset) query = query.offset(pagination.offset);
+      return query.all().map(toPluginDataRecord);
     },
 
     async deletePluginData(
@@ -1144,13 +1151,15 @@ export function createSqliteStore(dbPath: string): DataStore {
         .run();
     },
 
-    async listTraceEvents(sessionId: string): Promise<TraceEventRecord[]> {
-      const rows = db
+    async listTraceEvents(sessionId: string, pagination?: PaginationOpts): Promise<TraceEventRecord[]> {
+      let query = db
         .select()
         .from(schema.traceEvents)
         .where(eq(schema.traceEvents.sessionId, sessionId))
-        .all();
-      return rows.map(toTraceEventRecord);
+        .$dynamic();
+      if (pagination?.limit !== undefined) query = query.limit(pagination.limit);
+      if (pagination?.offset) query = query.offset(pagination.offset);
+      return query.all().map(toTraceEventRecord);
     },
 
     // ── Turn Messages ───────────────────────────────────────
@@ -1175,14 +1184,16 @@ export function createSqliteStore(dbPath: string): DataStore {
         .run();
     },
 
-    async listTurnMessages(sessionId: string): Promise<TurnMessageRecord[]> {
-      const rows = db
+    async listTurnMessages(sessionId: string, pagination?: PaginationOpts): Promise<TurnMessageRecord[]> {
+      let query = db
         .select()
         .from(schema.turnMessages)
         .where(eq(schema.turnMessages.sessionId, sessionId))
         .orderBy(asc(schema.turnMessages.createdAt))
-        .all();
-      return rows.map(toTurnMessageRecord);
+        .$dynamic();
+      if (pagination?.limit !== undefined) query = query.limit(pagination.limit);
+      if (pagination?.offset) query = query.offset(pagination.offset);
+      return query.all().map(toTurnMessageRecord);
     },
 
     // ── Player Inputs ───────────────────────────────────────

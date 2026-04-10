@@ -4,8 +4,18 @@
  */
 
 import { openDB, type IDBPDatabase } from 'idb';
+
+function applyPagination<T>(items: T[], pagination?: PaginationOpts): T[] {
+  if (!pagination) return items;
+  const offset = pagination.offset ?? 0;
+  const limit = pagination.limit;
+  if (limit !== undefined) return items.slice(offset, offset + limit);
+  if (offset > 0) return items.slice(offset);
+  return items;
+}
 import type {
   DataStore,
+  PaginationOpts,
   SessionRecord,
   TurnResultRecord,
   RuntimeResultRecord,
@@ -17,6 +27,7 @@ import type {
   ApprovalRecord,
   MessageRecord,
   CharacterRecord,
+  PluginDataRecord,
   PluginConfigRecord,
   WorldRecord,
   TraceEventRecord,
@@ -24,7 +35,7 @@ import type {
   PlayerInputRecord,
 } from '../types.js';
 
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 async function initDb(dbName: string): Promise<IDBPDatabase> {
   return openDB(dbName, DB_VERSION, {
@@ -80,6 +91,12 @@ async function initDb(dbName: string): Promise<IDBPDatabase> {
         const playerInputs = db.createObjectStore('playerInputs', { keyPath: 'id' });
         playerInputs.createIndex('sessionId', 'sessionId');
         playerInputs.createIndex('lookup', ['sessionId', 'formId']);
+      }
+
+      if (oldVersion < 3) {
+        const pluginData = db.createObjectStore('plugin_data', { keyPath: 'id' });
+        pluginData.createIndex('sessionId_pluginId', ['sessionId', 'pluginId']);
+        pluginData.createIndex('lookup', ['sessionId', 'pluginId', 'namespace', 'key']);
       }
     },
   });
@@ -240,9 +257,10 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
       await db.put('messages', structuredClone(record));
     },
 
-    async listMessages(sessionId: string): Promise<MessageRecord[]> {
+    async listMessages(sessionId: string, pagination?: PaginationOpts): Promise<MessageRecord[]> {
       const all = await db.getAllFromIndex('messages', 'sessionId', sessionId);
-      return all.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      const sorted = all.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      return applyPagination(sorted, pagination);
     },
 
     // ── Characters ──
@@ -253,6 +271,50 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
 
     async listCharacters(sessionId: string): Promise<CharacterRecord[]> {
       return db.getAllFromIndex('characters', 'sessionId', sessionId);
+    },
+
+    // ── Plugin Data ──
+
+    async setPluginData(record: PluginDataRecord): Promise<void> {
+      // Delete any existing record with the same composite key, then insert the new one
+      const tx = db.transaction('plugin_data', 'readwrite');
+      const existing = await tx.store.index('lookup').get([record.sessionId, record.pluginId, record.namespace, record.key]);
+      if (existing) {
+        await tx.store.delete(existing.id);
+      }
+      await tx.store.put(structuredClone(record));
+      await tx.done;
+    },
+
+    async setPluginDataBatch(records: readonly PluginDataRecord[]): Promise<void> {
+      if (records.length === 0) return;
+      const tx = db.transaction('plugin_data', 'readwrite');
+      for (const record of records) {
+        const existing = await tx.store.index('lookup').get([record.sessionId, record.pluginId, record.namespace, record.key]);
+        if (existing) {
+          await tx.store.delete(existing.id);
+        }
+        await tx.store.put(structuredClone(record));
+      }
+      await tx.done;
+    },
+
+    async getPluginData(sessionId: string, pluginId: string, namespace: string, key: string): Promise<PluginDataRecord | null> {
+      const results = await db.getAllFromIndex('plugin_data', 'lookup', [sessionId, pluginId, namespace, key]);
+      return results[0] ?? null;
+    },
+
+    async listPluginData(sessionId: string, pluginId: string, namespace?: string, pagination?: PaginationOpts): Promise<PluginDataRecord[]> {
+      const all = await db.getAllFromIndex('plugin_data', 'sessionId_pluginId', [sessionId, pluginId]);
+      const filtered = namespace === undefined ? all : all.filter((r) => r.namespace === namespace);
+      return applyPagination(filtered, pagination);
+    },
+
+    async deletePluginData(sessionId: string, pluginId: string, namespace: string, key: string): Promise<void> {
+      const existing = await db.getAllFromIndex('plugin_data', 'lookup', [sessionId, pluginId, namespace, key]);
+      for (const record of existing) {
+        await db.delete('plugin_data', record.id);
+      }
     },
 
     // ── Plugin Configs ──
@@ -293,8 +355,9 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
       await db.put('traceEvents', structuredClone(record));
     },
 
-    async listTraceEvents(sessionId: string): Promise<TraceEventRecord[]> {
-      return db.getAllFromIndex('traceEvents', 'sessionId', sessionId);
+    async listTraceEvents(sessionId: string, pagination?: PaginationOpts): Promise<TraceEventRecord[]> {
+      const all = await db.getAllFromIndex('traceEvents', 'sessionId', sessionId);
+      return applyPagination(all, pagination);
     },
 
     // ── Turn Messages ──
@@ -303,9 +366,10 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
       await db.put('turnMessages', structuredClone(record));
     },
 
-    async listTurnMessages(sessionId: string): Promise<TurnMessageRecord[]> {
+    async listTurnMessages(sessionId: string, pagination?: PaginationOpts): Promise<TurnMessageRecord[]> {
       const all = await db.getAllFromIndex('turnMessages', 'sessionId', sessionId);
-      return all.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      const sorted = all.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      return applyPagination(sorted, pagination);
     },
 
     // ── Player Inputs ──

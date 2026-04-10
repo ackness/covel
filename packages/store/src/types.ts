@@ -11,6 +11,8 @@ export interface WorldRecord {
   readonly id: string;
   readonly name: string;
   readonly description: string;
+  readonly lore?: string;
+  readonly tags?: readonly string[];
   readonly locale?: string;
   readonly metadata?: Readonly<Record<string, unknown>>;
   readonly createdAt: string;
@@ -138,6 +140,17 @@ export interface CharacterRecord {
   readonly updatedAt: string;
 }
 
+export interface PluginDataRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly pluginId: string;
+  readonly namespace: string;
+  readonly key: string;
+  readonly value: unknown;           // JSON
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
 export interface PluginConfigRecord {
   readonly id: string;
   readonly sessionId: string;
@@ -154,6 +167,15 @@ export interface TraceEventRecord {
   readonly turnId: string;
   readonly payload: unknown;       // JSON
   readonly createdAt: string;
+}
+
+// ── Pagination ──────────────────────────────────────────────────
+
+export interface PaginationOpts {
+  /** Max rows to return. Default varies by method. */
+  readonly limit?: number;
+  /** Number of rows to skip. Default: 0. */
+  readonly offset?: number;
 }
 
 // ── DataStore interface ──────────────────────────────────────────
@@ -203,11 +225,18 @@ export interface DataStore {
 
   // ── Messages ──
   addMessage(record: MessageRecord): Promise<void>;
-  listMessages(sessionId: string): Promise<MessageRecord[]>;
+  listMessages(sessionId: string, pagination?: PaginationOpts): Promise<MessageRecord[]>;
 
   // ── Characters ──
   upsertCharacter(record: CharacterRecord): Promise<void>;
   listCharacters(sessionId: string): Promise<CharacterRecord[]>;
+
+  // ── Plugin Data ──
+  setPluginData(record: PluginDataRecord): Promise<void>;
+  setPluginDataBatch(records: readonly PluginDataRecord[]): Promise<void>;
+  getPluginData(sessionId: string, pluginId: string, namespace: string, key: string): Promise<PluginDataRecord | null>;
+  listPluginData(sessionId: string, pluginId: string, namespace?: string, pagination?: PaginationOpts): Promise<PluginDataRecord[]>;
+  deletePluginData(sessionId: string, pluginId: string, namespace: string, key: string): Promise<void>;
 
   // ── Plugin Configs ──
   savePluginConfig(record: PluginConfigRecord): Promise<void>;
@@ -220,11 +249,11 @@ export interface DataStore {
 
   // ── Trace ──
   addTraceEvent(record: TraceEventRecord): Promise<void>;
-  listTraceEvents(sessionId: string): Promise<TraceEventRecord[]>;
+  listTraceEvents(sessionId: string, pagination?: PaginationOpts): Promise<TraceEventRecord[]>;
 
   // ── Turn Messages (append-only) ──
   appendTurnMessage(record: TurnMessageRecord): Promise<void>;
-  listTurnMessages(sessionId: string): Promise<TurnMessageRecord[]>;
+  listTurnMessages(sessionId: string, pagination?: PaginationOpts): Promise<TurnMessageRecord[]>;
 
   // ── Player Inputs ──
   savePlayerInput(record: PlayerInputRecord): Promise<void>;

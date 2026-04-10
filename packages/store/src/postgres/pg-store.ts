@@ -11,6 +11,7 @@ import { eq, and, asc } from 'drizzle-orm';
 import * as schema from './schema.js';
 import type {
   DataStore,
+  PaginationOpts,
   SessionRecord,
   TurnResultRecord,
   RuntimeResultRecord,
@@ -851,12 +852,16 @@ export async function createPgStore(
       });
     },
 
-    async listMessages(sessionId: string): Promise<MessageRecord[]> {
-      const rows = await db
+    async listMessages(sessionId: string, pagination?: PaginationOpts): Promise<MessageRecord[]> {
+      let query = db
         .select()
         .from(schema.messages)
         .where(eq(schema.messages.sessionId, sessionId))
-        .orderBy(asc(schema.messages.createdAt));
+        .orderBy(asc(schema.messages.createdAt))
+        .$dynamic();
+      if (pagination?.limit !== undefined) query = query.limit(pagination.limit);
+      if (pagination?.offset) query = query.offset(pagination.offset);
+      const rows = await query;
       return rows.map(toMessageRecord);
     },
 
@@ -982,6 +987,7 @@ export async function createPgStore(
       sessionId: string,
       pluginId: string,
       namespace?: string,
+      pagination?: PaginationOpts,
     ): Promise<PluginDataRecord[]> {
       const conditions = [
         eq(schema.pluginData.sessionId, sessionId),
@@ -991,10 +997,14 @@ export async function createPgStore(
         conditions.push(eq(schema.pluginData.namespace, namespace));
       }
 
-      const rows = await db
+      let query = db
         .select()
         .from(schema.pluginData)
-        .where(and(...conditions));
+        .where(and(...conditions))
+        .$dynamic();
+      if (pagination?.limit !== undefined) query = query.limit(pagination.limit);
+      if (pagination?.offset) query = query.offset(pagination.offset);
+      const rows = await query;
       return rows.map(toPluginDataRecord);
     },
 
@@ -1110,11 +1120,15 @@ export async function createPgStore(
       });
     },
 
-    async listTraceEvents(sessionId: string): Promise<TraceEventRecord[]> {
-      const rows = await db
+    async listTraceEvents(sessionId: string, pagination?: PaginationOpts): Promise<TraceEventRecord[]> {
+      let query = db
         .select()
         .from(schema.traceEvents)
-        .where(eq(schema.traceEvents.sessionId, sessionId));
+        .where(eq(schema.traceEvents.sessionId, sessionId))
+        .$dynamic();
+      if (pagination?.limit !== undefined) query = query.limit(pagination.limit);
+      if (pagination?.offset) query = query.offset(pagination.offset);
+      const rows = await query;
       return rows.map(toTraceEventRecord);
     },
 
@@ -1138,12 +1152,16 @@ export async function createPgStore(
       });
     },
 
-    async listTurnMessages(sessionId: string): Promise<TurnMessageRecord[]> {
-      const rows = await db
+    async listTurnMessages(sessionId: string, pagination?: PaginationOpts): Promise<TurnMessageRecord[]> {
+      let query = db
         .select()
         .from(schema.turnMessages)
         .where(eq(schema.turnMessages.sessionId, sessionId))
-        .orderBy(asc(schema.turnMessages.createdAt));
+        .orderBy(asc(schema.turnMessages.createdAt))
+        .$dynamic();
+      if (pagination?.limit !== undefined) query = query.limit(pagination.limit);
+      if (pagination?.offset) query = query.offset(pagination.offset);
+      const rows = await query;
       return rows.map(toTurnMessageRecord);
     },
 

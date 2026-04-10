@@ -22,4 +22,5 @@ export type {
   TraceEventRecord,
   TurnMessageRecord,
   PlayerInputRecord,
+  PaginationOpts,
 } from './types.js';
