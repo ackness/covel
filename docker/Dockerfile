@@ -10,16 +10,26 @@ COPY pnpm-lock.yaml package.json pnpm-workspace.yaml ./
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
 
-# Packages
-COPY packages/shared/package.json packages/shared/
+# Packages (alphabetical — keep in sync with packages/ directory)
 COPY packages/ai-provider/package.json packages/ai-provider/
-COPY packages/runtime/package.json packages/runtime/
-COPY packages/store/package.json packages/store/
-COPY packages/plugin-loader/package.json packages/plugin-loader/
-COPY packages/state/package.json packages/state/
-COPY packages/events/package.json packages/events/
-COPY packages/tools/package.json packages/tools/
 COPY packages/approval/package.json packages/approval/
+COPY packages/context/package.json packages/context/
+COPY packages/create/package.json packages/create/
+COPY packages/events/package.json packages/events/
+COPY packages/plugin-loader/package.json packages/plugin-loader/
+COPY packages/plugin-test-utils/package.json packages/plugin-test-utils/
+COPY packages/runtime/package.json packages/runtime/
+COPY packages/shared/package.json packages/shared/
+COPY packages/state/package.json packages/state/
+COPY packages/store/package.json packages/store/
+COPY packages/tools/package.json packages/tools/
+
+# Plugins (workspace members, need manifests for pnpm install)
+COPY plugins/core-char-creator/package.json plugins/core-char-creator/
+COPY plugins/core-codex/package.json plugins/core-codex/
+COPY plugins/core-narrator/package.json plugins/core-narrator/
+COPY plugins/core-pregame/package.json plugins/core-pregame/
+COPY plugins/core-world-init/package.json plugins/core-world-init/
 
 RUN pnpm install --frozen-lockfile
 
@@ -46,7 +56,7 @@ COPY packages/ packages/
 COPY apps/server/src/ apps/server/src/
 COPY apps/server/tsconfig.json apps/server/
 
-# Plugins (loaded by plugin-host at startup)
+# Plugins (loaded by plugin-loader at startup)
 COPY plugins/ plugins/
 
 # Externalized prompt templates (loaded by @covel/context at runtime)
@@ -54,6 +64,9 @@ COPY prompts/ prompts/
 
 # World packages (seed data loaded on first startup)
 COPY worlds/ worlds/
+
+# llm.toml (model slot config, optional — mount or override at runtime)
+COPY llm.toml* ./
 
 # Built web static assets
 COPY --from=build-web /app/dist/web apps/server/web-dist/

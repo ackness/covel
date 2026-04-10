@@ -39,9 +39,11 @@ services:
       # Create .env.llm from .env.llm.example: cp .env.llm.example .env.llm
       - path: ../.env.llm
         required: false
-    # Optional: mount custom llm.toml for model slot configuration
-    # volumes:
-    #   - ../llm.toml:/app/llm.toml:ro
+    volumes:
+      # Model slot configuration (required — copy llm.toml.example to llm.toml)
+      - ../llm.toml:/app/llm.toml:ro
+      # Optional: mount custom world packages
+      # - ../worlds:/app/worlds:ro
     depends_on:
       postgres:
         condition: service_healthy
