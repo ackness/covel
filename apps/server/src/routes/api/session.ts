@@ -17,6 +17,7 @@ import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import type { PluginRegistry } from '@covel/plugin-loader';
 import type { DataStore, SessionRecord } from '@covel/store';
+import { buildSessionSnapshot } from '@covel/runtime';
 
 const SAFE_WORLD_ID_RE = /^[a-z0-9_-]{1,64}$/i;
 const SAFE_SESSION_ID_RE = /^[a-z0-9_-]{1,128}$/i;
@@ -198,4 +199,19 @@ sessionRoutes.post('/:id/plugins/disable', async (c) => {
   const active = (session.activePlugins ?? []).filter((p) => p !== body.pluginId);
   await store.updateSession(id, { activePlugins: active, updatedAt: new Date().toISOString() });
   return c.json({ ok: true, active });
+});
+
+// ── Session Snapshot (restore/reconnection) ────────────────────
+
+// GET /sessions/:id/snapshot — complete session state for client restore
+sessionRoutes.get('/:id/snapshot', async (c) => {
+  const store = c.get('store');
+  const id = c.req.param('id');
+
+  const snapshot = await buildSessionSnapshot(store, id);
+  if (!snapshot) {
+    return c.json({ error: 'Session not found' }, 404);
+  }
+
+  return c.json(snapshot);
 });

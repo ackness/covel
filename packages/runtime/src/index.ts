@@ -33,6 +33,10 @@ export type { GatewayLike, GatewayAdapterConfig } from './gateway-llm-adapter.js
 export { normalizeOutput, createCommitPipeline, processRuntimeResult, createTraceRecorder } from './session-kernel.js';
 export type { KernelStore, CommitPipeline, TraceRecorder } from './session-kernel.js';
 
+// ── Snapshot Builder ────────────────────────────────────────────
+export { buildSessionSnapshot } from './snapshot-builder.js';
+export type { SnapshotStore } from './snapshot-builder.js';
+
 // ── Types ────────────────────────────────────────────────────────
 export type {
   TriggerContext,

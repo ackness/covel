@@ -95,6 +95,26 @@ export type {
 } from './proposal.js';
 
 export type {
+  ClientCapabilities,
+  ServerCapabilities,
+  CommandType,
+  SessionCommand,
+  SessionCreatePayload,
+  SessionRestorePayload,
+  TurnSubmitPayload,
+  InputSubmitPayload,
+  ProtocolEventType,
+  ProtocolEvent,
+  SessionSnapshot,
+  SnapshotMessage,
+  SnapshotCharacter,
+  SnapshotTraceEvent,
+  SnapshotPluginStatus,
+  SessionTransport,
+  ClientInfo,
+} from './protocol.js';
+
+export type {
   I18nText,
   WorldLandmark,
   WorldRegion,
