@@ -37,6 +37,7 @@ export interface ChatMessagesProps {
   blockSelections: Record<string, string>;
   onSendMessage: (msg: string) => void;
   onSubmitBlock: (blockId: string) => void;
+  onSubmitInteraction?: (blockId: string, turnId: string, interactionId: string, type: 'form' | 'choice' | 'confirmation', values: Record<string, unknown>) => Promise<void>;
   onRetryRuntime?: (runtimeId: string | undefined) => void;
   onTriggerEvent?: (type: string, data: Record<string, unknown>) => void;
   onBlockSelect: (blockId: string, value: string) => void;
@@ -64,6 +65,7 @@ export function ChatMessages({
   blockSelections,
   onSendMessage,
   onSubmitBlock,
+  onSubmitInteraction,
   onRetryRuntime,
   onTriggerEvent,
   onBlockSelect,
@@ -163,8 +165,10 @@ export function ChatMessages({
     const blockDisabled = executing || isSubmitted;
     const isInteractive = INTERACTIVE_BLOCK_TYPES.has(blockType);
 
-    // For interactive blocks: use select mode (collect, then confirm together).
-    // For non-interactive blocks: direct submit as before.
+    // Route block submissions:
+    // - Interactive forms/choices with interactionId → submit-inputs API
+    // - Trigger events → onTriggerEvent
+    // - Everything else → onSendMessage (legacy)
     const handleBlockSubmit = (value: string) => {
       const submission = resolveBlockSubmission(blockType, value);
 
@@ -177,6 +181,27 @@ export function ChatMessages({
         return;
       }
 
+      // Check if this is an interactive block with submit-inputs support
+      const interactionId = (data as Record<string, unknown> | undefined)?.interactionId as string | undefined;
+      const interactionType = (data as Record<string, unknown> | undefined)?.type as string | undefined;
+      const blockMeta = block.meta as Record<string, unknown> | undefined;
+      const turnId = msg.turnId ?? (blockMeta?.turnId as string | undefined);
+
+      if (onSubmitInteraction && interactionId && turnId &&
+          (blockType === 'interactive_form' || blockType === 'interactive_choice')) {
+        // Parse form values from the submitted value string
+        let formValues: Record<string, unknown>;
+        try {
+          formValues = JSON.parse(value);
+        } catch {
+          // Fallback: treat as single-value submission
+          formValues = { value };
+        }
+        onSubmitInteraction(msg.id, turnId, interactionId, (interactionType ?? 'form') as 'form' | 'choice' | 'confirmation', formValues);
+        return;
+      }
+
+      // Fallback: legacy path
       onSubmitBlock(msg.id);
       onSendMessage(submission.content);
     };

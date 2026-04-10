@@ -406,6 +406,42 @@ export async function disableSessionPlugin(
   );
 }
 
+// ── Submit Inputs (form/choice/confirmation interactions) ────────
+
+export interface SubmitInputsResult {
+  results: Array<{
+    submissionId: string;
+    interactionId: string;
+    filledNarrative: string;
+    accepted: boolean;
+  }>;
+}
+
+export async function submitInputs(
+  sessionId: string,
+  body: {
+    turnId: string;
+    submissions: Array<{
+      interactionId: string;
+      type: 'form' | 'choice' | 'confirmation';
+      values: Record<string, unknown>;
+    }>;
+  },
+): Promise<SubmitInputsResult> {
+  return request<SubmitInputsResult>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/submit-inputs`,
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+}
+
+// ── Session Snapshot (restore/reconnection) ───────────────────────
+
+export async function getSessionSnapshot(sessionId: string): Promise<import('@covel/shared').SessionSnapshot> {
+  return request<import('@covel/shared').SessionSnapshot>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/snapshot`,
+  );
+}
+
 // ── Session API ────────────────────────────────────────────────────
 
 export async function listSessions(worldId: string): Promise<SessionRecord[]> {

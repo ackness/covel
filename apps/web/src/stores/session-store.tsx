@@ -297,6 +297,8 @@ interface SessionContextValue {
   sendMessage: (content: string) => void;
   /** Mark a block as submitted (permanently locks it). */
   submitBlock: (blockId: string) => void;
+  /** Submit an interactive block through the submit-inputs API (form/choice/confirmation). */
+  submitInteraction: (blockId: string, turnId: string, interactionId: string, type: 'form' | 'choice' | 'confirmation', values: Record<string, unknown>) => Promise<void>;
   executeCommand: (command: string) => void;
   /**
    * Retry the last turn from a specific runtime.
@@ -862,6 +864,44 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  /**
+   * Submit an interactive block through the submit-inputs API.
+   * This handles: template filling, CharacterRecord creation, phase transition.
+   * After submission, triggers the next turn with the filled narrative.
+   */
+  const submitInteraction = useCallback(async (
+    blockId: string,
+    turnId: string,
+    interactionId: string,
+    type: 'form' | 'choice' | 'confirmation',
+    values: Record<string, unknown>,
+  ) => {
+    const sid = sessionIdRef.current;
+    if (!sid) return;
+
+    try {
+      // 1. Mark block as submitted (UI lock)
+      submitBlock(blockId);
+
+      // 2. Call submit-inputs API — handles template fill, character creation, phase transition
+      const result = await api.submitInputs(sid, {
+        turnId,
+        submissions: [{ interactionId, type, values }],
+      });
+
+      // 3. Use filled narrative to trigger next turn
+      const filled = result.results?.[0]?.filledNarrative;
+      if (filled) {
+        sendMessage(filled);
+      }
+    } catch (err) {
+      console.error('[submitInteraction] Failed:', err);
+      // Still send raw values as fallback
+      const rawContent = Object.values(values).join(', ');
+      sendMessage(rawContent);
+    }
+  }, [submitBlock, sendMessage]);
+
   const executeCommand = useCallback((command: string) => {
     if (!state.session || state.executing) return;
 
@@ -1138,6 +1178,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     deleteSession,
     sendMessage,
     submitBlock,
+    submitInteraction,
     executeCommand,
     retryRuntime,
     resetSession,

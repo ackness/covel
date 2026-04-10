@@ -74,6 +74,8 @@ interface GameViewProps {
   onSendMessage: (content: string) => void;
   /** Mark a block as submitted (permanently locks it). */
   onSubmitBlock: (blockId: string) => void;
+  /** Submit an interactive block through submit-inputs API. */
+  onSubmitInteraction?: (blockId: string, turnId: string, interactionId: string, type: 'form' | 'choice' | 'confirmation', values: Record<string, unknown>) => Promise<void>;
   /** Retry from a specific runtime (undefined = retry all). */
   onRetryRuntime?: (runtimeId?: string) => void;
   onResetSession: () => void;
@@ -110,6 +112,7 @@ export function GameView({
   onBeginAdventure,
   onSendMessage,
   onSubmitBlock,
+  onSubmitInteraction,
   onRetryRuntime,
   onResetSession,
   onBackToWorldSelect,
@@ -446,6 +449,7 @@ export function GameView({
             blockSelections={blockSelections}
             onSendMessage={onSendMessage}
             onSubmitBlock={onSubmitBlock}
+            onSubmitInteraction={onSubmitInteraction}
             onRetryRuntime={onRetryRuntime}
             onTriggerEvent={onTriggerEvent}
             onBlockSelect={handleBlockSelect}

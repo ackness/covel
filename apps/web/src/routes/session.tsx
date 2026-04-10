@@ -30,6 +30,7 @@ function SessionPage() {
     deleteSession,
     sendMessage,
     submitBlock,
+    submitInteraction,
     retryRuntime,
     resetSession,
     backToWorldSelect,
@@ -139,6 +140,7 @@ function SessionPage() {
         submittedBlockIds={state.submittedBlockIds}
         onSendMessage={sendMessage}
         onSubmitBlock={submitBlock}
+        onSubmitInteraction={submitInteraction}
         onBeginAdventure={beginAdventure}
         onRetryRuntime={retryRuntime}
         onResetSession={resetSession}
