@@ -149,13 +149,28 @@ sessionRoutes.get('/:id/plugins', async (c) => {
 
   const active = [...(session.activePlugins ?? [])];
   const all = pluginRegistry.getAll();
-  const available = Array.from(all.values()).map((entry) => ({
-    id: entry.id,
-    name: entry.summary.name,
-    description: entry.summary.description,
-    pluginType: entry.summary.pluginType,
-    active: active.includes(entry.id),
-  }));
+  const available = Array.from(all.values()).map((entry) => {
+    // Collect capabilities from all loaded runtimes (multi-runtime plugins have sub-entries)
+    const caps: string[] = [];
+    if (entry.manifest?.manifest.capabilities) {
+      caps.push(...entry.manifest.manifest.capabilities);
+    }
+    for (const [, loaded] of entry.loadedRuntimes) {
+      if (loaded.manifest.capabilities) {
+        for (const c of loaded.manifest.capabilities) {
+          if (!caps.includes(c)) caps.push(c);
+        }
+      }
+    }
+    return {
+      id: entry.id,
+      name: entry.summary.name,
+      description: entry.summary.description,
+      pluginType: entry.summary.pluginType,
+      active: active.includes(entry.id),
+      ...(caps.length > 0 ? { capabilities: caps } : {}),
+    };
+  });
 
   return c.json({ active, available });
 });
@@ -206,11 +221,44 @@ sessionRoutes.post('/:id/plugins/disable', async (c) => {
 // GET /sessions/:id/snapshot — complete session state for client restore
 sessionRoutes.get('/:id/snapshot', async (c) => {
   const store = c.get('store');
+  const pluginRegistry = c.get('pluginRegistry');
   const id = c.req.param('id');
 
   const snapshot = await buildSessionSnapshot(store, id);
   if (!snapshot) {
     return c.json({ error: 'Session not found' }, 404);
+  }
+
+  // Attach character attribute schema if a world-data-provider plugin exists.
+  // Use session.activePlugins from DB + global registry (not in-memory activation map)
+  // to survive server restarts / hot-reloads.
+  const session = await store.getSession(id);
+  const activePlugins = session?.activePlugins ?? [];
+  let worldDataPluginId: string | undefined;
+  for (const pid of activePlugins) {
+    const entry = pluginRegistry.get(pid);
+    if (!entry) continue;
+    if (entry.manifest?.manifest.capabilities?.includes('world-data-provider')) {
+      worldDataPluginId = pid;
+      break;
+    }
+    for (const [, loaded] of entry.loadedRuntimes) {
+      if (loaded.manifest.capabilities?.includes('world-data-provider')) {
+        worldDataPluginId = pid;
+        break;
+      }
+    }
+    if (worldDataPluginId) break;
+  }
+  if (worldDataPluginId) {
+    try {
+      const schemaRecord = await store.getPluginData(id, worldDataPluginId, 'schema', 'character-attributes');
+      if (schemaRecord?.value) {
+        return c.json({ ...snapshot, characterSchema: schemaRecord.value });
+      }
+    } catch {
+      // Non-critical: proceed without schema
+    }
   }
 
   return c.json(snapshot);

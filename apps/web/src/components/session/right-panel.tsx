@@ -24,6 +24,7 @@ import { Card, CardContent } from "@/components/ui/card.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { GameStatusPanel } from "./game-status-panel.js";
+import { CharacterPanel } from "./character-panel.js";
 import { EventPanel } from "./event-panel.js";
 import { CodexPanel } from "./codex-panel.js";
 import { text } from "@/components/world/editor-helpers.js";
@@ -72,6 +73,21 @@ export function RightPanel({
     setWorldEntries([]);
     setWorldDataLoaded(false);
   }, [sessionId]);
+
+  // Extract character attribute schema from loaded world data or gameState (snapshot restore)
+  const charAttrSchema = useMemo(() => {
+    // Priority 1: from plugin_data API (loaded by world tab)
+    const entry = worldSchema.find((e) => e.key === "character-attributes");
+    if (entry?.value && typeof entry.value === "object") {
+      return entry.value as Record<string, unknown>;
+    }
+    // Priority 2: from snapshot restore (gameState.characterSchema)
+    const gs = gameState.characterSchema;
+    if (gs && typeof gs === "object") {
+      return gs as Record<string, unknown>;
+    }
+    return null;
+  }, [worldSchema, gameState.characterSchema]);
 
   // Discover world-data-provider plugin ID via capabilities (never hardcode plugin IDs)
   const worldDataPluginId = useMemo(() => {
@@ -234,15 +250,10 @@ export function RightPanel({
             <User className="w-4 h-4 shrink-0" />{" "}
             {t("session.characterTitle", "角色状态")}
           </h3>
-          {characters.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">
-              {t("session.noCharacters", "角色信息将在创建角色后显示。")}
-            </p>
-          ) : (
-            <div className="space-y-3">
-              <GameStatusPanel gameState={{ characters }} />
-            </div>
-          )}
+          <CharacterPanel
+            characters={characters}
+            schema={charAttrSchema}
+          />
         </TabsContent>
         <TabsContent value="events" className="p-4 m-0">
           <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
@@ -399,6 +410,50 @@ function WorldDataEntryCard({ entry }: { entry: PluginDataEntry }) {
   const label = DIMENSION_LABELS[entry.key] ?? entry.key;
   const value = entry.value;
 
+  // Special rendering for character-attributes schema
+  if (entry.key === "character-attributes" && typeof value === "object" && value !== null) {
+    const schema = value as Record<string, unknown>;
+    const attrs = schema.attributes as Array<Record<string, unknown>> | undefined;
+    if (attrs && Array.isArray(attrs)) {
+      return (
+        <Card>
+          <CardContent className="p-3">
+            <button
+              type="button"
+              className="w-full text-left flex items-center gap-2 hover:bg-muted/30 transition-colors"
+              onClick={() => setExpanded((v) => !v)}
+            >
+              {expanded
+                ? <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+                : <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
+              }
+              <span className="text-xs font-medium">{label}</span>
+              {!expanded && (
+                <span className="text-[11px] text-muted-foreground">{attrs.length} 个属性</span>
+              )}
+            </button>
+            {expanded && (
+              <div className="mt-2 pl-5 space-y-1.5">
+                {attrs.map((attr) => (
+                  <div key={attr.id as string} className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="font-medium text-foreground">{attr.name as string}</span>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline" className="text-[9px] rounded-none">{attr.type as string}</Badge>
+                      <Badge variant="outline" className="text-[9px] rounded-none">{attr.category as string}</Badge>
+                      {attr.defaultValue !== undefined && (
+                        <span className="text-muted-foreground font-mono text-[10px]">={String(attr.defaultValue)}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      );
+    }
+  }
+
   // For simple string values, show inline
   if (typeof value === "string") {
     return (
@@ -455,27 +510,8 @@ function WorldDataEntryCard({ entry }: { entry: PluginDataEntry }) {
             )}
           </button>
           {expanded && (
-            <div className="mt-2 pl-5 space-y-1.5">
-              {Array.isArray(value)
-                ? value.map((item, i) => (
-                    <div key={i} className="text-xs text-muted-foreground">
-                      {typeof item === "object" && item !== null
-                        ? <ObjectRenderer data={item as Record<string, unknown>} />
-                        : String(item)
-                      }
-                    </div>
-                  ))
-                : Object.entries(obj).map(([k, v]) => (
-                    <div key={k} className="text-xs">
-                      <span className="font-medium text-foreground">{k}:</span>{" "}
-                      <span className="text-muted-foreground">
-                        {typeof v === "object" && v !== null
-                          ? JSON.stringify(v, null, 2)
-                          : String(v ?? "")}
-                      </span>
-                    </div>
-                  ))
-              }
+            <div className="mt-2 pl-5">
+              <FormattedValue value={value} />
             </div>
           )}
         </CardContent>
@@ -496,20 +532,63 @@ function WorldDataEntryCard({ entry }: { entry: PluginDataEntry }) {
   );
 }
 
-/** Render a nested object with indented key-value pairs. */
-function ObjectRenderer({ data }: { data: Record<string, unknown> }) {
-  return (
-    <div className="space-y-0.5">
-      {Object.entries(data).map(([k, v]) => (
-        <div key={k} className="text-[11px]">
-          <span className="font-medium text-foreground">{k}:</span>{" "}
-          <span className="text-muted-foreground">
-            {typeof v === "object" && v !== null
-              ? JSON.stringify(v)
-              : String(v ?? "")}
-          </span>
+/** Recursively render a value in a human-friendly format (no raw JSON). */
+function FormattedValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
+  if (value === null || value === undefined) return <span className="text-muted-foreground">—</span>;
+
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return <span className="text-muted-foreground">{String(value)}</span>;
+  }
+
+  if (Array.isArray(value)) {
+    // Simple string/number arrays → comma-separated badges
+    if (value.every(v => typeof v === "string" || typeof v === "number")) {
+      return (
+        <div className="flex flex-wrap gap-1">
+          {value.map((item, i) => (
+            <Badge key={i} variant="outline" className="text-[10px] rounded-none font-normal">
+              {String(item)}
+            </Badge>
+          ))}
         </div>
-      ))}
-    </div>
-  );
+      );
+    }
+    // Complex arrays → numbered list
+    return (
+      <div className={`space-y-1.5 ${depth > 0 ? "pl-3 border-l border-border/50" : ""}`}>
+        {value.map((item, i) => (
+          <div key={i} className="text-[11px]">
+            {typeof item === "object" && item !== null
+              ? <FormattedValue value={item} depth={depth + 1} />
+              : <span className="text-muted-foreground">{String(item)}</span>}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    return (
+      <div className={`space-y-1 ${depth > 0 ? "pl-3 border-l border-border/50" : ""}`}>
+        {Object.entries(obj).map(([k, v]) => {
+          const isComplex = typeof v === "object" && v !== null;
+          return (
+            <div key={k} className={isComplex ? "space-y-0.5" : "flex items-start gap-1.5"}>
+              <span className="text-[11px] font-medium text-foreground shrink-0">
+                {DIMENSION_LABELS[k] ?? k}{isComplex ? "" : ":"}
+              </span>
+              {isComplex ? (
+                <FormattedValue value={v} depth={depth + 1} />
+              ) : (
+                <span className="text-[11px] text-muted-foreground">{String(v ?? "")}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return <span className="text-muted-foreground">{String(value)}</span>;
 }

@@ -742,11 +742,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     try {
       const snapshot = await api.getSessionSnapshot(session.id);
       if (sessionIdRef.current !== targetSessionId) return;
-      if (snapshot.characters.length > 0 || Object.keys(snapshot.gameState).length > 0) {
-        const enrichedState = {
+      if (snapshot.characters.length > 0 || Object.keys(snapshot.gameState).length > 0 || snapshot.characterSchema) {
+        const enrichedState: Record<string, unknown> = {
           ...snapshot.gameState,
           characters: snapshot.characters,
         };
+        // Persist character schema for right panel rendering
+        if (snapshot.characterSchema) {
+          enrichedState.characterSchema = snapshot.characterSchema;
+        }
         dispatch({ type: "SET_GAME_STATE", state: enrichedState });
       }
       // Restore execution steps from trace events
@@ -792,6 +796,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch { /* ignore load errors */ }
+
+    // Load session-scoped plugins so right panel can discover world-data-provider.
+    // loadSessionPlugins is defined later in the hook, so call the API directly here.
+    api.listSessionPlugins(session.id).then((res) => {
+      if (sessionIdRef.current === targetSessionId) {
+        dispatch({ type: "LOAD_SESSION_PLUGINS", plugins: res.available });
+      }
+    }).catch(() => {});
 
     // Sync session context to server so subsequent turns can be processed
     ds.syncToServer(session.id).then(() => {
@@ -924,7 +936,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         submissions: [{ interactionId, type, values }],
       });
 
-      // 3. Use filled narrative to trigger next turn
+      // 3. Refresh characters + schema from snapshot API (character may have been created)
+      try {
+        const snapshot = await api.getSessionSnapshot(sid);
+        if (sessionIdRef.current === sid) {
+          const enrichedState: Record<string, unknown> = {
+            characters: snapshot.characters,
+          };
+          if (snapshot.characterSchema) {
+            enrichedState.characterSchema = snapshot.characterSchema;
+          }
+          dispatch({ type: "SET_GAME_STATE", state: enrichedState });
+        }
+      } catch {
+        // Non-critical: character panel will update on next refresh
+      }
+
+      // 4. Use filled narrative to trigger next turn
       const filled = result.results?.[0]?.filledNarrative;
       if (filled) {
         sendMessage(filled);

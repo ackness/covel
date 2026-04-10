@@ -133,6 +133,8 @@ export interface SessionSnapshot {
   readonly gameState: Readonly<Record<string, unknown>>;
   readonly executionSteps: readonly SnapshotTraceEvent[];
   readonly plugins: readonly SnapshotPluginStatus[];
+  /** Character attribute schema from world-data-provider plugin (if available). */
+  readonly characterSchema?: Readonly<Record<string, unknown>>;
 }
 
 export interface SnapshotMessage {

@@ -115,6 +115,13 @@ export type {
 } from './protocol.js';
 
 export type {
+  AttributeFieldType,
+  AttributeCategory,
+  AttributeDefinition,
+  CharacterAttributeSchema,
+} from './character-schema.js';
+
+export type {
   I18nText,
   WorldLandmark,
   WorldRegion,

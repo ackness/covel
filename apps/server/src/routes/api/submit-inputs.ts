@@ -19,10 +19,12 @@
 
 import { Hono } from 'hono';
 import type { DataStore } from '@covel/store';
+import type { PluginRegistry } from '@covel/plugin-loader';
 
 type Env = {
   Variables: {
     store: DataStore;
+    pluginRegistry: PluginRegistry;
   };
 };
 
@@ -135,6 +137,30 @@ submitInputsRoutes.post('/:id/submit-inputs', async (c) => {
     if (isCharCreation) {
       const charName = (sub.values.characterName as string) ?? (sub.values.name as string) ?? '未命名';
       const now = new Date().toISOString();
+
+      // Merge world schema defaults into character fields.
+      // The world-data-provider plugin stores character attribute definitions with
+      // default values — populate any attributes not explicitly set by the player.
+      const mergedFields: Record<string, unknown> = { ...sub.values };
+      const pluginRegistry = c.get('pluginRegistry');
+      const worldDataPluginId = pluginRegistry.findPluginByCapability(sessionId, 'world-data-provider');
+      if (worldDataPluginId) {
+        try {
+          const schemaRecord = await store.getPluginData(sessionId, worldDataPluginId, 'schema', 'character-attributes');
+          const attrs = (schemaRecord?.value as Record<string, unknown>)?.attributes;
+          if (Array.isArray(attrs)) {
+            for (const attr of attrs as Array<Record<string, unknown>>) {
+              const attrId = attr.id as string;
+              if (attrId && !(attrId in mergedFields) && attr.defaultValue !== undefined) {
+                mergedFields[attrId] = attr.defaultValue;
+              }
+            }
+          }
+        } catch {
+          // Non-critical: proceed without schema defaults
+        }
+      }
+
       // Reuse existing player character ID to avoid duplicates on resubmission
       const existingChars = await store.listCharacters(sessionId);
       const existingPlayer = existingChars.find((ch) => ch.type === 'player');
@@ -143,11 +169,11 @@ submitInputsRoutes.post('/:id/submit-inputs', async (c) => {
         sessionId,
         name: charName,
         type: 'player',
-        description: Object.entries(sub.values)
-          .filter(([k]) => k !== 'characterName' && k !== 'name')
+        description: Object.entries(mergedFields)
+          .filter(([k]) => k !== 'characterName' && k !== 'name' && k !== '_createCharacter')
           .map(([k, v]) => `${k}: ${String(v)}`)
           .join(', '),
-        fields: sub.values,
+        fields: mergedFields,
         version: (existingPlayer?.version ?? 0) + 1,
         createdAt: existingPlayer?.createdAt ?? now,
         updatedAt: now,

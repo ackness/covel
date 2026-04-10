@@ -236,10 +236,13 @@ function CharacterCreationBlock({ data, onSubmit, disabled }: BlockRendererProps
       const value = values[fields[0].id]?.trim();
       if (value) onSubmit(value);
     } else {
-      const parts = fields
-        .map((f) => values[f.id]?.trim())
-        .filter(Boolean);
-      if (parts.length > 0) onSubmit(parts.join(", "));
+      // Multiple fields without mapping — serialize as structured JSON
+      const payload: Record<string, unknown> = {};
+      for (const f of fields) {
+        const v = values[f.id]?.trim();
+        if (v) payload[f.id] = v;
+      }
+      if (Object.keys(payload).length > 0) onSubmit(JSON.stringify(payload));
     }
   };
 

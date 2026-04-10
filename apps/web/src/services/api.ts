@@ -381,7 +381,19 @@ export interface SessionPluginsResponse {
 
 /** Fetch the active + available plugins for a session. */
 export async function listSessionPlugins(sessionId: string): Promise<SessionPluginsResponse> {
-  return request<SessionPluginsResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/plugins`);
+  const raw = await request<{ active: string[]; available: Array<Record<string, unknown>> }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/plugins`,
+  );
+  // Map API field `active` → frontend field `isActive`
+  const available: SessionPluginInfo[] = raw.available.map((p) => ({
+    ...p,
+    id: p.id as string,
+    displayName: (p.name ?? p.id) as I18nText,
+    isActive: Boolean(p.active),
+    capabilities: p.capabilities as string[] | undefined,
+    pluginType: p.pluginType as string | undefined,
+  })) as SessionPluginInfo[];
+  return { active: raw.active, available };
 }
 
 /** Enable a plugin for a session. Returns updated active list. */

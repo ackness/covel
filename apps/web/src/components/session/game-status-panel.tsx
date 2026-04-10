@@ -6,7 +6,6 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { Badge } from "@/components/ui/badge.js";
-import { CharacterTablePanel } from "./character-table-panel.js";
 
 interface GameStatusPanelProps {
   gameState: Record<string, unknown>;
@@ -24,30 +23,11 @@ export function GameStatusPanel({ gameState }: GameStatusPanelProps) {
     );
   }
 
-  // Schema-driven character table when a plugin has defined a characterFieldSchema
-  const schema = gameState.characterFieldSchema as
-    | { version: number; worldId: string; fields: Array<Record<string, unknown>>; createdAt: string }
-    | undefined;
-
-  // DynamicFieldSchema expected by CharacterTablePanel
-  type DynamicFieldSchema = { version: number; worldId: string; fields: Array<Record<string, unknown>>; createdAt: string };
-  const chars = gameState.characters;
-  const charArray = Array.isArray(chars)
-    ? chars
-    : chars && typeof chars === "object"
-      ? Object.entries(chars as Record<string, unknown>).map(([key, val]) => {
-          const obj = (typeof val === "object" && val !== null ? val : {}) as Record<string, unknown>;
-          return obj.name ? obj : { ...obj, name: key };
-        })
-      : [];
 
   return (
     <div className="space-y-4">
       <WorldStateSection data={gameState.worldState} />
-      {schema
-        ? <CharacterTablePanel schema={schema as never} characters={charArray as Record<string, unknown>[]} />
-        : <CharactersSection data={gameState.characters} />
-      }
+      {/* Characters are displayed in the dedicated "角色" tab — not duplicated here */}
       <QuestsSection data={gameState.quests} />
       <InventorySection data={gameState.inventory} />
       <CombatSection data={gameState.combat} />
