@@ -29,6 +29,10 @@ export { createModelResolver } from './model-resolver.js';
 export { createGatewayAdapter } from './gateway-llm-adapter.js';
 export type { GatewayLike, GatewayAdapterConfig } from './gateway-llm-adapter.js';
 
+// ── Session Kernel ──────────────────────────────────────────────
+export { normalizeOutput, createCommitPipeline, processRuntimeResult } from './session-kernel.js';
+export type { KernelStore, CommitPipeline } from './session-kernel.js';
+
 // ── Types ────────────────────────────────────────────────────────
 export type {
   TriggerContext,

@@ -80,6 +80,21 @@ export type {
 } from './subscription-events.js';
 
 export type {
+  ProposalType,
+  ProposalSource,
+  Proposal,
+  NarrativeAppendPayload,
+  InteractionRequestPayload,
+  StatePatchPayload,
+  PhaseTransitionPayload,
+  EventEmitPayload,
+  RecordUpsertPayload,
+  PluginDataPayload,
+  SessionEvent,
+  CommitResult,
+} from './proposal.js';
+
+export type {
   I18nText,
   WorldLandmark,
   WorldRegion,
