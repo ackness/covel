@@ -101,6 +101,7 @@ type Action =
   | { type: "LOAD_STATE_PATCHES"; patches: Array<{ id: string; summary: string; packageName: string; data?: unknown }> }
   | { type: "SET_PHASE"; phase: api.SessionPhase }
   | { type: "ADD_EXECUTION_STEP"; step: ExecutionStep }
+  | { type: "LOAD_EXECUTION_STEPS"; steps: ExecutionStep[] }
   | { type: "CLEAR_EXECUTION_STEPS" }
   | { type: "RESET_SESSION" }
   | { type: "SUBMIT_BLOCK"; blockId: string }
@@ -225,6 +226,8 @@ function reducer(state: SessionState, action: Action): SessionState {
       const updated = raw.length > EXEC_STEPS_MAX ? raw.slice(raw.length - EXEC_STEPS_MAX) : raw;
       return { ...state, executionSteps: updated };
     }
+    case "LOAD_EXECUTION_STEPS":
+      return { ...state, executionSteps: action.steps };
     case "CLEAR_EXECUTION_STEPS":
       // Only clear in-memory — localStorage is preserved for session history
       return { ...state, executionSteps: [] };
@@ -733,6 +736,38 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (snapshotState) {
         dispatch({ type: "SET_GAME_STATE", state: snapshotState });
       }
+    }
+
+    // Load characters and execution steps from snapshot API for complete restore
+    try {
+      const snapshot = await api.getSessionSnapshot(session.id);
+      if (sessionIdRef.current !== targetSessionId) return;
+      if (snapshot.characters.length > 0 || Object.keys(snapshot.gameState).length > 0) {
+        const enrichedState = {
+          ...snapshot.gameState,
+          characters: snapshot.characters,
+        };
+        dispatch({ type: "SET_GAME_STATE", state: enrichedState });
+      }
+      // Restore execution steps from trace events
+      if (snapshot.executionSteps.length > 0) {
+        const steps = snapshot.executionSteps
+          .filter(s => s.type.startsWith('runtime.'))
+          .map(s => {
+            const p = s.payload as Record<string, unknown>;
+            return {
+              type: s.type as "runtime.started" | "runtime.completed" | "runtime.failed",
+              runtimeId: (p.runtimeId as string) ?? '',
+              pluginId: (p.pluginId as string) ?? '',
+              timestamp: s.timestamp,
+              turnId: s.turnId,
+              detail: (p.durationMs != null) ? `${p.durationMs}ms` : undefined,
+            };
+          });
+        dispatch({ type: "LOAD_EXECUTION_STEPS", steps });
+      }
+    } catch {
+      // Snapshot API not critical — game can still work without it
     }
 
     // Discard if session changed during restore
