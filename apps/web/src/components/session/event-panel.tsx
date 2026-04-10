@@ -263,9 +263,12 @@ function FilterButton({ active, onClick, label, count }: {
 // ── Helpers ──────────────────────────────────────────────────────
 
 function extractEvents(gameState: Record<string, unknown>): GameEvent[] {
-  // Events are stored under the core-event plugin's namespaced state
-  const coreEvent = gameState["core-event"] as Record<string, unknown> | undefined;
-  const raw = coreEvent?.events;
+  // Events are stored under the generic "events" state key.
+  // Framework must NOT reference specific plugin IDs — plugins write to well-known state keys.
+  const eventsData = gameState.events as Record<string, unknown> | unknown[] | undefined;
+  const raw = Array.isArray(eventsData) ? eventsData
+    : (eventsData && typeof eventsData === 'object') ? (eventsData as Record<string, unknown>).events ?? eventsData
+    : undefined;
   if (!raw) return [];
 
   const list: unknown[] = Array.isArray(raw)

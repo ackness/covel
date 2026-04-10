@@ -7,7 +7,7 @@ import type { RuntimeManifest } from '@covel/shared';
 
 type LoadRuntimeFn = (manifest: RuntimeManifest, locale?: string) => Promise<LoadedRuntime | undefined>;
 type GetConfigFn = (pluginId: string, runtimeId: string) => Readonly<Record<string, unknown>>;
-type ResolveModelFn = (slotOrModel: string, pluginId?: string) => string;
+type ResolveModelFn = (manifest: RuntimeManifest, apiOverride?: string) => string | undefined;
 
 declare module 'hono' {
   interface ContextVariableMap {

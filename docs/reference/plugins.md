@@ -9,6 +9,7 @@
 | ID | 类型 | 优先级 | 触发方式 | 模型 slot | 描述 |
 |----|------|--------|----------|-----------|------|
 | core-pregame | core-plugin | 10 | scheduled（仅首轮） | — | 游戏初始化（function runtime） |
+| core-world-init | core-plugin | 85 | scheduled（仅首轮） | `fast` | 世界维度初始化（guard + agent） |
 | core-narrator | core-plugin | 500 | auto（每轮） | `ds` | 主叙事生成器 |
 | core-codex | plugin | 650 | auto（每轮） | `fast` | 知识图鉴系统 |
 | core-char-creator | core-plugin | 700 | scheduled（仅首轮） | `ds` | 角色创建引导 |
@@ -29,6 +30,35 @@
 | input.inject | 无 |
 
 **职责**: 游戏开始时第一个执行的插件。读取世界观设定，发送欢迎通知，输出世界观摘要供后续叙事插件（narrator、codex、char-creator）作为上下文引导。
+
+---
+
+## core-world-init
+
+**路径**: `plugins/core-world-init/`
+
+单 runtime 插件，使用 `guard` 机制实现无 LLM 开销的前置门控。
+
+### core-world-init/schema-gen
+
+| 字段 | 值 |
+|------|----|
+| pluginType | `core-plugin`（不可禁用） |
+| priority | 85（Pre-Game 阶段） |
+| trigger | `scheduled`，`interval: 1`，`maxTriggerCount: 1` — 仅首轮触发 |
+| model | `fast` |
+| guard | `../../guard.js` |
+| capabilities | `[world-data-provider]` |
+| tools.local | `set-world-schema`, `set-world-entries-batch` |
+| tools.builtin | `plugin-data-get`, `plugin-data-list` |
+
+**Guard 门控**: `guard.js` 在 LLM 调用前执行（纯函数，零 LLM 开销）。检查 plugin_data 中是否已有世界维度数据，或从 world.yaml 导入 dimensions。若数据已存在，返回 `{ skip: true }` 跳过 LLM。
+
+**Agent 职责**: 读取世界观文档，通过专用 local tools 批量生成角色属性 schema 和世界词条。只需 2 次工具调用（`set-world-schema` + `set-world-entries-batch`）。
+
+**数据存储结构**:
+- namespace `schema` — 维度 schema 定义
+- namespace `entries` — 世界词条数据
 
 ---
 
@@ -84,7 +114,7 @@
 
 ---
 
-## 待迁移插件（v1 → 当前格式）
+## 待迁移插件（待开发）
 
 以下插件在 v1 中存在，计划逐步迁移到 PLUGIN.md 格式：
 
@@ -102,6 +132,8 @@
 
 ## 插件结构规范
 
+### 单 runtime 插件（默认）
+
 ```
 plugins/<plugin-id>/
 ├── PLUGIN.md              # 必需：frontmatter 元信息 + Markdown 提示词
@@ -114,6 +146,26 @@ plugins/<plugin-id>/
 └── references/            # 可选：按需加载的参考资料
     └── world-lore.md
 ```
+
+### 多 runtime 插件
+
+一个插件可以包含多个子运行时，放在 `runtimes/` 目录下。每个子运行时有独立的 PLUGIN.md。`name` 字段使用 `plugin-id/runtime-name` 格式（斜杠分隔）。
+
+```
+plugins/<plugin-id>/
+├── package.json
+├── runtimes/
+│   ├── check-existing/
+│   │   ├── PLUGIN.md      # name: plugin-id/check-existing
+│   │   └── PLUGIN.en.md   # 可选：英文版
+│   └── schema-gen/
+│       ├── PLUGIN.md      # name: plugin-id/schema-gen
+│       └── PLUGIN.en.md
+├── tools/                 # 可选：所有子运行时共享的工具
+└── check-existing.js      # function runtime 的 handler
+```
+
+子运行时之间可通过 `input.inject` 传递数据（如 check-existing 的输出注入到 schema-gen）。
 
 ### pluginType
 
@@ -130,6 +182,52 @@ plugins/<plugin-id>/
 | `function` | 纯函数执行：直接调用 `handler` 指定的 JS 模块，不调用 LLM，零延迟 |
 
 `function` 类型 runtime 需要额外声明 `handler` 字段指向 JS 模块路径。
+
+### guard
+
+Agent runtime 的前置门控函数。在 LLM 调用前执行（纯函数，零 token 开销），可用于检查前置条件、导入数据等��
+
+```yaml
+guard: ../../guard.js
+```
+
+Guard 函数接收与 function runtime 相同��� `FunctionHandlerContext`，返回值规则：
+- `{ skip: true, ... }` — 跳过 LLM 调用，guard 输出作为 runtime 结果
+- `{ skip: false, ... }` — 继续执行 LLM agent
+
+Guard 适用于"先检查再决定是否需要 LLM"的场景，替代了之前需要独立 function runtime 做门控的模式。
+
+### outputKind
+
+声明该 runtime 输出在 UI 中的处理方式。框架根据此字段决定消息展示策略，**而非硬编码插件 ID**。
+
+| 值 | 含义 |
+|----|------|
+| `story` | 主叙事内容，显示在主聊天流中 |
+| `plugin`（默认） | 辅助内容，可能被隐藏在主聊天之外 |
+| `system` | 系统级输出，不对玩家展示 |
+
+示例 frontmatter：
+```yaml
+outputKind: story
+```
+
+### capabilities
+
+能力标签数组，框架通过能力标签发现插件，**而非硬编码插件 ID**。
+
+| 能力标签 | 含义 | 框架用途 |
+|---------|------|---------|
+| `narrative` | 主叙事生成器 | 标识主叙事输出源 |
+| `world-data-provider` | 世界数据提供者 | 加载世界 schema/entries 到 turn context |
+| `image-generation` | 图像生成 | 前端展示「生成配图」按钮 |
+
+插件可以声明任意自定义能力标签。框架仅依赖上述已定义标签。
+
+示例 frontmatter：
+```yaml
+capabilities: [narrative, world-data-provider]
+```
 
 ### 优先级分带
 
@@ -159,3 +257,31 @@ plugins/<plugin-id>/
 | `conditional` | 满足条件时触发 |
 | `event` | 监听特定事件触发 |
 | `error-retry` | 前序 Runtime 出错时触发 |
+
+---
+
+## 框架–插件隔离规则
+
+> **CRITICAL**: 框架代码中禁止出现任何具体插件 ID 或插件名称。
+
+Covel 的核心设计原则是**插件承载游戏逻辑，框架提供原语和编排**。为确保任何插件都可以被替换而不修改框架代码，以下规则必须严格遵守：
+
+### 禁止
+
+在框架代码（`packages/`、`apps/server/src/`、`apps/web/src/`）中：
+
+- ❌ `pluginId === 'core-narrator'` — 不得通过插件 ID 判断行为
+- ❌ `store.listPluginData(sessionId, 'core-world-init', ...)` — 不得硬编码数据来源插件
+- ❌ `p.id === "core-image"` — 不得通过插件 ID 控制 UI
+- ❌ 在常量集合中列出插件名（如 `KNOWN_KEYS.has("core-codex")`）
+
+### 正确做法
+
+- ✅ 通过 `RuntimeManifest.outputKind` 判断输出类型（`story` / `plugin` / `system`）
+- ✅ 通过 `RuntimeManifest.capabilities` 发现插件能力（如 `world-data-provider`）
+- ✅ 通过 `pluginType` 判断核心/普通插件
+- ✅ 测试文件中可以使用具体插件名作为测试数据
+
+### 新增 frontmatter 字段
+
+当框架需要区分插件行为时，应在 `RuntimeManifest` 中添加通用字段（如 `outputKind`、`capabilities`），而非在框架代码中添加条件分支。

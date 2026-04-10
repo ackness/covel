@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import type { PackageSummary } from "@/services/api.js";
+import type { PackageSummary, SessionPluginInfo } from "@/services/api.js";
 import {
   clearRuntimeBindings,
   getRuntimeBindings,
@@ -53,6 +53,7 @@ export function useRuntimeBindings(
   sessionId: string | undefined,
   packages: PackageSummary[],
   resolvedSlots: ResolvedSlot[],
+  sessionPlugins?: SessionPluginInfo[],
 ): UseRuntimeBindingsResult {
   const [bindings, setBindingsState] = useState<Record<string, string>>({});
 
@@ -65,6 +66,29 @@ export function useRuntimeBindings(
       providerTag: string;
     }> = [];
 
+    // Detailed path: build targets from SessionPluginInfo when available
+    if (packages.length === 0 && sessionPlugins && sessionPlugins.length > 0) {
+      for (const sp of sessionPlugins) {
+        // Skip error plugins and function runtimes (no LLM needed)
+        if (sp.status === "error" || sp.runtimeType === "function") continue;
+        // Skip plugins without a model slot — they use default
+        const tag = sp.model ?? "text";
+        result.push({
+          qualifiedId: `${sp.id}:${sp.id}`,
+          pluginId: sp.id,
+          pluginDisplayName: typeof sp.displayName === "string"
+            ? sp.displayName
+            : typeof sp.displayName === "object"
+              ? Object.values(sp.displayName)[0]
+              : sp.id,
+          kind: sp.outputKind ?? "plugin",
+          providerTag: tag,
+        });
+      }
+      return result;
+    }
+
+    // Fallback: build targets from PackageSummary runtimes
     for (const pkg of packages) {
       if (!pkg.enabled || !pkg.runtimes) continue;
       for (const rt of pkg.runtimes) {
@@ -85,7 +109,7 @@ export function useRuntimeBindings(
     }
 
     return result;
-  }, [packages]);
+  }, [packages, sessionPlugins]);
 
   const runtimeTargetIdsKey = useMemo(
     () => runtimeTargets.map((target) => target.qualifiedId).join("\n"),

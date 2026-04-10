@@ -5,14 +5,7 @@ import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 import { fileURLToPath } from "node:url";
 
 const RUNTIME_PROXY_PATHS = [
-  "/actions",
   "/api",
-  "/archives",
-  "/commands",
-  "/packages",
-  "/presets",
-  "/sessions",
-  "/worlds"
 ] as const;
 
 export function resolveRuntimeProxyTarget(env: Record<string, string | undefined> = process.env): string {

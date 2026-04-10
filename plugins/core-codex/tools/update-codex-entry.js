@@ -2,14 +2,16 @@
  * Plugin-local tool: update-codex-entry
  *
  * Update an existing codex entry with new information.
+ * The entryId should be a short semantic ID returned by unlock-codex-entries
+ * (e.g. 'codex-fire-magic', 'codex-3').
  */
 
 export default function ({ tool, z }) {
   return tool({
     name: 'update-codex-entry',
-    description: '更新已有的图鉴条目，追加新发现的信息。',
+    description: '更新已有的图鉴条目，追加新发现的信息。entryId 使用 unlock-codex-entries 返回的短 ID（如 codex-fire-magic）。',
     parameters: z.object({
-      entryId: z.string().min(1).describe('要更新的条目 ID'),
+      entryId: z.string().min(1).describe('要更新的条目短 ID（如 codex-fire-magic）'),
       appendContent: z.string().min(1).describe('追加的新内容'),
       newTags: z.array(z.string()).optional().describe('新增的标签'),
       rarityUpgrade: z.enum(['common', 'uncommon', 'rare', 'legendary']).optional()

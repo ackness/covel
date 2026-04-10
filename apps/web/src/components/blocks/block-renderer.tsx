@@ -783,11 +783,11 @@ function InventoryPanelBlock({ data }: BlockRendererProps) {
   );
 }
 
-// ── interactive_form (V2 generic interaction protocol) ──────────
+// ── interactive_form (generic interaction protocol) ──────────
 
 /**
- * Adapts V2 `block.emitted` interactive_form blocks to the existing
- * CharacterCreationBlock renderer. V2 block shape:
+ * Adapts `block.emitted` interactive_form blocks to the existing
+ * CharacterCreationBlock renderer. Block shape:
  *   { id, type: "interactive_form", data: { formId, title, fields, submitLabel, ... }, meta }
  * Fields use `name` instead of `id`.
  */
@@ -811,7 +811,7 @@ function InteractiveFormBlock({ data, onSubmit, disabled }: BlockRendererProps) 
   return <CharacterCreationBlock data={adapted} onSubmit={onSubmit} disabled={disabled} />;
 }
 
-// ── interactive_choice (V2 generic interaction protocol) ─────────
+// ── interactive_choice (generic interaction protocol) ─────────
 
 function InteractiveChoiceBlock({ data, onSubmit, onSelect, selectedValue, disabled }: BlockRendererProps) {
   const choiceData = (data.data as Record<string, unknown>) ?? data;

@@ -3,9 +3,12 @@
  *
  * Batch unlock multiple codex entries in one call.
  * Produces a rich "discovery" UI card for each new entry.
+ *
+ * Uses shortIdBatch() to generate LLM-friendly IDs like 'codex-fire-magic'
+ * instead of UUID-based IDs. LLM can reference these IDs in update-codex-entry.
  */
 
-export default function ({ tool, z }) {
+export default function ({ tool, z, shortIdBatch }) {
   const codexEntrySchema = z.object({
     category: z.enum(['monster', 'item', 'location', 'lore', 'character', 'skill'])
       .describe('知识类别'),
@@ -20,13 +23,16 @@ export default function ({ tool, z }) {
 
   return tool({
     name: 'unlock-codex-entries',
-    description: '批量解锁新的图鉴条目。每个条目会生成一张"知识发现"卡片展示给玩家。',
+    description: '批量解锁新的图鉴条目。每个条目会生成一张"知识发现"卡片展示给玩家。返回的 entryId（如 codex-fire-magic）可用于后续 update-codex-entry 调用。',
     parameters: z.object({
       entries: z.array(codexEntrySchema).min(1).describe('要解锁的图鉴条目列表'),
     }),
     execute: async (params, context) => {
+      // Generate short semantic IDs from titles: 'codex-fire-magic', 'codex-1' (CJK fallback)
+      const ids = shortIdBatch('codex', params.entries.map((e) => e.title), context.sessionId);
+
       const results = params.entries.map((entry, i) => ({
-        entryId: `codex-${context.sessionId}-${Date.now()}-${i}`,
+        entryId: ids[i],
         ...entry,
         unlockedAt: new Date().toISOString(),
       }));

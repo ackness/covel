@@ -55,5 +55,6 @@ tools:
 - `narrativeTemplate` 中的 `{{fieldName}}` 占位符必须与 `fields` 的 `name` 一一对应
 - 叙事风格与 narrator 开场保持一致
 - 不超过 6 个表单字段
+- **只有 `characterName`（角色名称）字段设置 `required: true`**，其余字段都设为 `required: false`（玩家可以留空，由系统随机生成）
 - 使用第二人称叙述
 - 调用工具后不要输出额外文本

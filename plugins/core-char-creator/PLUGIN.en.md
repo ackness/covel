@@ -55,5 +55,6 @@ First output the narrative text, then call the `create-form` tool:
 - `{{fieldName}}` placeholders in `narrativeTemplate` must correspond one-to-one with the `name` values in `fields`
 - Narrative style should be consistent with the narrator's opening
 - No more than 6 form fields
+- **Only the `characterName` field should have `required: true`**; all other fields should be `required: false` (players can leave them blank and the system will generate random values)
 - Use second-person narration
 - Do not output additional text after calling the tool

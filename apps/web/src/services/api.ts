@@ -119,7 +119,7 @@ const PARAM_OVERRIDES_KEY = "covel:paramOverrides";
 // ── Helpers ────────────────────────────────────────────────────────
 
 /** Routes that need the provider API keys header. */
-const AI_ROUTES = ["/actions", "/api/ai/", "/api/kernel/"];
+const AI_ROUTES = ["/api/actions", "/api/ai/", "/api/kernel/"];
 
 function needsProviderKeys(url: string): boolean {
   return AI_ROUTES.some((prefix) => url.startsWith(prefix));
@@ -234,16 +234,16 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 // ── World API ──────────────────────────────────────────────────────
 
 export async function listWorlds(): Promise<WorldRecord[]> {
-  const res = await request<{ items: WorldRecord[] } | WorldRecord[]>("/worlds");
+  const res = await request<{ items: WorldRecord[] } | WorldRecord[]>("/api/worlds");
   return Array.isArray(res) ? res : res.items;
 }
 
 export async function getWorld(id: string): Promise<WorldRecord> {
-  return request<WorldRecord>(`/worlds/${encodeURIComponent(id)}`);
+  return request<WorldRecord>(`/api/worlds/${encodeURIComponent(id)}`);
 }
 
 export async function createWorld(name: string, description: string, id?: string): Promise<WorldRecord> {
-  return request<WorldRecord>("/worlds", {
+  return request<WorldRecord>("/api/worlds", {
     method: "POST",
     body: JSON.stringify({ id, name, description }),
   });
@@ -253,7 +253,7 @@ export async function updateWorld(
   id: string,
   patch: Partial<Pick<WorldRecord, "name" | "description" | "lore" | "locale" | "tags" | "dimensions">>,
 ): Promise<WorldRecord> {
-  return request<WorldRecord>(`/worlds/${encodeURIComponent(id)}`, {
+  return request<WorldRecord>(`/api/worlds/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
   });
@@ -358,9 +358,17 @@ export interface SessionPluginInfo {
   /** Core plugins that are always required and cannot be disabled. */
   locked?: boolean;
   pluginType?: string;
+  /** Plugin load status: 'registered' = ok, 'error' = failed to load. */
+  status?: string;
+  /** Error message when status is 'error'. */
+  error?: string;
   priority?: number;
   runtimeType?: string;
   model?: string;
+  /** How the framework treats this plugin's output in the UI ('story' | 'plugin' | 'system'). */
+  outputKind?: string;
+  /** Capability tags declared by this plugin (e.g. 'image-generation', 'world-data-provider'). */
+  capabilities?: string[];
   trigger?: { type: string; interval?: number; maxTriggerCount?: number; cooldownTurns?: number };
   tools?: { builtin: string[]; local: string[] };
   config?: Record<string, { type: string; default?: unknown; label?: string; description?: string; options?: string[] }>;
@@ -373,7 +381,7 @@ export interface SessionPluginsResponse {
 
 /** Fetch the active + available plugins for a session. */
 export async function listSessionPlugins(sessionId: string): Promise<SessionPluginsResponse> {
-  return request<SessionPluginsResponse>(`/sessions/${encodeURIComponent(sessionId)}/plugins`);
+  return request<SessionPluginsResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/plugins`);
 }
 
 /** Enable a plugin for a session. Returns updated active list. */
@@ -382,7 +390,7 @@ export async function enableSessionPlugin(
   pluginId: string,
 ): Promise<{ ok: boolean; active: string[] }> {
   return request<{ ok: boolean; active: string[] }>(
-    `/sessions/${encodeURIComponent(sessionId)}/plugins/enable`,
+    `/api/sessions/${encodeURIComponent(sessionId)}/plugins/enable`,
     { method: "POST", body: JSON.stringify({ pluginId }) },
   );
 }
@@ -393,7 +401,7 @@ export async function disableSessionPlugin(
   pluginId: string,
 ): Promise<{ ok: boolean; active: string[] }> {
   return request<{ ok: boolean; active: string[] }>(
-    `/sessions/${encodeURIComponent(sessionId)}/plugins/disable`,
+    `/api/sessions/${encodeURIComponent(sessionId)}/plugins/disable`,
     { method: "POST", body: JSON.stringify({ pluginId }) },
   );
 }
@@ -406,26 +414,26 @@ export async function listSessions(worldId: string): Promise<SessionRecord[]> {
 }
 
 export async function getSession(sessionId: string): Promise<SessionRecord> {
-  return request<SessionRecord>(`/sessions/${encodeURIComponent(sessionId)}`);
+  return request<SessionRecord>(`/api/sessions/${encodeURIComponent(sessionId)}`);
 }
 
 export async function listStatePatches(sessionId: string): Promise<StatePatchRecord[]> {
-  return request<StatePatchRecord[]>(`/sessions/${encodeURIComponent(sessionId)}/state-patches`);
+  return request<StatePatchRecord[]>(`/api/sessions/${encodeURIComponent(sessionId)}/state-patches`);
 }
 
 export async function loadStateSnapshot(sessionId: string): Promise<Record<string, unknown> | null> {
-  return request<Record<string, unknown> | null>(`/sessions/${encodeURIComponent(sessionId)}/state-snapshot`);
+  return request<Record<string, unknown> | null>(`/api/sessions/${encodeURIComponent(sessionId)}/state-snapshot`);
 }
 
 export async function saveStateSnapshot(sessionId: string, snapshot: Record<string, unknown>): Promise<void> {
-  await request<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/state-snapshot`, {
+  await request<{ ok: boolean }>(`/api/sessions/${encodeURIComponent(sessionId)}/state-snapshot`, {
     method: "PUT",
     body: JSON.stringify(snapshot),
   });
 }
 
 export async function createSession(worldId: string, presetId?: string, id?: string): Promise<SessionRecord> {
-  return request<SessionRecord>("/sessions", {
+  return request<SessionRecord>("/api/sessions", {
     method: "POST",
     body: JSON.stringify({ id, worldId, presetId }),
   });
@@ -435,27 +443,27 @@ export async function updateSession(
   sessionId: string,
   updates: Partial<Pick<SessionRecord, "status" | "presetId" | "phase">>
 ): Promise<SessionRecord> {
-  return request<SessionRecord>(`/sessions/${sessionId}`, {
+  return request<SessionRecord>(`/api/sessions/${sessionId}`, {
     method: "PATCH",
     body: JSON.stringify(updates),
   });
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
-  await request<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}`, {
+  await request<{ ok: boolean }>(`/api/sessions/${encodeURIComponent(sessionId)}`, {
     method: "DELETE",
   });
 }
 
 export async function listMessages(sessionId: string): Promise<MessageRecord[]> {
-  return request<MessageRecord[]>(`/sessions/${sessionId}/messages`);
+  return request<MessageRecord[]>(`/api/sessions/${sessionId}/messages`);
 }
 
 export async function syncMessages(
   sessionId: string,
   messages: Array<{ role: string; content: string; turnId?: string; runtimeId?: string; block?: Record<string, unknown> }>,
 ): Promise<void> {
-  await request<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/messages/sync`, {
+  await request<{ ok: boolean }>(`/api/sessions/${encodeURIComponent(sessionId)}/messages/sync`, {
     method: "POST",
     body: JSON.stringify({ messages }),
   });
@@ -464,7 +472,7 @@ export async function syncMessages(
 // ── Config API ─────────────────────────────────────────────────────
 
 export async function listPresets(): Promise<PresetSummary[]> {
-  return request<PresetSummary[]>("/presets");
+  return request<PresetSummary[]>("/api/presets");
 }
 
 export interface PluginLoadError {
@@ -478,7 +486,7 @@ interface PackagesResponse {
 }
 
 export async function listPackages(): Promise<PackagesResponse> {
-  const res = await request<PackagesResponse | PackageSummary[]>("/packages");
+  const res = await request<PackagesResponse | PackageSummary[]>("/api/packages");
   // Backward compat: old servers return a plain array
   if (Array.isArray(res)) {
     return { packages: res, loadErrors: [] };
@@ -487,7 +495,7 @@ export async function listPackages(): Promise<PackagesResponse> {
 }
 
 export async function listCommands(): Promise<CommandSummary[]> {
-  return request<CommandSummary[]>("/commands");
+  return request<CommandSummary[]>("/api/commands");
 }
 
 // ── LLM Config ───────────────────────────────────────────────────
@@ -630,7 +638,7 @@ export function mergeCapability(
 // ── Block Schemas ─────────────────────────────────────────────────
 
 export async function fetchBlockSchemas(): Promise<Record<string, unknown>> {
-  const res = await request<{ schemas: Record<string, unknown> }>("/block-schemas");
+  const res = await request<{ schemas: Record<string, unknown> }>("/api/block-schemas");
   return res.schemas;
 }
 
@@ -687,7 +695,7 @@ export function sendAction(
 
   (async () => {
     try {
-      const res = await fetch("/actions", {
+      const res = await fetch("/api/actions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

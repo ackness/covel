@@ -1,10 +1,10 @@
 # API 参考
 
-Covel V2 HTTP API 参考文档。通过这些端点，你可以在没有前端 UI 的情况下，仅通过 HTTP 请求完成一局完整的 AI RPG 游戏。
+Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI 的情况下，仅通过 HTTP 请求完成一局完整的 AI RPG 游戏。
 
 ## 概览
 
-- **基础 URL**: `http://localhost:3001/v2/`
+- **基础 URL**: `http://localhost:3001/api/`
 - **协议**: HTTP JSON API (Content-Type: `application/json`)
 - **服务器框架**: [Hono](https://hono.dev/)
 
@@ -39,25 +39,25 @@ pnpm dev:server
 ### 2. 健康检查
 
 ```bash
-curl http://localhost:3001/v2/health
+curl http://localhost:3001/api/health
 ```
 
 ### 3. 浏览可用世界
 
 ```bash
-curl http://localhost:3001/v2/worlds
+curl http://localhost:3001/api/worlds
 ```
 
 ### 4. 查看可用插件
 
 ```bash
-curl http://localhost:3001/v2/plugins
+curl http://localhost:3001/api/plugins
 ```
 
 ### 5. 创建游戏会话
 
 ```bash
-curl -X POST http://localhost:3001/v2/session/start \
+curl -X POST http://localhost:3001/api/session/start \
   -H "Content-Type: application/json" \
   -d '{
     "worldId": "cloudmere",
@@ -71,7 +71,7 @@ curl -X POST http://localhost:3001/v2/session/start \
 ### 6. 执行第一个 Turn（玩家发言）
 
 ```bash
-curl -X POST http://localhost:3001/v2/session/<sessionId>/turn \
+curl -X POST http://localhost:3001/api/session/<sessionId>/turn \
   -H "Content-Type: application/json" \
   -d '{
     "message": "我环顾四周，观察这个陌生的世界"
@@ -82,19 +82,19 @@ curl -X POST http://localhost:3001/v2/session/<sessionId>/turn \
 
 ```bash
 # 查看状态表
-curl http://localhost:3001/v2/session/<sessionId>/state
+curl http://localhost:3001/api/session/<sessionId>/state
 
 # 查看角色列表
-curl http://localhost:3001/v2/session/<sessionId>/characters
+curl http://localhost:3001/api/session/<sessionId>/characters
 
 # 查看消息历史
-curl http://localhost:3001/v2/session/<sessionId>/messages
+curl http://localhost:3001/api/session/<sessionId>/messages
 ```
 
 ### 8. 继续对话
 
 ```bash
-curl -X POST http://localhost:3001/v2/session/<sessionId>/turn \
+curl -X POST http://localhost:3001/api/session/<sessionId>/turn \
   -H "Content-Type: application/json" \
   -d '{
     "message": "走向远处的城镇"
@@ -104,7 +104,7 @@ curl -X POST http://localhost:3001/v2/session/<sessionId>/turn \
 ### 9. 提交玩家交互（如果 Turn 返回了 pendingInputs）
 
 ```bash
-curl -X POST http://localhost:3001/v2/session/<sessionId>/submit-inputs \
+curl -X POST http://localhost:3001/api/session/<sessionId>/submit-inputs \
   -H "Content-Type: application/json" \
   -d '{
     "turnId": "<turnId>",
@@ -121,7 +121,7 @@ curl -X POST http://localhost:3001/v2/session/<sessionId>/submit-inputs \
 ### 10. 结束会话
 
 ```bash
-curl -X DELETE http://localhost:3001/v2/session/<sessionId>
+curl -X DELETE http://localhost:3001/api/session/<sessionId>
 ```
 
 ---
@@ -132,82 +132,92 @@ curl -X DELETE http://localhost:3001/v2/session/<sessionId>
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/v2/health` | 健康检查 |
+| GET | `/api/health` | 健康检查 |
 
 ### 世界管理
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/v2/worlds` | 列出所有世界 |
-| GET | `/v2/worlds/:id` | 获取世界详情 |
-| POST | `/v2/worlds` | 创建/更新世界 |
+| GET | `/api/worlds` | 列出所有世界 |
+| GET | `/api/worlds/:id` | 获取世界详情 |
+| POST | `/api/worlds` | 创建/更新世界 |
 
 ### 会话管理
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/v2/sessions` | 列出所有会话 |
-| POST | `/v2/session/start` | 创建新会话 |
-| GET | `/v2/session/:id` | 获取会话信息 |
-| DELETE | `/v2/session/:id` | 删除会话 |
+| GET | `/api/sessions` | 列出所有会话 |
+| POST | `/api/session/start` | 创建新会话 |
+| GET | `/api/session/:id` | 获取会话信息 |
+| DELETE | `/api/session/:id` | 删除会话 |
 
 ### Turn 执行
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| POST | `/v2/session/:id/turn` | 执行玩家回合 |
-| GET | `/v2/session/:id/results` | 获取最近一次 Turn 结果 |
-| GET | `/v2/session/:id/turns` | 获取 Turn 历史 |
+| POST | `/api/session/:id/turn` | 执行玩家回合 |
+| GET | `/api/session/:id/results` | 获取最近一次 Turn 结果 |
+| GET | `/api/session/:id/turns` | 获取 Turn 历史 |
 
 ### 玩家交互
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| POST | `/v2/session/:id/submit-inputs` | 提交玩家交互响应 |
+| POST | `/api/session/:id/submit-inputs` | 提交玩家交互响应 |
 
 ### 插件管理
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/v2/plugins` | 列出所有已加载插件 |
-| GET | `/v2/plugins/:id` | 获取插件详情 |
-| GET | `/v2/plugins/:id/config` | 获取插件配置 schema 与值 |
-| PATCH | `/v2/plugins/:id/config` | 更新插件配置 |
+| GET | `/api/plugins` | 列出所有已加载插件 |
+| GET | `/api/plugins/:id` | 获取插件详情 |
+| GET | `/api/plugins/:id/config` | 获取插件配置 schema 与值 |
+| PATCH | `/api/plugins/:id/config` | 更新插件配置 |
 
 ### 状态查询
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/v2/session/:id/state` | 获取所有状态表 |
-| GET | `/v2/session/:id/state/:table` | 获取指定状态表快照 |
-| GET | `/v2/session/:id/state/:table/:field/history` | 获取字段变更历史 |
+| GET | `/api/session/:id/state` | 获取所有状态表 |
+| GET | `/api/session/:id/state/:table` | 获取指定状态表快照 |
+| GET | `/api/session/:id/state/:table/:field/history` | 获取字段变更历史 |
 
 ### 消息历史
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/v2/session/:id/messages` | 获取会话消息列表 |
-| GET | `/v2/session/:id/turn-messages` | 获取会话 Turn 消息列表 |
+| GET | `/api/session/:id/messages` | 获取会话消息列表 |
+| GET | `/api/session/:id/turn-messages` | 获取会话 Turn 消息列表 |
+
+### 插件数据（Plugin Data）
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/session/:id/plugin-data/:pluginId` | 列出插件所有数据 |
+| GET | `/api/session/:id/plugin-data/:pluginId/:namespace` | 列出某 namespace 下的数据 |
+| GET | `/api/session/:id/plugin-data/:pluginId/:namespace/:key` | 获取单条数据 |
+| PUT | `/api/session/:id/plugin-data/:pluginId/:namespace/:key` | 写入/更新数据 |
+| DELETE | `/api/session/:id/plugin-data/:pluginId/:namespace/:key` | 删除数据 |
 
 ### 角色数据
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/v2/session/:id/characters` | 获取会话角色列表 |
-| POST | `/v2/session/:id/characters` | 创建/更新角色 |
+| GET | `/api/session/:id/characters` | 获取会话角色列表 |
+| POST | `/api/session/:id/characters` | 创建/更新角色 |
 
 ### 事件系统
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/v2/events/subscribe?sessionId=xxx` | SSE 实时事件流 |
-| POST | `/v2/events/emit` | 注入外部事件 |
+| GET | `/api/events/subscribe?sessionId=xxx` | SSE 实时事件流 |
+| POST | `/api/events/emit` | 注入外部事件 |
 
 ### Runtime 调用
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| POST | `/v2/runtime/invoke` | 独立调用单个 Runtime（计划中） |
+| POST | `/api/runtime/invoke` | 独立调用单个 Runtime（计划中） |
 
 ---
 
@@ -215,7 +225,7 @@ curl -X DELETE http://localhost:3001/v2/session/<sessionId>
 
 ### 健康检查
 
-#### `GET /v2/health`
+#### `GET /api/health`
 
 检查服务器是否正常运行。
 
@@ -233,7 +243,7 @@ curl -X DELETE http://localhost:3001/v2/session/<sessionId>
 
 ### 世界管理
 
-#### `GET /v2/worlds`
+#### `GET /api/worlds`
 
 列出所有已加载的世界。世界数据从 `worlds/` 目录读取并缓存在 Store 中。
 
@@ -255,7 +265,7 @@ curl -X DELETE http://localhost:3001/v2/session/<sessionId>
 }
 ```
 
-#### `GET /v2/worlds/:id`
+#### `GET /api/worlds/:id`
 
 获取单个世界的详细信息。
 
@@ -287,7 +297,7 @@ curl -X DELETE http://localhost:3001/v2/session/<sessionId>
 }
 ```
 
-#### `POST /v2/worlds`
+#### `POST /api/worlds`
 
 创建或更新一个世界记录（upsert 语义）。
 
@@ -321,7 +331,7 @@ curl -X DELETE http://localhost:3001/v2/session/<sessionId>
 
 ### 会话管理
 
-#### `GET /v2/sessions`
+#### `GET /api/sessions`
 
 列出所有游戏会话。
 
@@ -344,7 +354,7 @@ curl -X DELETE http://localhost:3001/v2/session/<sessionId>
 }
 ```
 
-#### `POST /v2/session/start`
+#### `POST /api/session/start`
 
 创建一个新的游戏会话。
 
@@ -374,7 +384,7 @@ curl -X DELETE http://localhost:3001/v2/session/<sessionId>
 }
 ```
 
-#### `GET /v2/session/:id`
+#### `GET /api/session/:id`
 
 获取会话的完整信息。
 
@@ -407,7 +417,7 @@ curl -X DELETE http://localhost:3001/v2/session/<sessionId>
 }
 ```
 
-#### `DELETE /v2/session/:id`
+#### `DELETE /api/session/:id`
 
 删除一个游戏会话。
 
@@ -439,7 +449,7 @@ curl -X DELETE http://localhost:3001/v2/session/<sessionId>
 
 Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服务器调度所有活跃的 Runtime 按优先级执行，收集 LLM 输出并返回。
 
-#### `POST /v2/session/:id/turn`
+#### `POST /api/session/:id/turn`
 
 执行一个玩家回合。
 
@@ -500,7 +510,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 - Turn 执行后 `session.turnCount` 自动 +1
 - 如果某个 Runtime 的输出包含 `pendingInputs`，需要通过 `/submit-inputs` 提交玩家响应
 
-#### `GET /v2/session/:id/results`
+#### `GET /api/session/:id/results`
 
 获取最近一次 Turn 的执行结果。
 
@@ -530,7 +540,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 }
 ```
 
-#### `GET /v2/session/:id/turns`
+#### `GET /api/session/:id/turns`
 
 获取 Turn 历史记录。
 
@@ -550,7 +560,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ```bash
 # 获取最近 5 条 Turn
-curl "http://localhost:3001/v2/session/<sessionId>/turns?limit=5"
+curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 ```
 
 **响应:**
@@ -575,7 +585,7 @@ curl "http://localhost:3001/v2/session/<sessionId>/turns?limit=5"
 
 当 Turn 执行后产生 `pendingInputs`（如表单、选择题、确认框），玩家需要通过此端点提交响应。框架会将玩家输入转化为自然语言叙事，追加到对话历史中。
 
-#### `POST /v2/session/:id/submit-inputs`
+#### `POST /api/session/:id/submit-inputs`
 
 提交一个或多个玩家交互响应。
 
@@ -696,7 +706,7 @@ curl "http://localhost:3001/v2/session/<sessionId>/turns?limit=5"
 
 ### 插件管理
 
-#### `GET /v2/plugins`
+#### `GET /api/plugins`
 
 列出所有已加载的插件。
 
@@ -725,7 +735,7 @@ curl "http://localhost:3001/v2/session/<sessionId>/turns?limit=5"
 }
 ```
 
-#### `GET /v2/plugins/:id`
+#### `GET /api/plugins/:id`
 
 获取单个插件的详细信息。
 
@@ -756,7 +766,7 @@ curl "http://localhost:3001/v2/session/<sessionId>/turns?limit=5"
 }
 ```
 
-#### `GET /v2/plugins/:id/config`
+#### `GET /api/plugins/:id/config`
 
 获取插件的配置 schema 和当前值。
 
@@ -789,7 +799,7 @@ curl "http://localhost:3001/v2/session/<sessionId>/turns?limit=5"
 }
 ```
 
-#### `PATCH /v2/plugins/:id/config`
+#### `PATCH /api/plugins/:id/config`
 
 更新某个插件在特定会话中的配置覆盖。
 
@@ -836,7 +846,7 @@ curl "http://localhost:3001/v2/session/<sessionId>/turns?limit=5"
 
 状态系统以结构化表格形式存储游戏世界的各类事实（如角色属性、世界状态、任务进度）。每个表由插件通过 StateManager 注册。
 
-#### `GET /v2/session/:id/state`
+#### `GET /api/session/:id/state`
 
 获取会话的所有状态表及其数据。
 
@@ -887,7 +897,7 @@ curl "http://localhost:3001/v2/session/<sessionId>/turns?limit=5"
 }
 ```
 
-#### `GET /v2/session/:id/state/:table`
+#### `GET /api/session/:id/state/:table`
 
 获取指定状态表的快照。
 
@@ -917,7 +927,7 @@ curl "http://localhost:3001/v2/session/<sessionId>/turns?limit=5"
 { "error": "Table not found: <table>" }     // 表不存在
 ```
 
-#### `GET /v2/session/:id/state/:table/:field/history`
+#### `GET /api/session/:id/state/:table/:field/history`
 
 获取某个字段的变更历史记录。
 
@@ -954,7 +964,7 @@ curl "http://localhost:3001/v2/session/<sessionId>/turns?limit=5"
 
 ### 消息历史
 
-#### `GET /v2/session/:id/messages`
+#### `GET /api/session/:id/messages`
 
 获取会话的所有消息列表。
 
@@ -987,7 +997,7 @@ curl "http://localhost:3001/v2/session/<sessionId>/turns?limit=5"
 }
 ```
 
-#### `GET /v2/session/:id/turn-messages`
+#### `GET /api/session/:id/turn-messages`
 
 获取会话的 Turn 级别消息列表。Turn 消息包含更细粒度的信息，如来源类型、Runtime 名称、排序等。
 
@@ -1019,9 +1029,74 @@ curl "http://localhost:3001/v2/session/<sessionId>/turns?limit=5"
 
 ---
 
+### 插件数据（Plugin Data）
+
+插件的 session 级持久化 KV 存储。数据按 `(sessionId, pluginId, namespace, key)` 隔离。
+
+#### `GET /api/session/:id/plugin-data/:pluginId/:namespace`
+
+列出某插件某 namespace 下的所有数据条目。
+
+**参数:**
+
+| 参数 | 位置 | 说明 |
+|------|------|------|
+| `id` | 路径 | 会话 ID |
+| `pluginId` | 路径 | 插件 ID（如 `core-world-init`） |
+| `namespace` | 路径 | 数据命名空间（如 `schema`, `entries`） |
+
+**响应:**
+
+```json
+{
+  "items": [
+    { "namespace": "schema", "key": "attributes", "value": { ... }, "updatedAt": "..." },
+    { "namespace": "schema", "key": "skills", "value": { ... }, "updatedAt": "..." }
+  ]
+}
+```
+
+#### `GET /api/session/:id/plugin-data/:pluginId/:namespace/:key`
+
+获取单条插件数据。
+
+**响应:**
+
+```json
+{ "namespace": "schema", "key": "attributes", "value": { ... }, "updatedAt": "..." }
+```
+
+#### `PUT /api/session/:id/plugin-data/:pluginId/:namespace/:key`
+
+写入或更新单条插件数据。Value 最大 64KB。
+
+**请求体:**
+
+```json
+{ "value": { "dimensions": ["strength", "agility", "wisdom"] } }
+```
+
+**响应:**
+
+```json
+{ "success": true, "namespace": "schema", "key": "attributes" }
+```
+
+#### `DELETE /api/session/:id/plugin-data/:pluginId/:namespace/:key`
+
+删除单条插件数据。
+
+**响应:**
+
+```json
+{ "success": true }
+```
+
+---
+
 ### 角色数据
 
-#### `GET /v2/session/:id/characters`
+#### `GET /api/session/:id/characters`
 
 获取会话中的所有角色。角色在游戏过程中动态创建和演化。
 
@@ -1051,7 +1126,7 @@ curl "http://localhost:3001/v2/session/<sessionId>/turns?limit=5"
 }
 ```
 
-#### `POST /v2/session/:id/characters`
+#### `POST /api/session/:id/characters`
 
 创建或更新一个角色（upsert 语义）。
 
@@ -1105,7 +1180,7 @@ curl "http://localhost:3001/v2/session/<sessionId>/turns?limit=5"
 
 事件系统基于 EventBus，支持 SSE (Server-Sent Events) 实时推送和外部事件注入。
 
-#### `GET /v2/events/subscribe?sessionId=xxx`
+#### `GET /api/events/subscribe?sessionId=xxx`
 
 订阅指定会话的实时事件流（SSE 长连接）。
 
@@ -1118,7 +1193,7 @@ curl "http://localhost:3001/v2/session/<sessionId>/turns?limit=5"
 **示例:**
 
 ```bash
-curl -N "http://localhost:3001/v2/events/subscribe?sessionId=<sessionId>"
+curl -N "http://localhost:3001/api/events/subscribe?sessionId=<sessionId>"
 ```
 
 **SSE 事件格式:**
@@ -1157,7 +1232,7 @@ id: evt-002
 }
 ```
 
-#### `POST /v2/events/emit`
+#### `POST /api/events/emit`
 
 从外部注入事件到 EventBus 中。可用于触发特定 Runtime 或模拟游戏事件。
 
@@ -1200,7 +1275,7 @@ id: evt-002
 
 ### Runtime 调用
 
-#### `POST /v2/runtime/invoke` -- 计划中
+#### `POST /api/runtime/invoke` -- 计划中
 
 独立调用单个 Runtime，用于测试和调试。
 

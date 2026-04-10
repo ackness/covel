@@ -35,6 +35,8 @@ description: 主叙事生成器，负责根据玩家输入和世界观设定生�
 pluginType: core-plugin
 priority: 500
 model: ds
+outputKind: story
+capabilities: [narrative]
 trigger:
   type: auto
 ---
@@ -67,6 +69,8 @@ trigger:
 | `pluginType` | 否 | `core-plugin` / `plugin` | `core-plugin` 不可禁用，`plugin` 可按需启用/禁用。默认 `plugin` |
 | `priority` | 是 | number (0-1000) | 执行优先级，数字越小越先执行 |
 | `model` | 否 | string | 使用的模型 slot（如 `ds`、`fast`、`balance`）。不填则用 `default` |
+| `outputKind` | 否 | `story` / `plugin` / `system` | 输出在 UI 中的展示方式。`story` 显示在主聊天流，`plugin`（默认）可能被隐藏，`system` 不展示 |
+| `capabilities` | 否 | string[] | 能力标签，框架通过能力发现插件而非 ID。如 `[narrative]`、`[world-data-provider]`、`[image-generation]` |
 | `trigger` | 否 | object | 触发配置（见下方详解） |
 | `tools` | 否 | object | 工具声明（见第二部分） |
 | `input` | 否 | object | 输入注入声明（见第二部分） |
@@ -539,57 +543,63 @@ plugins/my-codex/
 
 **tools/unlock-codex-entries.js：**
 
+插件本地工具使用**工厂函数**模式 — 框架在加载时注入 `{ tool, z, shortId, shortIdBatch }`：
+
 ```javascript
-import { z } from 'zod';
-import { tool } from '@covel/tools';
+// 工厂函数接收框架注入
+export default function ({ tool, z, shortIdBatch }) {
+  const codexEntrySchema = z.object({
+    category: z.enum(['monster', 'item', 'location', 'lore', 'character', 'skill'])
+      .describe('知识类别'),
+    title: z.string().min(1).describe('条目标题'),
+    content: z.string().min(10).describe('2-3 句话的描述'),
+    tags: z.array(z.string()).min(1).max(5).describe('标签列表'),
+    rarity: z.enum(['common', 'uncommon', 'rare', 'legendary']).default('common')
+      .describe('稀有度，影响 UI 展示样式'),
+    imageHint: z.string().optional()
+      .describe('可选的视觉描述提示'),
+  });
 
-const codexEntrySchema = z.object({
-  category: z.enum(['monster', 'item', 'location', 'lore', 'character', 'skill'])
-    .describe('知识类别'),
-  title: z.string().min(1).describe('条目标题'),
-  content: z.string().min(10).describe('2-3 句话的描述'),
-  tags: z.array(z.string()).min(1).max(5).describe('标签列表'),
-  rarity: z.enum(['common', 'uncommon', 'rare', 'legendary']).default('common')
-    .describe('稀有度，影响 UI 展示样式'),
-  imageHint: z.string().optional()
-    .describe('可选的视觉描述提示'),
-});
+  return tool({
+    name: 'unlock-codex-entries',
+    description: '批量解锁新的图鉴条目。每个条目会生成一张"知识发现"卡片展示给玩家。',
+    parameters: z.object({
+      entries: z.array(codexEntrySchema).min(1).describe('要解锁的图鉴条目列表'),
+    }),
+    execute: async (params, context) => {
+      // 使用 shortIdBatch 生成 LLM 友好的短 ID（如 'codex-fire-magic'）
+      const ids = shortIdBatch('codex', params.entries.map((e) => e.title), context.sessionId);
 
-export const unlockCodexEntriesTool = tool({
-  name: 'unlock-codex-entries',
-  description: '批量解锁新的图鉴条目。每个条目会生成一张"知识发现"卡片展示给玩家。',
-  parameters: z.object({
-    entries: z.array(codexEntrySchema).min(1).describe('要解锁的图鉴条目列表'),
-  }),
-  execute: async (params, context) => {
-    // context 提供: { sessionId, turnId, pluginId, runtimeId }
-    const results = params.entries.map((entry, i) => ({
-      entryId: `codex-${context.sessionId}-${Date.now()}-${i}`,
-      ...entry,
-      unlockedAt: new Date().toISOString(),
-    }));
+      const results = params.entries.map((entry, i) => ({
+        entryId: ids[i],
+        ...entry,
+        unlockedAt: new Date().toISOString(),
+      }));
 
-    return {
-      unlocked: results.length,
-      entries: results,
-      ui: results.map((entry) => ({
-        type: 'codex-discovery',
-        entryId: entry.entryId,
-        category: entry.category,
-        title: entry.title,
-        rarity: entry.rarity,
-      })),
-    };
-  },
-});
+      return {
+        unlocked: results.length,
+        entries: results,
+        ui: results.map((entry) => ({
+          type: 'codex-discovery',
+          entryId: entry.entryId,
+          category: entry.category,
+          title: entry.title,
+          rarity: entry.rarity,
+        })),
+      };
+    },
+  });
+}
 ```
 
 **关键点：**
 
-1. **Zod 定义参数** — 框架自动从 Zod schema 生成 JSON Schema 注入 LLM 上下文，LLM 才知道如何调用
-2. **`.describe()` 很重要** — 每个参数的 describe 会作为参数说明发给 LLM
-3. **`execute(params, context)`** — params 是经过 Zod 验证的输入，context 包含会话信息
-4. **返回值** — 任意 JSON，会作为 tool result 返回给 LLM
+1. **工厂函数** — `export default function ({ tool, z, shortId, shortIdBatch })` 接收框架注入，无需 import
+2. **Zod 定义参数** — 框架自动从 Zod schema 生成 JSON Schema 注入 LLM 上下文，LLM 才知道如何调用
+3. **`.describe()` 很重要** — 每个参数的 describe 会作为参数说明发给 LLM
+4. **`execute(params, context)`** — params 是经过 Zod 验证的输入，context 包含会话信息
+5. **短 ID** — 使用 `shortId()` / `shortIdBatch()` 代替 UUID，让 LLM 能精确引用实体
+6. **返回值** — 任意 JSON，会作为 tool result 返回给 LLM
 
 在 PLUGIN.md frontmatter 中声明本地工具：
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MapIcon, Play, ArrowLeft, ChevronDown, ChevronUp, FileText,
-  Cpu, KeyRound, History, Trash2, Link2,
+  Cpu, KeyRound, History, Trash2,
 } from "lucide-react";
 import * as api from "@/services/api.js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.js";
@@ -14,7 +14,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { SessionBreadcrumb } from "./session-breadcrumb.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { ActiveModelSlots } from "./active-model-slots.js";
-import { RuntimeBindingPanel } from "./runtime-binding-panel.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { useRuntimeBindings } from "@/hooks/use-runtime-bindings.js";
 
@@ -83,7 +82,6 @@ export function SessionPrepScreen({
   const [sessionsExpanded, setSessionsExpanded] = useState(true);
   const [loreExpanded, setLoreExpanded] = useState(false);
   const [modelsExpanded, setModelsExpanded] = useState(false);
-  const [bindingsExpanded, setBindingsExpanded] = useState(false);
   const [pluginSectionExpanded, setPluginSectionExpanded] = useState(false);
 
   const [priorityOverrides, setPriorityOverrides] = useState<Record<string, number>>(() =>
@@ -334,33 +332,7 @@ export function SessionPrepScreen({
             )}
           </Card>
 
-          {/* Runtime Model Bindings */}
-          <Card className="mb-4">
-            <CollapsibleCardHeader
-              expanded={bindingsExpanded}
-              onToggle={() => setBindingsExpanded(!bindingsExpanded)}
-              summary={bindingState.allBound ? t("session.bindingsAllBound") : t("session.bindingsPartial")}
-            >
-              <Link2 className="w-4 h-4" />
-              {t("session.runtimeBindings", "Runtime Model Bindings")}
-              {!bindingState.allBound ? (
-                <Badge variant="secondary" className="text-[10px] ml-1 bg-amber-500/10 text-amber-600">
-                  {t("session.needsConfig", "Needs config")}
-                </Badge>
-              ) : (
-                <Badge variant="secondary" className="text-[10px] ml-1 bg-green-500/10 text-green-600">
-                  {t("session.allBound", "All bound")}
-                </Badge>
-              )}
-            </CollapsibleCardHeader>
-            {bindingsExpanded && (
-              <CardContent>
-                <RuntimeBindingPanel bindingState={bindingState} />
-              </CardContent>
-            )}
-          </Card>
-
-          {/* Plugin & Runtime Configuration */}
+          {/* Plugins, Runtimes & Model Bindings (unified) */}
           <Card className="mb-6">
             <CollapsibleCardHeader
               expanded={pluginSectionExpanded}
@@ -399,9 +371,12 @@ export function SessionPrepScreen({
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <Badge variant="outline" className="shrink-0 text-[10px]">
-                              {pkg.runtimes?.length ?? 0} runtime{(pkg.runtimes?.length ?? 0) !== 1 ? "s" : ""}
+                              P{pkg.runtimes?.[0]?.priority ?? "?"}
                             </Badge>
                             <span className="text-sm font-medium truncate">{displayName}</span>
+                            {pkg.runtimes?.[0]?.providerTag && (
+                              <Badge variant="secondary" className="text-[10px] shrink-0">{pkg.runtimes[0].providerTag}</Badge>
+                            )}
                           </div>
                           {isExpanded ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
                         </button>
@@ -416,36 +391,59 @@ export function SessionPrepScreen({
                                   const qualifiedId = `${pkg.name}:${rt.id}`;
                                   const effectivePriority = priorityOverrides[qualifiedId] ?? rt.priority;
                                   const isOverridden = qualifiedId in priorityOverrides;
+                                  // Model slot binding
+                                  const bindingEntry = bindingState.entries.find((e) => e.qualifiedId === qualifiedId);
+                                  const compatSlots = rt.providerTag ? bindingState.compatibleSlots(rt.providerTag) : [];
                                   return (
-                                    <div key={rt.id} className="flex items-center justify-between gap-3 bg-muted/30 px-3 py-2">
-                                      <div className="flex items-center gap-2 min-w-0">
-                                        <span className="text-xs font-mono truncate">{rt.id}</span>
-                                        <Badge variant="secondary" className="text-[10px] shrink-0">{rt.kind}</Badge>
-                                        {rt.providerTag && (
-                                          <Badge variant="outline" className="text-[10px] shrink-0">{rt.providerTag}</Badge>
-                                        )}
+                                    <div key={rt.id} className="bg-muted/30 px-3 py-2 space-y-2">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          <span className="text-xs font-mono truncate">{rt.id}</span>
+                                          <Badge variant="secondary" className="text-[10px] shrink-0">{rt.kind}</Badge>
+                                          {rt.providerTag && (
+                                            <Badge variant="outline" className="text-[10px] shrink-0">{rt.providerTag}</Badge>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                          <span className="text-[10px] text-muted-foreground uppercase">{t("session.priority")}</span>
+                                          <input
+                                            type="number"
+                                            min={0}
+                                            max={1000}
+                                            value={effectivePriority}
+                                            onChange={(e) => handlePriorityChange(qualifiedId, e.target.value)}
+                                            className={`w-16 bg-background border px-2 py-1 text-xs text-center outline-none focus:ring-1 focus:ring-primary ${
+                                              isOverridden ? "border-primary" : "border-border"
+                                            }`}
+                                          />
+                                          {isOverridden && (
+                                            <button
+                                              className="text-[10px] text-muted-foreground hover:text-primary underline"
+                                              onClick={() => resetPriority(qualifiedId)}
+                                            >
+                                              {t("session.reset")}
+                                            </button>
+                                          )}
+                                        </div>
                                       </div>
-                                      <div className="flex items-center gap-2 shrink-0">
-                                        <span className="text-[10px] text-muted-foreground uppercase">{t("session.priority")}</span>
-                                        <input
-                                          type="number"
-                                          min={0}
-                                          max={1000}
-                                          value={effectivePriority}
-                                          onChange={(e) => handlePriorityChange(qualifiedId, e.target.value)}
-                                          className={`w-16 bg-background border px-2 py-1 text-xs text-center outline-none focus:ring-1 focus:ring-primary ${
-                                            isOverridden ? "border-primary" : "border-border"
-                                          }`}
-                                        />
-                                        {isOverridden && (
-                                          <button
-                                            className="text-[10px] text-muted-foreground hover:text-primary underline"
-                                            onClick={() => resetPriority(qualifiedId)}
+                                      {/* Inline model slot binding */}
+                                      {rt.providerTag && compatSlots.length > 0 && (
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[10px] text-muted-foreground uppercase shrink-0">{t("plugin.modelBinding", "Model")}</span>
+                                          <select
+                                            value={bindingEntry?.slotName ?? ""}
+                                            onChange={(e) => bindingState.setBinding(qualifiedId, e.target.value)}
+                                            className="flex-1 bg-background border border-border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
                                           >
-                                            {t("session.reset")}
-                                          </button>
-                                        )}
-                                      </div>
+                                            <option value="">{t("session.selectSlot", "Select slot...")}</option>
+                                            {compatSlots.map((slot) => (
+                                              <option key={slot.slotId} value={slot.slotId}>
+                                                {slot.slotId}{slot.serverModel ? ` (${slot.serverModel})` : ""}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })}

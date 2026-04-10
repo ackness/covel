@@ -6,14 +6,14 @@ Covel 框架能力注册表与 API 参考。
 
 | 文档 | 描述 |
 |------|------|
-| [api.md](api.md) | HTTP API 参考 — 所有 V2 端点、请求/响应格式、curl 示例、存储模式说明 |
+| [api.md](api.md) | HTTP API 参考 — 所有 API 端点（含插件数据 CRUD）、请求/响应格式、curl 示例、存储模式说明 |
 
 ## 注册表
 
 | 文档 | 描述 |
 |------|------|
-| [plugins.md](plugins.md) | 插件注册表 — 所有已实现的插件、元信息、触发方式、依赖关系 |
-| [tools.md](tools.md) | 工具注册表 — 所有可用工具、参数定义、审批策略、创建指南 |
+| [plugins.md](plugins.md) | 插件注册表 — 所有已实现的插件（含 core-world-init 多 runtime）、元信息、触发方式、依赖关系 |
+| [tools.md](tools.md) | 工具注册表 — 所有可用工具（含 plugin-data 工具）、短 ID 系统、审批策略、创建指南 |
 
 ## 计划中
 

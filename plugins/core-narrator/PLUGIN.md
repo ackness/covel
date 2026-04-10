@@ -4,6 +4,8 @@ description: 主叙事生成器，负责根据玩家输入和世界观设定生�
 pluginType: core-plugin
 priority: 500
 model: ds
+outputKind: story
+capabilities: [narrative]
 trigger:
   type: auto
 ---

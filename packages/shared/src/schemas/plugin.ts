@@ -55,6 +55,8 @@ export const inputConfigSchema = z
 
 // ── Output ───────────────────────────────────────────────────────
 
+export const outputKindSchema = z.enum(['story', 'plugin', 'system']);
+
 export const outputConfigSchema = z
   .object({
     schema: z.string().optional(),
@@ -97,16 +99,19 @@ export const pluginConfigFieldSchema = z
 
 export const runtimeManifestSchema = z
   .object({
-    name: z.string().min(1).regex(/^[a-z][a-z0-9-]*$/, {
-      message: 'name must be lowercase with hyphens (e.g. "my-runtime")',
+    name: z.string().min(1).regex(/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)*$/, {
+      message: 'name must be lowercase with hyphens, optional slash separators (e.g. "my-runtime" or "my-plugin/sub-runtime")',
     }),
     description: z.string().min(1),
     priority: z.number().int().min(0).max(1000),
     version: z.string().optional(),
     runtimeType: z.enum(['agent', 'function']).optional(),
     handler: z.string().optional(),
+    guard: z.string().optional(),
     model: z.string().optional(),
     pluginType: z.enum(['core-plugin', 'plugin']).optional(),
+    outputKind: outputKindSchema.optional(),
+    capabilities: z.array(z.string().min(1)).optional(),
     trigger: triggerConfigSchema.optional(),
     tools: toolsConfigSchema.optional(),
     input: inputConfigSchema.optional(),

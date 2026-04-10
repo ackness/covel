@@ -1,6 +1,7 @@
 # ── AI / IDE tools ──────────────────────────────────────────────
 .codex/
-.claude/
+.claude/*
+!.claude/skills/
 .windsurf/
 .omx/
 skills-lock.json

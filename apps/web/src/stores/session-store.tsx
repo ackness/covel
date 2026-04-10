@@ -407,7 +407,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const msgId = (payload.messageId as string) ?? api.uid();
 
         // Display in main chat: story-kind runtime text
-        // Prefer kind from SSE payload (V2 actions), fall back to runtimeKindRef (V1 streaming)
+        // Prefer kind from SSE payload, fall back to runtimeKindRef
         const completedKind = (payload.kind as string) ?? runtimeKindRef.current.get(runtimeId);
         if (content && completedKind === "story") {
           const msg: StreamMessage = {

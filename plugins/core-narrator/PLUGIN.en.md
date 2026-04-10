@@ -4,6 +4,8 @@ description: Main narrative generator, responsible for generating story content 
 pluginType: core-plugin
 priority: 500
 model: ds
+outputKind: story
+capabilities: [narrative]
 trigger:
   type: auto
 ---

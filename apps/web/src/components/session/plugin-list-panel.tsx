@@ -230,9 +230,9 @@ function PluginErrorItem({ error }: { error: PluginLoadError }) {
   );
 }
 
-// ── V2 Session Plugin Item (collapsible, configurable, hot-swappable) ──
+// ── Session Plugin Item (collapsible, configurable, hot-swappable) ──
 
-interface V2PluginItemProps {
+interface SessionPluginItemProps {
   plugin: SessionPluginInfo;
   executing?: boolean;
   onToggle?: (pluginId: string, enable: boolean) => void;
@@ -254,9 +254,38 @@ const RUNTIME_TYPE_ICONS: Record<string, string> = {
   function: "Fn",
 };
 
-function V2PluginItem({ plugin, executing, onToggle, resolvedSlots, sessionId }: V2PluginItemProps) {
+function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, sessionId }: SessionPluginItemProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
+
+  // Plugin failed to load — render error state
+  if (plugin.status === "error") {
+    return (
+      <div className="border border-destructive/40 bg-destructive/5 rounded-md overflow-hidden">
+        <button
+          type="button"
+          className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-destructive/10 transition-colors"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <ChevronRight
+            className={`w-3 h-3 shrink-0 text-destructive transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
+          />
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-destructive" />
+          <span className="text-xs font-medium truncate flex-1 text-destructive">{plugin.id}</span>
+          <Badge variant="destructive" className="text-[9px] px-1.5 py-0 h-4 shrink-0">
+            {t("plugin.loadError", "Load Error")}
+          </Badge>
+        </button>
+        {expanded && (
+          <div className="px-3 pb-2.5 pt-1 border-t border-destructive/20">
+            <p className="text-[10px] text-destructive/80 font-mono whitespace-pre-wrap break-all">
+              {plugin.error ?? t("plugin.unknownError", "Unknown error")}
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // Runtime binding: which model slot this plugin uses
   const runtimeKey = plugin.id;
@@ -417,7 +446,7 @@ function V2PluginItem({ plugin, executing, onToggle, resolvedSlots, sessionId }:
           )}
 
           {/* Config fields */}
-          {/* Config schema (read-only display — editing requires PATCH /v2/plugins/:id/config) */}
+          {/* Config schema (read-only display — editing requires PATCH /api/plugins/:id/config) */}
           {configFields.length > 0 && (
             <div className="space-y-1.5">
               <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
@@ -473,12 +502,12 @@ export function PluginListPanel({
     (sessionPlugins ?? []).map((p) => [p.id, p]),
   );
 
-  // V2 path: when packages (V1) are empty but sessionPlugins (V2) are available,
-  // render V2 plugin items with full detail.
-  const useV2View = packages.length === 0 && hasSessionPlugins;
+  // When session plugins are available, render detailed plugin items.
+  // Fall back to package-level summary view otherwise.
+  const useDetailView = packages.length === 0 && hasSessionPlugins;
 
-  // Sort V2 plugins by priority
-  const sortedPlugins = useV2View
+  // Sort plugins by priority
+  const sortedPlugins = useDetailView
     ? [...(sessionPlugins ?? [])].sort((a, b) => (a.priority ?? 500) - (b.priority ?? 500))
     : [];
 
@@ -491,9 +520,9 @@ export function PluginListPanel({
           ))}
         </div>
       )}
-      {useV2View
+      {useDetailView
         ? sortedPlugins.map((sp) => (
-            <V2PluginItem
+            <SessionPluginItem
               key={sp.id}
               plugin={sp}
               executing={executing}

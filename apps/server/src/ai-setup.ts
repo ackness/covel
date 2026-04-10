@@ -11,7 +11,7 @@ import {
   setModelDatabase,
 } from "@covel/ai-provider";
 import type { AiConfig, LlmConfig, SlotRegistry, ModelDatabase, ModelDbFile } from "@covel/ai-provider";
-// Note: createRuntimeExecutor was part of the v1 runtime. In v2, use createGatewayAdapter instead.
+
 
 /**
  * Initialize AI provider stack.

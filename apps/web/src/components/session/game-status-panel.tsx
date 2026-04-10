@@ -24,7 +24,7 @@ export function GameStatusPanel({ gameState }: GameStatusPanelProps) {
     );
   }
 
-  // Schema-driven character table when core-npc-init has defined a schema
+  // Schema-driven character table when a plugin has defined a characterFieldSchema
   const schema = gameState.characterFieldSchema as
     | { version: number; worldId: string; fields: Array<Record<string, unknown>>; createdAt: string }
     | undefined;
@@ -463,7 +463,9 @@ function MemorySection({ data }: { data: unknown }) {
 
 // ── Unknown Sections (catch-all for plugin data not handled above) ─
 
-const KNOWN_KEYS = new Set(["worldState", "characters", "quests", "inventory", "combat", "memoryArchive", "characterFieldSchema", "core-npc-init", "events", "codex", "state", "records", "path", "value", "scope", "patch", "core-codex", "core-inventory", "core-event"]);
+// Only list framework-level state keys that are rendered by dedicated sections above.
+// NEVER add plugin-specific IDs here — the framework must remain plugin-agnostic.
+const KNOWN_KEYS = new Set(["worldState", "characters", "quests", "inventory", "combat", "memoryArchive", "characterFieldSchema", "events", "state", "records", "path", "value", "scope", "patch"]);
 
 function UnknownSections({ gameState }: { gameState: Record<string, unknown> }) {
   const unknownEntries = Object.entries(gameState).filter(([k]) => !KNOWN_KEYS.has(k));

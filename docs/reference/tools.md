@@ -11,6 +11,12 @@
 | create-form | builtin | — | auto-allow | 创建玩家表单 |
 | create-choices | builtin | — | auto-allow | 创建选项列表 |
 | create-notification | builtin | — | auto-allow | 显示通知消息 |
+| plugin-data-set | builtin | — | auto-allow | 写入插件持久化数据（单条） |
+| plugin-data-set-batch | builtin | — | auto-allow | 批量写入插件持久化数据 |
+| plugin-data-get | builtin | — | auto-allow | 读取当前插件持久化数据 |
+| plugin-data-list | builtin | — | auto-allow | 列出当前插件持久化数据 |
+| set-world-schema | local | core-world-init | auto-allow | 定义世界角色属性 Schema |
+| set-world-entries-batch | local | core-world-init | auto-allow | 批量写入世界词条 |
 | unlock-codex-entries | local | core-codex | auto-allow | 批量解锁图鉴条目 |
 | update-codex-entry | local | core-codex | auto-allow | 更新已有图鉴条目 |
 
@@ -71,15 +77,128 @@
 
 ---
 
+### plugin-data-set
+
+将数据写入插件的持久化存储。数据按 `(sessionId, pluginId, namespace, key)` 隔离，同 `(namespace, key)` 会覆盖旧值。
+
+| 参数 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| namespace | string | ✓ | 数据命名空间（如 `schema`, `entries`, `config`） |
+| key | string | ✓ | 数据键名 |
+| value | unknown | ✓ | 要存储的 JSON 数据 |
+
+**输出**: `{ success, namespace, key }`
+
+---
+
+### plugin-data-set-batch
+
+批量写入多条数据到插件持久化存储。一次调用写入整个数组，避免逐条调用的 LLM 轮次开销。适用于需要一次性写入大量条目的场景（如世界初始化）。
+
+| 参数 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| items | Array<{namespace, key, value}> | ✓ | 要批量写入的数据条目数组 |
+
+每个 item:
+| 字段 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| namespace | string | ✓ | 数据命名空间 |
+| key | string | ✓ | 数据键名 |
+| value | unknown | ✓ | 要存储的 JSON 数据 |
+
+**输出**: `{ success, count, items: [{ namespace, key }] }`
+
+**设计原则**: 框架提供通用批量写入能力。对于专用场景（如世界初始化），推荐插件创建自己的 local tools，用更精确的 schema 引导 LLM 生成正确结构的数据。
+
+---
+
+### plugin-data-get
+
+从**当前插件**的持久化存储中读取单条数据。出于安全考虑，不允许跨插件读取。
+
+| 参数 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| namespace | string | ✓ | 数据命名空间 |
+| key | string | ✓ | 数据键名 |
+
+**输出**: `{ found, namespace, key, value?, updatedAt? }`
+
+---
+
+### plugin-data-list
+
+列出**当前插件**持久化存储中某个 namespace 下的所有数据条目。
+
+| 参数 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| namespace | string | | 数据命名空间（不传则列出所有） |
+
+**输出**: `{ count, items: [{ namespace, key, value, updatedAt }] }`
+
+---
+
 ## Local 工具
 
 插件自带的工具，定义在插件的 `tools/` 目录下，使用 `tool()` 包装函数创建。
 
+### set-world-schema
+
+**所属**: core-world-init (`plugins/core-world-init/tools/set-world-schema.js`)
+
+定义世界角色属性 Schema。一次调用传入所有属性定义，存储到 `plugin_data` 的 `schema/character-attributes`。
+
+| 参数 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| attributes | AttributeDef[] | ✓ | 角色属性定义数组（至少 1 个） |
+
+**AttributeDef**:
+| 字段 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| id | string | ✓ | 属性唯一标识 |
+| name | string | ✓ | 属性显示名称 |
+| type | enum | ✓ | `string` / `number` / `array` / `enum` / `boolean` |
+| category | enum | ✓ | `stats` / `bio` / `abilities` / `equipment` / `social` |
+| min/max | number | | 数值类型的范围 |
+| defaultValue | unknown | | 默认值 |
+| itemType | enum | | 数组元素类型（`string` / `number`） |
+| options | string[] | | 枚举选项列表 |
+| description | string | | 属性说明 |
+
+**输出**: `{ success, attributeCount, categories }`
+
+**使用者**: core-world-init/schema-gen
+
+---
+
+### set-world-entries-batch
+
+**所属**: core-world-init (`plugins/core-world-init/tools/set-world-entries-batch.js`)
+
+批量写入世界词条。一次调用传入所有词条（地理、阵营、货币等），存储到 `plugin_data` 的 `entries` namespace。
+
+| 参数 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| entries | WorldEntry[] | ✓ | 世界词条数组（至少 1 个） |
+
+**WorldEntry**:
+| 字段 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| key | string | ✓ | 词条标识（如 `geography`, `factions`） |
+| value | object | ✓ | 词条内容（任意 JSON 对象） |
+
+**输出**: `{ success, count, keys }`
+
+**使用者**: core-world-init/schema-gen
+
+---
+
 ### unlock-codex-entries
 
-**所属**: core-codex (`plugins/core-codex/tools/unlock-codex-entries.ts`)
+**所属**: core-codex (`plugins/core-codex/tools/unlock-codex-entries.js`)
 
 批量解锁图鉴条目，每个条目生成一张"知识发现"UI 卡片。
+
+返回的 `entryId` 使用**语义短 ID** 格式（如 `codex-fire-magic`, `codex-3`），方便 LLM 在后续 `update-codex-entry` 调用中精确引用。
 
 | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
@@ -95,19 +214,21 @@
 | rarity | enum | | `common`(默认) / `uncommon` / `rare` / `legendary` |
 | imageHint | string | | 视觉描述提示 |
 
-**输出**: `{ unlocked, entries, ui }` — 含稀有度分级的 UI 卡片数组
+**输出**: `{ unlocked, entries, ui }` — 含稀有度分级的 UI 卡片数组。每个 entry 包含 `entryId`（短 ID）。
+
+**ID 生成**: 使用 `shortIdBatch('codex', titles, sessionId)`，英文标题生成语义 slug（`codex-fire-magic`），CJK 标题回退为计数器（`codex-1`），同一批次内自动去重。
 
 ---
 
 ### update-codex-entry
 
-**所属**: core-codex (`plugins/core-codex/tools/update-codex-entry.ts`)
+**所属**: core-codex (`plugins/core-codex/tools/update-codex-entry.js`)
 
 更新已有图鉴条目，追加新发现的信息。
 
 | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
-| entryId | string | ✓ | 要更新的条目 ID |
+| entryId | string | ✓ | 要更新的条目短 ID（如 `codex-fire-magic`） |
 | appendContent | string | ✓ | 追加的新内容 |
 | newTags | string[] | | 新增标签 |
 | rarityUpgrade | enum | | 提升稀有度 |
@@ -116,9 +237,58 @@
 
 ---
 
+## 短 ID（LLM 友好实体引用）
+
+工具中需要 LLM 传入或引用的实体 ID 应使用**短语义 ID** 而非 UUID。UUID 对 LLM 有两个问题：
+
+1. **Token 效率低** — 36 字符需 8-10 个 token
+2. **难以精确复制** — LLM 容易在长随机字符串中出错
+
+### 设计原则
+
+| 层 | 格式 | 用途 | 示例 |
+|---|---|---|---|
+| **存储层** | UUID | DB 主键、API 路由 | `550e8400-e29b-41d4...` |
+| **LLM 层** | 短 ID | 工具参数、返回值、prompt 中引用 | `codex-fire-magic`, `char-1` |
+
+### 使用方法
+
+框架提供 `shortId()` 和 `shortIdBatch()` 两个工具函数（`@covel/tools`），通过工厂注入提供给插件本地工具：
+
+```javascript
+// 插件工具文件接收注入
+export default function ({ tool, z, shortId, shortIdBatch }) {
+  return tool({
+    name: 'my-tool',
+    parameters: z.object({ ... }),
+    execute: async (params, context) => {
+      // 单个 ID
+      const id = shortId('item', 'Dragon Sword', context.sessionId);
+      // → 'item-dragon-sword'
+
+      // 批量 ID（自动去重）
+      const ids = shortIdBatch('codex', ['Fire Magic', 'Fire Magic', '龙息术'], context.sessionId);
+      // → ['codex-fire-magic', 'codex-fire-magic-2', 'codex-1']
+    },
+  });
+}
+```
+
+### ID 格式规则
+
+| 输入 | 输出 | 说明 |
+|------|------|------|
+| `shortId('char', 'Dragon Knight', sid)` | `char-dragon-knight` | 英文 → 语义 slug |
+| `shortId('item', 'Fire Sword', sid)` | `item-fire-sword` | 英文 → 语义 slug |
+| `shortId('codex', '龙息术', sid)` | `codex-1` | CJK → session 内计数器 |
+| `shortId('npc', '林若风', sid)` | `npc-2` | CJK → session 内计数器 |
+| `shortIdBatch('codex', ['A', 'A'], sid)` | `['codex-a', 'codex-a-2']` | 批量自动去重 |
+
+---
+
 ## 审批策略
 
-工具调用经过 `ApprovalPipeline` 审批检查，当前规则（配置在 `apps/server/src/routes/v2/bootstrap.ts`）：
+工具调用经过 `ApprovalPipeline` 审批检查，当前规则（配置在 `apps/server/src/routes/api/bootstrap.ts`）：
 
 | 来源分类 | 规则 | 说明 |
 |----------|------|------|
@@ -198,7 +368,7 @@ execute: async (params) => ({
 ### 提交 API
 
 ```
-POST /v2/session/:id/submit-inputs
+POST /api/session/:id/submit-inputs
 
 // 新格式（支持多交互）
 { "turnId": "...", "submissions": [
@@ -215,7 +385,39 @@ POST /v2/session/:id/submit-inputs
 
 ## 创建新工具
 
-使用 `@covel/tools` 的 `tool()` 包装函数：
+### 方式一：工厂函数（推荐）
+
+插件本地工具使用工厂函数模式，框架通过注入提供 `tool`, `z`, `shortId`, `shortIdBatch`：
+
+```javascript
+// tools/my-tool.js
+export default function ({ tool, z, shortId }) {
+  return tool({
+    name: 'my-tool-name',
+    description: '工具描述（会注入 LLM system prompt）',
+    parameters: z.object({
+      param1: z.string().describe('参数描述'),
+    }),
+    execute: async (params, context) => {
+      // context: { sessionId, turnId, pluginId, runtimeId }
+      const id = shortId('item', params.param1, context.sessionId);
+      return { id, result: params.param1 };
+    },
+  });
+}
+```
+
+**注入对象**:
+
+| 字段 | 类型 | 描述 |
+|------|------|------|
+| `tool` | function | `tool()` 包装函数，定义工具参数和执行逻辑 |
+| `z` | object | Zod schema 库，用于参数验证 |
+| `shortId` | function | `shortId(prefix, label, sessionId)` — 生成单个短语义 ID |
+| `shortIdBatch` | function | `shortIdBatch(prefix, labels, sessionId)` — 批量生成短 ID |
+| `store` | DataStore | DataStore 实例，用于直接读写持久化数据（如批量操作） |
+
+### 方式二：直接导出（TypeScript）
 
 ```typescript
 import { z } from 'zod';
@@ -223,16 +425,19 @@ import { tool } from '@covel/tools';
 
 export const myTool = tool({
   name: 'my-tool-name',
-  description: '工具描述（会注入 LLM system prompt）',
+  description: '工具描述',
   parameters: z.object({
     param1: z.string().describe('参数描述'),
   }),
   execute: async (params, context) => {
-    // context: { sessionId, turnId, pluginId, runtimeId }
     return { result: params.param1 };
   },
 });
 ```
+
+> 注意：直接导出模式无法使用 `shortId` 注入，需自行从 `@covel/tools` 导入。
+
+### 声明方式
 
 如需玩家交互，在返回值中添加 `interaction`（见上方交互协议）。
 
@@ -241,5 +446,5 @@ export const myTool = tool({
 ```yaml
 tools:
   local:
-    - ./tools/my-tool-name.ts
+    - ./tools/my-tool-name.js
 ```

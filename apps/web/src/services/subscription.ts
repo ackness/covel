@@ -104,7 +104,7 @@ export function createSessionSubscription(
     if (lastEventId) {
       params.set("lastEventId", lastEventId);
     }
-    return `/events/stream?${params.toString()}`;
+    return `/api/events/stream?${params.toString()}`;
   }
 
   /**

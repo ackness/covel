@@ -1,5 +1,5 @@
 /**
- * Covel V2 Server — Hono application entry point.
+ * Covel Server — Hono application entry point.
  *
  * Composition root: middleware → init → mount routes.
  * Route logic lives in routes/ modules.
@@ -15,9 +15,8 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { createAiStack } from './ai-setup.js';
 import { createStoreFromEnv } from '@covel/store';
 import { createGatewayAdapter } from '@covel/runtime';
-import { bootstrapV2 } from './routes/v2/bootstrap.js';
+import { bootstrapApi } from './routes/api/bootstrap.js';
 import { seedWorlds } from './world-seed-loader.js';
-import { createV1CompatRoutes } from './routes/v1-compat.js';
 import { createModelDbRoutes } from './routes/model-db.js';
 
 const app = new Hono();
@@ -60,10 +59,10 @@ for (const provider of KNOWN_PROVIDERS) {
 }
 const llmAdapter = createGatewayAdapter(ai.gateway, { apiKeys });
 
-// ── Bootstrap V2 ─────────────────────────────────────────────────
+// ── Bootstrap API ───────────────────────────────────────────────
 const pluginsDir = process.env.COVEL_PLUGINS_DIR
   ?? resolve(import.meta.dirname, '../../../plugins');
-const v2 = await bootstrapV2({ pluginsDir, llmAdapter, store });
+const api = await bootstrapApi({ pluginsDir, llmAdapter, store });
 
 // ── Seed worlds ──────────────────────────────────────────────────
 const worldsDir = process.env.COVEL_WORLDS_DIR
@@ -71,9 +70,8 @@ const worldsDir = process.env.COVEL_WORLDS_DIR
 await seedWorlds(store, worldsDir);
 
 // ── Mount routes ─────────────────────────────────────────────────
-app.route('/', v2.app);                              // V2 API
-app.route('/', createV1CompatRoutes(v2, ai));         // V1 compat proxies
-app.route('/', createModelDbRoutes(ai));               // Model database API
+app.route('/', api.app);
+app.route('/', createModelDbRoutes(ai));
 
 // ── Static file serving (production) ─────────────────────────────
 if (process.env.SERVE_STATIC === 'true') {

@@ -144,7 +144,7 @@ First-class execution primitives: **Runtime, Tool, Hook, Context, Proposal** —
 
 ### Server Bootstrap
 
-`bootstrapV2()` in `apps/server/src/routes/v2/bootstrap.ts` creates a fully wired Hono app: discovers plugins, creates registries, injects dependencies into routes via middleware. `app.ts` is a thin composition root (~90 lines): middleware → init → mount routes. V1 compat routes live in `routes/v1-compat.ts`, model DB routes in `routes/model-db.ts`.
+`bootstrapApi()` in `apps/server/src/routes/api/bootstrap.ts` creates a fully wired Hono app: discovers plugins, creates registries, injects dependencies into routes via middleware. `app.ts` is a thin composition root (~80 lines): middleware → init → mount routes. Model DB routes live in `routes/model-db.ts`. All API endpoints are under the `/api/` prefix.
 
 ### Turn Execution Pipeline
 
@@ -189,7 +189,7 @@ plugin/
 
 ### Plugin Inventory
 
-Current plugins (v2 PLUGIN.md-centric format):
+Current plugins (PLUGIN.md-centric format):
 
 | Priority | Plugin | Role | Trigger |
 |----------|--------|------|---------|
@@ -199,7 +199,7 @@ Current plugins (v2 PLUGIN.md-centric format):
 | 650 | core-codex | Knowledge/lore codex with local tools | auto |
 | 700 | core-char-creator | Character creation onboarding | scheduled (first turn only, maxTriggerCount=1) |
 
-Additional plugins planned for migration from v1: core-persona, core-combat, core-guide, core-inventory, core-quest, core-image, core-memory, etc.
+Additional plugins planned: core-persona, core-combat, core-guide, core-inventory, core-quest, core-image, core-memory, etc.
 
 ### Plugin Data Storage
 
@@ -210,7 +210,7 @@ Plugins have session-scoped persistent KV storage via the `plugin_data` table. D
 - `plugin-data-get` — read own plugin's data (cross-plugin read removed for security)
 - `plugin-data-list` — list own plugin's entries in a namespace
 
-**REST API**: `GET/PUT/DELETE /v2/session/:id/plugin-data/:pluginId/:namespace/:key`
+**REST API**: `GET/PUT/DELETE /api/session/:id/plugin-data/:pluginId/:namespace/:key`
 
 **Context injection**: Plugin data from `core-world-init` is pre-loaded at turn start and injected via `getConfig` → `{{ config.worldSchema }}`, `{{ config.worldEntries }}`, `{{ config.worldDimensions }}`.
 
@@ -297,21 +297,20 @@ Store backends (`@covel/store`): MemoryStore (dev/test), IdbStore (browser Index
 
 ### Server Route Layout
 
-Two route sets:
+All endpoints under `/api/` prefix (Vite dev server proxies `/api` → backend):
 
-**`/api/*` — internal programmatic API:**
-- AI: `ai/generate`, `ai/stream`, `ai/ping`, `ai/generate-world`, `ai/extract-dimensions`
-- Kernel: `kernel/turn`
-- Plugins: `plugins`, `block-schemas`
-- Commands: `commands`, `commands/execute`
-- Config: `config/presets`, `llm-config`, `provider-keys`
-- Model DB: `model-db`, `model-db/search`, `model-db/lookup`, `model-db/refresh`
-- Trace: `traces`
-- Health: `health`
-
-**Root-level routes (frontend-facing, proxied by Vite in dev):**
-- `/worlds`, `/sessions`, `/actions`, `/characters`, `/commands`, `/packages`, `/presets`, `/archives`
-- Session plugins: `GET /sessions/:id/plugins`, `POST /sessions/:id/plugins/enable`, `POST /sessions/:id/plugins/disable`
+- Sessions: `/api/sessions`, `/api/session/:id`, `/api/session/:id/turn`, `/api/session/:id/messages`
+- Worlds: `/api/worlds`, `/api/worlds/:id`
+- Plugins: `/api/plugins`, `/api/session/:id/plugins/enable`, `/api/session/:id/plugins/disable`
+- Actions: `/api/actions` (SSE action bridge)
+- Events: `/api/events/stream` (SSE), `/api/events/emit`
+- State: `/api/session/:id/state`, `/api/session/:id/state/:table`
+- Plugin Data: `/api/session/:id/plugin-data/:pluginId/:namespace/:key`
+- AI: `/api/ai/generate`, `/api/ai/stream`, `/api/ai/ping`, `/api/ai/generate-world`
+- Model DB: `/api/model-db`, `/api/model-db/search`, `/api/model-db/lookup`
+- Config: `/api/llm-config`, `/api/provider-keys`
+- Trace: `/api/traces`
+- Health: `/api/health`
 
 ### Frontend
 
@@ -358,7 +357,7 @@ plugins/<plugin>/tests/     # Plugin-specific tests (if any)
 ### Test Patterns
 
 - **Contract tests** (`store-contract.ts`): Shared test suite defining behavioral expectations for the `DataStore` interface. Each backend (MemoryStore, SqliteStore, IdbStore, PgStore) runs the same contract tests to ensure consistency. New store backends MUST pass the contract suite.
-- **Server tests**: `apps/server/tests/v2/` — V2 API routes, bootstrap, session management, SSE events.
+- **Server tests**: `apps/server/tests/api/` — API routes, bootstrap, session management, SSE events.
 - **Plugin tests**: Use `@covel/plugin-test-utils` for consistent test setup — `MockLLM`, `createTestHarness`, factory functions (`makeTurnInput`, `makeTriggerContext`, `makeRuntimeResult`).
 - **E2E scripts**: `scripts/test-full-3plugins.ts` (real LLM, 3-plugin integration via HTTP API), `scripts/test-real-llm.ts` (single-plugin real LLM test).
 

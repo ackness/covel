@@ -252,8 +252,9 @@ function CategoryButton({ active, onClick, label, count, icon }: {
 // ── Helpers ──────────────────────────────────────────────────────
 
 function extractCodexEntries(gameState: Record<string, unknown>): CodexEntry[] {
-  // Codex data can be in gameState.codex or gameState["core-codex"]
-  const raw = gameState.codex ?? gameState["core-codex"];
+  // Look for codex data under the generic "codex" state key.
+  // Framework must NOT reference specific plugin IDs — plugins write to well-known state keys.
+  const raw = gameState.codex;
   if (!raw) return [];
 
   let list: unknown[];

@@ -34,6 +34,13 @@ export interface PluginRegistry {
   /** Deactivate a plugin for a session. */
   deactivate(pluginId: string, sessionId: string): void;
 
+  /**
+   * Find the plugin package ID of an active plugin that declares a given capability.
+   * Searches all runtimes (including multi-runtime sub-entries) of active plugins.
+   * Returns the first match's plugin ID, or undefined if none found.
+   */
+  findPluginByCapability(sessionId: string, capability: string): string | undefined;
+
   /** Subscribe to registry changes. Returns unsubscribe function. */
   onChange(handler: (event: RegistryChangeEvent) => void): () => void;
 }
@@ -107,6 +114,23 @@ export function createPluginRegistry(options?: PluginRegistryOptions): PluginReg
       };
     },
 
+    findPluginByCapability(sessionId: string, capability: string): string | undefined {
+      const sessionSet = sessionActivations.get(sessionId);
+      if (sessionSet === undefined || sessionSet.size === 0) return undefined;
+
+      for (const pluginId of sessionSet) {
+        const entry = entries.get(pluginId);
+        if (!entry) continue;
+        // Check the primary manifest
+        if (entry.manifest?.manifest.capabilities?.includes(capability)) return pluginId;
+        // Check all loaded runtimes (multi-runtime plugins store sub-runtimes here)
+        for (const [, loaded] of entry.loadedRuntimes) {
+          if (loaded.manifest.capabilities?.includes(capability)) return pluginId;
+        }
+      }
+      return undefined;
+    },
+
     getActiveRuntimes(sessionId: string): readonly RuntimeManifest[] {
       const sessionSet = sessionActivations.get(sessionId);
       if (sessionSet === undefined || sessionSet.size === 0) {
@@ -117,7 +141,13 @@ export function createPluginRegistry(options?: PluginRegistryOptions): PluginReg
 
       for (const pluginId of sessionSet) {
         const entry = entries.get(pluginId);
-        if (entry?.manifest !== undefined) {
+        if (!entry) continue;
+        // Include all manifests for multi-runtime plugins
+        if (entry.manifests && entry.manifests.length > 0) {
+          for (const parsed of entry.manifests) {
+            manifests.push(parsed.manifest);
+          }
+        } else if (entry.manifest !== undefined) {
           manifests.push(entry.manifest.manifest);
         }
       }

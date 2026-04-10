@@ -77,7 +77,7 @@ describe("listSessionPlugins", () => {
     expect(result).toEqual(mockResponse);
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(fetchMock).toHaveBeenCalledOnce();
-    expect(fetchMock.mock.calls[0][0]).toBe("/sessions/session-123/plugins");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/sessions/session-123/plugins");
   });
 
   it("should URL-encode the sessionId", async () => {
@@ -86,7 +86,7 @@ describe("listSessionPlugins", () => {
     await listSessionPlugins("session/with/slashes");
 
     const fetchMock = vi.mocked(globalThis.fetch);
-    expect(fetchMock.mock.calls[0][0]).toBe("/sessions/session%2Fwith%2Fslashes/plugins");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/sessions/session%2Fwith%2Fslashes/plugins");
   });
 
   it("should throw on non-200 response", async () => {
@@ -111,7 +111,7 @@ describe("enableSessionPlugin", () => {
     expect(result).toEqual(mockResponse);
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(fetchMock).toHaveBeenCalledOnce();
-    expect(fetchMock.mock.calls[0][0]).toBe("/sessions/session-abc/plugins/enable");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/sessions/session-abc/plugins/enable");
 
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.method).toBe("POST");
@@ -146,7 +146,7 @@ describe("disableSessionPlugin", () => {
     expect(result).toEqual(mockResponse);
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(fetchMock).toHaveBeenCalledOnce();
-    expect(fetchMock.mock.calls[0][0]).toBe("/sessions/session-abc/plugins/disable");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/sessions/session-abc/plugins/disable");
 
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.method).toBe("POST");
@@ -165,6 +165,6 @@ describe("disableSessionPlugin", () => {
     await disableSessionPlugin("session with spaces", "core-memory");
 
     const fetchMock = vi.mocked(globalThis.fetch);
-    expect(fetchMock.mock.calls[0][0]).toBe("/sessions/session%20with%20spaces/plugins/disable");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/sessions/session%20with%20spaces/plugins/disable");
   });
 });
