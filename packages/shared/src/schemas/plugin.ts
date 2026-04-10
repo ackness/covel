@@ -26,6 +26,7 @@ export const triggerConfigSchema = z
     maxTriggerCount: z.number().int().positive().optional(),
     maxRetryCount: z.number().int().nonnegative().optional(),
     cooldownTurns: z.number().int().nonnegative().optional(),
+    phases: z.array(z.string()).optional(),
   })
   .strict();
 

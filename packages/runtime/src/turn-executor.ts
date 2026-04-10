@@ -160,6 +160,22 @@ export async function executeTurn(
 
   const turnNumber = messageHistory.filter((m) => m.sourceType === 'player').length;
 
+  // Load session metadata for context injection (turnNumber, phase, characters)
+  let sessionPhase: string | undefined;
+  let sessionCharacters: { name: string; type: string; description?: string; fields?: Record<string, unknown> }[] = [];
+  if (deps.store) {
+    const session = await deps.store.getSession(input.sessionId);
+    if (session) sessionPhase = session.phase;
+    const charRecords = await deps.store.listCharacters(input.sessionId);
+    sessionCharacters = charRecords.map(c => ({
+      name: c.name,
+      type: c.type,
+      description: c.description,
+      fields: c.fields as Record<string, unknown>,
+    }));
+  }
+  let sessionMeta = { turnNumber, phase: sessionPhase ?? 'unknown', characters: sessionCharacters };
+
   const triggered = activeRuntimes.filter((rt) => {
     // Compute turnsSinceLastTrigger: count player messages after this runtime's last message
     let lastRuntimeMsgIdx = -1;
@@ -182,6 +198,7 @@ export async function executeTurn(
       pendingEventTopics: [],
       hasUpstreamFailure: false,
       isManualTrigger: false,
+      sessionPhase,
     };
     return shouldTrigger(rt, triggerContext);
   });
@@ -194,12 +211,19 @@ export async function executeTurn(
 
   for (const group of groups) {
     const results = await executeParallel(group.runtimes, async (manifest) => {
-      return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, timeoutMs, messageHistory);
+      return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, timeoutMs, messageHistory, sessionMeta);
     });
 
-    // Merge results
+    // Merge results + apply phase transitions from runtime output
     for (const [name, result] of results) {
       completedResults.set(name, result);
+      const outputPhase = result.output && typeof (result.output as Record<string, unknown>).phase === 'string'
+        ? (result.output as Record<string, unknown>).phase as string
+        : undefined;
+      if (outputPhase && deps.store) {
+        sessionMeta = { ...sessionMeta, phase: outputPhase };
+        await deps.store.updateSession(input.sessionId, { phase: outputPhase });
+      }
     }
   }
 
@@ -304,6 +328,7 @@ async function executeOneRuntime(
   maxSteps: number,
   timeoutMs: number,
   messageHistory: readonly TurnMessageRecord[],
+  sessionMeta?: { turnNumber: number; phase: string; characters: readonly { name: string; type: string; description?: string; fields?: Record<string, unknown> }[] },
 ): Promise<RuntimeResult> {
   const startTime = Date.now();
   const runId = crypto.randomUUID();
@@ -487,6 +512,7 @@ async function executeOneRuntime(
       completedResults,
       config,
       messageHistory,
+      sessionMeta,
     });
 
     // Build LLM messages

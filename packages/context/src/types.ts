@@ -27,6 +27,21 @@ export interface MessageHistoryRecord {
   readonly name?: string;
 }
 
+/** Summary of a character record for template injection. */
+export interface CharacterSummary {
+  readonly name: string;
+  readonly type: string;
+  readonly description?: string;
+  readonly fields?: Record<string, unknown>;
+}
+
+/** Session-level metadata exposed to plugin templates. */
+export interface SessionMeta {
+  readonly turnNumber: number;
+  readonly phase: string;
+  readonly characters: readonly CharacterSummary[];
+}
+
 /** Parameters for building an execution context. */
 export interface ContextBuildParams {
   /** Runtime's prompt template. */
@@ -41,4 +56,6 @@ export interface ContextBuildParams {
   readonly config: Readonly<Record<string, unknown>>;
   /** Previous turn messages (append-only history from DataStore). */
   readonly messageHistory?: readonly MessageHistoryRecord[];
+  /** Session-level metadata (turnNumber, phase, characters). */
+  readonly sessionMeta?: SessionMeta;
 }

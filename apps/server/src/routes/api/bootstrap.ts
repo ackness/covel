@@ -15,16 +15,18 @@ import {
   loadPluginManifest,
   loadRuntime as loadRuntimeFromDisk,
   getPluginTrustInfo,
+  loadPluginLlmConfig,
   type PluginRegistry,
   type LoadedRuntime,
   type PluginDiscoveryResult,
   type ParsedPluginMd,
+  type PluginLlmConfig,
 } from '@covel/plugin-loader';
 import { createStateManager, type StateManager } from '@covel/state';
 import { createEventBus, type EventBus } from '@covel/events';
 import type { DataStore } from '@covel/store';
 import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
-import { createToolExecutor } from '@covel/runtime';
+import { createToolExecutor, createModelResolver } from '@covel/runtime';
 import { builtinUITools, createPluginDataTools, tool, shortId, shortIdBatch, type ToolModule } from '@covel/tools';
 import { z } from 'zod';
 import { createApprovalPipeline } from '@covel/approval';
@@ -45,6 +47,7 @@ import { actionRoutes } from './actions.js';
 import { subscribeRoutes } from './subscribe.js';
 import { pluginDataRoutes } from './plugin-data.js';
 import { createRoutes } from './create.js';
+import { aiRoutes } from './ai.js';
 import { traceRoutes } from './traces.js';
 
 // ── Bootstrap config ─────────────────────────────────────────────
@@ -126,10 +129,27 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     }
   }
 
-  // 3. Create remaining shared state
+  // 3. Load plugin-level llm.toml configs for model resolution
+  const pluginLlmConfigs = new Map<string, PluginLlmConfig>();
+  for (const [pluginId, discovery] of discoveryMap) {
+    const llmConfig = await loadPluginLlmConfig(discovery.rootPath);
+    if (llmConfig) {
+      // Map each runtime name to its plugin's LLM config
+      const manifests = manifestCache.get(pluginId);
+      if (manifests) {
+        for (const parsed of manifests) {
+          pluginLlmConfigs.set(parsed.manifest.name, llmConfig);
+        }
+      }
+    }
+  }
+
+  const resolveModel = createModelResolver({ pluginLlmConfigs });
+
+  // 4. Create remaining shared state
   const sessionScopes = new Map();
 
-  // 4. loadRuntime resolver (locale-aware: loads PLUGIN.en.md when locale is "en-US")
+  // 5. loadRuntime resolver (locale-aware: loads PLUGIN.en.md when locale is "en-US")
   const loadRuntimeFn = async (manifest: RuntimeManifest, locale?: string): Promise<LoadedRuntime | undefined> => {
     for (const [pluginId, discovery] of discoveryMap) {
       const manifests = manifestCache.get(pluginId);
@@ -140,7 +160,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     return undefined;
   };
 
-  // 5. Create ToolExecutor with builtin + plugin local tools + approval
+  // 6. Create ToolExecutor with builtin + plugin local tools + approval
   const builtinToolNames = new Set<string>();
   const localToolNames = new Set<string>();
   const toolMap = new Map<string, ToolModule>();
@@ -254,12 +274,12 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     },
   });
 
-  // 6. getConfigFn — per-request config injection
+  // 7. getConfigFn — per-request config injection
   //    Actual config pre-loading happens in route handlers (actions.ts, turn.ts)
   //    before calling executeTurn, bridging async store reads to sync getConfig interface.
   const getConfigFn = config.getConfigFn ?? ((_pluginId: string, _runtimeId: string): Readonly<Record<string, unknown>> => ({}));
 
-  // 7. Create app with dependency injection middleware
+  // 8. Create app with dependency injection middleware
   const app = new Hono();
 
   const isDev = process.env.NODE_ENV !== 'production';
@@ -282,10 +302,11 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     c.set('loadRuntimeFn', loadRuntimeFn);
     c.set('toolExecutor', toolExecutor);
     c.set('getConfigFn', getConfigFn);
+    c.set('resolveModel', resolveModel);
     await next();
   });
 
-  // 7. Mount routes — all under /api/ prefix
+  // 9. Mount routes — all under /api/ prefix
   // Session routes: frontend uses /api/sessions (plural) for all session operations
   app.route('/api/sessions', sessionRoutes);
   app.route('/api/sessions', turnRoutes);
@@ -301,8 +322,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   app.route('/api/worlds', worldRoutes);
   app.route('/api/health', healthRoutes);
   app.route('/api/create', createRoutes);
-  // Frontend calls POST /api/ai/generate-world; createRoutes defines POST /world
-  app.route('/api/ai/generate-', createRoutes);
+  app.route('/api/ai', aiRoutes);
   app.route('/api/actions', actionRoutes);
   app.route('/api/traces', traceRoutes);
 

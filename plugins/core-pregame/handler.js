@@ -31,7 +31,15 @@ export default async function pregameHandler(ctx) {
     }
   }
 
-  // 2. Build welcome notification
+  // 2. Persist phase transition to store
+  if (store && typeof store === 'object') {
+    const s = /** @type {any} */ (store);
+    try {
+      await s.updateSession(sessionId, { phase: 'character_creation' });
+    } catch { /* non-critical if store doesn't support updateSession */ }
+  }
+
+  // 3. Build welcome notification
   const notifications = [
     {
       level: 'info',
@@ -40,7 +48,7 @@ export default async function pregameHandler(ctx) {
     },
   ];
 
-  // 3. Return output — narrativeOutput is picked up by downstream plugins as context
+  // 4. Return output — narrativeOutput is picked up by downstream plugins as context
   return {
     narrativeOutput: worldSummary
       ? `【${worldName}】${worldSummary}`

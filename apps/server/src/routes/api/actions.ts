@@ -121,6 +121,18 @@ actionRoutes.post('/', async (c) => {
     }
 
     try {
+      // Persist player message to messages table (source of truth for refresh recovery)
+      if (playerMessage) {
+        await store.addMessage({
+          id: crypto.randomUUID(),
+          sessionId,
+          role: 'user',
+          content: playerMessage,
+          metadata: { turnId },
+          createdAt: new Date().toISOString(),
+        });
+      }
+
       // Emit phase change
       await stream.writeSSE({ data: JSON.stringify(makeEnvelope('phase_change', { phase: 'playing' })) });
 
@@ -197,13 +209,26 @@ actionRoutes.post('/', async (c) => {
         const content = typeof narrativeOutput === 'string' ? narrativeOutput : JSON.stringify(narrativeOutput);
 
         if (content) {
+          const msgId = crypto.randomUUID();
+          const kind = outputKindMap.get(rr.runtimeId) ?? 'plugin';
+
+          // Persist to messages table for refresh recovery
+          await store.addMessage({
+            id: msgId,
+            sessionId,
+            role: 'assistant',
+            content,
+            metadata: { turnId, runtimeId: rr.runtimeId, kind },
+            createdAt: new Date().toISOString(),
+          });
+
           // Emit message.completed for each runtime output
           await stream.writeSSE({
             data: JSON.stringify(makeEnvelope('message.completed', {
-              messageId: crypto.randomUUID(),
+              messageId: msgId,
               runtimeId: rr.runtimeId,
               pluginId: rr.pluginId,
-              kind: outputKindMap.get(rr.runtimeId) ?? 'plugin',
+              kind,
               content,
             })),
           });
@@ -226,15 +251,26 @@ actionRoutes.post('/', async (c) => {
       // Emit pending inputs as blocks
       if (result.pendingInputs) {
         for (const pi of result.pendingInputs) {
+          const blockId = crypto.randomUUID();
+          const wrappedBlock = {
+            id: blockId,
+            type: pi.interaction?.type === 'form' ? 'interactive_form' : 'interactive_choice',
+            data: pi.interaction ?? pi.form,
+            meta: { runtimeId: pi.runtimeId, pluginId: pi.pluginId, turnId },
+          };
+
+          // Persist block to messages table for refresh recovery
+          await store.addMessage({
+            id: blockId,
+            sessionId,
+            role: 'assistant',
+            content: '',
+            metadata: { turnId, runtimeId: pi.runtimeId, kind: 'plugin', block: wrappedBlock },
+            createdAt: new Date().toISOString(),
+          });
+
           await stream.writeSSE({
-            data: JSON.stringify(makeEnvelope('block.emitted', {
-              block: {
-                id: crypto.randomUUID(),
-                type: pi.interaction?.type === 'form' ? 'interactive_form' : 'interactive_choice',
-                data: pi.interaction ?? pi.form,
-                meta: { runtimeId: pi.runtimeId, pluginId: pi.pluginId },
-              },
-            })),
+            data: JSON.stringify(makeEnvelope('block.emitted', { block: wrappedBlock })),
           });
         }
       }

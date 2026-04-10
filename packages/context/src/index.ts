@@ -4,6 +4,8 @@ export type {
   AssembledContext,
   MessageHistoryRecord,
   ContextBuildParams,
+  SessionMeta,
+  CharacterSummary,
 } from './types.js';
 
 // ── Context Builder ─────────────────────────────────────────────

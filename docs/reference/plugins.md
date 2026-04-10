@@ -29,7 +29,9 @@
 | handler | `./handler.js` |
 | input.inject | 无 |
 
-**职责**: 游戏开始时第一个执行的插件。读取世界观设定，发送欢迎通知，输出世界观摘要供后续叙事插件（narrator、codex、char-creator）作为上下文引导。
+**职责**: 游戏开始时第一个执行的插件。读取世界观设定，发送欢迎通知，输出世界观摘要供后续叙事插件（narrator、codex、char-creator）作为上下文引导。持久化 session phase → `character_creation`。
+
+**Phase 转换**: 输出 `{ phase: 'character_creation' }` → turn-executor 自动调用 `store.updateSession()` 持久化。
 
 ---
 
@@ -71,11 +73,25 @@
 | pluginType | `core-plugin`（不可禁用） |
 | priority | 500 |
 | trigger | `auto` — 每个 Turn 自动执行 |
+| outputKind | `story`（输出显示在主聊天区） |
 | model | `ds`（DeepSeek slot） |
+| capabilities | `[narrative]` |
 | tools | 无 |
 | input.inject | 无 |
 
 **职责**: 根据玩家输入、世界观和历史上下文生成主线叙事。输出 `narrativeOutput` 字段供其他插件引用。
+
+**上下文变量**:
+- `{{ world.lore }}` — 世界观全文
+- `{{ world.dimensions }}` — 世界维度信息
+- `{{ world.openingScenario }}` — 开场场景
+- `{{ world.tone }}` — 叙事风格设定
+- `{{ player.message }}` — 玩家当前输入
+- `{{ player.character }}` — 玩家角色数据（CharacterSummary，首轮为 null）
+- `{{ session.turnNumber }}` — 当前回合数
+- `{{ session.phase }}` — 当前会话阶段
+
+**首轮行为**: Turn 1 时 `player.character = null`，narrator 自然写世界观开场。不使用 phase 门控或条件分支 — LLM 根据可用上下文自适应。
 
 ---
 
@@ -107,10 +123,17 @@
 | priority | 700 |
 | trigger | `scheduled`，`interval: 1`，`maxTriggerCount: 1` — 仅首轮触发 |
 | model | `ds`（DeepSeek slot） |
-| tools.builtin | `create-form` |
+| tools.builtin | `create-form`（需设置 `createCharacter: true`） |
 | input.inject | `core-narrator` → `narrativeOutput` → `<narrator-opening>` |
 
 **职责**: 读取 narrator 的开场叙事，生成角色创建表单（含 `narrativeTemplate`）。玩家填写后，框架用玩家输入替换模板占位符，生成个性化的角色引入叙事。
+
+**表单约束**:
+- 最多 4 个字段，优先使用选择题（combobox）而非文本输入
+- 只有 `characterName` 设为 `required: true`
+- 必须设置 `createCharacter: true` → 提交后框架自动创建 CharacterRecord 并转换 phase → `playing`
+
+**Phase 转换链**: `character_creation` → 表单提交 → `submit-inputs` API → `upsertCharacter()` + `updateSession({ phase: 'playing' })`
 
 ---
 

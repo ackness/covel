@@ -122,9 +122,16 @@ submitInputsRoutes.post('/:id/submit-inputs', async (c) => {
     });
 
     // 5. Auto-create CharacterRecord when a character-creation form is submitted (idempotent).
-    // Detection uses plugin convention: form values include `_createCharacter: true`.
-    // Framework NEVER hardcodes specific plugin IDs or interaction ID patterns.
-    const isCharCreation = sub.type === 'form' && sub.values._createCharacter === true;
+    // Detection: check _createCharacter flag in form values OR in the matching interaction from pendingInput.
+    // The create-form tool sets _createCharacter on the interaction; frontend may also pass it in values.
+    const pi = templateMessage?.pendingInput;
+    const matchedInteraction = Array.isArray(pi)
+      ? (pi as Array<Record<string, unknown>>).find(i => i.interactionId === sub.interactionId)
+      : (pi as Record<string, unknown> | undefined);
+    const isCharCreation = sub.type === 'form' && (
+      sub.values._createCharacter === true ||
+      matchedInteraction?._createCharacter === true
+    );
     if (isCharCreation) {
       const charName = (sub.values.characterName as string) ?? (sub.values.name as string) ?? '未命名';
       const now = new Date().toISOString();
@@ -145,6 +152,9 @@ submitInputsRoutes.post('/:id/submit-inputs', async (c) => {
         createdAt: existingPlayer?.createdAt ?? now,
         updatedAt: now,
       });
+
+      // Transition session phase: character_creation → playing
+      await store.updateSession(sessionId, { phase: 'playing' });
     }
 
     results.push({ submissionId, interactionId: sub.interactionId, filledNarrative, accepted: true });

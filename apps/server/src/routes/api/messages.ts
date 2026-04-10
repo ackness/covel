@@ -22,7 +22,22 @@ messageRoutes.get('/:id/messages', async (c) => {
     return c.json({ error: 'Session not found' }, 404);
   }
   const messages = await store.listMessages(sessionId);
-  return c.json(messages);
+  // Flatten metadata into top-level fields for frontend consumption
+  const flattened = messages.map(m => {
+    const meta = (m.metadata ?? {}) as Record<string, unknown>;
+    return {
+      id: m.id,
+      sessionId: m.sessionId,
+      role: m.role,
+      content: m.content,
+      turnId: meta.turnId,
+      runtimeId: meta.runtimeId,
+      kind: meta.kind,
+      block: meta.block,
+      createdAt: m.createdAt,
+    };
+  });
+  return c.json(flattened);
 });
 
 // POST /sessions/:id/messages/sync — bulk upsert messages (LocalDataService)

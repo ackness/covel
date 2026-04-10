@@ -37,6 +37,13 @@ export function shouldTrigger(
     return false;
   }
 
+  // Phase gate: skip if current session phase is not in the allowed list
+  if (trigger?.phases && trigger.phases.length > 0 && context.sessionPhase) {
+    if (!trigger.phases.includes(context.sessionPhase)) {
+      return false;
+    }
+  }
+
   switch (type) {
     case 'auto':
       return true;

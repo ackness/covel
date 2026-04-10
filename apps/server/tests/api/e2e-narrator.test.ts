@@ -79,6 +79,13 @@ describe('E2E: Narrator game flow', () => {
 
     const sessionId = session.id;
 
+    // Transition to 'playing' phase so narrator triggers (it only runs in playing phase)
+    await app.request(`/api/sessions/${sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phase: 'playing' }),
+    });
+
     // 2. Execute a turn
     const turnRes = await app.request(`/api/sessions/${sessionId}/turn`, {
       method: 'POST',
@@ -129,6 +136,13 @@ describe('E2E: Narrator game flow', () => {
       body: JSON.stringify({ plugins: ['core-narrator'] }),
     });
     const session = await startRes.json() as { id: string };
+
+    // Transition to 'playing' phase so narrator triggers
+    await app.request(`/api/sessions/${session.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phase: 'playing' }),
+    });
 
     // Turn 1
     const turn1Res = await app.request(`/api/sessions/${session.id}/turn`, {

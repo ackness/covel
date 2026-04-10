@@ -19,6 +19,8 @@ export interface TriggerContext {
   readonly hasUpstreamFailure: boolean;
   /** Whether this is a manual trigger request for this specific runtime. */
   readonly isManualTrigger: boolean;
+  /** Current session phase (e.g. 'pre-game', 'character_creation', 'playing'). */
+  readonly sessionPhase?: string;
 }
 
 // ── Scheduling ───────────────────────────────────────────────────

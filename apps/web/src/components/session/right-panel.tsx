@@ -107,7 +107,7 @@ export function RightPanel({
   // Load characters from API and merge with SSE gameState updates
   useEffect(() => {
     if (!sessionId) return;
-    fetch(`/sessions/${sessionId}/characters`)
+    fetch(`/api/sessions/${sessionId}/characters`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         if (data?.items) setCharacters(data.items);

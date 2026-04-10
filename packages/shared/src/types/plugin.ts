@@ -41,6 +41,8 @@ export interface TriggerConfig {
   readonly maxRetryCount?: number;
   /** Min turns between two triggers. */
   readonly cooldownTurns?: number;
+  /** Session phases in which this runtime is allowed to trigger. If omitted, triggers in all phases. */
+  readonly phases?: readonly string[];
 }
 
 // ── Input declarations ───────────────────────────────────────────

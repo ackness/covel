@@ -32,6 +32,7 @@ export const createFormTool = tool({
     fields: z.array(formFieldSchema).min(1).describe('表单字段列表'),
     submitLabel: z.string().min(1).describe('提交按钮文本'),
     narrativeTemplate: z.string().describe('叙事模板，包含 {{fieldName}} 占位符，玩家提交后由框架填充为完整叙事'),
+    createCharacter: z.boolean().optional().describe('设为 true 表示此表单用于角色创建，提交后框架自动创建 CharacterRecord 并切换 phase'),
   }),
   execute: async (params) => ({
     created: true,
@@ -44,6 +45,7 @@ export const createFormTool = tool({
       fields: params.fields,
       submitLabel: params.submitLabel,
       narrativeTemplate: params.narrativeTemplate,
+      ...(params.createCharacter ? { _createCharacter: true } : {}),
     },
   }),
 });

@@ -170,6 +170,9 @@ export function buildContext(
     }
   }
 
+  const meta = params.sessionMeta;
+  const playerChar = meta?.characters?.find(c => c.type === 'player') ?? null;
+
   const variables: Record<string, unknown> = {
     inputs: inputsMap,
     config,
@@ -177,9 +180,12 @@ export function buildContext(
     world,
     session: {
       id: turnInput.sessionId,
+      turnNumber: meta?.turnNumber ?? 0,
+      phase: meta?.phase ?? 'unknown',
     },
     player: {
       message: turnInput.playerMessage,
+      character: playerChar,
     },
   };
 

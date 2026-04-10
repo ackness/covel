@@ -49,12 +49,13 @@ tools:
 - `fields`: 根据世界观适配的字段（修仙→灵根，赛博朋克→义体等）
 - `submitLabel`: 合适的提交按钮文本
 - `narrativeTemplate`: 你写的叙事文本（包含 `{{fieldName}}` 占位符）
+- `createCharacter`: **必须设为 true**（告知框架这是角色创建表单）
 
 ## 重要规则
 
 - `narrativeTemplate` 中的 `{{fieldName}}` 占位符必须与 `fields` 的 `name` 一一对应
 - 叙事风格与 narrator 开场保持一致
-- 不超过 6 个表单字段
-- **只有 `characterName`（角色名称）字段设置 `required: true`**，其余字段都设为 `required: false`（玩家可以留空，由系统随机生成）
+- **最多 4 个表单字段**，尽量用选择题（select/combobox）而非文本输入，降低玩家填写负担
+- **只有 `characterName`（角色名称）字段设置 `required: true`**，其余字段都设为 `required: false`
 - 使用第二人称叙述
 - 调用工具后不要输出额外文本
