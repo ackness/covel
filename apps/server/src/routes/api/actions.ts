@@ -10,9 +10,19 @@ import { streamSSE } from 'hono/streaming';
 import type { DataStore } from '@covel/store';
 import type { PluginRegistry, LoadedRuntime } from '@covel/plugin-loader';
 import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
-import { executeTurn } from '@covel/runtime';
+import { executeTurn, processRuntimeResult } from '@covel/runtime';
 import type { RuntimeManifest } from '@covel/shared';
 import { loadSessionConfig } from './load-session-config.js';
+
+// Map SessionEvent types to legacy SSE event types for backward compatibility with frontend
+const SESSION_EVENT_TO_SSE: Record<string, string> = {
+  'narrative.completed': 'message.completed',
+  'interaction.requested': 'block.emitted',
+  'state.changed': 'state.patch.applied',
+  'phase.changed': 'phase_change',
+  'event.emitted': 'event.emitted',
+  'record.updated': 'record.updated',
+};
 
 type Env = {
   Variables: {
@@ -199,78 +209,31 @@ actionRoutes.post('/', async (c) => {
         updatedAt: new Date().toISOString(),
       });
 
-      // Emit results as SSE events
+      // Process all runtime results through Session Kernel:
+      // normalize output → commit to Store → emit SessionEvents as SSE
       for (const rr of result.runtimeResults) {
-        // Extract narrative text — prefer narrativeOutput; skip narrativeTemplate (has {{placeholders}})
-        const narrativeOutput =
-          (rr.output as Record<string, unknown>)?.narrativeOutput ??
-          (rr.output as Record<string, unknown>)?.content ?? '';
+        const kind = outputKindMap.get(rr.runtimeId) ?? 'plugin';
+        const events = await processRuntimeResult(rr, store, sessionId, kind);
 
-        const content = typeof narrativeOutput === 'string' ? narrativeOutput : JSON.stringify(narrativeOutput);
+        for (const evt of events) {
+          // Map SessionEvent types to SSE envelope types for backward compatibility
+          const sseType = SESSION_EVENT_TO_SSE[evt.type] ?? evt.type;
 
-        if (content) {
-          const msgId = crypto.randomUUID();
-          const kind = outputKindMap.get(rr.runtimeId) ?? 'plugin';
-
-          // Persist to messages table for refresh recovery
-          await store.addMessage({
-            id: msgId,
-            sessionId,
-            role: 'assistant',
-            content,
-            metadata: { turnId, runtimeId: rr.runtimeId, kind },
-            createdAt: new Date().toISOString(),
-          });
-
-          // Emit message.completed for each runtime output
-          await stream.writeSSE({
-            data: JSON.stringify(makeEnvelope('message.completed', {
-              messageId: msgId,
-              runtimeId: rr.runtimeId,
-              pluginId: rr.pluginId,
-              kind,
-              content,
-            })),
-          });
-        }
-
-        // Emit state patches from runtime output if present
-        const output = rr.output as Record<string, unknown> | null;
-        if (output?.statePatches && Array.isArray(output.statePatches)) {
-          for (const patch of output.statePatches as Array<Record<string, unknown>>) {
-            await stream.writeSSE({
-              data: JSON.stringify(makeEnvelope('state.patch.applied', {
-                data: patch,
-                runtimeId: rr.runtimeId,
-              })),
-            });
+          // Adapt payload shape per event type to match frontend expectations
+          let ssePayload: Record<string, unknown>;
+          if (evt.type === 'interaction.requested') {
+            // Frontend expects { block: { id, type, data, meta } }
+            ssePayload = { block: evt.payload.block };
+          } else {
+            ssePayload = {
+              ...evt.payload,
+              runtimeId: evt.source.runtimeId,
+              pluginId: evt.source.pluginId,
+            };
           }
-        }
-      }
-
-      // Emit pending inputs as blocks
-      if (result.pendingInputs) {
-        for (const pi of result.pendingInputs) {
-          const blockId = crypto.randomUUID();
-          const wrappedBlock = {
-            id: blockId,
-            type: pi.interaction?.type === 'form' ? 'interactive_form' : 'interactive_choice',
-            data: pi.interaction ?? pi.form,
-            meta: { runtimeId: pi.runtimeId, pluginId: pi.pluginId, turnId },
-          };
-
-          // Persist block to messages table for refresh recovery
-          await store.addMessage({
-            id: blockId,
-            sessionId,
-            role: 'assistant',
-            content: '',
-            metadata: { turnId, runtimeId: pi.runtimeId, kind: 'plugin', block: wrappedBlock },
-            createdAt: new Date().toISOString(),
-          });
 
           await stream.writeSSE({
-            data: JSON.stringify(makeEnvelope('block.emitted', { block: wrappedBlock })),
+            data: JSON.stringify(makeEnvelope(sseType, ssePayload)),
           });
         }
       }
