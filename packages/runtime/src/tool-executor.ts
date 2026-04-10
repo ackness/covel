@@ -51,8 +51,8 @@ export interface ToolExecutor {
 // ── Implementation ───────────────────────────────────────────────
 
 export interface ToolExecutorConfig {
-  /** Tool lookup function — returns the tool module by name. */
-  readonly findTool: (name: string) => ToolModule | undefined;
+  /** Tool lookup function — returns the tool module by name. Context enables per-plugin scoping. */
+  readonly findTool: (name: string, context?: ToolCallContext) => ToolModule | undefined;
   /** Optional DataStore for recording tool calls. */
   readonly store?: DataStore;
   /** Optional approval pipeline for permission checking. */
@@ -72,8 +72,8 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
     async execute(call: ToolCall, context: ToolCallContext): Promise<ToolCallResult> {
       const startTime = Date.now();
 
-      // 1. Find tool
-      const tool = config.findTool(call.name);
+      // 1. Find tool (scoped to calling plugin if context available)
+      const tool = config.findTool(call.name, context);
       if (!tool) {
         const errorResult = JSON.stringify({ error: `Unknown tool: ${call.name}` });
         await recordCall(config.store, call, context, errorResult, startTime, false, 'auto-allowed');

@@ -217,8 +217,33 @@ export async function bootstrapV2(config: V2BootstrapConfig): Promise<V2Bootstra
   ];
   const approval = createApprovalPipeline(store, approvalRules);
 
+  // Build per-plugin tool access map: pluginId → Set<toolName>
+  const pluginToolAccess = new Map<string, Set<string>>();
+  for (const [pluginId, manifests] of manifestCache) {
+    const allowed = new Set<string>();
+    for (const parsed of manifests) {
+      // Builtin tools declared by this runtime
+      for (const t of parsed.manifest.tools?.builtin ?? []) allowed.add(t);
+      // Local tools: extract basename from path
+      for (const p of parsed.manifest.tools?.local ?? []) {
+        const basename = p.split('/').pop()?.replace(/\.[^.]+$/, '') ?? p;
+        allowed.add(basename);
+      }
+    }
+    pluginToolAccess.set(pluginId, allowed);
+  }
+
   const toolExecutor = createToolExecutor({
-    findTool: (name) => toolMap.get(name),
+    findTool: (name, context) => {
+      // Builtin tools are always accessible
+      if (builtinToolNames.has(name)) return toolMap.get(name);
+      // Local tools: only accessible if declared by the calling plugin
+      if (context) {
+        const allowed = pluginToolAccess.get(context.pluginId);
+        if (!allowed?.has(name)) return undefined; // Cross-plugin call blocked
+      }
+      return toolMap.get(name);
+    },
     store,
     approval,
     getToolSource: (name) => {

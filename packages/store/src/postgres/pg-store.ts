@@ -22,6 +22,7 @@ import type {
   ApprovalRecord,
   MessageRecord,
   CharacterRecord,
+  PluginDataRecord,
   PluginConfigRecord,
   WorldRecord,
   TraceEventRecord,
@@ -36,6 +37,8 @@ const CREATE_TABLES_SQL = `
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     description TEXT NOT NULL,
+    lore TEXT,
+    tags JSONB,
     locale TEXT,
     metadata JSONB,
     created_at TEXT NOT NULL,
@@ -179,6 +182,19 @@ const CREATE_TABLES_SQL = `
   );
   CREATE INDEX IF NOT EXISTS pg_characters_session_id_idx ON characters(session_id);
 
+  CREATE TABLE IF NOT EXISTS plugin_data (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    plugin_id TEXT NOT NULL,
+    namespace TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value JSONB,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (session_id, plugin_id, namespace, key)
+  );
+  CREATE INDEX IF NOT EXISTS pg_plugin_data_session_id_idx ON plugin_data(session_id);
+
   CREATE TABLE IF NOT EXISTS plugin_configs (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
@@ -233,7 +249,7 @@ const CREATE_TABLES_SQL = `
 const ALL_TABLE_NAMES = [
   'worlds', 'sessions', 'turn_results', 'runtime_results', 'tool_calls',
   'state_schemas', 'state_entries', 'state_changes', 'events', 'approvals',
-  'messages', 'characters', 'plugin_configs', 'trace_events',
+  'messages', 'characters', 'plugin_data', 'plugin_configs', 'trace_events',
   'turn_messages', 'player_inputs',
 ] as const;
 
@@ -261,6 +277,8 @@ function toWorldRecord(row: typeof schema.worlds.$inferSelect): WorldRecord {
     id: row.id,
     name: row.name,
     description: row.description,
+    lore: row.lore ?? undefined,
+    tags: (row.tags ?? undefined) as string[] | undefined,
     locale: row.locale ?? undefined,
     metadata: (row.metadata ?? undefined) as Record<string, unknown> | undefined,
     createdAt: row.createdAt,
@@ -393,6 +411,19 @@ function toCharacterRecord(row: typeof schema.characters.$inferSelect): Characte
     description: row.description ?? undefined,
     fields: row.fields ?? undefined,
     version: row.version,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function toPluginDataRecord(row: typeof schema.pluginData.$inferSelect): PluginDataRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    pluginId: row.pluginId,
+    namespace: row.namespace,
+    key: row.key,
+    value: row.value ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -866,6 +897,125 @@ export async function createPgStore(
       return rows.map(toCharacterRecord);
     },
 
+    // ── Plugin Data ──────────────────────────────────────────
+
+    async setPluginData(record: PluginDataRecord): Promise<void> {
+      await db
+        .insert(schema.pluginData)
+        .values({
+          id: record.id,
+          sessionId: record.sessionId,
+          pluginId: record.pluginId,
+          namespace: record.namespace,
+          key: record.key,
+          value: record.value ?? null,
+          createdAt: record.createdAt,
+          updatedAt: record.updatedAt,
+        })
+        .onConflictDoUpdate({
+          target: [
+            schema.pluginData.sessionId,
+            schema.pluginData.pluginId,
+            schema.pluginData.namespace,
+            schema.pluginData.key,
+          ],
+          set: {
+            value: record.value ?? null,
+            updatedAt: record.updatedAt,
+          },
+        });
+    },
+
+    async setPluginDataBatch(records: readonly PluginDataRecord[]): Promise<void> {
+      if (records.length === 0) return;
+      await db.transaction(async (tx) => {
+        for (const record of records) {
+          await tx
+            .insert(schema.pluginData)
+            .values({
+              id: record.id,
+              sessionId: record.sessionId,
+              pluginId: record.pluginId,
+              namespace: record.namespace,
+              key: record.key,
+              value: record.value ?? null,
+              createdAt: record.createdAt,
+              updatedAt: record.updatedAt,
+            })
+            .onConflictDoUpdate({
+              target: [
+                schema.pluginData.sessionId,
+                schema.pluginData.pluginId,
+                schema.pluginData.namespace,
+                schema.pluginData.key,
+              ],
+              set: {
+                value: record.value ?? null,
+                updatedAt: record.updatedAt,
+              },
+            });
+        }
+      });
+    },
+
+    async getPluginData(
+      sessionId: string,
+      pluginId: string,
+      namespace: string,
+      key: string,
+    ): Promise<PluginDataRecord | null> {
+      const rows = await db
+        .select()
+        .from(schema.pluginData)
+        .where(
+          and(
+            eq(schema.pluginData.sessionId, sessionId),
+            eq(schema.pluginData.pluginId, pluginId),
+            eq(schema.pluginData.namespace, namespace),
+            eq(schema.pluginData.key, key),
+          ),
+        );
+      return rows.length > 0 ? toPluginDataRecord(rows[0]) : null;
+    },
+
+    async listPluginData(
+      sessionId: string,
+      pluginId: string,
+      namespace?: string,
+    ): Promise<PluginDataRecord[]> {
+      const conditions = [
+        eq(schema.pluginData.sessionId, sessionId),
+        eq(schema.pluginData.pluginId, pluginId),
+      ];
+      if (namespace != null) {
+        conditions.push(eq(schema.pluginData.namespace, namespace));
+      }
+
+      const rows = await db
+        .select()
+        .from(schema.pluginData)
+        .where(and(...conditions));
+      return rows.map(toPluginDataRecord);
+    },
+
+    async deletePluginData(
+      sessionId: string,
+      pluginId: string,
+      namespace: string,
+      key: string,
+    ): Promise<void> {
+      await db
+        .delete(schema.pluginData)
+        .where(
+          and(
+            eq(schema.pluginData.sessionId, sessionId),
+            eq(schema.pluginData.pluginId, pluginId),
+            eq(schema.pluginData.namespace, namespace),
+            eq(schema.pluginData.key, key),
+          ),
+        );
+    },
+
     // ── Plugin Configs ───────────────────────────────────────
 
     async savePluginConfig(record: PluginConfigRecord): Promise<void> {
@@ -925,6 +1075,8 @@ export async function createPgStore(
           id: record.id,
           name: record.name,
           description: record.description,
+          lore: record.lore ?? null,
+          tags: record.tags ?? null,
           locale: record.locale ?? null,
           metadata: record.metadata ?? null,
           createdAt: record.createdAt,
@@ -935,6 +1087,8 @@ export async function createPgStore(
           set: {
             name: record.name,
             description: record.description,
+            lore: record.lore ?? null,
+            tags: record.tags ?? null,
             locale: record.locale ?? null,
             metadata: record.metadata ?? null,
             updatedAt: record.updatedAt ?? null,

@@ -578,6 +578,159 @@ export function runStoreContractTests(
       });
     });
 
+    // ── Plugin Data ─────────────────────────────────────────
+
+    describe('PluginData', () => {
+      it('should set and get plugin data', async () => {
+        const record = {
+          id: 'pd-1',
+          sessionId: 'sess-1',
+          pluginId: 'core-world-init',
+          namespace: 'schema',
+          key: 'dimensions',
+          value: { hp: { type: 'number', max: 100 }, name: { type: 'string' } },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await store.setPluginData(record);
+        const result = await store.getPluginData('sess-1', 'core-world-init', 'schema', 'dimensions');
+        expect(result).not.toBeNull();
+        expect(result!.key).toBe('dimensions');
+        expect(result!.value).toEqual(record.value);
+      });
+
+      it('should upsert on conflict (same session+plugin+namespace+key)', async () => {
+        const record1 = {
+          id: 'pd-2',
+          sessionId: 'sess-1',
+          pluginId: 'test-plugin',
+          namespace: 'config',
+          key: 'setting-a',
+          value: { enabled: true },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await store.setPluginData(record1);
+
+        const record2 = {
+          ...record1,
+          id: 'pd-2-updated',
+          value: { enabled: false, extra: 42 },
+          updatedAt: new Date().toISOString(),
+        };
+        await store.setPluginData(record2);
+
+        const result = await store.getPluginData('sess-1', 'test-plugin', 'config', 'setting-a');
+        expect(result).not.toBeNull();
+        expect(result!.value).toEqual({ enabled: false, extra: 42 });
+      });
+
+      it('should list plugin data by namespace', async () => {
+        await store.setPluginData({
+          id: 'pd-3a', sessionId: 'sess-2', pluginId: 'p1', namespace: 'entries',
+          key: 'a', value: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        });
+        await store.setPluginData({
+          id: 'pd-3b', sessionId: 'sess-2', pluginId: 'p1', namespace: 'entries',
+          key: 'b', value: 2, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        });
+        await store.setPluginData({
+          id: 'pd-3c', sessionId: 'sess-2', pluginId: 'p1', namespace: 'other',
+          key: 'c', value: 3, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        });
+
+        const withNs = await store.listPluginData('sess-2', 'p1', 'entries');
+        expect(withNs).toHaveLength(2);
+
+        const allNs = await store.listPluginData('sess-2', 'p1');
+        expect(allNs).toHaveLength(3);
+      });
+
+      it('should delete plugin data', async () => {
+        await store.setPluginData({
+          id: 'pd-4', sessionId: 'sess-3', pluginId: 'p2', namespace: 'temp',
+          key: 'x', value: 'delete-me', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        });
+        await store.deletePluginData('sess-3', 'p2', 'temp', 'x');
+        const result = await store.getPluginData('sess-3', 'p2', 'temp', 'x');
+        expect(result).toBeNull();
+      });
+
+      it('should return null for unknown plugin data', async () => {
+        const result = await store.getPluginData('sess-x', 'unknown', 'ns', 'key');
+        expect(result).toBeNull();
+      });
+
+      it('should batch set plugin data', async () => {
+        const now = new Date().toISOString();
+        await store.setPluginDataBatch([
+          { id: 'pd-b1', sessionId: 'sess-batch', pluginId: 'p1', namespace: 'entries', key: 'a', value: { x: 1 }, createdAt: now, updatedAt: now },
+          { id: 'pd-b2', sessionId: 'sess-batch', pluginId: 'p1', namespace: 'entries', key: 'b', value: { x: 2 }, createdAt: now, updatedAt: now },
+          { id: 'pd-b3', sessionId: 'sess-batch', pluginId: 'p1', namespace: 'schema', key: 'c', value: { x: 3 }, createdAt: now, updatedAt: now },
+        ]);
+
+        const entries = await store.listPluginData('sess-batch', 'p1', 'entries');
+        expect(entries).toHaveLength(2);
+
+        const all = await store.listPluginData('sess-batch', 'p1');
+        expect(all).toHaveLength(3);
+
+        const single = await store.getPluginData('sess-batch', 'p1', 'entries', 'a');
+        expect(single).not.toBeNull();
+        expect(single!.value).toEqual({ x: 1 });
+      });
+
+      it('should batch upsert on conflict', async () => {
+        const now = new Date().toISOString();
+        await store.setPluginDataBatch([
+          { id: 'pd-u1', sessionId: 'sess-upsert', pluginId: 'p1', namespace: 'ns', key: 'k1', value: 'old', createdAt: now, updatedAt: now },
+        ]);
+        const later = new Date(Date.now() + 1000).toISOString();
+        await store.setPluginDataBatch([
+          { id: 'pd-u2', sessionId: 'sess-upsert', pluginId: 'p1', namespace: 'ns', key: 'k1', value: 'new', createdAt: later, updatedAt: later },
+        ]);
+        const result = await store.getPluginData('sess-upsert', 'p1', 'ns', 'k1');
+        expect(result!.value).toBe('new');
+      });
+
+      it('should handle empty batch', async () => {
+        await store.setPluginDataBatch([]);
+        // No error thrown
+      });
+
+      it('should isolate data between sessions', async () => {
+        await store.setPluginData({
+          id: 'pd-5a', sessionId: 'sess-A', pluginId: 'p1', namespace: 'ns',
+          key: 'k', value: 'session-A', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        });
+        await store.setPluginData({
+          id: 'pd-5b', sessionId: 'sess-B', pluginId: 'p1', namespace: 'ns',
+          key: 'k', value: 'session-B', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        });
+
+        const a = await store.getPluginData('sess-A', 'p1', 'ns', 'k');
+        const b = await store.getPluginData('sess-B', 'p1', 'ns', 'k');
+        expect(a!.value).toBe('session-A');
+        expect(b!.value).toBe('session-B');
+      });
+
+      it('should isolate data between plugins in the same session', async () => {
+        const now = new Date().toISOString();
+        await store.setPluginData({
+          id: 'pd-iso-a', sessionId: 'sess-X', pluginId: 'plugin-a',
+          namespace: 'ns', key: 'k', value: 'from-a', createdAt: now, updatedAt: now,
+        });
+        await store.setPluginData({
+          id: 'pd-iso-b', sessionId: 'sess-X', pluginId: 'plugin-b',
+          namespace: 'ns', key: 'k', value: 'from-b', createdAt: now, updatedAt: now,
+        });
+        const a = await store.getPluginData('sess-X', 'plugin-a', 'ns', 'k');
+        const b = await store.getPluginData('sess-X', 'plugin-b', 'ns', 'k');
+        expect(a!.value).toBe('from-a');
+        expect(b!.value).toBe('from-b');
+      });
+    });
+
     // ── Worlds ───────────────────────────────────────────────
 
     describe('Worlds', () => {

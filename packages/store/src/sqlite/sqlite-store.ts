@@ -22,6 +22,7 @@ import type {
   ApprovalRecord,
   MessageRecord,
   CharacterRecord,
+  PluginDataRecord,
   PluginConfigRecord,
   WorldRecord,
   TraceEventRecord,
@@ -61,6 +62,8 @@ function createTables(sqlite: Database.Database): void {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       description TEXT NOT NULL,
+      lore TEXT,
+      tags TEXT,
       locale TEXT,
       metadata TEXT,
       created_at TEXT NOT NULL,
@@ -204,6 +207,19 @@ function createTables(sqlite: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS characters_session_id_idx ON characters(session_id);
 
+    CREATE TABLE IF NOT EXISTS plugin_data (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      plugin_id TEXT NOT NULL,
+      namespace TEXT NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (session_id, plugin_id, namespace, key)
+    );
+    CREATE INDEX IF NOT EXISTS plugin_data_session_id_idx ON plugin_data(session_id);
+
     CREATE TABLE IF NOT EXISTS plugin_configs (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL,
@@ -274,6 +290,8 @@ function toWorldRecord(row: typeof schema.worlds.$inferSelect): WorldRecord {
     id: row.id,
     name: row.name,
     description: row.description,
+    lore: row.lore ?? undefined,
+    tags: fromJson(row.tags) as string[] | undefined,
     locale: row.locale ?? undefined,
     metadata: fromJson(row.metadata) as Record<string, unknown> | undefined,
     createdAt: row.createdAt,
@@ -406,6 +424,19 @@ function toCharacterRecord(row: typeof schema.characters.$inferSelect): Characte
     description: row.description ?? undefined,
     fields: fromJson(row.fields),
     version: row.version,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function toPluginDataRecord(row: typeof schema.pluginData.$inferSelect): PluginDataRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    pluginId: row.pluginId,
+    namespace: row.namespace,
+    key: row.key,
+    value: fromJson(row.value),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -894,6 +925,127 @@ export function createSqliteStore(dbPath: string): DataStore {
       return rows.map(toCharacterRecord);
     },
 
+    // ── Plugin Data ──────────────────────────────────────────
+
+    async setPluginData(record: PluginDataRecord): Promise<void> {
+      db.insert(schema.pluginData)
+        .values({
+          id: record.id,
+          sessionId: record.sessionId,
+          pluginId: record.pluginId,
+          namespace: record.namespace,
+          key: record.key,
+          value: record.value != null ? toJson(record.value) : null,
+          createdAt: record.createdAt,
+          updatedAt: record.updatedAt,
+        })
+        .onConflictDoUpdate({
+          target: [
+            schema.pluginData.sessionId,
+            schema.pluginData.pluginId,
+            schema.pluginData.namespace,
+            schema.pluginData.key,
+          ],
+          set: {
+            value: record.value != null ? toJson(record.value) : null,
+            updatedAt: record.updatedAt,
+          },
+        })
+        .run();
+    },
+
+    async setPluginDataBatch(records: readonly PluginDataRecord[]): Promise<void> {
+      if (records.length === 0) return;
+      db.transaction((tx) => {
+        for (const record of records) {
+          tx.insert(schema.pluginData)
+            .values({
+              id: record.id,
+              sessionId: record.sessionId,
+              pluginId: record.pluginId,
+              namespace: record.namespace,
+              key: record.key,
+              value: record.value != null ? toJson(record.value) : null,
+              createdAt: record.createdAt,
+              updatedAt: record.updatedAt,
+            })
+            .onConflictDoUpdate({
+              target: [
+                schema.pluginData.sessionId,
+                schema.pluginData.pluginId,
+                schema.pluginData.namespace,
+                schema.pluginData.key,
+              ],
+              set: {
+                value: record.value != null ? toJson(record.value) : null,
+                updatedAt: record.updatedAt,
+              },
+            })
+            .run();
+        }
+      });
+    },
+
+    async getPluginData(
+      sessionId: string,
+      pluginId: string,
+      namespace: string,
+      key: string,
+    ): Promise<PluginDataRecord | null> {
+      const row = db
+        .select()
+        .from(schema.pluginData)
+        .where(
+          and(
+            eq(schema.pluginData.sessionId, sessionId),
+            eq(schema.pluginData.pluginId, pluginId),
+            eq(schema.pluginData.namespace, namespace),
+            eq(schema.pluginData.key, key),
+          ),
+        )
+        .get();
+      return row ? toPluginDataRecord(row) : null;
+    },
+
+    async listPluginData(
+      sessionId: string,
+      pluginId: string,
+      namespace?: string,
+    ): Promise<PluginDataRecord[]> {
+      const conditions = [
+        eq(schema.pluginData.sessionId, sessionId),
+        eq(schema.pluginData.pluginId, pluginId),
+      ];
+      if (namespace != null) {
+        conditions.push(eq(schema.pluginData.namespace, namespace));
+      }
+
+      const rows = db
+        .select()
+        .from(schema.pluginData)
+        .where(and(...conditions))
+        .all();
+      return rows.map(toPluginDataRecord);
+    },
+
+    async deletePluginData(
+      sessionId: string,
+      pluginId: string,
+      namespace: string,
+      key: string,
+    ): Promise<void> {
+      db.delete(schema.pluginData)
+        .where(
+          and(
+            eq(schema.pluginData.sessionId, sessionId),
+            eq(schema.pluginData.pluginId, pluginId),
+            eq(schema.pluginData.namespace, namespace),
+            eq(schema.pluginData.key, key),
+          ),
+        )
+        .run();
+    },
+
     // ── Plugin Configs ───────────────────────────────────────
 
     async savePluginConfig(record: PluginConfigRecord): Promise<void> {
@@ -954,6 +1106,8 @@ export function createSqliteStore(dbPath: string): DataStore {
           id: record.id,
           name: record.name,
           description: record.description,
+          lore: record.lore ?? null,
+          tags: record.tags != null ? toJson(record.tags) : null,
           locale: record.locale ?? null,
           metadata: record.metadata != null ? toJson(record.metadata) : null,
           createdAt: record.createdAt,
@@ -964,6 +1118,8 @@ export function createSqliteStore(dbPath: string): DataStore {
           set: {
             name: record.name,
             description: record.description,
+            lore: record.lore ?? null,
+            tags: record.tags != null ? toJson(record.tags) : null,
             locale: record.locale ?? null,
             metadata: record.metadata != null ? toJson(record.metadata) : null,
             updatedAt: record.updatedAt ?? null,

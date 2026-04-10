@@ -16,6 +16,7 @@ import type {
   ApprovalRecord,
   MessageRecord,
   CharacterRecord,
+  PluginDataRecord,
   PluginConfigRecord,
   WorldRecord,
   TraceEventRecord,
@@ -35,6 +36,7 @@ export function createMemoryStore(): DataStore {
   const approvals: ApprovalRecord[] = [];
   const messages: MessageRecord[] = [];
   const characters = new Map<string, CharacterRecord>();
+  const pluginData = new Map<string, PluginDataRecord>();
   const pluginConfigs = new Map<string, PluginConfigRecord>();
   const worlds = new Map<string, WorldRecord>();
   const traceEvents: TraceEventRecord[] = [];
@@ -43,6 +45,10 @@ export function createMemoryStore(): DataStore {
 
   function stateEntryKey(sessionId: string, tableName: string, fieldName: string): string {
     return `${sessionId}:${tableName}:${fieldName}`;
+  }
+
+  function pluginDataKey(sessionId: string, pluginId: string, namespace: string, key: string): string {
+    return `${sessionId}:${pluginId}:${namespace}:${key}`;
   }
 
   function pluginConfigKey(sessionId: string, pluginId: string): string {
@@ -72,6 +78,27 @@ export function createMemoryStore(): DataStore {
 
     async deleteSession(id) {
       sessions.delete(id);
+      // Cascade delete all session-scoped data
+      const filterArr = <T extends { sessionId: string }>(arr: T[]): void => {
+        for (let i = arr.length - 1; i >= 0; i--) {
+          if (arr[i].sessionId === id) arr.splice(i, 1);
+        }
+      };
+      filterArr(turnResults);
+      filterArr(runtimeResults);
+      filterArr(toolCalls);
+      filterArr(stateSchemas);
+      filterArr(stateChanges);
+      filterArr(events);
+      filterArr(approvals);
+      filterArr(messages);
+      filterArr(traceEvents);
+      filterArr(turnMessages);
+      filterArr(playerInputs);
+      for (const [k, v] of stateEntries) { if (v.sessionId === id) stateEntries.delete(k); }
+      for (const [k, v] of characters) { if (v.sessionId === id) characters.delete(k); }
+      for (const [k, v] of pluginData) { if (v.sessionId === id) pluginData.delete(k); }
+      for (const [k, v] of pluginConfigs) { if (v.sessionId === id) pluginConfigs.delete(k); }
     },
 
     // ── Turn Results ──
@@ -217,6 +244,35 @@ export function createMemoryStore(): DataStore {
 
     async listCharacters(sessionId) {
       return [...characters.values()].filter((r) => r.sessionId === sessionId);
+    },
+
+    // ── Plugin Data ──
+
+    async setPluginData(record) {
+      pluginData.set(pluginDataKey(record.sessionId, record.pluginId, record.namespace, record.key), record);
+    },
+
+    async setPluginDataBatch(records) {
+      for (const record of records) {
+        pluginData.set(pluginDataKey(record.sessionId, record.pluginId, record.namespace, record.key), record);
+      }
+    },
+
+    async getPluginData(sessionId, pluginId, namespace, key) {
+      return pluginData.get(pluginDataKey(sessionId, pluginId, namespace, key)) ?? null;
+    },
+
+    async listPluginData(sessionId, pluginId, namespace?) {
+      return [...pluginData.values()].filter(
+        (r) =>
+          r.sessionId === sessionId &&
+          r.pluginId === pluginId &&
+          (namespace === undefined || r.namespace === namespace),
+      );
+    },
+
+    async deletePluginData(sessionId, pluginId, namespace, key) {
+      pluginData.delete(pluginDataKey(sessionId, pluginId, namespace, key));
     },
 
     // ── Plugin Configs ──
