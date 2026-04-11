@@ -2,13 +2,13 @@
  * Plugin-local tool: unlock-codex-entries
  *
  * Batch unlock multiple codex entries in one call.
- * Produces a rich "discovery" UI card for each new entry.
+ * Persists to plugin-data store and produces a rich "discovery" UI card.
  *
  * Uses shortIdBatch() to generate LLM-friendly IDs like 'codex-fire-magic'
  * instead of UUID-based IDs. LLM can reference these IDs in update-codex-entry.
  */
 
-export default function ({ tool, z, shortIdBatch }) {
+export default function ({ tool, z, shortIdBatch, store }) {
   const codexEntrySchema = z.object({
     category: z.enum(['monster', 'item', 'location', 'lore', 'character', 'skill'])
       .describe('知识类别'),
@@ -23,19 +23,40 @@ export default function ({ tool, z, shortIdBatch }) {
 
   return tool({
     name: 'unlock-codex-entries',
-    description: '批量解锁新的图鉴条目。每个条目会生成一张"知识发现"卡片展示给玩家。返回的 entryId（如 codex-fire-magic）可用于后续 update-codex-entry 调用。',
+    description: '批量解锁新的图鉴条目。条目会持久化存储并生成"知识发现"卡片。返回的 entryId（如 codex-fire-magic）可用于后续 update-codex-entry 调用。',
     parameters: z.object({
       entries: z.array(codexEntrySchema).min(1).describe('要解锁的图鉴条目列表'),
     }),
     execute: async (params, context) => {
-      // Generate short semantic IDs from titles: 'codex-fire-magic', 'codex-1' (CJK fallback)
       const ids = shortIdBatch('codex', params.entries.map((e) => e.title), context.sessionId);
+      const now = new Date().toISOString();
 
       const results = params.entries.map((entry, i) => ({
         entryId: ids[i],
         ...entry,
-        unlockedAt: new Date().toISOString(),
+        unlockedAt: now,
       }));
+
+      // Persist all entries to plugin-data store
+      const records = results.map((entry) => ({
+        id: crypto.randomUUID(),
+        sessionId: context.sessionId,
+        pluginId: context.pluginId,
+        namespace: 'entries',
+        key: entry.entryId,
+        value: {
+          category: entry.category,
+          title: entry.title,
+          content: entry.content,
+          tags: entry.tags,
+          rarity: entry.rarity,
+          imageHint: entry.imageHint,
+          unlockedAt: entry.unlockedAt,
+        },
+        createdAt: now,
+        updatedAt: now,
+      }));
+      await store.setPluginDataBatch(records);
 
       const ui = results.map((entry) => ({
         type: 'codex-discovery',

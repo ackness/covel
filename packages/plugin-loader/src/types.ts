@@ -84,6 +84,12 @@ export interface LoadedRuntime {
   readonly handler?: FunctionHandler;
   /** Guard function — runs before agent execution, returns `{ skip: true }` to bypass LLM. */
   readonly guard?: FunctionHandler;
+  /** Loaded UI specs from ui/ directory, grouped by slot. */
+  readonly uiSpecs?: {
+    readonly right?: readonly Readonly<Record<string, unknown>>[];
+    readonly message?: readonly Readonly<Record<string, unknown>>[];
+    readonly left?: readonly Readonly<Record<string, unknown>>[];
+  };
 }
 
 // ── Plugin registry ──────────────────────────────────────────────

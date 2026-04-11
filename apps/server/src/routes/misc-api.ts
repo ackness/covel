@@ -91,6 +91,36 @@ export function createMiscApiRoutes(ai: AiStack, registry: PluginRegistry): Hono
     return c.json({ schemas });
   });
 
+  // GET /api/ui-specs — list UI specs from plugin manifests, grouped by slot
+  app.get('/api/ui-specs', (c) => {
+    type SlotEntry = { pluginId: string; specs: readonly Record<string, unknown>[] };
+    const right: SlotEntry[] = [];
+    const message: SlotEntry[] = [];
+    const left: SlotEntry[] = [];
+
+    const all = registry.getAll();
+    for (const [, entry] of all) {
+      if (entry.status === 'error') continue;
+
+      for (const [, loaded] of entry.loadedRuntimes) {
+        if (!loaded.uiSpecs) continue;
+        const pluginId = loaded.manifest.pluginId;
+
+        if (loaded.uiSpecs.right?.length) {
+          right.push({ pluginId, specs: loaded.uiSpecs.right });
+        }
+        if (loaded.uiSpecs.message?.length) {
+          message.push({ pluginId, specs: loaded.uiSpecs.message });
+        }
+        if (loaded.uiSpecs.left?.length) {
+          left.push({ pluginId, specs: loaded.uiSpecs.left });
+        }
+      }
+    }
+
+    return c.json({ right, message, left });
+  });
+
   // GET /api/llm-config — return slot configuration with capability info
   app.get('/api/llm-config', (c) => {
     const slots = ai.slotRegistry.listSlots();

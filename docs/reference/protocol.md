@@ -76,6 +76,14 @@
 |----------|------|------|------|
 | `world.dimensions.changed` | S→C | 世界维度文件变更（热更新） | `{ worldId, changedKeys[] }` |
 
+### 插件数据事件
+
+| 事件类型 | 方向 | 描述 | 负载 |
+|----------|------|------|------|
+| `plugin-data.changed` | S→C | 插件持久化数据变更 | `{ pluginId, runtimeId, changes: [{ namespace, key, value, operation }] }` |
+
+`plugin-data-set` / `plugin-data-set-batch` 工具写入后自动触发此事件，前端可实时响应插件状态变更。
+
 ## 二、命令类型（CommandType）
 
 ### 会话管理

@@ -16,6 +16,9 @@ input:
 tools:
   builtin:
     - create-form
+ui:
+  right:
+    - ./ui/character-panel.json
 ---
 
 你是一个角色创建引导 agent。

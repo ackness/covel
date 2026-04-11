@@ -30,9 +30,18 @@ interface PluginDataStore {
   }>>;
 }
 
+/** Minimal event emitter interface (avoids @covel/events dependency). */
+interface PluginDataEventEmitter {
+  emit(message: {
+    id: string; type: string; topic: string;
+    payload: Record<string, unknown>;
+    sessionId: string; turnId?: string; timestamp: string;
+  }): void;
+}
+
 // ── plugin-data-set ─────────────────────────────────────────────
 
-function createPluginDataSetTool(store: PluginDataStore): ToolModule {
+function createPluginDataSetTool(store: PluginDataStore, eventEmitter?: PluginDataEventEmitter): ToolModule {
   return tool({
     name: 'plugin-data-set',
     description: '将数据写入插件的持久化存储。数据按 namespace + key 组织，value 为任意 JSON。相同 (namespace, key) 会覆盖旧值。',
@@ -53,6 +62,12 @@ function createPluginDataSetTool(store: PluginDataStore): ToolModule {
         createdAt: now,
         updatedAt: now,
       });
+      emitPluginDataChanged(eventEmitter, context, [{
+        namespace: params.namespace,
+        key: params.key,
+        value: params.value,
+        operation: 'set' as const,
+      }]);
       return {
         success: true,
         namespace: params.namespace,
@@ -64,7 +79,7 @@ function createPluginDataSetTool(store: PluginDataStore): ToolModule {
 
 // ── plugin-data-set-batch ───────────────────────────────────────
 
-function createPluginDataSetBatchTool(store: PluginDataStore): ToolModule {
+function createPluginDataSetBatchTool(store: PluginDataStore, eventEmitter?: PluginDataEventEmitter): ToolModule {
   return tool({
     name: 'plugin-data-set-batch',
     description: '批量写入多条数据到插件持久化存储。一次调用写入整个数组，避免逐条调用的开销。相同 (namespace, key) 会覆盖旧值。',
@@ -88,6 +103,12 @@ function createPluginDataSetBatchTool(store: PluginDataStore): ToolModule {
         updatedAt: now,
       }));
       await store.setPluginDataBatch(records);
+      emitPluginDataChanged(eventEmitter, context, params.items.map((item) => ({
+        namespace: item.namespace,
+        key: item.key,
+        value: item.value,
+        operation: 'set' as const,
+      })));
       return {
         success: true,
         count: records.length,
@@ -160,14 +181,50 @@ function createPluginDataListTool(store: PluginDataStore): ToolModule {
 
 // ── Factory ─────────────────────────────────────────────────────
 
+// ── Event emission helper ───────────────────────────────────────
+
+interface PluginDataChange {
+  readonly namespace: string;
+  readonly key: string;
+  readonly value: unknown;
+  readonly operation: 'set' | 'delete';
+}
+
+function emitPluginDataChanged(
+  eventEmitter: PluginDataEventEmitter | undefined,
+  context: { sessionId: string; turnId: string; pluginId: string; runtimeId: string },
+  changes: readonly PluginDataChange[],
+): void {
+  if (!eventEmitter || changes.length === 0) return;
+  eventEmitter.emit({
+    id: crypto.randomUUID(),
+    type: 'event',
+    topic: 'plugin',
+    payload: {
+      _subType: 'plugin-data.changed',
+      pluginId: context.pluginId,
+      runtimeId: context.runtimeId,
+      changes,
+    },
+    sessionId: context.sessionId,
+    turnId: context.turnId,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+// ── Factory ─────────────────────────────────────────────────────
+
 /**
  * Create plugin data tools bound to a DataStore instance.
  * Call this during bootstrap when the store is available.
+ *
+ * @param eventEmitter — optional EventBus; when provided, set/set-batch/delete
+ *   tools emit `plugin-data.changed` events so the frontend can react in real-time.
  */
-export function createPluginDataTools(store: PluginDataStore): ToolModule[] {
+export function createPluginDataTools(store: PluginDataStore, eventEmitter?: PluginDataEventEmitter): ToolModule[] {
   return [
-    createPluginDataSetTool(store),
-    createPluginDataSetBatchTool(store),
+    createPluginDataSetTool(store, eventEmitter),
+    createPluginDataSetBatchTool(store, eventEmitter),
     createPluginDataGetTool(store),
     createPluginDataListTool(store),
   ];

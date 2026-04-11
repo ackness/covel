@@ -106,6 +106,8 @@ export type ProtocolEventType =
   | 'event.emitted'
   // World
   | 'world.dimensions.changed'
+  // Plugin data
+  | 'plugin-data.changed'
   // System
   | 'error.occurred'
   | 'connection.restored';

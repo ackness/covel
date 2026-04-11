@@ -6,10 +6,11 @@
  * 2. Local tools: unlock-codex-entries + update-codex-entry
  * 3. Batch unlock (multiple entries in one call)
  * 4. UI card generation with rarity styles
- * 5. Integration: mock LLM calls tool → framework extracts UI
+ * 5. Persistence to plugin-data store
+ * 6. Integration: mock LLM calls tool → framework extracts UI
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import path from 'node:path';
 import { MockLLM, createTestHarness } from '@covel/plugin-test-utils';
 import { discoverPlugins, loadPluginManifest, loadRuntime } from '@covel/plugin-loader';
@@ -17,9 +18,39 @@ import { tool, z, shortIdBatch } from '@covel/tools';
 import createUnlockCodexEntries from '../tools/unlock-codex-entries.js';
 import createUpdateCodexEntry from '../tools/update-codex-entry.js';
 
-// Instantiate tools from factory functions
-const unlockCodexEntriesTool = createUnlockCodexEntries({ tool, z, shortIdBatch });
-const updateCodexEntryTool = createUpdateCodexEntry({ tool, z });
+// In-memory mock store for plugin-data operations
+function createMockPluginDataStore() {
+  /** @type {Map<string, unknown>} */
+  const data = new Map();
+  const makeKey = (sid, pid, ns, k) => `${sid}:${pid}:${ns}:${k}`;
+
+  return {
+    data,
+    async setPluginData(record) {
+      data.set(makeKey(record.sessionId, record.pluginId, record.namespace, record.key), {
+        namespace: record.namespace,
+        key: record.key,
+        value: record.value,
+        updatedAt: record.updatedAt,
+      });
+    },
+    async setPluginDataBatch(records) {
+      for (const r of records) await this.setPluginData(r);
+    },
+    async getPluginData(sessionId, pluginId, namespace, key) {
+      return data.get(makeKey(sessionId, pluginId, namespace, key)) ?? null;
+    },
+    async listPluginData(sessionId, pluginId, namespace) {
+      const results = [];
+      for (const [k, v] of data) {
+        if (k.startsWith(`${sessionId}:${pluginId}:`) && (!namespace || k.startsWith(`${sessionId}:${pluginId}:${namespace}:`))) {
+          results.push(v);
+        }
+      }
+      return results;
+    },
+  };
+}
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, '../..');
 
@@ -27,6 +58,15 @@ const PLUGINS_DIR = path.resolve(import.meta.dirname, '../..');
 
 describe('core-codex tools', () => {
   const ctx = { sessionId: 'sess-1', turnId: 'turn-1', pluginId: 'core-codex', runtimeId: 'core-codex' };
+  let mockStore;
+  let unlockCodexEntriesTool;
+  let updateCodexEntryTool;
+
+  beforeEach(() => {
+    mockStore = createMockPluginDataStore();
+    unlockCodexEntriesTool = createUnlockCodexEntries({ tool, z, shortIdBatch, store: mockStore });
+    updateCodexEntryTool = createUpdateCodexEntry({ tool, z, store: mockStore });
+  });
 
   describe('unlock-codex-entries', () => {
     it('should unlock a single entry with UI card', async () => {
@@ -47,6 +87,24 @@ describe('core-codex tools', () => {
       expect(result.ui[0].style.icon).toBe('🗺️');
     });
 
+    it('should persist entries to plugin-data store', async () => {
+      const result = await unlockCodexEntriesTool.execute({
+        entries: [{
+          category: 'location',
+          title: '青萍山',
+          content: '青萍宗所在的灵脉山峰。',
+          tags: ['宗门'],
+          rarity: 'common',
+        }],
+      }, ctx);
+
+      const entryId = result.entries[0].entryId;
+      const stored = await mockStore.getPluginData('sess-1', 'core-codex', 'entries', entryId);
+      expect(stored).not.toBeNull();
+      expect(stored.value.title).toBe('青萍山');
+      expect(stored.value.category).toBe('location');
+    });
+
     it('should batch unlock multiple entries', async () => {
       const result = await unlockCodexEntriesTool.execute({
         entries: [
@@ -62,6 +120,10 @@ describe('core-codex tools', () => {
       expect(result.ui[1].style.borderColor).toBe('#a855f7');
       expect(result.ui[1].style.animation).toBe('shimmer');
       expect(result.ui[2].style.borderColor).toBe('#6b7280');
+
+      // All 3 entries persisted
+      const stored = await mockStore.listPluginData('sess-1', 'core-codex', 'entries');
+      expect(stored).toHaveLength(3);
     });
 
     it('should generate legendary entry with glow animation', async () => {
@@ -83,26 +145,69 @@ describe('core-codex tools', () => {
   });
 
   describe('update-codex-entry', () => {
-    it('should update existing entry', async () => {
+    it('should update existing entry from store', async () => {
+      // First unlock an entry so it exists in store
+      const unlockResult = await unlockCodexEntriesTool.execute({
+        entries: [{
+          category: 'location',
+          title: '青萍山',
+          content: '青萍宗所在的灵脉山峰。',
+          tags: ['宗门'],
+          rarity: 'common',
+        }],
+      }, ctx);
+
+      const entryId = unlockResult.entries[0].entryId;
+
       const result = await updateCodexEntryTool.execute({
-        entryId: 'codex-123',
+        entryId,
         appendContent: '据传青萍山灵脉近年有衰退迹象，原因不明。',
       }, ctx);
 
       expect(result.updated).toBe(true);
-      expect(result.entryId).toBe('codex-123');
+      expect(result.entryId).toBe(entryId);
       expect(result.ui[0].type).toBe('codex-update');
+
+      // Verify store was updated
+      const stored = await mockStore.getPluginData('sess-1', 'core-codex', 'entries', entryId);
+      expect(stored.value.content).toContain('衰退迹象');
+    });
+
+    it('should return error for non-existent entry', async () => {
+      const result = await updateCodexEntryTool.execute({
+        entryId: 'codex-nonexistent',
+        appendContent: 'some content',
+      }, ctx);
+
+      expect(result.updated).toBe(false);
+      expect(result.error).toBeDefined();
     });
 
     it('should support rarity upgrade', async () => {
+      // First unlock
+      const unlockResult = await unlockCodexEntriesTool.execute({
+        entries: [{
+          category: 'item',
+          title: '梦莲',
+          content: '野生灵植，可短暂扩展灵识但有成瘾风险。',
+          tags: ['灵植'],
+          rarity: 'common',
+        }],
+      }, ctx);
+      const entryId = unlockResult.entries[0].entryId;
+
       const result = await updateCodexEntryTool.execute({
-        entryId: 'codex-123',
+        entryId,
         appendContent: '发现梦莲与上古封印有直接关联！',
         rarityUpgrade: 'legendary',
       }, ctx);
 
       expect(result.ui[0].rarityUpgrade).toBe('legendary');
       expect(result.ui[0].style.animation).toBe('upgrade-pulse');
+
+      // Verify rarity updated in store
+      const stored = await mockStore.getPluginData('sess-1', 'core-codex', 'entries', entryId);
+      expect(stored.value.rarity).toBe('legendary');
     });
   });
 });
@@ -133,17 +238,31 @@ describe('core-codex plugin manifest', () => {
     expect(manifest.tools?.local).toContain('./tools/update-codex-entry.js');
   });
 
-  it('should declare builtin notification tool', () => {
+  it('should declare builtin tools', () => {
     expect(manifest.tools?.builtin).toContain('create-notification');
+    expect(manifest.tools?.builtin).toContain('plugin-data-list');
   });
 
-  it('should have auto trigger', () => {
-    expect(manifest.trigger?.type).toBe('auto');
+  it('should have scheduled trigger with interval', () => {
+    expect(manifest.trigger?.type).toBe('scheduled');
+    expect(manifest.trigger?.interval).toBe(2);
   });
 
   it('should load prompt template', () => {
     expect(loaded.promptTemplate).toContain('知识图鉴');
     expect(loaded.promptTemplate).toContain('unlock-codex-entries');
+  });
+
+  it('should declare right panel UI spec', () => {
+    expect(manifest.ui).toBeDefined();
+    expect(manifest.ui?.right).toContain('./ui/codex-panel.json');
+  });
+
+  it('should load UI spec JSON with panel metadata', () => {
+    expect(loaded.uiSpecs).toBeDefined();
+    expect(loaded.uiSpecs?.right).toHaveLength(1);
+    expect(loaded.uiSpecs?.right?.[0].id).toBe('codex');
+    expect(loaded.uiSpecs?.right?.[0].icon).toBe('book-open');
   });
 });
 
@@ -151,6 +270,10 @@ describe('core-codex plugin manifest', () => {
 
 describe('core-codex integration', () => {
   it('should execute tool calls and produce UI cards via harness', async () => {
+    const mockStore = createMockPluginDataStore();
+    const unlockTool = createUnlockCodexEntries({ tool, z, shortIdBatch, store: mockStore });
+    const updateTool = createUpdateCodexEntry({ tool, z, store: mockStore });
+
     const llm = new MockLLM({
       defaultResponse: {
         content: '',
@@ -189,7 +312,7 @@ describe('core-codex integration', () => {
     const harness = await createTestHarness({
       pluginsDir: PLUGINS_DIR,
       llm,
-      tools: [unlockCodexEntriesTool, updateCodexEntryTool],
+      tools: [unlockTool, updateTool],
       activePlugins: ['core-codex'],
     });
 

@@ -42,6 +42,7 @@ export interface RightPanelProps {
   sessionId: string;
   world: WorldRecord | null;
   gameState: Record<string, unknown>;
+  pluginData: Record<string, Record<string, Record<string, unknown>>>;
   statePatches: Array<{
     id: string;
     summary: string;
@@ -55,6 +56,7 @@ export function RightPanel({
   sessionId,
   world,
   gameState,
+  pluginData,
   statePatches,
   onToggleRightPanel,
 }: RightPanelProps) {
@@ -225,7 +227,7 @@ export function RightPanel({
             <Library className="w-4 h-4 shrink-0" />{" "}
             {t("session.codexTitle", "Codex")}
           </h3>
-          <CodexPanel gameState={gameState} />
+          <CodexPanel gameState={gameState} pluginData={pluginData} />
         </TabsContent>
         <TabsContent value="state" className="p-4 m-0 space-y-4">
           <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">

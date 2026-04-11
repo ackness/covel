@@ -17,6 +17,9 @@ tools:
   builtin:
     - plugin-data-get
     - plugin-data-list
+ui:
+  right:
+    - ./ui/world-data-panel.json
 ---
 
 你是世界维度初始化 agent。

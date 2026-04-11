@@ -65,6 +65,7 @@ interface GameViewProps {
     data?: unknown;
   }>;
   gameState: Record<string, unknown>;
+  pluginData: Record<string, Record<string, Record<string, unknown>>>;
   executionSteps: ExecutionStep[];
   worldSessions: SessionRecord[];
   /** Block IDs that have been submitted (permanently locked). */
@@ -106,6 +107,7 @@ export function GameView({
   llmConfig,
   statePatches,
   gameState,
+  pluginData,
   executionSteps,
   worldSessions,
   submittedBlockIds,
@@ -319,6 +321,7 @@ export function GameView({
                 sessionId={session.id}
                 world={world}
                 gameState={gameState}
+                pluginData={pluginData}
                 statePatches={statePatches}
                 onToggleRightPanel={toggleRightPanel}
               />
@@ -544,6 +547,7 @@ export function GameView({
                 sessionId={session.id}
                 world={world}
                 gameState={gameState}
+                pluginData={pluginData}
                 statePatches={statePatches}
                 onToggleRightPanel={toggleRightPanel}
               />

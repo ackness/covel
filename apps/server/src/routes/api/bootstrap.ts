@@ -170,8 +170,8 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     builtinToolNames.add(t.name);
   }
 
-  // Register plugin-data tools (store-bound via closure)
-  for (const t of createPluginDataTools(store)) {
+  // Register plugin-data tools (store-bound via closure, eventBus for real-time notifications)
+  for (const t of createPluginDataTools(store, eventBus)) {
     toolMap.set(t.name, t);
     builtinToolNames.add(t.name);
   }
@@ -273,6 +273,27 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
       return 'third-party';
     },
   });
+
+  // 6b. Eagerly load runtimes that declare UI specs so /api/ui-specs has data at boot
+  for (const [pluginId, discovery] of discoveryMap) {
+    const manifests = manifestCache.get(pluginId);
+    if (!manifests) continue;
+    for (const parsed of manifests) {
+      if (parsed.manifest.ui) {
+        try {
+          const loaded = await loadRuntimeFn(parsed.manifest);
+          if (loaded) {
+            const entry = registry.get(pluginId);
+            if (entry) {
+              (entry.loadedRuntimes as Map<string, typeof loaded>).set(parsed.manifest.name, loaded);
+            }
+          }
+        } catch (err) {
+          console.warn(`[bootstrap] Failed to load UI specs for ${parsed.manifest.name}:`, err);
+        }
+      }
+    }
+  }
 
   // 7. getConfigFn — per-request config injection
   //    Actual config pre-loading happens in route handlers (actions.ts, turn.ts)

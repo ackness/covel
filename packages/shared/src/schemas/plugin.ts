@@ -96,6 +96,16 @@ export const pluginConfigFieldSchema = z
   })
   .strict();
 
+// ── UI spec ─────────────────────────────────────────────────────
+
+export const uiSpecSchema = z
+  .object({
+    right: z.array(z.string().min(1)).optional(),
+    message: z.array(z.string().min(1)).optional(),
+    left: z.array(z.string().min(1)).optional(),
+  })
+  .strict();
+
 // ── Runtime manifest ─────────────────────────────────────────────
 
 export const runtimeManifestSchema = z
@@ -119,6 +129,7 @@ export const runtimeManifestSchema = z
     output: outputConfigSchema.optional(),
     config: z.record(z.string(), pluginConfigFieldSchema).optional(),
     i18n: z.record(z.string(), z.string()).optional(),
+    ui: uiSpecSchema.optional(),
   })
   .strict();
 

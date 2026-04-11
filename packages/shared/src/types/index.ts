@@ -10,6 +10,8 @@ export type {
   ToolsConfig,
   ConfigFieldType,
   PluginConfigField,
+  UISlotType,
+  UISpec,
   RuntimeManifest,
   PluginManifest,
 } from './plugin.js';

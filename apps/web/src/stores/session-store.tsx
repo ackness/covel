@@ -79,6 +79,9 @@ interface SessionState {
   /** Accumulated game state from state.patch events. */
   gameState: Record<string, unknown>;
 
+  /** Plugin data keyed by pluginId → namespace → key → value. Updated via plugin-data.changed events. */
+  pluginData: Record<string, Record<string, Record<string, unknown>>>;
+
   /** Block IDs that have been submitted by the player (permanently locked). */
   submittedBlockIds: ReadonlySet<string>;
 }
@@ -111,7 +114,8 @@ type Action =
   | { type: "REMOVE_SESSION"; sessionId: string }
   | { type: "LOAD_SESSION_PLUGINS"; plugins: api.SessionPluginInfo[] }
   | { type: "TOGGLE_SESSION_PLUGIN"; pluginId: string; isActive: boolean }
-  | { type: "BACKFILL_TURN_ID"; turnId: string };
+  | { type: "BACKFILL_TURN_ID"; turnId: string }
+  | { type: "PLUGIN_DATA_CHANGED"; pluginId: string; changes: readonly { namespace: string; key: string; value: unknown; operation: string }[] };
 
 const initialState: SessionState = {
   presets: [],
@@ -132,6 +136,7 @@ const initialState: SessionState = {
   executionSteps: [],
   statePatches: [],
   gameState: {},
+  pluginData: {},
   submittedBlockIds: new Set<string>(),
   sessionPlugins: [],
 };
@@ -234,9 +239,9 @@ function reducer(state: SessionState, action: Action): SessionState {
     case "SUBMIT_BLOCK":
       return { ...state, submittedBlockIds: new Set([...state.submittedBlockIds, action.blockId]) };
     case "RESET_SESSION":
-      return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), sessionPlugins: [] };
+      return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), sessionPlugins: [] };
     case "RESET_TO_WORLD_SELECT":
-      return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), sessionPlugins: [] };
+      return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), sessionPlugins: [] };
     case "LOAD_SESSION_PLUGINS":
       return { ...state, sessionPlugins: action.plugins };
     case "TOGGLE_SESSION_PLUGIN":
@@ -274,6 +279,21 @@ function reducer(state: SessionState, action: Action): SessionState {
         return false;
       });
       return { ...state, messages: filtered };
+    }
+    case "PLUGIN_DATA_CHANGED": {
+      const { pluginId, changes } = action;
+      const prev = state.pluginData;
+      const pluginNs = { ...prev[pluginId] };
+      for (const change of changes) {
+        const ns = { ...pluginNs[change.namespace] };
+        if (change.operation === 'delete') {
+          delete ns[change.key];
+        } else {
+          ns[change.key] = change.value;
+        }
+        pluginNs[change.namespace] = ns;
+      }
+      return { ...state, pluginData: { ...prev, [pluginId]: pluginNs } };
     }
     default:
       return state;
@@ -703,6 +723,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               },
             },
           });
+        }
+        break;
+      }
+      // ── Plugin data events ────────────────────────────────────
+      case "plugin-data.changed": {
+        const pluginId = payload.pluginId as string;
+        const changes = payload.changes as readonly { namespace: string; key: string; value: unknown; operation: string }[];
+        if (pluginId && changes) {
+          dispatch({ type: "PLUGIN_DATA_CHANGED", pluginId, changes });
         }
         break;
       }

@@ -169,6 +169,45 @@ async function readReferences(runtimeDir: string): Promise<readonly ParsedRefere
 }
 
 /**
+ * Load UI spec JSON files declared in manifest.ui.
+ * Validates paths to prevent traversal outside the plugin root.
+ */
+async function loadUiSpecs(
+  runtimeDir: string,
+  pluginRoot: string,
+  ui: { right?: readonly string[]; message?: readonly string[]; left?: readonly string[] } | undefined,
+): Promise<LoadedRuntime['uiSpecs']> {
+  if (!ui) return undefined;
+
+  const loadSlot = async (paths: readonly string[] | undefined): Promise<readonly Readonly<Record<string, unknown>>[] | undefined> => {
+    if (!paths || paths.length === 0) return undefined;
+    const specs: Readonly<Record<string, unknown>>[] = [];
+    for (const relPath of paths) {
+      const fullPath = path.resolve(runtimeDir, relPath);
+      const rel = path.relative(pluginRoot, fullPath);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        throw new Error(`UI spec path traversal rejected: ${relPath}`);
+      }
+      if (fullPath.endsWith('.json')) {
+        const content = await fs.readFile(fullPath, 'utf-8');
+        specs.push(JSON.parse(content) as Record<string, unknown>);
+      } else {
+        // .tsx/.js — store path for frontend dynamic loading
+        specs.push({ _componentPath: relPath });
+      }
+    }
+    return specs;
+  };
+
+  const right = await loadSlot(ui.right);
+  const message = await loadSlot(ui.message);
+  const left = await loadSlot(ui.left);
+
+  if (!right && !message && !left) return undefined;
+  return { right, message, left };
+}
+
+/**
  * Level 2: Fully load a runtime for execution.
  * Reads prompt template, references, output schema.
  *
@@ -219,6 +258,9 @@ export async function loadRuntime(
     guard = mod.default as FunctionHandler;
   }
 
+  // Load UI spec files from ui/ directory
+  const uiSpecs = await loadUiSpecs(runtimeDir, discovery.rootPath, parsed.manifest.ui);
+
   return {
     manifest: parsed.manifest,
     promptTemplate: parsed.promptTemplate,
@@ -226,5 +268,6 @@ export async function loadRuntime(
     outputSchema,
     handler,
     guard,
+    uiSpecs,
   };
 }

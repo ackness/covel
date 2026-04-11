@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge.js";
 
 // ── Types ────────────────────────────────────────────────────────
 
-type CodexCategory = "monster" | "item" | "location" | "lore" | "character";
+type CodexCategory = "monster" | "item" | "location" | "lore" | "character" | "skill";
 
 interface CodexEntry {
   id: string;
@@ -17,6 +17,7 @@ interface CodexEntry {
   category: CodexCategory;
   content?: string;
   tags?: string[];
+  rarity?: string;
   isNew?: boolean;
   turnUnlocked?: number;
 }
@@ -65,23 +66,32 @@ const CATEGORY_CONFIG: Record<CodexCategory, {
     label: "Characters",
     labelZh: "人物",
   },
+  skill: {
+    icon: Sparkles,
+    color: "text-cyan-500 dark:text-cyan-400",
+    bg: "bg-cyan-500/10",
+    label: "Skills",
+    labelZh: "技能",
+  },
 };
 
-const ALL_CATEGORIES: CodexCategory[] = ["monster", "item", "location", "lore", "character"];
+const ALL_CATEGORIES: CodexCategory[] = ["monster", "item", "location", "lore", "character", "skill"];
 
 // ── Component ────────────────────────────────────────────────────
 
 interface CodexPanelProps {
   gameState: Record<string, unknown>;
+  /** Plugin data keyed by pluginId → namespace → key → value. */
+  pluginData?: Record<string, Record<string, Record<string, unknown>>>;
 }
 
-export function CodexPanel({ gameState }: CodexPanelProps) {
+export function CodexPanel({ gameState, pluginData }: CodexPanelProps) {
   const { i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const [categoryFilter, setCategoryFilter] = useState<CodexCategory | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const entries = extractCodexEntries(gameState);
+  const entries = extractCodexEntries(gameState, pluginData);
 
   if (entries.length === 0) {
     return (
@@ -251,38 +261,75 @@ function CategoryButton({ active, onClick, label, count, icon }: {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-function extractCodexEntries(gameState: Record<string, unknown>): CodexEntry[] {
-  // Look for codex data under the generic "codex" state key.
-  // Framework must NOT reference specific plugin IDs — plugins write to well-known state keys.
-  const raw = gameState.codex;
-  if (!raw) return [];
+/**
+ * Extract codex entries from plugin data (primary) or legacy gameState.codex (fallback).
+ *
+ * Plugin data source: any plugin that writes to the "entries" namespace is treated
+ * as a codex data provider. The framework does NOT reference specific plugin IDs —
+ * it discovers codex-like data by namespace convention.
+ */
+function extractCodexEntries(
+  gameState: Record<string, unknown>,
+  pluginData?: Record<string, Record<string, Record<string, unknown>>>,
+): CodexEntry[] {
+  const entries: CodexEntry[] = [];
 
-  let list: unknown[];
-  if (Array.isArray(raw)) {
-    list = raw;
-  } else if (typeof raw === "object" && raw !== null) {
-    const obj = raw as Record<string, unknown>;
-    // Support { entries: [...] } or direct object map
-    if (Array.isArray(obj.entries)) {
-      list = obj.entries;
-    } else {
-      list = Object.values(obj);
+  // Primary: read from pluginData — scan all plugins for "entries" namespace
+  if (pluginData) {
+    for (const [_pluginId, namespaces] of Object.entries(pluginData)) {
+      const codexEntries = namespaces.entries;
+      if (!codexEntries) continue;
+      for (const [key, value] of Object.entries(codexEntries)) {
+        if (typeof value !== "object" || value === null) continue;
+        const v = value as Record<string, unknown>;
+        entries.push({
+          id: key,
+          title: String(v.title ?? v.name ?? key),
+          category: (v.category as CodexCategory) ?? "lore",
+          content: v.content ? String(v.content) : undefined,
+          tags: Array.isArray(v.tags) ? v.tags.map(String) : undefined,
+          rarity: typeof v.rarity === "string" ? v.rarity : undefined,
+          isNew: Boolean(v.isNew ?? v.newlyUnlocked),
+        });
+      }
     }
-  } else {
-    return [];
   }
 
-  return list
-    .filter((e): e is Record<string, unknown> => typeof e === "object" && e !== null)
-    .map((e) => ({
-      id: String(e.id ?? ""),
-      title: String(e.title ?? e.name ?? "Untitled"),
-      category: (e.category as CodexCategory) ?? "lore",
-      content: e.content ? String(e.content) : undefined,
-      tags: Array.isArray(e.tags) ? e.tags.map(String) : undefined,
-      isNew: Boolean(e.isNew ?? e.newlyUnlocked),
-      turnUnlocked: typeof e.turnUnlocked === "number" ? e.turnUnlocked : undefined,
-    }));
+  // Fallback: legacy gameState.codex (for backward compatibility)
+  if (entries.length === 0) {
+    const raw = gameState.codex;
+    if (!raw) return [];
+
+    let list: unknown[];
+    if (Array.isArray(raw)) {
+      list = raw;
+    } else if (typeof raw === "object" && raw !== null) {
+      const obj = raw as Record<string, unknown>;
+      if (Array.isArray(obj.entries)) {
+        list = obj.entries;
+      } else {
+        list = Object.values(obj);
+      }
+    } else {
+      return [];
+    }
+
+    for (const e of list) {
+      if (typeof e !== "object" || e === null) continue;
+      const v = e as Record<string, unknown>;
+      entries.push({
+        id: String(v.id ?? ""),
+        title: String(v.title ?? v.name ?? "Untitled"),
+        category: (v.category as CodexCategory) ?? "lore",
+        content: v.content ? String(v.content) : undefined,
+        tags: Array.isArray(v.tags) ? v.tags.map(String) : undefined,
+        rarity: typeof v.rarity === "string" ? v.rarity : undefined,
+        isNew: Boolean(v.isNew ?? v.newlyUnlocked),
+      });
+    }
+  }
+
+  return entries;
 }
 
 function countByCategory(entries: CodexEntry[]): Record<string, number> {

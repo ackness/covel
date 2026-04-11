@@ -1,0 +1,77 @@
+{
+  "id": "character",
+  "group": "character",
+  "label": { "zh": "角色", "en": "Character" },
+  "icon": "user",
+  "dataSource": { "namespace": "character" },
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "md" },
+    "children": [
+      {
+        "component": "Card",
+        "children": [
+          {
+            "component": "Row",
+            "props": { "gap": "sm" },
+            "children": [
+              { "component": "Icon", "props": { "name": "user", "size": "md" } },
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "$state": "/name" },
+                  "weight": "bold",
+                  "size": "lg"
+                }
+              }
+            ]
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": { "$state": "/description" },
+              "variant": "muted",
+              "size": "sm"
+            }
+          }
+        ]
+      },
+      {
+        "component": "Card",
+        "children": [
+          {
+            "component": "Text",
+            "props": { "content": { "zh": "属性", "en": "Attributes" }, "weight": "bold", "size": "sm" }
+          },
+          {
+            "component": "Separator"
+          },
+          {
+            "component": "Stack",
+            "props": { "gap": "xs" },
+            "children": [
+              {
+                "component": "Row",
+                "props": { "gap": "sm" },
+                "children": [
+                  { "component": "Text", "props": { "content": { "zh": "类型", "en": "Type" }, "variant": "muted", "size": "sm" } },
+                  { "component": "Text", "props": { "content": { "$state": "/type" }, "size": "sm" } }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "component": "Text",
+        "props": {
+          "variant": "muted",
+          "size": "xs",
+          "align": "center",
+          "content": { "zh": "角色创建后属性将在此显示", "en": "Character attributes will appear here after creation" }
+        },
+        "visible": { "$state": "/name", "$eq": null }
+      }
+    ]
+  }
+}

@@ -135,6 +135,7 @@ function SessionPage() {
         llmConfig={state.llmConfig}
         statePatches={state.statePatches}
         gameState={state.gameState}
+        pluginData={state.pluginData}
         executionSteps={state.executionSteps}
         worldSessions={state.worldSessions}
         submittedBlockIds={state.submittedBlockIds}
