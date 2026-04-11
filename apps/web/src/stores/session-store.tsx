@@ -583,15 +583,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
       // ── Execution lifecycle events ───────────────────────────
       case "execution.started": {
-        // Turn-level execution started
-        dispatch({ type: "ADD_EXECUTION_STEP", step: {
-          type: "runtime.started",
-          runtimeId: "__turn__",
-          pluginId: "",
-          detail: `${payload.runtimeCount ?? 0} runtimes`,
-          timestamp: envelope.timestamp,
-          turnId,
-        }});
+        // Turn-level execution started — tracked by `executing` flag, no fake runtime step needed
         break;
       }
       case "runtime.started": {
@@ -906,7 +898,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               turnId: s.turnId,
               detail: (p.durationMs != null) ? `${p.durationMs}ms` : undefined,
             };
-          });
+          })
+          .filter(s => s.runtimeId !== '__turn__');
         dispatch({ type: "LOAD_EXECUTION_STEPS", steps });
       }
     } catch {

@@ -26,6 +26,7 @@ import { GameStatusPanel } from "./game-status-panel.js";
 import { CharacterPanel } from "./character-panel.js";
 import { EventPanel } from "./event-panel.js";
 import { CodexPanel } from "./codex-panel.js";
+import { WorldDimensionsPanel } from "./world-dimensions-panel.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { fetchServerHealth } from "@/services/api.js";
 import type { WorldRecord } from "@/services/api.js";
@@ -253,19 +254,26 @@ export function RightPanel({
                 <span className="font-bold text-sm">{text(world.name)}</span>
                 <span className="text-[10px] text-muted-foreground font-mono">{world.id}</span>
               </div>
-              {world.lore ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none text-xs leading-relaxed">
-                  <Markdown>{text(world.lore)}</Markdown>
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground italic">
-                  {text(world.description)}
-                </p>
+              <p className="text-xs text-muted-foreground">
+                {text(world.description)}
+              </p>
+              {world.dimensions && (
+                <WorldDimensionsPanel dimensions={world.dimensions} />
+              )}
+              {world.lore && (
+                <details className="group">
+                  <summary className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                    {t("session.worldLore", "Lore")}
+                  </summary>
+                  <div className="prose prose-sm dark:prose-invert max-w-none text-xs leading-relaxed mt-2">
+                    <Markdown>{text(world.lore)}</Markdown>
+                  </div>
+                </details>
               )}
             </div>
           ) : (
             <p className="text-xs text-muted-foreground italic">
-              No world loaded.
+              {t("session.noWorldLoaded", "No world loaded.")}
             </p>
           )}
         </TabsContent>

@@ -233,13 +233,24 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 
 // ── World API ──────────────────────────────────────────────────────
 
+/** Map server WorldRecord (metadata.dimensions) to frontend WorldRecord (top-level dimensions). */
+function mapWorldRecord(w: Record<string, unknown>): WorldRecord {
+  const meta = w.metadata as Record<string, unknown> | undefined;
+  return {
+    ...w,
+    dimensions: (w.dimensions ?? meta?.dimensions) as WorldRecord["dimensions"],
+  } as WorldRecord;
+}
+
 export async function listWorlds(): Promise<WorldRecord[]> {
-  const res = await request<{ items: WorldRecord[] } | WorldRecord[]>("/api/worlds");
-  return Array.isArray(res) ? res : res.items;
+  const res = await request<{ items: Record<string, unknown>[] } | Record<string, unknown>[]>("/api/worlds");
+  const raw = Array.isArray(res) ? res : res.items;
+  return raw.map(mapWorldRecord);
 }
 
 export async function getWorld(id: string): Promise<WorldRecord> {
-  return request<WorldRecord>(`/api/worlds/${encodeURIComponent(id)}`);
+  const raw = await request<Record<string, unknown>>(`/api/worlds/${encodeURIComponent(id)}`);
+  return mapWorldRecord(raw);
 }
 
 export async function createWorld(name: string, description: string, id?: string): Promise<WorldRecord> {

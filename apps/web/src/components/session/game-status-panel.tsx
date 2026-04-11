@@ -14,8 +14,12 @@ interface GameStatusPanelProps {
 export function GameStatusPanel({ gameState }: GameStatusPanelProps) {
   const { t } = useTranslation();
 
-  // Keys handled exclusively by other dedicated tabs — don't count towards "has game data"
-  const DELEGATED_KEYS = new Set(["characters", "characterFieldSchema"]);
+  // Keys handled by other tabs or internal — don't count towards "has game data"
+  const DELEGATED_KEYS = new Set([
+    "characters", "characterFieldSchema", "characterSchema",
+    "events", "codex", "records",
+    "state", "path", "value", "scope", "patch",
+  ]);
   const hasGameData = Object.keys(gameState).some((k) => !DELEGATED_KEYS.has(k));
 
   if (!hasGameData) {

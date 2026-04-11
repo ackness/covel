@@ -11,7 +11,7 @@
 | 事件 | Flame | 剧情事件追踪树 | `gameState.events` | 插件 emit event 时 |
 | 图鉴 | Library | 知识百科（怪物/物品/地点/传说/人物） | `gameState.codex` | 插件写入 codex 时 |
 | 状态 | Database | State change 历史记录 | `statePatches` (SSE push) | state.patch 提交时 |
-| 世界观 | MapIcon | 世界 lore 文档（Markdown） | `world.lore` (世界包 WORLD.md) | 静态，会话开始时加载 |
+| 世界观 | MapIcon | 世界设定总览（维度 + lore） | `world.dimensions` + `world.lore` | 静态，会话开始时加载 |
 | 知识库 | BookOpen | 长期记录（角色日记/任务档案） | `gameState.records` | 插件 record.upsert 时 |
 
 ## 各 Tab 详细说明
@@ -31,9 +31,9 @@
 | 背包 | `inventory` | 物品 + 货币 |
 | 战斗 | `combat` | 回合制战斗状态 |
 | 记忆 | `memoryArchive` | 对话/事件摘要 |
-| 其他 | 任意未知 key | 格式化渲染（含 characterSchema 角色属性模板） |
+| 其他 | 任意未知 key | 格式化渲染 |
 
-**过滤的 key**（由专属 Tab 处理）：`characters`, `characterFieldSchema`, `events`, `codex`, `records`, `state`
+**过滤的 key**（由专属 Tab 处理或内部使用）：`characters`, `characterFieldSchema`, `characterSchema`, `events`, `codex`, `records`, `state`, `path`, `value`, `scope`, `patch`
 
 ### 角色 (Character)
 
@@ -83,9 +83,23 @@ Schema-driven 角色属性面板。根据世界初始化插件定义的 `Charact
 
 ### 世界观 (World)
 
-显示世界包的 lore 文档（`WORLD.md` / `WORLD.zh.md`），使用 Markdown 渲染。这是玩家在开始游戏前可以查看/编辑的世界观原始文档。
+**组件**: `WorldDimensionsPanel` + Markdown
 
-**数据源**：`world.lore` — 从世界包 manifest 加载，静态内容。
+世界设定总览，显示三层内容：
+
+1. **世界信息**：名称 + ID + 描述
+2. **维度面板**（`WorldDimensionsPanel`）：从世界包 `world.yaml` 的 `dimensions` 加载，以可折叠 section 显示：
+   - 地理 (Geography) — 区域、气候、地标
+   - 势力 (Factions) — 名称、影响力、领袖
+   - 力量体系 (Power System) — 名称、类型、境界阶梯
+   - 历史 (History) — 时间线事件
+   - 经济 (Economy) — 货币、资源
+   - 社会结构 (Social Structure) — 阶层
+   - 风格 (Tone) — 类型、主题
+   - 机制 (Mechanics) — 战斗方式、难度、技能体系
+3. **Lore 文档**（可折叠 `<details>`）：世界包 `WORLD.md` 的 Markdown 原文
+
+**数据源**：`world.dimensions`（从 `metadata.dimensions` 映射）+ `world.lore`。API 层 `mapWorldRecord()` 负责将服务器返回的 `metadata.dimensions` 提升到顶层 `dimensions` 字段。
 
 ### 知识库 (Records)
 

@@ -307,7 +307,7 @@ class LocalDataService implements DataService {
     const store = await this.getStore();
     const worlds = await store.listWorlds() as any[];
     return worlds
-      .map((w: any) => ({ id: w.id, name: w.name, description: w.description, lore: w.lore, tags: w.tags, createdAt: w.createdAt }) as WorldRecord)
+      .map((w: any) => ({ id: w.id, name: w.name, description: w.description, lore: w.lore, tags: w.tags, dimensions: w.dimensions ?? w.metadata?.dimensions, createdAt: w.createdAt }) as WorldRecord)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
@@ -315,7 +315,7 @@ class LocalDataService implements DataService {
     const store = await this.getStore();
     const w = await store.getWorld(id) as any;
     if (!w) return null;
-    return { id: w.id, name: w.name, description: w.description, lore: w.lore, tags: w.tags, createdAt: w.createdAt } as WorldRecord;
+    return { id: w.id, name: w.name, description: w.description, lore: w.lore, tags: w.tags, dimensions: w.dimensions ?? w.metadata?.dimensions, createdAt: w.createdAt } as WorldRecord;
   }
 
   async createWorld(name: string, description: string): Promise<WorldRecord> {
