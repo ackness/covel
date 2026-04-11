@@ -17,6 +17,7 @@ import { createStoreFromEnv } from '@covel/store';
 import { createGatewayAdapter } from '@covel/runtime';
 import { bootstrapApi } from './routes/api/bootstrap.js';
 import { seedWorlds } from './world-seed-loader.js';
+import { createWorldFileWatcher } from './world-file-watcher.js';
 import { createModelDbRoutes } from './routes/model-db.js';
 import { createMiscApiRoutes } from './routes/misc-api.js';
 
@@ -69,6 +70,12 @@ const api = await bootstrapApi({ pluginsDir, llmAdapter, store });
 const worldsDir = process.env.COVEL_WORLDS_DIR
   ?? resolve(import.meta.dirname, '../../../worlds');
 await seedWorlds(store, worldsDir);
+
+// ── World file watcher (hot-reload) ─────────────────────────────
+const worldWatcher = createWorldFileWatcher(worldsDir, store, api.eventBus);
+worldWatcher.start();
+process.on('SIGTERM', () => worldWatcher.stop());
+process.on('SIGINT', () => worldWatcher.stop());
 
 // ── Mount routes ─────────────────────────────────────────────────
 app.route('/', api.app);

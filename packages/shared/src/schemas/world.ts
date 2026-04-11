@@ -173,6 +173,24 @@ export const worldDimensionsSchema = z.object({
   startingConditions: worldStartingConditionsSchema.optional(),
 }).strict();
 
+// ── Dimension Key → Sub-Schema Map ─────────────────────────────
+
+/** Maps each dimension key to its Zod sub-schema for per-file validation. */
+export const DIMENSION_KEY_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
+  geography: worldGeographySchema,
+  factions: z.array(worldFactionSchema),
+  powerSystem: worldPowerSystemSchema,
+  history: z.array(worldHistoryEventSchema),
+  economy: worldEconomySchema,
+  socialStructure: worldSocialStructureSchema,
+  tone: worldToneSchema,
+  mechanics: worldMechanicsSchema,
+  startingConditions: worldStartingConditionsSchema,
+};
+
+/** Valid dimension key names. */
+export const DIMENSION_KEYS = Object.keys(DIMENSION_KEY_SCHEMAS) as readonly string[];
+
 // ── World Manifest (world.yaml root) ────────────────────────────
 
 export const worldManifestSchema = z.object({
@@ -189,6 +207,8 @@ export const worldManifestSchema = z.object({
   requiredPlugins: z.array(z.string()).optional(),
   recommendedPlugins: z.array(z.string()).optional(),
   dimensions: worldDimensionsSchema.optional(),
+  /** Map of dimension key → relative file path for external dimension files. */
+  dimensionSources: z.record(z.string(), z.string().min(1)).optional(),
 }).strict();
 
 export type WorldManifestInput = z.input<typeof worldManifestSchema>;

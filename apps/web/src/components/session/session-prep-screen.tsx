@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MapIcon, Play, ArrowLeft, ChevronDown, ChevronUp, FileText,
-  Cpu, KeyRound, History, Trash2,
+  Cpu, KeyRound, History, Trash2, Download, Upload,
 } from "lucide-react";
 import * as api from "@/services/api.js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.js";
@@ -310,6 +310,19 @@ export function SessionPrepScreen({
             )}
           </Card>
 
+          {/* Dimension Import/Export */}
+          {world.dimensions && (
+            <div className="flex items-center gap-2 mb-4 px-1">
+              <a href={api.exportDimensionsUrl(world.id)} download>
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
+                  <Download className="w-3 h-3" />
+                  {t("session.exportDimensions", "导出维度")}
+                </Button>
+              </a>
+              <DimensionImportButton worldId={world.id} />
+            </div>
+          )}
+
           {/* Active Models */}
           <Card className="mb-4">
             <CollapsibleCardHeader
@@ -490,6 +503,73 @@ export function SessionPrepScreen({
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ── Dimension Import Button ───────────────────────────────────────
+
+function DimensionImportButton({ worldId }: { worldId: string }) {
+  const { t } = useTranslation();
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [message, setMessage] = useState("");
+
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setStatus("loading");
+    setMessage("");
+
+    try {
+      const text = await file.text();
+
+      let dimensions: Record<string, unknown>;
+      if (file.name.endsWith(".json")) {
+        dimensions = JSON.parse(text) as Record<string, unknown>;
+      } else {
+        // YAML — dynamically import yaml parser
+        const { parse } = await import("yaml");
+        dimensions = parse(text) as Record<string, unknown>;
+      }
+
+      await api.importDimensions(worldId, dimensions);
+      setStatus("success");
+      setMessage(t("session.dimensionsImported", "导入成功"));
+    } catch (err) {
+      setStatus("error");
+      setMessage(err instanceof Error ? err.message : String(err));
+    }
+
+    // Reset file input so same file can be re-selected
+    e.target.value = "";
+  }, [worldId, t]);
+
+  return (
+    <div className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 text-xs gap-1.5 relative"
+        disabled={status === "loading"}
+        asChild
+      >
+        <label>
+          <Upload className="w-3 h-3" />
+          {t("session.importDimensions", "导入维度")}
+          <input
+            type="file"
+            accept=".yaml,.yml,.json"
+            className="sr-only"
+            onChange={handleFileSelect}
+          />
+        </label>
+      </Button>
+      {message && (
+        <span className={`text-[10px] ${status === "error" ? "text-destructive" : "text-muted-foreground"}`}>
+          {message}
+        </span>
+      )}
     </div>
   );
 }

@@ -141,6 +141,10 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | GET | `/api/worlds` | 列出所有世界 |
 | GET | `/api/worlds/:id` | 获取世界详情 |
 | POST | `/api/worlds` | 创建/更新世界 |
+| PATCH | `/api/worlds/:id` | 部分更新世界（lore, tags, metadata 等） |
+| GET | `/api/worlds/:id/dimensions/export` | 导出世界维度（YAML/JSON） |
+| POST | `/api/worlds/:id/dimensions/import` | 导入世界维度 |
+| POST | `/api/worlds/:id/sync-dimensions` | 将世界维度同步到活跃 session 的 plugin_data |
 
 ### 会话管理
 
@@ -386,6 +390,54 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 }
 ```
 
+#### `GET /api/worlds/:id/dimensions/export`
+
+导出世界维度数据。支持 YAML 和 JSON 格式。
+
+**参数:**
+
+| 参数 | 位置 | 说明 |
+|------|------|------|
+| `id` | 路径 | 世界 ID |
+| `format` | 查询 | `yaml`（默认）或 `json` |
+
+**响应:** 以 `Content-Disposition: attachment` 返回维度数据文件。
+
+#### `POST /api/worlds/:id/dimensions/import`
+
+导入维度数据到世界（全量替换 dimensions）。导入后自动通知使用该世界的活跃 session。
+
+**请求体:**
+
+```json
+{
+  "dimensions": {
+    "geography": { "overview": "...", "regions": [...] },
+    "factions": [...]
+  }
+}
+```
+
+**响应:** 更新后的 WorldRecord。
+
+**响应 422:** 维度数据校验失败。
+
+#### `POST /api/worlds/:id/sync-dimensions`
+
+将世界最新维度数据同步到指定 session 的 plugin_data 中（覆盖旧数据）。
+
+**请求体:**
+
+```json
+{ "sessionId": "neonridge-abcd1234" }
+```
+
+**响应:**
+
+```json
+{ "success": true, "syncedKeys": ["geography", "factions", ...], "entryCount": 9 }
+```
+
 ---
 
 ### 会话管理
@@ -567,7 +619,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 ```json
 {
   "turnId": "a1b2c3d4-...",
-  "sessionId": "550e8400-...",
+  "sessionId": "cloudmere-a1b2c3d4",
   "runtimeResults": [
     {
       "pluginId": "core-narrator",
@@ -612,7 +664,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 ```json
 {
   "turnId": "a1b2c3d4-...",
-  "sessionId": "550e8400-...",
+  "sessionId": "cloudmere-a1b2c3d4",
   "runtimeResults": [...],
   "durationMs": 2500,
   "timestamp": "2025-01-15T10:05:00.000Z"
@@ -627,7 +679,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 }
 ```
 
-#### `GET /api/session/:id/turns`
+#### `GET /api/sessions/:id/turns`
 
 获取 Turn 历史记录。
 
@@ -647,7 +699,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ```bash
 # 获取最近 5 条 Turn
-curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
+curl "http://localhost:3001/api/sessions/<sessionId>/turns?limit=5"
 ```
 
 **响应:**
@@ -657,7 +709,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
   "turns": [
     {
       "turnId": "a1b2c3d4-...",
-      "sessionId": "550e8400-...",
+      "sessionId": "cloudmere-a1b2c3d4",
       "runtimeResults": [...],
       "durationMs": 2500,
       "timestamp": "2025-01-15T10:05:00.000Z"
@@ -672,7 +724,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 
 当 Turn 执行后产生 `pendingInputs`（如表单、选择题、确认框），玩家需要通过此端点提交响应。框架会将玩家输入转化为自然语言叙事，追加到对话历史中。
 
-#### `POST /api/session/:id/submit-inputs`
+#### `POST /api/sessions/:id/submit-inputs`
 
 提交一个或多个玩家交互响应。
 
@@ -853,78 +905,62 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 }
 ```
 
-#### `GET /api/plugins/:id/config`
+---
 
-获取插件的配置 schema 和当前值。
+### 会话插件管理
 
-**参数:**
+#### `GET /api/sessions/:id/plugins`
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
-| `id` | 路径 | 插件 ID |
+列出会话的活跃插件和所有可用插件。
 
-**响应 200:**
+**响应:**
 
 ```json
 {
-  "pluginId": "core-narrator",
-  "config": {
-    "style": {
-      "type": "string",
-      "default": "descriptive",
-      "description": "叙事风格"
+  "active": ["core-pregame", "core-narrator"],
+  "available": [
+    {
+      "id": "core-narrator",
+      "name": "核心叙事者",
+      "description": "主要叙事生成插件",
+      "pluginType": "runtime",
+      "active": true,
+      "capabilities": ["narrative"]
     }
-  }
+  ]
 }
 ```
 
-**响应 404:**
+#### `POST /api/sessions/:id/plugins/enable`
 
-```json
-{
-  "error": "Plugin \"unknown\" not found"
-}
-```
-
-#### `PATCH /api/plugins/:id/config`
-
-更新某个插件在特定会话中的配置覆盖。
-
-**参数:**
-
-| 参数 | 位置 | 说明 |
-|------|------|------|
-| `id` | 路径 | 插件 ID |
+启用一个插件。
 
 **请求体:**
 
 ```json
-{
-  "sessionId": "550e8400-...",
-  "config": {
-    "style": "cinematic"
-  }
-}
+{ "pluginId": "core-codex" }
 ```
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `sessionId` | string | 是 | 会话 ID |
-| `config` | object | 是 | 要覆盖的配置键值对 |
-
-**响应 200:**
+**响应:**
 
 ```json
-{
-  "updated": true
-}
+{ "ok": true, "active": ["core-pregame", "core-narrator", "core-codex"] }
 ```
 
-**错误响应:**
+#### `POST /api/sessions/:id/plugins/disable`
+
+禁用一个插件。
+
+**请求体:**
 
 ```json
-{ "error": "Plugin \"unknown\" not found" }     // 404
-{ "error": "Session \"<id>\" not found" }        // 404
+{ "pluginId": "core-codex" }
+```
+
+**响应:**
+
+```json
+{ "ok": true, "active": ["core-pregame", "core-narrator"] }
 ```
 
 ---
@@ -933,7 +969,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 
 状态系统以结构化表格形式存储游戏世界的各类事实（如角色属性、世界状态、任务进度）。每个表由插件通过 StateManager 注册。
 
-#### `GET /api/session/:id/state`
+#### `GET /api/sessions/:id/state`
 
 获取会话的所有状态表及其数据。
 
@@ -984,7 +1020,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 }
 ```
 
-#### `GET /api/session/:id/state/:table`
+#### `GET /api/sessions/:id/state/:table`
 
 获取指定状态表的快照。
 
@@ -1014,7 +1050,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 { "error": "Table not found: <table>" }     // 表不存在
 ```
 
-#### `GET /api/session/:id/state/:table/:field/history`
+#### `GET /api/sessions/:id/state/:table/:field/history`
 
 获取某个字段的变更历史记录。
 
@@ -1051,7 +1087,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 
 ### 消息历史
 
-#### `GET /api/session/:id/messages`
+#### `GET /api/sessions/:id/messages`
 
 获取会话的所有消息列表。
 
@@ -1068,14 +1104,14 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
   "items": [
     {
       "id": "msg-001",
-      "sessionId": "550e8400-...",
+      "sessionId": "cloudmere-a1b2c3d4",
       "role": "user",
       "content": "我环顾四周",
       "createdAt": "2025-01-15T10:00:00.000Z"
     },
     {
       "id": "msg-002",
-      "sessionId": "550e8400-...",
+      "sessionId": "cloudmere-a1b2c3d4",
       "role": "assistant",
       "content": "你发现自己站在一片广阔的草原上...",
       "createdAt": "2025-01-15T10:00:05.000Z"
@@ -1084,7 +1120,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 }
 ```
 
-#### `GET /api/session/:id/turn-messages`
+#### `GET /api/sessions/:id/turn-messages`
 
 获取会话的 Turn 级别消息列表。Turn 消息包含更细粒度的信息，如来源类型、Runtime 名称、排序等。
 
@@ -1101,7 +1137,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
   "items": [
     {
       "id": "tm-001",
-      "sessionId": "550e8400-...",
+      "sessionId": "cloudmere-a1b2c3d4",
       "turnId": "a1b2c3d4-...",
       "sourceType": "runtime",
       "role": "assistant",
@@ -1120,7 +1156,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 
 插件的 session 级持久化 KV 存储。数据按 `(sessionId, pluginId, namespace, key)` 隔离。
 
-#### `GET /api/session/:id/plugin-data/:pluginId/:namespace`
+#### `GET /api/sessions/:id/plugin-data/:pluginId/:namespace`
 
 列出某插件某 namespace 下的所有数据条目。
 
@@ -1143,7 +1179,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 }
 ```
 
-#### `GET /api/session/:id/plugin-data/:pluginId/:namespace/:key`
+#### `GET /api/sessions/:id/plugin-data/:pluginId/:namespace/:key`
 
 获取单条插件数据。
 
@@ -1153,7 +1189,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 { "namespace": "schema", "key": "attributes", "value": { ... }, "updatedAt": "..." }
 ```
 
-#### `PUT /api/session/:id/plugin-data/:pluginId/:namespace/:key`
+#### `PUT /api/sessions/:id/plugin-data/:pluginId/:namespace/:key`
 
 写入或更新单条插件数据。Value 最大 64KB。
 
@@ -1169,7 +1205,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 { "success": true, "namespace": "schema", "key": "attributes" }
 ```
 
-#### `DELETE /api/session/:id/plugin-data/:pluginId/:namespace/:key`
+#### `DELETE /api/sessions/:id/plugin-data/:pluginId/:namespace/:key`
 
 删除单条插件数据。
 
@@ -1183,7 +1219,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 
 ### 角色数据
 
-#### `GET /api/session/:id/characters`
+#### `GET /api/sessions/:id/characters`
 
 获取会话中的所有角色。角色在游戏过程中动态创建和演化。
 
@@ -1200,7 +1236,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
   "items": [
     {
       "id": "char-001",
-      "sessionId": "550e8400-...",
+      "sessionId": "cloudmere-a1b2c3d4",
       "name": "艾尔文",
       "type": "player",
       "description": "一名孤儿出身的流浪剑客",
@@ -1213,7 +1249,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 }
 ```
 
-#### `POST /api/session/:id/characters`
+#### `POST /api/sessions/:id/characters`
 
 创建或更新一个角色（upsert 语义）。
 
@@ -1250,7 +1286,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 ```json
 {
   "id": "char-001",
-  "sessionId": "550e8400-...",
+  "sessionId": "cloudmere-a1b2c3d4",
   "name": "艾尔文",
   "type": "player",
   "description": "一名孤儿出身的流浪剑客",
@@ -1267,20 +1303,22 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 
 事件系统基于 EventBus，支持 SSE (Server-Sent Events) 实时推送和外部事件注入。
 
-#### `GET /api/events/subscribe?sessionId=xxx`
+#### `GET /api/events/stream?sessionId=xxx`
 
-订阅指定会话的实时事件流（SSE 长连接）。
+订阅指定会话的实时事件流（SSE 长连接）。支持 topic 过滤和事件重放。
 
 **查询参数:**
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `sessionId` | string | 是 | 会话 ID |
+| `topics` | string | 否 | 逗号分隔的 topic 过滤（如 `runtime,state`） |
+| `lastEventId` | string | 否 | 从此 ID 之后重放事件（用于断线重连） |
 
 **示例:**
 
 ```bash
-curl -N "http://localhost:3001/api/events/subscribe?sessionId=<sessionId>"
+curl -N "http://localhost:3001/api/events/stream?sessionId=<sessionId>"
 ```
 
 **SSE 事件格式:**
@@ -1289,7 +1327,7 @@ curl -N "http://localhost:3001/api/events/subscribe?sessionId=<sessionId>"
 
 ```
 event: connected
-data: {"sessionId":"550e8400-...","timestamp":"2025-01-15T10:00:00.000Z"}
+data: {"sessionId":"cloudmere-a1b2c3d4","timestamp":"2025-01-15T10:00:00.000Z"}
 ```
 
 后续事件：
@@ -1329,7 +1367,7 @@ id: evt-002
 {
   "topic": "combat.start",
   "payload": { "enemyId": "goblin-01", "terrain": "forest" },
-  "sessionId": "550e8400-...",
+  "sessionId": "cloudmere-a1b2c3d4",
   "targetRuntime": "core-combat"
 }
 ```
@@ -1345,7 +1383,7 @@ id: evt-002
 
 ```json
 {
-  "id": "evt-550e8400-...",
+  "id": "evt-a1b2c3d4",
   "emitted": true
 }
 ```
@@ -1355,6 +1393,132 @@ id: evt-002
 ```json
 {
   "error": "topic and sessionId are required"
+}
+```
+
+---
+
+### Actions（SSE 桥接）
+
+#### `POST /api/actions`
+
+前端主要使用此端点进行游戏交互。将动作请求（发送消息、执行命令等）翻译为 Turn 执行，并通过 SSE 流式返回结果。
+
+**请求体:**
+
+```json
+{
+  "requestId": "req-001",
+  "type": "send_message",
+  "sessionId": "cloudmere-a1b2c3d4",
+  "locale": "zh-CN",
+  "payload": {
+    "message": "我拔出剑，准备迎战"
+  }
+}
+```
+
+**响应:** SSE 事件流，使用 `ProtocolEventType` 类型。详见下方「SSE 协议」章节。
+
+---
+
+### AI 生成
+
+#### `POST /api/ai/ping`
+
+测试 LLM 提供商连通性。
+
+**请求体:**
+
+```json
+{ "presetId": "default" }
+```
+
+**响应:**
+
+```json
+{
+  "ok": true,
+  "latencyMs": 0,
+  "text": "Preset default (deepseek/deepseek-chat) configured"
+}
+```
+
+#### `POST /api/ai/generate-world`
+
+AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、dimensions、lore）。
+
+**请求体:**
+
+```json
+{
+  "concept": "一个被永恒暴风雪笼罩的冰封大陆",
+  "locale": "zh-CN",
+  "model": "deepseek-chat"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `concept` | string | 是 | 世界概念描述（最多 2000 字符） |
+| `locale` | string | 否 | 语言区域，默认 `zh-CN` |
+| `model` | string | 否 | 覆盖 LLM 模型 |
+
+**响应 200:** 生成的世界包数据。
+
+**响应 422:** `{ "error": "World generation failed", "details": [...] }`
+
+---
+
+### Trace 调试
+
+#### `GET /api/traces/:sessionId`
+
+获取会话的所有 trace 事件。
+
+**响应:**
+
+```json
+{
+  "sessionId": "cloudmere-a1b2c3d4",
+  "count": 42,
+  "events": [
+    {
+      "type": "runtime.started",
+      "requestId": "req-001",
+      "traceId": "trace-001",
+      "sessionId": "cloudmere-a1b2c3d4",
+      "turnId": "turn-001",
+      "flowId": "flow-001",
+      "seq": 0,
+      "timestamp": "2025-01-15T10:00:00.000Z",
+      "payload": {}
+    }
+  ]
+}
+```
+
+#### `GET /api/traces/:sessionId/turns`
+
+按 Turn 分组的 trace 事件。
+
+**响应:**
+
+```json
+{
+  "sessionId": "cloudmere-a1b2c3d4",
+  "turnCount": 3,
+  "turns": [
+    {
+      "turnId": "turn-001",
+      "flowId": "flow-001",
+      "traceId": "trace-001",
+      "startedAt": "2025-01-15T10:00:00.000Z",
+      "completedAt": "2025-01-15T10:00:05.000Z",
+      "eventCount": 12,
+      "events": [...]
+    }
+  ]
 }
 ```
 
@@ -1373,6 +1537,49 @@ id: evt-002
   "error": "Not implemented"
 }
 ```
+
+---
+
+## SSE 协议
+
+Covel 使用 `ProtocolEventType` 定义 server → client 的实时事件。Actions 端点 (`POST /api/actions`) 和事件流 (`GET /api/events/stream`) 均使用此协议。
+
+### 事件类型
+
+| 类型 | 分类 | 说明 |
+|------|------|------|
+| `narrative.delta` | 叙事 | 叙事文本增量（逐 token 流式） |
+| `narrative.completed` | 叙事 | 叙事文本完成 |
+| `interaction.requested` | 交互 | 请求玩家输入（表单/选择/确认） |
+| `interaction.completed` | 交互 | 玩家交互完成 |
+| `state.changed` | 状态 | 游戏状态变更 |
+| `state.snapshot` | 状态 | 状态快照 |
+| `execution.started` | 执行生命周期 | Turn 执行开始 |
+| `runtime.started` | 执行生命周期 | 单个 Runtime 开始执行 |
+| `runtime.completed` | 执行生命周期 | 单个 Runtime 执行完成 |
+| `runtime.failed` | 执行生命周期 | Runtime 执行失败 |
+| `execution.completed` | 执行生命周期 | Turn 执行完成 |
+| `phase.changed` | 会话生命周期 | 会话阶段变更 |
+| `record.updated` | 会话生命周期 | 记录更新（角色、任务等） |
+| `event.emitted` | 会话生命周期 | 事件发射 |
+| `error.occurred` | 系统 | 错误发生 |
+| `connection.restored` | 系统 | 连接恢复 |
+
+### 事件格式
+
+```typescript
+interface ProtocolEvent {
+  id: string;
+  type: ProtocolEventType;
+  sessionId: string;
+  turnId?: string;
+  source?: { pluginId: string; runtimeId: string };
+  payload: Record<string, unknown>;
+  timestamp: string;
+}
+```
+
+> 完整协议定义参见 `packages/shared/src/types/protocol.ts`。
 
 ---
 

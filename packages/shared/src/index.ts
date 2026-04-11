@@ -35,6 +35,8 @@ export {
   worldToneSchema,
   worldMechanicsSchema,
   worldStartingConditionsSchema,
+  DIMENSION_KEY_SCHEMAS,
+  DIMENSION_KEYS,
 } from './schemas/world.js';
 
 export type { WorldManifestInput } from './schemas/world.js';
@@ -43,6 +45,8 @@ export type { WorldManifestInput } from './schemas/world.js';
 export {
   validatePluginManifest,
   validateWorldManifest,
+  validateDimensionData,
+  validateDimensions,
   formatValidationErrors,
 } from './schemas/validate.js';
 

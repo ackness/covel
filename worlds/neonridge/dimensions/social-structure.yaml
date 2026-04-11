@@ -1,0 +1,11 @@
+classes:
+  - name: 企业高管
+    rank: 1
+    description: 顶层居民，享有最先进义体与医疗
+  - name: 签约员工
+    rank: 2
+    description: 中层居民，为企业工作换取义体维护
+  - name: 底层自由人
+    rank: 3
+    description: 无企业合同者，义体维护只能靠黑市
+notes: 自由体（无义体者）不属于任何阶层，在底层被视为精神领袖，在顶层被视为恐怖分子。

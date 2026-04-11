@@ -10,6 +10,8 @@ import {
   Library,
   User,
   Loader2,
+  Download,
+  RefreshCw,
 } from "lucide-react";
 import {
   Tabs,
@@ -28,7 +30,11 @@ import { EventPanel } from "./event-panel.js";
 import { CodexPanel } from "./codex-panel.js";
 import { WorldDimensionsPanel } from "./world-dimensions-panel.js";
 import { text } from "@/components/world/editor-helpers.js";
-import { fetchServerHealth } from "@/services/api.js";
+import {
+  fetchServerHealth,
+  exportDimensionsUrl,
+  syncSessionDimensions,
+} from "@/services/api.js";
 import type { WorldRecord } from "@/services/api.js";
 import { useSession } from "@/stores/session-store.js";
 
@@ -247,6 +253,18 @@ export function RightPanel({
           <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
             <MapIcon className="w-4 h-4 shrink-0" />{" "}
             {t("session.world", "世界观")}
+            {world?.dimensions && (
+              <a
+                href={exportDimensionsUrl(world.id)}
+                download
+                className="ml-auto"
+                title={t("session.exportDimensions", "导出维度")}
+              >
+                <Button variant="ghost" size="icon" className="h-6 w-6">
+                  <Download className="w-3 h-3" />
+                </Button>
+              </a>
+            )}
           </h3>
           {world ? (
             <div className="space-y-3">
@@ -254,6 +272,13 @@ export function RightPanel({
                 <span className="font-bold text-sm">{text(world.name)}</span>
                 <span className="text-[10px] text-muted-foreground font-mono">{world.id}</span>
               </div>
+              {/* Re-sync button — lets player pull latest world dimensions into this session */}
+              {world.dimensions && sessionId && (
+                <WorldSyncBanner
+                  worldId={world.id}
+                  sessionId={sessionId}
+                />
+              )}
               <p className="text-xs text-muted-foreground">
                 {text(world.description)}
               </p>
@@ -310,6 +335,51 @@ export function RightPanel({
         )}
       </div>
     )}
+    </div>
+  );
+}
+
+// ── World Sync Banner ─────────────────────────────────────────────
+
+function WorldSyncBanner({ worldId, sessionId }: { worldId: string; sessionId: string }) {
+  const { t } = useTranslation();
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const result = await syncSessionDimensions(worldId, sessionId);
+      setSyncResult(
+        t("session.dimensionsSynced", "已同步 {{count}} 个维度", { count: result.entryCount }),
+      );
+    } catch {
+      setSyncResult(t("session.dimensionsSyncFailed", "同步失败"));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-6 text-[10px] gap-1"
+        onClick={handleSync}
+        disabled={syncing}
+      >
+        {syncing ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : (
+          <RefreshCw className="w-3 h-3" />
+        )}
+        {t("session.resyncDimensions", "重载维度")}
+      </Button>
+      {syncResult && (
+        <span className="text-[10px] text-muted-foreground">{syncResult}</span>
+      )}
     </div>
   );
 }

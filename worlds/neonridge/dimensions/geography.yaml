@@ -1,0 +1,22 @@
+overview: 垂直发展的巨型城市，底层永夜，顶层空中庭园。义体改造是生存的基础。
+regions:
+  - name: 顶层・云庭
+    description: 企业集团的总部与高管住宅区，阳光充沛，空气经过净化。
+    climate: 人工恒温，天气可控
+    landmarks:
+      - name: 寰宇科技天穹塔
+        description: 全城最高建筑，集团总部兼数据中枢。
+  - name: 中层・霓虹带
+    description: 商业区和中产住宅区，霓虹灯永不熄灭。
+    climate: 人工光照，温度适宜但空气质量一般
+    landmarks:
+      - name: 中央义体诊所
+        description: 官方授权的义体维护设施。
+  - name: 底层・暗沟
+    description: 信号屏蔽的贫民窟，阳光无法抵达，靠废热和泄漏管道供暖。
+    climate: 潮湿闷热，空气含有微量工业废气
+    landmarks:
+      - name: 虹姐信号站
+        description: 底层信息网络的中枢，靠物理线路运作。
+      - name: 第三区废弃充能站
+        description: 已停用的义体充能设施，传闻有人秘密使用。

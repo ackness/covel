@@ -70,6 +70,12 @@
 |----------|------|------|------|
 | `error.occurred` | S→C | 执行错误 | `{ message }` |
 
+### 世界事件
+
+| 事件类型 | 方向 | 描述 | 负载 |
+|----------|------|------|------|
+| `world.dimensions.changed` | S→C | 世界维度文件变更（热更新） | `{ worldId, changedKeys[] }` |
+
 ## 二、命令类型（CommandType）
 
 ### 会话管理

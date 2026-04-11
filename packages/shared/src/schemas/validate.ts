@@ -7,7 +7,7 @@
 
 import type { ZodError, ZodType } from 'zod';
 import { runtimeManifestSchema } from './plugin.js';
-import { worldManifestSchema } from './world.js';
+import { worldManifestSchema, worldDimensionsSchema, DIMENSION_KEY_SCHEMAS } from './world.js';
 
 // ── Validation result ───────────────────────────────────────────
 
@@ -58,6 +58,27 @@ export function validatePluginManifest(data: unknown): ManifestValidationResult 
  */
 export function validateWorldManifest(data: unknown): ManifestValidationResult {
   return validate(worldManifestSchema, data);
+}
+
+/**
+ * Validate a single dimension data object (e.g., geography, factions) against its sub-schema.
+ */
+export function validateDimensionData(key: string, data: unknown): ManifestValidationResult {
+  const schema = DIMENSION_KEY_SCHEMAS[key];
+  if (!schema) {
+    return {
+      valid: false,
+      errors: [{ path: '(root)', message: `Unknown dimension key: ${key}`, code: 'custom' }],
+    };
+  }
+  return validate(schema, data);
+}
+
+/**
+ * Validate a full dimensions object against worldDimensionsSchema.
+ */
+export function validateDimensions(data: unknown): ManifestValidationResult {
+  return validate(worldDimensionsSchema, data);
 }
 
 /**

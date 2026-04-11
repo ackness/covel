@@ -19,6 +19,20 @@ type Env = {
 
 export const subscribeRoutes = new Hono<Env>();
 
+/**
+ * Derive the SSE event field name from a SubscriptionEvent.
+ *
+ * Prefers `_subType` from payload (set by EventBus conventions) over
+ * the generic `topic.type` fallback. This ensures that events like
+ * `world.dimensions.changed` reach the frontend with their semantic type
+ * rather than the generic `system.event`.
+ */
+function deriveSseEventName(event: { topic: string; type: string; payload?: Record<string, unknown> }): string {
+  const subType = event.payload?._subType as string | undefined;
+  if (subType) return subType;
+  return `${event.topic}.${event.type.split('.').pop()}`;
+}
+
 // GET /events/stream?sessionId=xxx&topics=runtime,state&lastEventId=xxx
 subscribeRoutes.get('/stream', async (c) => {
   const store = c.get('store');
@@ -69,7 +83,7 @@ subscribeRoutes.get('/stream', async (c) => {
           if (!topics || topics.has(event.topic)) {
             await stream.writeSSE({
               id: event.id,
-              event: `${event.topic}.${event.type.split('.').pop()}`,
+              event: deriveSseEventName(event),
               data: JSON.stringify(event),
             });
           }
@@ -85,7 +99,7 @@ subscribeRoutes.get('/stream', async (c) => {
       stream
         .writeSSE({
           id: event.id,
-          event: `${event.topic}.${event.type.split('.').pop()}`,
+          event: deriveSseEventName(event),
           data: JSON.stringify(event),
         })
         .catch(() => {

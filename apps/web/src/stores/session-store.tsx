@@ -1224,7 +1224,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
 
     const sub = createSessionSubscription(sid, {
-      topics: ["plugin"],
+      topics: ["plugin", "system"],
     });
     subscriptionRef.current = sub;
 
@@ -1237,6 +1237,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           if (currentSid) {
             api.listSessionPlugins(currentSid)
               .then((res) => dispatch({ type: "LOAD_SESSION_PLUGINS", plugins: res.available }))
+              .catch(() => {});
+          }
+          break;
+        }
+        case "world.dimensions.changed": {
+          // Refresh world data from server so UI can prompt sync
+          const worldId = event.payload?.worldId as string | undefined;
+          if (worldId) {
+            api.getWorld(worldId)
+              .then((world) => dispatch({ type: "UPDATE_WORLD", world }))
               .catch(() => {});
           }
           break;

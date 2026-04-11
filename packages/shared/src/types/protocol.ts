@@ -104,6 +104,8 @@ export type ProtocolEventType =
   | 'phase.changed'
   | 'record.updated'
   | 'event.emitted'
+  // World
+  | 'world.dimensions.changed'
   // System
   | 'error.occurred'
   | 'connection.restored';

@@ -1,13 +1,19 @@
 /**
- * API World routes — list, get, create/update worlds.
+ * API World routes — list, get, create/update worlds, dimension import/export.
  */
 
 import { Hono } from 'hono';
+import { stringify as stringifyYaml } from 'yaml';
+import { validateDimensions } from '@covel/shared';
 import type { DataStore, WorldRecord } from '@covel/store';
+import type { EventBus } from '@covel/events';
+import type { PluginRegistry } from '@covel/plugin-loader';
 
 type Env = {
   Variables: {
     store: DataStore;
+    eventBus: EventBus;
+    pluginRegistry: PluginRegistry;
   };
 };
 
@@ -87,4 +93,155 @@ worldRoutes.patch('/:id', async (c) => {
 
   await store.upsertWorld(updated);
   return c.json(updated);
+});
+
+// ── Dimension Export/Import ─────────────────────────────────────
+
+// GET /worlds/:id/dimensions/export — download dimensions as YAML
+worldRoutes.get('/:id/dimensions/export', async (c) => {
+  const store = c.get('store');
+  const id = c.req.param('id');
+  const world = await store.getWorld(id);
+  if (!world) {
+    return c.json({ error: 'World not found' }, 404);
+  }
+
+  const meta = world.metadata as Record<string, unknown> | undefined;
+  const dimensions = meta?.dimensions ?? {};
+
+  const format = c.req.query('format') ?? 'yaml';
+
+  if (format !== 'yaml' && format !== 'json') {
+    return c.json({ error: 'Invalid format. Use "yaml" or "json".' }, 400);
+  }
+
+  if (format === 'json') {
+    return c.json(dimensions, 200, {
+      'Content-Disposition': `attachment; filename="${id}-dimensions.json"`,
+    });
+  }
+
+  // Default: YAML
+  const yaml = stringifyYaml(dimensions, { lineWidth: 120 });
+  return c.text(yaml, 200, {
+    'Content-Type': 'application/x-yaml; charset=utf-8',
+    'Content-Disposition': `attachment; filename="${id}-dimensions.yaml"`,
+  });
+});
+
+// POST /worlds/:id/dimensions/import — import dimensions from JSON body
+worldRoutes.post('/:id/dimensions/import', async (c) => {
+  const store = c.get('store');
+  const eventBus = c.get('eventBus');
+  const id = c.req.param('id');
+
+  const existing = await store.getWorld(id);
+  if (!existing) {
+    return c.json({ error: 'World not found' }, 404);
+  }
+
+  const body = await c.req.json<Record<string, unknown>>();
+  const dimensions = body.dimensions;
+
+  if (!dimensions || typeof dimensions !== 'object') {
+    return c.json({ error: 'dimensions (object) is required' }, 400);
+  }
+
+  // Validate against worldDimensionsSchema
+  const validation = validateDimensions(dimensions);
+  if (!validation.valid) {
+    return c.json({ error: 'Invalid dimensions', details: validation.errors }, 422);
+  }
+
+  const now = new Date().toISOString();
+  const meta = (existing.metadata as Record<string, unknown>) ?? {};
+  const updated: WorldRecord = {
+    ...existing,
+    metadata: { ...meta, dimensions: validation.data },
+    updatedAt: now,
+  };
+
+  await store.upsertWorld(updated);
+
+  // Notify active sessions
+  const sessions = await store.listSessions();
+  const affected = sessions.filter((s) => s.worldId === id);
+  for (const session of affected) {
+    eventBus.emit({
+      id: crypto.randomUUID(),
+      type: 'event',
+      topic: 'system',
+      payload: {
+        _subTopic: 'system',
+        _subType: 'world.dimensions.changed',
+        worldId: id,
+        changedKeys: Object.keys(dimensions),
+      },
+      sessionId: session.id,
+      timestamp: now,
+    });
+  }
+
+  return c.json(updated);
+});
+
+// ── Session Dimension Sync ──────────────────────────────────────
+
+// POST /worlds/:id/sync-dimensions — re-import world dimensions into a session's plugin_data
+worldRoutes.post('/:id/sync-dimensions', async (c) => {
+  const store = c.get('store');
+  const pluginRegistry = c.get('pluginRegistry');
+  const id = c.req.param('id');
+
+  const body = await c.req.json<Record<string, unknown>>();
+  const sessionId = body.sessionId;
+  if (typeof sessionId !== 'string') {
+    return c.json({ error: 'sessionId (string) is required' }, 400);
+  }
+
+  const world = await store.getWorld(id);
+  if (!world) {
+    return c.json({ error: 'World not found' }, 404);
+  }
+
+  const session = await store.getSession(sessionId);
+  if (!session || session.worldId !== id) {
+    return c.json({ error: 'Session not found or world mismatch' }, 404);
+  }
+
+  // Discover world-data-provider plugin by capability (not hardcoded ID)
+  const worldDataPluginId = pluginRegistry.findPluginByCapability(sessionId, 'world-data-provider');
+  if (!worldDataPluginId) {
+    return c.json({ error: 'No world-data-provider plugin active in session' }, 422);
+  }
+
+  const meta = world.metadata as Record<string, unknown> | undefined;
+  const dimensions = (meta?.dimensions ?? {}) as Record<string, unknown>;
+
+  if (Object.keys(dimensions).length === 0) {
+    return c.json({ error: 'World has no dimensions to sync' }, 422);
+  }
+
+  // Upsert dimensions into plugin_data (setPluginDataBatch uses onConflictDoUpdate).
+  // Stale keys from a previous dimension set are left in place — harmless since
+  // dimension keys are a small, fixed set and the context builder reads by key.
+  const now = new Date().toISOString();
+  const records = Object.entries(dimensions).map(([key, value]) => ({
+    id: crypto.randomUUID(),
+    sessionId,
+    pluginId: worldDataPluginId,
+    namespace: 'entries',
+    key,
+    value,
+    createdAt: now,
+    updatedAt: now,
+  }));
+
+  await store.setPluginDataBatch(records);
+
+  return c.json({
+    success: true,
+    syncedKeys: Object.keys(dimensions),
+    entryCount: records.length,
+  });
 });
