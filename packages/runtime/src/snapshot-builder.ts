@@ -99,6 +99,6 @@ export async function buildSessionSnapshot(
     characters: snapshotCharacters,
     gameState,
     executionSteps,
-    plugins: [], // TODO: load from plugin registry
+    plugins: [], // Populated by the route handler from PluginRegistry
   };
 }

@@ -2,6 +2,7 @@
   "name": "@covel/web",
   "version": "0.0.0",
   "private": true,
+  "deprecated": "Use @covel/web-v2 instead. This package is the legacy frontend with hardcoded panels.",
   "type": "module",
   "scripts": {
     "dev": "vite",

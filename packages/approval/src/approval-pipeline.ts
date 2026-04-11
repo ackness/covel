@@ -1,6 +1,16 @@
 /**
  * Approval pipeline — checks tool calls against permission rules.
- * Current implementation: default-allow-all (skeleton for future third-party tool approval).
+ *
+ * Current rules (set in bootstrap.ts):
+ *   - builtin:*     → allow (framework-owned tools)
+ *   - local:*       → allow (plugin-declared tools from trusted sources)
+ *   - third-party:* → deny  (community plugins, not yet implemented)
+ *
+ * When community plugin support is added, this pipeline enables:
+ *   - Per-tool approval prompts (ask user before executing)
+ *   - Session-level allow (approve once, skip for rest of session)
+ *   - Audit trail (all decisions persisted to DataStore)
+ *   - Wildcard + exact-match permission rules
  */
 
 import type { ApprovalDecision, ApprovalRequest, ApprovalRecord } from '@covel/shared';

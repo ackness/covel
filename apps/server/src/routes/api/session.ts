@@ -229,6 +229,23 @@ sessionRoutes.get('/:id/snapshot', async (c) => {
     return c.json({ error: 'Session not found' }, 404);
   }
 
+  // Populate plugins from registry + session activePlugins
+  const session2 = await store.getSession(id);
+  const activeIds = new Set(session2?.activePlugins ?? []);
+  const allPlugins = pluginRegistry.getAll();
+  const pluginList: Array<{ id: string; name: string; isActive: boolean; priority: number }> = [];
+  for (const [, entry] of allPlugins) {
+    const manifests = entry.manifests ?? (entry.manifest ? [entry.manifest] : []);
+    const primary = manifests[0]?.manifest;
+    pluginList.push({
+      id: entry.id,
+      name: typeof entry.summary.name === 'string' ? entry.summary.name : entry.id,
+      isActive: activeIds.has(entry.id),
+      priority: primary?.priority ?? 500,
+    });
+  }
+  (snapshot as unknown as Record<string, unknown>).plugins = pluginList;
+
   // Attach character attribute schema if a world-data-provider plugin exists.
   // Use session.activePlugins from DB + global registry (not in-memory activation map)
   // to survive server restarts / hot-reloads.

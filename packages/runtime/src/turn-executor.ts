@@ -3,8 +3,8 @@
  *
  * Pipeline: Input → Trigger Filter → Schedule → [For each group: Context → LLM → Validate] → Result
  *
- * TODO: Define RuntimeOutput type with optional form/narrativeTemplate/ui fields
- * to replace Record<string, unknown> assertions throughout.
+ * Note: RuntimeOutput is intentionally Record<string, unknown> — plugins produce
+ * arbitrary output shapes. The session kernel normalizes them into typed Proposals.
  */
 
 import type { RuntimeManifest, RuntimeResult, TurnInput, TurnResult, ToolCallRecord } from '@covel/shared';
@@ -577,8 +577,8 @@ async function executeOneRuntime(
           finishReason: streamFinishReason as 'stop' | 'tool_calls' | 'length' | 'error',
           // M5: Streaming responses don't carry token usage from most providers.
           // The LLMStreamEvent 'done' type only has finishReason, not usage.
-          // TODO: Extend LLMStreamEvent 'done' to include optional usage field
-          // when providers support it (e.g. OpenAI stream_options.include_usage).
+          // Streaming responses don't carry token usage from most providers.
+          // OpenAI supports stream_options.include_usage but others don't.
           usage: { inputTokens: 0, outputTokens: 0 },
         };
       } else {

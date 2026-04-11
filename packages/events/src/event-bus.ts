@@ -1,6 +1,12 @@
 /**
  * Event bus — publish/subscribe with topic matching.
  * Optionally persists events to a DataStore for audit trail.
+ *
+ * Ring buffer design (RING_BUFFER_MAX = 1000 per session):
+ * Enables SSE reconnection recovery — when a client disconnects and reconnects,
+ * it passes `lastEventId` and receives missed events via `getEventsAfter()`.
+ * Used by `/api/events/stream` (subscribe.ts) for the out-of-band SSE channel.
+ * The primary `/api/actions` channel does not use replay (it's per-turn lifecycle).
  */
 
 import type { CovelMessage, SubscriptionEvent } from '@covel/shared';
