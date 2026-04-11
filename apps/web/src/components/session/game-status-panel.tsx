@@ -445,7 +445,7 @@ function MemorySection({ data }: { data: unknown }) {
 
 // Only list framework-level state keys that are rendered by dedicated sections above.
 // NEVER add plugin-specific IDs here — the framework must remain plugin-agnostic.
-const KNOWN_KEYS = new Set(["worldState", "characters", "quests", "inventory", "combat", "memoryArchive", "characterFieldSchema", "events", "state", "records", "path", "value", "scope", "patch"]);
+const KNOWN_KEYS = new Set(["worldState", "characters", "quests", "inventory", "combat", "memoryArchive", "characterFieldSchema", "characterSchema", "events", "state", "records", "path", "value", "scope", "patch"]);
 
 function UnknownSections({ gameState }: { gameState: Record<string, unknown> }) {
   const unknownEntries = Object.entries(gameState).filter(([k]) => !KNOWN_KEYS.has(k));
