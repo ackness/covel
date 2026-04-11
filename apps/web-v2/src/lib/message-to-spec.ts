@@ -11,6 +11,38 @@ import type { GameMessage } from "@/stores/session-store.js";
 type NestedSpec = Record<string, unknown>;
 
 /**
+ * Convert a GameMessage to a disabled spec (post-submission state).
+ * All interactive elements are disabled, submit button shows "已提交".
+ */
+export function messageToSpecDisabled(msg: GameMessage): NestedSpec | null {
+  if (!msg.block) return messageToSpec(msg);
+
+  const block = msg.block;
+  const data = (block.data ?? block) as Record<string, unknown>;
+  const type = block.type as string;
+  const innerType = data.type as string | undefined;
+
+  // Form → disabled version
+  if (innerType === "form" || type === "interactive_form" || (data.fields && Array.isArray(data.fields))) {
+    return formToSpecDisabled(data);
+  }
+
+  // Choice → disabled version
+  if (innerType === "choice" || type === "interactive_choice") {
+    return {
+      type: "Stack",
+      props: { gap: "sm" },
+      children: [
+        { type: "Text", props: { content: data.prompt ?? "", variant: "muted" } },
+        { type: "Text", props: { content: "已选择", variant: "muted", size: "xs" } },
+      ],
+    };
+  }
+
+  return messageToSpec(msg);
+}
+
+/**
  * Convert a GameMessage to a json-render nested spec.
  * Returns null for messages that should not be rendered (empty, system).
  */
@@ -163,6 +195,49 @@ function formToSpec(data: Record<string, unknown>): NestedSpec {
         params: { formId: data.interactionId ?? data.formId ?? "form" },
       },
     },
+  });
+
+  return {
+    type: "Form",
+    children,
+  };
+}
+
+/**
+ * Convert a form block to a disabled json-render spec (post-submission).
+ */
+function formToSpecDisabled(data: Record<string, unknown>): NestedSpec {
+  const title = data.title as string ?? "表单";
+  const fields = (data.fields ?? []) as Array<{
+    name: string;
+    label?: string;
+    type: string;
+    options?: string[] | Array<{ value: string; label: string }>;
+  }>;
+
+  const children: NestedSpec[] = [
+    { type: "FormHeader", props: { title } },
+  ];
+
+  for (const field of fields) {
+    const options = field.options?.map((opt) =>
+      typeof opt === "string" ? { value: opt, label: opt } : opt,
+    );
+    children.push({
+      type: "FormField",
+      props: {
+        fieldType: field.type === "select" ? "select" : "text",
+        label: field.label ?? field.name,
+        options,
+        disabled: true,
+        value: { $bindState: `/form/${field.name}` },
+      },
+    });
+  }
+
+  children.push({
+    type: "SubmitButton",
+    props: { label: "已提交", disabled: true },
   });
 
   return {
