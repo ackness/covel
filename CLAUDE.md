@@ -319,7 +319,7 @@ All endpoints under `/api/` prefix (Vite dev server proxies `/api` → backend).
 
 ### Frontend
 
-- Three-panel workbench: left rail (navigation), main content, side panel (settings)
+- Three-panel workbench: left rail (navigation/config), main content (chat), right panel (7 tabs: Game/Character/Events/Codex/State/World/Records — see `docs/reference/ui-panels.md`)
 - Routes: `/` (landing), `/session` (game workbench, `?sid=<id>` for resume), `/debug` (debugger)
 - `@` path alias → `apps/web/src/`
 - i18n via i18next: `zh-CN` (default) + `en-US`

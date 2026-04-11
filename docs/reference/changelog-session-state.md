@@ -1,8 +1,63 @@
 # Session State & Narrative Flow 改动记录
 
-> 本文档记录 2026-04-10 会话中的所有框架改动、新增字段、已知问题和待办事项。
+> 本文档记录框架改动、新增字段、已知问题和待办事项。
 
 ---
+
+## 2026-04-11: Schema-Driven Character Attributes & UI Panel Refactor
+
+### 新增：CharacterAttributeSchema 共享类型
+
+`packages/shared/src/types/character-schema.ts` — 定义 `AttributeDefinition` 和 `CharacterAttributeSchema`，供 world-init、char-creator、submit-inputs、右侧面板共同使用。
+
+属性类型：`string` | `number` | `boolean` | `enum` | `array`
+属性分类：`stats` | `bio` | `abilities` | `equipment` | `social`
+
+### 新增：Schema-Driven 角色创建
+
+- `core-char-creator/PLUGIN.md` 读取 `{{ config.worldSchema }}` 生成表单字段
+- 字段 `name` 与 world schema attribute `id` 对齐（如 `lingGen`、`background`）
+- `submit-inputs.ts` 角色创建时合并 schema 默认值（hp、mp、cultivation_layer 等）
+
+### 新增：CharacterPanel 组件
+
+`apps/web/src/components/session/character-panel.tsx` — 替代旧的 GameStatusPanel 角色展示。
+按 schema 分类分组渲染：进度条（stats）、Badge（enum）、key-value（string/number）。
+
+### 修复：Session Plugins API 缺少 capabilities
+
+`session.ts` GET `/sessions/:id/plugins` 响应现在包含 `capabilities` 字段，从 manifest + loadedRuntimes 收集。
+
+### 修复：API active → 前端 isActive 字段映射
+
+`api.ts` `listSessionPlugins` 添加字段映射：`active` → `isActive`、`name` → `displayName`。
+
+### 修复：Snapshot API characterSchema 加载
+
+`session.ts` snapshot 路由从 DB `activePlugins` + 全局 registry 查找 world-data-provider（不依赖内存态 session activation），确保 server 重启后仍能返回 characterSchema。
+
+### 修复：restoreSession 加载 sessionPlugins
+
+`session-store.tsx` 的 `restoreSession` 现在调用 `listSessionPlugins` API，确保右侧面板能发现 world-data-provider 插件。
+
+### 修复：submitInteraction 后刷新角色面板
+
+提交角色创建表单后，自动从 snapshot API 加载最新角色数据和 characterSchema。
+
+### 重构：右侧面板 Tab 整理
+
+- 游戏 tab：移除角色重复显示，characterSchema 格式化渲染（非 raw JSON）
+- 世界观 tab：显示世界 lore markdown 文档（WORLD.md）
+- 移除 plugin_data fetch（world dimension 数据不再在前端直接加载）
+- 详细 Tab 定义见 `docs/reference/ui-panels.md`
+
+### 修复：多字段表单 JSON 序列化
+
+`block-renderer.tsx` 多字段表单（无 submitMapping）现在序列化为 JSON 对象，修复角色名 "未命名" bug。
+
+---
+
+## 2026-04-10: Session Kernel & Protocol Layer
 
 ## 一、改动概览
 
