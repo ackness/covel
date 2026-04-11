@@ -348,24 +348,25 @@ All endpoints under `/api/` prefix (Vite dev server proxies `/api` → backend).
 
 ### Frontend
 
-- Three-panel workbench: left rail (navigation/config), main content (chat), right panel (7 tabs: Game/Character/Events/Codex/State/World/Records — see `docs/reference/ui-panels.md`)
-- Routes: `/` (landing), `/session` (game workbench, `?sid=<id>` for resume), `/debug` (debugger)
-- `@` path alias → `apps/web/src/`
-- i18n via i18next: `zh-CN` (default) + `en-US`
-- Vite plugins: `@tailwindcss/vite` + `@tanstack/router-plugin/vite` + `@vitejs/plugin-react`
-- Game messages support markdown rendering (react-markdown + remark-gfm)
-- Session messages/state persist to IndexedDB for refresh survival
-- Unified SSE protocol: all events use `ProtocolEventType` names (see `docs/reference/protocol.md`)
-- Two SSE channels: `/actions` (primary, all in-turn data) + `/events/stream` (out-of-band, plugin enable/disable only)
-- Session restore from snapshot API (`GET /api/sessions/:id/snapshot`) — loads messages, characters, characterSchema, gameState, execution steps
+Two frontend apps exist side by side:
 
-**Frontend DataService layer** (`apps/web/src/services/data-service.ts`):
+**`apps/web/` (V1, legacy)** — React 19 + TanStack Router, hardcoded 7-tab right panel, direct gameState reads. Routes: `/` (landing), `/session` (workbench), `/debug`. Port 5173.
 
-Two implementations selected at runtime:
-- `LocalDataService` — all game data (worlds, sessions, messages) stored in browser IndexedDB; used for T1/T2 self-deploy. Before each action, `syncToServer()` pushes local state to server's MemoryStore so the stateless server can process the turn.
-- `RemoteDataService` — delegates all CRUD to the server API; used when `STORE_BACKEND=pg`.
+**`apps/web-v2/` (V2, active development)** — Plugin-driven UI architecture (see `docs/reference/ui-panels.md`):
+- All rendering through [json-render](https://github.com/vercel-labs/json-render) with ~25 component catalog
+- Right panel: VSCode-style activity bar, tabs from `/api/ui-specs` — no hardcoded panels
+- Message area: Prose (narrative), Form (char creation), Alert (notification), Button (choices) — all json-render
+- pluginData drives panel data, `plugin-data.changed` SSE events for real-time updates
+- Port 5174, `@` path alias → `apps/web-v2/src/`
 
-Storage mode is auto-detected on startup: `main.tsx` calls `GET /api/health`, reads `storeBackend` from the response, and sets `storageMode = "remote"` when it equals `"pg"`. LLM execution, plugin, and config APIs always go through the server regardless of storage mode.
+**V2 game flow**: World Select → `createSession` → `POST /api/actions` (start_session, SSE stream) → narrative + char form → `POST /api/sessions/:id/submit-inputs` (template fill + char create + phase transition) → `POST /api/actions` (player_action) → next Turn
+
+**Shared infrastructure**:
+- Unified SSE protocol: `ProtocolEventType` names (see `docs/reference/protocol.md`)
+- Two SSE channels: `/actions` (in-turn) + `/events/stream` (out-of-band)
+- Session restore: `GET /api/sessions/:id/snapshot`
+
+**V1 DataService layer** (`apps/web/src/services/data-service.ts`): `LocalDataService` (IndexedDB, T1/T2) or `RemoteDataService` (PostgreSQL, T3). Auto-detected via `GET /api/health` → `storeBackend`.
 
 ### Deployment Tiers
 

@@ -270,6 +270,34 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | GET | `/api/llm-config` | 返回 slot 配置与能力信息 |
 | GET | `/api/provider-keys` | 返回服务器配置的 API 密钥（仅 T1） |
 
+#### GET /api/ui-specs
+
+返回所有活跃插件的 UI 声明，按 slot 分组。前端在 boot 时调用，用于动态构建右侧面板 Tab 和消息区 block 渲染器。
+
+**响应格式**：
+
+```json
+{
+  "right": [
+    {
+      "pluginId": "core-codex",
+      "specs": [{
+        "id": "codex",
+        "group": "codex",
+        "label": { "zh": "知识图鉴", "en": "Codex" },
+        "icon": "book-open",
+        "dataSource": { "namespace": "entries" },
+        "view": { "component": "Stack", "children": [...] }
+      }]
+    }
+  ],
+  "message": [...],
+  "left": [...]
+}
+```
+
+每个 slot 包含一个数组，元素为 `{ pluginId, specs[] }`。`specs` 中每项是一个 json-render spec（从插件 `ui/*.json` 文件加载）。
+
 ### Runtime 调用
 
 | 方法 | 路径 | 描述 |
