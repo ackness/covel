@@ -46,35 +46,40 @@ describe("listSessionPlugins", () => {
   });
 
   it("should call GET /sessions/:id/plugins and return the response", async () => {
-    const mockResponse = {
+    // Mock the raw server response (uses `active` and `name`, not `isActive`/`displayName`)
+    const serverResponse = {
       active: ["core-narrator", "core-persona"],
       available: [
         {
           id: "core-narrator",
-          displayName: "Narrator",
+          name: "Narrator",
           description: "Main narrative generation",
-          isActive: true,
+          active: true,
         },
         {
           id: "core-persona",
-          displayName: "Persona",
-          description: undefined,
-          isActive: true,
+          name: "Persona",
+          active: true,
         },
         {
           id: "core-memory",
-          displayName: "Memory",
+          name: "Memory",
           description: "Memory summarizer",
-          isActive: false,
+          active: false,
         },
       ],
     };
 
-    mockFetchOnce(mockResponse);
+    mockFetchOnce(serverResponse);
 
     const result = await listSessionPlugins("session-123");
 
-    expect(result).toEqual(mockResponse);
+    // API layer maps: active→isActive, name→displayName
+    expect(result.active).toEqual(["core-narrator", "core-persona"]);
+    expect(result.available).toHaveLength(3);
+    expect(result.available[0].isActive).toBe(true);
+    expect(result.available[0].displayName).toBe("Narrator");
+    expect(result.available[2].isActive).toBe(false);
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls[0][0]).toBe("/api/sessions/session-123/plugins");

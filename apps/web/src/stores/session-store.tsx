@@ -508,18 +508,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         break;
       }
       case "state.patch.applied": {
-        const patch = payload.patch as { id: string; summary: string; packageName: string; data?: unknown };
-        if (patch) {
-          dispatch({ type: "ADD_STATE_PATCH", patch });
-          // Persist state patch to IDB
-          const sid = sessionIdRef.current;
-          if (sid) {
-            ds.addStatePatch(sid, {
-              ...patch,
-              sessionId: sid,
-              createdAt: new Date().toISOString(),
-            }).catch(() => {});
-          }
+        // Session Kernel sends: { table, field, value, runtimeId, pluginId }
+        // Legacy format: { patch: { id, summary, packageName, data } }
+        const table = payload.table as string | undefined;
+        const field = payload.field as string | undefined;
+        const value = payload.value;
+        const legacyPatch = payload.patch as { id: string; summary: string; packageName: string; data?: unknown } | undefined;
+
+        const patch = legacyPatch ?? {
+          id: `sp_${Date.now()}`,
+          summary: field ? `${table ?? "default"}.${field}` : "state change",
+          packageName: (payload.pluginId as string) ?? "system",
+          data: field ? { [field]: value } : undefined,
+        };
+
+        dispatch({ type: "ADD_STATE_PATCH", patch });
+        // Persist state patch to IDB
+        const sid = sessionIdRef.current;
+        if (sid) {
+          ds.addStatePatch(sid, {
+            ...patch,
+            sessionId: sid,
+            createdAt: new Date().toISOString(),
+          }).catch(() => {});
         }
         break;
       }
@@ -576,6 +587,51 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           }
         }
         dispatch({ type: "ADD_EXECUTION_STEP", step });
+        break;
+      }
+      case "event.emitted": {
+        // Merge emitted game events into gameState.events array
+        const topic = (payload.topic as string) ?? (payload.type as string);
+        const eventData = payload.data ?? payload;
+        if (topic) {
+          dispatch({
+            type: "ADD_STATE_PATCH",
+            patch: {
+              id: `evt_${Date.now()}`,
+              summary: `event: ${topic}`,
+              packageName: (payload.pluginId as string) ?? "system",
+              data: {
+                events: [{
+                  id: `evt_${Date.now()}`,
+                  title: topic,
+                  type: (payload.eventType as string) ?? topic,
+                  status: "active",
+                  description: typeof eventData === "object" ? JSON.stringify(eventData) : String(eventData),
+                  turnCreated: turnId ? parseInt(turnId.split("-").pop() ?? "0", 10) : undefined,
+                }],
+              },
+            },
+          });
+        }
+        break;
+      }
+      case "record.updated": {
+        // Merge record updates into gameState.records
+        const recordType = (payload.recordType as string) ?? (payload.type as string);
+        const recordKey = (payload.key as string) ?? (payload.id as string);
+        if (recordKey) {
+          dispatch({
+            type: "ADD_STATE_PATCH",
+            patch: {
+              id: `rec_${Date.now()}`,
+              summary: `record: ${recordType ?? "update"} ${recordKey}`,
+              packageName: (payload.pluginId as string) ?? "system",
+              data: {
+                records: { [recordKey]: payload.value ?? payload },
+              },
+            },
+          });
+        }
         break;
       }
       case "flow.failed": {

@@ -446,10 +446,16 @@ function MemorySection({ data }: { data: unknown }) {
 
 // ── Unknown Sections (catch-all for plugin data not handled above) ─
 
-// Only list framework-level state keys that are rendered by dedicated sections above.
-// NEVER add plugin-specific IDs here — the framework must remain plugin-agnostic.
-// Keys rendered by dedicated sections above or by other tabs — skip in catch-all.
-const KNOWN_KEYS = new Set(["worldState", "characters", "quests", "inventory", "combat", "memoryArchive", "characterFieldSchema", "events", "state", "records", "path", "value", "scope", "patch"]);
+// Keys rendered by dedicated sections above or by other right-panel tabs — skip in catch-all.
+// Game tab sections: worldState, quests, inventory, combat, memoryArchive
+// Other tabs: characters (角色), events (事件), codex (图鉴), records (知识库)
+// Internal: characterFieldSchema, characterSchema, state, path, value, scope, patch
+const KNOWN_KEYS = new Set([
+  "worldState", "quests", "inventory", "combat", "memoryArchive",
+  "characters", "characterFieldSchema", "characterSchema",
+  "events", "codex", "records",
+  "state", "path", "value", "scope", "patch",
+]);
 
 /** Human-readable labels for well-known gameState keys. */
 const STATE_KEY_LABELS: Record<string, string> = {
