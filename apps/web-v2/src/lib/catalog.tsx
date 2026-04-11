@@ -380,10 +380,151 @@ const FilterBar: ComponentRenderer = ({ element, bindings }) => {
   );
 };
 
+// ── Message Components (for chat area rendering) ─────────────────
+
+/** Prose — renders narrative text as styled paragraphs. */
+const Prose: ComponentRenderer = ({ element }) => {
+  const content = element.props?.content as string ?? "";
+  const paragraphs = content.split(/\n\n+/).filter(Boolean);
+
+  return (
+    <div className="space-y-3">
+      {paragraphs.map((p, i) => (
+        <p key={i} className="text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed">
+          {p.split(/(\*\*[^*]+\*\*)/).map((segment, j) =>
+            segment.startsWith("**") && segment.endsWith("**")
+              ? <strong key={j} className="font-semibold">{segment.slice(2, -2)}</strong>
+              : segment
+          )}
+        </p>
+      ))}
+    </div>
+  );
+};
+
+/** PlayerMessage — renders player's input message (right-aligned bubble). */
+const PlayerMessage: ComponentRenderer = ({ element }) => {
+  const content = element.props?.content as string ?? "";
+  return (
+    <div className="flex justify-end">
+      <div className="max-w-[80%] bg-blue-600 text-white px-4 py-2.5 rounded-2xl rounded-br-sm text-sm leading-relaxed">
+        {content}
+      </div>
+    </div>
+  );
+};
+
+/** Alert — renders notifications (info, success, warning, error). */
+const Alert: ComponentRenderer = ({ element }) => {
+  const level = element.props?.level as string ?? "info";
+  const title = resolveI18n(element.props?.title);
+  const message = resolveI18n(element.props?.message);
+
+  const colors: Record<string, string> = {
+    success: "border-emerald-500/30 bg-emerald-50 dark:bg-emerald-900/10 text-emerald-700 dark:text-emerald-400",
+    warning: "border-amber-500/30 bg-amber-50 dark:bg-amber-900/10 text-amber-700 dark:text-amber-400",
+    error: "border-red-500/30 bg-red-50 dark:bg-red-900/10 text-red-700 dark:text-red-400",
+    info: "border-blue-500/30 bg-blue-50 dark:bg-blue-900/10 text-blue-700 dark:text-blue-400",
+  };
+
+  return (
+    <div className={clsx("border rounded-lg px-4 py-2.5 text-sm", colors[level])}>
+      {title && <div className="font-medium text-xs">{title}</div>}
+      {message && <div className="text-xs mt-0.5 opacity-80">{message}</div>}
+    </div>
+  );
+};
+
+/** FormField — a single form field (text input or select). */
+const FormField: ComponentRenderer = ({ element, bindings, emit }) => {
+  const fieldType = element.props?.fieldType as string ?? "text";
+  const label = resolveI18n(element.props?.label);
+  const placeholder = resolveI18n(element.props?.placeholder);
+  const required = element.props?.required as boolean;
+  const options = element.props?.options as Array<{ value: string; label: string }> | undefined;
+  const value = element.props?.value as string ?? "";
+  const disabled = element.props?.disabled as boolean;
+  const { set } = useStateStore();
+  const bindPath = bindings?.value;
+
+  return (
+    <div className="space-y-1">
+      <label className="text-xs text-zinc-500">
+        {label}
+        {required && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
+      {fieldType === "select" && options ? (
+        <select
+          value={value}
+          onChange={(e) => bindPath && set(bindPath, e.target.value)}
+          disabled={disabled}
+          className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-sm rounded-md outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+        >
+          <option value="">{placeholder ?? `选择${label}`}</option>
+          {options.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      ) : (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => bindPath && set(bindPath, e.target.value)}
+          placeholder={placeholder}
+          disabled={disabled}
+          className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-sm rounded-md outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+        />
+      )}
+    </div>
+  );
+};
+
+/** SubmitButton — styled form submit button with disabled state. */
+const SubmitButton: ComponentRenderer = ({ element, emit }) => {
+  const label = resolveI18n(element.props?.label);
+  const disabled = element.props?.disabled as boolean;
+
+  return (
+    <button
+      type="button"
+      onClick={() => emit("click")}
+      disabled={disabled}
+      className={clsx(
+        "w-full py-2.5 text-sm font-medium rounded-md transition-colors",
+        disabled
+          ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 cursor-not-allowed"
+          : "bg-blue-600 text-white hover:bg-blue-700",
+      )}
+    >
+      {label}
+    </button>
+  );
+};
+
+/** Source — subtle source attribution label. */
+const Source: ComponentRenderer = ({ element }) => {
+  const label = element.props?.label as string ?? "";
+  return <span className="text-[9px] text-zinc-400 block mt-1">{label}</span>;
+};
+
 // ── Form Components ──────────────────────────────────────────────
 
 const Form: ComponentRenderer = ({ children }) => {
-  return <div className="space-y-3">{children}</div>;
+  return (
+    <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden">
+      <div className="p-4 space-y-3">{children}</div>
+    </div>
+  );
+};
+
+/** FormHeader — form title bar. */
+const FormHeader: ComponentRenderer = ({ element }) => {
+  const title = resolveI18n(element.props?.title);
+  return (
+    <div className="bg-zinc-50 dark:bg-zinc-800/50 px-4 py-2 -mx-4 -mt-4 mb-3 border-b border-zinc-200 dark:border-zinc-700">
+      <span className="text-xs font-medium">{title}</span>
+    </div>
+  );
 };
 
 // ── Registry ─────────────────────────────────────────────────────
@@ -399,6 +540,7 @@ export const covelRegistry: Record<string, ComponentRenderer> = {
   Badge,
   Icon,
   TagList,
+  Source,
   // Data
   Card,
   CardList,
@@ -414,4 +556,11 @@ export const covelRegistry: Record<string, ComponentRenderer> = {
   FilterBar,
   // Form
   Form,
+  FormHeader,
+  FormField,
+  SubmitButton,
+  // Message (chat area)
+  Prose,
+  PlayerMessage,
+  Alert,
 };

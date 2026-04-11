@@ -1,11 +1,19 @@
 /**
- * MessageList — renders game messages (narrative, player input, blocks).
+ * MessageList — renders all game messages via json-render.
+ *
+ * Every message type (narrative, player input, forms, notifications)
+ * is converted to a json-render spec and rendered through the unified
+ * component catalog. No hardcoded React rendering.
  */
 
-import { useEffect, useRef } from "react";
-import { clsx } from "clsx";
+import { useEffect, useRef, useMemo, useCallback } from "react";
+import { JSONUIProvider, Renderer } from "@json-render/react";
+import { nestedToFlat } from "@json-render/core";
+import type { Spec } from "@json-render/core";
+import { covelRegistry } from "@/lib/catalog.js";
+import { messageToSpec } from "@/lib/message-to-spec.js";
 import type { GameMessage } from "@/stores/session-store.js";
-import { InteractionBlock } from "./interaction-block.js";
+import { sendMessage } from "@/stores/session-store.js";
 
 interface MessageListProps {
   messages: GameMessage[];
@@ -18,51 +26,53 @@ export function MessageList({ messages }: MessageListProps) {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
 
-  // Filter out empty assistant messages (streaming placeholders that never got content)
   const visible = messages.filter((m) => m.content || m.block);
 
   return (
     <div className="space-y-4 pb-4">
       {visible.map((msg) => (
-        <MessageBubble key={msg.id} message={msg} />
+        <MessageRenderer key={msg.id} message={msg} />
       ))}
       <div ref={endRef} />
     </div>
   );
 }
 
-function MessageBubble({ message }: { message: GameMessage }) {
-  if (message.block) {
-    return <InteractionBlock block={message.block} />;
-  }
+function MessageRenderer({ message }: { message: GameMessage }) {
+  const spec = useMemo(() => {
+    const nested = messageToSpec(message);
+    if (!nested) return null;
+    try {
+      return nestedToFlat(nested);
+    } catch {
+      return null;
+    }
+  }, [message]);
 
-  if (message.role === "user") {
-    return (
-      <div className="flex justify-end">
-        <div className="max-w-[80%] bg-blue-600 text-white px-4 py-2.5 rounded-2xl rounded-br-sm text-sm leading-relaxed">
-          {message.content}
-        </div>
-      </div>
-    );
-  }
+  const handleAction = useCallback((actionName: string, params?: Record<string, unknown>) => {
+    if (actionName === "submitForm") {
+      // Collect form state and send as message
+      // The form values are in json-render's internal state at /form/*
+      // For now, trigger via a simple message
+      sendMessage("(表单已提交)");
+    } else if (actionName === "selectChoice") {
+      const label = params?.label as string;
+      if (label) sendMessage(label);
+    }
+  }, []);
 
-  // Assistant narrative
-  if (!message.content) return null;
+  if (!spec) return null;
 
   return (
-    <div className="max-w-[90%]">
-      <div className="prose prose-sm dark:prose-invert prose-p:my-2 prose-p:leading-relaxed">
-        {message.content.split("\n\n").map((paragraph, i) => (
-          <p key={i} className="text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed">
-            {paragraph}
-          </p>
-        ))}
-      </div>
-      {message.pluginId && (
-        <span className="text-[9px] text-zinc-400 mt-1 block">
-          {message.pluginId}
-        </span>
-      )}
-    </div>
+    <JSONUIProvider
+      registry={covelRegistry}
+      initialState={{}}
+      handlers={{
+        submitForm: async (params) => handleAction("submitForm", params),
+        selectChoice: async (params) => handleAction("selectChoice", params),
+      }}
+    >
+      <Renderer spec={spec} registry={covelRegistry} />
+    </JSONUIProvider>
   );
 }
