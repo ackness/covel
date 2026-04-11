@@ -98,20 +98,73 @@ Schema-driven 角色属性面板。根据世界初始化插件定义的 `Charact
 
 ## 数据流架构
 
-```
-Runtime 执行
-  → Proposal (narrative.append / state.patch / event.emit / record.upsert / ...)
-  → Session Kernel commit
-  → SSE 事件推送到前端
-  → session-store dispatch
-  → gameState 更新
-  → 各 Tab 组件响应渲染
+### 统一推送模型
 
-Snapshot 恢复（刷新）
+所有 UI 状态通过**两个 SSE 通道**更新，职责不重叠：
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Channel 1: /actions SSE (per-turn, primary)             │
+│ ─────────────────────────────────────────────           │
+│ 处理所有回合内数据更新，每次 turn 执行时打开，          │
+│ turn 结束时关闭。                                       │
+│                                                         │
+│   message.delta        → 流式叙事文本                   │
+│   message.completed    → 完成的叙事消息                 │
+│   block.emitted        → 交互 block（表单/选择）        │
+│   state.patch.applied  → 状态变更 → gameState deep-merge│
+│   event.emitted        → 游戏事件 → gameState.events    │
+│   record.updated       → 记录更新 → gameState.records   │
+│   phase_change         → 会话阶段转换                   │
+│   runtime.progress     → 执行时间线步骤                 │
+│   flow.completed       → 执行完成                       │
+│   flow.failed          → 执行失败                       │
+├─────────────────────────────────────────────────────────┤
+│ Channel 2: /events/stream (persistent, out-of-band)     │
+│ ─────────────────────────────────────────────           │
+│ 仅处理回合外事件，会话生命周期内持续连接：              │
+│                                                         │
+│   plugin.activated     → 重新加载 sessionPlugins        │
+│   plugin.deactivated   → 重新加载 sessionPlugins        │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 事件 → 状态映射表
+
+| SSE 事件 | Reducer Action | 更新的 State | 对应 Tab |
+|----------|---------------|-------------|---------|
+| `message.delta` | APPEND_DELTA | messages (streaming) | 主聊天区 |
+| `message.completed` | COMPLETE_MESSAGE | messages | 主聊天区 |
+| `block.emitted` | ADD_MESSAGE | messages (block) | 主聊天区 |
+| `state.patch.applied` | ADD_STATE_PATCH | gameState + statePatches | 游戏 + 状态 |
+| `event.emitted` | ADD_STATE_PATCH | gameState.events | 事件 |
+| `record.updated` | ADD_STATE_PATCH | gameState.records | 知识库 |
+| `phase_change` | SET_PHASE | session.phase | 侧栏 |
+| `runtime.progress` | ADD_EXECUTION_STEP | executionSteps | 执行时间线 |
+
+### 恢复流程（刷新）
+
+```
+页面刷新
   → GET /api/sessions/:id/snapshot
   → messages + characters + characterSchema + gameState + executionSteps
-  → session-store dispatch
+  → session-store dispatch (LOAD_MESSAGES, SET_GAME_STATE, etc.)
+  → GET /api/sessions/:id/plugins (restoreSession 内调用)
+  → LOAD_SESSION_PLUGINS
   → 各 Tab 组件恢复状态
+```
+
+### 服务端事件产生流程
+
+```
+Runtime 执行 → RuntimeOutput
+  → Session Kernel normalizeOutput() → Proposal[]
+  → CommitPipeline.commitAll() → 每个 Proposal:
+      1. validate
+      2. commit (写入 Store)
+      3. emit SessionEvent
+  → SSE adapter: SessionEvent → SSE envelope → stream.writeSSE()
+  → 前端 handleSseEvent → dispatch → UI 更新
 ```
 
 ## 扩展指南
