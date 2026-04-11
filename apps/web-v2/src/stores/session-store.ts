@@ -18,6 +18,7 @@ export interface GameMessage {
   content: string;
   runtimeId?: string;
   pluginId?: string;
+  turnId?: string;
   kind?: string;
   block?: Record<string, unknown>;
   timestamp: string;
@@ -132,6 +133,7 @@ function processSSEEvent(eventType: string, data: Record<string, unknown>) {
           block,
           runtimeId: data.runtimeId as string,
           pluginId: data.pluginId as string,
+          turnId: data.turnId as string ?? (block.meta as Record<string, unknown>)?.turnId as string,
           kind: "interaction",
           timestamp: new Date().toISOString(),
         });
@@ -286,6 +288,50 @@ export async function sendMessage(content: string) {
       type: "player_action",
       sessionId: state.session.id,
       playerMessage: content,
+      locale: "zh-CN",
+    });
+    await readActionStream(response);
+  } catch (e) {
+    update({ error: (e as Error).message, executing: false });
+  }
+}
+
+/**
+ * Submit form/choice/confirmation inputs via the submit-inputs API.
+ * This handles: narrativeTemplate filling, character creation, phase transition.
+ * Then triggers the next turn via player_action.
+ */
+export async function submitFormInputs(payload: {
+  turnId: string;
+  interactionId: string;
+  values: Record<string, unknown>;
+}) {
+  if (!state.session) return;
+
+  try {
+    // 1. Submit to submit-inputs API (creates character, transitions phase, fills narrative template)
+    const result = await api.submitInputs(state.session.id, {
+      turnId: payload.turnId,
+      interactionId: payload.interactionId,
+      values: payload.values,
+    });
+
+    // 2. Show the filled narrative as a player message (story text, not raw field data)
+    if (result.filledNarrative) {
+      addMessage({
+        id: `input-${Date.now()}`,
+        role: "user",
+        content: result.filledNarrative,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // 3. Trigger next turn
+    update({ executing: true, executionSteps: [] });
+    const response = await api.postAction({
+      type: "player_action",
+      sessionId: state.session.id,
+      playerMessage: result.filledNarrative || "(继续)",
       locale: "zh-CN",
     });
     await readActionStream(response);

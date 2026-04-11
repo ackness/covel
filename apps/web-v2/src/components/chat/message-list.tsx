@@ -13,7 +13,7 @@ import type { Spec } from "@json-render/core";
 import { covelRegistry } from "@/lib/catalog.js";
 import { messageToSpec, messageToSpecDisabled } from "@/lib/message-to-spec.js";
 import type { GameMessage } from "@/stores/session-store.js";
-import { sendMessage } from "@/stores/session-store.js";
+import { sendMessage, submitFormInputs } from "@/stores/session-store.js";
 
 interface MessageListProps {
   messages: GameMessage[];
@@ -67,26 +67,36 @@ function MessageRenderer({ message }: { message: GameMessage }) {
       if (submitted) return;
       setSubmitted(true);
 
-      // Extract form field values from tracked state
+      // Extract form field values from tracked json-render state
       const formValues: Record<string, string> = {};
       for (const [path, value] of Object.entries(formStateRef.current)) {
-        // paths like "/form/characterName" → "characterName"
         const match = path.match(/^\/form\/(.+)$/);
         if (match && value) {
           formValues[match[1]] = String(value);
         }
       }
 
-      // Build readable message from form values
-      const parts = Object.entries(formValues)
-        .filter(([, v]) => v.trim())
-        .map(([k, v]) => `${k}: ${v}`);
+      // Get block metadata for submit-inputs API
+      const block = message.block;
+      if (block) {
+        const data = (block.data ?? block) as Record<string, unknown>;
+        const interactionId = (data.interactionId ?? data.formId ?? "form") as string;
+        const turnId = ((block.meta as Record<string, unknown>)?.turnId ?? message.turnId ?? "") as string;
+        const isCharCreation = data._createCharacter === true;
 
-      const text = parts.length > 0
-        ? parts.join(", ")
-        : "(表单已提交)";
-
-      sendMessage(text);
+        // Call submit-inputs API (handles narrativeTemplate, character creation, phase transition)
+        await submitFormInputs({
+          turnId,
+          interactionId,
+          values: { ...formValues, ...(isCharCreation ? { _createCharacter: true } : {}) },
+        });
+      } else {
+        // Fallback: just send form values as message
+        const parts = Object.entries(formValues)
+          .filter(([, v]) => v.trim())
+          .map(([k, v]) => `${k}: ${v}`);
+        sendMessage(parts.join(", ") || "(表单已提交)");
+      }
     },
     selectChoice: async (params: Record<string, unknown>) => {
       if (submitted) return;
@@ -98,7 +108,7 @@ function MessageRenderer({ message }: { message: GameMessage }) {
       const text = params.text as string;
       if (text) sendMessage(text);
     },
-  }), [submitted]);
+  }), [submitted, message]);
 
   if (!spec) return null;
 

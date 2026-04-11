@@ -81,6 +81,33 @@ export async function postAction(payload: ActionPayload): Promise<Response> {
   return res;
 }
 
+// ── Submit Inputs (form/choice/confirmation) ─────────────────────
+
+export interface SubmitInputPayload {
+  turnId: string;
+  interactionId: string;
+  type?: "form" | "choice" | "confirmation";
+  values: Record<string, unknown>;
+}
+
+export async function submitInputs(
+  sessionId: string,
+  payload: SubmitInputPayload,
+): Promise<{ filledNarrative: string; accepted: boolean }> {
+  return request<{ filledNarrative: string; accepted: boolean }>(
+    `/api/sessions/${sessionId}/submit-inputs`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        turnId: payload.turnId,
+        formId: payload.interactionId,
+        values: payload.values,
+      }),
+    },
+  );
+}
+
 // ── Plugins ──────────────────────────────────────────────────────
 
 export interface PluginInfo {
