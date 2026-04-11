@@ -58,9 +58,9 @@ export async function createSession(worldId: string, plugins: string[]): Promise
 // ── Actions (SSE) ────────────────────────────────────────────────
 
 export interface ActionPayload {
-  type: "start_session" | "player_action";
+  type: "start_session" | "send_message";
   sessionId: string;
-  playerMessage?: string;
+  payload?: { content: string };
   locale?: string;
 }
 

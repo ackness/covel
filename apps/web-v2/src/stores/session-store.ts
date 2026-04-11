@@ -397,9 +397,9 @@ export async function sendMessage(content: string) {
   try {
     update({ executing: true, executionSteps: [] });
     const response = await api.postAction({
-      type: "player_action",
+      type: "send_message",
       sessionId: state.session.id,
-      playerMessage: content,
+      payload: { content },
       locale: "zh-CN",
     });
     await readActionStream(response);
@@ -411,7 +411,7 @@ export async function sendMessage(content: string) {
 /**
  * Submit form/choice/confirmation inputs via the submit-inputs API.
  * This handles: narrativeTemplate filling, character creation, phase transition.
- * Then triggers the next turn via player_action.
+ * Then triggers the next turn via send_message.
  */
 export async function submitFormInputs(payload: {
   turnId: string;
@@ -441,9 +441,9 @@ export async function submitFormInputs(payload: {
     // 3. Trigger next turn
     update({ executing: true, executionSteps: [] });
     const response = await api.postAction({
-      type: "player_action",
+      type: "send_message",
       sessionId: state.session.id,
-      playerMessage: result.filledNarrative || "(继续)",
+      payload: { content: result.filledNarrative || "(继续)" },
       locale: "zh-CN",
     });
     await readActionStream(response);
