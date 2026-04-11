@@ -13,12 +13,15 @@ interface GameStatusPanelProps {
 
 export function GameStatusPanel({ gameState }: GameStatusPanelProps) {
   const { t } = useTranslation();
-  const isEmpty = Object.keys(gameState).length === 0;
 
-  if (isEmpty) {
+  // Keys handled exclusively by other dedicated tabs — don't count towards "has game data"
+  const DELEGATED_KEYS = new Set(["characters", "characterFieldSchema"]);
+  const hasGameData = Object.keys(gameState).some((k) => !DELEGATED_KEYS.has(k));
+
+  if (!hasGameData) {
     return (
       <p className="text-xs text-muted-foreground italic">
-        {t("session.noGameState")}
+        {t("session.noGameState", "游戏状态将在冒险过程中出现。")}
       </p>
     );
   }
@@ -445,7 +448,13 @@ function MemorySection({ data }: { data: unknown }) {
 
 // Only list framework-level state keys that are rendered by dedicated sections above.
 // NEVER add plugin-specific IDs here — the framework must remain plugin-agnostic.
-const KNOWN_KEYS = new Set(["worldState", "characters", "quests", "inventory", "combat", "memoryArchive", "characterFieldSchema", "characterSchema", "events", "state", "records", "path", "value", "scope", "patch"]);
+// Keys rendered by dedicated sections above or by other tabs — skip in catch-all.
+const KNOWN_KEYS = new Set(["worldState", "characters", "quests", "inventory", "combat", "memoryArchive", "characterFieldSchema", "events", "state", "records", "path", "value", "scope", "patch"]);
+
+/** Human-readable labels for well-known gameState keys. */
+const STATE_KEY_LABELS: Record<string, string> = {
+  characterSchema: "角色属性模板",
+};
 
 function UnknownSections({ gameState }: { gameState: Record<string, unknown> }) {
   const unknownEntries = Object.entries(gameState).filter(([k]) => !KNOWN_KEYS.has(k));
@@ -457,14 +466,97 @@ function UnknownSections({ gameState }: { gameState: Record<string, unknown> }) 
         <Card key={key}>
           <CardContent className="p-3 space-y-1.5">
             <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-              {key}
+              {STATE_KEY_LABELS[key] ?? key}
             </h4>
-            <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-all font-mono">
-              {typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)}
-            </pre>
+            <FormattedGameValue value={value} />
           </CardContent>
         </Card>
       ))}
     </>
   );
+}
+
+/** Render any game state value in a human-readable format instead of raw JSON. */
+function FormattedGameValue({ value }: { value: unknown }) {
+  if (value === null || value === undefined) {
+    return <span className="text-[11px] text-muted-foreground">—</span>;
+  }
+
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return <span className="text-[11px] text-muted-foreground">{String(value)}</span>;
+  }
+
+  if (Array.isArray(value)) {
+    // Simple arrays → badges
+    if (value.every((v) => typeof v === "string" || typeof v === "number")) {
+      return (
+        <div className="flex flex-wrap gap-1">
+          {value.map((item, i) => (
+            <Badge key={i} variant="outline" className="text-[10px] rounded-none font-normal">
+              {String(item)}
+            </Badge>
+          ))}
+        </div>
+      );
+    }
+    // Object arrays (e.g. attributes) → compact list
+    return (
+      <div className="space-y-1">
+        {value.map((item, i) => {
+          if (typeof item === "object" && item !== null) {
+            const obj = item as Record<string, unknown>;
+            // Special: attribute-like objects → compact one-liner
+            if (obj.name && obj.type) {
+              return (
+                <div key={i} className="flex items-center justify-between gap-2 text-[11px]">
+                  <span className="font-medium text-foreground">{String(obj.name)}</span>
+                  <div className="flex items-center gap-1">
+                    <Badge variant="outline" className="text-[9px] rounded-none">{String(obj.type)}</Badge>
+                    {obj.category ? <Badge variant="outline" className="text-[9px] rounded-none">{String(obj.category)}</Badge> : null}
+                    {obj.defaultValue !== undefined && (
+                      <span className="text-muted-foreground font-mono text-[10px]">={String(obj.defaultValue)}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+            return <FormattedGameValue key={i} value={item} />;
+          }
+          return <span key={i} className="text-[11px] text-muted-foreground">{String(item)}</span>;
+        })}
+      </div>
+    );
+  }
+
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    // Special: schema with attributes array → render attributes list
+    if (Array.isArray(obj.attributes)) {
+      return (
+        <div className="space-y-1">
+          {obj.version != null && (
+            <span className="text-[10px] text-muted-foreground">v{String(obj.version)} · {(obj.attributes as unknown[]).length} 个属性</span>
+          )}
+          <FormattedGameValue value={obj.attributes} />
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-1">
+        {Object.entries(obj).map(([k, v]) => {
+          const isComplex = typeof v === "object" && v !== null;
+          return (
+            <div key={k} className={isComplex ? "space-y-0.5" : "flex items-start gap-1.5"}>
+              <span className="text-[11px] font-medium text-foreground shrink-0">{k}{isComplex ? "" : ":"}</span>
+              {isComplex ? <FormattedGameValue value={v} /> : (
+                <span className="text-[11px] text-muted-foreground">{String(v ?? "")}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return <span className="text-[11px] text-muted-foreground">{String(value)}</span>;
 }
