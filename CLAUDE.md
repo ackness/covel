@@ -307,6 +307,7 @@ All endpoints under `/api/` prefix (Vite dev server proxies `/api` → backend).
 - Session State Persistence: `GET/PUT /api/sessions/:id/state-snapshot`, `GET /api/sessions/:id/state-patches`
 - Session Plugin Data: `GET/PUT/DELETE /api/sessions/:id/plugin-data/:pluginId/:namespace/:key`
 - Session Characters: `GET/POST /api/sessions/:id/characters`
+- Session Snapshot: `GET /api/sessions/:id/snapshot` (complete state for restore — messages, characters, characterSchema, gameState, traces)
 - Session Submit: `POST /api/sessions/:id/submit-inputs`
 - Worlds: `GET/POST /api/worlds`, `GET/PATCH /api/worlds/:id`
 - Plugins (global): `GET /api/plugins`, `GET /api/plugins/:id`
@@ -314,6 +315,7 @@ All endpoints under `/api/` prefix (Vite dev server proxies `/api` → backend).
 - Events: `GET /api/events/stream` (SSE), `POST /api/events/emit`
 - AI: `POST /api/ai/ping`, `POST /api/ai/generate-world`
 - Model DB: `GET /api/model-db`, `GET /api/model-db/search`, `GET /api/model-db/lookup`, `POST /api/model-db/refresh`
+- Traces: `GET /api/traces/:sessionId`, `GET /api/traces/:sessionId/turns`
 - Config: `GET /api/presets`, `GET /api/packages`, `GET /api/commands`, `GET /api/block-schemas`, `GET /api/llm-config`, `GET /api/provider-keys`
 - Health: `GET /api/health`
 
@@ -326,6 +328,9 @@ All endpoints under `/api/` prefix (Vite dev server proxies `/api` → backend).
 - Vite plugins: `@tailwindcss/vite` + `@tanstack/router-plugin/vite` + `@vitejs/plugin-react`
 - Game messages support markdown rendering (react-markdown + remark-gfm)
 - Session messages/state persist to IndexedDB for refresh survival
+- Unified SSE protocol: all events use `ProtocolEventType` names (see `docs/reference/protocol.md`)
+- Two SSE channels: `/actions` (primary, all in-turn data) + `/events/stream` (out-of-band, plugin enable/disable only)
+- Session restore from snapshot API (`GET /api/sessions/:id/snapshot`) — loads messages, characters, characterSchema, gameState, execution steps
 
 **Frontend DataService layer** (`apps/web/src/services/data-service.ts`):
 
@@ -470,6 +475,9 @@ describe("ComponentName", () => {
 | 添加/修改/删除工具（builtin 或 local） | `docs/reference/tools.md` |
 | 修改审批策略或工具来源分类 | `docs/reference/tools.md` |
 | 添加/修改模型 slot | `docs/reference/slots.md`（创建后） |
+| 修改 SSE 事件类型或通讯协议 | `docs/reference/protocol.md` |
+| 修改右侧面板 Tab 或数据源 | `docs/reference/ui-panels.md` |
+| 修改/添加 API 端点 | `docs/reference/api.md` |
 | 修改包结构或依赖关系 | `CLAUDE.md` Workspace Layout + Dependency Flow |
 
 不同步文档的 PR 应被视为未完成。

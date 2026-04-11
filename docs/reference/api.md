@@ -57,21 +57,21 @@ curl http://localhost:3001/api/plugins
 ### 5. 创建游戏会话
 
 ```bash
-curl -X POST http://localhost:3001/api/session/start \
+curl -X POST http://localhost:3001/api/sessions \
   -H "Content-Type: application/json" \
   -d '{
     "worldId": "cloudmere",
     "locale": "zh-CN",
-    "plugins": ["core-persona", "core-narrator", "core-guide"]
+    "plugins": ["core-pregame", "core-narrator", "core-codex"]
   }'
 ```
 
-记下返回的 `sessionId`，后续请求都需要它。
+记下返回的 `id`（格式为 `{worldId}-{uuid8}`，如 `cloudmere-a1b2c3d4`），后续请求都需要它。
 
 ### 6. 执行第一个 Turn（玩家发言）
 
 ```bash
-curl -X POST http://localhost:3001/api/session/<sessionId>/turn \
+curl -X POST http://localhost:3001/api/sessions/<sessionId>/turn \
   -H "Content-Type: application/json" \
   -d '{
     "message": "我环顾四周，观察这个陌生的世界"
@@ -82,19 +82,19 @@ curl -X POST http://localhost:3001/api/session/<sessionId>/turn \
 
 ```bash
 # 查看状态表
-curl http://localhost:3001/api/session/<sessionId>/state
+curl http://localhost:3001/api/sessions/<sessionId>/state
 
 # 查看角色列表
-curl http://localhost:3001/api/session/<sessionId>/characters
+curl http://localhost:3001/api/sessions/<sessionId>/characters
 
 # 查看消息历史
-curl http://localhost:3001/api/session/<sessionId>/messages
+curl http://localhost:3001/api/sessions/<sessionId>/messages
 ```
 
 ### 8. 继续对话
 
 ```bash
-curl -X POST http://localhost:3001/api/session/<sessionId>/turn \
+curl -X POST http://localhost:3001/api/sessions/<sessionId>/turn \
   -H "Content-Type: application/json" \
   -d '{
     "message": "走向远处的城镇"
@@ -104,7 +104,7 @@ curl -X POST http://localhost:3001/api/session/<sessionId>/turn \
 ### 9. 提交玩家交互（如果 Turn 返回了 pendingInputs）
 
 ```bash
-curl -X POST http://localhost:3001/api/session/<sessionId>/submit-inputs \
+curl -X POST http://localhost:3001/api/sessions/<sessionId>/submit-inputs \
   -H "Content-Type: application/json" \
   -d '{
     "turnId": "<turnId>",
@@ -121,7 +121,7 @@ curl -X POST http://localhost:3001/api/session/<sessionId>/submit-inputs \
 ### 10. 结束会话
 
 ```bash
-curl -X DELETE http://localhost:3001/api/session/<sessionId>
+curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 ```
 
 ---
@@ -146,72 +146,124 @@ curl -X DELETE http://localhost:3001/api/session/<sessionId>
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/sessions` | 列出所有会话 |
-| POST | `/api/session/start` | 创建新会话 |
-| GET | `/api/session/:id` | 获取会话信息 |
-| DELETE | `/api/session/:id` | 删除会话 |
+| GET | `/api/sessions` | 列出所有会话（可选 `?worldId=` 过滤） |
+| POST | `/api/sessions` | 创建新会话 |
+| GET | `/api/sessions/:id` | 获取会话信息 |
+| PATCH | `/api/sessions/:id` | 更新会话字段（如 phase） |
+| DELETE | `/api/sessions/:id` | 删除会话 |
+
+### 会话快照
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/sessions/:id/snapshot` | 获取完整会话快照（用于客户端恢复/重连） |
 
 ### Turn 执行
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| POST | `/api/session/:id/turn` | 执行玩家回合 |
-| GET | `/api/session/:id/results` | 获取最近一次 Turn 结果 |
-| GET | `/api/session/:id/turns` | 获取 Turn 历史 |
+| POST | `/api/sessions/:id/turn` | 执行玩家回合 |
+| GET | `/api/sessions/:id/results` | 获取最近一次 Turn 结果 |
+| GET | `/api/sessions/:id/turns` | 获取 Turn 历史 |
 
 ### 玩家交互
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| POST | `/api/session/:id/submit-inputs` | 提交玩家交互响应 |
+| POST | `/api/sessions/:id/submit-inputs` | 提交玩家交互响应 |
 
-### 插件管理
+### 会话插件管理
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/sessions/:id/plugins` | 列出会话的活跃/可用插件 |
+| POST | `/api/sessions/:id/plugins/enable` | 启用插件（body: `{ pluginId }`） |
+| POST | `/api/sessions/:id/plugins/disable` | 禁用插件（body: `{ pluginId }`） |
+
+### 全局插件
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
 | GET | `/api/plugins` | 列出所有已加载插件 |
 | GET | `/api/plugins/:id` | 获取插件详情 |
-| GET | `/api/plugins/:id/config` | 获取插件配置 schema 与值 |
-| PATCH | `/api/plugins/:id/config` | 更新插件配置 |
 
 ### 状态查询
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/session/:id/state` | 获取所有状态表 |
-| GET | `/api/session/:id/state/:table` | 获取指定状态表快照 |
-| GET | `/api/session/:id/state/:table/:field/history` | 获取字段变更历史 |
+| GET | `/api/sessions/:id/state` | 获取所有状态表 |
+| GET | `/api/sessions/:id/state/:table` | 获取指定状态表快照 |
+| GET | `/api/sessions/:id/state/:table/:field/history` | 获取字段变更历史 |
 
 ### 消息历史
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/session/:id/messages` | 获取会话消息列表 |
-| GET | `/api/session/:id/turn-messages` | 获取会话 Turn 消息列表 |
+| GET | `/api/sessions/:id/messages` | 获取会话消息列表 |
+| POST | `/api/sessions/:id/messages/sync` | 同步消息（LocalDataService 用） |
 
 ### 插件数据（Plugin Data）
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/session/:id/plugin-data/:pluginId` | 列出插件所有数据 |
-| GET | `/api/session/:id/plugin-data/:pluginId/:namespace` | 列出某 namespace 下的数据 |
-| GET | `/api/session/:id/plugin-data/:pluginId/:namespace/:key` | 获取单条数据 |
-| PUT | `/api/session/:id/plugin-data/:pluginId/:namespace/:key` | 写入/更新数据 |
-| DELETE | `/api/session/:id/plugin-data/:pluginId/:namespace/:key` | 删除数据 |
+| GET | `/api/sessions/:id/plugin-data/:pluginId/:namespace` | 列出某 namespace 下的数据 |
+| GET | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 获取单条数据 |
+| PUT | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 写入/更新数据 |
+| DELETE | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 删除数据 |
 
 ### 角色数据
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/session/:id/characters` | 获取会话角色列表 |
-| POST | `/api/session/:id/characters` | 创建/更新角色 |
+| GET | `/api/sessions/:id/characters` | 获取会话角色列表 |
+| POST | `/api/sessions/:id/characters` | 创建/更新角色 |
+
+### Actions（SSE 桥接）
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| POST | `/api/actions` | SSE 动作桥接（发送消息/执行命令 → Turn 执行 → SSE 事件流） |
 
 ### 事件系统
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/events/subscribe?sessionId=xxx` | SSE 实时事件流 |
+| GET | `/api/events/stream?sessionId=xxx` | SSE 实时事件流（支持 topic 过滤和重放） |
 | POST | `/api/events/emit` | 注入外部事件 |
+
+### AI 生成
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| POST | `/api/ai/ping` | 测试 LLM 提供商连通性 |
+| POST | `/api/ai/generate-world` | AI 生成世界包 |
+
+### 模型数据库（Model DB）
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/model-db` | 获取模型数据库信息 |
+| GET | `/api/model-db/search?q=xxx` | 搜索模型 |
+| GET | `/api/model-db/lookup?model=xxx` | 查找模型能力 |
+| POST | `/api/model-db/refresh` | 刷新模型数据库 |
+
+### Trace 调试
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/traces/:sessionId` | 获取会话所有 trace 事件 |
+| GET | `/api/traces/:sessionId/turns` | 按 Turn 分组的 trace 事件 |
+
+### 配置信息
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/presets` | 列出配置的模型预设 |
+| GET | `/api/packages` | 列出已加载插件包（含 runtime/tool 信息） |
+| GET | `/api/commands` | 列出注册的命令 |
+| GET | `/api/block-schemas` | 列出插件 block schema |
+| GET | `/api/llm-config` | 返回 slot 配置与能力信息 |
+| GET | `/api/provider-keys` | 返回服务器配置的 API 密钥（仅 T1） |
 
 ### Runtime 调用
 
@@ -234,10 +286,17 @@ curl -X DELETE http://localhost:3001/api/session/<sessionId>
 ```json
 {
   "status": "ok",
-  "version": "2.0.0",
+  "version": "1.0.0",
+  "storeBackend": "memory",
+  "bootId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "timestamp": "2025-01-15T10:00:00.000Z"
 }
 ```
+
+| 字段 | 说明 |
+|------|------|
+| `storeBackend` | 当前存储后端（`memory` / `pg`），前端据此选择 `LocalDataService` 或 `RemoteDataService` |
+| `bootId` | 服务器启动 ID（UUID），每次重启变化，可用于检测服务器重启 |
 
 ---
 
@@ -333,7 +392,7 @@ curl -X DELETE http://localhost:3001/api/session/<sessionId>
 
 #### `GET /api/sessions`
 
-列出所有游戏会话。
+列出所有游戏会话。支持 `?worldId=` 查询参数过滤。
 
 **响应:**
 
@@ -341,12 +400,12 @@ curl -X DELETE http://localhost:3001/api/session/<sessionId>
 {
   "items": [
     {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "id": "cloudmere-a1b2c3d4",
       "worldId": "cloudmere",
       "phase": "pre-game",
       "turnCount": 0,
       "locale": "zh-CN",
-      "activePlugins": ["core-persona", "core-narrator"],
+      "activePlugins": ["core-pregame", "core-narrator"],
       "createdAt": "2025-01-15T10:00:00.000Z",
       "updatedAt": "2025-01-15T10:00:00.000Z"
     }
@@ -354,7 +413,7 @@ curl -X DELETE http://localhost:3001/api/session/<sessionId>
 }
 ```
 
-#### `POST /api/session/start`
+#### `POST /api/sessions`
 
 创建一个新的游戏会话。
 
@@ -364,27 +423,35 @@ curl -X DELETE http://localhost:3001/api/session/<sessionId>
 {
   "worldId": "cloudmere",
   "locale": "zh-CN",
-  "plugins": ["core-persona", "core-narrator", "core-guide", "core-combat"]
+  "plugins": ["core-pregame", "core-narrator", "core-codex"]
 }
 ```
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `worldId` | string | 否 | 关联的世界 ID |
+| `worldId` | string | 否 | 关联的世界 ID（校验: `/^[a-z0-9_-]{1,64}$/i`） |
 | `locale` | string | 否 | 语言区域，默认 `zh-CN` |
 | `plugins` | string[] | 否 | 要激活的插件 ID 列表 |
+| `id` | string | 否 | 客户端自定义会话 ID（如不提供则自动生成 `{worldId}-{uuid8}`） |
 
 **响应:**
 
 ```json
 {
-  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "id": "cloudmere-a1b2c3d4",
+  "worldId": "cloudmere",
+  "locale": "zh-CN",
   "phase": "pre-game",
-  "activePlugins": ["core-persona", "core-narrator", "core-guide", "core-combat"]
+  "turnCount": 0,
+  "activePlugins": ["core-pregame", "core-narrator", "core-codex"],
+  "createdAt": "2025-01-15T10:00:00.000Z",
+  "updatedAt": "2025-01-15T10:00:00.000Z"
 }
 ```
 
-#### `GET /api/session/:id`
+> **Session ID 格式**: 自动生成的 ID 格式为 `{worldId}-{uuid8}`（如 `cloudmere-a1b2c3d4`），使用 `crypto.randomUUID()` 后缀防止枚举。如未提供 worldId 则前缀为 `session`。
+
+#### `GET /api/sessions/:id`
 
 获取会话的完整信息。
 
@@ -392,18 +459,18 @@ curl -X DELETE http://localhost:3001/api/session/<sessionId>
 
 | 参数 | 位置 | 说明 |
 |------|------|------|
-| `id` | 路径 | 会话 ID (UUID) |
+| `id` | 路径 | 会话 ID |
 
 **响应 200:**
 
 ```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "id": "cloudmere-a1b2c3d4",
   "worldId": "cloudmere",
   "phase": "pre-game",
   "turnCount": 3,
   "locale": "zh-CN",
-  "activePlugins": ["core-persona", "core-narrator"],
+  "activePlugins": ["core-pregame", "core-narrator"],
   "createdAt": "2025-01-15T10:00:00.000Z",
   "updatedAt": "2025-01-15T10:05:00.000Z"
 }
@@ -417,7 +484,27 @@ curl -X DELETE http://localhost:3001/api/session/<sessionId>
 }
 ```
 
-#### `DELETE /api/session/:id`
+#### `PATCH /api/sessions/:id`
+
+更新会话字段（当前支持 `phase`）。
+
+**参数:**
+
+| 参数 | 位置 | 说明 |
+|------|------|------|
+| `id` | 路径 | 会话 ID |
+
+**请求体:**
+
+```json
+{
+  "phase": "playing"
+}
+```
+
+**响应 200:** 返回合并后的会话对象。
+
+#### `DELETE /api/sessions/:id`
 
 删除一个游戏会话。
 
@@ -425,7 +512,7 @@ curl -X DELETE http://localhost:3001/api/session/<sessionId>
 
 | 参数 | 位置 | 说明 |
 |------|------|------|
-| `id` | 路径 | 会话 ID (UUID) |
+| `id` | 路径 | 会话 ID |
 
 **响应 200:**
 
@@ -449,7 +536,7 @@ curl -X DELETE http://localhost:3001/api/session/<sessionId>
 
 Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服务器调度所有活跃的 Runtime 按优先级执行，收集 LLM 输出并返回。
 
-#### `POST /api/session/:id/turn`
+#### `POST /api/sessions/:id/turn`
 
 执行一个玩家回合。
 
@@ -457,7 +544,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 | 参数 | 位置 | 说明 |
 |------|------|------|
-| `id` | 路径 | 会话 ID (UUID) |
+| `id` | 路径 | 会话 ID |
 
 **请求体:**
 
@@ -510,7 +597,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 - Turn 执行后 `session.turnCount` 自动 +1
 - 如果某个 Runtime 的输出包含 `pendingInputs`，需要通过 `/submit-inputs` 提交玩家响应
 
-#### `GET /api/session/:id/results`
+#### `GET /api/sessions/:id/results`
 
 获取最近一次 Turn 的执行结果。
 
@@ -518,7 +605,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 | 参数 | 位置 | 说明 |
 |------|------|------|
-| `id` | 路径 | 会话 ID (UUID) |
+| `id` | 路径 | 会话 ID |
 
 **响应:**
 
@@ -548,7 +635,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 | 参数 | 位置 | 说明 |
 |------|------|------|
-| `id` | 路径 | 会话 ID (UUID) |
+| `id` | 路径 | 会话 ID |
 
 **查询参数:**
 
@@ -593,7 +680,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 
 | 参数 | 位置 | 说明 |
 |------|------|------|
-| `id` | 路径 | 会话 ID (UUID) |
+| `id` | 路径 | 会话 ID |
 
 **请求体（批量提交）:**
 
@@ -854,7 +941,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 
 | 参数 | 位置 | 说明 |
 |------|------|------|
-| `id` | 路径 | 会话 ID (UUID) |
+| `id` | 路径 | 会话 ID |
 
 **响应 200:**
 
@@ -905,7 +992,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 
 | 参数 | 位置 | 说明 |
 |------|------|------|
-| `id` | 路径 | 会话 ID (UUID) |
+| `id` | 路径 | 会话 ID |
 | `table` | 路径 | 状态表名（如 `character_stats`） |
 
 **响应 200:**
@@ -935,7 +1022,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 
 | 参数 | 位置 | 说明 |
 |------|------|------|
-| `id` | 路径 | 会话 ID (UUID) |
+| `id` | 路径 | 会话 ID |
 | `table` | 路径 | 状态表名 |
 | `field` | 路径 | 字段名 |
 
@@ -972,7 +1059,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 
 | 参数 | 位置 | 说明 |
 |------|------|------|
-| `id` | 路径 | 会话 ID (UUID) |
+| `id` | 路径 | 会话 ID |
 
 **响应:**
 
@@ -1005,7 +1092,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 
 | 参数 | 位置 | 说明 |
 |------|------|------|
-| `id` | 路径 | 会话 ID (UUID) |
+| `id` | 路径 | 会话 ID |
 
 **响应:**
 
@@ -1104,7 +1191,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 
 | 参数 | 位置 | 说明 |
 |------|------|------|
-| `id` | 路径 | 会话 ID (UUID) |
+| `id` | 路径 | 会话 ID |
 
 **响应:**
 
@@ -1134,7 +1221,7 @@ curl "http://localhost:3001/api/session/<sessionId>/turns?limit=5"
 
 | 参数 | 位置 | 说明 |
 |------|------|------|
-| `id` | 路径 | 会话 ID (UUID) |
+| `id` | 路径 | 会话 ID |
 
 **请求体:**
 

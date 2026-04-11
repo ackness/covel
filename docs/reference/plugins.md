@@ -10,7 +10,7 @@
 |----|------|--------|----------|-----------|------|
 | core-pregame | core-plugin | 10 | scheduled（仅首轮） | — | 游戏初始化（function runtime） |
 | core-world-init | core-plugin | 85 | scheduled（仅首轮） | `fast` | 世界维度初始化（guard + agent） |
-| core-narrator | core-plugin | 500 | auto（每轮） | `ds` | 主叙事生成器 |
+| core-narrator | core-plugin | 500 | auto（`playing` 阶段） | `ds` | 主叙事生成器 |
 | core-codex | plugin | 650 | auto（每轮） | `fast` | 知识图鉴系统 |
 | core-char-creator | core-plugin | 700 | scheduled（仅首轮） | `ds` | 角色创建引导 |
 
@@ -72,7 +72,7 @@
 |------|----|
 | pluginType | `core-plugin`（不可禁用） |
 | priority | 500 |
-| trigger | `auto` — 每个 Turn 自动执行 |
+| trigger | `auto`，`phases: [playing]` — 仅 `playing` 阶段执行 |
 | outputKind | `story`（输出显示在主聊天区） |
 | model | `ds`（DeepSeek slot） |
 | capabilities | `[narrative]` |
@@ -87,11 +87,11 @@
 - `{{ world.openingScenario }}` — 开场场景
 - `{{ world.tone }}` — 叙事风格设定
 - `{{ player.message }}` — 玩家当前输入
-- `{{ player.character }}` — 玩家角色数据（CharacterSummary，首轮为 null）
+- `{{ player.character }}` — 玩家角色数据（CharacterSummary）
 - `{{ session.turnNumber }}` — 当前回合数
 - `{{ session.phase }}` — 当前会话阶段
 
-**首轮行为**: Turn 1 时 `player.character = null`，narrator 自然写世界观开场。不使用 phase 门控或条件分支 — LLM 根据可用上下文自适应。
+**Phase 门控**: 通过 `phases: [playing]` 触发门控，narrator 仅在角色创建完成后（session phase 转入 `playing`）开始执行。首轮（`init` / `character_creation` 阶段）不触发。
 
 ---
 
@@ -125,15 +125,27 @@
 | model | `ds`（DeepSeek slot） |
 | tools.builtin | `create-form`（需设置 `createCharacter: true`） |
 | input.inject | `core-narrator` → `narrativeOutput` → `<narrator-opening>` |
+| config.inject | `{{ config.worldSchema }}` — 世界维度系统的角色属性 schema |
 
-**职责**: 读取 narrator 的开场叙事，生成角色创建表单（含 `narrativeTemplate`）。玩家填写后，框架用玩家输入替换模板占位符，生成个性化的角色引入叙事。
+**职责**: 读取 narrator 的开场叙事和世界属性 schema，生成 schema 驱动的角色创建表单（含 `narrativeTemplate`）。玩家填写后，框架用玩家输入替换模板占位符，生成个性化的角色引入叙事。
+
+**Schema 驱动表单生成**: 通过 `{{ config.worldSchema }}` 注入 `core-world-init` 生成的角色属性定义（`character-attributes` schema），根据属性类型自动映射表单字段：
+- `enum`（有 options）→ `select`，选项取自 schema 定义
+- `string` → `text`
+- `number` → `select`，从合理范围生成 3-5 个选项
+- 数值型属性（如 hp/mp/level 等 stats 分类）不作为表单字段，使用 schema 中的 `defaultValue`
 
 **表单约束**:
-- 最多 4 个字段，优先使用选择题（combobox）而非文本输入
+- **最多 4 个字段**（含 `characterName`），优先使用 `select` 而非 `text` 输入
+- 从 schema 的 `bio` > `abilities` > `stats` 分类中选取最多 3 个适合玩家选择的属性
+- 字段 `name` 必须与 schema 属性 `id` 完全一致（如 `lingGen`、`background`、`specialTrait`）
 - 只有 `characterName` 设为 `required: true`
 - 必须设置 `createCharacter: true` → 提交后框架自动创建 CharacterRecord 并转换 phase → `playing`
+- 若 `{{ config.worldSchema }}` 为空或不可用，退回根据世界观自行设计字段
 
-**Phase 转换链**: `character_creation` → 表单提交 → `submit-inputs` API → `upsertCharacter()` + `updateSession({ phase: 'playing' })`
+**Phase 转换链**: `character_creation` → 表单提交 → `submit-inputs` API → 合并 schema defaultValue → `upsertCharacter()` + `updateSession({ phase: 'playing' })`
+
+**Default 值合并**: `submit-inputs` API 在创建角色时，从 `world-data-provider` 插件的 `character-attributes` schema 中读取未被玩家填写属性的 `defaultValue`（如 hp、mp 等），自动合并到角色 `fields` 中，确保角色记录包含完整的属性数据。
 
 ---
 
@@ -246,6 +258,11 @@ outputKind: story
 | `image-generation` | 图像生成 | 前端展示「生成配图」按钮 |
 
 插件可以声明任意自定义能力标签。框架仅依赖上述已定义标签。
+
+**API 暴露**: Session plugins API（`GET /api/sessions/:id/plugins`）在响应中返回每个插件的 `capabilities` 字段（从所有子 runtime 的 manifest 中聚合），前端可据此发现插件能力。示例响应片段：
+```json
+{ "id": "core-world-init", "pluginType": "core-plugin", "active": true, "capabilities": ["world-data-provider"] }
+```
 
 示例 frontmatter：
 ```yaml
