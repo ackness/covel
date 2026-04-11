@@ -266,6 +266,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | GET | `/api/packages` | 列出已加载插件包（含 runtime/tool 信息） |
 | GET | `/api/commands` | 列出注册的命令 |
 | GET | `/api/block-schemas` | 列出插件 block schema |
+| GET | `/api/ui-specs` | 列出插件 UI 声明（按 slot 分组：right/message/left） |
 | GET | `/api/llm-config` | 返回 slot 配置与能力信息 |
 | GET | `/api/provider-keys` | 返回服务器配置的 API 密钥（仅 T1） |
 

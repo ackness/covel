@@ -11,7 +11,9 @@
 | core-pregame | core-plugin | 10 | scheduled（仅首轮） | — | 游戏初始化（function runtime） |
 | core-world-init | core-plugin | 85 | scheduled（仅首轮） | `fast` | 世界维度初始化（guard + agent） |
 | core-narrator | core-plugin | 500 | auto（`playing` 阶段） | `ds` | 主叙事生成器 |
-| core-codex | plugin | 650 | auto（每轮） | `fast` | 知识图鉴系统 |
+| core-narrator | core-plugin | 500 | auto（`playing` 阶段） | `ds` | 主叙事生成器 |
+| core-guide | plugin | 550 | scheduled（interval=1, cooldown=1） | `fast` | 行动引导 + 选择面板 |
+| core-codex | plugin | 650 | scheduled（interval=2） | `fast` | 知识图鉴系统 |
 | core-char-creator | core-plugin | 700 | scheduled（仅首轮） | `ds` | 角色创建引导 |
 
 ---
@@ -103,13 +105,18 @@
 |------|----|
 | pluginType | `plugin`（可禁用） |
 | priority | 650 |
-| trigger | `auto` — 每个 Turn 自动执行 |
+| trigger | `scheduled`，`interval: 2`，`cooldownTurns: 2`，`phases: [playing]` |
 | model | `fast`（轻量模型 slot） |
 | tools.local | `unlock-codex-entries`, `update-codex-entry` |
-| tools.builtin | `create-notification` |
+| tools.builtin | `plugin-data-list`, `create-notification` |
+| ui.right | `./ui/codex-panel.json` |
 | input.inject | 无 |
 
-**职责**: 分析叙事文本，识别并记录玩家发现的知识条目（怪物、道具、地点、传说、人物）。通过本地工具生成带稀有度分级的"知识发现"UI 卡片。
+**职责**: 分析叙事文本，识别并记录玩家发现的知识条目（怪物、道具、地点、传说、人物、技能）。通过本地工具生成带稀有度分级的"知识发现"UI 卡片。工具调用自动持久化到 plugin-data store，前端通过 `plugin-data.changed` SSE 事件实时更新。
+
+**数据持久化**: `unlock-codex-entries` 工具内部调用 `store.setPluginDataBatch()` 将条目写入 plugin-data（namespace: `entries`），`update-codex-entry` 工具读取已有条目、合并更新后写回。
+
+**UI 面板**: `ui/codex-panel.json` 声明右侧面板（json-render spec），包含搜索框、分类筛选栏和条目卡片列表。框架通过 `/api/ui-specs` 发现并渲染。
 
 ---
 
@@ -149,15 +156,40 @@
 
 ---
 
-## 待迁移插件（待开发）
+## core-guide
 
-以下插件在 v1 中存在，计划逐步迁移到 PLUGIN.md 格式：
+**路径**: `plugins/core-guide/`
+
+| 字段 | 值 |
+|------|----|
+| pluginType | `plugin`（可禁用） |
+| priority | 550（narrator 之后、codex 之前） |
+| trigger | `scheduled`，`interval: 1`，`cooldownTurns: 1`，`phases: [playing]` |
+| model | `fast`（轻量模型 slot） |
+| tools.local | `generate-guide` |
+| ui.message | `./ui/action-guide-block.json` |
+| input.inject | `core-narrator` → `narrativeOutput` → `<narrator-output>` |
+
+**职责**: 在叙事推进后，分析当前情境，为玩家生成分风格的行动建议。让 narrator 专注叙事，选择引导交由本插件。
+
+**风格分类**:
+- **safe（稳妥）** — 低风险、谨慎的选择
+- **aggressive（激进）** — 直接、对抗性的选择
+- **creative（创意）** — 非常规、巧妙的选择
+- **wild（疯狂）** — 高风险、出人意料的选择
+
+**触发逻辑**: `cooldownTurns: 1` 确保首轮不触发（避免与角色创建冲突）。仅在 `playing` 阶段执行。如果叙事中没有明显决策点，LLM 不会调用工具。
+
+**UI 渲染**: 工具返回的 `action-guide` block 通过 json-render 渲染为分类卡片，每个建议是一个可点击按钮，点击后作为玩家消息发送给模型。
+
+---
+
+## 待迁移插件（待开发）
 
 | 插件 | 预期优先级 | 描述 |
 |------|-----------|------|
 | core-persona | 100 | AI 人格配置 |
 | core-combat | 420 | 回合制战斗 |
-| core-guide | 600 | 故事引导 + 选择面板 |
 | core-inventory | 600 | 物品/装备管理 |
 | core-quest | 650 | 任务追踪 |
 | core-image | 800 | 故事配图生成 |

@@ -82,7 +82,8 @@ The dev server (`tsx watch`) loads both `../../.env` and `../../.env.llm` from t
 
 ```
 apps/
-  web/              @covel/web              — React 19 + Vite 8 + TailwindCSS v4 + TanStack Router
+  web/              @covel/web              — React 19 + Vite 8 + TailwindCSS v4 + TanStack Router (legacy, being replaced)
+  web-v2/           @covel/web-v2           — Plugin-driven frontend: json-render + dynamic panels (port 5174)
   server/           @covel/server           — Hono API server + Drizzle ORM
 
 packages/
@@ -102,8 +103,9 @@ plugins/                    — Core gameplay plugins (PLUGIN.md-centric, see Pl
   core-pregame/             — Game initialization (priority 0, first turn only)
   core-world-init/          — World dimension initialization (guard + agent runtime)
   core-narrator/            — Main narrative generation
-  core-char-creator/        — Character creation onboarding
+  core-guide/               — Action guidance + choice panels (after narrator)
   core-codex/               — Knowledge codex with local tools
+  core-char-creator/        — Character creation onboarding
 
 prompts/                    — Externalized prompt templates (locale-aware markdown)
   server/                   — Server route prompts (generate-world, extract-dimensions)
@@ -195,11 +197,36 @@ Current plugins (PLUGIN.md-centric format):
 |----------|--------|------|---------|
 | 10 | core-pregame | Game initialization (function runtime, no LLM) | scheduled (first turn only, maxTriggerCount=1) |
 | 85 | core-world-init/schema-gen | World dimension schema + entries via LLM (guard skips if data exists) | scheduled (first turn only) |
-| 500 | core-narrator | Main narrative generation | auto (every turn) |
-| 650 | core-codex | Knowledge/lore codex with local tools | auto |
+| 500 | core-narrator | Main narrative generation | auto (every turn, playing phase) |
+| 550 | core-guide | Action guidance + choice panels (analyzes narrator output) | scheduled (interval=1, cooldown=1, playing phase) |
+| 650 | core-codex | Knowledge/lore codex with persistent plugin-data | scheduled (interval=2, playing phase) |
 | 700 | core-char-creator | Character creation onboarding | scheduled (first turn only, maxTriggerCount=1) |
 
-Additional plugins planned: core-persona, core-combat, core-guide, core-inventory, core-quest, core-image, core-memory, etc.
+Additional plugins planned: core-persona, core-combat, core-inventory, core-quest, core-image, core-memory, etc.
+
+### Plugin UI System (Declarative Panels)
+
+Plugins declare UI contributions via `ui:` field in PLUGIN.md frontmatter, referencing external JSON files:
+
+```yaml
+ui:
+  right:      # Right sidebar panel tabs
+    - ./ui/my-panel.json
+  message:    # Inline message blocks
+    - ./ui/my-block.json
+  left:       # Left sidebar content
+    - ./ui/my-settings.json
+```
+
+**Rendering**: All UI is rendered via [json-render](https://github.com/vercel-labs/json-render) with a framework-defined component catalog (~25 components). Plugins compose UI from these primitives — no React code needed.
+
+**Three-tier resolution**: Custom React (`.tsx` in `client/`) → json-render spec (`.json` in `ui/`) → raw JSON fallback.
+
+**Data flow**: Plugin tools write to plugin-data store → `plugin-data.changed` SSE event → frontend `pluginData` state → json-render re-renders panels.
+
+**API**: `GET /api/ui-specs` aggregates all plugin UI declarations by slot (right/message/left). Frontend discovers panels at boot and renders dynamically.
+
+**Right panel**: VSCode-style vertical activity bar. Each plugin declaring `ui.right` gets an icon tab. No hardcoded tabs — entirely plugin-driven (except World tab which is framework-owned).
 
 ### Plugin Data Storage
 
@@ -316,7 +343,7 @@ All endpoints under `/api/` prefix (Vite dev server proxies `/api` → backend).
 - AI: `POST /api/ai/ping`, `POST /api/ai/generate-world`
 - Model DB: `GET /api/model-db`, `GET /api/model-db/search`, `GET /api/model-db/lookup`, `POST /api/model-db/refresh`
 - Traces: `GET /api/traces/:sessionId`, `GET /api/traces/:sessionId/turns`
-- Config: `GET /api/presets`, `GET /api/packages`, `GET /api/commands`, `GET /api/block-schemas`, `GET /api/llm-config`, `GET /api/provider-keys`
+- Config: `GET /api/presets`, `GET /api/packages`, `GET /api/commands`, `GET /api/block-schemas`, `GET /api/ui-specs`, `GET /api/llm-config`, `GET /api/provider-keys`
 - Health: `GET /api/health`
 
 ### Frontend
