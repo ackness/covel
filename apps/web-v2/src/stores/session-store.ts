@@ -10,7 +10,7 @@ import { applyChanges, resetPluginData } from "./plugin-data-store.js";
 
 // ── Types ────────────────────────────────────────────────────────
 
-export type AppPhase = "loading" | "world-select" | "playing";
+export type AppPhase = "loading" | "world-select" | "session-prep" | "playing";
 
 export interface GameMessage {
   id: string;
@@ -35,12 +35,13 @@ export interface ExecutionStep {
 interface SessionState {
   phase: AppPhase;
   worlds: api.WorldRecord[];
+  selectedWorld: api.WorldRecord | null;
   session: api.SessionRecord | null;
   messages: GameMessage[];
   executing: boolean;
   executionSteps: ExecutionStep[];
   error: string | null;
-  plugins: string[];
+  plugins: api.PluginInfo[];
 }
 
 // ── Store ────────────────────────────────────────────────────────
@@ -48,6 +49,7 @@ interface SessionState {
 let state: SessionState = {
   phase: "loading",
   worlds: [],
+  selectedWorld: null,
   session: null,
   messages: [],
   executing: false,
@@ -55,6 +57,9 @@ let state: SessionState = {
   error: null,
   plugins: [],
 };
+
+// Re-export WorldRecord for components
+export type { WorldRecord, PluginInfo } from "@/services/api.js";
 
 const listeners = new Set<() => void>();
 function notify() { for (const l of listeners) l(); }
@@ -242,20 +247,28 @@ export async function boot() {
       api.listWorlds(),
       api.listPlugins(),
     ]);
-    update({
-      phase: "world-select",
-      worlds,
-      plugins: plugins.map((p) => p.name),
-    });
+    update({ phase: "world-select", worlds, plugins });
   } catch (e) {
     update({ error: (e as Error).message, phase: "world-select" });
   }
 }
 
-export async function startGame(worldId: string) {
+export function selectWorld(worldId: string) {
+  const world = state.worlds.find((w) => w.id === worldId);
+  if (world) {
+    update({ selectedWorld: world, phase: "session-prep" });
+  }
+}
+
+export function backToWorldSelect() {
+  update({ selectedWorld: null, phase: "world-select" });
+}
+
+export async function startGame() {
+  if (!state.selectedWorld) return;
   try {
     update({ error: null, executing: true });
-    const session = await api.createSession(worldId, state.plugins);
+    const session = await api.createSession(state.selectedWorld.id, state.plugins.map((p) => p.name));
     resetPluginData();
     update({ session, phase: "playing", messages: [], executionSteps: [] });
 
@@ -347,6 +360,8 @@ export function useSessionStore() {
   return {
     ...s,
     boot: useCallback(boot, []),
+    selectWorld: useCallback(selectWorld, []),
+    backToWorldSelect: useCallback(backToWorldSelect, []),
     startGame: useCallback(startGame, []),
     sendMessage: useCallback(sendMessage, []),
   };

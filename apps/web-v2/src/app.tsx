@@ -9,6 +9,7 @@ import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { useSessionStore } from "@/stores/session-store.js";
 import { WorldSelect } from "@/components/session/world-select.js";
+import { SessionPrep } from "@/components/session/session-prep.js";
 import { MessageList } from "@/components/chat/message-list.js";
 import { InputBar } from "@/components/chat/input-bar.js";
 import { RightPanel } from "@/components/panels/right-panel.js";
@@ -33,7 +34,21 @@ export function App() {
   if (store.phase === "world-select") {
     return (
       <div className="h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
-        <WorldSelect worlds={store.worlds} onSelect={store.startGame} />
+        <WorldSelect worlds={store.worlds} onSelect={store.selectWorld} />
+      </div>
+    );
+  }
+
+  // Session prep — world selected, show details + "开始冒险"
+  if (store.phase === "session-prep" && store.selectedWorld) {
+    return (
+      <div className="h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
+        <SessionPrep
+          world={store.selectedWorld}
+          plugins={store.plugins}
+          onStart={store.startGame}
+          onBack={store.backToWorldSelect}
+        />
       </div>
     );
   }
