@@ -34,7 +34,7 @@ export function App() {
   if (store.phase === "world-select") {
     return (
       <div className="h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
-        <WorldSelect worlds={store.worlds} onSelect={store.selectWorld} />
+        <WorldSelect worlds={store.worlds} onSelect={store.selectWorld} onResume={store.resumeSession} />
       </div>
     );
   }

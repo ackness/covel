@@ -150,13 +150,16 @@ export function buildContext(
   // Build the variables object for interpolation
   const inputsMap: Record<string, Record<string, Record<string, unknown>>> = {};
   for (const [key, result] of completedResults) {
-    const [pluginId, runtimeId] = key.split('/');
-    if (pluginId && runtimeId && result.output) {
-      if (!inputsMap[pluginId]) {
-        inputsMap[pluginId] = {};
-      }
-      inputsMap[pluginId][runtimeId] = result.output;
+    if (!result.output) continue;
+    const slashIdx = key.indexOf('/');
+    // Single-runtime: name = "core-narrator" → pluginId = runtimeId = "core-narrator"
+    // Multi-runtime:  name = "core-world-init/schema-gen" → pluginId = "core-world-init", runtimeId = "schema-gen"
+    const pluginId = slashIdx >= 0 ? key.slice(0, slashIdx) : key;
+    const runtimeId = slashIdx >= 0 ? key.slice(slashIdx + 1) : key;
+    if (!inputsMap[pluginId]) {
+      inputsMap[pluginId] = {};
     }
+    inputsMap[pluginId][runtimeId] = result.output;
   }
 
   // Build a `world` convenience object from config.world* keys so that

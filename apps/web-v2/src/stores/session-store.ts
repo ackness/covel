@@ -6,7 +6,29 @@
 
 import { useSyncExternalStore, useCallback } from "react";
 import * as api from "@/services/api.js";
-import { applyChanges, resetPluginData } from "./plugin-data-store.js";
+import { applyChanges, resetPluginData, loadPluginData } from "./plugin-data-store.js";
+
+// ── LocalStorage Keys ───────────────────────────────────────────
+
+const LS_SESSION_ID = "covel:sessionId";
+const LS_WORLD_ID = "covel:worldId";
+
+function saveSessionToStorage(sessionId: string, worldId: string): void {
+  localStorage.setItem(LS_SESSION_ID, sessionId);
+  localStorage.setItem(LS_WORLD_ID, worldId);
+}
+
+function clearSessionStorage(): void {
+  localStorage.removeItem(LS_SESSION_ID);
+  localStorage.removeItem(LS_WORLD_ID);
+}
+
+export function getSavedSession(): { sessionId: string; worldId: string } | null {
+  const sessionId = localStorage.getItem(LS_SESSION_ID);
+  const worldId = localStorage.getItem(LS_WORLD_ID);
+  if (sessionId && worldId) return { sessionId, worldId };
+  return null;
+}
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -247,7 +269,21 @@ export async function boot() {
       api.listWorlds(),
       api.listPlugins(),
     ]);
-    update({ phase: "world-select", worlds, plugins });
+    update({ worlds, plugins });
+
+    // Check for a saved session and attempt to resume
+    const saved = getSavedSession();
+    if (saved) {
+      try {
+        await resumeSession(saved.sessionId, saved.worldId);
+        return;
+      } catch {
+        // Session no longer valid — clear and fall through to world select
+        clearSessionStorage();
+      }
+    }
+
+    update({ phase: "world-select" });
   } catch (e) {
     update({ error: (e as Error).message, phase: "world-select" });
   }
@@ -261,15 +297,18 @@ export function selectWorld(worldId: string) {
 }
 
 export function backToWorldSelect() {
-  update({ selectedWorld: null, phase: "world-select" });
+  clearSessionStorage();
+  update({ selectedWorld: null, session: null, messages: [], executionSteps: [], phase: "world-select" });
 }
 
 export async function startGame() {
   if (!state.selectedWorld) return;
   try {
+    clearSessionStorage();
     update({ error: null, executing: true });
     const session = await api.createSession(state.selectedWorld.id, state.plugins.map((p) => p.name));
     resetPluginData();
+    saveSessionToStorage(session.id, state.selectedWorld.id);
     update({ session, phase: "playing", messages: [], executionSteps: [] });
 
     // Start the game — post start_session action
@@ -282,6 +321,66 @@ export async function startGame() {
   } catch (e) {
     update({ error: (e as Error).message, executing: false });
   }
+}
+
+export async function resumeSession(sessionId: string, worldId: string) {
+  update({ error: null });
+
+  const snapshot = await api.fetchSnapshot(sessionId);
+
+  const session: api.SessionRecord = {
+    id: snapshot.session.id,
+    worldId: snapshot.session.worldId ?? worldId,
+    phase: snapshot.session.phase,
+    locale: snapshot.session.locale,
+  };
+
+  const selectedWorld = state.worlds.find((w) => w.id === worldId) ?? null;
+
+  // Convert snapshot messages to GameMessage format
+  const messages: GameMessage[] = snapshot.messages.map((m) => ({
+    id: m.id,
+    role: m.role as GameMessage["role"],
+    content: m.content,
+    turnId: m.turnId,
+    runtimeId: m.runtimeId,
+    kind: m.kind,
+    block: m.block as Record<string, unknown> | undefined,
+    timestamp: m.createdAt,
+  }));
+
+  // Restore plugin data for active plugins
+  resetPluginData();
+  const activePlugins = snapshot.plugins.filter((p) => p.isActive);
+  await Promise.all(
+    activePlugins.map(async (plugin) => {
+      try {
+        const items = await api.fetchPluginData(sessionId, plugin.id);
+        // Group by namespace and load
+        const byNs = new Map<string, Array<{ key: string; value: unknown }>>();
+        for (const item of items) {
+          const arr = byNs.get(item.namespace) ?? [];
+          arr.push({ key: item.key, value: item.value });
+          byNs.set(item.namespace, arr);
+        }
+        for (const [ns, entries] of byNs) {
+          loadPluginData(plugin.id, ns, entries);
+        }
+      } catch {
+        // Non-critical: plugin data load failure shouldn't block restore
+      }
+    }),
+  );
+
+  saveSessionToStorage(sessionId, worldId);
+  update({
+    session,
+    selectedWorld,
+    messages,
+    phase: "playing",
+    executing: false,
+    executionSteps: [],
+  });
 }
 
 export async function sendMessage(content: string) {
@@ -364,5 +463,6 @@ export function useSessionStore() {
     backToWorldSelect: useCallback(backToWorldSelect, []),
     startGame: useCallback(startGame, []),
     sendMessage: useCallback(sendMessage, []),
+    resumeSession: useCallback(resumeSession, []),
   };
 }

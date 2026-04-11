@@ -120,6 +120,31 @@ export async function listPlugins(): Promise<PluginInfo[]> {
   return res.packages;
 }
 
+// ── Session Snapshot (restore) ──────────────────────────────────
+
+export interface SnapshotResponse {
+  session: { id: string; worldId?: string; phase: string; turnCount: number; locale?: string };
+  messages: Array<{
+    id: string;
+    role: string;
+    content: string;
+    turnId?: string;
+    runtimeId?: string;
+    kind?: string;
+    block?: Record<string, unknown>;
+    createdAt: string;
+  }>;
+  characters: Array<{ id: string; name: string; type: string; description?: string; fields?: Record<string, unknown> }>;
+  gameState: Record<string, unknown>;
+  executionSteps: Array<{ type: string; turnId: string; payload: Record<string, unknown>; timestamp: string }>;
+  plugins: Array<{ id: string; name: string; isActive: boolean; priority: number }>;
+  characterSchema?: Record<string, unknown>;
+}
+
+export async function fetchSnapshot(sessionId: string): Promise<SnapshotResponse> {
+  return request<SnapshotResponse>(`/api/sessions/${sessionId}/snapshot`);
+}
+
 // ── UI Specs ─────────────────────────────────────────────────────
 
 export interface UISlotEntry {

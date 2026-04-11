@@ -32,6 +32,8 @@ import { z } from 'zod';
 import { createApprovalPipeline } from '@covel/approval';
 import type { PermissionRule } from '@covel/approval';
 
+import type { PluginDataRecord } from '@covel/store';
+
 import { sessionRoutes } from './session.js';
 import { turnRoutes } from './turn.js';
 import { pluginRoutes } from './plugins.js';
@@ -85,9 +87,12 @@ export interface ApiBootstrapResult {
  */
 export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBootstrapResult> {
   // 1. Create shared infrastructure first (eventBus needed by registry)
-  const { store } = config;
-  const stateManager = config.stateManager ?? createStateManager(store);
-  const eventBus = createEventBus(store);
+  const stateManager = config.stateManager ?? createStateManager(config.store);
+  const eventBus = createEventBus(config.store);
+
+  // Wrap store to automatically emit plugin-data.changed SSE events
+  // on every setPluginData / setPluginDataBatch call, regardless of caller.
+  const store = wrapStoreWithPluginDataEvents(config.store, eventBus);
 
   // 2. Discover plugins
   const registry = createPluginRegistry({ eventBus });
@@ -170,8 +175,8 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     builtinToolNames.add(t.name);
   }
 
-  // Register plugin-data tools (store-bound via closure, eventBus for real-time notifications)
-  for (const t of createPluginDataTools(store, eventBus)) {
+  // Register plugin-data tools (store-bound via closure; events emitted by store proxy)
+  for (const t of createPluginDataTools(store)) {
     toolMap.set(t.name, t);
     builtinToolNames.add(t.name);
   }
@@ -348,4 +353,71 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   app.route('/api/traces', traceRoutes);
 
   return { app, registry, stateManager, store, eventBus };
+}
+
+// ── Store decorator: auto-emit plugin-data.changed events ──────
+
+function emitPluginDataChangedEvent(
+  eventBus: EventBus,
+  pluginId: string,
+  sessionId: string,
+  changes: readonly { namespace: string; key: string; value: unknown; operation: 'set' }[],
+): void {
+  if (changes.length === 0) return;
+  eventBus.emit({
+    id: crypto.randomUUID(),
+    type: 'event',
+    topic: 'plugin',
+    payload: {
+      _subType: 'plugin-data.changed',
+      pluginId,
+      changes,
+    },
+    sessionId,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+function wrapStoreWithPluginDataEvents(baseStore: DataStore, eventBus: EventBus): DataStore {
+  return new Proxy(baseStore, {
+    get(target, prop, receiver) {
+      if (prop === 'setPluginData') {
+        return async (record: PluginDataRecord): Promise<void> => {
+          await target.setPluginData(record);
+          emitPluginDataChangedEvent(eventBus, record.pluginId, record.sessionId, [{
+            namespace: record.namespace,
+            key: record.key,
+            value: record.value,
+            operation: 'set',
+          }]);
+        };
+      }
+
+      if (prop === 'setPluginDataBatch') {
+        return async (records: readonly PluginDataRecord[]): Promise<void> => {
+          await target.setPluginDataBatch(records);
+          // Group by pluginId to emit one event per plugin
+          const byPlugin = new Map<string, { sessionId: string; changes: { namespace: string; key: string; value: unknown; operation: 'set' }[] }>();
+          for (const r of records) {
+            let entry = byPlugin.get(r.pluginId);
+            if (!entry) {
+              entry = { sessionId: r.sessionId, changes: [] };
+              byPlugin.set(r.pluginId, entry);
+            }
+            entry.changes.push({
+              namespace: r.namespace,
+              key: r.key,
+              value: r.value,
+              operation: 'set',
+            });
+          }
+          for (const [pluginId, { sessionId, changes }] of byPlugin) {
+            emitPluginDataChangedEvent(eventBus, pluginId, sessionId, changes);
+          }
+        };
+      }
+
+      return Reflect.get(target, prop, receiver);
+    },
+  });
 }

@@ -18,6 +18,7 @@ export type {
   ApprovalRecord,
   MessageRecord,
   CharacterRecord,
+  PluginDataRecord,
   PluginConfigRecord,
   TraceEventRecord,
   TurnMessageRecord,
