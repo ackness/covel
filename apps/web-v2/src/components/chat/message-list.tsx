@@ -51,13 +51,13 @@ function MessageRenderer({ message }: { message: GameMessage }) {
 
   const handleAction = useCallback((actionName: string, params?: Record<string, unknown>) => {
     if (actionName === "submitForm") {
-      // Collect form state and send as message
-      // The form values are in json-render's internal state at /form/*
-      // For now, trigger via a simple message
       sendMessage("(表单已提交)");
     } else if (actionName === "selectChoice") {
       const label = params?.label as string;
       if (label) sendMessage(label);
+    } else if (actionName === "selectSuggestion") {
+      const text = params?.text as string;
+      if (text) sendMessage(text);
     }
   }, []);
 
@@ -70,6 +70,7 @@ function MessageRenderer({ message }: { message: GameMessage }) {
       handlers={{
         submitForm: async (params) => handleAction("submitForm", params),
         selectChoice: async (params) => handleAction("selectChoice", params),
+        selectSuggestion: async (params) => handleAction("selectSuggestion", params),
       }}
     >
       <Renderer spec={spec} registry={covelRegistry} />

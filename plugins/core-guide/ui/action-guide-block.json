@@ -1,0 +1,58 @@
+{
+  "id": "action-guide",
+  "trigger": "action-guide",
+  "view": {
+    "component": "Card",
+    "props": { "variant": "guide" },
+    "children": [
+      {
+        "component": "Row",
+        "props": { "gap": "sm" },
+        "children": [
+          { "component": "Icon", "props": { "name": "compass", "size": "sm" } },
+          { "component": "Text", "props": { "content": { "$state": "/topic" }, "weight": "bold", "size": "sm" } }
+        ]
+      },
+      {
+        "component": "Stack",
+        "props": { "gap": "sm" },
+        "repeat": { "$state": "/categories" },
+        "children": [
+          {
+            "component": "Card",
+            "children": [
+              {
+                "component": "Row",
+                "props": { "gap": "xs" },
+                "children": [
+                  { "component": "Icon", "props": { "name": { "$bindItem": "/icon" }, "size": "xs" } },
+                  { "component": "Badge", "props": { "label": { "$bindItem": "/label" }, "color": { "$bindItem": "/color" } } }
+                ]
+              },
+              {
+                "component": "Stack",
+                "props": { "gap": "xs" },
+                "repeat": { "$bindItem": "/suggestions" },
+                "children": [
+                  {
+                    "component": "Button",
+                    "props": {
+                      "label": { "$bindItem": "" },
+                      "variant": "default"
+                    },
+                    "on": {
+                      "click": {
+                        "action": "selectSuggestion",
+                        "params": { "text": { "$bindItem": "" } }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

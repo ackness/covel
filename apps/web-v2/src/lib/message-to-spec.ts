@@ -76,6 +76,11 @@ function blockToSpec(block: Record<string, unknown>): NestedSpec | null {
     return choiceToSpec(data);
   }
 
+  // Action guide
+  if (type === "action-guide" || type === "action_guide") {
+    return actionGuideToSpec(data);
+  }
+
   // Codex discovery
   if (type === "codex-discovery" || type === "codex_entry") {
     return {
@@ -195,5 +200,70 @@ function choiceToSpec(data: Record<string, unknown>): NestedSpec {
     type: "Stack",
     props: { gap: "sm" },
     children,
+  };
+}
+
+/**
+ * Convert an action guide block to a json-render nested spec.
+ */
+function actionGuideToSpec(data: Record<string, unknown>): NestedSpec {
+  const topic = data.topic as string ?? "";
+  const categories = (data.categories ?? []) as Array<{
+    style: string;
+    label: string;
+    icon: string;
+    color: string;
+    suggestions: string[];
+  }>;
+
+  const styleColors: Record<string, string> = {
+    safe: "blue", aggressive: "red", creative: "purple", wild: "amber",
+  };
+  const styleIcons: Record<string, string> = {
+    safe: "shield", aggressive: "swords", creative: "lightbulb", wild: "flame",
+  };
+
+  const categorySpecs: NestedSpec[] = categories.map((cat) => ({
+    type: "Card",
+    children: [
+      {
+        type: "Row",
+        props: { gap: "xs" },
+        children: [
+          { type: "Icon", props: { name: cat.icon ?? styleIcons[cat.style] ?? "circle", size: "xs" } },
+          { type: "Badge", props: { label: cat.label, color: cat.color ?? styleColors[cat.style] ?? "blue" } },
+        ],
+      },
+      {
+        type: "Stack",
+        props: { gap: "xs" },
+        children: cat.suggestions.map((suggestion) => ({
+          type: "Button",
+          props: { label: suggestion, variant: "default" },
+          on: {
+            click: {
+              action: "selectSuggestion",
+              params: { text: suggestion },
+            },
+          },
+        })),
+      },
+    ],
+  }));
+
+  return {
+    type: "Stack",
+    props: { gap: "sm" },
+    children: [
+      {
+        type: "Row",
+        props: { gap: "sm" },
+        children: [
+          { type: "Icon", props: { name: "compass", size: "sm" } },
+          { type: "Text", props: { content: topic, weight: "bold", size: "sm" } },
+        ],
+      },
+      ...categorySpecs,
+    ],
   };
 }
