@@ -1,63 +1,126 @@
 /**
- * Covel v2 — Plugin-driven UI prototype.
+ * Covel v2 — Plugin-driven UI.
  *
- * This app demonstrates the decoupled plugin UI system:
- * - Right panel tabs are dynamically registered from /api/ui-specs
- * - Panel content is rendered via json-render from plugin JSON specs
- * - Plugin data flows through SSE events in real-time
+ * Full game flow: world select → session create → narrative streaming → player input
+ * Right panel: plugin-driven tabs via json-render
  */
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { Loader2 } from "lucide-react";
+import { useSessionStore } from "@/stores/session-store.js";
+import { WorldSelect } from "@/components/session/world-select.js";
+import { MessageList } from "@/components/chat/message-list.js";
+import { InputBar } from "@/components/chat/input-bar.js";
 import { RightPanel } from "@/components/panels/right-panel.js";
-import { fetchHealth } from "@/services/api.js";
 
 export function App() {
-  const [serverStatus, setServerStatus] = useState<"connecting" | "connected" | "error">("connecting");
+  const store = useSessionStore();
 
   useEffect(() => {
-    fetchHealth()
-      .then(() => setServerStatus("connected"))
-      .catch(() => setServerStatus("error"));
+    store.boot();
   }, []);
 
+  // Loading
+  if (store.phase === "loading") {
+    return (
+      <div className="h-screen flex items-center justify-center bg-white dark:bg-zinc-950">
+        <Loader2 className="w-6 h-6 text-zinc-400 animate-spin" />
+      </div>
+    );
+  }
+
+  // World select
+  if (store.phase === "world-select") {
+    return (
+      <div className="h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
+        <WorldSelect worlds={store.worlds} onSelect={store.startGame} />
+      </div>
+    );
+  }
+
+  // Playing
   return (
     <div className="h-screen flex flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
       {/* Header */}
       <header className="shrink-0 border-b border-zinc-200 dark:border-zinc-700 px-4 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h1 className="text-sm font-semibold tracking-wide">COVEL v2</h1>
-          <span className="text-[10px] text-zinc-400 uppercase tracking-widest">Plugin UI Prototype</span>
+        <div className="flex items-center gap-3">
+          <h1 className="text-sm font-semibold tracking-wide">COVEL</h1>
+          {store.session && (
+            <span className="text-[10px] text-zinc-400 font-mono">
+              {store.session.id}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          <span className={`inline-block w-2 h-2 rounded-full ${
-            serverStatus === "connected" ? "bg-emerald-500" :
-            serverStatus === "error" ? "bg-red-500" : "bg-amber-500 animate-pulse"
-          }`} />
-          <span className="text-[10px] text-zinc-500">
-            {serverStatus === "connected" ? "Server connected" :
-             serverStatus === "error" ? "Server offline" : "Connecting..."}
-          </span>
+          {store.executing && (
+            <div className="flex items-center gap-1.5 text-[10px] text-blue-500">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span>执行中...</span>
+            </div>
+          )}
+          {store.session && (
+            <span className="text-[10px] px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded">
+              {store.session.phase}
+            </span>
+          )}
         </div>
       </header>
 
       {/* Main layout */}
       <div className="flex-1 flex min-h-0">
-        {/* Left panel placeholder */}
-        <aside className="w-60 shrink-0 border-r border-zinc-200 dark:border-zinc-700 p-4">
-          <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">Plugins</h2>
-          <p className="text-[11px] text-zinc-400 italic">Plugin config will appear here</p>
-        </aside>
+        {/* Center: message area */}
+        <main className="flex-1 flex flex-col min-w-0">
+          {/* Execution steps */}
+          {store.executionSteps.length > 0 && (
+            <div className="shrink-0 border-b border-zinc-200 dark:border-zinc-700 px-4 py-2">
+              <div className="flex flex-wrap gap-2">
+                {store.executionSteps.map((step) => (
+                  <div key={step.runtimeId} className="flex items-center gap-1.5 text-[10px]">
+                    {step.status === "running" ? (
+                      <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
+                    ) : step.status === "completed" ? (
+                      <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
+                    ) : (
+                      <span className="w-3 h-3 rounded-full bg-red-500 inline-block" />
+                    )}
+                    <span className="text-zinc-500">{step.label ?? step.runtimeId}</span>
+                    {step.durationMs != null && (
+                      <span className="text-zinc-400">{(step.durationMs / 1000).toFixed(1)}s</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-        {/* Center panel placeholder */}
-        <main className="flex-1 flex items-center justify-center">
-          <div className="text-center text-zinc-400 space-y-2">
-            <p className="text-sm">Message area</p>
-            <p className="text-[11px]">Game chat and inline blocks will render here</p>
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            {store.messages.length === 0 && !store.executing ? (
+              <div className="flex items-center justify-center h-full text-zinc-400 text-sm">
+                等待游戏开始...
+              </div>
+            ) : (
+              <MessageList messages={store.messages} />
+            )}
           </div>
+
+          {/* Input */}
+          <InputBar
+            onSend={store.sendMessage}
+            disabled={store.executing}
+            placeholder={store.executing ? "等待回合结束..." : "输入你的行动..."}
+          />
+
+          {/* Error */}
+          {store.error && (
+            <div className="shrink-0 px-4 py-2 bg-red-50 dark:bg-red-900/10 text-red-600 text-xs border-t border-red-200 dark:border-red-800">
+              {store.error}
+            </div>
+          )}
         </main>
 
-        {/* Right panel — plugin-driven */}
-        <aside className="w-80 shrink-0 border-l border-zinc-200 dark:border-zinc-700">
+        {/* Right: plugin panels */}
+        <aside className="w-72 shrink-0 border-l border-zinc-200 dark:border-zinc-700">
           <RightPanel />
         </aside>
       </div>

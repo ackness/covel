@@ -11,6 +11,88 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// ── Types ────────────────────────────────────────────────────────
+
+export interface WorldRecord {
+  id: string;
+  name: string;
+  description: string;
+  tags?: string[];
+}
+
+export interface SessionRecord {
+  id: string;
+  worldId: string;
+  phase: string;
+  locale?: string;
+}
+
+// ── Health ───────────────────────────────────────────────────────
+
+export interface HealthResponse {
+  status: string;
+  storeBackend: string;
+}
+
+export async function fetchHealth(): Promise<HealthResponse> {
+  return request<HealthResponse>("/api/health");
+}
+
+// ── Worlds ───────────────────────────────────────────────────────
+
+export async function listWorlds(): Promise<WorldRecord[]> {
+  const res = await request<{ items: WorldRecord[] }>("/api/worlds");
+  return res.items;
+}
+
+// ── Sessions ─────────────────────────────────────────────────────
+
+export async function createSession(worldId: string, plugins: string[]): Promise<SessionRecord> {
+  return request<SessionRecord>("/api/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ worldId, plugins, locale: "zh-CN" }),
+  });
+}
+
+// ── Actions (SSE) ────────────────────────────────────────────────
+
+export interface ActionPayload {
+  type: "start_session" | "player_action";
+  sessionId: string;
+  playerMessage?: string;
+  locale?: string;
+}
+
+/**
+ * Post an action and return the SSE stream response.
+ * Caller is responsible for reading the stream.
+ */
+export async function postAction(payload: ActionPayload): Promise<Response> {
+  const res = await fetch("/api/actions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Action failed ${res.status}: ${body}`);
+  }
+  return res;
+}
+
+// ── Plugins ──────────────────────────────────────────────────────
+
+export interface PluginInfo {
+  name: string;
+  displayName: string;
+}
+
+export async function listPlugins(): Promise<PluginInfo[]> {
+  const res = await request<{ packages: PluginInfo[] }>("/api/packages");
+  return res.packages;
+}
+
 // ── UI Specs ─────────────────────────────────────────────────────
 
 export interface UISlotEntry {
@@ -26,17 +108,6 @@ export interface UISpecsResponse {
 
 export async function fetchUiSpecs(): Promise<UISpecsResponse> {
   return request<UISpecsResponse>("/api/ui-specs");
-}
-
-// ── Health ───────────────────────────────────────────────────────
-
-export interface HealthResponse {
-  status: string;
-  storeBackend: string;
-}
-
-export async function fetchHealth(): Promise<HealthResponse> {
-  return request<HealthResponse>("/api/health");
 }
 
 // ── Plugin Data ──────────────────────────────────────────────────
