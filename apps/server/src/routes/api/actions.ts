@@ -14,15 +14,8 @@ import { executeTurn, processRuntimeResult, createTraceRecorder } from '@covel/r
 import type { RuntimeManifest } from '@covel/shared';
 import { loadSessionConfig } from './load-session-config.js';
 
-// Map SessionEvent types to legacy SSE event types for backward compatibility with frontend
-const SESSION_EVENT_TO_SSE: Record<string, string> = {
-  'narrative.completed': 'message.completed',
-  'interaction.requested': 'block.emitted',
-  'state.changed': 'state.patch.applied',
-  'phase.changed': 'phase_change',
-  'event.emitted': 'event.emitted',
-  'record.updated': 'record.updated',
-};
+// SSE uses ProtocolEventType names directly — no legacy mapping.
+// Frontend handleSseEvent handles these standard types.
 
 type Env = {
   Variables: {
@@ -146,13 +139,13 @@ actionRoutes.post('/', async (c) => {
       // Create trace recorder for this turn (persists all lifecycle events to DB)
       const trace = createTraceRecorder(store, sessionId, turnId);
 
-      // Emit phase change
-      await stream.writeSSE({ data: JSON.stringify(makeEnvelope('phase_change', { phase: 'playing' })) });
+      // Emit phase change (protocol: phase.changed)
+      await stream.writeSSE({ data: JSON.stringify(makeEnvelope('phase.changed', { phase: 'playing' })) });
 
-      // Emit runtime progress: starting
+      // Emit execution started (protocol: execution.started)
       await trace.turnStarted({ runtimeCount: activeRuntimes.length });
       await stream.writeSSE({
-        data: JSON.stringify(makeEnvelope('runtime.progress', {
+        data: JSON.stringify(makeEnvelope('execution.started', {
           status: 'executing',
           runtimeCount: activeRuntimes.length,
         })),
@@ -176,7 +169,7 @@ actionRoutes.post('/', async (c) => {
           resolveModel,
           onDelta: async (delta) => {
             await stream.writeSSE({
-              data: JSON.stringify(makeEnvelope('message.delta', {
+              data: JSON.stringify(makeEnvelope('narrative.delta', {
                 runtimeId: delta.runtimeId,
                 pluginId: delta.pluginId,
                 kind: outputKindMap.get(delta.runtimeId) ?? 'plugin',
@@ -187,8 +180,7 @@ actionRoutes.post('/', async (c) => {
           onRuntimeStart: async (info) => {
             await trace.runtimeStarted({ runtimeId: info.runtimeId, pluginId: info.pluginId, priority: info.priority });
             await stream.writeSSE({
-              data: JSON.stringify(makeEnvelope('runtime.progress', {
-                status: 'started',
+              data: JSON.stringify(makeEnvelope('runtime.started', {
                 runtimeId: info.runtimeId,
                 pluginId: info.pluginId,
                 label: info.pluginId + '/' + (outputKindMap.get(info.runtimeId) ?? 'plugin'),
@@ -198,8 +190,7 @@ actionRoutes.post('/', async (c) => {
           onRuntimeComplete: async (info) => {
             await trace.runtimeCompleted({ runtimeId: info.runtimeId, pluginId: info.pluginId, status: info.status, durationMs: info.durationMs });
             await stream.writeSSE({
-              data: JSON.stringify(makeEnvelope('runtime.progress', {
-                status: 'completed',
+              data: JSON.stringify(makeEnvelope('runtime.completed', {
                 runtimeId: info.runtimeId,
                 pluginId: info.pluginId,
                 durationMs: info.durationMs,
@@ -222,24 +213,15 @@ actionRoutes.post('/', async (c) => {
         const events = await processRuntimeResult(rr, store, sessionId, kind);
 
         for (const evt of events) {
-          // Map SessionEvent types to SSE envelope types for backward compatibility
-          const sseType = SESSION_EVENT_TO_SSE[evt.type] ?? evt.type;
-
-          // Adapt payload shape per event type to match frontend expectations
-          let ssePayload: Record<string, unknown>;
-          if (evt.type === 'interaction.requested') {
-            // Frontend expects { block: { id, type, data, meta } }
-            ssePayload = { block: evt.payload.block };
-          } else {
-            ssePayload = {
-              ...evt.payload,
-              runtimeId: evt.source.runtimeId,
-              pluginId: evt.source.pluginId,
-            };
-          }
+          // Emit using ProtocolEventType directly — no legacy mapping
+          const ssePayload: Record<string, unknown> = {
+            ...evt.payload,
+            runtimeId: evt.source.runtimeId,
+            pluginId: evt.source.pluginId,
+          };
 
           await stream.writeSSE({
-            data: JSON.stringify(makeEnvelope(sseType, ssePayload)),
+            data: JSON.stringify(makeEnvelope(evt.type, ssePayload)),
           });
         }
       }
@@ -247,8 +229,7 @@ actionRoutes.post('/', async (c) => {
       // Emit runtime progress: complete + persist trace
       await trace.turnCompleted({ durationMs: result.durationMs, resultCount: result.runtimeResults.length });
       await stream.writeSSE({
-        data: JSON.stringify(makeEnvelope('runtime.progress', {
-          status: 'completed',
+        data: JSON.stringify(makeEnvelope('execution.completed', {
           runtimeCount: activeRuntimes.length,
           resultCount: result.runtimeResults.length,
           durationMs: result.durationMs,
@@ -257,7 +238,7 @@ actionRoutes.post('/', async (c) => {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await stream.writeSSE({
-        data: JSON.stringify(makeEnvelope('error', { message })),
+        data: JSON.stringify(makeEnvelope('error.occurred', { message })),
       });
     }
   });

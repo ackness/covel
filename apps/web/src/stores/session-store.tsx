@@ -400,13 +400,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // Single handler for ALL in-turn data updates. Every piece of UI state
   // is updated through this handler during turn execution:
   //
-  //   Narrative:  message.delta → message.completed → block.emitted
-  //   State:      state.patch.applied → gameState deep-merge
+  //   Narrative:  narrative.delta → narrative.completed → interaction.requested
+  //   State:      state.changed → gameState deep-merge
   //   Events:     event.emitted → gameState.events
   //   Records:    record.updated → gameState.records
-  //   Phase:      phase_change → session phase
-  //   Execution:  runtime.progress → execution timeline
-  //   Lifecycle:  flow.completed / flow.failed
+  //   Phase:      phase.changed → session phase
+  //   Execution:  execution.started → runtime.started → runtime.completed → execution.completed
+  //   Error:      error.occurred
   //
   const handleSseEvent = useCallback((envelope: api.SseEnvelope) => {
     const { type, payload, turnId } = envelope;
@@ -419,6 +419,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
 
     switch (type) {
+      // ── Narrative events ──────────────────────────────────────
+      case "narrative.delta":
       case "message.delta": {
         const delta = (payload.delta as string) ?? "";
         const runtimeId = (payload.runtimeId as string) ?? "unknown";
@@ -446,6 +448,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
         break;
       }
+      case "narrative.completed":
       case "message.completed": {
         // When streaming is active, message.completed duplicates streamed content.
         // Dispatch a deduplicated action — the reducer checks for existing stream messages.
@@ -487,6 +490,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
         break;
       }
+      // ── Interaction events ────────────────────────────────────
+      case "interaction.requested":
       case "block.emitted": {
         const block = payload.block as Record<string, unknown>;
         if (block) {
@@ -519,6 +524,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
         break;
       }
+      // ── State events ─────────────────────────────────────────
+      case "state.changed":
       case "state.patch.applied": {
         // Session Kernel sends: { table, field, value, runtimeId, pluginId }
         // Legacy format: { patch: { id, summary, packageName, data } }
@@ -560,6 +567,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
         break;
       }
+      // ── Session lifecycle events ─────────────────────────────
+      case "phase.changed":
       case "phase_change": {
         const phase = payload.phase as api.SessionPhase;
         if (phase) {
@@ -572,8 +581,66 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
         break;
       }
+      // ── Execution lifecycle events ───────────────────────────
+      case "execution.started": {
+        // Turn-level execution started
+        dispatch({ type: "ADD_EXECUTION_STEP", step: {
+          type: "runtime.started",
+          runtimeId: "__turn__",
+          pluginId: "",
+          detail: `${payload.runtimeCount ?? 0} runtimes`,
+          timestamp: envelope.timestamp,
+          turnId,
+        }});
+        break;
+      }
+      case "runtime.started": {
+        const step: ExecutionStep = {
+          type: "runtime.started",
+          runtimeId: (payload.runtimeId as string) ?? "unknown",
+          pluginId: (payload.pluginId as string) ?? "",
+          label: payload.label as string | undefined,
+          timestamp: envelope.timestamp,
+          turnId,
+        };
+        // Track runtime kind from label (format: "pluginId/kind")
+        if (step.label) {
+          const slashIdx = step.label.indexOf("/");
+          if (slashIdx >= 0) {
+            runtimeKindRef.current.set(step.runtimeId, step.label.slice(slashIdx + 1));
+          }
+        }
+        dispatch({ type: "ADD_EXECUTION_STEP", step });
+        break;
+      }
+      case "runtime.completed": {
+        dispatch({ type: "ADD_EXECUTION_STEP", step: {
+          type: "runtime.completed",
+          runtimeId: (payload.runtimeId as string) ?? "unknown",
+          pluginId: (payload.pluginId as string) ?? "",
+          detail: payload.durationMs != null ? `${payload.durationMs}ms` : undefined,
+          timestamp: envelope.timestamp,
+          turnId,
+        }});
+        break;
+      }
+      case "runtime.failed": {
+        dispatch({ type: "ADD_EXECUTION_STEP", step: {
+          type: "runtime.failed",
+          runtimeId: (payload.runtimeId as string) ?? "unknown",
+          pluginId: (payload.pluginId as string) ?? "",
+          detail: payload.error as string | undefined,
+          timestamp: envelope.timestamp,
+          turnId,
+        }});
+        break;
+      }
+      case "execution.completed": {
+        dispatch({ type: "SET_EXECUTING", value: false });
+        break;
+      }
+      // Legacy compat — remove once all servers emit protocol types
       case "runtime.progress": {
-        // Server sends `status` ("started"/"completed"/"executing"), map to ExecutionStep type
         const statusToType: Record<string, ExecutionStep["type"]> = {
           started: "runtime.started",
           completed: "runtime.completed",
@@ -582,23 +649,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           executing: "runtime.started",
         };
         const stepType = statusToType[payload.status as string] ?? (payload.type as ExecutionStep["type"]);
-        const step: ExecutionStep = {
-          type: stepType,
-          runtimeId: payload.runtimeId as string,
-          pluginId: payload.pluginId as string,
-          label: payload.label as string | undefined,
-          detail: payload.detail as string | undefined,
-          timestamp: envelope.timestamp,
-          turnId,
-        };
-        // Track runtime kind from runtime.started label (format: "pluginId/kind")
-        if (step.type === "runtime.started" && step.label) {
-          const slashIdx = step.label.indexOf("/");
-          if (slashIdx >= 0) {
-            runtimeKindRef.current.set(step.runtimeId, step.label.slice(slashIdx + 1));
+        if (stepType) {
+          const step: ExecutionStep = {
+            type: stepType,
+            runtimeId: (payload.runtimeId as string) ?? "__turn__",
+            pluginId: (payload.pluginId as string) ?? "",
+            label: payload.label as string | undefined,
+            detail: payload.durationMs != null ? `${payload.durationMs}ms` : undefined,
+            timestamp: envelope.timestamp,
+            turnId,
+          };
+          if (step.type === "runtime.started" && step.label) {
+            const slashIdx = step.label.indexOf("/");
+            if (slashIdx >= 0) {
+              runtimeKindRef.current.set(step.runtimeId, step.label.slice(slashIdx + 1));
+            }
           }
+          dispatch({ type: "ADD_EXECUTION_STEP", step });
         }
-        dispatch({ type: "ADD_EXECUTION_STEP", step });
         break;
       }
       case "event.emitted": {
@@ -646,11 +714,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
         break;
       }
+      // ── Error events ──────────────────────────────────────────
+      case "error.occurred":
       case "flow.failed": {
         dispatch({ type: "SET_EXECUTION_ERROR", error: (payload.message as string) ?? "Execution failed" });
         dispatch({ type: "SET_EXECUTING", value: false });
         break;
       }
+      // Legacy compat
       case "flow.completed": {
         dispatch({ type: "SET_EXECUTING", value: false });
         break;
