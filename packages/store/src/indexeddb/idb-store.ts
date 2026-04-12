@@ -458,8 +458,15 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
       if (idbSnapshot === null) {
         throw new Error('IdbStore: rollbackTx called without an active transaction');
       }
-      await restoreIdbSnapshot(idbSnapshot);
-      idbSnapshot = null;
+      // Clear the snapshot reference in finally: if restoreIdbSnapshot throws
+      // mid-refill the store is in a half-restored state, but the next beginTx
+      // must still be able to recover rather than see a stale "tx active" flag.
+      const snapshot = idbSnapshot;
+      try {
+        await restoreIdbSnapshot(snapshot);
+      } finally {
+        idbSnapshot = null;
+      }
     },
 
     // ── Lifecycle ──

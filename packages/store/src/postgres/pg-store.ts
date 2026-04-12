@@ -30,6 +30,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
 } from '../types.js';
+import { createPgTxAdapter } from './pg-store-tx.js';
 import {
   CREATE_TABLES_SQL,
   DROP_ALL_SQL,
@@ -73,29 +74,12 @@ export async function createPgStore(
   // Create tables (idempotent)
   await client.unsafe(CREATE_TABLES_SQL);
 
-  // ── Transaction state (S4-T1) ──
-  //
-  // postgres.js is a connection pool, so a bare `unsafe('BEGIN')` does not
-  // bind to a specific connection. Drizzle's own `db.transaction(async (tx)
-  // => ...)` API handles reservation + BEGIN/COMMIT/ROLLBACK correctly, but
-  // it is callback-shaped. To adapt that to the imperative beginTx / commitTx
-  // / rollbackTx contract, we spawn `pooledDb.transaction` in the background
-  // and gate its completion on a manually-resolved promise. `commitTx()`
-  // resolves the gate (the callback returns cleanly → drizzle commits);
-  // `rollbackTx()` rejects it with a sentinel error (the callback throws →
-  // drizzle issues ROLLBACK and rethrows, we swallow the sentinel).
-  //
-  // While a tx is active, `db` points at the drizzle transaction handle so
-  // every write method routes through the transaction.
-  const ROLLBACK_SENTINEL = Symbol('covel-pg-rollback');
-  let activeTx:
-    | {
-        readonly done: Promise<void>;
-        resolveGate: () => void;
-        rejectGate: (err: unknown) => void;
-      }
-    | null = null;
+  // Mutable "current db" handle. Outside a transaction this is the pool-bound
+  // drizzle instance; inside one the tx adapter swaps it for the drizzle tx
+  // handle so every data method below routes through the active transaction.
+  // See pg-store-tx.ts for the callback → imperative adapter details.
   let db: typeof pooledDb = pooledDb;
+  const txAdapter = createPgTxAdapter({ pooledDb, setDb: (next) => { db = next; } });
 
   return {
     // ── Session ──────────────────────────────────────────────
@@ -795,98 +779,16 @@ export async function createPgStore(
     },
 
     // ── Transactions (S4-T1) ──────────────────────────────────
+    // See pg-store-tx.ts for the callback-to-imperative adapter.
 
-    async beginTx(): Promise<void> {
-      if (activeTx !== null) {
-        throw new Error('PgStore: nested transactions are not supported (beginTx called while another tx is active)');
-      }
-
-      // Gate that the drizzle transaction callback awaits. Resolving it lets
-      // the callback return cleanly (→ drizzle COMMITs). Rejecting it with
-      // the sentinel makes the callback throw (→ drizzle ROLLBACKs).
-      let resolveGate!: () => void;
-      let rejectGate!: (err: unknown) => void;
-      const gate = new Promise<void>((resolve, reject) => {
-        resolveGate = resolve;
-        rejectGate = reject;
-      });
-
-      // Promise that resolves once the tx callback has installed the
-      // tx-scoped db handle. beginTx waits on this before returning so
-      // callers see a ready tx state.
-      let resolveReady!: () => void;
-      const ready = new Promise<void>((resolve) => {
-        resolveReady = resolve;
-      });
-
-      const done = pooledDb
-        .transaction(async (tx) => {
-          db = tx as unknown as typeof pooledDb;
-          resolveReady();
-          await gate;
-        })
-        .then(
-          () => undefined,
-          (err) => {
-            // Rollback sentinel is expected — swallow it.
-            if (
-              err &&
-              typeof err === 'object' &&
-              (err as { _covelRollback?: symbol })._covelRollback === ROLLBACK_SENTINEL
-            ) {
-              return undefined;
-            }
-            throw err;
-          },
-        )
-        .finally(() => {
-          db = pooledDb;
-          activeTx = null;
-        });
-
-      activeTx = { done, resolveGate, rejectGate };
-
-      // If the tx setup itself fails before ready resolves, surface that error.
-      await Promise.race([
-        ready,
-        done.then(() => {
-          throw new Error('PgStore: transaction ended before beginTx completed');
-        }),
-      ]);
-    },
-
-    async commitTx(): Promise<void> {
-      if (activeTx === null) {
-        throw new Error('PgStore: commitTx called without an active transaction');
-      }
-      const tx = activeTx;
-      tx.resolveGate();
-      await tx.done;
-    },
-
-    async rollbackTx(): Promise<void> {
-      if (activeTx === null) {
-        throw new Error('PgStore: rollbackTx called without an active transaction');
-      }
-      const tx = activeTx;
-      tx.rejectGate({ _covelRollback: ROLLBACK_SENTINEL, message: 'covel rollback' });
-      await tx.done;
-    },
+    beginTx: txAdapter.beginTx,
+    commitTx: txAdapter.commitTx,
+    rollbackTx: txAdapter.rollbackTx,
 
     // ── Lifecycle ────────────────────────────────────────────
 
     async close(): Promise<void> {
-      if (activeTx !== null) {
-        // Best-effort rollback of any in-flight tx so we don't leak the
-        // reserved connection when the store is closed mid-transaction.
-        const tx = activeTx;
-        try {
-          tx.rejectGate({ _covelRollback: ROLLBACK_SENTINEL, message: 'covel rollback (close)' });
-          await tx.done;
-        } catch {
-          // ignore
-        }
-      }
+      await txAdapter.closeActiveTx();
       await client.end();
     },
   };

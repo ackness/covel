@@ -823,16 +823,24 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
       if (!txActive) {
         throw new Error('SqliteStore: commitTx called without an active transaction');
       }
-      sqlite.exec('COMMIT');
-      txActive = false;
+      // Reset the flag in finally so a throwing COMMIT still clears state;
+      // the next beginTx can then recover instead of reporting a phantom active tx.
+      try {
+        sqlite.exec('COMMIT');
+      } finally {
+        txActive = false;
+      }
     },
 
     async rollbackTx(): Promise<void> {
       if (!txActive) {
         throw new Error('SqliteStore: rollbackTx called without an active transaction');
       }
-      sqlite.exec('ROLLBACK');
-      txActive = false;
+      try {
+        sqlite.exec('ROLLBACK');
+      } finally {
+        txActive = false;
+      }
     },
 
     // ── Lifecycle ────────────────────────────────────────────
