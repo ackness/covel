@@ -113,7 +113,9 @@ export type ProtocolEventType =
   | 'connection.restored'
   // Suspend / Resume (S4-T4)
   | 'turn.suspended'
-  | 'turn.resumed';
+  | 'turn.resumed'
+  // Snapshot / Fork (S4-T2)
+  | 'session.forked';
 
 export interface ProtocolEvent {
   readonly id: string;
