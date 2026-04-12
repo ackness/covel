@@ -240,6 +240,232 @@
 
 ---
 
+## 七、测试分层策略（新增）
+
+> 文档前身完全没讨论测试策略，而"测试慢且不稳"是用户最常抱怨的痛点之一。本节确立 Covel 的测试分层矩阵，并明确**不引入全局 aimock**的理由。
+
+### 7.1 现状事实核对（2026-04-13 盘点）
+
+| 层 | 文件 | 是否打网络 | 默认 `pnpm test` 是否跑 |
+|---|---|---|---|
+| 单元/集成（85 测试） | `packages/**/tests/*.test.ts`、`apps/server/tests/api/*.test.ts` | ❌ 全部走 `MockLLM` / stub adapter | ✅ 跑，<10 s |
+| Live opt-in | `packages/ai-provider/tests/live/{deepseek,dashscope,image-generation}.test.ts` | ✅ 真实 LLM | ❌ `describe.skipIf(!LIVE_LLM_ENABLED)` 默认跳过 |
+| 手动脚本 | `scripts/test-real-llm.ts`、`scripts/test-full-3plugins.ts`、`scripts/long-session-50turns.ts` | 视脚本而定 | ❌ 不在 turbo 任务中 |
+| Playwright E2E | `tests/e2e/*.spec.ts`（`pnpm e2e:docker`） | ✅ 后端通过 Docker 连真 LLM | ❌ 单独命令，非默认 |
+
+**核心结论**：默认 `pnpm test` **已经快且稳**，`MockLLM` 足够覆盖业务逻辑。真正慢/不稳的是 **E2E Playwright 的后端调用真 provider**。
+
+### 7.2 分层矩阵（决策版）
+
+| 层 | 用途 | Backend | 触发 | 位置 |
+|---|---|---|---|---|
+| **fake/unit** | 编排、状态机、schema、pipeline、prompt 组装 | `MockLLM` via `@covel/plugin-test-utils` | `pnpm test` | 各包 `tests/` |
+| **replay**（新增） | provider HTTP 序列化、`cache_control` 注入、流式分片、fallback | 本地 record/replay fixture | `pnpm test:replay` | `packages/ai-provider/tests/replay/` |
+| **live opt-in** | 供应商漂移、真实响应格式、pricing 校准 | 真 LLM | `LIVE_LLM_ENABLED=1` | `packages/ai-provider/tests/live/` |
+| **e2e-fake** | 全栈用户流（web-v2 + server + store） | Docker + 注入 `COVEL_FAKE_LLM=1` | `pnpm e2e` | `tests/e2e/` |
+| **e2e-live** | 冒烟（release gate） | Docker + 真 LLM | `pnpm e2e:docker` + `.env.llm` | `tests/e2e/` |
+
+### 7.3 关于 aimock 的明确判断
+
+**不引入全局 aimock**。理由：
+
+1. `@covel/plugin-test-utils` 已提供 `MockLLM` 同等能力，业务逻辑测试没有 HTTP 边界可回放。
+2. 真正需要"回放"的只有 provider adapter 层（Anthropic `cache_control` 头、OpenAI function_calling 序列化、DeepSeek/Qwen 流式分片），范围极小。
+3. 引入第三方 record/replay 库会增加 CI 启动开销与依赖表面积，对 80% 的测试无收益。
+4. Covel 自有的 provider `baseUrl` 切换（`validateBaseUrl`、`COVEL_ALLOWED_LLM_HOSTS`）足以把 replay 测试指向本地 HTTP stub server，无需外部 runtime。
+
+**代替方案**：新建 `packages/ai-provider/tests/replay/` 子目录，使用 vitest + 内置 `MockAgent`（undici）或 `msw/node`，fixture 采用 JSON 文件（首次录制后人工校对入库）。
+
+### 7.4 需要补的测试（绑定到剩余 ticket）
+
+| 目标 | 覆盖 ticket | 产物 |
+|---|---|---|
+| Anthropic `cache_control` 4 breakpoint 注入 | S2-T3 | `tests/replay/anthropic-cache.test.ts` |
+| OpenAI / DeepSeek / Qwen 自动前缀缓存（无改动） | S2-T3 | `tests/replay/auto-prefix.test.ts`（断言请求体不变） |
+| 流式异常 → non-stream fallback | S1-T3 补测 | `tests/replay/stream-interrupt.test.ts` |
+| Compactor 在长 session 下只调 1 次 fast slot | S2-T2 已覆盖 | 扩展既有 `compactor.test.ts` |
+| Suspend 序列化 → 反序列化 round-trip | S4-T4 补测 | `packages/runtime/tests/suspend-roundtrip.test.ts` |
+| `COVEL_FAKE_LLM=1` 的后端注入开关 | 新基建 | `apps/server/src/ai/fake-provider.ts` + 端到端 smoke |
+
+### 7.5 验收门槛
+
+- `pnpm test` 总时长 ≤ 15 s，覆盖率 ≥ 80%
+- `pnpm test:replay` 总时长 ≤ 30 s，零网络
+- `pnpm e2e`（FAKE 模式）在 CI 上稳定 green，总时长 ≤ 3 min
+- `pnpm e2e:docker`（真 LLM）只在 release pre-check 跑
+
+---
+
+## 八、Sprint 进度账本（progress ledger）
+
+> **硬规则**：每个 ticket 合并时必须在同一 PR 更新此账本。此区块是 session 失忆时的唯一 ground truth。
+
+**最后更新**：2026-04-13（由 `main @ f5540cf` 对照生成）
+
+### 8.1 状态图例
+- ✅ merged to main
+- 🔧 in review / rebase
+- ⏳ not started
+- 🚧 blocked（见下方 fix queue）
+
+### 8.2 Sprint 完成度
+
+**Sprint 1 — "不崩" 地基** — 5/5 ✅
+
+| 票号 | 状态 | 备注 |
+|---|---|---|
+| S1-T1 Tokenizer 基础设施 | ✅ `7f795e0` | — |
+| S1-T2 Context budget + Pruning | ✅ `a5e1b42` | — |
+| S1-T3 LLM 重试 + 流式兜底 | ✅ `63d0fc6` | P3: stream-interrupt replay 测试待补 |
+| S1-T4 Scheduler 死代码清理 | ✅ `4e8251d` | — |
+| S1-T5 长 session 压测脚本 | ✅ `d80c08c` + `16e916c` + `1e1bf29` | — |
+
+**Sprint 2 — Prompt 三段式 + Compactor + Cache** — 2/5
+
+| 票号 | 状态 | 备注 |
+|---|---|---|
+| S2-T1 三段式 Prompt assembler | ✅ `df820eb` | 段 1/3/5/7 完成，段 8/9/10 在 S3-T4 |
+| S2-T2 Compactor + `session_summaries` | ✅ `cca779c` | I4: prompt 未外部化，待 §七.4 决策 |
+| S2-T3 Prompt cache 抽象 + Anthropic | ⏳ | 对接 §七.4 的 replay 测试 |
+| S2-T4 core-narrator + core-guide 迁 V2 | ⏳ | 依赖 S2-T3 |
+| S2-T5 `prompt-structure.md` 文档 | ⏳ | 依赖 S2-T1/T3/T4 |
+
+**Sprint 3 — Lorebook + Working Memory + Author's Note** — 2/6
+
+| 票号 | 状态 | 备注 |
+|---|---|---|
+| S3-T1 Lorebook 核心 | ✅ `4dec3b5` | — |
+| S3-T2 core-world-init 迁 Lorebook | ⏳ | **与 S3-T5 冲突**：拆分见 §九.5 |
+| S3-T3 Working Memory 表 + 段 2 | ✅ `916cba6` | **🚧 B1**：`turn-executor.ts:940` WM 未 inject 到 context |
+| S3-T4 段 9/10 Author's Note + Post-History | ⏳ | 纯 prompt-assembler 扩展 |
+| S3-T5 其余 core 插件 V2 迁移 | ⏳ | **拆分**：5a(codex+char-creator) + 5b(world-init 合并到 S3-T2) |
+| S3-T6 Lorebook 玩家 UI | ⏳ | 在 `apps/web-v2/` |
+
+**Sprint 4 — 稳健性** — 3/5
+
+| 票号 | 状态 | 备注 |
+|---|---|---|
+| S4-T1 Commit 事务 | ✅ `e942fce` + `ce56048` | — |
+| S4-T2 Snapshot + Fork API | ⏳ | **依赖 S3-T3**（`SnapshotPayload.workingMemory`） |
+| S4-T3 Hook lifecycle pipeline | ✅ `c0bb9ed` + `627787d` + `87ed8d8` | — |
+| S4-T4 Suspend/Resume 原语 | ✅ `f5540cf` + `07c5fd6` (M4) | — |
+| S4-T5 SSE 协议扩展 + 文档同步 | ⏳ | 依赖 S4-T2 完成（`session.forked` 事件） |
+
+**Sprint 5 — 生态长尾** — 0/5 ⏳
+
+全部未启动（S5-T1..T5）。
+
+### 8.3 Fix queue
+
+**Wave 2 发现的 8 项已全部在 Wave 0 清空（2026-04-13）**：
+
+| 编号 | 严重度 | 位置 | 修复 commit | 备注 |
+|---|---|---|---|---|
+| **B1** | BLOCKER | `packages/runtime/src/turn-executor.ts` | `fe0264d` → merge `8e65a75` | `listWorkingMemory()` probe-then-call，`COVEL_WORKING_MEMORY_V1` 控制段 2 注入；3 个新注入测试 |
+| **B2** | BLOCKER | `apps/server` vitest workspace | 无代码改动 | 合并后重现，`pnpm install` 即恢复。**根因**：stale node_modules/workspace symlink。已记入 §八.5 |
+| **I1** | IMPORTANT | `CLAUDE.md` | `5b26cea` → merge `6a52728` | 18 → 20 tables，列表补 `session_summaries` / `suspensions` |
+| **I2** | IMPORTANT | `docs/reference/protocol.md` | `5b26cea` | 补 `turn.suspended` / `turn.resumed`。**重要发现**：`working_memory.changed` / `context.compacted` 实为 KernelEvent / trace-only，**不在** `ProtocolEventType`——已标注"kernel-only"。promote 到 SSE 是否必要 → 见 §八.6 follow-up |
+| **I3** | IMPORTANT | `docs/reference/api.md` | `5b26cea` | 补 resume / suspensions 3 个路由 |
+| **I4** | IMPORTANT | `packages/context/src/compactor.ts` | `a069c34` → merge `ee6db4d` | 新增 `packages/context/src/prompts-loader.ts`（`loadPrompt` + `interpolate`，此前整个仓库仅在 CLAUDE.md 有规范未实现）；compactor 改走 `loadPrompt('server','compactor',locale)`；md 文件以 inline 为 ground truth 重写；4 个新外部化测试 |
+| **I5** | IMPORTANT | `docs/reference/tools.md` | `5b26cea` | 补 `suspend` builtin + `working_memory.set` proposal + 完整 11 项 ProposalType 列表 |
+| **M4** | MINOR | `apps/server/src/routes/api/resume.ts` | `0afe002` → merge `07c5fd6` | `GET /suspensions` flag off → 503，对齐兄弟路由格式 |
+
+**Wave 0 验证**：`pnpm test` 20/20 包绿，`pnpm lint` 16/16 包绿。
+
+### 8.4 Progress ledger 更新规则
+
+1. 每个 ticket 合并时在 `feat:...` commit 中同时修改 §八.2 对应行：`⏳` → `✅ <short-sha>`
+2. 每次 unified review 结束时把发现清单追加到 §八.3
+3. Fix queue 清空时把 §八.3 归档到 `devs/docs/insights/fix-queue-archive/YYYY-MM-DD.md`
+4. CI gate：PR 若改动 `packages/`、`apps/server/` 但未修改本文档的 §八.2 视为未完成（后续加 danger.js / github action）
+
+### 8.5 Wave 0 经验教训（供 Wave A 及后续参考）
+
+1. **合并后必须 `pnpm install`**：多个 worktree 平行开发 + 后合并时，pnpm workspace symlink 会漂移。Stream B 在 `.worktrees/server-test-fix` 里测试原本就绿（所以报告 B2 无需修复），但 4 个 branch 合到 main 后 `apps/server` 测试报 `Cannot find package '@covel/context'`——root cause 是 main worktree 的 `node_modules` 未刷新，而非代码问题。`pnpm install` 后立刻 103/103 绿。**下一个 wave 合并完成务必先 `pnpm install` 再跑测试**。
+2. **同一文件的多 branch 修改不会冲突但会漂移**：`packages/context/src/index.ts` 被 Stream A（export `WorkingMemoryEntry`）和 Stream D（export `loadPrompt` / `interpolate`）同时修改，`git merge` 自动合并成功。验证合并结果仍然 tsc 干净即可。
+3. **"worktree 里绿"不等于"merge 后绿"**：Stream B 报告 B2 无需修复是**真实**的——它的 worktree 自包含，但一旦换 host worktree 就可能再现。Wave 的 unified review 必须以 main 为准，不能信 stream self-report。
+4. **跨 worktree 搭脚手架**：`apps/web/src/routeTree.gen.ts` 是 gitignore 的生成产物，worktree install 后需要从主 worktree 复制（已在每个 stream prompt 里说明，实际执行 OK）。
+
+### 8.6 Wave 0 发现的 follow-up（非阻塞）
+
+| 编号 | 说明 | 触发 ticket |
+|---|---|---|
+| FU-1 | **`working_memory.changed` / `context.compacted` → SSE 提升**？当前只是 KernelEvent / trace。若要前端实时反应 WM 与压缩事件，需把这 2 个字符串加入 `packages/shared/src/types/protocol.ts` 的 `ProtocolEventType` union 并接入 SSE forwarder。**决策点**：前端是否真的需要实时感知？如果是——在 Wave A 的 S4-T2 或 S3-T4 顺手做（+5 行）。如果否——更新 §七文档标注为 "kernel-internal by design" 即可 |
+| FU-2 | **Compactor locale 管道**：I4 修复把 locale 参数留在 `maybeCompact()` 签名上，但 `CompactorRunner.run()` 还没 plumbing session locale。需扩展 runner 签名从 session context 提取 locale。半天工作量，可顺手并入 Wave A 的 S2-T3（反正 S2-T3 要动 compactor）|
+| FU-3 | **loadPrompt 推广**：`apps/server/src/routes/api/ai.ts`（generate-world / extract-dimensions）仍然内联 TS template literal。Wave 0-D 创建的 `loadPrompt` 第一次真正可用，这些 server 路由 prompt 都可以迁移。非阻塞，可作为 Sprint 5 清理票 |
+
+### 8.4 Progress ledger 更新规则
+
+1. 每个 ticket 合并时在 `feat:...` commit 中同时修改 §八.2 对应行：`⏳` → `✅ <short-sha>`
+2. 每次 unified review 结束时把发现清单追加到 §八.3
+3. Fix queue 清空时把 §八.3 归档到 `devs/docs/insights/fix-queue-archive/YYYY-MM-DD.md`
+4. CI gate：PR 若改动 `packages/`、`apps/server/` 但未修改本文档的 §八.2 视为未完成（后续加 danger.js / github action）
+
+---
+
+## 九、并行 Wave 调度图（parallel waves）
+
+> 补齐规划缺的"哪些 ticket 可以并行"指引。规则：wave 内 ticket 完全独立；wave 之间严格串行；每个 wave 结束汇合到 main 做统一 review。
+
+### 9.1 前置：清 Fix queue
+
+**Wave 0（必须最先做）**：
+
+| Stream | 任务 | 工作树 |
+|---|---|---|
+| A | B1 Working Memory inject 到 turn-executor context | `.worktrees/wm-inject` |
+| B | B2 vitest workspace resolution + M4 503 返回 | `.worktrees/server-test-fix` |
+| C | I1+I2+I3+I5 文档同步 | `.worktrees/wave2-docs` |
+| D | I4 Compactor prompt 外部化决策 | `.worktrees/compactor-prompt` |
+
+Wave 0 全绿后再启动 Wave A。
+
+### 9.2 Wave A（3 票并行，完全独立）
+
+| 票号 | 工作树 | 关键文件 | 依赖 |
+|---|---|---|---|
+| S2-T3 Prompt cache + Anthropic cache_control | `.worktrees/s2-t3-cache` | `ai-provider/src/adapters/anthropic.ts`、新增 `cacheStrategy` 字段 | S2-T1 已完 |
+| S3-T4 Author's Note 段 9 + Post-History 段 10 | `.worktrees/s3-t4-author-note` | `packages/context/src/prompt-assembler.ts` 补段 8/9/10 | S2-T1 已完 |
+| S4-T2 Snapshot 表 + Fork API | `.worktrees/s4-t2-snapshot` | 新表 `state_snapshots`、新端点 `/fork` `/snapshot` | S4-T1 + **S3-T3 B1 修好** |
+
+### 9.3 Wave B（依赖 Wave A 全绿）
+
+| 票号 | 依赖 | 说明 |
+|---|---|---|
+| S3-T2 core-world-init 迁 Lorebook | Wave A 完 + S3-T1 | **合并 S3-T5b** 一起做，world-init 只迁一次 |
+| S2-T4 core-narrator + core-guide 迁 V2 | Wave A 的 S2-T3 | cache 注入需要 V2 路径 |
+| S4-T5 SSE 协议扩展 | Wave A 的 S4-T2 | `session.forked` 事件需要 fork 路由已 ready |
+
+### 9.4 Wave C（依赖 Wave B）
+
+| 票号 | 依赖 | 说明 |
+|---|---|---|
+| S3-T5a core-codex + core-char-creator 迁 V2 | Wave B 完 | 不碰 world-init（已在 S3-T2 完成） |
+| S3-T6 Lorebook 玩家 UI (`web-v2`) | Wave B 完 | 依赖 `/api/ui-specs` |
+| S2-T5 `prompt-structure.md` 文档 | Wave A+B 完 | 模式已稳定 |
+
+### 9.5 冲突守卫（critical）
+
+1. **`core-world-init` 只迁一次**：把 S3-T5 拆成 S3-T5a (codex+char-creator) 和 S3-T5b (world-init)，S3-T5b 并入 S3-T2 的同一 PR。规划表里 §附录 B 的 S3-T5 描述应同步改。
+2. **`core-narrator` 不双写**：S2-T4 先做 V2 迁移；任何后续票若需要 narrator 读 lorebook，走 S3-T5a 的同一 PR。
+3. **`turn-executor.ts` 热点文件**：S4-T2 `Snapshot` 需要在 `postCommit` 插 snapshot 写入点；S4-T5 需要发 SSE——两者都动 `turn-executor.ts` 的相邻行，要求 S4-T2 先合再起 S4-T5。
+4. **`prompt-assembler.ts` 段扩展**：S3-T4 和 S2-T3 都改它，但段位不重叠（S3-T4 加段 9/10，S2-T3 只加 `cache_control` 标记）——可并行但 rebase 时注意。
+
+### 9.6 Wave 执行规则（承自本 session 已验证模式）
+
+1. 每个 wave 在开始前从 main 拉最新，创建 worktree + 独立 branch
+2. Wave 内每个 stream 一个 subagent 执行，skip 子分支 spec/code review（用户指令）
+3. Stream 完成直接 merge 到 main（no PR），merge 顺序任意
+4. 整个 wave 合并完后在 main 跑 **一次统一 review**（spec compliance + code quality + security + doc drift）
+5. Review 发现写入 §八.3 fix queue，下一个 wave 启动前必须清空
+6. 每次 merge 必须同步更新 §八.2 进度表
+
+### 9.7 Wave D（Sprint 5 生态层，非阻塞）
+
+S5-T1 (Character Card) / S5-T2 (MCP) / S5-T3 (pgvector) / S5-T4 (OTel) / S5-T5 (OM 升级) 互相独立，且与 Wave A/B/C 无文件冲突（新包为主），可在任意时机与 Wave B/C 并行启动。优先级应在 Wave C 完成后由业务决定，不走本文档强制排序。
+
+---
+
 # 附录 A：奠基决策（回答 spec self-review 的 17 个问题）
 
 下列决策是后续所有 P 项实现的共同地基。每条 = 决策 + 理由 + 影响面。
