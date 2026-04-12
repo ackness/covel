@@ -225,6 +225,16 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | PUT | `/api/sessions/:id/working-memory/:scope/:key` | 写入/更新工作记忆（scope: player \| story \| shared） |
 | DELETE | `/api/sessions/:id/working-memory/:scope/:key` | 删除工作记忆条目 |
 
+### Suspend / Resume（S4-T4）
+
+> 需要环境变量 `COVEL_SUSPEND_V1=1`。关闭时 `POST /resume` 与 `DELETE /suspensions/:suspensionId` 返回 `503`，`GET /suspensions` 返回空列表。
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| POST | `/api/sessions/:id/resume` | 用提交的 data 重新启动指定 suspensionId 对应的 runtime |
+| GET | `/api/sessions/:id/suspensions` | 列出当前 session 所有未解决的挂起项 |
+| DELETE | `/api/sessions/:id/suspensions/:suspensionId` | 放弃一个挂起项（删除记录） |
+
 ### 角色数据
 
 | 方法 | 路径 | 描述 |
@@ -1319,6 +1329,78 @@ curl "http://localhost:3001/api/sessions/<sessionId>/turns?limit=5"
 
 ```json
 { "success": true }
+```
+
+---
+
+### Suspend / Resume（S4-T4）
+
+> 需要环境变量 `COVEL_SUSPEND_V1=1`。flag 关闭时所有写路径返回 `503 Service Unavailable`（表示端点存在但功能未启用），列表路径返回空数组。
+
+#### `POST /api/sessions/:id/resume`
+
+用玩家提交的数据重新启动一个被 `suspend` 工具暂停的 runtime。
+请求**必须**带 `X-Provider-Keys` header（API key 不在服务端持久化，每次 resume 都要重新提供）。
+
+**请求体:**
+
+```json
+{
+  "suspensionId": "susp_abc123",
+  "data": { /* shape 必须匹配 suspension.resumeSchema */ }
+}
+```
+
+服务器会用 `suspension.resumeSchema` 对 `data` 做最小 JSON Schema 校验（type / required / 顶层 properties type）；不匹配返回 `400`。
+
+**响应:**
+
+```json
+{ "result": <ResumeResult> }
+```
+
+**错误码:**
+
+| 状态 | 触发条件 |
+|------|---------|
+| `400` | 缺少 `X-Provider-Keys`、JSON body 错误、`suspensionId` 缺失或 schema 校验失败 |
+| `404` | session、suspension 不存在，或 suspension 已 resolved，或 runtime manifest 找不到 |
+| `500` | `resumeSuspendedRuntime()` 抛出错误 |
+| `503` | `COVEL_SUSPEND_V1` 未启用 |
+
+#### `GET /api/sessions/:id/suspensions`
+
+列出指定 session 当前所有挂起项，按 `createdAt asc` 排序。flag 关闭时直接返回 `{ "suspensions": [] }`。
+
+**响应:**
+
+```json
+{
+  "suspensions": [
+    {
+      "id": "susp_abc123",
+      "sessionId": "world-uuid8",
+      "turnId": "turn-...",
+      "runtimeId": "core-foo/bar",
+      "pluginId": "core-foo",
+      "reason": "需要玩家选择路线",
+      "resumeSchema": { "type": "object", "required": ["choice"], "properties": { "choice": { "type": "string" } } },
+      "pendingContinuation": { /* runtime-internal serialized state */ },
+      "createdAt": "2026-04-12T00:00:00.000Z",
+      "resolvedAt": null
+    }
+  ]
+}
+```
+
+#### `DELETE /api/sessions/:id/suspensions/:suspensionId`
+
+放弃一个挂起项 —— 直接从 `suspensions` 表删除。用于玩家放弃当前选择 / 管理界面清理。
+
+**响应:**
+
+```json
+{ "deleted": true, "suspensionId": "susp_abc123" }
 ```
 
 ---
