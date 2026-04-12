@@ -3,6 +3,7 @@
  */
 
 import type { RuntimeManifest, RuntimeResult, TurnInput } from '@covel/shared';
+import type { BudgetOptions, TokenEstimator } from './budget.js';
 
 /** A single LLM message in the conversation. */
 export interface LLMMessage {
@@ -65,4 +66,18 @@ export interface ContextBuildParams {
   readonly messageHistory?: readonly MessageHistoryRecord[];
   /** Session-level metadata (turnNumber, phase, characters). */
   readonly sessionMeta?: SessionMeta;
+  /**
+   * Token estimator injected by the caller for budget calculation. Optional.
+   * When both this and {@link ContextBuildParams.contextBudget} are set and
+   * `COVEL_CONTEXT_BUDGET_V1=1` is in the environment, the builder runs a
+   * pruning pass before returning the assembled context.
+   */
+  readonly estimator?: TokenEstimator;
+  /**
+   * Budget config. If present together with `estimator` and the feature
+   * flag, message pruning runs. The `estimator` field of `BudgetOptions`
+   * is supplied via {@link ContextBuildParams.estimator}, so callers need
+   * only provide the numeric limits here.
+   */
+  readonly contextBudget?: Omit<BudgetOptions, 'estimator'>;
 }

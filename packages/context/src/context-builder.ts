@@ -7,6 +7,7 @@
  * - Full context assembly (system prompt + message history)
  */
 
+import { applyBudget } from './budget.js';
 import type { AssembledContext, ContextBuildParams, LLMMessage } from './types.js';
 
 /**
@@ -230,6 +231,22 @@ export function buildContext(
     ...historyMessages,
     { role: 'user', content: turnInput.playerMessage },
   ];
+
+  // Conditional pruning gate — opt-in via feature flag + caller must supply
+  // both an estimator and a budget config. Default behavior (flag unset) is
+  // unchanged from the pre-S1-T2 semantics.
+  const budgetEnabled =
+    params.estimator !== undefined &&
+    params.contextBudget !== undefined &&
+    process.env.COVEL_CONTEXT_BUDGET_V1 === '1';
+
+  if (budgetEnabled) {
+    const result = applyBudget(systemPrompt, messages, {
+      ...params.contextBudget!,
+      estimator: params.estimator!,
+    });
+    return { systemPrompt, messages: result.messages };
+  }
 
   return { systemPrompt, messages };
 }
