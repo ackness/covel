@@ -90,6 +90,28 @@ export interface ModelCapability {
 
 export type ModelTier = "small" | "medium" | "large" | "embed-default";
 
+// ── Prompt Cache Strategy (S2-T3) ─────────────────────────────────
+
+/**
+ * How a provider handles prompt caching.
+ *
+ * Per §A15 of the improvement plan, all major LLM providers support some
+ * form of prompt caching but the ergonomics differ:
+ *
+ * - `anthropic-explicit` — Anthropic Messages API requires the client to
+ *   attach `cache_control: { type: 'ephemeral' }` to specific content
+ *   blocks. Up to 4 breakpoints are allowed per request. The adapter
+ *   turns the sentinel-delimited `systemPrompt` string into a
+ *   multi-block `system` array with cache hints on the stable segments.
+ * - `auto-prefix` — OpenAI, DeepSeek, and Qwen transparently cache any
+ *   prompt prefix they see repeatedly. The adapter needs no change; the
+ *   only requirement is that prefixes stay byte-stable across turns,
+ *   which the S2-T1 three-tier assembler already guarantees.
+ * - `none` — fallback for providers with no prompt caching support.
+ *   Adapters behave exactly as they did before S2-T3.
+ */
+export type CacheStrategy = 'anthropic-explicit' | 'auto-prefix' | 'none';
+
 // ── Provider Config ────────────────────────────────────────────────
 
 export interface ProviderConfig {
@@ -98,6 +120,14 @@ export interface ProviderConfig {
   headers?: Record<string, string>;
   /** Abort signal for request cancellation. */
   signal?: AbortSignal;
+  /**
+   * Prompt cache strategy for this provider (S2-T3).
+   *
+   * Filled in by the provider registry based on the resolved protocol;
+   * callers do not normally set this directly. When omitted or set to
+   * `"none"` the adapter uses its pre-S2-T3 request construction.
+   */
+  cacheStrategy?: CacheStrategy;
 }
 
 // ── Provider Defaults (from TOML [providers.*]) ────────────────────
