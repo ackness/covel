@@ -21,6 +21,9 @@ export type { PromptSegments } from './prompt-assembler.js';
 export { applyBudget } from './budget.js';
 export type { TokenEstimator, BudgetOptions, BudgetResult } from './budget.js';
 
+// ── Prompt Loader ────────────────────────────────────────────────
+export { loadPrompt, interpolate, setPromptsRoot } from './prompts-loader.js';
+
 // ── Compactor (S2-T2) ────────────────────────────────────────────
 export { maybeCompact } from './compactor.js';
 export type {
