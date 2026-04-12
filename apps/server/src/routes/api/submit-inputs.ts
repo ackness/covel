@@ -110,18 +110,11 @@ submitInputsRoutes.post('/:id/submit-inputs', async (c) => {
     // 3. Fill template → pure natural language narrative
     const filledNarrative = fillTemplate(sub, templateMessage);
 
-    // 4. Append as player-input message
-    await store.appendTurnMessage({
-      id: crypto.randomUUID(),
-      sessionId,
-      turnId: body.turnId,
-      sourceType: 'player-input',
-      role: 'assistant',
-      name: templateMessage?.name ? `${templateMessage.name}-result` : 'player-input',
-      content: filledNarrative,
-      order: (templateMessage?.order ?? 700) + 1,
-      createdAt: new Date().toISOString(),
-    });
+    // NOTE: We deliberately do NOT write `filledNarrative` to turn_messages here.
+    // The frontend will call POST /api/actions { type: 'send_message', payload: { content: filledNarrative } }
+    // which flows to turn-executor.ts and appends a proper { role: 'user', sourceType: 'player' } row.
+    // Writing it here too (with role: 'assistant') used to cause LLM history pollution — see
+    // audits/2026-04-12-backend-webv2-framework-audit Finding 1.
 
     // NOTE: Character creation is no longer done here. Plugins own character
     // creation via the create-character builtin tool. The player-init runtime
