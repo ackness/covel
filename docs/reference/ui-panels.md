@@ -47,11 +47,15 @@
 
 ### 当前注册的面板
 
-| 插件 | 面板 ID | 图标 | 数据 namespace | 描述 |
-|------|---------|------|---------------|------|
-| core-char-creator | character | user | character | 角色属性展示 |
-| core-codex | codex | book-open | entries | 知识图鉴（搜索 + 分类） |
-| core-world-init | world-data | globe | entries | 世界维度数据 |
+| 插件/runtime | 面板 ID | 图标 | group | 数据 namespace | 描述 |
+|------|---------|------|-------|---------------|------|
+| core-char-creator/player-init | character | users | character | characters | 角色列表（player + NPC + companion） |
+| core-codex | codex | book-open | codex | entries | 知识图鉴 |
+| core-world-init/schema-gen | world-entries | book-marked | world-data | entries | 世界词条 |
+| core-world-init/schema-gen | world-schema | sliders-horizontal | world-data | schema | 角色属性 schema |
+
+> `core-world-init` 的 schema-gen runtime 注册两个 spec，通过相同 `group: "world-data"` + `groupLabel` 合并为单个 activity-bar tab "世界维度"，内部横向子 Tab 切换 `词条 / 属性`。
+> `core-char-creator` 的 character-panel 由 player-init runtime 声明，character-tracker runtime 共享同一个 namespace `characters`（由 `create-character` / `update-character` builtin 工具写入）。
 
 ### 声明方式
 
@@ -68,16 +72,23 @@ ui:
 
 ```json
 {
-  "id": "codex",
-  "group": "codex",
-  "label": { "zh": "知识图鉴", "en": "Codex" },
-  "icon": "book-open",
+  "id": "world-entries",
+  "group": "world-data",
+  "groupLabel": { "zh": "世界维度", "en": "World Data" },
+  "label": { "zh": "词条", "en": "Entries" },
+  "icon": "book-marked",
   "dataSource": { "namespace": "entries" },
   "view": {
-    "component": "Stack",
+    "component": "Accordion",
+    "repeat": { "statePath": "/entries", "key": "key" },
     "children": [
-      { "component": "SearchInput", "props": { ... } },
-      { "component": "CardList", "repeat": { "$state": "/entries" }, "children": [...] }
+      {
+        "component": "Section",
+        "props": { "title": { "$item": "key" }, "icon": "chevron-right" },
+        "children": [
+          { "component": "JsonView", "props": { "value": { "$item": "value" } } }
+        ]
+      }
     ]
   }
 }
@@ -85,20 +96,62 @@ ui:
 
 关键字段：
 - `id` — 面板唯一标识
-- `group` — 同 group 的面板合并为一个 Tab + 子 Tab
+- `group` — 同 group 的面板合并为一个外层 Tab
+- `groupLabel` — 合并后外层 Tab 的显示名（可选，省略时用第一个 spec 的 `label`）
+- `label` — 面板自身名（在子 Tab 上显示）
 - `icon` — Lucide 图标名（kebab-case）
 - `dataSource.namespace` — 从 `pluginData[pluginId][namespace]` 读取数据
 - `view` — json-render nested spec，使用框架 catalog 中的组件
 
-### 多面板与分组
+### json-render 绑定速查
 
-一个插件可以注册多个面板。`group` 字段控制合并策略：
-- 相同 `group` → 合并为一个 Tab，内部子 Tab 切换
-- 不同 `group` 或无 `group` → 独立 Tab
+| 需求 | 写法 |
+|------|------|
+| 读状态 | `{ "$state": "/path" }` |
+| 读写状态 | `{ "$bindState": "/path" }` |
+| 迭代数组 | `repeat: { "statePath": "/path", "key": "id" }`（元素顶层字段，**非 props**） |
+| 读当前 item 字段 | `{ "$item": "field" }`（字段名不带前导斜杠） |
+| 读写当前 item 字段 | `{ "$bindItem": "field" }` |
+| 当前 index | `{ "$index": true }` |
+
+> ⚠️ `repeat` 只接受 `statePath`，不是 `$state`。字段名不能带前导斜杠（`$item: "key"` ✓，`$item: "/key"` ✗）。
+
+### 自动 `entries` 数组
+
+框架从 `pluginData[pluginId][namespace]`（record 结构 `{ key: value }`）派生一个 `/entries` 数组，格式为 `[{ key, value }, ...]`，供 `repeat` 迭代使用。原 record 键仍可通过 `$state: "/someKey"` 直接访问 —— 两种方式共存。
+
+### 多面板与分组（跨插件共享）
+
+**`group` 是全局字符串，跨插件共享**。任意多个插件或同一插件的多个 runtime 声明相同 `group` 值，会被合并到同一个外层 Tab，各自贡献的 spec 以横向子 Tab 切换。
+
+```
+┌──────┬──────────────────────────────┐
+│ 🌍 │ 世界维度                          │  ← 外层 Tab（group="world-data"）
+│ 👥 │ [词条] [属性] [背包] ...             │  ← 子 Tab（多 runtime/多插件）
+│ 📖 │ ┌──────────────────────────┐   │
+└──────┤ (当前子 Tab 的面板内容)          │
+       └──────────────────────────┘
+```
+
+**核心用例**：
+- 单插件多 runtime：`core-char-creator/player-init` + `core-char-creator/character-tracker` 共享 `character-panel.json`
+- 跨插件组合：`core-char-creator` 贡献角色列表，未来 `core-inventory` 贡献背包，都声明 `group: "character"`，自动汇聚到同一个"角色"外层 Tab
+
+**合并规则**：
+| 字段 | 行为 |
+|------|------|
+| 相同 `group` | 合并为一个外层 Tab（横向子 Tab 切换） |
+| 不同 `group` 或省略 | 独立外层 Tab（兜底 key 为 `${pluginId}::${specId}`） |
+| `groupLabel` / `icon` / `groupOrder` | 冲突时"**首个声明者赢**"，按 `/api/ui-specs` 返回顺序（插件加载顺序） |
+| `groupOrder` | 外层 Tab 在 activity bar 中的排序（数字小的排前，默认 500） |
+
+**命名空间约定**：跨插件 group key 与 CSS class name 同理 —— 作者自觉使用命名空间前缀（`core.character`、`myorg.combat`）避免冲突，框架不做 magic 前缀。
+
+**实现位置**：`apps/web-v2/src/components/panels/right-panel.tsx` 的 `aggregateSpecsIntoGroups()` 纯函数。该函数可独立测试（见 Playwright smoke test）。
 
 ### 排序
 
-面板按加载顺序显示，用户可拖拽调整，偏好存 localStorage。
+外层 Tab 按 `groupOrder` 排序（稳定排序，相同 order 保持加载顺序）。子 Tab 按贡献顺序展示。未来会支持用户拖拽。
 
 ## 消息区（Message Area）
 
@@ -176,6 +229,9 @@ core-guide 分析叙事 → 生成建议卡片
 | EntryCard | 图鉴条目卡片（分类图标 + 稀有度 + 标签） |
 | StatBar | 数值条（label + value/max + 进度条） |
 | Progress | 进度条 |
+| Accordion | 折叠面板容器（与 `repeat` + `Section` 组合） |
+| Section | 可折叠 section（props: `title`, `icon`, `defaultOpen`） |
+| JsonView | 递归渲染任意 JSON 值（props: `value`） |
 
 ### 交互
 | 组件 | 用途 |

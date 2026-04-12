@@ -6,6 +6,7 @@
  * controls the vocabulary, plugins compose from it.
  */
 
+import { useState, type ReactNode } from "react";
 import type { ComponentRenderer } from "@json-render/react";
 import { useStateStore } from "@json-render/react";
 import { clsx } from "clsx";
@@ -233,6 +234,131 @@ const Progress: ComponentRenderer = ({ element }) => {
       </div>
     </div>
   );
+};
+
+// ── Collapsible / Recursive JSON ─────────────────────────────────
+
+/**
+ * Accordion — vertical list wrapper for Section children.
+ * No own behavior; just groups collapsible sections with consistent spacing.
+ */
+const Accordion: ComponentRenderer = ({ children }) => (
+  <div className="space-y-0.5">{children}</div>
+);
+
+/**
+ * Section — collapsible header + content block.
+ * Self-contained open state; receives title/icon via props, body via children.
+ */
+const Section: ComponentRenderer = ({ element, children }) => {
+  const title = resolveI18n(element.props?.title);
+  const iconName = element.props?.icon as string | undefined;
+  const defaultOpen = element.props?.defaultOpen as boolean ?? false;
+  const [open, setOpen] = useState(defaultOpen);
+  const SectionIcon = resolveIcon(iconName);
+  const Chevron = Icons.ChevronRight;
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-1.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+      >
+        <Chevron className={clsx("w-3 h-3 transition-transform shrink-0", open && "rotate-90")} />
+        {SectionIcon && <SectionIcon className="w-3 h-3 shrink-0" />}
+        <span className="truncate text-left">{title}</span>
+      </button>
+      {open && (
+        <div className="border-l border-zinc-200 dark:border-zinc-700 pl-3 ml-1.5 space-y-1 pb-2 pt-0.5">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Render any JSON value with shape-aware styling.
+ * Primitives inline, arrays of primitives as tag list, arrays of objects
+ * as vertical list, nested objects as key: value pairs.
+ */
+function renderJsonValue(value: unknown, depth: number): ReactNode {
+  if (value === null || value === undefined) {
+    return <span className="text-zinc-400 italic text-[10px]">—</span>;
+  }
+  if (typeof value === "string") {
+    return <span className="text-[11px] text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap">{value}</span>;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return <span className="text-[11px] font-mono text-blue-600 dark:text-blue-400">{String(value)}</span>;
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return <span className="text-zinc-400 italic text-[10px]">[ ]</span>;
+    }
+    const allPrimitive = value.every(
+      (v) => v === null || typeof v === "string" || typeof v === "number" || typeof v === "boolean",
+    );
+    if (allPrimitive) {
+      return (
+        <div className="flex flex-wrap gap-1">
+          {value.map((v, i) => (
+            <span
+              key={i}
+              className="text-[9px] px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-sm"
+            >
+              {String(v)}
+            </span>
+          ))}
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-1.5">
+        {value.map((item, i) => (
+          <div key={i} className="border-l border-zinc-200 dark:border-zinc-800 pl-2">
+            {renderJsonValue(item, depth + 1)}
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) {
+      return <span className="text-zinc-400 italic text-[10px]">{"{ }"}</span>;
+    }
+    return (
+      <div className={clsx("space-y-0.5", depth > 0 && "mt-0.5")}>
+        {entries.map(([k, v]) => {
+          const isNested = v !== null && typeof v === "object";
+          return (
+            <div key={k} className="text-[11px] leading-snug">
+              <span className="text-zinc-500 dark:text-zinc-400 font-medium">{k}</span>
+              <span className="text-zinc-400">: </span>
+              {isNested ? (
+                <div className="pl-2 mt-0.5">{renderJsonValue(v, depth + 1)}</div>
+              ) : (
+                renderJsonValue(v, depth + 1)
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  return <span className="text-[11px]">{String(value)}</span>;
+}
+
+/**
+ * JsonView — renders any JSON value passed via props.value.
+ * Used inside repeat blocks with `value: { "$bindItem": "/value" }`
+ * to display arbitrary plugin-data shapes without per-shape specs.
+ */
+const JsonView: ComponentRenderer = ({ element }) => {
+  const value = element.props?.value;
+  return <div className="text-[11px]">{renderJsonValue(value, 0)}</div>;
 };
 
 // ── Interactive Components ───────────────────────────────────────
@@ -547,6 +673,9 @@ export const covelRegistry: Record<string, ComponentRenderer> = {
   EntryCard,
   StatBar,
   Progress,
+  Accordion,
+  Section,
+  JsonView,
   // Interactive
   Button,
   Input,

@@ -19,7 +19,8 @@ tools:
     - plugin-data-list
 ui:
   right:
-    - ./ui/world-data-panel.json
+    - ./ui/world-entries.json
+    - ./ui/world-schema.json
 ---
 
 你是世界维度初始化 agent。

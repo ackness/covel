@@ -1,0 +1,62 @@
+{
+  "id": "world-schema",
+  "group": "world-data",
+  "groupLabel": { "zh": "世界维度", "en": "World Data" },
+  "label": { "zh": "属性", "en": "Schema" },
+  "icon": "sliders-horizontal",
+  "dataSource": { "namespace": "schema" },
+  "view": {
+    "component": "CardList",
+    "repeat": { "statePath": "/character-attributes/attributes", "key": "id" },
+    "children": [
+      {
+        "component": "Card",
+        "children": [
+          {
+            "component": "Row",
+            "props": { "gap": "sm" },
+            "children": [
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "$item": "name" },
+                  "weight": "bold",
+                  "size": "sm"
+                }
+              },
+              {
+                "component": "Badge",
+                "props": {
+                  "label": { "$item": "type" },
+                  "color": "blue"
+                }
+              },
+              {
+                "component": "Badge",
+                "props": {
+                  "label": { "$item": "category" }
+                }
+              }
+            ]
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": { "$item": "id" },
+              "variant": "muted",
+              "size": "xs"
+            }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": { "$item": "description" },
+              "variant": "muted",
+              "size": "xs"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

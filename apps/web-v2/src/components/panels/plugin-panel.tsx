@@ -57,6 +57,11 @@ export function PluginPanel({ pluginId, spec, onAction }: PluginPanelProps) {
   const namespace = (spec.dataSource as Record<string, string> | undefined)?.namespace ?? "default";
   const data = usePluginNamespace(pluginId, namespace);
 
+  const initialState = useMemo(() => {
+    const entries = Object.entries(data).map(([key, value]) => ({ key, value }));
+    return { ...data, entries };
+  }, [data]);
+
   const flatSpec = useMemo(() => convertToSpec(spec.view), [spec.view]);
 
   const handlers = onAction
@@ -73,7 +78,7 @@ export function PluginPanel({ pluginId, spec, onAction }: PluginPanelProps) {
   return (
     <JSONUIProvider
       registry={covelRegistry}
-      initialState={data}
+      initialState={initialState}
       handlers={handlers}
     >
       <Renderer spec={flatSpec} registry={covelRegistry} />

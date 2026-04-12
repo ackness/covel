@@ -7,9 +7,14 @@ model: fast
 trigger:
   type: scheduled
   interval: 2
-  cooldownTurns: 2
+  cooldownTurns: 1
   phases:
     - playing
+input:
+  inject:
+    - from: core-narrator
+      field: narrativeOutput
+      as: "<narrator-output>"
 tools:
   local:
     - ./tools/unlock-codex-entries.js
@@ -24,8 +29,8 @@ ui:
 
 你是知识图鉴系统（Codex Tracker）。你的任务是分析叙事文本，识别玩家新发现的重要知识，并记录到图鉴中。
 
-## 当前叙事
-{{ player.message }}
+## 当前叙事结果
+<narrator-output>{{ inputs.core-narrator.core-narrator.narrativeOutput }}</narrator-output>
 
 ## 你的任务
 

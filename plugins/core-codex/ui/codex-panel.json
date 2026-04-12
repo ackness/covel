@@ -5,47 +5,18 @@
   "icon": "book-open",
   "dataSource": { "namespace": "entries" },
   "view": {
-    "component": "Stack",
-    "props": { "gap": "sm" },
+    "component": "CardList",
+    "repeat": { "statePath": "/entries", "key": "key" },
     "children": [
       {
-        "component": "SearchInput",
+        "component": "EntryCard",
         "props": {
-          "placeholder": { "zh": "搜索图鉴...", "en": "Search codex..." },
-          "value": { "$bindState": "/search" }
+          "title": { "$item": "value/title" },
+          "category": { "$item": "value/category" },
+          "content": { "$item": "value/content" },
+          "tags": { "$item": "value/tags" },
+          "rarity": { "$item": "value/rarity" }
         }
-      },
-      {
-        "component": "FilterBar",
-        "props": {
-          "field": "category",
-          "value": { "$bindState": "/categoryFilter" },
-          "options": [
-            { "value": "all", "label": { "zh": "全部", "en": "All" } },
-            { "value": "monster", "label": { "zh": "怪物", "en": "Monsters" }, "icon": "skull" },
-            { "value": "item", "label": { "zh": "物品", "en": "Items" }, "icon": "gem" },
-            { "value": "location", "label": { "zh": "地点", "en": "Locations" }, "icon": "map-pin" },
-            { "value": "lore", "label": { "zh": "传说", "en": "Lore" }, "icon": "scroll-text" },
-            { "value": "character", "label": { "zh": "人物", "en": "Characters" }, "icon": "users" },
-            { "value": "skill", "label": { "zh": "技能", "en": "Skills" }, "icon": "sparkles" }
-          ]
-        }
-      },
-      {
-        "component": "CardList",
-        "repeat": { "$state": "/filteredEntries" },
-        "children": [
-          {
-            "component": "EntryCard",
-            "props": {
-              "title": { "$bindItem": "/title" },
-              "category": { "$bindItem": "/category" },
-              "content": { "$bindItem": "/content" },
-              "tags": { "$bindItem": "/tags" },
-              "rarity": { "$bindItem": "/rarity" }
-            }
-          }
-        ]
       }
     ]
   }
