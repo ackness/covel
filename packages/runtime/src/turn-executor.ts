@@ -787,27 +787,30 @@ async function executeOneRuntime(
               continue;
             }
 
+            // Use the (possibly replaced) toolCall from the hook outcome
+            const effectiveTc = preToolOutcome.toolCall;
+
             const result = await deps.toolExecutor.execute(
-              { toolCallId: tc.id, name: tc.name, arguments: tc.arguments },
+              { toolCallId: effectiveTc.id, name: effectiveTc.name, arguments: effectiveTc.arguments },
               { sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name },
             );
 
             // ── PostToolUse hook (S4-T3) ─────────────────────────
-            const toolResult = await runPostToolUseHook(preToolOpts, { id: tc.id, name: tc.name, arguments: tc.arguments }, result);
+            const toolResult = await runPostToolUseHook(preToolOpts, { id: effectiveTc.id, name: effectiveTc.name, arguments: effectiveTc.arguments }, result);
 
             executedToolCalls.push({
-              name: tc.name,
-              arguments: tc.arguments,
+              name: effectiveTc.name,
+              arguments: effectiveTc.arguments,
               result: toolResult.parsedResult,
               success: toolResult.success,
             });
 
             // Build ToolCallRecord for RuntimeResult.toolCalls
             let parsedInput: Record<string, unknown> = {};
-            try { parsedInput = JSON.parse(tc.arguments) as Record<string, unknown>; } catch { /* keep empty */ }
+            try { parsedInput = JSON.parse(effectiveTc.arguments) as Record<string, unknown>; } catch { /* keep empty */ }
             collectedToolCalls.push({
-              toolCallId: tc.id,
-              toolName: tc.name,
+              toolCallId: effectiveTc.id,
+              toolName: effectiveTc.name,
               pluginId: manifest.pluginId,
               runtimeId: manifest.name,
               turnId: input.turnId,
@@ -821,7 +824,7 @@ async function executeOneRuntime(
             messages.push({
               role: 'tool',
               content: toolResult.result,
-              toolCallId: tc.id,
+              toolCallId: effectiveTc.id,
             });
           } else {
             messages.push({

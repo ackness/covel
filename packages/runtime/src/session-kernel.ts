@@ -13,6 +13,7 @@
  */
 
 import type { Proposal, ProposalSource, ProposalType, SessionEvent, CommitResult } from '@covel/shared';
+import type { EventBus } from '@covel/events';
 import type { HookPipeline } from './hooks/pipeline.js';
 import type { HookContext } from './hooks/types.js';
 
@@ -127,7 +128,7 @@ export interface CommitPipeline {
   commitAll(proposals: readonly Proposal[]): Promise<CommitResult[]>;
 }
 
-export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipeline): CommitPipeline {
+export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipeline, eventBus?: EventBus): CommitPipeline {
   const handlers: Record<string, (p: Proposal) => Promise<CommitResult>> = {
     'narrative.append': commitNarrative,
     'interaction.request': commitInteraction,
@@ -150,7 +151,7 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
         sessionId: proposal.sessionId,
         turnId: proposal.turnId,
       };
-      const preResult = await hookPipeline.run('PreStateCommit', hookCtx, { proposal }, {});
+      const preResult = await hookPipeline.run('PreStateCommit', hookCtx, { proposal }, { eventBus });
       if (preResult.action === 'abort') {
         return { committed: false, error: `pre-state-commit hook aborted: ${preResult.reason}` };
       }
@@ -182,7 +183,7 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
         turnId: effectiveProposal.turnId,
       };
       // Fire-and-forget observability; result is not modified
-      await hookPipeline.run('PostStateCommit', hookCtx, { proposal: effectiveProposal, result }, {});
+      await hookPipeline.run('PostStateCommit', hookCtx, { proposal: effectiveProposal, result }, { eventBus });
     }
 
     return result;

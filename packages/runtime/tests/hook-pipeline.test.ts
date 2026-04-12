@@ -32,6 +32,36 @@ describe('HookPipeline', () => {
     pipeline = createHookPipeline();
   });
 
+  describe('global-first ordering', () => {
+    it('runs global hooks before plugin hooks within the same event, preserving insertion order within each group', async () => {
+      const order: string[] = [];
+
+      // Register order: global-A, plugin-x-B, global-C
+      pipeline.register({
+        id: 'global:TurnStart:A',
+        event: 'TurnStart',
+        // no pluginId → global
+        handler: vi.fn().mockImplementation(async () => { order.push('global-A'); return { action: 'continue' }; }),
+      });
+      pipeline.register({
+        id: 'plugin-x:TurnStart:B',
+        event: 'TurnStart',
+        pluginId: 'plugin-x',
+        handler: vi.fn().mockImplementation(async () => { order.push('plugin-x-B'); return { action: 'continue' }; }),
+      });
+      pipeline.register({
+        id: 'global:TurnStart:C',
+        event: 'TurnStart',
+        // no pluginId → global
+        handler: vi.fn().mockImplementation(async () => { order.push('global-C'); return { action: 'continue' }; }),
+      });
+
+      await pipeline.run('TurnStart', makeCtx(), {});
+
+      expect(order).toEqual(['global-A', 'global-C', 'plugin-x-B']);
+    });
+  });
+
   describe('basic registration and execution', () => {
     it('returns continue when no handlers are registered', async () => {
       const result = await pipeline.run('TurnStart', makeCtx(), { foo: 'bar' });

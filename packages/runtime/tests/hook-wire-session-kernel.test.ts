@@ -9,6 +9,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Proposal } from '@covel/shared';
+import { createEventBus } from '@covel/events';
 import { createCommitPipeline, type KernelStore } from '../src/session-kernel.js';
 import { createHookPipeline } from '../src/hooks/pipeline.js';
 
@@ -196,6 +197,38 @@ describe('session-kernel hook wire-in (S4-T3)', () => {
       // Proposal was committed despite post-hook abort
       expect(result.committed).toBe(true);
       expect(store.messages).toHaveLength(1);
+    });
+  });
+
+  describe('EventBus observability (F5)', () => {
+    it('emits hook.error to eventBus when a PreStateCommit hook throws', async () => {
+      process.env.COVEL_HOOKS_V1 = '1';
+      const store = createRecordingStore();
+      const hookPipeline = createHookPipeline();
+      const eventBus = createEventBus();
+
+      const emittedTypes: string[] = [];
+      eventBus.onEmit((e) => {
+        emittedTypes.push(e.type);
+      });
+
+      hookPipeline.register({
+        id: 'test:PreStateCommit:throw',
+        event: 'PreStateCommit',
+        handler: vi.fn().mockRejectedValue(new Error('validation exploded')),
+      });
+
+      const pipeline = createCommitPipeline(store, hookPipeline, eventBus);
+      const result = await pipeline.commit(
+        makeProposal('narrative.append', { content: 'test', kind: 'story' }, 'err'),
+      );
+
+      // The commit was aborted (hook threw)
+      expect(result.committed).toBe(false);
+      expect(result.error).toContain('validation exploded');
+
+      // The eventBus received a hook.error event
+      expect(emittedTypes).toContain('hook.error');
     });
   });
 });

@@ -3,8 +3,34 @@
  */
 
 import matter from 'gray-matter';
+import { z } from 'zod';
 import { runtimeManifestSchema } from '@covel/shared';
 import type { ParsedPluginMd } from './types.js';
+
+// ── Valid hook event names ────────────────────────────────────────
+
+const VALID_HOOK_EVENTS = new Set([
+  'TurnStart',
+  'PreRuntime',
+  'PostRuntime',
+  'PreToolUse',
+  'PostToolUse',
+  'PreStateCommit',
+  'PostStateCommit',
+  'TurnStop',
+]);
+
+/**
+ * Lenient hook schema that accepts any string for `event`, used to
+ * pre-validate hooks before filtering out unknown event names with a warning.
+ * Built from scratch (not extending hookDeclarationSchema) to avoid .strict() incompatibility.
+ */
+const lenientHookDeclarationSchema = z.object({
+  event: z.string().min(1),
+  handler: z.string().min(1),
+  match: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+  timeoutMs: z.number().int().positive().optional(),
+});
 
 /** Regex to extract markdown links pointing to `references/` paths. */
 const REFERENCE_LINK_RE = /\[([^\]]*)\]\((references\/[^)]+)\)/g;
@@ -34,7 +60,36 @@ export function parsePluginMd(content: string, filePath: string): ParsedPluginMd
 
   let manifest;
   try {
-    const parsed = runtimeManifestSchema.parse(data);
+    // Parse hooks leniently (accept any string for event) so we can warn
+    // on unknown event names instead of throwing. All other fields remain
+    // strictly validated. Non-hook fields are validated by runtimeManifestSchema.
+    let dataToValidate = data;
+    const rawHooks: Array<{ event: string; handler: string; [k: string]: unknown }> = [];
+
+    if (Array.isArray(data.hooks)) {
+      const lenientHooksSchema = z.array(lenientHookDeclarationSchema);
+      const parsed = lenientHooksSchema.safeParse(data.hooks);
+      if (parsed.success) {
+        for (const h of parsed.data) {
+          if (!VALID_HOOK_EVENTS.has(h.event)) {
+            console.warn(
+              `[plugin-loader] ${filePath}: unknown hook event "${h.event}" — skipping. ` +
+              `Valid events: ${[...VALID_HOOK_EVENTS].join(', ')}`,
+            );
+          } else {
+            rawHooks.push(h as { event: string; handler: string; [k: string]: unknown });
+          }
+        }
+      }
+      // Replace hooks in data with the filtered valid ones for strict schema validation.
+    // If none remain, omit the key entirely so strict mode doesn't complain about [].
+    const { hooks: _omitted, ...dataWithoutHooks } = data as Record<string, unknown>;
+    dataToValidate = rawHooks.length > 0
+      ? { ...dataWithoutHooks, hooks: rawHooks }
+      : dataWithoutHooks;
+    }
+
+    const parsed = runtimeManifestSchema.parse(dataToValidate);
     // Derive pluginId from name: "core-world-init/schema-gen" → "core-world-init"
     // Single-runtime plugins: pluginId === name
     const slashIdx = parsed.name.indexOf('/');

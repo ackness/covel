@@ -53,10 +53,18 @@ export class HookPipeline {
     payload: P,
     opts?: { readonly eventBus?: EventBus },
   ): Promise<HookResult<P>> {
-    const handlers = this.registrations.get(event) ?? [];
-    if (handlers.length === 0) {
+    const raw = this.registrations.get(event) ?? [];
+    if (raw.length === 0) {
       return { action: 'continue' };
     }
+
+    // Spec: global hooks (pluginId === undefined) run before plugin hooks.
+    // Use a stable sort: globals first, plugin hooks preserve insertion order.
+    const handlers = [...raw].sort((a, b) => {
+      const aGlobal = a.pluginId === undefined ? 0 : 1;
+      const bGlobal = b.pluginId === undefined ? 0 : 1;
+      return aGlobal - bGlobal;
+    });
 
     // Running payload accumulates replace patches from handlers
     let currentPayload: P = payload;

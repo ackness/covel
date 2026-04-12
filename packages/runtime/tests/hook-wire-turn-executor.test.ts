@@ -283,12 +283,10 @@ describe('Turn executor hook wire-in (S4-T3)', () => {
   });
 
   describe('Integration: PreToolUse replace (argument rewriting)', () => {
-    it('PreToolUse replace modifies toolCall.arguments for downstream handlers', async () => {
+    it('PreToolUse replace rewrites toolCall.arguments and executor receives the replaced arguments', async () => {
       process.env.COVEL_HOOKS_V1 = '1';
-      const llm = new SimpleMockLLM();
-      const pipeline = createHookPipeline();
 
-      // LLM asks for tool call, then finishes
+      const llm = new SimpleMockLLM();
       llm.nextResponse({
         content: null,
         toolCalls: [{ id: 'tc-rewrite', name: 'my-tool', arguments: '{"name":"original"}' }],
@@ -302,15 +300,23 @@ describe('Turn executor hook wire-in (S4-T3)', () => {
         usage: { inputTokens: 0, outputTokens: 0 },
       });
 
+      // Spy that captures every call's arguments so we can assert they were replaced (W1)
+      const executedArgs: string[] = [];
       const toolExecutor = {
-        execute: vi.fn().mockResolvedValue({ result: '{"ok":true}', parsedResult: { ok: true }, success: true }),
+        execute: vi.fn().mockImplementation(async (tc: { name: string; arguments: string }) => {
+          executedArgs.push(tc.arguments);
+          return { result: '{"ok":true}', parsedResult: { ok: true }, success: true };
+        }),
         getToolInfo: vi.fn().mockReturnValue({ name: 'my-tool', description: 'test', jsonSchema: { type: 'object' } }),
       };
 
-      // Hook rewrites the toolCall payload
+      const pipeline = createHookPipeline();
+
+      // Global PreToolUse hook — no pluginId (global scope, per spec)
       pipeline.register({
-        id: 'global:PreToolUse:0',
+        id: 'global:PreToolUse:rewrite',
         event: 'PreToolUse',
+        // no pluginId → global
         handler: vi.fn().mockImplementation(async (_ctx, payload: { toolCall: { id: string; name: string; arguments: string } }) => ({
           action: 'continue',
           replace: {
@@ -329,9 +335,12 @@ describe('Turn executor hook wire-in (S4-T3)', () => {
       };
 
       const result = await executeTurn(makeTurnInput(), [manifest], deps);
+
       expect(result.runtimeResults[0].status).toBe('success');
-      // The tool was called (hook returned continue, not abort)
+      // Tool was called exactly once (hook returned continue, not abort)
       expect(toolExecutor.execute).toHaveBeenCalledOnce();
+      // W1: assert the executor received the REPLACED arguments, not the original
+      expect(executedArgs[0]).toBe('{"name":"rewritten"}');
     });
   });
 });

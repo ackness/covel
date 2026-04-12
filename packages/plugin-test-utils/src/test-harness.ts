@@ -7,6 +7,7 @@
 
 import type { TurnInput, TurnResult, RuntimeManifest } from '@covel/shared';
 import type { LLMAdapter } from '@covel/runtime';
+import type { HookPipeline } from '@covel/runtime';
 import type { DataStore } from '@covel/store';
 import type { ToolModule } from '@covel/tools';
 import { discoverPlugins, loadPluginManifest, loadRuntime } from '@covel/plugin-loader';
@@ -26,6 +27,8 @@ export interface TestHarnessConfig {
   readonly tools?: readonly ToolModule[];
   /** Plugin IDs to activate (defaults to all discovered). */
   readonly activePlugins?: readonly string[];
+  /** Optional hook pipeline to inject into turn execution (e.g. for testing global hooks). */
+  readonly hookPipeline?: HookPipeline;
 }
 
 export interface TestHarness {
@@ -124,6 +127,7 @@ export async function createTestHarness(
         getConfig: () => ({}),
         store,
         toolExecutor,
+        hookPipeline: config.hookPipeline,
       };
 
       return executeTurn(turnInput, allManifests, deps);

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { parsePluginMd } from '../src/parse-plugin-md.js';
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -271,7 +271,9 @@ describe('parsePluginMd', () => {
       }
     });
 
-    it('throws on invalid hook event name', () => {
+    it('skips invalid hook event with warning and returns only valid entries', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
       const content = md(
         [
           'name: test-bad-hook',
@@ -280,11 +282,47 @@ describe('parsePluginMd', () => {
           'hooks:',
           '  - event: InvalidEvent',
           '    handler: ./hooks/bad.ts',
+          '  - event: PreToolUse',
+          '    handler: ./hooks/good.ts',
         ].join('\n'),
         '\nBody.\n',
       );
 
-      expect(() => parsePluginMd(content, 'plugins/test-bad-hook/PLUGIN.md')).toThrow();
+      const result = parsePluginMd(content, 'plugins/test-bad-hook/PLUGIN.md');
+
+      // Warning emitted for the invalid event
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(warnSpy.mock.calls[0][0]).toContain('InvalidEvent');
+      expect(warnSpy.mock.calls[0][0]).toContain('plugins/test-bad-hook/PLUGIN.md');
+
+      // Only the valid entry survives
+      expect(result.manifest.hooks).toHaveLength(1);
+      expect(result.manifest.hooks![0].event).toBe('PreToolUse');
+
+      warnSpy.mockRestore();
+    });
+
+    it('returns hooks: undefined when all hook entries have invalid events', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const content = md(
+        [
+          'name: test-all-bad-hooks',
+          'description: All bad hook events',
+          'priority: 500',
+          'hooks:',
+          '  - event: Bogus',
+          '    handler: ./hooks/bad.ts',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/test-all-bad-hooks/PLUGIN.md');
+
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(result.manifest.hooks).toBeUndefined();
+
+      warnSpy.mockRestore();
     });
 
     it('parses plugin without hooks field (optional)', () => {

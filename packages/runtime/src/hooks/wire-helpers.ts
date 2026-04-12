@@ -111,14 +111,14 @@ export interface PreToolUsePayload {
 }
 
 export type PreToolUseOutcome =
-  | { readonly skipped: false }
+  | { readonly skipped: false; readonly toolCall: { readonly id: string; readonly name: string; readonly arguments: string } }
   | { readonly skipped: true; readonly reason: string };
 
 export async function runPreToolUseHook(
   opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
   toolCall: { id: string; name: string; arguments: string },
 ): Promise<PreToolUseOutcome> {
-  if (process.env.COVEL_HOOKS_V1 !== '1' || !opts.pipeline) return { skipped: false };
+  if (process.env.COVEL_HOOKS_V1 !== '1' || !opts.pipeline) return { skipped: false, toolCall };
   const payload: PreToolUsePayload = { toolCall, pluginId: opts.pluginId, runtimeId: opts.runtimeId };
   const hookResult = await opts.pipeline.run(
     'PreToolUse',
@@ -127,7 +127,13 @@ export async function runPreToolUseHook(
     { eventBus: opts.eventBus },
   );
   if (hookResult.action === 'abort') return { skipped: true, reason: hookResult.reason };
-  return { skipped: false };
+
+  // Accumulate any toolCall replacement from the hook result
+  let effectiveToolCall = toolCall;
+  if (hookResult.action === 'continue' && 'replace' in hookResult && hookResult.replace?.toolCall) {
+    effectiveToolCall = { ...effectiveToolCall, ...(hookResult.replace.toolCall as Partial<typeof toolCall>) };
+  }
+  return { skipped: false, toolCall: effectiveToolCall };
 }
 
 // ── PostToolUse ──────────────────────────────────────────────────
