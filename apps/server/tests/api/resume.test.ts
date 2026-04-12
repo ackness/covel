@@ -5,8 +5,9 @@
  * DELETE /api/sessions/:id/suspensions/:suspensionId
  * GET    /api/sessions/:id/suspensions
  *
- * Feature flag: COVEL_SUSPEND_V1=1 must be set for resume/delete to work.
- * GET /suspensions returns [] when flag is off (never 503).
+ * Feature flag: COVEL_SUSPEND_V1=1 must be set for all three routes.
+ * When the flag is off, all three endpoints return 503 (consistent
+ * "feature disabled" semantics across the suspend surface).
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -501,13 +502,13 @@ describe('Resume Routes — flag off (COVEL_SUSPEND_V1 != 1)', () => {
     expect(res.status).toBe(503);
   });
 
-  it('GET /suspensions returns empty array (not 503) when flag is off', async () => {
+  it('GET /suspensions returns 503 when flag is off', async () => {
     const app = createTestApp(makeDefaultDeps(store));
 
     const res = await app.request('/api/sessions/sess-1/suspensions');
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(503);
     const body = await res.json() as Record<string, unknown>;
-    expect(body.suspensions).toEqual([]);
+    expect(body.error).toMatch(/COVEL_SUSPEND_V1/);
   });
 });
