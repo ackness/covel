@@ -2,9 +2,13 @@
  * Unit tests for the S2-T2 Compactor.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { afterAll, beforeAll, describe, it, expect, vi, beforeEach } from 'vitest';
 import { maybeCompact } from '../src/compactor.js';
 import type { CompactorDeps, CompactorLLMAdapter } from '../src/compactor.js';
+import { setPromptsRoot } from '../src/prompts-loader.js';
 import type { DataStore, TurnMessageRecord, SessionSummaryRecord } from '@covel/store';
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -241,6 +245,93 @@ describe('maybeCompact', () => {
         systemPrompt: string;
       };
       expect(callArgs.systemPrompt).toMatch(/summarizer/i);
+    });
+  });
+
+  describe('prompt externalization (loadPrompt)', () => {
+    let tmpRoot: string;
+
+    beforeAll(async () => {
+      tmpRoot = await mkdtemp(path.join(tmpdir(), 'covel-compactor-prompts-'));
+      const serverDir = path.join(tmpRoot, 'server');
+      await mkdir(serverDir, { recursive: true });
+      await writeFile(
+        path.join(serverDir, 'compactor.zh.md'),
+        '【ZH-FIXTURE】摘要器\n\nsections:\n- {{ sections }}\n',
+      );
+      await writeFile(
+        path.join(serverDir, 'compactor.en.md'),
+        '<<EN-FIXTURE>> summarizer\n\nsections:\n- {{ sections }}\n',
+      );
+      setPromptsRoot(tmpRoot);
+    });
+
+    afterAll(async () => {
+      setPromptsRoot(null);
+      await rm(tmpRoot, { recursive: true, force: true });
+    });
+
+    it('reads the zh-CN system prompt from prompts/server/compactor.zh.md', async () => {
+      const messages = makeSimpleHistory(20);
+      const deps: CompactorDeps = { store, estimator, fastSlotLlm, contextWindow: 1_000 };
+
+      await maybeCompact('sess-1', '', messages, deps, { locale: 'zh-CN' });
+
+      const callArgs = (fastSlotLlm.complete as ReturnType<typeof vi.fn>).mock.calls[0]![0] as {
+        systemPrompt: string;
+      };
+      expect(callArgs.systemPrompt).toContain('【ZH-FIXTURE】');
+    });
+
+    it('reads the en-US system prompt from prompts/server/compactor.en.md', async () => {
+      const messages = makeSimpleHistory(20);
+      const deps: CompactorDeps = { store, estimator, fastSlotLlm, contextWindow: 1_000 };
+
+      await maybeCompact('sess-1', '', messages, deps, { locale: 'en-US' });
+
+      const callArgs = (fastSlotLlm.complete as ReturnType<typeof vi.fn>).mock.calls[0]![0] as {
+        systemPrompt: string;
+      };
+      expect(callArgs.systemPrompt).toContain('<<EN-FIXTURE>>');
+    });
+
+    it('interpolates focusSections into the {{ sections }} template variable', async () => {
+      const messages = makeSimpleHistory(20);
+      const deps: CompactorDeps = { store, estimator, fastSlotLlm, contextWindow: 1_000 };
+
+      await maybeCompact('sess-1', '', messages, deps, {
+        locale: 'en-US',
+        focusSections: ['alpha', 'bravo', 'charlie'],
+      });
+
+      const callArgs = (fastSlotLlm.complete as ReturnType<typeof vi.fn>).mock.calls[0]![0] as {
+        systemPrompt: string;
+      };
+      // First section sits next to the leading "- " in the template; the rest
+      // are joined with "\n- " so each appears on its own bullet line.
+      expect(callArgs.systemPrompt).toContain('- alpha\n- bravo\n- charlie');
+    });
+
+    it('skips compaction when the prompt file is missing', async () => {
+      // Point at an empty directory so loadPrompt() throws.
+      const emptyRoot = await mkdtemp(path.join(tmpdir(), 'covel-compactor-empty-'));
+      setPromptsRoot(emptyRoot);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        const messages = makeSimpleHistory(20);
+        const deps: CompactorDeps = { store, estimator, fastSlotLlm, contextWindow: 1_000 };
+
+        const result = await maybeCompact('sess-1', '', messages, deps, { locale: 'zh-CN' });
+
+        expect(result.compacted).toBe(false);
+        expect(fastSlotLlm.complete).not.toHaveBeenCalled();
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to load prompt template'));
+      } finally {
+        warnSpy.mockRestore();
+        setPromptsRoot(tmpRoot);
+        await rm(emptyRoot, { recursive: true, force: true });
+      }
     });
   });
 

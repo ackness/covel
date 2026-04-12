@@ -24,6 +24,7 @@
 
 import type { DataStore, TurnMessageRecord, SessionSummaryRecord } from '@covel/store';
 import type { TokenEstimator } from './budget.js';
+import { loadPrompt, interpolate } from './prompts-loader.js';
 
 // ── Public types ────────────────────────────────────────────────
 
@@ -85,29 +86,35 @@ const DEFAULT_PROTECT_LAST_USER_TURNS = 2;
 const DEFAULT_PROTECT_LAST_N_MESSAGES = 5;
 
 /**
- * Build the framework system prompt for the summary LLM call.
- * Language is determined by `locale`.
+ * Default focus sections used when the caller does not supply any. The actual
+ * text is locale-aware so the summary LLM gets a sensible bullet list to expand
+ * on.
  */
-function buildCompactorSystemPrompt(locale: 'zh-CN' | 'en-US', focusSections: readonly string[]): string {
-  const sectionsText = focusSections.length > 0
-    ? focusSections.join('\n- ')
-    : (locale === 'zh-CN' ? '关键事件\n- 人物关系\n- 环境状态' : 'Key events\n- Character relationships\n- World state');
+const DEFAULT_FOCUS_SECTIONS: Record<'zh-CN' | 'en-US', readonly string[]> = {
+  'zh-CN': ['关键事件', '人物关系', '环境状态'],
+  'en-US': ['Key events', 'Character relationships', 'World state'],
+};
 
-  if (locale === 'zh-CN') {
-    return [
-      '你是叙事摘要器。按下列 sections 分块输出。保留名称、数字、因果链，不要解释。',
-      '',
-      `sections:`,
-      `- ${sectionsText}`,
-    ].join('\n');
-  }
-
-  return [
-    'You are a narrative summarizer. Output in the sections listed below. Preserve names, numbers, and causal chains. Do not explain.',
-    '',
-    `sections:`,
-    `- ${sectionsText}`,
-  ].join('\n');
+/**
+ * Build the framework system prompt for the summary LLM call.
+ *
+ * The template lives at `prompts/server/compactor.{zh,en}.md` and is loaded
+ * via `loadPrompt()` so prompt edits do not require a rebuild.
+ *
+ * The single template variable is `{{ sections }}`. To preserve the
+ * pre-externalization rendering (one section per bullet line), we join the
+ * `focusSections` array with `\n- ` so the leading `- ` from the markdown
+ * template lines up with the first item.
+ */
+async function buildCompactorSystemPrompt(
+  locale: 'zh-CN' | 'en-US',
+  focusSections: readonly string[],
+): Promise<string> {
+  const effective = focusSections.length > 0 ? focusSections : DEFAULT_FOCUS_SECTIONS[locale];
+  const template = await loadPrompt('server', 'compactor', locale);
+  return interpolate(template, {
+    sections: effective.join('\n- '),
+  }).trimEnd();
 }
 
 /**
@@ -232,7 +239,14 @@ export async function maybeCompact(
   }
 
   // 3. Build prompts and call fast LLM
-  const compactorSystemPrompt = buildCompactorSystemPrompt(locale, focusSections);
+  let compactorSystemPrompt: string;
+  try {
+    compactorSystemPrompt = await buildCompactorSystemPrompt(locale, focusSections);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[compactor] Failed to load prompt template for session ${sessionId}: ${message}. Skipping compaction.`);
+    return { compacted: false };
+  }
   const compactorUserPrompt = buildCompactorUserPrompt(toCompact, locale);
 
   let summaryContent: string;
