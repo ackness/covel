@@ -97,6 +97,7 @@ packages/
   events/           @covel/events           — Event bus (pub/sub, event persistence)
   tools/            @covel/tools            — Tool system (tool() wrapper, registry, builtin UI tools, short ID generator, output validation)
   approval/         @covel/approval         — Approval pipeline (permission rules, approval gates)
+  lorebook/         @covel/lorebook         — World/plugin/session lorebook entries (constant + selective scanning, NovelAI-style Reserved Tokens budget)
   plugin-test-utils/ @covel/plugin-test-utils — Testing utilities for plugin authors (MockLLM, TestHarness, factories)
 
 plugins/                    — Core gameplay plugins (PLUGIN.md-centric, see Plugin Inventory below)
@@ -128,6 +129,7 @@ worlds/                     — File-based world packages (YAML manifest + markd
                   @covel/events ←───────────────────────────┘
                   @covel/tools ←────────────────────────────┘
                   @covel/approval
+                  @covel/lorebook   (depends on @covel/context for TokenEstimator)
                   @covel/plugin-test-utils (dev/test only)
 ```
 
