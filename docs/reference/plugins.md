@@ -9,12 +9,12 @@
 | ID | 类型 | 优先级 | 触发方式 | 模型 slot | 描述 |
 |----|------|--------|----------|-----------|------|
 | core-pregame | core-plugin | 10 | scheduled（仅首轮） | — | 游戏初始化（function runtime） |
-| core-world-init | core-plugin | 85 | scheduled（仅首轮） | `fast` | 世界维度初始化（guard + agent） |
-| core-narrator | core-plugin | 500 | auto（`playing` 阶段） | `ds` | 主叙事生成器 |
+| core-world-init/schema-gen | core-plugin | 85 | scheduled（仅首轮） | `fast` | 世界维度初始化（guard + agent） |
 | core-narrator | core-plugin | 500 | auto（`playing` 阶段） | `ds` | 主叙事生成器 |
 | core-guide | plugin | 550 | scheduled（interval=1, cooldown=1） | `fast` | 行动引导 + 选择面板 |
-| core-codex | plugin | 650 | scheduled（interval=2） | `fast` | 知识图鉴系统 |
-| core-char-creator | core-plugin | 700 | scheduled（仅首轮） | `ds` | 角色创建引导 |
+| core-codex | plugin | 650 | scheduled（interval=2, cooldown=1） | `fast` | 知识图鉴系统 |
+| core-char-creator/player-init | core-plugin | 700 | scheduled（maxTriggerCount=2, guard） | `ds` | 玩家角色创建（LLM agent + create-character tool） |
+| core-char-creator/character-tracker | core-plugin | 750 | scheduled（interval=1, cooldown=1, phases=[playing]） | `fast` | NPC 发现 + 角色状态跟踪 |
 
 ---
 
@@ -120,39 +120,58 @@
 
 ---
 
-## core-char-creator
+## core-char-creator（角色子系统）
 
 **路径**: `plugins/core-char-creator/`
+
+多 runtime 插件。player-init 负责玩家角色创建，character-tracker 负责持续跟踪 NPC 和角色状态变化。两者共用同一个 `character-panel.json` 侧边栏面板（通过 `group: "character"` 聚合）。
+
+### core-char-creator/player-init
 
 | 字段 | 值 |
 |------|----|
 | pluginType | `core-plugin`（不可禁用） |
 | priority | 700 |
-| trigger | `scheduled`，`interval: 1`，`maxTriggerCount: 1` — 仅首轮触发 |
+| trigger | `scheduled`，`interval: 1`，`maxTriggerCount: 2`（首轮生成表单 + 表单提交后写库） |
+| guard | `./guard.js` — 若 player 已存在则 skip，并保证 session 在 playing phase |
 | model | `ds`（DeepSeek slot） |
-| tools.builtin | `create-form`（需设置 `createCharacter: true`） |
+| tools.builtin | `create-form`（第 1 步）、`create-character`（第 2 步） |
 | input.inject | `core-narrator` → `narrativeOutput` → `<narrator-opening>` |
 | config.inject | `{{ config.worldSchema }}` — 世界维度系统的角色属性 schema |
+| ui.right | `../../ui/character-panel.json` |
 
-**职责**: 读取 narrator 的开场叙事和世界属性 schema，生成 schema 驱动的角色创建表单（含 `narrativeTemplate`）。玩家填写后，框架用玩家输入替换模板占位符，生成个性化的角色引入叙事。
+**两步流程**（通过 `{{ player.lastFormValues }}` 判断当前步骤）：
 
-**Schema 驱动表单生成**: 通过 `{{ config.worldSchema }}` 注入 `core-world-init` 生成的角色属性定义（`character-attributes` schema），根据属性类型自动映射表单字段：
-- `enum`（有 options）→ `select`，选项取自 schema 定义
-- `string` → `text`
-- `number` → `select`，从合理范围生成 3-5 个选项
-- 数值型属性（如 hp/mp/level 等 stats 分类）不作为表单字段，使用 schema 中的 `defaultValue`
+1. **第 1 步 - 生成表单**（`<player-submission>` 为空时）：
+   - 读取开场叙事 + 世界 schema
+   - 写一段角色觉醒短叙事
+   - 调用 `create-form` 工具生成表单，字段从 `<world-schema>` 的 `character-attributes.attributes` 映射（bio > abilities > stats 优先级，最多 4 字段含 `characterName`）
 
-**表单约束**:
-- **最多 4 个字段**（含 `characterName`），优先使用 `select` 而非 `text` 输入
-- 从 schema 的 `bio` > `abilities` > `stats` 分类中选取最多 3 个适合玩家选择的属性
-- 字段 `name` 必须与 schema 属性 `id` 完全一致（如 `lingGen`、`background`、`specialTrait`）
-- 只有 `characterName` 设为 `required: true`
-- 必须设置 `createCharacter: true` → 提交后框架自动创建 CharacterRecord 并转换 phase → `playing`
-- 若 `{{ config.worldSchema }}` 为空或不可用，退回根据世界观自行设计字段
+2. **第 2 步 - 提交创建**（`<player-submission>` 包含表单值时）：
+   - 读取 `{{ player.lastFormValues }}`（JSON 字符串）
+   - 合并 schema `defaultValue`（数值型 stats 走默认值）
+   - 调用 `create-character` 工具一次，参数 `type: "player"`, `transitionPhase: "playing"`
+   - 工具原子地写 characters 表 + 镜像到 plugin-data + 转换 session phase
 
-**Phase 转换链**: `character_creation` → 表单提交 → `submit-inputs` API → 合并 schema defaultValue → `upsertCharacter()` + `updateSession({ phase: 'playing' })`
+**框架隔离**: `submit-inputs.ts` 不再有 `_createCharacter` 魔法路径。角色创建完全由插件用 builtin 工具完成，session phase 转换通过 `create-character(transitionPhase="playing")` 参数触发。
 
-**Default 值合并**: `submit-inputs` API 在创建角色时，从 `world-data-provider` 插件的 `character-attributes` schema 中读取未被玩家填写属性的 `defaultValue`（如 hp、mp 等），自动合并到角色 `fields` 中，确保角色记录包含完整的属性数据。
+### core-char-creator/character-tracker
+
+| 字段 | 值 |
+|------|----|
+| pluginType | `core-plugin` |
+| priority | 750 |
+| trigger | `scheduled`，`interval: 1`，`cooldownTurns: 1`，`phases: [playing]` |
+| model | `fast` |
+| tools.builtin | `create-character`, `update-character`, `list-characters`, `get-character` |
+| input.inject | `core-narrator` → `narrativeOutput` → `<narrator-output>` |
+
+**职责**: 每轮扫描 narrator 输出，发现新的有名字 NPC → `create-character(type="npc")`；检测叙事中的角色状态变化（受伤、死亡、装备、关系）→ `update-character(fields: {...})`。工作流：
+1. `list-characters` 获取现有角色（避免重复）
+2. 阅读叙事识别新 NPC + 状态变化
+3. 仅对明确出现的变化调用 create/update 工具
+4. 每次最多创建 5 个 NPC（防止 runaway）
+5. 不修改玩家角色属性（除非叙事明确描述）
 
 ---
 

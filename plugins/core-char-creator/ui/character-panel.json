@@ -1,76 +1,75 @@
 {
   "id": "character",
   "group": "character",
-  "label": { "zh": "角色", "en": "Character" },
-  "icon": "user",
-  "dataSource": { "namespace": "character" },
+  "groupLabel": { "zh": "角色", "en": "Characters" },
+  "groupOrder": 100,
+  "label": { "zh": "角色", "en": "Characters" },
+  "icon": "users",
+  "dataSource": { "namespace": "characters" },
   "view": {
     "component": "Stack",
-    "props": { "gap": "md" },
+    "props": { "gap": "sm" },
     "children": [
       {
-        "component": "Card",
-        "children": [
-          {
-            "component": "Row",
-            "props": { "gap": "sm" },
-            "children": [
-              { "component": "Icon", "props": { "name": "user", "size": "md" } },
-              {
-                "component": "Text",
-                "props": {
-                  "content": { "$state": "/name" },
-                  "weight": "bold",
-                  "size": "lg"
-                }
-              }
-            ]
-          },
-          {
-            "component": "Text",
-            "props": {
-              "content": { "$state": "/description" },
-              "variant": "muted",
-              "size": "sm"
-            }
-          }
-        ]
+        "component": "Text",
+        "props": {
+          "content": { "zh": "所有角色", "en": "All Characters" },
+          "weight": "bold",
+          "size": "sm"
+        }
       },
       {
-        "component": "Card",
+        "component": "Separator"
+      },
+      {
+        "component": "CardList",
+        "repeat": { "statePath": "/entries", "key": "key" },
         "children": [
           {
-            "component": "Text",
-            "props": { "content": { "zh": "属性", "en": "Attributes" }, "weight": "bold", "size": "sm" }
-          },
-          {
-            "component": "Separator"
-          },
-          {
-            "component": "Stack",
-            "props": { "gap": "xs" },
+            "component": "Card",
             "children": [
               {
                 "component": "Row",
                 "props": { "gap": "sm" },
                 "children": [
-                  { "component": "Text", "props": { "content": { "zh": "类型", "en": "Type" }, "variant": "muted", "size": "sm" } },
-                  { "component": "Text", "props": { "content": { "$state": "/type" }, "size": "sm" } }
+                  {
+                    "component": "Icon",
+                    "props": { "name": "user", "size": "sm" }
+                  },
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "$item": "value/name" },
+                      "weight": "bold",
+                      "size": "sm"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$item": "value/type" },
+                      "color": "blue"
+                    }
+                  }
                 ]
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "$item": "value/description" },
+                  "variant": "muted",
+                  "size": "xs"
+                }
+              },
+              {
+                "component": "JsonView",
+                "props": {
+                  "value": { "$item": "value/fields" }
+                }
               }
             ]
           }
         ]
-      },
-      {
-        "component": "Text",
-        "props": {
-          "variant": "muted",
-          "size": "xs",
-          "align": "center",
-          "content": { "zh": "角色创建后属性将在此显示", "en": "Character attributes will appear here after creation" }
-        },
-        "visible": { "$state": "/name", "$eq": null }
       }
     ]
   }

@@ -10,6 +10,7 @@ import { streamSSE } from 'hono/streaming';
 import type { DataStore } from '@covel/store';
 import type { PluginRegistry, LoadedRuntime } from '@covel/plugin-loader';
 import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
+import type { EventBus } from '@covel/events';
 import { executeTurn, processRuntimeResult, createTraceRecorder } from '@covel/runtime';
 import type { RuntimeManifest } from '@covel/shared';
 import { loadSessionConfig } from './load-session-config.js';
@@ -26,6 +27,7 @@ type Env = {
     toolExecutor: ToolExecutor;
     getConfigFn: (pluginId: string, runtimeId: string) => Readonly<Record<string, unknown>>;
     resolveModel: (manifest: RuntimeManifest, apiOverride?: string) => string | undefined;
+    eventBus: EventBus;
   };
 };
 
@@ -47,6 +49,7 @@ actionRoutes.post('/', async (c) => {
   const toolExecutor = c.get('toolExecutor');
   const getConfigFn = c.get('getConfigFn');
   const resolveModel = c.get('resolveModel');
+  const eventBus = c.get('eventBus');
 
   const body = await c.req.json<ActionRequest>();
   const { requestId, type, sessionId, locale, payload } = body;
@@ -122,6 +125,23 @@ actionRoutes.post('/', async (c) => {
         payload: eventPayload,
       };
     }
+
+    // Subscribe to out-of-band eventBus events (e.g. plugin-data.changed from
+    // store proxy writes) and forward them to the action SSE stream. Without
+    // this, events emitted by tool calls during the turn never reach the
+    // frontend and UI state (character panel, codex, etc.) desyncs.
+    //
+    // Note: EventBus strips `_subType` from the raw payload and puts it on
+    // `event.type`. So we whitelist by `event.type`, not by payload fields.
+    const FORWARDED_SUBTYPES = new Set(['plugin-data.changed', 'world.dimensions.changed']);
+    const eventBusUnsubscribe = eventBus.onEmit((ev) => {
+      if (ev.sessionId !== sessionId) return;
+      if (!FORWARDED_SUBTYPES.has(ev.type)) return;
+      const payload = { ...(ev.payload as Record<string, unknown>) };
+      stream
+        .writeSSE({ data: JSON.stringify(makeEnvelope(ev.type, payload)) })
+        .catch(() => { /* stream closed, unsubscribe handles cleanup */ });
+    });
 
     try {
       // Persist player message to messages table (source of truth for refresh recovery)
@@ -240,6 +260,8 @@ actionRoutes.post('/', async (c) => {
       await stream.writeSSE({
         data: JSON.stringify(makeEnvelope('error.occurred', { message })),
       });
+    } finally {
+      eventBusUnsubscribe();
     }
   });
 });

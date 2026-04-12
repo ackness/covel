@@ -15,6 +15,10 @@
 | plugin-data-set-batch | builtin | — | auto-allow | 批量写入插件持久化数据 |
 | plugin-data-get | builtin | — | auto-allow | 读取当前插件持久化数据 |
 | plugin-data-list | builtin | — | auto-allow | 列出当前插件持久化数据 |
+| **create-character** | builtin | — | auto-allow | 创建角色（player/npc/companion），写 characters 表 + 镜像到 plugin-data |
+| **update-character** | builtin | — | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++ |
+| **list-characters** | builtin | — | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见） |
+| **get-character** | builtin | — | auto-allow | 按 id 或 name 查找单个角色 |
 | set-world-schema | local | core-world-init | auto-allow | 定义世界角色属性 Schema |
 | set-world-entries-batch | local | core-world-init | auto-allow | 批量写入世界词条 |
 | unlock-codex-entries | local | core-codex | auto-allow | 批量解锁图鉴条目 |
@@ -134,6 +138,67 @@
 | namespace | string | | 数据命名空间（不传则列出所有） |
 
 **输出**: `{ count, items: [{ namespace, key, value, updatedAt }] }`
+
+---
+
+## Character 管理工具
+
+框架级角色管理工具，定义在 `packages/tools/src/builtin/character-tools.ts`。写入 `characters` 表（session 作用域，跨插件可见），同时镜像到调用插件的 `plugin_data[pluginId][namespace="characters"][key=charId]`，让右侧面板通过现成的 `plugin-data.changed` SSE 通道实时更新。
+
+### create-character
+
+创建一个新的角色记录（玩家、NPC 或同伴）。
+
+| 参数 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| name | string | ✓ | 角色名称 |
+| type | enum | ✓ | `player` / `npc` / `companion` |
+| description | string | | 角色简短描述 |
+| fields | Record<string, unknown> | | 属性键值对（应符合世界 schema 中的 character-attributes） |
+| transitionPhase | string | | **仅对 type=player 有效**：创建后将 session 转入此 phase（通常 `"playing"`） |
+
+**输出**: `{ success, characterId, name, type, phaseTransitioned }`
+
+**使用者**: `core-char-creator/player-init`（传 `transitionPhase: "playing"`）、`core-char-creator/character-tracker`（只创建 NPC）
+
+---
+
+### update-character
+
+按 id 更新已有角色。`fields` 按 shallow merge 合并（新键覆盖旧键），`version` 自动 +1。适用于状态变化、装备变更、受伤、死亡等。
+
+| 参数 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| id | string | ✓ | 要更新的角色 id |
+| description | string | | 新描述（未传则保留原值） |
+| fields | Record<string, unknown> | | 要合并的字段 |
+
+**输出**: `{ success, characterId, version }` 或 `{ success: false, notFound: true }`
+
+---
+
+### list-characters
+
+列出本 session 所有角色（session 作用域，跨插件可见）。可按 type 过滤。
+
+| 参数 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| type | enum | | `player` / `npc` / `companion` |
+
+**输出**: `{ count, characters: CharacterSnapshot[] }`
+
+---
+
+### get-character
+
+按 id 或 name 查找单个角色。必须传入 id 或 name 其中之一。
+
+| 参数 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| id | string | | 角色 id |
+| name | string | | 角色名称（精确匹配） |
+
+**输出**: `{ found: true, character: CharacterSnapshot }` 或 `{ found: false }`
 
 ---
 

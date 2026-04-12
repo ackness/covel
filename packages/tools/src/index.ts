@@ -14,6 +14,8 @@ export { validateOutput, selectOutputStrategy, generateSchemaPrompt } from './ou
 // ── Built-in tools ───────────────────────────────────────────────
 export { createFormTool, createChoicesTool, createNotificationTool, builtinUITools } from './builtin/ui-tools.js';
 export { createPluginDataTools } from './builtin/plugin-data-tools.js';
+export { createCharacterTools } from './builtin/character-tools.js';
+export type { CharacterStore } from './builtin/character-tools.js';
 
 // ── Short ID (LLM-friendly entity references) ──────────────────
 export { shortId, shortIdBatch, clearSessionCounters } from './short-id.js';

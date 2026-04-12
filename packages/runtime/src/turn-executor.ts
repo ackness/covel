@@ -160,9 +160,10 @@ export async function executeTurn(
 
   const turnNumber = messageHistory.filter((m) => m.sourceType === 'player').length;
 
-  // Load session metadata for context injection (turnNumber, phase, characters)
+  // Load session metadata for context injection (turnNumber, phase, characters, lastFormValues)
   let sessionPhase: string | undefined;
   let sessionCharacters: { name: string; type: string; description?: string; fields?: Record<string, unknown> }[] = [];
+  let lastFormValues: Record<string, unknown> | undefined;
   if (deps.store) {
     const session = await deps.store.getSession(input.sessionId);
     if (session) sessionPhase = session.phase;
@@ -173,8 +174,21 @@ export async function executeTurn(
       description: c.description,
       fields: c.fields as Record<string, unknown>,
     }));
+    // Most recent player submission — latest row in player_inputs for this session.
+    // Plugins read this via `{{ player.lastFormValues }}` to process form submissions.
+    try {
+      const inputs = await deps.store.listPlayerInputs(input.sessionId);
+      if (inputs.length > 0) {
+        const latest = inputs[inputs.length - 1];
+        if (latest?.values && typeof latest.values === 'object') {
+          lastFormValues = latest.values as Record<string, unknown>;
+        }
+      }
+    } catch {
+      // Non-critical: player inputs may not exist yet
+    }
   }
-  let sessionMeta = { turnNumber, phase: sessionPhase ?? 'unknown', characters: sessionCharacters };
+  let sessionMeta = { turnNumber, phase: sessionPhase ?? 'unknown', characters: sessionCharacters, lastFormValues };
 
   const triggered = activeRuntimes.filter((rt) => {
     // Compute turnsSinceLastTrigger: count player messages after this runtime's last message
@@ -328,7 +342,7 @@ async function executeOneRuntime(
   maxSteps: number,
   timeoutMs: number,
   messageHistory: readonly TurnMessageRecord[],
-  sessionMeta?: { turnNumber: number; phase: string; characters: readonly { name: string; type: string; description?: string; fields?: Record<string, unknown> }[] },
+  sessionMeta?: { turnNumber: number; phase: string; characters: readonly { name: string; type: string; description?: string; fields?: Record<string, unknown> }[]; lastFormValues?: Record<string, unknown> },
 ): Promise<RuntimeResult> {
   const startTime = Date.now();
   const runId = crypto.randomUUID();

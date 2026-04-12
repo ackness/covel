@@ -82,13 +82,14 @@ function MessageRenderer({ message }: { message: GameMessage }) {
         const data = (block.data ?? block) as Record<string, unknown>;
         const interactionId = (data.interactionId ?? data.formId ?? "form") as string;
         const turnId = ((block.meta as Record<string, unknown>)?.turnId ?? message.turnId ?? "") as string;
-        const isCharCreation = data._createCharacter === true;
 
-        // Call submit-inputs API (handles narrativeTemplate, character creation, phase transition)
+        // Submit raw form values. Character creation is now owned by the
+        // plugin's player-init runtime, which reads the submission from context
+        // via {{ player.lastFormValues }} and calls create-character.
         await submitFormInputs({
           turnId,
           interactionId,
-          values: { ...formValues, ...(isCharCreation ? { _createCharacter: true } : {}) },
+          values: formValues,
         });
       } else {
         // Fallback: just send form values as message

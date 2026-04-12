@@ -25,14 +25,13 @@ const formFieldSchema = z.object({
 
 export const createFormTool = tool({
   name: 'create-form',
-  description: '创建一个需要玩家填写的表单。框架会将表单渲染在前端，玩家填写提交后结果注入下一轮上下文。适用于角色创建、NPC 对话选择、任务确认等任何需要玩家输入的场景。',
+  description: '创建一个需要玩家填写的表单。框架会将表单渲染在前端，玩家填写提交后结果注入下一轮上下文（通过 `{{ player.lastFormValues }}`）。适用于角色创建、NPC 对话选择、任务确认等任何需要玩家输入的场景。表单提交后，发起表单的插件应在下一轮读取 lastFormValues 并调用相应的业务工具（如 create-character）处理。',
   parameters: z.object({
     formId: z.string().min(1).describe('表单唯一标识'),
     title: z.string().min(1).describe('表单标题'),
     fields: z.array(formFieldSchema).min(1).describe('表单字段列表'),
     submitLabel: z.string().min(1).describe('提交按钮文本'),
     narrativeTemplate: z.string().describe('叙事模板，包含 {{fieldName}} 占位符，玩家提交后由框架填充为完整叙事'),
-    createCharacter: z.boolean().optional().describe('设为 true 表示此表单用于角色创建，提交后框架自动创建 CharacterRecord 并切换 phase'),
   }),
   execute: async (params) => ({
     created: true,
@@ -45,7 +44,6 @@ export const createFormTool = tool({
       fields: params.fields,
       submitLabel: params.submitLabel,
       narrativeTemplate: params.narrativeTemplate,
-      ...(params.createCharacter ? { _createCharacter: true } : {}),
     },
   }),
 });

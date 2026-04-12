@@ -40,6 +40,13 @@ export interface SessionMeta {
   readonly turnNumber: number;
   readonly phase: string;
   readonly characters: readonly CharacterSummary[];
+  /**
+   * Latest player form submission for this session. Populated from the
+   * `player_inputs` table — the most recent row wins. Plugins read this via
+   * `{{ player.lastFormValues }}` to process form submissions without
+   * server-side magic.
+   */
+  readonly lastFormValues?: Readonly<Record<string, unknown>>;
 }
 
 /** Parameters for building an execution context. */

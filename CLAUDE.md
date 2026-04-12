@@ -105,7 +105,7 @@ plugins/                    — Core gameplay plugins (PLUGIN.md-centric, see Pl
   core-narrator/            — Main narrative generation
   core-guide/               — Action guidance + choice panels (after narrator)
   core-codex/               — Knowledge codex with local tools
-  core-char-creator/        — Character creation onboarding
+  core-char-creator/        — Character subsystem (player-init + character-tracker runtimes)
 
 prompts/                    — Externalized prompt templates (locale-aware markdown)
   server/                   — Server route prompts (generate-world, extract-dimensions)
@@ -199,8 +199,9 @@ Current plugins (PLUGIN.md-centric format):
 | 85 | core-world-init/schema-gen | World dimension schema + entries via LLM (guard skips if data exists) | scheduled (first turn only) |
 | 500 | core-narrator | Main narrative generation | auto (every turn, playing phase) |
 | 550 | core-guide | Action guidance + choice panels (analyzes narrator output) | scheduled (interval=1, cooldown=1, playing phase) |
-| 650 | core-codex | Knowledge/lore codex with persistent plugin-data | scheduled (interval=2, playing phase) |
-| 700 | core-char-creator | Character creation onboarding | scheduled (first turn only, maxTriggerCount=1) |
+| 650 | core-codex | Knowledge/lore codex with persistent plugin-data | scheduled (interval=2, cooldown=1, playing phase) |
+| 700 | core-char-creator/player-init | Player character creation via create-character builtin tool | scheduled (maxTriggerCount=2, guard skips if player exists) |
+| 750 | core-char-creator/character-tracker | NPC detection + character state tracking | scheduled (interval=1, cooldown=1, playing phase) |
 
 Additional plugins planned: core-persona, core-combat, core-inventory, core-quest, core-image, core-memory, etc.
 
@@ -236,10 +237,11 @@ Plugins have session-scoped persistent KV storage via the `plugin_data` table. D
 - `plugin-data-set` — write plugin data
 - `plugin-data-get` — read own plugin's data (cross-plugin read removed for security)
 - `plugin-data-list` — list own plugin's entries in a namespace
+- `create-character`, `update-character`, `list-characters`, `get-character` — character subsystem (writes `characters` table, mirrors to caller plugin's `plugin_data[namespace="characters"]` for panel reactivity; list/get are session-scoped, cross-plugin visible)
 
 **REST API**: `GET/PUT/DELETE /api/session/:id/plugin-data/:pluginId/:namespace/:key`
 
-**Context injection**: Plugin data from `core-world-init` is pre-loaded at turn start and injected via `getConfig` → `{{ config.worldSchema }}`, `{{ config.worldEntries }}`, `{{ config.worldDimensions }}`.
+**Context injection**: Plugin data from `core-world-init` is pre-loaded at turn start and injected via `getConfig` → `{{ config.worldSchema }}`, `{{ config.worldEntries }}`, `{{ config.worldDimensions }}`. Latest player form submission is exposed via `{{ player.lastFormValues }}` (JSON string) — plugins read this to process form submissions without server-side magic.
 
 ### Model Slot System
 

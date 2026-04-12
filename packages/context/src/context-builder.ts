@@ -176,6 +176,14 @@ export function buildContext(
   const meta = params.sessionMeta;
   const playerChar = meta?.characters?.find(c => c.type === 'player') ?? null;
 
+  // Stringify the latest form submission so template interpolation renders
+  // a JSON blob (LLM-friendly) instead of "[object Object]".
+  const lastFormValuesRaw = meta?.lastFormValues;
+  const lastFormValuesStr =
+    lastFormValuesRaw && Object.keys(lastFormValuesRaw).length > 0
+      ? JSON.stringify(lastFormValuesRaw, null, 2)
+      : '';
+
   const variables: Record<string, unknown> = {
     inputs: inputsMap,
     config,
@@ -189,6 +197,8 @@ export function buildContext(
     player: {
       message: turnInput.playerMessage,
       character: playerChar,
+      lastFormValues: lastFormValuesStr,
+      lastFormValuesRaw,
     },
   };
 

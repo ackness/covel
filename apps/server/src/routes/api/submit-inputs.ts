@@ -123,65 +123,12 @@ submitInputsRoutes.post('/:id/submit-inputs', async (c) => {
       createdAt: new Date().toISOString(),
     });
 
-    // 5. Auto-create CharacterRecord when a character-creation form is submitted (idempotent).
-    // Detection: check _createCharacter flag in form values OR in the matching interaction from pendingInput.
-    // The create-form tool sets _createCharacter on the interaction; frontend may also pass it in values.
-    const pi = templateMessage?.pendingInput;
-    const matchedInteraction = Array.isArray(pi)
-      ? (pi as Array<Record<string, unknown>>).find(i => i.interactionId === sub.interactionId)
-      : (pi as Record<string, unknown> | undefined);
-    const isCharCreation = sub.type === 'form' && (
-      sub.values._createCharacter === true ||
-      matchedInteraction?._createCharacter === true
-    );
-    if (isCharCreation) {
-      const charName = (sub.values.characterName as string) ?? (sub.values.name as string) ?? '未命名';
-      const now = new Date().toISOString();
-
-      // Merge world schema defaults into character fields.
-      // The world-data-provider plugin stores character attribute definitions with
-      // default values — populate any attributes not explicitly set by the player.
-      const mergedFields: Record<string, unknown> = { ...sub.values };
-      const pluginRegistry = c.get('pluginRegistry');
-      const worldDataPluginId = pluginRegistry.findPluginByCapability(sessionId, 'world-data-provider');
-      if (worldDataPluginId) {
-        try {
-          const schemaRecord = await store.getPluginData(sessionId, worldDataPluginId, 'schema', 'character-attributes');
-          const attrs = (schemaRecord?.value as Record<string, unknown>)?.attributes;
-          if (Array.isArray(attrs)) {
-            for (const attr of attrs as Array<Record<string, unknown>>) {
-              const attrId = attr.id as string;
-              if (attrId && !(attrId in mergedFields) && attr.defaultValue !== undefined) {
-                mergedFields[attrId] = attr.defaultValue;
-              }
-            }
-          }
-        } catch {
-          // Non-critical: proceed without schema defaults
-        }
-      }
-
-      // Reuse existing player character ID to avoid duplicates on resubmission
-      const existingChars = await store.listCharacters(sessionId);
-      const existingPlayer = existingChars.find((ch) => ch.type === 'player');
-      await store.upsertCharacter({
-        id: existingPlayer?.id ?? crypto.randomUUID(),
-        sessionId,
-        name: charName,
-        type: 'player',
-        description: Object.entries(mergedFields)
-          .filter(([k]) => k !== 'characterName' && k !== 'name' && k !== '_createCharacter')
-          .map(([k, v]) => `${k}: ${String(v)}`)
-          .join(', '),
-        fields: mergedFields,
-        version: (existingPlayer?.version ?? 0) + 1,
-        createdAt: existingPlayer?.createdAt ?? now,
-        updatedAt: now,
-      });
-
-      // Transition session phase: character_creation → playing
-      await store.updateSession(sessionId, { phase: 'playing' });
-    }
+    // NOTE: Character creation is no longer done here. Plugins own character
+    // creation via the create-character builtin tool. The player-init runtime
+    // reads the latest player submission from context ({{ player.lastFormValues }}),
+    // calls create-character(type="player", transitionPhase="playing"), and the
+    // session phase transitions as part of that tool call. This keeps the
+    // framework free of plugin-specific magic strings (`_createCharacter`).
 
     results.push({ submissionId, interactionId: sub.interactionId, filledNarrative, accepted: true });
   }

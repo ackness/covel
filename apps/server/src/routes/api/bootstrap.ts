@@ -27,7 +27,7 @@ import { createEventBus, type EventBus } from '@covel/events';
 import type { DataStore } from '@covel/store';
 import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
 import { createToolExecutor, createModelResolver } from '@covel/runtime';
-import { builtinUITools, createPluginDataTools, tool, shortId, shortIdBatch, type ToolModule } from '@covel/tools';
+import { builtinUITools, createPluginDataTools, createCharacterTools, tool, shortId, shortIdBatch, type ToolModule } from '@covel/tools';
 import { z } from 'zod';
 import { createApprovalPipeline } from '@covel/approval';
 import type { PermissionRule } from '@covel/approval';
@@ -177,6 +177,12 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
 
   // Register plugin-data tools (store-bound via closure; events emitted by store proxy)
   for (const t of createPluginDataTools(store)) {
+    toolMap.set(t.name, t);
+    builtinToolNames.add(t.name);
+  }
+
+  // Register character management tools (writes characters table + mirrors to plugin-data)
+  for (const t of createCharacterTools(store)) {
     toolMap.set(t.name, t);
     builtinToolNames.add(t.name);
   }
