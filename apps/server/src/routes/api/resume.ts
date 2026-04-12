@@ -209,7 +209,7 @@ resumeRoutes.delete('/:id/suspensions/:suspensionId', async (c) => {
 
 resumeRoutes.get('/:id/suspensions', async (c) => {
   if (process.env['COVEL_SUSPEND_V1'] !== '1') {
-    return c.json({ suspensions: [] });
+    return c.json({ error: 'Suspend/resume feature is not enabled (COVEL_SUSPEND_V1)' }, 503);
   }
 
   const sessionId = c.req.param('id');
