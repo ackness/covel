@@ -80,4 +80,10 @@ export interface ContextBuildParams {
    * only provide the numeric limits here.
    */
   readonly contextBudget?: Omit<BudgetOptions, 'estimator'>;
+  /**
+   * V2 (three-tier prompt assembler) only — caller override for segment 1
+   * (framework preamble). When omitted, V2 derives a minimal locale-based
+   * preamble. V1 ignores this field. Introduced in S2-T1.
+   */
+  readonly frameworkPreamble?: string;
 }

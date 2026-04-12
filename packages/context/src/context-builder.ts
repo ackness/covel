@@ -1,35 +1,27 @@
 /**
- * Context Builder — assembles the execution context for a runtime.
+ * Context Builder V1 — assembles the execution context for a runtime.
  *
  * Responsibilities:
- * - Template variable interpolation ({{ inputs.xxx }}, {{ config.xxx }}, etc.)
+ * - Template variable interpolation (`{{ inputs.xxx }}`, `{{ config.xxx }}`, etc.)
  * - Inject block assembly (XML-wrapped data from other runtime outputs)
  * - Full context assembly (system prompt + message history)
+ *
+ * V1 is the legacy single-pass assembler. When the environment variable
+ * `COVEL_PROMPT_V2=1` is set, `buildContext` delegates to
+ * {@link buildContextV2} (three-tier assembly, section A2 of the
+ * improvement plan). With the flag unset the V1 path below is bit-identical
+ * to its pre-S2-T1 behaviour.
  */
 
 import { applyBudget } from './budget.js';
+import { buildContextV2 } from './prompt-assembler.js';
+import {
+  assemblePromptVariables,
+  buildInjectBlocks as _buildInjectBlocks,
+  interpolateTemplate as _interpolateTemplate,
+  resolveLocaleLanguageName,
+} from './prompt-internals.js';
 import type { AssembledContext, ContextBuildParams, LLMMessage } from './types.js';
-
-/**
- * Resolve a dot-separated path against a nested object.
- * Returns `undefined` when any segment is missing.
- */
-function resolvePath(
-  obj: Readonly<Record<string, unknown>>,
-  path: string,
-): unknown {
-  const segments = path.split('.');
-  let current: unknown = obj;
-
-  for (const segment of segments) {
-    if (current === null || current === undefined || typeof current !== 'object') {
-      return undefined;
-    }
-    current = (current as Record<string, unknown>)[segment];
-  }
-
-  return current;
-}
 
 /**
  * Replace `{{ path }}` template variables in a prompt string.
@@ -57,66 +49,26 @@ function resolvePath(
  * // => 'Hello Aria, welcome to Cloudmere!'
  * ```
  */
-export function interpolateTemplate(
-  template: string,
-  variables: Readonly<Record<string, unknown>>,
-): string {
-  return template.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, path: string) => {
-    const value = resolvePath(variables, path.trim());
-    if (value === undefined || value === null) {
-      return '';
-    }
-    return String(value);
-  });
-}
+export const interpolateTemplate = _interpolateTemplate;
 
 /**
- * Extract the tag name from an XML-style tag string like `<narrator-output>`.
- */
-function parseTagName(tag: string): string {
-  return tag.replace(/^</, '').replace(/>$/, '');
-}
-
-/**
- * Build the inject XML blocks from input.inject declarations.
+ * Build the inject XML blocks from `input.inject` declarations.
  *
- * For each inject declaration, finds the corresponding runtime result
- * and wraps the specified field value in the declared XML tag.
+ * For each inject declaration, finds the corresponding runtime result and
+ * wraps the specified field value in the declared XML tag.
  */
-export function buildInjectBlocks(
-  params: ContextBuildParams,
-): string {
-  const injects = params.manifest.input?.inject;
-  if (!injects || injects.length === 0) {
-    return '';
-  }
-
-  const blocks: string[] = [];
-
-  for (const inject of injects) {
-    const result = params.completedResults.get(inject.from);
-    if (!result?.output) {
-      continue;
-    }
-
-    const value = result.output[inject.field];
-    if (value === undefined || value === null) {
-      continue;
-    }
-
-    const tagName = parseTagName(inject.as);
-    blocks.push(`<${tagName}>${String(value)}</${tagName}>`);
-  }
-
-  return blocks.join('\n');
-}
+export const buildInjectBlocks = _buildInjectBlocks;
 
 /**
  * Assemble the full execution context for a runtime.
  *
  * Combines the prompt template, inject blocks from upstream runtime outputs,
- * template variable interpolation, and message history into an `AssembledContext`
- * ready for LLM consumption.
+ * template variable interpolation, and message history into an
+ * `AssembledContext` ready for LLM consumption.
+ *
+ * When `COVEL_PROMPT_V2=1` is set, delegates to {@link buildContextV2}
+ * (three-tier segment assembly). Otherwise runs the V1 single-pass logic.
+ * Budget pruning (`COVEL_CONTEXT_BUDGET_V1=1`) applies to both paths.
  *
  * @param params - Context build parameters: prompt template, manifest, turn input, completed results, config, and message history.
  * @returns An `AssembledContext` containing the interpolated system prompt and ordered messages.
@@ -140,83 +92,28 @@ export function buildInjectBlocks(
 export function buildContext(
   params: ContextBuildParams,
 ): AssembledContext {
-  const { promptTemplate, turnInput, completedResults, config } = params;
+  // V2 gate (S2-T1). Any value other than exactly "1" falls through to V1.
+  if (process.env.COVEL_PROMPT_V2 === '1') {
+    return buildContextV2(params);
+  }
+
+  const { promptTemplate, turnInput } = params;
 
   // Build inject blocks and append to prompt template
-  const injectBlocks = buildInjectBlocks(params);
+  const injectBlocks = _buildInjectBlocks(params);
   const rawSystemPrompt = injectBlocks
     ? `${promptTemplate}\n${injectBlocks}`
     : promptTemplate;
 
-  // Build the variables object for interpolation
-  const inputsMap: Record<string, Record<string, Record<string, unknown>>> = {};
-  for (const [key, result] of completedResults) {
-    if (!result.output) continue;
-    const slashIdx = key.indexOf('/');
-    // Single-runtime: name = "core-narrator" → pluginId = runtimeId = "core-narrator"
-    // Multi-runtime:  name = "core-world-init/schema-gen" → pluginId = "core-world-init", runtimeId = "schema-gen"
-    const pluginId = slashIdx >= 0 ? key.slice(0, slashIdx) : key;
-    const runtimeId = slashIdx >= 0 ? key.slice(slashIdx + 1) : key;
-    if (!inputsMap[pluginId]) {
-      inputsMap[pluginId] = {};
-    }
-    inputsMap[pluginId][runtimeId] = result.output;
-  }
-
-  // Build a `world` convenience object from config.world* keys so that
-  // plugin templates can use `{{ world.lore }}`, `{{ world.dimensions }}`, etc.
-  const world: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(config)) {
-    if (key.startsWith('world') && key.length > 5) {
-      // worldLore → lore, worldDimensions → dimensions, worldEntries → entries, etc.
-      const shortKey = key[5].toLowerCase() + key.slice(6);
-      world[shortKey] = value;
-    }
-  }
-
-  const meta = params.sessionMeta;
-  const playerChar = meta?.characters?.find(c => c.type === 'player') ?? null;
-
-  // Stringify the latest form submission so template interpolation renders
-  // a JSON blob (LLM-friendly) instead of "[object Object]".
-  const lastFormValuesRaw = meta?.lastFormValues;
-  const lastFormValuesStr =
-    lastFormValuesRaw && Object.keys(lastFormValuesRaw).length > 0
-      ? JSON.stringify(lastFormValuesRaw, null, 2)
-      : '';
-
-  const variables: Record<string, unknown> = {
-    inputs: inputsMap,
-    config,
-    ...config,
-    world,
-    session: {
-      id: turnInput.sessionId,
-      turnNumber: meta?.turnNumber ?? 0,
-      phase: meta?.phase ?? 'unknown',
-    },
-    player: {
-      message: turnInput.playerMessage,
-      character: playerChar,
-      lastFormValues: lastFormValuesStr,
-      lastFormValuesRaw,
-    },
-  };
+  // Assemble the variables object for interpolation (shared with V2).
+  const variables = assemblePromptVariables(params);
 
   // Interpolate template variables
-  let systemPrompt = interpolateTemplate(rawSystemPrompt, variables);
+  let systemPrompt = _interpolateTemplate(rawSystemPrompt, variables);
 
   // Inject language constraint based on session locale
   if (turnInput.locale) {
-    const langMap: Record<string, string> = {
-      'zh-CN': '中文',
-      'zh': '中文',
-      'en-US': 'English',
-      'en': 'English',
-      'ja': '日本語',
-      'ko': '한국어',
-    };
-    const langName = langMap[turnInput.locale] ?? turnInput.locale;
+    const langName = resolveLocaleLanguageName(turnInput.locale);
     systemPrompt += `\n\n[LANGUAGE] You MUST respond in ${langName}. All narrative output, tool parameters, and descriptions must be in ${langName}.`;
   }
 
