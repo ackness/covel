@@ -496,6 +496,9 @@ importers:
       postgres:
         specifier: ^3.4.0
         version: 3.4.8
+      sqlite-vec:
+        specifier: 0.1.7-alpha.2
+        version: 0.1.7-alpha.2
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.13

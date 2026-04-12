@@ -68,6 +68,13 @@ export const slotDefinitionSchema = z.object({
    * If omitted, defaults to "openai-chat".
    */
   imageApi: z.enum(["dashscope-wan", "openai-chat"]).optional(),
+  /**
+   * Embeddings request body format for embed slots.
+   *   "openai" (default)       — standard `{input: string[]}` (OpenAI, Ollama, most OpenRouter text embedders)
+   *   "nemotron-multimodal"    — OpenRouter NVIDIA Nemotron multimodal shape `{input: [{content: [...]}]}`
+   * Only meaningful when output includes "embedding".
+   */
+  embeddingFormat: z.enum(["openai", "nemotron-multimodal"]).optional(),
 
   // ── Capability overrides (all optional, auto-inferred from known model DB) ──
 

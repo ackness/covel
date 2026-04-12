@@ -115,15 +115,73 @@ export function createPresetRegistry(options: {
     return { profile: effectiveProfile, preset };
   }
 
-  /** Resolve the embedding target (always embed-default profile). */
-  function resolveEmbeddingTarget(): ResolvedTarget {
-    const profile = profiles.get("embed-default");
-    if (!profile) {
+  /**
+   * Resolve an embedding target.
+   *
+   * - If `presetId` is provided and that preset supports embedding, use
+   *   it (overriding the default). The profile is synthesized from the
+   *   preset so routing works without requiring a paired profile entry.
+   * - Otherwise return the "embed-default" profile and the first preset
+   *   declaring `output: ["embedding"]`, if any.
+   * - Throws when no embedding target is configured at all.
+   */
+  function resolveEmbeddingTarget(input?: { presetId?: string }): ResolvedTarget {
+    // Explicit preset path — user picked a specific embed slot.
+    if (input?.presetId) {
+      const preset = presets.get(input.presetId);
+      if (!preset) {
+        throw new Error(
+          `Preset registry: preset "${input.presetId}" not found.`
+        );
+      }
+      if (!preset.enabled) {
+        throw new Error(
+          `Preset registry: preset "${input.presetId}" is disabled.`
+        );
+      }
+      if (!preset.supportedModes.includes("embed")) {
+        throw new Error(
+          `Preset registry: preset "${input.presetId}" does not support embedding.`
+        );
+      }
+      const syntheticProfile: ModelProfile = {
+        id: "embed-default",
+        tier: "embed-default",
+        provider: preset.provider,
+        model: preset.model,
+        contextWindow: preset.capability?.contextWindow ?? SYNTHETIC_CONTEXT_WINDOW,
+        latencyClass: "medium",
+        costClass: "medium",
+        supportedModes: ["embed"],
+      };
+      return { profile: syntheticProfile, preset };
+    }
+
+    // Default path — use the first embed profile synthesized by the loader
+    // and (optionally) the matching preset for baseUrl/protocol hints.
+    const profile = profiles.get("embed-default") ?? null;
+    const preset =
+      Array.from(presets.values()).find((p) =>
+        p.supportedModes.includes("embed"),
+      ) ?? null;
+
+    if (!profile && !preset) {
       throw new Error(
-        'Preset registry: profile "embed-default" not found.'
+        'Preset registry: no embedding target configured. Add an embed slot to llm.toml (output = ["embedding"]) or register an "embed-default" profile programmatically.',
       );
     }
-    return { profile, preset: null };
+
+    const effectiveProfile: ModelProfile = profile ?? {
+      id: "embed-default",
+      tier: "embed-default",
+      provider: preset!.provider,
+      model: preset!.model,
+      contextWindow: preset!.capability?.contextWindow ?? SYNTHETIC_CONTEXT_WINDOW,
+      latencyClass: "medium",
+      costClass: "medium",
+      supportedModes: ["embed"],
+    };
+    return { profile: effectiveProfile, preset };
   }
 
   /**

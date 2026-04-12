@@ -34,8 +34,35 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
 } from '../types.js';
+import type {
+  VectorStoreCapability,
+  UpsertVectorInput,
+  SearchVectorsInput,
+  VectorSearchResult,
+  DeleteVectorsInput,
+} from '../vector-store.js';
 
-export function createMemoryStore(): DataStore {
+/** In-memory vector row. Mutable — this is only for dev/test. */
+interface MemoryVectorRow {
+  sessionId: string;
+  pluginId: string;
+  namespace: string;
+  key: string;
+  dimensions: number;
+  embedding: Float32Array;
+  payload: string | null;
+}
+
+function squaredL2(a: Float32Array, b: Float32Array): number {
+  let sum = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    const diff = a[i] - b[i];
+    sum += diff * diff;
+  }
+  return sum;
+}
+
+export function createMemoryStore(): DataStore & VectorStoreCapability {
   const sessions = new Map<string, SessionRecord>();
   const turnResults: TurnResultRecord[] = [];
   const runtimeResults: RuntimeResultRecord[] = [];
@@ -49,6 +76,10 @@ export function createMemoryStore(): DataStore {
   const characters = new Map<string, CharacterRecord>();
   const pluginData = new Map<string, PluginDataRecord>();
   const pluginConfigs = new Map<string, PluginConfigRecord>();
+  /** Keyed by `${sessionId}:${pluginId}:${namespace}:${key}:${dim}` so
+   *  multiple dims can coexist for the same logical row if a caller ever
+   *  re-embeds with a different model. */
+  const vectorRows = new Map<string, MemoryVectorRow>();
   const worlds = new Map<string, WorldRecord>();
   const traceEvents: TraceEventRecord[] = [];
   const turnMessages: TurnMessageRecord[] = [];
@@ -66,7 +97,17 @@ export function createMemoryStore(): DataStore {
     return `${sessionId}:${pluginId}`;
   }
 
-  const store: DataStore = {
+  function vectorRowKey(
+    sessionId: string,
+    pluginId: string,
+    namespace: string,
+    key: string,
+    dimensions: number,
+  ): string {
+    return `${sessionId}:${pluginId}:${namespace}:${key}:${dimensions}`;
+  }
+
+  const store: DataStore & VectorStoreCapability = {
     // ── Session ──
 
     async createSession(session) {
@@ -350,6 +391,68 @@ export function createMemoryStore(): DataStore {
 
     async listPlayerInputs(sessionId) {
       return playerInputs.filter((r) => r.sessionId === sessionId);
+    },
+
+    // ── Vector Store (brute-force, O(n) — fine for tests and <1k rows) ──
+
+    async upsertVector(input: UpsertVectorInput) {
+      if (input.embedding.length !== input.dimensions) {
+        throw new Error(
+          `Memory vector upsert: embedding length ${input.embedding.length} does not match declared dimensions ${input.dimensions}`,
+        );
+      }
+      const rowKey = vectorRowKey(
+        input.sessionId,
+        input.pluginId,
+        input.namespace,
+        input.key,
+        input.dimensions,
+      );
+      // Copy the Float32Array to decouple from caller-owned buffers.
+      vectorRows.set(rowKey, {
+        sessionId: input.sessionId,
+        pluginId: input.pluginId,
+        namespace: input.namespace,
+        key: input.key,
+        dimensions: input.dimensions,
+        embedding: new Float32Array(input.embedding),
+        payload: input.payload ?? null,
+      });
+    },
+
+    async searchVectors(input: SearchVectorsInput): Promise<VectorSearchResult[]> {
+      if (input.query.length !== input.dimensions) {
+        throw new Error(
+          `Memory vector search: query length ${input.query.length} does not match declared dimensions ${input.dimensions}`,
+        );
+      }
+      const scored: Array<{ row: MemoryVectorRow; distance: number }> = [];
+      for (const row of vectorRows.values()) {
+        if (row.sessionId !== input.sessionId) continue;
+        if (row.dimensions !== input.dimensions) continue;
+        if (input.pluginId !== undefined && row.pluginId !== input.pluginId) continue;
+        if (input.namespace !== undefined && row.namespace !== input.namespace) continue;
+        scored.push({ row, distance: squaredL2(input.query, row.embedding) });
+      }
+      scored.sort((a, b) => a.distance - b.distance);
+      return scored.slice(0, Math.max(0, input.topK)).map(({ row, distance }) => ({
+        sessionId: row.sessionId,
+        pluginId: row.pluginId,
+        namespace: row.namespace,
+        key: row.key,
+        distance,
+        payload: row.payload,
+      }));
+    },
+
+    async deleteVectors(input: DeleteVectorsInput) {
+      for (const [rowKey, row] of Array.from(vectorRows.entries())) {
+        if (row.sessionId !== input.sessionId) continue;
+        if (row.pluginId !== input.pluginId) continue;
+        if (input.namespace !== undefined && row.namespace !== input.namespace) continue;
+        if (input.dimensions !== undefined && row.dimensions !== input.dimensions) continue;
+        vectorRows.delete(rowKey);
+      }
     },
 
     // ── Lifecycle ──

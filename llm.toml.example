@@ -68,6 +68,38 @@ fallback = "story"
 # output    = ["image"]
 # imageApi  = "openai-chat"            # ← optional: this is the default
 
+# ── Embedding Slots (optional) ───────────────────────────────────
+#
+# Embedding slots are identified by `output = ["embedding"]`. The first
+# slot so declared becomes the `embed-default` target for gateway.embed().
+# Add `embeddingFormat` to select the request body shape:
+#   "openai"              — standard {input: string[]} (default)
+#   "nemotron-multimodal" — NVIDIA Nemotron {input: [{content: [...]}]}
+#
+# Example A: local Ollama (recommended default — private, free, no network)
+# Prereq: `ollama pull nomic-embed-text-v2-moe && ollama serve`
+#
+# [covel.embed-default]
+# provider = "ollama"
+# model    = "nomic-embed-text-v2-moe"
+# baseUrl  = "http://localhost:11434/v1"
+# protocol = "openai-chat-v1"
+# output   = ["embedding"]
+# # embeddingFormat = "openai"   # ← default, can omit
+#
+# Example B: OpenRouter NVIDIA Nemotron multimodal (vision embedding, 2048d)
+# Works for text-only too; accepts image_url content parts when Phase 2
+# multimodal values land.
+#
+# [covel.embed-multimodal]
+# provider = "openrouter"
+# model    = "nvidia/llama-nemotron-embed-vl-1b-v2:free"
+# baseUrl  = "https://openrouter.ai/api/v1"
+# protocol = "openai-chat-v1"
+# output   = ["embedding"]
+# input    = ["text", "image"]
+# embeddingFormat = "nemotron-multimodal"
+
 # ── Capability Override (optional) ───────────────────────────────
 #
 # Model capabilities (input/output modalities, features, token limits,

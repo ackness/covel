@@ -214,6 +214,38 @@ export const KNOWN_MODELS: ReadonlyMap<string, KnownModelEntry> = new Map([
     pricing: { inputPerMToken: 0.13 },
   }],
 
+  // ── Ollama local embeddings ─────────────────────────────────────
+  // Dimensions vary by model variant; contextWindow is the prompt cap.
+
+  ["nomic-embed-text", {
+    input: ["text"],
+    output: ["embedding"],
+    features: [],
+    contextWindow: 8_192,
+    maxOutputTokens: 0,
+  }],
+
+  ["nomic-embed-text-v2-moe", {
+    input: ["text"],
+    output: ["embedding"],
+    features: [],
+    contextWindow: 8_192,
+    maxOutputTokens: 0,
+  }],
+
+  // ── OpenRouter multimodal embeddings ────────────────────────────
+  // NVIDIA Nemotron multimodal embedding — accepts both text and
+  // image_url content parts. Shape requires the "nemotron-multimodal"
+  // embeddingFormat dispatch in the adapter.
+
+  ["nvidia/llama-nemotron-embed-vl-1b-v2:free", {
+    input: ["text", "image"],
+    output: ["embedding"],
+    features: ["vision"],
+    contextWindow: 8_192,
+    maxOutputTokens: 0,
+  }],
+
   // ── Anthropic ──────────────────────────────────────────────────
 
   ["claude-sonnet-4-20250514", {

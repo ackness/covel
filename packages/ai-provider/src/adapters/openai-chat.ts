@@ -20,7 +20,19 @@ import {
 import type { TextMessage } from "../types.js";
 
 /** Fields that providerRequestMetadata must never override. */
-const OPENAI_PROTECTED_KEYS = new Set(["model", "messages", "stream", "max_tokens", "response_format"]);
+const OPENAI_PROTECTED_KEYS = new Set([
+  "model",
+  "messages",
+  "stream",
+  "max_tokens",
+  "response_format",
+  // `input` is protected for embeddings — it is built from params.values.
+  "input",
+  // Slot-level dispatch hints — consumed by the adapter, not forwarded.
+  "embeddingFormat",
+  // Image dispatch hint — consumed by generateImage branches.
+  "imageFormat",
+]);
 
 function sanitizeOpenAiMetadata(
   meta: Record<string, unknown> | undefined,
@@ -31,6 +43,27 @@ function sanitizeOpenAiMetadata(
     if (!OPENAI_PROTECTED_KEYS.has(k)) sanitized[k] = v;
   }
   return sanitized;
+}
+
+/**
+ * Build the `input` field for a POST /embeddings request, dispatching on
+ * the slot's declared embedding format.
+ *
+ * - "openai" (default): array of strings, per the OpenAI spec.
+ * - "nemotron-multimodal": OpenRouter NVIDIA Nemotron multimodal shape
+ *   where each element is `{content: [{type: "text", text}, ...]}`. Phase 1
+ *   supports text parts only; adding image_url parts is a Phase 2 feature.
+ */
+function buildEmbeddingInput(
+  values: string[],
+  format: string,
+): unknown {
+  if (format === "nemotron-multimodal") {
+    return values.map((text) => ({
+      content: [{ type: "text", text }],
+    }));
+  }
+  return values;
 }
 
 /**
@@ -314,9 +347,19 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
     },
 
     async embed(config, params) {
+      // Slot-level `embeddingFormat` (from llm.toml) is propagated here via
+      // params.providerRequestMetadata.embeddingFormat. Default is the
+      // standard OpenAI `input: string[]` shape. Custom formats wrap values
+      // into provider-specific content shapes — mirrors the imageApi
+      // dispatch pattern further below.
+      const meta = params.providerRequestMetadata ?? {};
+      const embeddingFormat = (meta.embeddingFormat as string | undefined) ?? "openai";
+
+      const input = buildEmbeddingInput(params.values, embeddingFormat);
+
       const response = await postJson(config, "/embeddings", {
         model: params.model,
-        input: params.values,
+        input,
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
       });
       const payload = await parseJson(response);

@@ -53,10 +53,12 @@ import {
   toTurnMessageRecord,
   toPlayerInputRecord,
 } from './sqlite-store-mappers.js';
+import type { VectorStoreCapability } from '../vector-store.js';
+import { createSqliteVectorCapability } from './sqlite-vector.js';
 
 // ── Factory ─────────────────────────────────────────────────────
 
-export function createSqliteStore(dbPath: string): DataStore {
+export function createSqliteStore(dbPath: string): DataStore & Partial<VectorStoreCapability> {
   const sqlite = new Database(dbPath);
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
@@ -65,7 +67,12 @@ export function createSqliteStore(dbPath: string): DataStore {
 
   createTables(sqlite);
 
-  return {
+  // Attempt to load sqlite-vec. If the optional binary is missing, vector
+  // methods are simply absent from the returned store and supportsVector()
+  // will return false — callers fall back to structured retrieval.
+  const vectorCapability = createSqliteVectorCapability(sqlite);
+
+  const baseStore: DataStore = {
     // ── Session ──────────────────────────────────────────────
 
     async createSession(session: SessionRecord): Promise<void> {
@@ -800,4 +807,12 @@ export function createSqliteStore(dbPath: string): DataStore {
       sqlite.close();
     },
   };
+
+  // Compose the optional vector capability onto the base store. When
+  // sqlite-vec could not be loaded, the returned store has no vector
+  // methods and `supportsVector(store)` returns false.
+  if (vectorCapability) {
+    return Object.assign(baseStore, vectorCapability);
+  }
+  return baseStore;
 }

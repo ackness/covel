@@ -35,7 +35,7 @@ interface GatewayDependencies {
   };
   presetRegistry: {
     resolveTextTarget(input: { presetId?: string }): ResolvedTarget;
-    resolveEmbeddingTarget(): ResolvedTarget;
+    resolveEmbeddingTarget(input?: { presetId?: string }): ResolvedTarget;
     resolveTextTargetChain(input: { presetId?: string }): ResolvedTarget[];
   };
   slotRegistry?: SlotRegistry;
@@ -216,23 +216,35 @@ export function createGateway(deps: GatewayDependencies) {
       });
     }
 
-    const target = deps.presetRegistry.resolveEmbeddingTarget();
-    // Use text target's provider config for embed routing
-    const textTarget = deps.presetRegistry.resolveTextTarget({
+    const target = deps.presetRegistry.resolveEmbeddingTarget({
       presetId: resolveSlotOrPassthrough(input.presetId),
     });
-    const resolvedProvider = targetProvider(textTarget);
-    let resolved = deps.providerRegistry.resolve(
-      textTarget.preset ?? target.profile,
-      { mode: "embed" }
-    );
+
+    // Route via the preset (carries baseUrl/protocol) when available, else
+    // via the embed profile's provider name — the provider registry fills
+    // in baseUrl/protocol from its registered provider defaults.
+    const routingTarget = target.preset ?? {
+      provider: target.profile.provider,
+    };
+    let resolved = deps.providerRegistry.resolve(routingTarget, {
+      mode: "embed",
+    });
     if (options?.apiKeys) {
       resolved = deps.providerRegistry.withApiKeys(
         resolved,
         options.apiKeys,
-        resolvedProvider
+        target.profile.provider,
       );
     }
+
+    // Merge slot-level embeddingFormat into the per-call metadata so the
+    // adapter can dispatch (e.g. Nemotron multimodal wrapping).
+    const providerRequestMetadata: Record<string, unknown> = {
+      ...(target.preset?.embeddingFormat !== undefined
+        ? { embeddingFormat: target.preset.embeddingFormat }
+        : {}),
+      ...input.providerRequestMetadata,
+    };
 
     return runSingle(
       target,
@@ -245,10 +257,10 @@ export function createGateway(deps: GatewayDependencies) {
           {
             model: target.profile.model,
             values: input.values,
-            providerRequestMetadata: input.providerRequestMetadata,
+            providerRequestMetadata,
           },
-          { profile: target.profile, preset: target.preset, mode: "embed" }
-        )
+          { profile: target.profile, preset: target.preset, mode: "embed" },
+        ),
     );
   }
 

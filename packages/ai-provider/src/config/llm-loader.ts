@@ -3,8 +3,11 @@ import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { llmConfigSchema, type LlmConfig, type SlotDefinition } from "./llm-schema.js";
-import type { AiConfig, PresetConfig, ProviderDefaults, OperationMode } from "../types.js";
+import type { AiConfig, ModelProfile, PresetConfig, ProviderDefaults, OperationMode } from "../types.js";
 import { resolveCapability, type ManualCapabilityOverride } from "../capability/index.js";
+
+/** Fallback context window when the capability DB does not report one. */
+const DEFAULT_EMBED_CONTEXT_WINDOW = 8_192;
 
 /**
  * Load llm.toml from disk, validate, and convert to internal AiConfig format.
@@ -58,7 +61,7 @@ export function parseLlmConfig(toml: string): { llmConfig: LlmConfig; aiConfig: 
 function convertToAiConfig(llm: LlmConfig): AiConfig {
   const providers: Record<string, ProviderDefaults> = {};
   const presets: PresetConfig[] = [];
-  const slotNames = Object.keys(llm.covel);
+  const profiles: ModelProfile[] = [];
 
   for (const [slotName, _def] of Object.entries(llm.covel)) {
     const def = _def as SlotDefinition;
@@ -114,10 +117,29 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
       capability,
       tag,
       ...(def.imageApi !== undefined ? { imageApi: def.imageApi } : {}),
+      ...(def.embeddingFormat !== undefined ? { embeddingFormat: def.embeddingFormat } : {}),
     });
+
+    // Synthesize the "embed-default" profile on the first slot that declares
+    // an embedding model. Later embed slots remain addressable via their own
+    // preset ID but do not override the default.
+    const isEmbedSlot = supportedModes.includes("embed");
+    const hasEmbedDefault = profiles.some((p) => p.id === "embed-default");
+    if (isEmbedSlot && !hasEmbedDefault) {
+      profiles.push({
+        id: "embed-default",
+        tier: "embed-default",
+        provider: def.provider,
+        model: def.model,
+        contextWindow: capability.contextWindow ?? DEFAULT_EMBED_CONTEXT_WINDOW,
+        latencyClass: "medium",
+        costClass: "medium",
+        supportedModes: ["embed"],
+      });
+    }
   }
 
-  return { providers, profiles: [], presets };
+  return { providers, profiles, presets };
 }
 
 /**

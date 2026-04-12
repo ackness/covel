@@ -148,6 +148,13 @@ export interface PresetConfig {
    * ultimately to the adapter via providerRequestMetadata.imageFormat.
    */
   imageApi?: ImageApiFormat;
+  /**
+   * Embeddings request body format. Carried from llm.toml `embeddingFormat`
+   * field. Only meaningful for embed slots (output includes "embedding").
+   * The gateway merges this into providerRequestMetadata.embeddingFormat
+   * so adapters can dispatch on it.
+   */
+  embeddingFormat?: EmbeddingFormat;
 }
 
 // ── Tool Calling ──────────────────────────────────────────────────
@@ -336,6 +343,16 @@ export interface ProviderLifecycleHook {
 type SlotTag = "text" | "image" | "embed" | "speech" | string;
 
 export type ImageApiFormat = "dashscope-wan" | "openai-chat";
+
+/**
+ * Embeddings request body format.
+ * - "openai" (default): standard `{input: string[]}` shape accepted by
+ *   OpenAI, Ollama (v1), most OpenRouter text-embedding models.
+ * - "nemotron-multimodal": OpenRouter NVIDIA Nemotron multimodal embedding
+ *   shape `{input: [{content: [{type: "text"|"image_url", ...}]}]}`.
+ *   Phase 1 supports only text content parts; Phase 2 will add images.
+ */
+export type EmbeddingFormat = "openai" | "nemotron-multimodal";
 
 export interface ModelSlotConfig {
   slotId: string;
