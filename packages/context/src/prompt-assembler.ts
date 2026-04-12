@@ -32,11 +32,8 @@
  * hitting the V1 `buildContext` path and this module is not exercised.
  */
 
-<<<<<<< HEAD
 import type { AuthorsNoteDecl, PostHistoryDecl, RuntimeManifest } from '@covel/shared';
-=======
 import { PROMPT_CACHE_BREAKPOINT_MARKER } from '@covel/shared';
->>>>>>> feat/s2-t3-prompt-cache
 import { applyBudget } from './budget.js';
 import {
   assemblePromptVariables,
