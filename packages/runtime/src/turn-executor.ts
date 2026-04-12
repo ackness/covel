@@ -303,12 +303,33 @@ export async function executeTurn(
     sessionSummaries = [...(await deps.store.listSessionSummaries(input.sessionId))];
   }
 
+  // Load working memory for prompt injection (S3-T3, B1 fix).
+  // The store may not implement listWorkingMemory on older backends, so we
+  // probe for the method before calling. The downstream context-builder gates
+  // actual rendering on COVEL_WORKING_MEMORY_V1=1, so loading here is cheap
+  // and idempotent — when the flag is off, the loaded entries are simply not
+  // rendered into the system prompt.
+  let workingMemory: readonly import('@covel/context').WorkingMemoryEntry[] = [];
+  if (deps.store && typeof deps.store.listWorkingMemory === 'function') {
+    try {
+      const records = await deps.store.listWorkingMemory(input.sessionId);
+      workingMemory = records.map((r) => ({
+        scope: r.scope,
+        key: r.key,
+        value: r.value,
+      }));
+    } catch {
+      // Non-critical: working memory load failures must not abort the turn.
+      workingMemory = [];
+    }
+  }
+
   // 3. Execute each group
   const completedResults = new Map<string, RuntimeResult>();
 
   for (const group of groups) {
     const results = await executeParallel(group.runtimes, async (manifest) => {
-      return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, timeoutMs, messageHistory, sessionMeta, deps.hookPipeline, sessionSummaries);
+      return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, timeoutMs, messageHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory);
     });
 
     // Merge results + apply phase transitions from runtime output
@@ -628,6 +649,7 @@ async function executeOneRuntime(
   sessionMeta?: { turnNumber: number; phase: string; characters: readonly { name: string; type: string; description?: string; fields?: Record<string, unknown> }[]; lastFormValues?: Record<string, unknown> },
   hookPipeline?: HookPipeline,
   sessionSummaries?: readonly import('@covel/store').SessionSummaryRecord[],
+  workingMemory?: readonly import('@covel/context').WorkingMemoryEntry[],
 ): Promise<RuntimeResult> {
   const startTime = Date.now();
   const runId = crypto.randomUUID();
@@ -946,6 +968,7 @@ async function executeOneRuntime(
       messageHistory,
       sessionMeta,
       summaries: sessionSummaries ?? [],
+      workingMemory: workingMemory ?? [],
       ...(budgetEligible
         ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
         : {}),
