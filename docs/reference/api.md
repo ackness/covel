@@ -182,7 +182,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 |------|------|------|
 | GET | `/api/sessions/:id/plugins` | 列出会话的活跃/可用插件 |
 | POST | `/api/sessions/:id/plugins/enable` | 启用插件（body: `{ pluginId }`） |
-| POST | `/api/sessions/:id/plugins/disable` | 禁用插件（body: `{ pluginId }`） |
+| POST | `/api/sessions/:id/plugins/disable` | 禁用插件（body: `{ pluginId }`，core-plugin 返回 403） |
 
 ### 全局插件
 
@@ -266,13 +266,19 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | GET | `/api/packages` | 列出已加载插件包（含 runtime/tool 信息） |
 | GET | `/api/commands` | 列出注册的命令 |
 | GET | `/api/block-schemas` | 列出插件 block schema |
-| GET | `/api/ui-specs` | 列出插件 UI 声明（按 slot 分组：right/message/left） |
+| GET | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件 |
 | GET | `/api/llm-config` | 返回 slot 配置与能力信息 |
 | GET | `/api/provider-keys` | 返回服务器配置的 API 密钥（仅 T1） |
 
 #### GET /api/ui-specs
 
-返回所有活跃插件的 UI 声明，按 slot 分组。前端在 boot 时调用，用于动态构建右侧面板 Tab 和消息区 block 渲染器。
+返回插件的 UI 声明，按 slot 分组。前端在 boot 时调用，用于动态构建右侧面板 Tab 和消息区 block 渲染器。
+
+**查询参数：**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `sessionId` | string（可选） | 指定后只返回该会话激活集中的插件；省略时返回全局所有已加载插件（向后兼容） |
 
 **响应格式**：
 
@@ -676,6 +682,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 - 每个活跃 Runtime 按优先级依次执行（同优先级并行）
 - `runtimeResults` 包含每个 Runtime 的输出，可能包含叙事文本、工具调用结果等
 - Turn 执行后 `session.turnCount` 自动 +1
+- 服务端会对每个 runtimeResult 运行 `processRuntimeResult` 提交管道（与 `/api/actions` 一致）：normalize → state.commit → 触发后续 SessionEvent
 - 如果某个 Runtime 的输出包含 `pendingInputs`，需要通过 `/submit-inputs` 提交玩家响应
 
 #### `GET /api/sessions/:id/results`
@@ -866,7 +873,7 @@ curl "http://localhost:3001/api/sessions/<sessionId>/turns?limit=5"
 **使用说明:**
 
 - `filledNarrative` 是将玩家输入填入模板后的**纯自然语言**文本，不含 JSON 结构
-- 该文本会自动追加到对话历史中，供叙事者在下一轮 Turn 中参考
+- 该文本作为玩家消息追加到对话历史，供叙事者在下一轮 Turn 中参考（**不再生成合成的 assistant-role 消息**）
 - 模板由插件提供，使用 `{{fieldName}}` 占位符语法
 - 如果找不到模板，会生成一条简单的回退叙事（如 `[玩家输入] name: 艾尔文, class: 战士`）
 
@@ -978,7 +985,7 @@ curl "http://localhost:3001/api/sessions/<sessionId>/turns?limit=5"
 
 #### `POST /api/sessions/:id/plugins/disable`
 
-禁用一个插件。
+禁用一个插件。如果目标插件 `pluginType === "core-plugin"`，返回 **403** 拒绝禁用（核心插件由框架保护）。
 
 **请求体:**
 
@@ -986,10 +993,16 @@ curl "http://localhost:3001/api/sessions/<sessionId>/turns?limit=5"
 { "pluginId": "core-codex" }
 ```
 
-**响应:**
+**响应 200:**
 
 ```json
 { "ok": true, "active": ["core-pregame", "core-narrator"] }
+```
+
+**响应 403:**
+
+```json
+{ "error": "Cannot disable core plugin \"core-narrator\"" }
 ```
 
 ---

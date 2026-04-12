@@ -1,6 +1,8 @@
 # Session State & Narrative Flow 改动记录
 
 > 本文档记录框架改动、新增字段、已知问题和待办事项。
+>
+> **2026-04-12 更新**：以下条目中提到的 `_createCharacter` magic flag 与 `submit-inputs.ts` 自动建角色 + 切 phase 的路径已被废弃。当前实现：插件通过 `create-character(transitionPhase="playing")` builtin 工具完成建角色与 phase 切换，框架不再在 submit-inputs 中检测任何插件特定字段。详见 `audits/2026-04-12-backend-webv2-framework-audit/04-changelog.md`。
 
 ---
 

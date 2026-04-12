@@ -82,7 +82,11 @@
 |----------|------|------|------|
 | `plugin-data.changed` | S→C | 插件持久化数据变更 | `{ pluginId, runtimeId, changes: [{ namespace, key, value, operation }] }` |
 
-`plugin-data-set` / `plugin-data-set-batch` 工具写入后自动触发此事件，前端可实时响应插件状态变更。
+`plugin-data-set` / `plugin-data-set-batch` / DELETE `/plugin-data/...` 等所有写路径均会触发此事件。`operation` 字段为 `'set'` 或 `'delete'`（删除时 `value` 为 `null`），由 `wrapStoreWithPluginDataEvents` 在 store 层统一拦截，前端可实时响应插件状态变更。
+
+### SSE 命名事件订阅注意事项
+
+所有 ProtocolEventType 在 SSE 流上都以**命名事件**（`event: <type>\ndata: ...`）形式发送，**不会**触发 `EventSource.onmessage` 默认 handler。前端必须为每个关心的事件类型显式注册 `addEventListener('<type>', handler)`，否则事件会被静默丢弃。`apps/web-v2/src/services/sse.ts` 已为 `narrative.delta` / `narrative.completed` / `interaction.requested` / `phase.changed` / `plugin-data.changed` 等关键事件挂载监听。新增事件类型时**必须同步更新该文件**。
 
 ## 二、命令类型（CommandType）
 

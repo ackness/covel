@@ -39,11 +39,15 @@
 ### 面板发现流程
 
 ```
-启动 → GET /api/ui-specs → { right: [...], message: [...], left: [...] }
+session 建立 → GET /api/ui-specs?sessionId=<id>
+  → server 按会话激活集（session plugin scope）过滤
+  → { right: [...], message: [...], left: [...] }
   → 按 right[] 动态生成 Tab（icon + label）
   → 每个 Tab 对应一个 json-render Renderer
   → pluginData[pluginId][namespace] 注入为 state
 ```
+
+> 不带 `sessionId` 的请求返回所有已加载插件（向后兼容用于 boot/debug）。`right-panel.tsx` 在 session 切换时会清空状态并以新 sessionId 重新拉取，避免跨会话的 Tab 残留。
 
 ### 当前注册的面板
 

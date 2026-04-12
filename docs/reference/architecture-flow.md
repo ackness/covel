@@ -430,9 +430,12 @@ plugins/my-plugin/
   │  │   ├─ 找到 narrativeTemplate                                │ │
   │  │   ├─ 填充 {{characterName}} → "陆青云"                      │ │
   │  │   ├─ 生成叙事文本（自然语言，非 JSON）                      │ │
-  │  │   ├─ 创建 CharacterRecord (upsertCharacter)                │ │
-  │  │   ├─ 合并 schema defaultValue (hp, mp 等)                  │ │
-  │  │   └─ 转换 phase → playing                                  │ │
+  │  │   └─ 返回 filledNarrative（不写 turn_messages，不建角色）   │ │
+  │  │                                                            │ │
+  │  │   下一轮 Turn 由 char-creator 运行：                       │ │
+  │  │   create-character(transitionPhase: "playing") →           │ │
+  │  │     upsertCharacter + updateSession({phase}) +             │ │
+  │  │     hooks.onPhaseTransition → SSE phase.changed            │ │
   │  │                                                            │ │
   │  │   2. POST /api/actions (player_action)                     │ │
   │  │      → 触发 Turn 2 → narrator + guide + codex              │ │
@@ -531,7 +534,7 @@ turn_messages (追加式，永不删除):
   │ turn-1 │ player   │ user       │ (空 - 首轮无输入)             │
   │ turn-1 │ runtime  │ assistant  │ 午后的坊市弥漫着灵植的甜香... │
   │ turn-1 │ runtime  │ assistant  │ [角色创建叙事]                │
-  │ turn-1 │ player-input│assistant│ [narrativeTemplate 填充结果]  │
+  │ turn-1 │ player-input│ user    │ [narrativeTemplate 填充结果]  │
   │ turn-2 │ player   │ user       │ 我决定跟师姐去探查灵脉       │
   │ turn-2 │ runtime  │ assistant  │ 清晨，你在老槐树下等到了...   │
   │ turn-2 │ tool     │ tool       │ {"entries":[...]}             │
@@ -541,6 +544,9 @@ turn_messages (追加式，永不删除):
   消息历史是 LLM 上下文的一部分。
   每次 Turn 执行时，完整历史传给 Context Builder。
   Context Builder 组装为 LLM messages[] 数组。
+
+  注意：玩家输入只以 `user` 角色追加一行（叙事模板填充结果），
+  框架不再为 player-input 生成合成的 `assistant` 镜像消息。
 ```
 
 ## 七、完整游戏流程时序图
@@ -552,7 +558,7 @@ turn_messages (追加式，永不删除):
   打开页面 ──────────► boot()
                        GET /api/worlds
                        GET /api/packages
-                       GET /api/ui-specs ◄─── 返回插件面板声明
+                       GET /api/ui-specs ◄─── 返回所有已加载插件的面板声明（boot 阶段）
                        渲染世界选择页面
 
   选择世界 ──────────► selectWorld()
@@ -589,9 +595,20 @@ turn_messages (追加式，永不删除):
                        pluginData 更新 → 右侧面板渲染
 
   填写角色表单 ──────► submitFormInputs()
-                       POST /submit-inputs ──► 填充 narrativeTemplate
-                                               创建 CharacterRecord
-                                               phase → playing
+                       POST /api/sessions/:id/submit-inputs
+                                            ──► 仅填充 narrativeTemplate
+                                                返回 filledNarrative
+                                                (不创建角色，不切 phase)
+                       POST /api/actions  ──► send_message(filledNarrative)
+                       (Turn 2)               ├── narrator 叙事
+                                              └── char-creator 调用
+                                                  create-character tool
+                                                  ├── store.upsertCharacter
+                                                  ├── store.updateSession({phase})
+                                                  └── hooks.onPhaseTransition
+                                                      → eventBus.emit
+                                                      → SSE phase.changed
+                       ◄── phase.changed ─────┘
                        POST /api/actions  ──► SSE 流打开 (Turn 2)
                        (player_action)        │
                                               ├── executeTurn()

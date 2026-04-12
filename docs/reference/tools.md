@@ -185,6 +185,8 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 
 **使用者**: `core-char-creator/player-init`（传 `transitionPhase: "playing"`）、`core-char-creator/character-tracker`（只创建 NPC）
 
+**框架钩子**：`createCharacterTools(store, hooks?)` 工厂接受可选的 `CharacterToolHooks`，包含 `onPhaseTransition(sessionId, phase)` 回调。`bootstrap.ts` 在装配时注入该回调，使得 `transitionPhase` 触发的 phase 切换会自动通过 `eventBus.emit({ _subType: 'phase.changed', phase })` 广播 SSE 事件 —— 框架不再在路由层硬编码 `phase.changed` 发射。回调失败被吞掉（仅打印警告），不阻塞 tool 执行。
+
 ---
 
 ### update-character
@@ -487,7 +489,7 @@ execute: async (params) => ({
 });
 ```
 
-**`narrativeTemplate` 由插件作者编写**，决定了交互结果如何翻译为叙事文本。框架只负责替换占位符。
+**`narrativeTemplate` 由插件作者编写**，决定了交互结果如何翻译为叙事文本。框架只负责替换占位符。提交后**只有填充后的叙事文本会作为玩家消息追加到对话历史**，框架不再生成任何合成的 assistant-role 镜像消息。
 
 ### 提交 API
 
