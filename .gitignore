@@ -90,3 +90,4 @@ vendor/
 tmp/
 *.png
 .playwright-mcp/
+.worktrees/
