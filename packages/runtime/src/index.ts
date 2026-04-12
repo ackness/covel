@@ -12,8 +12,8 @@ export { executeParallel, resolveFailure } from './parallel-executor.js';
 export type { RuntimeExecuteFn, FailureResolution } from './parallel-executor.js';
 
 // ── Turn Executor ────────────────────────────────────────────────
-export { executeTurn } from './turn-executor.js';
-export type { TurnExecutorDeps, TurnExecutorOptions } from './turn-executor.js';
+export { executeTurn, resumeSuspendedRuntime } from './turn-executor.js';
+export type { TurnExecutorDeps, TurnExecutorOptions, ResumeSuspendedRuntimeOptions } from './turn-executor.js';
 
 // ── LLM Adapter ─────────────────────────────────────────────────
 export type { LLMAdapter, LLMMessage as LLMAdapterMessage, LLMResponse, LLMStreamEvent, LLMToolCall, LLMToolDefinition } from './llm-adapter.js';

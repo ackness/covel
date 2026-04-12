@@ -28,7 +28,7 @@ import type { DataStore } from '@covel/store';
 import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
 import { createToolExecutor, createModelResolver } from '@covel/runtime';
 import { maybeCompact, type CompactorRunner, type CompactorLLMAdapter } from '@covel/context';
-import { builtinUITools, createPluginDataTools, createCharacterTools, tool, shortId, shortIdBatch, type ToolModule } from '@covel/tools';
+import { builtinUITools, createPluginDataTools, createCharacterTools, suspendTool, tool, shortId, shortIdBatch, type ToolModule } from '@covel/tools';
 import { z } from 'zod';
 import { createApprovalPipeline } from '@covel/approval';
 import type { PermissionRule } from '@covel/approval';
@@ -53,6 +53,7 @@ import { workingMemoryRoutes } from './working-memory.js';
 import { createRoutes } from './create.js';
 import { aiRoutes } from './ai.js';
 import { traceRoutes } from './traces.js';
+import { resumeRoutes } from './resume.js';
 
 // ── Bootstrap config ─────────────────────────────────────────────
 
@@ -179,6 +180,11 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     toolMap.set(t.name, t);
     builtinToolNames.add(t.name);
   }
+
+  // Register suspend tool (S4-T4). Always registered — harmless when flag off,
+  // as the sentinel just becomes a normal tool result returned to the LLM.
+  toolMap.set(suspendTool.name, suspendTool);
+  builtinToolNames.add(suspendTool.name);
 
   // Register plugin-data tools (store-bound via closure; events emitted by store proxy)
   for (const t of createPluginDataTools(store)) {
@@ -419,6 +425,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   app.route('/api/sessions', characterRoutes);
   app.route('/api/sessions', pluginDataRoutes);
   app.route('/api/sessions', workingMemoryRoutes);
+  app.route('/api/sessions', resumeRoutes);  // S4-T4: suspend/resume (resume + suspensions list/delete)
   app.route('/api/plugins', pluginRoutes);
   app.route('/api/events', eventRoutes);
   app.route('/api/events', subscribeRoutes);

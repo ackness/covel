@@ -24,6 +24,7 @@ import type {
   PlayerInputRecord,
   WorkingMemoryRecord,
   SessionSummaryRecord,
+  SuspensionRecord,
 } from '../types.js';
 
 // ── Record factories ────────────────────────────────────────────
@@ -262,6 +263,28 @@ function makeSessionSummary(overrides?: Partial<SessionSummaryRecord>): SessionS
     content: 'The hero entered the dungeon and defeated a goblin.',
     focusSections: ['narrative', 'character-state'],
     createdAt: ts(),
+    ...overrides,
+  };
+}
+
+function makeSuspension(overrides?: Partial<SuspensionRecord>): SuspensionRecord {
+  return {
+    id: id(),
+    sessionId: 'sess-1',
+    turnId: 'turn-1',
+    runtimeId: 'test-runtime',
+    pluginId: 'test-plugin',
+    reason: 'Need player input',
+    resumeSchema: { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'] },
+    pendingContinuation: {
+      messages: [{ role: 'system', content: 'You are a test assistant.' }],
+      partialContent: undefined,
+      toolCallsSoFar: [],
+      pendingProposals: [],
+      suspendToolCallId: 'tc-suspend-1',
+    },
+    createdAt: ts(),
+    resolvedAt: undefined,
     ...overrides,
   };
 }
@@ -1091,6 +1114,99 @@ export function runStoreContractTests(
 
         const messages = await store.listTurnMessages('sess-tag-tx');
         expect(messages[0].compactedAtTurnId).toBeUndefined();
+      });
+    });
+
+    // ── Suspensions (S4-T4) ──────────────────────────────────
+
+    describe('Suspensions (S4-T4)', () => {
+      it('should save and retrieve a suspension (roundtrip)', async () => {
+        const suspension = makeSuspension({ sessionId: 'sess-susp-1' });
+        await store.saveSuspension(suspension);
+        const result = await store.getSuspension(suspension.id);
+        expect(result).not.toBeNull();
+        expect(result!.id).toBe(suspension.id);
+        expect(result!.sessionId).toBe('sess-susp-1');
+        expect(result!.reason).toBe(suspension.reason);
+        expect(result!.resolvedAt).toBeUndefined();
+      });
+
+      it('should filter listSuspensions by sessionId', async () => {
+        const s1 = makeSuspension({ sessionId: 'sess-susp-A' });
+        const s2 = makeSuspension({ sessionId: 'sess-susp-A' });
+        const s3 = makeSuspension({ sessionId: 'sess-susp-B' });
+        await store.saveSuspension(s1);
+        await store.saveSuspension(s2);
+        await store.saveSuspension(s3);
+
+        const listA = await store.listSuspensions('sess-susp-A');
+        expect(listA).toHaveLength(2);
+        expect(listA.map((s) => s.id)).toContain(s1.id);
+        expect(listA.map((s) => s.id)).toContain(s2.id);
+
+        const listB = await store.listSuspensions('sess-susp-B');
+        expect(listB).toHaveLength(1);
+        expect(listB[0].id).toBe(s3.id);
+      });
+
+      it('should markSuspensionResolved — sets resolvedAt, leaves other fields intact', async () => {
+        const suspension = makeSuspension({ sessionId: 'sess-susp-res' });
+        await store.saveSuspension(suspension);
+        await store.markSuspensionResolved(suspension.id);
+
+        const result = await store.getSuspension(suspension.id);
+        expect(result).not.toBeNull();
+        expect(result!.resolvedAt).not.toBeUndefined();
+        // Other fields unchanged
+        expect(result!.reason).toBe(suspension.reason);
+        expect(result!.runtimeId).toBe(suspension.runtimeId);
+      });
+
+      it('should deleteSuspension — removes only the targeted record', async () => {
+        const s1 = makeSuspension({ sessionId: 'sess-susp-del' });
+        const s2 = makeSuspension({ sessionId: 'sess-susp-del' });
+        await store.saveSuspension(s1);
+        await store.saveSuspension(s2);
+
+        await store.deleteSuspension(s1.id);
+
+        const r1 = await store.getSuspension(s1.id);
+        const r2 = await store.getSuspension(s2.id);
+        expect(r1).toBeNull();
+        expect(r2).not.toBeNull();
+      });
+
+      it('should return null for non-existent suspension ID', async () => {
+        const result = await store.getSuspension('nonexistent-id');
+        expect(result).toBeNull();
+      });
+
+      it('should roll back saveSuspension on rollbackTx', async () => {
+        const suspension = makeSuspension({ sessionId: 'sess-susp-tx' });
+
+        await store.beginTx();
+        await store.saveSuspension(suspension);
+        await store.rollbackTx();
+
+        const result = await store.getSuspension(suspension.id);
+        expect(result).toBeNull();
+      });
+
+      it('should persist complex resumeSchema JSON', async () => {
+        const complexSchema = {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            age: { type: 'number' },
+            tags: { type: 'array', items: { type: 'string' } },
+          },
+          required: ['name'],
+        };
+        const suspension = makeSuspension({ sessionId: 'sess-susp-schema', resumeSchema: complexSchema });
+        await store.saveSuspension(suspension);
+
+        const result = await store.getSuspension(suspension.id);
+        expect(result!.resumeSchema).toEqual(complexSchema);
       });
     });
 

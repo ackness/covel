@@ -9,7 +9,8 @@
 
 import type { RuntimeManifest, RuntimeResult, TurnInput, TurnResult, ToolCallRecord } from '@covel/shared';
 import type { LoadedRuntime } from '@covel/plugin-loader';
-import type { DataStore, TurnMessageRecord } from '@covel/store';
+import type { DataStore, TurnMessageRecord, SuspensionRecord } from '@covel/store';
+import { isSuspendSentinel } from '@covel/tools';
 import type { EventBus } from '@covel/events';
 import { shouldTrigger } from './trigger.js';
 import { scheduleByPriority } from './scheduler.js';
@@ -418,6 +419,200 @@ export async function executeTurn(
   return turnResult;
 }
 
+// ── Resume (S4-T4) ───────────────────────────────────────────────
+
+export interface ResumeSuspendedRuntimeOptions {
+  readonly maxSteps?: number;
+  readonly timeoutMs?: number;
+}
+
+/**
+ * Re-enter the LLM tool loop for a suspended agent runtime (S4-T4).
+ *
+ * This function:
+ * 1. Reconstructs the LLM message array from `pendingContinuation.messages`.
+ * 2. Appends a synthetic `tool` message carrying `resumeData` (for agent runtimes)
+ *    or a `user` message (for function runtimes that suspended via status).
+ * 3. Drives the LLM tool-calling loop to completion.
+ * 4. Marks the suspension as resolved in the store.
+ * 5. Emits `turn.resumed` SSE event.
+ *
+ * Provider API keys are never stored; they must be supplied via the current request.
+ *
+ * NOTE: COVEL_SUSPEND_V1 must be '1' — callers check this before invoking.
+ */
+export async function resumeSuspendedRuntime(
+  suspension: SuspensionRecord,
+  resumeData: unknown,
+  manifest: RuntimeManifest,
+  deps: TurnExecutorDeps,
+  options?: ResumeSuspendedRuntimeOptions,
+): Promise<RuntimeResult> {
+  const startTime = Date.now();
+  const maxSteps = options?.maxSteps ?? 10;
+  const timeoutMs = options?.timeoutMs ?? 60000;
+  const runId = crypto.randomUUID();
+
+  const { pendingContinuation } = suspension;
+
+  // Reconstruct message array from stored continuation
+  const messages: LLMMessage[] = [...(pendingContinuation.messages as LLMMessage[])];
+
+  // Append synthetic message to deliver resume data to the LLM.
+  // For agent runtimes (suspended via suspend tool), append as a 'tool' message
+  // referencing the suspend tool's call ID. For function runtimes, append as 'user'.
+  if (pendingContinuation.suspendToolCallId) {
+    // Agent runtime path: synthetic tool result carrying resume data
+    messages.push({
+      role: 'tool',
+      content: JSON.stringify({ resumeData }),
+      toolCallId: pendingContinuation.suspendToolCallId,
+    });
+  } else {
+    // Function runtime path: resume data delivered as user message
+    messages.push({
+      role: 'user',
+      content: typeof resumeData === 'string' ? resumeData : JSON.stringify(resumeData),
+    });
+  }
+
+  // Load the runtime to get toolDefs etc.
+  const loaded = await deps.loadRuntime(manifest, undefined);
+  if (!loaded) {
+    return {
+      pluginId: manifest.pluginId,
+      runtimeId: manifest.name,
+      runId,
+      turnId: suspension.turnId,
+      status: 'failed',
+      output: null,
+      toolCalls: [],
+      durationMs: Date.now() - startTime,
+      error: 'Runtime not found on resume',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  const collectedToolCalls: ToolCallRecord[] = [...(pendingContinuation.toolCallsSoFar as ToolCallRecord[])];
+  let finalContent: string | null = pendingContinuation.partialContent ?? null;
+  let steps = 0;
+  const deadline = Date.now() + timeoutMs;
+
+  const toolDefs = deps.toolExecutor ? buildToolDefinitions(manifest, deps.toolExecutor) : undefined;
+
+  while (steps < maxSteps && Date.now() < deadline) {
+    steps++;
+
+    const effectiveModel = deps.resolveModel
+      ? deps.resolveModel(manifest, undefined)
+      : manifest.model;
+
+    const response = await deps.llm.generate({
+      model: effectiveModel,
+      messages,
+      tools: toolDefs,
+    });
+
+    if (response.toolCalls.length > 0) {
+      if (response.content) finalContent = response.content;
+
+      messages.push({
+        role: 'assistant',
+        content: response.content ?? '',
+        toolCalls: response.toolCalls,
+      });
+
+      for (const tc of response.toolCalls) {
+        if (deps.toolExecutor) {
+          const tcStart = Date.now();
+          const result = await deps.toolExecutor.execute(
+            { toolCallId: tc.id, name: tc.name, arguments: tc.arguments },
+            { sessionId: suspension.sessionId, turnId: suspension.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name },
+          );
+
+          // Detect nested suspend — not supported, treat as error result
+          if (process.env['COVEL_SUSPEND_V1'] === '1' && isSuspendSentinel(result.parsedResult)) {
+            messages.push({
+              role: 'tool',
+              content: JSON.stringify({ error: 'Nested suspend is not supported' }),
+              toolCallId: tc.id,
+            });
+            continue;
+          }
+
+          let parsedInput: Record<string, unknown> = {};
+          try { parsedInput = JSON.parse(tc.arguments) as Record<string, unknown>; } catch { /* keep empty */ }
+          collectedToolCalls.push({
+            toolCallId: tc.id,
+            toolName: tc.name,
+            pluginId: manifest.pluginId,
+            runtimeId: manifest.name,
+            turnId: suspension.turnId,
+            input: parsedInput,
+            output: result.parsedResult,
+            durationMs: Date.now() - tcStart,
+            approvalStatus: 'auto-allowed',
+            timestamp: new Date().toISOString(),
+          });
+
+          messages.push({
+            role: 'tool',
+            content: result.result,
+            toolCallId: tc.id,
+          });
+        } else {
+          messages.push({
+            role: 'tool',
+            content: JSON.stringify({ result: 'Tool execution not available' }),
+            toolCallId: tc.id,
+          });
+        }
+      }
+      continue;
+    }
+
+    finalContent = response.content;
+    break;
+  }
+
+  // Parse final output
+  let output: Record<string, unknown>;
+  if (finalContent) {
+    const stripped = finalContent.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+    try {
+      output = JSON.parse(stripped) as Record<string, unknown>;
+    } catch {
+      output = { narrativeOutput: finalContent };
+    }
+  } else {
+    output = { narrativeOutput: '' };
+  }
+
+  // Mark suspension as resolved
+  if (deps.store) {
+    await deps.store.markSuspensionResolved(suspension.id);
+  }
+
+  // Emit turn.resumed event
+  emitSubEvent(deps.eventBus, 'game', 'turn.resumed', suspension.sessionId, {
+    sessionId: suspension.sessionId,
+    turnId: suspension.turnId,
+    suspensionId: suspension.id,
+  });
+
+  return {
+    pluginId: manifest.pluginId,
+    runtimeId: manifest.name,
+    runId,
+    turnId: suspension.turnId,
+    status: 'success',
+    output,
+    toolCalls: collectedToolCalls,
+    durationMs: Date.now() - startTime,
+    timestamp: new Date().toISOString(),
+  };
+}
+
 /**
  * Execute a single runtime. Dispatches to function handler or LLM agent pipeline
  * based on `manifest.runtimeType`.
@@ -481,6 +676,82 @@ async function executeOneRuntime(
         completedResults,
         config,
       });
+
+      // ── Suspend detection for function runtimes (S4-T4) ────────────
+      // If the handler returns { status: 'suspended', reason, resumeSchema } and
+      // COVEL_SUSPEND_V1=1, persist a suspension and return status: 'suspended'.
+      if (
+        process.env['COVEL_SUSPEND_V1'] === '1' &&
+        typeof output.status === 'string' &&
+        output.status === 'suspended' &&
+        typeof output.reason === 'string' &&
+        deps.store
+      ) {
+        const suspensionId = crypto.randomUUID();
+        const suspension: SuspensionRecord = {
+          id: suspensionId,
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          runtimeId: manifest.name,
+          pluginId: manifest.pluginId,
+          reason: output.reason as string,
+          resumeSchema: output.resumeSchema ?? {},
+          pendingContinuation: {
+            messages: [],
+            toolCallsSoFar: [],
+            pendingProposals: [],
+            // TODO(S4-T4.b): function runtime suspend carries no partial content
+          },
+          createdAt: new Date().toISOString(),
+        };
+        await deps.store.saveSuspension(suspension);
+
+        emitSubEvent(deps.eventBus, 'game', 'turn.suspended', input.sessionId, {
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          suspensionId,
+          reason: suspension.reason,
+          resumeSchema: suspension.resumeSchema,
+        });
+
+        const suspendedResult: RuntimeResult = {
+          pluginId: manifest.pluginId,
+          runtimeId: manifest.name,
+          runId,
+          turnId: input.turnId,
+          status: 'suspended',
+          output: {
+            suspended: true,
+            suspensionId,
+            reason: suspension.reason,
+            resumeSchema: suspension.resumeSchema,
+          },
+          toolCalls: [],
+          durationMs: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+        };
+
+        try {
+          await deps.onRuntimeComplete?.({
+            runtimeId: manifest.name,
+            pluginId: manifest.pluginId,
+            status: 'suspended',
+            durationMs: suspendedResult.durationMs,
+          });
+        } catch { /* callback error must not kill runtime */ }
+
+        emitSubEvent(deps.eventBus, 'runtime', 'runtime.completed', input.sessionId, {
+          runtimeId: manifest.name,
+          pluginId: manifest.pluginId,
+          status: 'suspended',
+          durationMs: suspendedResult.durationMs,
+        });
+
+        return runPostRuntimeHook(
+          { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus },
+          suspendedResult,
+        );
+      }
 
       const result: RuntimeResult = {
         pluginId: manifest.pluginId,
@@ -834,6 +1105,93 @@ async function executeOneRuntime(
 
             // ── PostToolUse hook (S4-T3) ─────────────────────────
             const toolResult = await runPostToolUseHook(preToolOpts, { id: effectiveTc.id, name: effectiveTc.name, arguments: effectiveTc.arguments }, result);
+
+            // ── Suspend detection (S4-T4) ────────────────────────
+            // When COVEL_SUSPEND_V1=1 and the suspend tool was called, capture
+            // the current loop state and persist a SuspensionRecord. The tool
+            // result is NOT pushed back to the LLM — instead we exit the loop
+            // with status 'suspended'.
+            if (
+              process.env['COVEL_SUSPEND_V1'] === '1' &&
+              isSuspendSentinel(toolResult.parsedResult) &&
+              deps.store
+            ) {
+              const sentinel = toolResult.parsedResult;
+              const suspensionId = crypto.randomUUID();
+
+              // Messages array currently has the assistant message (with tool_calls)
+              // but NOT the tool result for the suspend call. We capture the full
+              // message array up to this point (including the assistant message).
+              const pendingContinuation: SuspensionRecord['pendingContinuation'] = {
+                messages: [...messages],
+                partialContent: finalContent ?? undefined,
+                toolCallsSoFar: [...collectedToolCalls],
+                pendingProposals: [],
+                // Store the suspend tool's call ID so resume can append a proper tool result
+                suspendToolCallId: effectiveTc.id,
+              };
+
+              const suspension: SuspensionRecord = {
+                id: suspensionId,
+                sessionId: input.sessionId,
+                turnId: input.turnId,
+                runtimeId: manifest.name,
+                pluginId: manifest.pluginId,
+                reason: sentinel.reason,
+                resumeSchema: sentinel.resumeSchema,
+                pendingContinuation,
+                createdAt: new Date().toISOString(),
+              };
+
+              await deps.store.saveSuspension(suspension);
+
+              // Emit turn.suspended SSE event via the actions channel
+              emitSubEvent(deps.eventBus, 'game', 'turn.suspended', input.sessionId, {
+                sessionId: input.sessionId,
+                turnId: input.turnId,
+                suspensionId,
+                reason: sentinel.reason,
+                resumeSchema: sentinel.resumeSchema,
+              });
+
+              const suspendedResult: RuntimeResult = {
+                pluginId: manifest.pluginId,
+                runtimeId: manifest.name,
+                runId,
+                turnId: input.turnId,
+                status: 'suspended',
+                output: {
+                  suspended: true,
+                  suspensionId,
+                  reason: sentinel.reason,
+                  resumeSchema: sentinel.resumeSchema,
+                },
+                toolCalls: collectedToolCalls,
+                durationMs: Date.now() - startTime,
+                timestamp: new Date().toISOString(),
+              };
+
+              try {
+                await deps.onRuntimeComplete?.({
+                  runtimeId: manifest.name,
+                  pluginId: manifest.pluginId,
+                  status: 'suspended',
+                  durationMs: suspendedResult.durationMs,
+                });
+              } catch { /* callback error must not kill runtime */ }
+
+              emitSubEvent(deps.eventBus, 'runtime', 'runtime.completed', input.sessionId, {
+                runtimeId: manifest.name,
+                pluginId: manifest.pluginId,
+                status: 'suspended',
+                durationMs: suspendedResult.durationMs,
+              });
+
+              return runPostRuntimeHook(
+                { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus },
+                suspendedResult,
+              );
+            }
 
             executedToolCalls.push({
               name: effectiveTc.name,

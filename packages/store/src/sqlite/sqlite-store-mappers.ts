@@ -27,6 +27,7 @@ import type {
   PlayerInputRecord,
   WorkingMemoryRecord,
   SessionSummaryRecord,
+  SuspensionRecord,
 } from '../types.js';
 
 // ── JSON helpers ────────────────────────────────────────────────
@@ -290,6 +291,20 @@ export function createTables(sqlite: Database.Database): void {
       UNIQUE (session_id, scope, key)
     );
     CREATE INDEX IF NOT EXISTS idx_working_memory_session ON working_memory(session_id);
+
+    CREATE TABLE IF NOT EXISTS suspensions (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      turn_id TEXT NOT NULL,
+      runtime_id TEXT NOT NULL,
+      plugin_id TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      resume_schema TEXT NOT NULL,
+      pending_continuation TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      resolved_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_suspensions_session ON suspensions(session_id);
   `);
 }
 
@@ -540,3 +555,35 @@ export function toSessionSummaryRecord(row: typeof schema.sessionSummaries.$infe
     createdAt: row.createdAt,
   };
 }
+
+// ── Suspension row type (not in drizzle schema, raw sqlite) ─────
+
+interface SuspensionRow {
+  id: string;
+  session_id: string;
+  turn_id: string;
+  runtime_id: string;
+  plugin_id: string;
+  reason: string;
+  resume_schema: string;
+  pending_continuation: string;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export function toSuspensionRecord(row: SuspensionRow): SuspensionRecord {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    turnId: row.turn_id,
+    runtimeId: row.runtime_id,
+    pluginId: row.plugin_id,
+    reason: row.reason,
+    resumeSchema: fromJsonRequired(row.resume_schema),
+    pendingContinuation: fromJsonRequired(row.pending_continuation) as SuspensionRecord['pendingContinuation'],
+    createdAt: row.created_at,
+    resolvedAt: row.resolved_at ?? undefined,
+  };
+}
+
+export type { SuspensionRow };

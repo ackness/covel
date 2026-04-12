@@ -34,4 +34,5 @@ export type {
   WorkingMemoryRecord,
   SessionSummaryRecord,
   PaginationOpts,
+  SuspensionRecord,
 } from './types.js';

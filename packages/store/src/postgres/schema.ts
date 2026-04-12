@@ -382,3 +382,24 @@ export const workingMemory = pgTable(
     ),
   ],
 );
+
+// ── Suspensions (S4-T4) ────────────────────────────────────────
+
+export const suspensions = pgTable(
+  'suspensions',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id').notNull(),
+    turnId: text('turn_id').notNull(),
+    runtimeId: text('runtime_id').notNull(),
+    pluginId: text('plugin_id').notNull(),
+    reason: text('reason').notNull(),
+    resumeSchema: jsonb('resume_schema').notNull(),          // JSON schema object
+    pendingContinuation: jsonb('pending_continuation').notNull(), // serialized continuation state
+    createdAt: text('created_at').notNull(),
+    resolvedAt: text('resolved_at'),                         // nullable — set on resume
+  },
+  (table) => [
+    index('pg_suspensions_session_id_idx').on(table.sessionId),
+  ],
+);

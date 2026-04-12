@@ -31,6 +31,7 @@ import type {
   PlayerInputRecord,
   WorkingMemoryRecord,
   SessionSummaryRecord,
+  SuspensionRecord,
 } from '../types.js';
 import {
   toJson,
@@ -56,6 +57,8 @@ import {
   toPlayerInputRecord,
   toWorkingMemoryRecord,
   toSessionSummaryRecord,
+  toSuspensionRecord,
+  type SuspensionRow,
 } from './sqlite-store-mappers.js';
 import type { VectorStoreCapability } from '../vector-store.js';
 import { createSqliteVectorCapability } from './sqlite-vector.js';
@@ -934,6 +937,52 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
           )
           .run();
       }
+    },
+
+    // ── Suspensions (S4-T4) ─────────────────────────────────
+
+    async saveSuspension(record: SuspensionRecord): Promise<void> {
+      sqlite.prepare(
+        `INSERT INTO suspensions (id, session_id, turn_id, runtime_id, plugin_id, reason, resume_schema, pending_continuation, created_at, resolved_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           reason = excluded.reason,
+           resume_schema = excluded.resume_schema,
+           pending_continuation = excluded.pending_continuation,
+           resolved_at = excluded.resolved_at`,
+      ).run(
+        record.id,
+        record.sessionId,
+        record.turnId,
+        record.runtimeId,
+        record.pluginId,
+        record.reason,
+        toJson(record.resumeSchema),
+        toJson(record.pendingContinuation),
+        record.createdAt,
+        record.resolvedAt ?? null,
+      );
+    },
+
+    async getSuspension(id: string): Promise<SuspensionRecord | null> {
+      const row = sqlite.prepare('SELECT * FROM suspensions WHERE id = ?').get(id) as SuspensionRow | undefined;
+      return row ? toSuspensionRecord(row) : null;
+    },
+
+    async markSuspensionResolved(id: string): Promise<void> {
+      sqlite.prepare('UPDATE suspensions SET resolved_at = ? WHERE id = ?').run(
+        new Date().toISOString(),
+        id,
+      );
+    },
+
+    async listSuspensions(sessionId: string): Promise<readonly SuspensionRecord[]> {
+      const rows = sqlite.prepare('SELECT * FROM suspensions WHERE session_id = ? ORDER BY created_at ASC').all(sessionId) as SuspensionRow[];
+      return rows.map(toSuspensionRecord);
+    },
+
+    async deleteSuspension(id: string): Promise<void> {
+      sqlite.prepare('DELETE FROM suspensions WHERE id = ?').run(id);
     },
 
     // ── Transactions (S4-T1) ──────────────────────────────────

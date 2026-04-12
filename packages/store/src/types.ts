@@ -289,6 +289,13 @@ export interface DataStore {
    */
   tagTurnMessagesCompacted(sessionId: string, messageIds: readonly string[], summaryId: string): Promise<void>;
 
+  // ── Suspensions (S4-T4) ──
+  saveSuspension(record: SuspensionRecord): Promise<void>;
+  getSuspension(id: string): Promise<SuspensionRecord | null>;
+  markSuspensionResolved(id: string): Promise<void>;
+  listSuspensions(sessionId: string): Promise<readonly SuspensionRecord[]>;
+  deleteSuspension(id: string): Promise<void>;
+
   // ── Transactions (S4-T1) ──
   /**
    * Begin a transaction. Subsequent writes are buffered until commit or rollback.
@@ -365,6 +372,53 @@ export interface PlayerInputRecord {
   readonly formId: string;
   readonly values: unknown;        // JSON — Record<string, unknown>
   readonly createdAt: string;
+}
+
+// ── Suspensions (S4-T4) ──────────────────────────────────────────
+
+/**
+ * Persisted state for a suspended runtime (S4-T4 suspend/resume primitive).
+ *
+ * When an agent runtime calls the `suspend` builtin tool, the turn-executor
+ * captures the current LLM message array and tool-call history, writes a
+ * SuspensionRecord, and returns `status: 'suspended'`.
+ *
+ * On `POST /api/sessions/:id/resume { suspensionId, data }`, the resume
+ * handler loads this record, reconstructs the message array, appends a
+ * synthetic message carrying `data`, and re-enters the LLM tool loop.
+ *
+ * NOTE: Provider API keys are NEVER stored here — they must be supplied
+ * again via the `X-Provider-Keys` header on the resume request.
+ */
+export interface SuspensionRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly runtimeId: string;
+  readonly pluginId: string;
+  readonly reason: string;
+  /** Plain JSON schema object { type, properties, required }. Not a live Zod schema. */
+  readonly resumeSchema: unknown;
+  readonly pendingContinuation: {
+    /** Full LLMMessage[] up to the suspend point. */
+    readonly messages: readonly unknown[];
+    /** If the LLM produced narrative text alongside the suspend tool call. */
+    readonly partialContent?: string;
+    /** ToolCallRecord[] accumulated before the suspend point. */
+    readonly toolCallsSoFar: readonly unknown[];
+    /**
+     * TODO(S4-T4.b): pendingProposals are not yet populated — the suspend
+     * point is currently always before any proposal-generating runtime output,
+     * so this is safe for now. When mid-turn proposal collection lands, capture
+     * accumulated proposals here so they are committed on resume completion.
+     */
+    readonly pendingProposals: readonly unknown[];
+    /** tool_call_id of the suspend tool call (agent runtime only). Used to append synthetic tool result. */
+    readonly suspendToolCallId?: string;
+  };
+  readonly createdAt: string;
+  /** Set to ISO timestamp when resume completes successfully. */
+  readonly resolvedAt?: string;
 }
 
 // ── Store config ─────────────────────────────────────────────────

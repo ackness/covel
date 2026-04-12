@@ -26,6 +26,7 @@ import type {
   PlayerInputRecord,
   WorkingMemoryRecord,
   SessionSummaryRecord,
+  SuspensionRecord,
 } from '../types.js';
 
 // ── Table creation DDL ─────────────────────────────────────────
@@ -264,6 +265,20 @@ export const CREATE_TABLES_SQL = `
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS pg_session_summaries_session_id_idx ON session_summaries(session_id);
+
+  CREATE TABLE IF NOT EXISTS suspensions (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    turn_id TEXT NOT NULL,
+    runtime_id TEXT NOT NULL,
+    plugin_id TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    resume_schema JSONB NOT NULL,
+    pending_continuation JSONB NOT NULL,
+    created_at TEXT NOT NULL,
+    resolved_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS pg_suspensions_session_id_idx ON suspensions(session_id);
 `;
 
 // ── Table names for cleanup ─────────────────────────────────────
@@ -272,7 +287,7 @@ export const ALL_TABLE_NAMES = [
   'worlds', 'sessions', 'turn_results', 'runtime_results', 'tool_calls',
   'state_schemas', 'state_entries', 'state_changes', 'events', 'approvals',
   'messages', 'characters', 'plugin_data', 'plugin_configs', 'trace_events',
-  'turn_messages', 'player_inputs', 'working_memory', 'session_summaries',
+  'turn_messages', 'player_inputs', 'working_memory', 'session_summaries', 'suspensions',
 ] as const;
 
 export const DROP_ALL_SQL = ALL_TABLE_NAMES.map(
@@ -524,5 +539,20 @@ export function toSessionSummaryRecord(row: typeof schema.sessionSummaries.$infe
     content: row.content,
     focusSections: (row.focusSections as string[] | null) ?? [],
     createdAt: row.createdAt,
+  };
+}
+
+export function toSuspensionRecord(row: typeof schema.suspensions.$inferSelect): SuspensionRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    turnId: row.turnId,
+    runtimeId: row.runtimeId,
+    pluginId: row.pluginId,
+    reason: row.reason,
+    resumeSchema: row.resumeSchema ?? null,
+    pendingContinuation: (row.pendingContinuation ?? {}) as SuspensionRecord['pendingContinuation'],
+    createdAt: row.createdAt,
+    resolvedAt: row.resolvedAt ?? undefined,
   };
 }

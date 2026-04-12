@@ -9,7 +9,9 @@ export type RuntimeStatus =
   | 'running'
   | 'success'
   | 'failed'
-  | 'skipped';
+  | 'skipped'
+  /** S4-T4: runtime suspended, waiting for player input via resume API. */
+  | 'suspended';
 
 // ── Tool call record ─────────────────────────────────────────────
 

@@ -31,6 +31,7 @@ import type {
   PlayerInputRecord,
   WorkingMemoryRecord,
   SessionSummaryRecord,
+  SuspensionRecord,
 } from '../types.js';
 import { createPgTxAdapter } from './pg-store-tx.js';
 import {
@@ -55,6 +56,7 @@ import {
   toPlayerInputRecord,
   toWorkingMemoryRecord,
   toSessionSummaryRecord,
+  toSuspensionRecord,
 } from './pg-store-mappers.js';
 
 // ── Factory ─────────────────────────────────────────────────────
@@ -900,6 +902,59 @@ export async function createPgStore(
             ),
           );
       }
+    },
+
+    // ── Suspensions (S4-T4) ─────────────────────────────────
+
+    async saveSuspension(record: SuspensionRecord): Promise<void> {
+      await db.insert(schema.suspensions).values({
+        id: record.id,
+        sessionId: record.sessionId,
+        turnId: record.turnId,
+        runtimeId: record.runtimeId,
+        pluginId: record.pluginId,
+        reason: record.reason,
+        resumeSchema: record.resumeSchema as Record<string, unknown>,
+        pendingContinuation: record.pendingContinuation as Record<string, unknown>,
+        createdAt: record.createdAt,
+        resolvedAt: record.resolvedAt ?? null,
+      }).onConflictDoUpdate({
+        target: schema.suspensions.id,
+        set: {
+          reason: record.reason,
+          resumeSchema: record.resumeSchema as Record<string, unknown>,
+          pendingContinuation: record.pendingContinuation as Record<string, unknown>,
+          resolvedAt: record.resolvedAt ?? null,
+        },
+      });
+    },
+
+    async getSuspension(id: string): Promise<SuspensionRecord | null> {
+      const rows = await db
+        .select()
+        .from(schema.suspensions)
+        .where(eq(schema.suspensions.id, id));
+      return rows[0] ? toSuspensionRecord(rows[0]) : null;
+    },
+
+    async markSuspensionResolved(id: string): Promise<void> {
+      await db
+        .update(schema.suspensions)
+        .set({ resolvedAt: new Date().toISOString() })
+        .where(eq(schema.suspensions.id, id));
+    },
+
+    async listSuspensions(sessionId: string): Promise<readonly SuspensionRecord[]> {
+      const rows = await db
+        .select()
+        .from(schema.suspensions)
+        .where(eq(schema.suspensions.sessionId, sessionId))
+        .orderBy(asc(schema.suspensions.createdAt));
+      return rows.map(toSuspensionRecord);
+    },
+
+    async deleteSuspension(id: string): Promise<void> {
+      await db.delete(schema.suspensions).where(eq(schema.suspensions.id, id));
     },
 
     // ── Transactions (S4-T1) ──────────────────────────────────

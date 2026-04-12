@@ -35,6 +35,7 @@ import type {
   PlayerInputRecord,
   WorkingMemoryRecord,
   SessionSummaryRecord,
+  SuspensionRecord,
 } from '../types.js';
 import type {
   VectorStoreCapability,
@@ -78,6 +79,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
   const characters = new Map<string, CharacterRecord>();
   const pluginData = new Map<string, PluginDataRecord>();
   const pluginConfigs = new Map<string, PluginConfigRecord>();
+  const suspensions = new Map<string, SuspensionRecord>();
   /** Keyed by `${sessionId}:${pluginId}:${namespace}:${key}:${dim}` so
    *  multiple dims can coexist for the same logical row if a caller ever
    *  re-embeds with a different model. */
@@ -146,6 +148,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     readonly playerInputs: PlayerInputRecord[];
     readonly workingMemoryEntries: Map<string, WorkingMemoryRecord>;
     readonly sessionSummaries: SessionSummaryRecord[];
+    readonly suspensions: Map<string, SuspensionRecord>;
   }
 
   let snapshot: MemorySnapshot | null = null;
@@ -193,6 +196,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
       playerInputs: structuredClone(playerInputs),
       workingMemoryEntries: structuredClone(workingMemoryEntries),
       sessionSummaries: structuredClone(sessionSummaries),
+      suspensions: structuredClone(suspensions),
     };
   }
 
@@ -237,6 +241,8 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     for (const [k, v] of snap.workingMemoryEntries) workingMemoryEntries.set(k, v);
     sessionSummaries.length = 0;
     sessionSummaries.push(...snap.sessionSummaries);
+    suspensions.clear();
+    for (const [k, v] of snap.suspensions) suspensions.set(k, v);
   }
 
   const store: DataStore & VectorStoreCapability = {
@@ -595,6 +601,30 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
           turnMessages[i] = { ...msg, compactedAtTurnId: summaryId };
         }
       }
+    },
+
+    // ── Suspensions (S4-T4) ──
+
+    async saveSuspension(record) {
+      suspensions.set(record.id, record);
+    },
+
+    async getSuspension(id) {
+      return suspensions.get(id) ?? null;
+    },
+
+    async markSuspensionResolved(id) {
+      const existing = suspensions.get(id);
+      if (!existing) return;
+      suspensions.set(id, { ...existing, resolvedAt: new Date().toISOString() });
+    },
+
+    async listSuspensions(sessionId) {
+      return [...suspensions.values()].filter((r) => r.sessionId === sessionId);
+    },
+
+    async deleteSuspension(id) {
+      suspensions.delete(id);
     },
 
     // ── Vector Store (brute-force, O(n) — fine for tests and <1k rows) ──

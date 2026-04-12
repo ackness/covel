@@ -4,7 +4,6 @@
  */
 
 import { openDB, type IDBPDatabase } from 'idb';
-import type { SessionSummaryRecord } from '../types.js';
 
 function applyPagination<T>(items: T[], pagination?: PaginationOpts): T[] {
   if (!pagination) return items;
@@ -35,6 +34,8 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  SessionSummaryRecord,
+  SuspensionRecord,
 } from '../types.js';
 
 const DB_VERSION = 4;
@@ -108,6 +109,9 @@ async function initDb(dbName: string): Promise<IDBPDatabase> {
 
         const summaries = db.createObjectStore('sessionSummaries', { keyPath: 'id' });
         summaries.createIndex('sessionId', 'sessionId');
+
+        const suspensions = db.createObjectStore('suspensions', { keyPath: 'id' });
+        suspensions.createIndex('sessionId', 'sessionId');
       }
     },
   });
@@ -134,6 +138,7 @@ const OBJECT_STORES = [
   'plugin_data',
   'working_memory',
   'sessionSummaries',
+  'suspensions',
 ] as const;
 
 export async function createIdbStore(dbName?: string): Promise<DataStore> {
@@ -536,6 +541,31 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
           await db.put('turnMessages', structuredClone({ ...msg, compactedAtTurnId: summaryId }));
         }
       }
+    },
+
+    // ── Suspensions (S4-T4) ──
+
+    async saveSuspension(record: SuspensionRecord): Promise<void> {
+      await db.put('suspensions', structuredClone(record));
+    },
+
+    async getSuspension(id: string): Promise<SuspensionRecord | null> {
+      return (await db.get('suspensions', id)) ?? null;
+    },
+
+    async markSuspensionResolved(id: string): Promise<void> {
+      const existing = await db.get('suspensions', id) as SuspensionRecord | undefined;
+      if (!existing) return;
+      await db.put('suspensions', { ...existing, resolvedAt: new Date().toISOString() });
+    },
+
+    async listSuspensions(sessionId: string): Promise<readonly SuspensionRecord[]> {
+      const all = await db.getAllFromIndex('suspensions', 'sessionId', sessionId);
+      return (all as SuspensionRecord[]).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    },
+
+    async deleteSuspension(id: string): Promise<void> {
+      await db.delete('suspensions', id);
     },
 
     // ── Transactions (S4-T1) ──

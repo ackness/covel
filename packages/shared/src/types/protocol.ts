@@ -110,7 +110,10 @@ export type ProtocolEventType =
   | 'plugin-data.changed'
   // System
   | 'error.occurred'
-  | 'connection.restored';
+  | 'connection.restored'
+  // Suspend / Resume (S4-T4)
+  | 'turn.suspended'
+  | 'turn.resumed';
 
 export interface ProtocolEvent {
   readonly id: string;
