@@ -368,6 +368,196 @@ describe('parsePluginMd', () => {
     });
   });
 
+  describe("authorsNote field (S3-T4)", () => {
+    it('parses a minimal authorsNote declaration', () => {
+      const content = md(
+        [
+          'name: test-note',
+          'description: Author note plugin',
+          'priority: 500',
+          'authorsNote:',
+          '  content: Stay in character and keep pacing tight.',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/test-note/PLUGIN.md');
+      expect(result.manifest.authorsNote).toEqual({
+        content: 'Stay in character and keep pacing tight.',
+      });
+    });
+
+    it('parses authorsNote with depth and role', () => {
+      const content = md(
+        [
+          'name: test-note',
+          'description: Full note',
+          'priority: 500',
+          'authorsNote:',
+          '  content: Director note body',
+          '  depth: 2',
+          '  role: user',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/test-note/PLUGIN.md');
+      expect(result.manifest.authorsNote).toEqual({
+        content: 'Director note body',
+        depth: 2,
+        role: 'user',
+      });
+    });
+
+    it('skips malformed authorsNote with warning and preserves other fields', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const content = md(
+        [
+          'name: test-bad-note',
+          'description: Bad note shape',
+          'priority: 500',
+          'authorsNote:',
+          '  content: "valid"',
+          '  depth: not-a-number',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/test-bad-note/PLUGIN.md');
+
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(warnSpy.mock.calls[0][0]).toContain('malformed authorsNote skipped');
+      expect(result.manifest.authorsNote).toBeUndefined();
+      // Other fields still parsed correctly
+      expect(result.manifest.name).toBe('test-bad-note');
+      expect(result.manifest.priority).toBe(500);
+
+      warnSpy.mockRestore();
+    });
+
+    it('rejects authorsNote with unknown role', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const content = md(
+        [
+          'name: test-bad-role',
+          'description: Unknown role',
+          'priority: 500',
+          'authorsNote:',
+          '  content: "valid content"',
+          '  role: tool',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/test-bad-role/PLUGIN.md');
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(result.manifest.authorsNote).toBeUndefined();
+      warnSpy.mockRestore();
+    });
+  });
+
+  describe("postHistory field (S3-T4)", () => {
+    it('parses a minimal postHistory declaration', () => {
+      const content = md(
+        [
+          'name: test-post',
+          'description: Post history plugin',
+          'priority: 500',
+          'postHistory:',
+          '  content: Always respond in markdown.',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/test-post/PLUGIN.md');
+      expect(result.manifest.postHistory).toEqual({
+        content: 'Always respond in markdown.',
+      });
+    });
+
+    it('parses postHistory with role override', () => {
+      const content = md(
+        [
+          'name: test-post',
+          'description: Full post',
+          'priority: 500',
+          'postHistory:',
+          '  content: Final instructions',
+          '  role: user',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/test-post/PLUGIN.md');
+      expect(result.manifest.postHistory).toEqual({
+        content: 'Final instructions',
+        role: 'user',
+      });
+    });
+
+    it('skips malformed postHistory with warning and preserves other fields', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const content = md(
+        [
+          'name: test-bad-post',
+          'description: Bad shape',
+          'priority: 500',
+          'postHistory:',
+          '  content: 42',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/test-bad-post/PLUGIN.md');
+
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(warnSpy.mock.calls[0][0]).toContain('malformed postHistory skipped');
+      expect(result.manifest.postHistory).toBeUndefined();
+      expect(result.manifest.name).toBe('test-bad-post');
+
+      warnSpy.mockRestore();
+    });
+
+    it('parses both authorsNote and postHistory together', () => {
+      const content = md(
+        [
+          'name: test-both',
+          'description: Both fields',
+          'priority: 500',
+          'authorsNote:',
+          '  content: Director',
+          '  depth: 3',
+          'postHistory:',
+          '  content: Final',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/test-both/PLUGIN.md');
+      expect(result.manifest.authorsNote?.content).toBe('Director');
+      expect(result.manifest.authorsNote?.depth).toBe(3);
+      expect(result.manifest.postHistory?.content).toBe('Final');
+    });
+
+    it('omitting both fields yields undefined', () => {
+      const content = md(
+        [
+          'name: test-none',
+          'description: No note fields',
+          'priority: 500',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/test-none/PLUGIN.md');
+      expect(result.manifest.authorsNote).toBeUndefined();
+      expect(result.manifest.postHistory).toBeUndefined();
+    });
+  });
+
   describe('invalid name format', () => {
     it('should reject uppercase characters in name', () => {
       const content = md(

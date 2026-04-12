@@ -16,6 +16,8 @@ export type {
   HookDeclaration,
   RuntimeManifest,
   PluginManifest,
+  AuthorsNoteDecl,
+  PostHistoryDecl,
 } from './plugin.js';
 
 export type {
