@@ -7,6 +7,7 @@ export type {
   SessionMeta,
   CharacterSummary,
   SummaryRecord,
+  WorkingMemoryEntry,
 } from './types.js';
 
 // ── Context Builder ─────────────────────────────────────────────
