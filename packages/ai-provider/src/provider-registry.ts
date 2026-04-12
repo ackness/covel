@@ -3,12 +3,34 @@ import { createOpenAiChatAdapter } from "./adapters/openai-chat.js";
 import { createOpenAiResponsesAdapter } from "./adapters/openai-responses.js";
 import { createAnthropicMessagesAdapter } from "./adapters/anthropic-messages.js";
 import type {
+  CacheStrategy,
   OperationMode,
   ProviderConfig,
   ProviderDefaults,
   ProviderLifecycleHook,
   ProviderProtocol,
 } from "./types.js";
+
+/**
+ * Resolve the default prompt-cache strategy for a given provider protocol.
+ *
+ * §A15 of the improvement plan: Anthropic requires explicit `cache_control`
+ * markers, OpenAI-family APIs auto-cache on prefix match, and anything
+ * else falls through to `none`. Individual callers can override the
+ * chosen strategy by setting `ProviderConfig.cacheStrategy` explicitly
+ * on the registered defaults or protocol route.
+ */
+function defaultCacheStrategyFor(protocol: ProviderProtocol): CacheStrategy {
+  switch (protocol) {
+    case "anthropic-messages-v1":
+      return "anthropic-explicit";
+    case "openai-chat-v1":
+    case "openai-responses-v1":
+      return "auto-prefix";
+    default:
+      return "none";
+  }
+}
 
 interface ProtocolRoute {
   adapter?: ModelProviderAdapter;
@@ -87,13 +109,23 @@ export function createProviderRegistry(options?: {
       );
     }
 
+    // Prompt cache strategy (S2-T3): the provider-registered defaults take
+    // precedence so tests and specific deployments can override; otherwise
+    // we fall back to the protocol-wide default. An explicit `undefined`
+    // in the merged config is replaced with the protocol default so the
+    // adapter never needs to probe protocol identity itself.
+    const mergedConfig: ProviderConfig = {
+      ...registered.defaults,
+      ...protocolRoute?.defaults,
+      ...(target.baseUrl ? { baseUrl: target.baseUrl } : {}),
+    };
+    if (mergedConfig.cacheStrategy === undefined) {
+      mergedConfig.cacheStrategy = defaultCacheStrategyFor(protocol);
+    }
+
     return {
       adapter,
-      config: {
-        ...registered.defaults,
-        ...protocolRoute?.defaults,
-        ...(target.baseUrl ? { baseUrl: target.baseUrl } : {}),
-      },
+      config: mergedConfig,
       protocol,
       hooks: [...(registered.hooks ?? [])],
     };

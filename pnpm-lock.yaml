@@ -293,6 +293,9 @@ importers:
 
   packages/ai-provider:
     dependencies:
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../shared
       gpt-tokenizer:
         specifier: ^2.9.0
         version: 2.9.0

@@ -37,6 +37,7 @@ export type {
   ModelSlotConfig,
   ModelParameterOverrides,
   ModelSlotMap,
+  CacheStrategy,
 } from "./types.js";
 
 // Errors

@@ -106,4 +106,74 @@ describe("provider-registry", () => {
     // Original should be unmodified
     expect(resolution.config.apiKey).toBeUndefined();
   });
+
+  // ── S2-T3: cacheStrategy auto-fill ──────────────────────────────
+
+  describe("cacheStrategy auto-fill (S2-T3)", () => {
+    it("fills 'anthropic-explicit' for the anthropic protocol", () => {
+      const registry = createProviderRegistry({
+        providerDefaults: {
+          anthropic: { baseUrl: "https://api.anthropic.com/v1" },
+        },
+      });
+      const result = registry.resolve(
+        { provider: "anthropic" },
+        { mode: "text" },
+      );
+      expect(result.config.cacheStrategy).toBe("anthropic-explicit");
+    });
+
+    it("fills 'auto-prefix' for openai-chat-v1", () => {
+      const registry = createProviderRegistry({
+        providerDefaults: {
+          deepseek: {
+            baseUrl: "https://api.deepseek.com",
+            protocol: "openai-chat-v1",
+          },
+        },
+      });
+      const result = registry.resolve(
+        { provider: "deepseek" },
+        { mode: "text" },
+      );
+      expect(result.config.cacheStrategy).toBe("auto-prefix");
+    });
+
+    it("fills 'auto-prefix' for openai-responses-v1", () => {
+      const registry = createProviderRegistry({
+        providerDefaults: {
+          openai: {
+            baseUrl: "https://api.openai.com/v1",
+            protocol: "openai-responses-v1",
+          },
+        },
+      });
+      const result = registry.resolve(
+        { provider: "openai" },
+        { mode: "text" },
+      );
+      expect(result.config.cacheStrategy).toBe("auto-prefix");
+    });
+
+    it("honors an explicit cacheStrategy override on the provider defaults", () => {
+      const registry = createProviderRegistry({
+        providers: {
+          anthropic: {
+            defaults: {
+              baseUrl: "https://api.anthropic.com/v1",
+              // Pin to "none" even though anthropic would otherwise get
+              // 'anthropic-explicit' — lets downstream deployments disable
+              // cache_control injection per-environment.
+              cacheStrategy: "none",
+            },
+          },
+        },
+      });
+      const result = registry.resolve(
+        { provider: "anthropic" },
+        { mode: "text" },
+      );
+      expect(result.config.cacheStrategy).toBe("none");
+    });
+  });
 });

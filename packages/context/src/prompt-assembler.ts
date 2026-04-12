@@ -32,7 +32,11 @@
  * hitting the V1 `buildContext` path and this module is not exercised.
  */
 
+<<<<<<< HEAD
 import type { AuthorsNoteDecl, PostHistoryDecl, RuntimeManifest } from '@covel/shared';
+=======
+import { PROMPT_CACHE_BREAKPOINT_MARKER } from '@covel/shared';
+>>>>>>> feat/s2-t3-prompt-cache
 import { applyBudget } from './budget.js';
 import {
   assemblePromptVariables,
@@ -350,16 +354,53 @@ function buildPromptSegments(params: ContextBuildParams): PromptSegments {
 /**
  * Concatenate the pre-history segments (1–6) into a single system prompt.
  * Empty segments are skipped so there are no stray blank separators.
+ *
+ * When `injectCacheBreakpoints` is true (feature flag `COVEL_PROMPT_CACHE_V1=1`),
+ * an invisible `PROMPT_CACHE_BREAKPOINT_MARKER` sentinel is appended to the
+ * end of three cache-stable segments — framework preamble, plugin
+ * instructions, and worldInfo-after-plugin. Provider adapters that support
+ * explicit cache hints (currently Anthropic) split on these sentinels to
+ * produce `cache_control: { type: 'ephemeral' }` breakpoints.
+ *
+ * Segment 2 (Working Memory) is intentionally **not** a breakpoint: per
+ * §A15 of the improvement plan, WM is the "slow-vary" slice and placing
+ * it outside the cache boundary prevents minor WM updates from invalidating
+ * downstream cache hits.
+ *
+ * The marker is omitted for any segment that is empty so adapters never
+ * see a degenerate zero-width breakpoint.
  */
-function concatenateSystemPrompt(segments: PromptSegments): string {
+function concatenateSystemPrompt(
+  segments: PromptSegments,
+  injectCacheBreakpoints: boolean,
+): string {
   const parts: string[] = [];
-  if (segments.frameworkPreamble) parts.push(segments.frameworkPreamble);
+  const markerForCacheable = injectCacheBreakpoints
+    ? PROMPT_CACHE_BREAKPOINT_MARKER
+    : '';
+
+  if (segments.frameworkPreamble) {
+    parts.push(segments.frameworkPreamble + markerForCacheable);
+  }
   if (segments.workingMemory) parts.push(segments.workingMemory);
-  if (segments.pluginInstructions) parts.push(segments.pluginInstructions);
+  if (segments.pluginInstructions) {
+    parts.push(segments.pluginInstructions + markerForCacheable);
+  }
   if (segments.worldInfoBeforePlugin) parts.push(segments.worldInfoBeforePlugin);
   if (segments.upstreamInjects) parts.push(segments.upstreamInjects);
-  if (segments.worldInfoAfterPlugin) parts.push(segments.worldInfoAfterPlugin);
+  if (segments.worldInfoAfterPlugin) {
+    parts.push(segments.worldInfoAfterPlugin + markerForCacheable);
+  }
   return parts.join('\n\n');
+}
+
+/**
+ * Read the S2-T3 prompt-cache feature flag lazily so tests can flip it per
+ * case. Must be exactly the string `"1"` to enable — anything else
+ * (undefined, `"0"`, `"true"`) keeps the pre-S2-T3 legacy path.
+ */
+function isPromptCacheEnabled(): boolean {
+  return process.env.COVEL_PROMPT_CACHE_V1 === '1';
 }
 
 /**
@@ -380,7 +421,7 @@ export function buildContextV2(
   params: ContextBuildParams,
 ): AssembledContext {
   const segments = buildPromptSegments(params);
-  const systemPrompt = concatenateSystemPrompt(segments);
+  const systemPrompt = concatenateSystemPrompt(segments, isPromptCacheEnabled());
 
   // Segment 7: history with optional compaction substitution (S2-T2)
   const historyMessages: LLMMessage[] = buildMessageHistoryWithSummaries(

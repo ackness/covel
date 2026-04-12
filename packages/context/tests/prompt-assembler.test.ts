@@ -6,6 +6,10 @@ import {
   type MessageHistoryRecord,
   type TokenEstimator,
 } from '@covel/context';
+import {
+  PROMPT_CACHE_BREAKPOINT_MARKER,
+  splitPromptCacheSegments,
+} from '@covel/shared';
 import type { RuntimeManifest, RuntimeResult, TurnInput } from '@covel/shared';
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -58,6 +62,7 @@ const mockEstimator: TokenEstimator = text => Math.ceil(text.length / 4);
 afterEach(() => {
   delete process.env.COVEL_PROMPT_V2;
   delete process.env.COVEL_CONTEXT_BUDGET_V1;
+  delete process.env.COVEL_PROMPT_CACHE_V1;
 });
 
 // ── Tests ───────────────────────────────────────────────────────
@@ -512,5 +517,126 @@ describe('prompt-assembler V2', () => {
     process.env.COVEL_PROMPT_V2 = '0';
     const v1Zero = buildContext({ ...params });
     expect(v1Zero.systemPrompt).toBe(v1Direct.systemPrompt);
+  });
+});
+
+// ── S2-T3: Prompt cache breakpoint markers ──────────────────────
+
+describe('prompt-assembler V2 — cache breakpoints (S2-T3)', () => {
+  afterEach(() => {
+    delete process.env.COVEL_PROMPT_CACHE_V1;
+  });
+
+  it('emits no cache markers when COVEL_PROMPT_CACHE_V1 is unset', () => {
+    const params = baselineParams({
+      promptTemplate: 'Plugin body.',
+      turnInput: makeTurnInput({ locale: 'en-US' }),
+    });
+
+    const result = buildContextV2(params);
+
+    expect(result.systemPrompt).not.toContain(PROMPT_CACHE_BREAKPOINT_MARKER);
+    expect(splitPromptCacheSegments(result.systemPrompt)).toHaveLength(1);
+  });
+
+  it('emits markers after segment 1 and segment 3 when the flag is set', () => {
+    process.env.COVEL_PROMPT_CACHE_V1 = '1';
+    const params = baselineParams({
+      promptTemplate: 'Plugin body.',
+      turnInput: makeTurnInput({ locale: 'en-US' }),
+    });
+
+    const result = buildContextV2(params);
+
+    const segments = splitPromptCacheSegments(result.systemPrompt);
+    // Two non-empty cacheable breakpoints in this baseline: segment 1
+    // (framework preamble) and segment 3 (plugin instructions). Segment 6
+    // (worldInfoAfterPlugin) is empty and therefore produces no marker.
+    expect(segments).toHaveLength(2);
+    expect(segments[0]).toContain('[LANGUAGE]');
+    expect(segments[1]).toContain('Plugin body.');
+  });
+
+  it('skips the working-memory segment — it must not anchor a breakpoint', () => {
+    process.env.COVEL_PROMPT_CACHE_V1 = '1';
+    process.env.COVEL_WORKING_MEMORY_V1 = '1';
+    try {
+      const params = baselineParams({
+        promptTemplate: 'Plugin body.',
+        turnInput: makeTurnInput({ locale: 'en-US' }),
+        workingMemory: [
+          { scope: 'player', key: 'goal', value: 'find the artifact' },
+        ],
+      });
+
+      const result = buildContextV2(params);
+      const segments = splitPromptCacheSegments(result.systemPrompt);
+
+      // Per §A15: framework preamble opens its own cache span; working
+      // memory deliberately sits OUTSIDE the cache boundary and rides
+      // along with plugin instructions in the next segment.
+      const frameworkSegment = segments[0];
+      expect(frameworkSegment).toContain('[LANGUAGE]');
+      expect(frameworkSegment).not.toContain('goal');
+
+      const pluginSegment = segments[1];
+      expect(pluginSegment).toContain('goal');
+      expect(pluginSegment).toContain('Plugin body.');
+    } finally {
+      delete process.env.COVEL_WORKING_MEMORY_V1;
+    }
+  });
+
+  it('does not emit markers for empty optional segments', () => {
+    process.env.COVEL_PROMPT_CACHE_V1 = '1';
+    // No locale → segment 1 empty; no upstream inject → segment 5 empty.
+    const params = baselineParams({
+      promptTemplate: 'Plugin body.',
+      turnInput: makeTurnInput(), // no locale
+    });
+
+    const result = buildContextV2(params);
+    const segments = splitPromptCacheSegments(result.systemPrompt);
+
+    // Only segment 3 survives → single breakpoint only.
+    expect(segments).toHaveLength(1);
+    expect(segments[0]).toContain('Plugin body.');
+  });
+
+  it('never places a breakpoint on the history (messages stay unchanged)', () => {
+    process.env.COVEL_PROMPT_CACHE_V1 = '1';
+    const params = baselineParams({
+      promptTemplate: 'Plugin body.',
+      turnInput: makeTurnInput({ locale: 'en-US', playerMessage: 'go north' }),
+      messageHistory: [
+        { role: 'user', content: 'prior 1' },
+        { role: 'assistant', content: 'prior 2' },
+      ] satisfies readonly MessageHistoryRecord[],
+    });
+
+    const result = buildContextV2(params);
+
+    for (const msg of result.messages) {
+      expect(msg.content).not.toContain(PROMPT_CACHE_BREAKPOINT_MARKER);
+    }
+  });
+
+  it('is strictly gated: only the literal string "1" enables cache markers', () => {
+    const params = baselineParams({
+      promptTemplate: 'Plugin body.',
+      turnInput: makeTurnInput({ locale: 'en-US' }),
+    });
+
+    process.env.COVEL_PROMPT_CACHE_V1 = 'true';
+    const truthy = buildContextV2(params);
+    expect(truthy.systemPrompt).not.toContain(PROMPT_CACHE_BREAKPOINT_MARKER);
+
+    process.env.COVEL_PROMPT_CACHE_V1 = '0';
+    const zero = buildContextV2(params);
+    expect(zero.systemPrompt).not.toContain(PROMPT_CACHE_BREAKPOINT_MARKER);
+
+    process.env.COVEL_PROMPT_CACHE_V1 = '1';
+    const enabled = buildContextV2(params);
+    expect(enabled.systemPrompt).toContain(PROMPT_CACHE_BREAKPOINT_MARKER);
   });
 });
