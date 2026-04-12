@@ -107,6 +107,122 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     return `${sessionId}:${pluginId}:${namespace}:${key}:${dimensions}`;
   }
 
+  // ── Transaction snapshot state (S4-T1) ──
+  //
+  // On beginTx() we structurally clone every collection into `snapshot`.
+  // On rollbackTx() we clear each collection and refill it from the snapshot.
+  // On commitTx() we simply discard the snapshot.
+  //
+  // We deliberately use eager (not lazy-per-table) snapshotting: MemoryStore is
+  // dev/test only, data volumes are small, and eager cloning keeps the bookkeeping
+  // trivial. Vector rows are included so transactional commits also roll back
+  // embedding upserts.
+  interface MemorySnapshot {
+    readonly sessions: Map<string, SessionRecord>;
+    readonly turnResults: TurnResultRecord[];
+    readonly runtimeResults: RuntimeResultRecord[];
+    readonly toolCalls: ToolCallRecordRow[];
+    readonly stateSchemas: StateSchemaRecord[];
+    readonly stateEntries: Map<string, StateEntryRecord>;
+    readonly stateChanges: StateChangeRecord[];
+    readonly events: EventRecord[];
+    readonly approvals: ApprovalRecord[];
+    readonly messages: MessageRecord[];
+    readonly characters: Map<string, CharacterRecord>;
+    readonly pluginData: Map<string, PluginDataRecord>;
+    readonly pluginConfigs: Map<string, PluginConfigRecord>;
+    readonly vectorRows: Map<string, MemoryVectorRow>;
+    readonly worlds: Map<string, WorldRecord>;
+    readonly traceEvents: TraceEventRecord[];
+    readonly turnMessages: TurnMessageRecord[];
+    readonly playerInputs: PlayerInputRecord[];
+  }
+
+  let snapshot: MemorySnapshot | null = null;
+
+  function cloneVectorRows(
+    src: Map<string, MemoryVectorRow>,
+  ): Map<string, MemoryVectorRow> {
+    // structuredClone does not clone Float32Array view semantics the way we
+    // want across Map boundaries in older runtimes, so we do it by hand. The
+    // other fields are primitives or nullable strings.
+    const out = new Map<string, MemoryVectorRow>();
+    for (const [k, row] of src) {
+      out.set(k, {
+        sessionId: row.sessionId,
+        pluginId: row.pluginId,
+        namespace: row.namespace,
+        key: row.key,
+        dimensions: row.dimensions,
+        embedding: new Float32Array(row.embedding),
+        payload: row.payload,
+      });
+    }
+    return out;
+  }
+
+  function captureSnapshot(): MemorySnapshot {
+    return {
+      sessions: structuredClone(sessions),
+      turnResults: structuredClone(turnResults),
+      runtimeResults: structuredClone(runtimeResults),
+      toolCalls: structuredClone(toolCalls),
+      stateSchemas: structuredClone(stateSchemas),
+      stateEntries: structuredClone(stateEntries),
+      stateChanges: structuredClone(stateChanges),
+      events: structuredClone(events),
+      approvals: structuredClone(approvals),
+      messages: structuredClone(messages),
+      characters: structuredClone(characters),
+      pluginData: structuredClone(pluginData),
+      pluginConfigs: structuredClone(pluginConfigs),
+      vectorRows: cloneVectorRows(vectorRows),
+      worlds: structuredClone(worlds),
+      traceEvents: structuredClone(traceEvents),
+      turnMessages: structuredClone(turnMessages),
+      playerInputs: structuredClone(playerInputs),
+    };
+  }
+
+  function restoreSnapshot(snap: MemorySnapshot): void {
+    sessions.clear();
+    for (const [k, v] of snap.sessions) sessions.set(k, v);
+    turnResults.length = 0;
+    turnResults.push(...snap.turnResults);
+    runtimeResults.length = 0;
+    runtimeResults.push(...snap.runtimeResults);
+    toolCalls.length = 0;
+    toolCalls.push(...snap.toolCalls);
+    stateSchemas.length = 0;
+    stateSchemas.push(...snap.stateSchemas);
+    stateEntries.clear();
+    for (const [k, v] of snap.stateEntries) stateEntries.set(k, v);
+    stateChanges.length = 0;
+    stateChanges.push(...snap.stateChanges);
+    events.length = 0;
+    events.push(...snap.events);
+    approvals.length = 0;
+    approvals.push(...snap.approvals);
+    messages.length = 0;
+    messages.push(...snap.messages);
+    characters.clear();
+    for (const [k, v] of snap.characters) characters.set(k, v);
+    pluginData.clear();
+    for (const [k, v] of snap.pluginData) pluginData.set(k, v);
+    pluginConfigs.clear();
+    for (const [k, v] of snap.pluginConfigs) pluginConfigs.set(k, v);
+    vectorRows.clear();
+    for (const [k, v] of snap.vectorRows) vectorRows.set(k, v);
+    worlds.clear();
+    for (const [k, v] of snap.worlds) worlds.set(k, v);
+    traceEvents.length = 0;
+    traceEvents.push(...snap.traceEvents);
+    turnMessages.length = 0;
+    turnMessages.push(...snap.turnMessages);
+    playerInputs.length = 0;
+    playerInputs.push(...snap.playerInputs);
+  }
+
   const store: DataStore & VectorStoreCapability = {
     // ── Session ──
 
@@ -453,6 +569,30 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
         if (input.dimensions !== undefined && row.dimensions !== input.dimensions) continue;
         vectorRows.delete(rowKey);
       }
+    },
+
+    // ── Transactions (S4-T1) ──
+
+    async beginTx() {
+      if (snapshot !== null) {
+        throw new Error('MemoryStore: nested transactions are not supported (beginTx called while another tx is active)');
+      }
+      snapshot = captureSnapshot();
+    },
+
+    async commitTx() {
+      if (snapshot === null) {
+        throw new Error('MemoryStore: commitTx called without an active transaction');
+      }
+      snapshot = null;
+    },
+
+    async rollbackTx() {
+      if (snapshot === null) {
+        throw new Error('MemoryStore: rollbackTx called without an active transaction');
+      }
+      restoreSnapshot(snapshot);
+      snapshot = null;
     },
 
     // ── Lifecycle ──

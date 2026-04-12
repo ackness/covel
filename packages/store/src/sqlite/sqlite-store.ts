@@ -72,6 +72,14 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
   // will return false — callers fall back to structured retrieval.
   const vectorCapability = createSqliteVectorCapability(sqlite);
 
+  // ── Transaction state (S4-T1) ──
+  //
+  // better-sqlite3 holds a single synchronous connection per Database instance,
+  // so we can drive transactions directly via BEGIN / COMMIT / ROLLBACK on the
+  // same handle. We track a local boolean to enforce "no nested transactions"
+  // and to detect commit/rollback calls without a matching begin.
+  let txActive = false;
+
   const baseStore: DataStore = {
     // ── Session ──────────────────────────────────────────────
 
@@ -799,6 +807,32 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
         .where(eq(schema.playerInputs.sessionId, sessionId))
         .all();
       return rows.map(toPlayerInputRecord);
+    },
+
+    // ── Transactions (S4-T1) ──────────────────────────────────
+
+    async beginTx(): Promise<void> {
+      if (txActive) {
+        throw new Error('SqliteStore: nested transactions are not supported (beginTx called while another tx is active)');
+      }
+      sqlite.exec('BEGIN');
+      txActive = true;
+    },
+
+    async commitTx(): Promise<void> {
+      if (!txActive) {
+        throw new Error('SqliteStore: commitTx called without an active transaction');
+      }
+      sqlite.exec('COMMIT');
+      txActive = false;
+    },
+
+    async rollbackTx(): Promise<void> {
+      if (!txActive) {
+        throw new Error('SqliteStore: rollbackTx called without an active transaction');
+      }
+      sqlite.exec('ROLLBACK');
+      txActive = false;
     },
 
     // ── Lifecycle ────────────────────────────────────────────

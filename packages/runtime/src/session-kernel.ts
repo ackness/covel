@@ -103,6 +103,15 @@ export interface KernelStore {
   saveEvent(record: { id: string; sessionId: string; type: string; topic: string; payload: unknown; createdAt: string }): Promise<void>;
   addStateChange(record: { id: string; sessionId: string; tableName: string; fieldName: string; value: unknown; changedBy: string; turnId: string; reason?: string; createdAt: string }): Promise<void>;
   addTraceEvent(record: { id: string; sessionId: string; type: string; traceId: string; turnId: string; payload: unknown; createdAt: string }): Promise<void>;
+  /**
+   * Optional transaction hooks (S4-T1). When present and opted-in via the
+   * COVEL_COMMIT_TXN_V1 feature flag, `commitAll()` wraps the whole proposal
+   * chain in begin/commit/rollback so a mid-chain failure leaves no partial
+   * state in the store.
+   */
+  beginTx?(): Promise<void>;
+  commitTx?(): Promise<void>;
+  rollbackTx?(): Promise<void>;
 }
 
 /**
@@ -150,11 +159,41 @@ export function createCommitPipeline(store: KernelStore): CommitPipeline {
   }
 
   async function commitAll(proposals: readonly Proposal[]): Promise<CommitResult[]> {
-    const results: CommitResult[] = [];
-    for (const p of proposals) {
-      results.push(await commit(p));
+    // Feature-flagged atomic path (S4-T1). When COVEL_COMMIT_TXN_V1=1 and the
+    // store implements the optional tx hooks, we wrap the whole commit chain
+    // in beginTx/commitTx. If any commit throws mid-chain we rollback so no
+    // partial state is persisted. Default (flag off) preserves the legacy
+    // non-transactional behaviour byte-for-byte.
+    const txEnabled = process.env.COVEL_COMMIT_TXN_V1 === '1';
+    const supportsTx =
+      typeof store.beginTx === 'function' &&
+      typeof store.commitTx === 'function' &&
+      typeof store.rollbackTx === 'function';
+
+    if (!txEnabled || !supportsTx) {
+      const results: CommitResult[] = [];
+      for (const p of proposals) {
+        results.push(await commit(p));
+      }
+      return results;
     }
-    return results;
+
+    await store.beginTx!();
+    try {
+      const results: CommitResult[] = [];
+      for (const p of proposals) {
+        results.push(await commit(p));
+      }
+      await store.commitTx!();
+      return results;
+    } catch (err) {
+      try {
+        await store.rollbackTx!();
+      } catch {
+        // Swallow rollback errors — surface the original failure to the caller.
+      }
+      throw err;
+    }
   }
 
   // ── Commit Handlers ─────────────────────────────────────────

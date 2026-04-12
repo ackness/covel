@@ -102,8 +102,59 @@ async function initDb(dbName: string): Promise<IDBPDatabase> {
   });
 }
 
+// All IndexedDB object stores the backend owns. Used by the tx snapshot machinery.
+const OBJECT_STORES = [
+  'sessions',
+  'turnResults',
+  'runtimeResults',
+  'toolCalls',
+  'stateSchemas',
+  'stateEntries',
+  'stateChanges',
+  'events',
+  'approvals',
+  'messages',
+  'characters',
+  'pluginConfigs',
+  'worlds',
+  'traceEvents',
+  'turnMessages',
+  'playerInputs',
+  'plugin_data',
+] as const;
+
 export async function createIdbStore(dbName?: string): Promise<DataStore> {
   const db = await initDb(dbName ?? 'covel-store');
+
+  // ── Transaction snapshot state (S4-T1) ──
+  //
+  // IndexedDB object-store-level transactions are scoped to the stores named at
+  // tx creation, which does not fit the "one transaction per commit pipeline"
+  // model. IdbStore is dev/test only (T1/T2), so we use the same eager snapshot
+  // strategy as MemoryStore: on beginTx we read every object store, on
+  // rollbackTx we clear and refill. Performance is fine at test-suite volumes.
+  let idbSnapshot: Map<string, unknown[]> | null = null;
+
+  async function captureIdbSnapshot(): Promise<Map<string, unknown[]>> {
+    const snap = new Map<string, unknown[]>();
+    for (const name of OBJECT_STORES) {
+      const rows = await db.getAll(name);
+      snap.set(name, structuredClone(rows));
+    }
+    return snap;
+  }
+
+  async function restoreIdbSnapshot(snap: Map<string, unknown[]>): Promise<void> {
+    for (const name of OBJECT_STORES) {
+      const tx = db.transaction(name, 'readwrite');
+      await tx.store.clear();
+      const rows = snap.get(name) ?? [];
+      for (const row of rows) {
+        await tx.store.put(row as Record<string, unknown>);
+      }
+      await tx.done;
+    }
+  }
 
   const store: DataStore = {
     // ── Session ──
@@ -385,6 +436,30 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
 
     async listPlayerInputs(sessionId: string): Promise<PlayerInputRecord[]> {
       return db.getAllFromIndex('playerInputs', 'sessionId', sessionId);
+    },
+
+    // ── Transactions (S4-T1) ──
+
+    async beginTx(): Promise<void> {
+      if (idbSnapshot !== null) {
+        throw new Error('IdbStore: nested transactions are not supported (beginTx called while another tx is active)');
+      }
+      idbSnapshot = await captureIdbSnapshot();
+    },
+
+    async commitTx(): Promise<void> {
+      if (idbSnapshot === null) {
+        throw new Error('IdbStore: commitTx called without an active transaction');
+      }
+      idbSnapshot = null;
+    },
+
+    async rollbackTx(): Promise<void> {
+      if (idbSnapshot === null) {
+        throw new Error('IdbStore: rollbackTx called without an active transaction');
+      }
+      await restoreIdbSnapshot(idbSnapshot);
+      idbSnapshot = null;
     },
 
     // ── Lifecycle ──

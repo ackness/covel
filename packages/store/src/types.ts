@@ -260,6 +260,30 @@ export interface DataStore {
   getPlayerInput(sessionId: string, formId: string): Promise<PlayerInputRecord | null>;
   listPlayerInputs(sessionId: string): Promise<PlayerInputRecord[]>;
 
+  // ── Transactions (S4-T1) ──
+  /**
+   * Begin a transaction. Subsequent writes are buffered until commit or rollback.
+   *
+   * On SQL backends this maps to `BEGIN`. On MemoryStore/IdbStore it takes a
+   * structural snapshot of the current state that can be restored on rollback.
+   *
+   * Nested transactions are NOT supported. Calling `beginTx()` twice without an
+   * intervening `commitTx()` / `rollbackTx()` throws.
+   */
+  beginTx(): Promise<void>;
+
+  /**
+   * Commit the current transaction. Buffered writes become durable.
+   * Throws if no transaction is active.
+   */
+  commitTx(): Promise<void>;
+
+  /**
+   * Roll back the current transaction. Buffered writes are discarded.
+   * Throws if no transaction is active.
+   */
+  rollbackTx(): Promise<void>;
+
   // ── Lifecycle ──
   close(): Promise<void>;
 }
