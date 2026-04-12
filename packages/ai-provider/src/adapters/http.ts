@@ -97,8 +97,91 @@ export function validateBaseUrl(url: string): boolean {
   return isDomainAllowed(parsed.hostname);
 }
 
+// ── Retry policy (S1-T3) ─────────────────────────────────────────
+
+/** Maximum number of retries after the initial attempt (so total attempts = 1 + MAX_RETRIES). */
+const MAX_RETRIES = 3;
+/** Base backoff in milliseconds; actual delay = BASE_BACKOFF_MS * 2^attempt * jitter. */
+const BASE_BACKOFF_MS = 500;
+/** Cap on backoff delay. */
+const MAX_BACKOFF_MS = 8000;
+/** Jitter factor range for randomized backoff. */
+const JITTER_MIN = 0.75;
+const JITTER_MAX = 1.25;
+
+/**
+ * Whether a given HTTP status code should trigger a retry.
+ * Retries on 429 (rate limit) and 5xx (transient server errors).
+ * Non-retriable on other 4xx (400/401/403/404 etc) and 2xx/3xx.
+ */
+export function isRetriableStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+/**
+ * Compute exponential-backoff delay in milliseconds with jitter.
+ * @param attempt 0-based retry index (0 = first retry, 1 = second, ...).
+ */
+export function computeBackoffMs(attempt: number): number {
+  const exp = BASE_BACKOFF_MS * Math.pow(2, attempt);
+  const jitter = JITTER_MIN + Math.random() * (JITTER_MAX - JITTER_MIN);
+  return Math.min(MAX_BACKOFF_MS, Math.floor(exp * jitter));
+}
+
+/**
+ * Parse a `Retry-After` header value (integer seconds) into milliseconds.
+ * Returns `null` when the header is absent or not a non-negative integer.
+ * NOTE: HTTP-date form is intentionally not supported — LLM providers only
+ * emit the delta-seconds form in practice.
+ */
+export function parseRetryAfterMs(header: string | null): number | null {
+  if (!header) return null;
+  const trimmed = header.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  return Number(trimmed) * 1000;
+}
+
+/**
+ * Sleep for `ms` milliseconds, aborting early if `signal` fires.
+ * Rejects with the signal's abort reason (DOMException AbortError by default).
+ */
+export function sleepWithAbort(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new DOMException("Aborted", "AbortError"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/**
+ * Check whether retry is disabled via the `COVEL_LLM_RETRY_DISABLED` env var.
+ * Read lazily on each call so tests can flip the flag per-case.
+ */
+function isRetryDisabled(): boolean {
+  return process.env.COVEL_LLM_RETRY_DISABLED === "1";
+}
+
 /**
  * POST JSON body to a provider endpoint.
+ *
+ * Robustness (S1-T3): applies exponential-backoff retry on HTTP 429 and 5xx
+ * responses. Honors the `Retry-After` header when present. Does NOT retry on
+ * `fetch()` throws (network errors, DNS failures, connection refused) —
+ * those are a different failure class and stay with the caller. If all
+ * retries are exhausted the last failed `Response` is returned, letting the
+ * caller's existing `assertSuccess` error-classification path fire.
+ *
+ * Retry can be disabled entirely via `COVEL_LLM_RETRY_DISABLED=1`.
  */
 export async function postJson(
   config: ProviderConfig,
@@ -121,12 +204,47 @@ export async function postJson(
     ...overrideHeaders,
   };
 
-  return fetch(buildProviderUrl(config.baseUrl, path), {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-    signal: signal ?? config.signal,
-  });
+  const url = buildProviderUrl(config.baseUrl, path);
+  const serializedBody = JSON.stringify(body);
+  const effectiveSignal = signal ?? config.signal;
+
+  const doFetch = (): Promise<Response> =>
+    fetch(url, {
+      method: "POST",
+      headers,
+      body: serializedBody,
+      signal: effectiveSignal,
+    });
+
+  // Fast path: retry disabled via escape hatch. Exactly one fetch, no retry logic.
+  if (isRetryDisabled()) {
+    return doFetch();
+  }
+
+  let response = await doFetch();
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    if (!isRetriableStatus(response.status)) {
+      return response;
+    }
+
+    // Drain the failed body to free the socket before retrying.
+    // `.arrayBuffer()` is used because the body is cheap JSON in practice.
+    await response.arrayBuffer().catch(() => { /* body already consumed or stream error */ });
+
+    const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
+    const delay = retryAfterMs ?? computeBackoffMs(attempt);
+
+    // If the signal aborts during the wait, sleepWithAbort rejects and we
+    // let the rejection bubble up — the caller sees an AbortError, same as
+    // they would from any interrupted fetch.
+    await sleepWithAbort(delay, effectiveSignal);
+
+    response = await doFetch();
+  }
+
+  // Retries exhausted — return whatever we have and let assertSuccess classify it.
+  return response;
 }
 
 /**

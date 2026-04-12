@@ -563,38 +563,74 @@ async function executeOneRuntime(
         // Streaming path: accumulate content from text-delta events, forward deltas to caller
         let streamedContent = '';
         let streamFinishReason = 'stop';
+        // S1-T3: When the stream throws with no content we fall back to a
+        // non-stream generate() call. Holding the fallback response here
+        // (vs assigning `response` directly) keeps TypeScript's definite-
+        // assignment analysis happy — `response` is set exactly once, below.
+        let fallbackResponse: import('./llm-adapter.js').LLMResponse | null = null;
 
-        for await (const event of deps.llm.stream!({
-          model: effectiveModel,
-          messages,
-        })) {
-          if (event.type === 'text-delta') {
-            streamedContent += event.textDelta;
-            // M1: Wrap onDelta — client disconnect should not kill the runtime
-            try {
-              await deps.onDelta!({
-                runtimeId: manifest.name,
-                pluginId: manifest.pluginId,
-                textDelta: event.textDelta,
-              });
-            } catch {
-              // Client disconnected — continue streaming to collect full content
+        // S1-T3: Wrap the stream loop. On exception mid-stream, either salvage
+        // the accumulated content (if any) or fall back to a single non-stream
+        // generate() call. Do not attempt prefix-continuation — no provider
+        // offers a reliable cross-vendor protocol for it.
+        try {
+          for await (const event of deps.llm.stream!({
+            model: effectiveModel,
+            messages,
+          })) {
+            if (event.type === 'text-delta') {
+              streamedContent += event.textDelta;
+              // M1: Wrap onDelta — client disconnect should not kill the runtime
+              try {
+                await deps.onDelta!({
+                  runtimeId: manifest.name,
+                  pluginId: manifest.pluginId,
+                  textDelta: event.textDelta,
+                });
+              } catch {
+                // Client disconnected — continue streaming to collect full content
+              }
+            } else if (event.type === 'done') {
+              streamFinishReason = event.finishReason;
             }
-          } else if (event.type === 'done') {
-            streamFinishReason = event.finishReason;
+          }
+        } catch (streamError: unknown) {
+          const errMsg = streamError instanceof Error ? streamError.message : String(streamError);
+
+          if (streamedContent.length > 0) {
+            // Salvage: keep what we have and mark the finishReason as 'error'.
+            // No new SSE protocol event is emitted here — SSE formalization is S4-T5 scope.
+            streamFinishReason = 'error';
+            console.warn(
+              `[stream-recovery] runtime ${manifest.name} stream failed after partial content; salvaging ${streamedContent.length} chars. error=${errMsg}`,
+            );
+          } else {
+            // Nothing to salvage — fall back to a single non-stream call.
+            // If THIS also throws, let it bubble up to the outer executeOneRuntime catch.
+            console.warn(
+              `[stream-recovery] runtime ${manifest.name} stream failed before any content; falling back to generate(). error=${errMsg}`,
+            );
+            fallbackResponse = await deps.llm.generate({
+              model: effectiveModel,
+              messages,
+            });
           }
         }
 
-        response = {
-          content: streamedContent || null,
-          toolCalls: [],
-          finishReason: streamFinishReason as 'stop' | 'tool_calls' | 'length' | 'error',
-          // M5: Streaming responses don't carry token usage from most providers.
-          // The LLMStreamEvent 'done' type only has finishReason, not usage.
-          // Streaming responses don't carry token usage from most providers.
-          // OpenAI supports stream_options.include_usage but others don't.
-          usage: { inputTokens: 0, outputTokens: 0 },
-        };
+        if (fallbackResponse !== null) {
+          response = fallbackResponse;
+        } else {
+          response = {
+            content: streamedContent || null,
+            toolCalls: [],
+            finishReason: streamFinishReason as 'stop' | 'tool_calls' | 'length' | 'error',
+            // M5: Streaming responses don't carry token usage from most providers.
+            // The LLMStreamEvent 'done' type only has finishReason, not usage.
+            // Streaming responses don't carry token usage from most providers.
+            // OpenAI supports stream_options.include_usage but others don't.
+            usage: { inputTokens: 0, outputTokens: 0 },
+          };
+        }
       } else {
         // Non-streaming path: standard generate()
         response = await deps.llm.generate({
