@@ -11,6 +11,7 @@ import type { ComponentRenderer } from "@json-render/react";
 import { useStateStore } from "@json-render/react";
 import { clsx } from "clsx";
 import * as Icons from "lucide-react";
+import { GraphCanvas } from "./graph-canvas.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -692,4 +693,6 @@ export const covelRegistry: Record<string, ComponentRenderer> = {
   Prose,
   PlayerMessage,
   Alert,
+  // Visualization
+  GraphCanvas,
 };

@@ -55,11 +55,13 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 |------|---------|------|-------|---------------|------|
 | core-char-creator/player-init | character | users | character | characters | 角色列表（player + NPC + companion） |
 | core-codex | codex | book-open | codex | entries | 知识图鉴 |
+| core-npc-graph/extractor | npc-graph | network | npc-graph | nodes + edges | NPC 关系图（force-directed 可视化） |
 | core-world-init/schema-gen | world-entries | book-marked | world-data | entries | 世界词条 |
 | core-world-init/schema-gen | world-schema | sliders-horizontal | world-data | schema | 角色属性 schema |
 
 > `core-world-init` 的 schema-gen runtime 注册两个 spec，通过相同 `group: "world-data"` + `groupLabel` 合并为单个 activity-bar tab "世界维度"，内部横向子 Tab 切换 `词条 / 属性`。
 > `core-char-creator` 的 character-panel 由 player-init runtime 声明，character-tracker runtime 共享同一个 namespace `characters`（由 `create-character` / `update-character` builtin 工具写入）。
+> `core-npc-graph/extractor` 的 npc-graph-panel 引用 `GraphCanvas` 组件读取 `nodes` + `edges` 两个 namespace，呈现 force-directed 关系图（react-force-graph-2d 懒加载）。
 
 ### 声明方式
 
@@ -260,6 +262,11 @@ core-guide 分析叙事 → 生成建议卡片
 |------|------|
 | PlayerMessage | 玩家消息气泡（右对齐） |
 | Alert | 通知（info/success/warning/error） |
+
+### 可视化
+| 组件 | 用途 |
+|------|------|
+| GraphCanvas | 力导向关系图（react-force-graph-2d）。读取 `pluginId` 下两个 namespace 的数据（节点 + 边），按 `node.type` 着色，按边的 `strength` 正负染色。点击节点弹出档案。基于 lazy import，仅在打开面板时加载 ~60KB gzip 的额外 chunk。Props: `pluginId`, `nodesNamespace`, `edgesNamespace`, `height?`。当前由 `core-npc-graph` 使用。 |
 
 ## 数据流
 

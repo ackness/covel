@@ -22,6 +22,7 @@
     "lucide-react": "^1.7.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-force-graph-2d": "^1.29.1",
     "tailwind-merge": "^3.2.0"
   },
   "devDependencies": {

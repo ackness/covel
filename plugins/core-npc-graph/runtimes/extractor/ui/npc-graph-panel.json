@@ -1,0 +1,33 @@
+{
+  "id": "npc-graph",
+  "group": "npc-graph",
+  "label": { "zh": "人物图谱", "en": "NPC Graph" },
+  "icon": "network",
+  "dataSource": { "namespace": "nodes" },
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "sm" },
+    "children": [
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "已知人物的关系图。绿线=正向关系，红线=负向关系，灰线=中立。点击节点查看档案。",
+            "en": "Known NPC relationship graph. Green = positive, red = negative, gray = neutral. Click a node to inspect."
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "GraphCanvas",
+        "props": {
+          "pluginId": "core-npc-graph",
+          "nodesNamespace": "nodes",
+          "edgesNamespace": "edges",
+          "height": 480
+        }
+      }
+    ]
+  }
+}
