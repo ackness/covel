@@ -385,6 +385,49 @@ outputKind: story
 capabilities: [narrative, world-data-provider]
 ```
 
+### authorsNote（S3-T4，V2 prompt 段 9）
+
+声明"导演级"指令，插入到消息历史倒数第 `depth` 条之前。借鉴 SillyTavern / NovelAI 的 author's note 语义 —— 用于在长历史中重新锚定模型的叙事方向。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `content` | `string`（必填） | 注入文本，支持 `{{ template }}` 插值（与 PLUGIN.md 正文相同的变量空间） |
+| `depth` | `number`（可选，默认 `4`） | 距离消息数组尾部的偏移。`4` 表示插入到 `messages[length - 4]` 之前。`0` 或 `<= 0` 等价于追加到末尾 |
+| `role` | `'system' \| 'user' \| 'assistant'`（可选，默认 `system`） | 注入消息的角色 |
+
+多个插件的 authorsNote 会按 `priority` 升序聚合，落在同一 `(role, depth)` 桶内的内容会被合并为一条消息（用空行分隔）。
+
+仅在 V2 prompt assembler（`COVEL_PROMPT_V2=1`）下生效；V1 路径忽略该字段。
+
+示例 frontmatter：
+```yaml
+authorsNote:
+  content: |
+    Keep scenes tense and grounded.
+    Do not reveal {{ config.spoilerName }}.
+  depth: 4
+  role: system
+```
+
+### postHistory（S3-T4，V2 prompt 段 10）
+
+声明最末端的高权重指令。追加在所有消息（包括 authorsNote）之后，用于提醒模型输出格式、风格约束或硬规则。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `content` | `string`（必填） | 注入文本，支持 `{{ template }}` 插值 |
+| `role` | `'system' \| 'user'`（可选，默认 `system`） | 注入消息的角色 |
+
+多个插件的 postHistory 会按 `priority` 升序聚合；相同 role 的声明会被合并为一条消息。
+
+仅在 V2 prompt assembler（`COVEL_PROMPT_V2=1`）下生效；V1 路径忽略该字段。
+
+示例 frontmatter：
+```yaml
+postHistory:
+  content: Always respond in valid markdown. Never break character.
+```
+
 ### 优先级分带
 
 ```

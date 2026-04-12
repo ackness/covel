@@ -118,6 +118,32 @@ export const hookDeclarationSchema = z
   })
   .strict();
 
+// ── Author's note / Post-history declarations (S3-T4) ──────────
+
+/**
+ * Segment 9 — Author's note. Inserted near the end of the message history,
+ * just before the Nth-from-last message (default depth = 4). Content is
+ * interpolated with the same variable map as the plugin body.
+ */
+export const authorsNoteDeclSchema = z
+  .object({
+    content: z.string().min(1),
+    depth: z.number().int().optional(),
+    role: z.enum(['system', 'user', 'assistant']).optional(),
+  })
+  .strict();
+
+/**
+ * Segment 10 — Post-history instructions. Appended at the very end of the
+ * message array as a high-weight re-anchoring message.
+ */
+export const postHistoryDeclSchema = z
+  .object({
+    content: z.string().min(1),
+    role: z.enum(['system', 'user']).optional(),
+  })
+  .strict();
+
 // ── UI spec ─────────────────────────────────────────────────────
 
 export const uiSpecSchema = z
@@ -154,6 +180,8 @@ export const runtimeManifestSchema = z
     ui: uiSpecSchema.optional(),
     hooks: z.array(hookDeclarationSchema).optional(),
     summaryFocus: z.array(z.string()).optional(),
+    authorsNote: authorsNoteDeclSchema.optional(),
+    postHistory: postHistoryDeclSchema.optional(),
   })
   .strict();
 

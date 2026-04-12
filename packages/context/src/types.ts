@@ -123,4 +123,15 @@ export interface ContextBuildParams {
    * The caller (turn-executor) is responsible for loading these from the store.
    */
   readonly summaries?: readonly SummaryRecord[];
+  /**
+   * Active runtime manifests considered for segment-9/10 aggregation (S3-T4).
+   *
+   * V2 scans these manifests for their `authorsNote` and `postHistory` fields
+   * and merges all declarations into the final prompt in `priority` order
+   * (ascending, so earlier priorities render first). When omitted, V2 falls
+   * back to `[params.manifest]` so a runtime's own notes still apply.
+   *
+   * V1 ignores this field. Only exercised under `COVEL_PROMPT_V2=1`.
+   */
+  readonly activeManifests?: readonly RuntimeManifest[];
 }

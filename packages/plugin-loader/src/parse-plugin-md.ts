@@ -4,7 +4,11 @@
 
 import matter from 'gray-matter';
 import { z } from 'zod';
-import { runtimeManifestSchema } from '@covel/shared';
+import {
+  authorsNoteDeclSchema,
+  postHistoryDeclSchema,
+  runtimeManifestSchema,
+} from '@covel/shared';
 import type { ParsedPluginMd } from './types.js';
 
 // ── Valid hook event names ────────────────────────────────────────
@@ -94,6 +98,36 @@ export function parsePluginMd(content: string, filePath: string): ParsedPluginMd
       dataToValidate = rawHooks.length > 0
         ? { ...dataWithoutHooks, hooks: rawHooks }
         : dataWithoutHooks;
+    }
+
+    // S3-T4: author's note / post-history lenient parsing.
+    // These fields are optional decorative metadata. A single malformed
+    // declaration (e.g. wrong type on `depth`) should not crash the entire
+    // plugin load — drop the bad field with a warning and continue, mirroring
+    // the per-entry lenient handling used for `hooks`.
+    if (dataToValidate && typeof dataToValidate === 'object' && 'authorsNote' in dataToValidate) {
+      const parsedNote = authorsNoteDeclSchema.safeParse(
+        (dataToValidate as Record<string, unknown>).authorsNote,
+      );
+      if (!parsedNote.success) {
+        console.warn(
+          `[plugin-loader] ${filePath}: malformed authorsNote skipped — ${parsedNote.error.issues.map((i) => i.message).join('; ')}`,
+        );
+        const { authorsNote: _omitted, ...rest } = dataToValidate as Record<string, unknown>;
+        dataToValidate = rest;
+      }
+    }
+    if (dataToValidate && typeof dataToValidate === 'object' && 'postHistory' in dataToValidate) {
+      const parsedPost = postHistoryDeclSchema.safeParse(
+        (dataToValidate as Record<string, unknown>).postHistory,
+      );
+      if (!parsedPost.success) {
+        console.warn(
+          `[plugin-loader] ${filePath}: malformed postHistory skipped — ${parsedPost.error.issues.map((i) => i.message).join('; ')}`,
+        );
+        const { postHistory: _omitted, ...rest } = dataToValidate as Record<string, unknown>;
+        dataToValidate = rest;
+      }
     }
 
     const parsed = runtimeManifestSchema.parse(dataToValidate);

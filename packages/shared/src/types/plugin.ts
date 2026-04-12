@@ -231,6 +231,57 @@ export interface RuntimeManifest {
    * Examples: `['narrative', 'character-state', 'world-facts']`
    */
   readonly summaryFocus?: readonly string[];
+  /**
+   * Author's Note (S3-T4, V2 prompt segment 9) — director-grade instruction
+   * inserted near the end of the message history, just before the Nth-from-last
+   * message. Modeled after SillyTavern / NovelAI author's-note semantics.
+   *
+   * The content supports template interpolation (`{{ config.xxx }}`, etc.)
+   * identical to the plugin body. Multiple active plugins' notes are merged
+   * in priority order.
+   *
+   * Only applied by the V2 prompt assembler (`COVEL_PROMPT_V2=1`).
+   */
+  readonly authorsNote?: AuthorsNoteDecl;
+  /**
+   * Post-History Instructions (S3-T4, V2 prompt segment 10) — final
+   * high-weight instruction appended after the last message. Used to
+   * re-anchor the model on output format, style constraints, or
+   * hard rules that should survive long histories.
+   *
+   * Only applied by the V2 prompt assembler (`COVEL_PROMPT_V2=1`).
+   */
+  readonly postHistory?: PostHistoryDecl;
+}
+
+// ── Author's note / Post-history declarations (S3-T4) ───────────
+
+/**
+ * Declaration for V2 prompt segment 9 — "director's note" inserted
+ * near the end of the message history.
+ */
+export interface AuthorsNoteDecl {
+  /** Interpolated text to inject. Supports `{{ template }}` variables. */
+  readonly content: string;
+  /**
+   * Insertion depth measured from the END of the message array.
+   * A value of `4` places the note before `messages[length - 4]`.
+   * Defaults to `4` (SillyTavern default). Values `<= 0` mean "append at end".
+   */
+  readonly depth?: number;
+  /** Message role used to wrap the note. Defaults to `system`. */
+  readonly role?: 'system' | 'user' | 'assistant';
+}
+
+/**
+ * Declaration for V2 prompt segment 10 — high-weight instruction appended
+ * after the last message.
+ */
+export interface PostHistoryDecl {
+  /** Interpolated text to inject. Supports `{{ template }}` variables. */
+  readonly content: string;
+  /** Message role used to wrap the note. Defaults to `system`. */
+  readonly role?: 'system' | 'user';
 }
 
 // ── Plugin manifest ──────────────────────────────────────────────
