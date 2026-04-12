@@ -159,8 +159,11 @@ actionRoutes.post('/', async (c) => {
       // Create trace recorder for this turn (persists all lifecycle events to DB)
       const trace = createTraceRecorder(store, sessionId, turnId);
 
-      // Emit phase change (protocol: phase.changed)
-      await stream.writeSSE({ data: JSON.stringify(makeEnvelope('phase.changed', { phase: 'playing' })) });
+      // NOTE: Removed unconditional `phase.changed { phase: 'playing' }` emit here.
+      // It fired on every action regardless of real session phase, overriding
+      // sessions still in pre-game / character_creation. Real phase transitions
+      // now flow only through phase.transition proposals via processRuntimeResult().
+      // See audits/2026-04-12-backend-webv2-framework-audit Finding 4.
 
       // Emit execution started (protocol: execution.started)
       await trace.turnStarted({ runtimeCount: activeRuntimes.length });

@@ -151,8 +151,10 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
 
   const resolveModel = createModelResolver({ pluginLlmConfigs });
 
-  // 4. Create remaining shared state
-  const sessionScopes = new Map();
+  // 4. (sessionScopes was removed 2026-04-12 — see audit Finding 2:
+  //     `createSessionScope` had no production caller, the map was always
+  //     empty, and PATCH /api/plugins/:id/config always 404'd. Real config
+  //     lives in loadSessionConfig() + plugin_data.)
 
   // 5. loadRuntime resolver (locale-aware: loads PLUGIN.en.md when locale is "en-US")
   const loadRuntimeFn = async (manifest: RuntimeManifest, locale?: string): Promise<LoadedRuntime | undefined> => {
@@ -329,7 +331,6 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     c.set('stateManager', stateManager);
     c.set('eventBus', eventBus);
     c.set('pluginRegistry', registry);
-    c.set('sessionScopes', sessionScopes);
     c.set('llmAdapter', config.llmAdapter);
     c.set('loadRuntimeFn', loadRuntimeFn);
     c.set('toolExecutor', toolExecutor);
@@ -367,7 +368,7 @@ function emitPluginDataChangedEvent(
   eventBus: EventBus,
   pluginId: string,
   sessionId: string,
-  changes: readonly { namespace: string; key: string; value: unknown; operation: 'set' }[],
+  changes: readonly { namespace: string; key: string; value: unknown; operation: 'set' | 'delete' }[],
 ): void {
   if (changes.length === 0) return;
   eventBus.emit({
@@ -384,7 +385,7 @@ function emitPluginDataChangedEvent(
   });
 }
 
-function wrapStoreWithPluginDataEvents(baseStore: DataStore, eventBus: EventBus): DataStore {
+export function wrapStoreWithPluginDataEvents(baseStore: DataStore, eventBus: EventBus): DataStore {
   return new Proxy(baseStore, {
     get(target, prop, receiver) {
       if (prop === 'setPluginData') {
@@ -403,7 +404,7 @@ function wrapStoreWithPluginDataEvents(baseStore: DataStore, eventBus: EventBus)
         return async (records: readonly PluginDataRecord[]): Promise<void> => {
           await target.setPluginDataBatch(records);
           // Group by pluginId to emit one event per plugin
-          const byPlugin = new Map<string, { sessionId: string; changes: { namespace: string; key: string; value: unknown; operation: 'set' }[] }>();
+          const byPlugin = new Map<string, { sessionId: string; changes: { namespace: string; key: string; value: unknown; operation: 'set' | 'delete' }[] }>();
           for (const r of records) {
             let entry = byPlugin.get(r.pluginId);
             if (!entry) {
@@ -420,6 +421,18 @@ function wrapStoreWithPluginDataEvents(baseStore: DataStore, eventBus: EventBus)
           for (const [pluginId, { sessionId, changes }] of byPlugin) {
             emitPluginDataChangedEvent(eventBus, pluginId, sessionId, changes);
           }
+        };
+      }
+
+      if (prop === 'deletePluginData') {
+        return async (sessionId: string, pluginId: string, namespace: string, key: string): Promise<void> => {
+          await target.deletePluginData(sessionId, pluginId, namespace, key);
+          emitPluginDataChangedEvent(eventBus, pluginId, sessionId, [{
+            namespace,
+            key,
+            value: null,
+            operation: 'delete',
+          }]);
         };
       }
 

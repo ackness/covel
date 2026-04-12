@@ -6,7 +6,7 @@ import { Hono } from 'hono';
 import type { RuntimeManifest } from '@covel/shared';
 import type { PluginRegistry, LoadedRuntime } from '@covel/plugin-loader';
 import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
-import { executeTurn } from '@covel/runtime';
+import { executeTurn, processRuntimeResult } from '@covel/runtime';
 import { loadSessionConfig } from './load-session-config.js';
 import type { DataStore } from '@covel/store';
 
@@ -86,6 +86,18 @@ turnRoutes.post('/:id/turn', async (c) => {
     turnCount: session.turnCount + 1,
     updatedAt: new Date().toISOString(),
   });
+
+  // Process runtime results through the same commit pipeline as /api/actions.
+  // Without this, turn.ts would write runtime_results but not messages/state/events,
+  // leaving snapshot restore desynced from LLM history. Audit Finding 3.
+  const outputKindMap = new Map<string, string>();
+  for (const rt of activeRuntimes) {
+    outputKindMap.set(rt.name, rt.outputKind ?? 'plugin');
+  }
+  for (const rr of result.runtimeResults) {
+    const kind = outputKindMap.get(rr.runtimeId) ?? 'plugin';
+    await processRuntimeResult(rr, store, sessionId, kind);
+  }
 
   return c.json(result);
 });

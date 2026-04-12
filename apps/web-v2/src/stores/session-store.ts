@@ -7,6 +7,39 @@
 import { useSyncExternalStore, useCallback } from "react";
 import * as api from "@/services/api.js";
 import { applyChanges, resetPluginData, loadPluginData } from "./plugin-data-store.js";
+import { connectSSE } from "@/services/sse.js";
+
+// ── Session-level SSE subscription ──────────────────────────────
+//
+// connectSSE opens an EventSource on /api/events/stream that delivers
+// out-of-band events (plugin-data.changed, phase.changed, etc.) for the
+// current session. Without this, we only get events that happen to be
+// emitted inside an /api/actions request stream — events emitted from
+// other tabs, background runtimes, or out-of-band tool calls were lost.
+// See audits/2026-04-12-backend-webv2-framework-audit Finding w1.
+
+let sseTeardown: (() => void) | null = null;
+
+function closeSse(): void {
+  if (sseTeardown) {
+    sseTeardown();
+    sseTeardown = null;
+  }
+}
+
+function openSse(sessionId: string): void {
+  closeSse();
+  sseTeardown = connectSSE({
+    sessionId,
+    onEvent: (type, data) => {
+      // The /api/events/stream envelope wraps the payload under .payload,
+      // matching how /api/actions stream events are shaped. Pass the inner
+      // payload to the same reducer so both code paths converge.
+      const payload = (data.payload ?? data) as Record<string, unknown>;
+      processSSEEvent(type, payload);
+    },
+  });
+}
 
 // ── LocalStorage Keys ───────────────────────────────────────────
 
@@ -297,6 +330,7 @@ export function selectWorld(worldId: string) {
 }
 
 export function backToWorldSelect() {
+  closeSse();
   clearSessionStorage();
   update({ selectedWorld: null, session: null, messages: [], executionSteps: [], phase: "world-select" });
 }
@@ -310,6 +344,7 @@ export async function startGame() {
     resetPluginData();
     saveSessionToStorage(session.id, state.selectedWorld.id);
     update({ session, phase: "playing", messages: [], executionSteps: [] });
+    openSse(session.id);
 
     // Start the game — post start_session action
     const response = await api.postAction({
@@ -381,6 +416,7 @@ export async function resumeSession(sessionId: string, worldId: string) {
     executing: false,
     executionSteps: [],
   });
+  openSse(sessionId);
 }
 
 export async function sendMessage(content: string) {

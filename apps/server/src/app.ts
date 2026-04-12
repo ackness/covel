@@ -80,7 +80,7 @@ process.on('SIGINT', () => worldWatcher.stop());
 // ── Mount routes ─────────────────────────────────────────────────
 app.route('/', api.app);
 app.route('/', createModelDbRoutes(ai));
-app.route('/', createMiscApiRoutes(ai, api.registry));
+app.route('/', createMiscApiRoutes(ai, api.registry, store));
 
 
 // ── Static file serving (production) ─────────────────────────────

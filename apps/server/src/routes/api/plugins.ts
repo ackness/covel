@@ -1,14 +1,18 @@
 /**
- * API Plugin routes — list, configure, enable/disable plugins.
+ * API Plugin routes — list and inspect loaded plugins.
+ *
+ * NOTE: The PATCH /:id/config route was removed in 2026-04-12 because the
+ * `sessionScopes` map it depended on was never populated by any production
+ * code path. See audits/2026-04-12-backend-webv2-framework-audit Finding 2.
+ * Real per-session config lives in `loadSessionConfig()` + plugin_data.
  */
 
 import { Hono } from 'hono';
-import type { PluginRegistry, SessionPluginScope } from '@covel/plugin-loader';
+import type { PluginRegistry } from '@covel/plugin-loader';
 
 type Env = {
   Variables: {
     pluginRegistry: PluginRegistry;
-    sessionScopes: Map<string, SessionPluginScope>;
   };
 };
 
@@ -47,7 +51,7 @@ pluginRoutes.get('/:id', async (c) => {
   });
 });
 
-// GET /plugins/:id/config — Get plugin config schema + values
+// GET /plugins/:id/config — Get plugin config schema (read-only)
 pluginRoutes.get('/:id/config', async (c) => {
   const registry = c.get('pluginRegistry');
   const id = c.req.param('id');
@@ -57,25 +61,4 @@ pluginRoutes.get('/:id/config', async (c) => {
   }
   const config = entry.manifest?.manifest.config ?? {};
   return c.json({ pluginId: id, config });
-});
-
-// PATCH /plugins/:id/config — Update plugin config
-pluginRoutes.patch('/:id/config', async (c) => {
-  const registry = c.get('pluginRegistry');
-  const sessionScopes = c.get('sessionScopes');
-  const id = c.req.param('id');
-
-  const entry = registry.get(id);
-  if (!entry) {
-    return c.json({ error: `Plugin "${id}" not found` }, 404);
-  }
-
-  const body = await c.req.json<{ sessionId: string; config: Record<string, unknown> }>();
-  const scope = sessionScopes.get(body.sessionId);
-  if (!scope) {
-    return c.json({ error: `Session "${body.sessionId}" not found` }, 404);
-  }
-
-  scope.setConfigOverride(id, body.config);
-  return c.json({ updated: true });
 });

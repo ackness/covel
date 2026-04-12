@@ -10,7 +10,6 @@ import { pluginRoutes } from '../../src/routes/api/plugins.js';
 import { turnRoutes } from '../../src/routes/api/turn.js';
 import {
   createPluginRegistry,
-  createSessionScope,
   type PluginRegistry,
   type SessionPluginScope,
   type PluginSummary,
@@ -175,46 +174,18 @@ describe('V2 Plugin Routes', () => {
     });
   });
 
-  describe('PATCH /api/plugins/:id/config', () => {
-    it('should update config via SessionPluginScope', async () => {
-      registry.register(makeEntry({ id: 'cfg-plugin', summary: makeSummary({ id: 'cfg-plugin' }) }));
-      const scope = createSessionScope('sess-1', ['cfg-plugin'], new Set());
-      sessionScopes.set('sess-1', scope);
-
+  // PATCH /api/plugins/:id/config tests removed 2026-04-12.
+  // The route was deleted because the underlying sessionScopes Map was never
+  // populated by any production code path. See audits/2026-04-12-backend-webv2-framework-audit
+  // Finding 2. Per-session config now lives in loadSessionConfig() + plugin_data.
+  describe('PATCH /api/plugins/:id/config (route removed)', () => {
+    it('returns 404 because the route is no longer mounted', async () => {
       const res = await app.request('/api/plugins/cfg-plugin/config', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: 'sess-1', config: { difficulty: 'hard' } }),
       });
-
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.updated).toBe(true);
-
-      // Verify through scope
-      expect(scope.getEffectiveConfig('cfg-plugin')).toEqual({ difficulty: 'hard' });
-    });
-
-    it('should return 404 when plugin not found', async () => {
-      const scope = createSessionScope('sess-1', [], new Set());
-      sessionScopes.set('sess-1', scope);
-
-      const res = await app.request('/api/plugins/ghost/config', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: 'sess-1', config: { x: 1 } }),
-      });
-      expect(res.status).toBe(404);
-    });
-
-    it('should return 404 when session not found', async () => {
-      registry.register(makeEntry({ id: 'cfg-plugin', summary: makeSummary({ id: 'cfg-plugin' }) }));
-
-      const res = await app.request('/api/plugins/cfg-plugin/config', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: 'no-session', config: { x: 1 } }),
-      });
+      // Hono returns 404 for unmatched routes
       expect(res.status).toBe(404);
     });
   });
