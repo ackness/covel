@@ -183,6 +183,309 @@ describe('prompt-assembler V2', () => {
     expect(v2.messages.length).toBeLessThan(history.length + 2); // +2 = placeholder + current user
   });
 
+  // ── Segment 9: Author's Note (S3-T4) ──────────────────────────
+
+  describe('segment 9 — Author\'s Note', () => {
+    function makeHistory(count: number): MessageHistoryRecord[] {
+      const history: MessageHistoryRecord[] = [];
+      for (let i = 0; i < count; i++) {
+        history.push({
+          role: i % 2 === 0 ? 'user' : 'assistant',
+          content: `msg-${i}`,
+        });
+      }
+      return history;
+    }
+
+    it('inserts an author\'s note before messages[length - depth]', () => {
+      // 5 history messages + 1 current user message → 6 base messages
+      // default depth = 4 → insert before index 6 - 4 = 2
+      const params = baselineParams({
+        manifest: makeManifest({
+          authorsNote: { content: 'Director: keep it tense.' },
+        }),
+        messageHistory: makeHistory(5),
+        turnInput: makeTurnInput({ playerMessage: 'current' }),
+      });
+
+      const v2 = buildContextV2(params);
+
+      // Find the note
+      const noteIdx = v2.messages.findIndex(m => m.content === 'Director: keep it tense.');
+      expect(noteIdx).toBe(2); // inserted at len(6) - depth(4) = 2
+
+      // Role defaults to system
+      expect(v2.messages[noteIdx]?.role).toBe('system');
+
+      // Messages before the note are the first two history entries
+      expect(v2.messages[0]?.content).toBe('msg-0');
+      expect(v2.messages[1]?.content).toBe('msg-1');
+      // Messages after the note continue the history
+      expect(v2.messages[3]?.content).toBe('msg-2');
+      // Final message is the current user turn
+      expect(v2.messages[v2.messages.length - 1]?.content).toBe('current');
+    });
+
+    it('respects custom depth', () => {
+      // 3 history + 1 current = 4 base messages; depth=1 → insert before len-1 = 3
+      const params = baselineParams({
+        manifest: makeManifest({
+          authorsNote: { content: 'short-note', depth: 1 },
+        }),
+        messageHistory: makeHistory(3),
+        turnInput: makeTurnInput({ playerMessage: 'current' }),
+      });
+
+      const v2 = buildContextV2(params);
+      const noteIdx = v2.messages.findIndex(m => m.content === 'short-note');
+      expect(noteIdx).toBe(3); // 4 - 1 = 3, right before the current user turn
+      expect(v2.messages[v2.messages.length - 1]?.content).toBe('current');
+    });
+
+    it('uses declared role override', () => {
+      const params = baselineParams({
+        manifest: makeManifest({
+          authorsNote: { content: 'as-user', role: 'user' },
+        }),
+        messageHistory: makeHistory(5),
+      });
+
+      const v2 = buildContextV2(params);
+      const note = v2.messages.find(m => m.content === 'as-user');
+      expect(note?.role).toBe('user');
+    });
+
+    it('merges multiple plugins author notes in priority order', () => {
+      const lowPriority: RuntimeManifest = {
+        name: 'plug-low',
+        description: 'low',
+        priority: 100,
+        authorsNote: { content: 'LOW priority note' },
+      };
+      const highPriority: RuntimeManifest = {
+        name: 'plug-high',
+        description: 'high',
+        priority: 800,
+        authorsNote: { content: 'HIGH priority note' },
+      };
+
+      const params = baselineParams({
+        manifest: lowPriority, // fallback manifest — unused when activeManifests set
+        activeManifests: [highPriority, lowPriority], // deliberate reverse order
+        messageHistory: makeHistory(5),
+      });
+
+      const v2 = buildContextV2(params);
+      // Both declarations share (system, depth=4) so they merge into a single
+      // message with lowPriority's content first (priority 100 < 800).
+      const merged = v2.messages.find(m =>
+        m.role === 'system' && m.content.includes('LOW priority note'),
+      );
+      expect(merged).toBeDefined();
+      expect(merged?.content).toBe('LOW priority note\n\nHIGH priority note');
+    });
+
+    it('produces separate messages when notes have different (role, depth) combos', () => {
+      const a: RuntimeManifest = {
+        name: 'a',
+        description: 'a',
+        priority: 100,
+        authorsNote: { content: 'note-a', depth: 4, role: 'system' },
+      };
+      const b: RuntimeManifest = {
+        name: 'b',
+        description: 'b',
+        priority: 200,
+        authorsNote: { content: 'note-b', depth: 2, role: 'system' },
+      };
+
+      const params = baselineParams({
+        manifest: a,
+        activeManifests: [a, b],
+        messageHistory: makeHistory(5),
+      });
+
+      const v2 = buildContextV2(params);
+      const idxA = v2.messages.findIndex(m => m.content === 'note-a');
+      const idxB = v2.messages.findIndex(m => m.content === 'note-b');
+      // 6 base messages, note-a inserted at 6-4=2, note-b at 6-2=4 → plus the
+      // earlier insertion shifts later indices; but since insertion order is
+      // high-depth-first, ordering is independent. Just assert both present.
+      expect(idxA).toBeGreaterThanOrEqual(0);
+      expect(idxB).toBeGreaterThanOrEqual(0);
+      expect(idxA).not.toBe(idxB);
+    });
+
+    it('skips empty segment when no manifest declares authorsNote', () => {
+      const params = baselineParams({
+        messageHistory: makeHistory(3),
+      });
+
+      const v2 = buildContextV2(params);
+      // No note should be inserted → messages are exactly history + current turn
+      expect(v2.messages.map(m => m.content)).toEqual([
+        'msg-0', 'msg-1', 'msg-2', 'I step forward',
+      ]);
+    });
+
+    it('interpolates template variables in authorsNote.content', () => {
+      const params = baselineParams({
+        manifest: makeManifest({
+          authorsNote: {
+            content: 'Focus on player message: {{ player.message }}',
+          },
+        }),
+        turnInput: makeTurnInput({ playerMessage: 'go east' }),
+        messageHistory: makeHistory(5),
+      });
+
+      const v2 = buildContextV2(params);
+      const note = v2.messages.find(m => m.content.startsWith('Focus on'));
+      expect(note?.content).toBe('Focus on player message: go east');
+    });
+
+    it('appends note at end when depth >= messages.length is clamped appropriately', () => {
+      // depth=0 behaves like "append"
+      const params = baselineParams({
+        manifest: makeManifest({
+          authorsNote: { content: 'appended', depth: 0 },
+        }),
+        messageHistory: makeHistory(2),
+        turnInput: makeTurnInput({ playerMessage: 'current' }),
+      });
+
+      const v2 = buildContextV2(params);
+      expect(v2.messages[v2.messages.length - 1]?.content).toBe('appended');
+    });
+  });
+
+  // ── Segment 10: Post-History Instructions (S3-T4) ──────────────
+
+  describe('segment 10 — Post-History Instructions', () => {
+    it('appends post-history instruction as the final message', () => {
+      const params = baselineParams({
+        manifest: makeManifest({
+          postHistory: { content: 'Respond in markdown only.' },
+        }),
+        messageHistory: [
+          { role: 'user', content: 'hi' },
+          { role: 'assistant', content: 'hello' },
+        ],
+      });
+
+      const v2 = buildContextV2(params);
+      const last = v2.messages[v2.messages.length - 1];
+      expect(last?.content).toBe('Respond in markdown only.');
+      expect(last?.role).toBe('system');
+    });
+
+    it('merges multiple plugins post-history into one message per role', () => {
+      const a: RuntimeManifest = {
+        name: 'a',
+        description: 'a',
+        priority: 100,
+        postHistory: { content: 'Rule A' },
+      };
+      const b: RuntimeManifest = {
+        name: 'b',
+        description: 'b',
+        priority: 200,
+        postHistory: { content: 'Rule B' },
+      };
+
+      const params = baselineParams({
+        manifest: a,
+        activeManifests: [b, a], // out of order on purpose
+        messageHistory: [{ role: 'user', content: 'hi' }],
+      });
+
+      const v2 = buildContextV2(params);
+      const last = v2.messages[v2.messages.length - 1];
+      expect(last?.role).toBe('system');
+      // sorted by priority: a (100) before b (200)
+      expect(last?.content).toBe('Rule A\n\nRule B');
+    });
+
+    it('places post-history after author\'s notes', () => {
+      const m: RuntimeManifest = {
+        name: 'x',
+        description: 'x',
+        priority: 100,
+        authorsNote: { content: 'author-note' },
+        postHistory: { content: 'post-rule' },
+      };
+
+      const params = baselineParams({
+        manifest: m,
+        messageHistory: [
+          { role: 'user', content: 'u1' },
+          { role: 'assistant', content: 'a1' },
+          { role: 'user', content: 'u2' },
+          { role: 'assistant', content: 'a2' },
+        ],
+        turnInput: makeTurnInput({ playerMessage: 'current' }),
+      });
+
+      const v2 = buildContextV2(params);
+      const authorIdx = v2.messages.findIndex(m => m.content === 'author-note');
+      const postIdx = v2.messages.findIndex(m => m.content === 'post-rule');
+      expect(authorIdx).toBeGreaterThanOrEqual(0);
+      expect(postIdx).toBeGreaterThan(authorIdx);
+      // post-history is strictly the final entry
+      expect(postIdx).toBe(v2.messages.length - 1);
+    });
+
+    it('skips empty segment when no manifest declares postHistory', () => {
+      const params = baselineParams({
+        messageHistory: [
+          { role: 'user', content: 'u1' },
+          { role: 'assistant', content: 'a1' },
+        ],
+        turnInput: makeTurnInput({ playerMessage: 'current' }),
+      });
+
+      const v2 = buildContextV2(params);
+      expect(v2.messages.map(m => m.content)).toEqual(['u1', 'a1', 'current']);
+    });
+
+    it('interpolates template variables in postHistory.content', () => {
+      const params = baselineParams({
+        manifest: makeManifest({
+          postHistory: { content: 'Reply to: {{ player.message }}' },
+        }),
+        turnInput: makeTurnInput({ playerMessage: 'the dungeon' }),
+      });
+
+      const v2 = buildContextV2(params);
+      const last = v2.messages[v2.messages.length - 1];
+      expect(last?.content).toBe('Reply to: the dungeon');
+    });
+  });
+
+  describe('V1 path does not render segment 9 or 10', () => {
+    it('V1 ignores authorsNote and postHistory declarations', () => {
+      const params = baselineParams({
+        manifest: makeManifest({
+          authorsNote: { content: 'director' },
+          postHistory: { content: 'post-rule' },
+        }),
+        messageHistory: [
+          { role: 'user', content: 'u1' },
+          { role: 'assistant', content: 'a1' },
+        ],
+        turnInput: makeTurnInput({ playerMessage: 'current' }),
+      });
+
+      // Explicitly V1 (no COVEL_PROMPT_V2 flag)
+      const v1 = buildContext(params);
+      // Messages should be only history + current turn — no injected notes.
+      expect(v1.messages.map(m => m.content)).toEqual(['u1', 'a1', 'current']);
+      // And no note text leaked into systemPrompt either.
+      expect(v1.systemPrompt).not.toContain('director');
+      expect(v1.systemPrompt).not.toContain('post-rule');
+    });
+  });
+
   it('is correctly gated by COVEL_PROMPT_V2: exact "1" selects V2, any other value keeps V1', () => {
     // V1 and V2 produce structurally different prompts when locale is set:
     // V1 appends locale at the tail, V2 prepends it in segment 1.
