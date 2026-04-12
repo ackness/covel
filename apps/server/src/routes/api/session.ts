@@ -210,6 +210,15 @@ sessionRoutes.post('/:id/plugins/disable', async (c) => {
   if (!body.pluginId || typeof body.pluginId !== 'string') {
     return c.json({ error: 'pluginId is required' }, 400);
   }
+
+  // Core plugins cannot be disabled — enforced at the framework level via
+  // manifest.pluginType. Never hardcode specific plugin IDs here (see
+  // CLAUDE.md "Framework–Plugin Isolation Rule"). Audit Finding 5.
+  const entry = pluginRegistry.get(body.pluginId);
+  if (entry && entry.summary.pluginType === 'core-plugin') {
+    return c.json({ error: `Cannot disable core plugin "${body.pluginId}"` }, 403);
+  }
+
   pluginRegistry.deactivate(body.pluginId, id);
   const active = (session.activePlugins ?? []).filter((p) => p !== body.pluginId);
   await store.updateSession(id, { activePlugins: active, updatedAt: new Date().toISOString() });
