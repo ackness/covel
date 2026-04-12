@@ -25,6 +25,7 @@ import { useMemo, useState, useEffect } from "react";
 import * as Icons from "lucide-react";
 import { clsx } from "clsx";
 import { fetchUiSpecs, type UISlotEntry } from "@/services/api.js";
+import { useSessionStore } from "@/stores/session-store.js";
 import { PluginPanel } from "./plugin-panel.js";
 
 interface SubPanel {
@@ -117,24 +118,40 @@ export function aggregateSpecsIntoGroups(
 }
 
 export function RightPanel() {
+  const { session } = useSessionStore();
+  const sessionId = session?.id;
   const [rawGroups, setRawGroups] = useState<TabGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeGroupId, setActiveGroupId] = useState<string>("");
   const [activeSubByGroup, setActiveSubByGroup] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    fetchUiSpecs()
+    let cancelled = false;
+    setLoading(true);
+    // Reset local tab state on session switch so the previous session's
+    // tabs don't briefly flash before the new specs arrive.
+    setRawGroups([]);
+    setActiveGroupId("");
+    setActiveSubByGroup({});
+
+    fetchUiSpecs(sessionId)
       .then((specs) => {
+        if (cancelled) return;
         const groups = aggregateSpecsIntoGroups(specs.right);
         setRawGroups(groups);
         if (groups.length > 0) setActiveGroupId(groups[0].id);
         setLoading(false);
       })
       .catch((err) => {
+        if (cancelled) return;
         console.error("[RightPanel] Failed to load ui-specs:", err);
         setLoading(false);
       });
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
 
   const currentGroup = useMemo(
     () => rawGroups.find((g) => g.id === activeGroupId),

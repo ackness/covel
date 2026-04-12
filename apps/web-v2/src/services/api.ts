@@ -158,8 +158,9 @@ export interface UISpecsResponse {
   left: UISlotEntry[];
 }
 
-export async function fetchUiSpecs(): Promise<UISpecsResponse> {
-  return request<UISpecsResponse>("/api/ui-specs");
+export async function fetchUiSpecs(sessionId?: string): Promise<UISpecsResponse> {
+  const qs = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
+  return request<UISpecsResponse>(`/api/ui-specs${qs}`);
 }
 
 // ── Plugin Data ──────────────────────────────────────────────────

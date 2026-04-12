@@ -7,8 +7,13 @@
 import { Hono } from 'hono';
 import type { AiStack } from '../ai-setup.js';
 import type { PluginRegistry } from '@covel/plugin-loader';
+import type { DataStore } from '@covel/store';
 
-export function createMiscApiRoutes(ai: AiStack, registry: PluginRegistry): Hono {
+export function createMiscApiRoutes(
+  ai: AiStack,
+  registry: PluginRegistry,
+  store: DataStore,
+): Hono {
   const app = new Hono();
 
   // GET /api/presets — list configured model presets
@@ -91,16 +96,30 @@ export function createMiscApiRoutes(ai: AiStack, registry: PluginRegistry): Hono
     return c.json({ schemas });
   });
 
-  // GET /api/ui-specs — list UI specs from plugin manifests, grouped by slot
-  app.get('/api/ui-specs', (c) => {
+  // GET /api/ui-specs — list UI specs from plugin manifests, grouped by slot.
+  // When ?sessionId= is provided, filter to that session's activePlugins so the
+  // panel only shows plugins actually enabled for the current session.
+  // (Audit Finding w2 — without this, RightPanel shows specs for plugins that
+  // are loaded globally but not enabled for the active session.)
+  app.get('/api/ui-specs', async (c) => {
     type SlotEntry = { pluginId: string; specs: readonly Record<string, unknown>[] };
     const right: SlotEntry[] = [];
     const message: SlotEntry[] = [];
     const left: SlotEntry[] = [];
 
+    const sessionId = c.req.query('sessionId');
+    let activeFilter: Set<string> | null = null;
+    if (sessionId) {
+      const session = await store.getSession(sessionId);
+      if (session) {
+        activeFilter = new Set(session.activePlugins ?? []);
+      }
+    }
+
     const all = registry.getAll();
     for (const [, entry] of all) {
       if (entry.status === 'error') continue;
+      if (activeFilter && !activeFilter.has(entry.id)) continue;
 
       for (const [, loaded] of entry.loadedRuntimes) {
         if (!loaded.uiSpecs) continue;
