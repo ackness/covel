@@ -27,7 +27,8 @@
     "e2e:ui": "playwright test --ui",
     "e2e:docker:up": "docker compose -f docker/docker-compose.e2e.yml up --build -d && echo 'Waiting for app...' && until curl -sf http://localhost:3001/api/health > /dev/null 2>&1; do sleep 2; done && echo 'App ready!'",
     "e2e:docker": "pnpm e2e:docker:up && E2E_BASE_URL=http://localhost:3001 pnpm e2e; EXIT=$?; docker compose -f docker/docker-compose.e2e.yml down -v; exit $EXIT",
-    "e2e:docker:down": "docker compose -f docker/docker-compose.e2e.yml down -v"
+    "e2e:docker:down": "docker compose -f docker/docker-compose.e2e.yml down -v",
+    "stress:budget": "tsx scripts/long-session-50turns.ts"
   },
   "packageManager": "pnpm@10.7.0",
   "engines": {

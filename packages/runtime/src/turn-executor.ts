@@ -14,6 +14,7 @@ import type { EventBus } from '@covel/events';
 import { shouldTrigger } from './trigger.js';
 import { scheduleByPriority } from './scheduler.js';
 import { buildContext } from '@covel/context';
+import type { BudgetOptions, TokenEstimator } from '@covel/context';
 import { executeParallel } from './parallel-executor.js';
 import type { TriggerContext } from './types.js';
 import type { LLMAdapter, LLMMessage } from './llm-adapter.js';
@@ -47,6 +48,24 @@ export interface TurnExecutorDeps {
   readonly onRuntimeStart?: (info: { runtimeId: string; pluginId: string; priority: number }) => Promise<void>;
   /** Called when a runtime completes execution. */
   readonly onRuntimeComplete?: (info: { runtimeId: string; pluginId: string; status: string; durationMs: number }) => Promise<void>;
+
+  /**
+   * Optional token estimator for context budgeting. When provided together with
+   * `contextBudget` AND `process.env.COVEL_CONTEXT_BUDGET_V1 === '1'`, the message
+   * history is pruned before it is handed to the LLM. See packages/context/src/budget.ts.
+   *
+   * Turn-executor does NOT read the env flag itself — that check lives in
+   * `buildContext`. Turn-executor only threads these references through.
+   */
+  readonly estimator?: TokenEstimator;
+
+  /**
+   * Optional budget configuration. Only honored when `estimator` is also present.
+   * Same shape as `BudgetOptions` from @covel/context minus the `estimator` field
+   * (which is threaded separately so callers can share one estimator across many
+   * runtimes).
+   */
+  readonly contextBudget?: Omit<BudgetOptions, 'estimator'>;
 }
 
 export interface TurnExecutorOptions {
@@ -519,6 +538,18 @@ async function executeOneRuntime(
     });
     // Build context
     const config = deps.getConfig(manifest.pluginId, manifest.name);
+
+    // S1-T5 / I1 guard — applyBudget is role-agnostic for `role: 'tool'` messages,
+    // so mid-history pruning could split an assistant↔tool pair and produce a
+    // broken OpenAI-protocol payload. Until S2 introduces pair-aware pruning,
+    // skip budget injection entirely for any runtime that declares tool usage.
+    const runtimeUsesTools =
+      Array.isArray(manifest.input?.tools) && manifest.input!.tools.length > 0;
+    const budgetEligible =
+      !runtimeUsesTools &&
+      deps.estimator !== undefined &&
+      deps.contextBudget !== undefined;
+
     const assembled = buildContext({
       promptTemplate: loaded.promptTemplate,
       manifest,
@@ -527,6 +558,9 @@ async function executeOneRuntime(
       config,
       messageHistory,
       sessionMeta,
+      ...(budgetEligible
+        ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
+        : {}),
     });
 
     // Build LLM messages
