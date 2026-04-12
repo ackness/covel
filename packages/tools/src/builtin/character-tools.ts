@@ -189,9 +189,33 @@ function sortByFrequencyThenRecency<T extends { version: number; updatedAt: stri
   });
 }
 
+// ── Hooks (optional, supplied by the host at factory time) ──────
+
+/**
+ * Optional hooks the host can supply to react to character-tool side-effects.
+ * Kept as a thin callback layer rather than a hard dep on @covel/events so
+ * the tools package stays runtime-dependency-free.
+ */
+export interface CharacterToolHooks {
+  /**
+   * Fired immediately after `create-character` updates `session.phase` via
+   * `store.updateSession`. Hosts wire this to their event bus so the
+   * frontend reducer learns about the transition through the same SSE
+   * channel as any other `phase.changed` event.
+   *
+   * Background: see audits/2026-04-12-backend-webv2-framework-audit
+   * Followup C / Followup D — without this hook, phase transitions inside
+   * tool calls didn't reach the frontend until a page refresh.
+   */
+  onPhaseTransition?: (sessionId: string, phase: string) => void | Promise<void>;
+}
+
 // ── create-character ─────────────────────────────────────────────
 
-function createCreateCharacterTool(store: CharacterStore): ToolModule {
+function createCreateCharacterTool(
+  store: CharacterStore,
+  hooks?: CharacterToolHooks,
+): ToolModule {
   return tool({
     name: 'create-character',
     description:
@@ -264,6 +288,19 @@ function createCreateCharacterTool(store: CharacterStore): ToolModule {
           updatedAt: now,
         });
         phaseTransitioned = true;
+        // Notify the host so it can emit a phase.changed event on the
+        // session SSE stream. Without this, the frontend reducer never
+        // learns about the transition and the header stays stuck on the
+        // previous phase until a page refresh. (Followup D for the
+        // 2026-04-12 audit fix sweep.)
+        try {
+          await hooks?.onPhaseTransition?.(context.sessionId, params.transitionPhase);
+        } catch (err) {
+          // Hook failure must not break character creation. Surface to
+          // stderr but swallow.
+          // eslint-disable-next-line no-console
+          console.warn('[create-character] onPhaseTransition hook threw:', err);
+        }
       }
 
       const summary = params.description ? ` — ${truncate(params.description, 60)}` : '';
@@ -465,10 +502,18 @@ function createGetCharacterTool(store: CharacterStore): ToolModule {
 /**
  * Create the full set of builtin character tools bound to a DataStore instance.
  * Call this during bootstrap when the store is available.
+ *
+ * Optional `hooks` lets the host react to side-effects (e.g. emit
+ * `phase.changed` on the session SSE stream after `create-character`
+ * transitions session phase). Hooks default to no-ops, so existing callers
+ * that don't pass them keep working unchanged.
  */
-export function createCharacterTools(store: CharacterStore): readonly ToolModule[] {
+export function createCharacterTools(
+  store: CharacterStore,
+  hooks?: CharacterToolHooks,
+): readonly ToolModule[] {
   return [
-    createCreateCharacterTool(store),
+    createCreateCharacterTool(store, hooks),
     createUpdateCharacterTool(store),
     createListCharactersTool(store),
     createGetCharacterTool(store),

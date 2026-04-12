@@ -36,6 +36,18 @@ class MockEventSource {
     this.listeners.delete(type);
   }
 
+  /** Test helper: simulate the server pushing an SSE event. Returns true if a handler was registered. */
+  fire(type: string, data: unknown): boolean {
+    const handler = this.listeners.get(type);
+    if (!handler) return false;
+    handler(new MessageEvent(type, { data: JSON.stringify(data) }));
+    return true;
+  }
+
+  hasListener(type: string): boolean {
+    return this.listeners.has(type);
+  }
+
   close(): void {
     this.closed = true;
   }
@@ -139,5 +151,29 @@ describe("session-store SSE wiring", () => {
     expect(MockEventSource.instances).toHaveLength(2);
     expect(MockEventSource.instances[1].closed).toBe(false);
     expect(MockEventSource.instances[1].url).toContain("sessionId=sess-2");
+  });
+
+  // Followup D regression — the connectSSE helper must register a listener
+  // for the `phase.changed` SSE event. Before this, only `plugin-data.changed`
+  // had a dedicated listener and phase transitions never reached the frontend
+  // reducer (the unnamed-event onmessage path doesn't fire for named events).
+  it("registers a phase.changed listener that fires when the server emits", async () => {
+    const { resumeSession } = await import("../session-store.js");
+    await resumeSession("sess-1", "w1");
+
+    const es = MockEventSource.instances[0];
+    expect(es.hasListener("phase.changed")).toBe(true);
+    expect(es.hasListener("plugin-data.changed")).toBe(true);
+
+    // Firing the event should hit the registered handler (returns true).
+    const handled = es.fire("phase.changed", {
+      id: "1",
+      topic: "session",
+      type: "phase.changed",
+      sessionId: "sess-1",
+      timestamp: new Date().toISOString(),
+      payload: { phase: "ended" },
+    });
+    expect(handled).toBe(true);
   });
 });
