@@ -4,6 +4,7 @@ import type { StateManager } from '@covel/state';
 import type { EventBus } from '@covel/events';
 import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
 import type { RuntimeManifest } from '@covel/shared';
+import type { CompactorRunner } from '@covel/context';
 
 type LoadRuntimeFn = (manifest: RuntimeManifest, locale?: string) => Promise<LoadedRuntime | undefined>;
 type GetConfigFn = (pluginId: string, runtimeId: string) => Readonly<Record<string, unknown>>;
@@ -22,5 +23,6 @@ declare module 'hono' {
     toolExecutor: ToolExecutor;
     getConfigFn: GetConfigFn;
     resolveModel: ResolveModelFn;
+    compactorRunner: CompactorRunner;
   }
 }

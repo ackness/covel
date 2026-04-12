@@ -27,6 +27,7 @@ import { createEventBus, type EventBus } from '@covel/events';
 import type { DataStore } from '@covel/store';
 import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
 import { createToolExecutor, createModelResolver } from '@covel/runtime';
+import { maybeCompact, type CompactorRunner, type CompactorLLMAdapter } from '@covel/context';
 import { builtinUITools, createPluginDataTools, createCharacterTools, tool, shortId, shortIdBatch, type ToolModule } from '@covel/tools';
 import { z } from 'zod';
 import { createApprovalPipeline } from '@covel/approval';
@@ -74,6 +75,7 @@ export interface ApiBootstrapResult {
   readonly stateManager: StateManager;
   readonly store: DataStore;
   readonly eventBus: EventBus;
+  readonly compactorRunner: CompactorRunner;
 }
 
 // ── Bootstrap function ───────────────────────────────────────────
@@ -332,6 +334,54 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   //    before calling executeTurn, bridging async store reads to sync getConfig interface.
   const getConfigFn = config.getConfigFn ?? ((_pluginId: string, _runtimeId: string): Readonly<Record<string, unknown>> => ({}));
 
+  // 7b. CompactorRunner (S2-T2) — wraps maybeCompact with server-level deps.
+  //     Feature-gated by COVEL_COMPACTOR_V1=1 at call site (turn-executor.ts).
+  //     Collects summaryFocus from ALL registered manifests (deduplicated).
+  const allSummaryFocus = new Set<string>();
+  for (const [, manifests] of manifestCache) {
+    for (const parsed of manifests) {
+      for (const section of parsed.manifest.summaryFocus ?? []) {
+        allSummaryFocus.add(section);
+      }
+    }
+  }
+  const focusSections: readonly string[] = [...allSummaryFocus];
+
+  // Simple char-based token estimator (chars/4 ≈ tokens). Good enough for
+  // compactor threshold comparisons; budget tests use the same approach.
+  const simpleEstimator = (text: string): number => Math.ceil(text.length / 4);
+
+  // Default context window (32k tokens) — used when COVEL_COMPACTOR_V1 is on
+  // but no finer-grained window is configured. Callers may override via env.
+  const compactorContextWindow = parseInt(process.env.COVEL_COMPACTOR_CONTEXT_WINDOW ?? '32768', 10);
+
+  // Adapt LLMAdapter to CompactorLLMAdapter (fast slot, system+user messages)
+  const fastSlotLlm: CompactorLLMAdapter = {
+    async complete(params) {
+      const response = await config.llmAdapter.generate({
+        model: 'fast',
+        messages: [
+          { role: 'system', content: params.systemPrompt },
+          ...params.messages.map(m => ({ role: m.role as 'user', content: m.content })),
+        ],
+      });
+      return { content: response.content ?? '' };
+    },
+  };
+
+  const compactorRunner: CompactorRunner = {
+    async run(sessionId, systemPromptPreview, messages) {
+      await maybeCompact(sessionId, systemPromptPreview, messages, {
+        store,
+        estimator: simpleEstimator,
+        fastSlotLlm,
+        contextWindow: compactorContextWindow,
+      }, {
+        focusSections,
+      });
+    },
+  };
+
   // 8. Create app with dependency injection middleware
   const app = new Hono();
 
@@ -355,6 +405,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     c.set('toolExecutor', toolExecutor);
     c.set('getConfigFn', getConfigFn);
     c.set('resolveModel', resolveModel);
+    c.set('compactorRunner', compactorRunner);
     await next();
   });
 
@@ -379,7 +430,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   app.route('/api/actions', actionRoutes);
   app.route('/api/traces', traceRoutes);
 
-  return { app, registry, stateManager, store, eventBus };
+  return { app, registry, stateManager, store, eventBus, compactorRunner };
 }
 
 // ── Store decorator: auto-emit plugin-data.changed events ──────

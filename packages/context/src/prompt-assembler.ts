@@ -40,7 +40,59 @@ import {
   resolveLocaleLanguageName,
   renderWorkingMemory,
 } from './prompt-internals.js';
-import type { AssembledContext, ContextBuildParams, LLMMessage } from './types.js';
+import type { AssembledContext, ContextBuildParams, LLMMessage, MessageHistoryRecord, SummaryRecord } from './types.js';
+
+// ── Summary substitution helper (mirrors context-builder.ts) ────
+
+/**
+ * V2 segment 7 — history with compaction substitution.
+ * Same logic as the V1 helper in context-builder.ts. Keeping them in sync
+ * is intentional: both paths must produce identical output for the same input.
+ */
+function buildMessageHistoryWithSummaries(
+  messageHistory: readonly MessageHistoryRecord[],
+  summaries: readonly SummaryRecord[],
+): LLMMessage[] {
+  const compactorEnabled = process.env.COVEL_COMPACTOR_V1 === '1';
+
+  if (!compactorEnabled || summaries.length === 0) {
+    return messageHistory.map(msg => ({
+      role: msg.role as 'system' | 'user' | 'assistant',
+      content: msg.content,
+      ...(msg.name ? { name: msg.name } : {}),
+    }));
+  }
+
+  const summaryById = new Map(summaries.map(s => [s.id, s]));
+  const emittedSummaryIds = new Set<string>();
+  const result: LLMMessage[] = [];
+
+  for (const msg of messageHistory) {
+    const compactedId = (msg as MessageHistoryRecord & { compactedAtTurnId?: string }).compactedAtTurnId;
+
+    if (compactedId) {
+      if (!emittedSummaryIds.has(compactedId)) {
+        const summary = summaryById.get(compactedId);
+        if (summary) {
+          emittedSummaryIds.add(compactedId);
+          result.push({
+            role: 'system',
+            content: `[Compacted history: sections=${JSON.stringify(summary.focusSections)}]\n\n${summary.content}`,
+          });
+        }
+      }
+      continue;
+    }
+
+    result.push({
+      role: msg.role as 'system' | 'user' | 'assistant',
+      content: msg.content,
+      ...(msg.name ? { name: msg.name } : {}),
+    });
+  }
+
+  return result;
+}
 
 /**
  * Structured view of the 10 system-prompt segments produced by V2.
@@ -164,11 +216,11 @@ export function buildContextV2(
   const segments = buildPromptSegments(params);
   const systemPrompt = concatenateSystemPrompt(segments);
 
-  const historyMessages: LLMMessage[] = (params.messageHistory ?? []).map(msg => ({
-    role: msg.role as 'system' | 'user' | 'assistant',
-    content: msg.content,
-    ...(msg.name ? { name: msg.name } : {}),
-  }));
+  // Segment 7: history with optional compaction substitution (S2-T2)
+  const historyMessages: LLMMessage[] = buildMessageHistoryWithSummaries(
+    params.messageHistory ?? [],
+    params.summaries ?? [],
+  );
 
   const messages: readonly LLMMessage[] = [
     ...historyMessages,

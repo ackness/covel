@@ -26,6 +26,24 @@ export interface MessageHistoryRecord {
   readonly role: string;
   readonly content: string;
   readonly name?: string;
+  /**
+   * Set by the compactor (S2-T2) when this message has been summarized.
+   * The value is the `SessionSummaryRecord.id` of the summary that replaced
+   * this span. The prompt-build path substitutes the summary when the flag
+   * `COVEL_COMPACTOR_V1=1` is set.
+   */
+  readonly compactedAtTurnId?: string;
+}
+
+/**
+ * Minimal summary record shape consumed by the context builder.
+ * Matches `SessionSummaryRecord` from `@covel/store` but is
+ * kept separate so `@covel/context` stays free of a store dep.
+ */
+export interface SummaryRecord {
+  readonly id: string;
+  readonly content: string;
+  readonly focusSections: readonly string[];
 }
 
 /** Summary of a character record for template injection. */
@@ -98,4 +116,11 @@ export interface ContextBuildParams {
    * preamble. V1 ignores this field. Introduced in S2-T1.
    */
   readonly frameworkPreamble?: string;
+  /**
+   * Session summaries (S2-T2 Compactor).
+   * When provided AND `COVEL_COMPACTOR_V1=1` is set, the prompt-build path
+   * substitutes compacted message spans with their summary.
+   * The caller (turn-executor) is responsible for loading these from the store.
+   */
+  readonly summaries?: readonly SummaryRecord[];
 }

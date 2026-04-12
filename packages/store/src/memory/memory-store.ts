@@ -34,6 +34,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  SessionSummaryRecord,
 } from '../types.js';
 import type {
   VectorStoreCapability,
@@ -86,6 +87,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
   const turnMessages: TurnMessageRecord[] = [];
   const playerInputs: PlayerInputRecord[] = [];
   const workingMemoryEntries = new Map<string, WorkingMemoryRecord>();
+  const sessionSummaries: SessionSummaryRecord[] = [];
 
   function stateEntryKey(sessionId: string, tableName: string, fieldName: string): string {
     return `${sessionId}:${tableName}:${fieldName}`;
@@ -143,6 +145,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     readonly turnMessages: TurnMessageRecord[];
     readonly playerInputs: PlayerInputRecord[];
     readonly workingMemoryEntries: Map<string, WorkingMemoryRecord>;
+    readonly sessionSummaries: SessionSummaryRecord[];
   }
 
   let snapshot: MemorySnapshot | null = null;
@@ -189,6 +192,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
       turnMessages: structuredClone(turnMessages),
       playerInputs: structuredClone(playerInputs),
       workingMemoryEntries: structuredClone(workingMemoryEntries),
+      sessionSummaries: structuredClone(sessionSummaries),
     };
   }
 
@@ -231,6 +235,8 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     playerInputs.push(...snap.playerInputs);
     workingMemoryEntries.clear();
     for (const [k, v] of snap.workingMemoryEntries) workingMemoryEntries.set(k, v);
+    sessionSummaries.length = 0;
+    sessionSummaries.push(...snap.sessionSummaries);
   }
 
   const store: DataStore & VectorStoreCapability = {
@@ -273,6 +279,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
       filterArr(traceEvents);
       filterArr(turnMessages);
       filterArr(playerInputs);
+      filterArr(sessionSummaries);
       for (const [k, v] of stateEntries) { if (v.sessionId === id) stateEntries.delete(k); }
       for (const [k, v] of characters) { if (v.sessionId === id) characters.delete(k); }
       for (const [k, v] of pluginData) { if (v.sessionId === id) pluginData.delete(k); }
@@ -556,6 +563,38 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     ): Promise<void> {
       const k = workingMemoryKey(sessionId, scope, key);
       workingMemoryEntries.delete(k);
+    },
+
+    // ── Session Summaries (S2-T2 Compactor) ──
+
+    async saveSessionSummary(record: SessionSummaryRecord): Promise<void> {
+      sessionSummaries.push(record);
+    },
+
+    async listSessionSummaries(sessionId: string): Promise<readonly SessionSummaryRecord[]> {
+      return sessionSummaries.filter((r) => r.sessionId === sessionId);
+    },
+
+    async deleteSessionSummaries(sessionId: string): Promise<void> {
+      for (let i = sessionSummaries.length - 1; i >= 0; i--) {
+        if (sessionSummaries[i]!.sessionId === sessionId) {
+          sessionSummaries.splice(i, 1);
+        }
+      }
+    },
+
+    async tagTurnMessagesCompacted(
+      sessionId: string,
+      messageIds: readonly string[],
+      summaryId: string,
+    ): Promise<void> {
+      const idSet = new Set(messageIds);
+      for (let i = 0; i < turnMessages.length; i++) {
+        const msg = turnMessages[i]!;
+        if (msg.sessionId === sessionId && idSet.has(msg.id)) {
+          turnMessages[i] = { ...msg, compactedAtTurnId: summaryId };
+        }
+      }
     },
 
     // ── Vector Store (brute-force, O(n) — fine for tests and <1k rows) ──

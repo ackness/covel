@@ -30,6 +30,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  SessionSummaryRecord,
 } from '../types.js';
 import {
   toJson,
@@ -54,6 +55,7 @@ import {
   toTurnMessageRecord,
   toPlayerInputRecord,
   toWorkingMemoryRecord,
+  toSessionSummaryRecord,
 } from './sqlite-store-mappers.js';
 import type { VectorStoreCapability } from '../vector-store.js';
 import { createSqliteVectorCapability } from './sqlite-vector.js';
@@ -883,6 +885,55 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
           ),
         )
         .run();
+    },
+
+    // ── Session Summaries (S2-T2 Compactor) ──────────────────
+
+    async saveSessionSummary(record: SessionSummaryRecord): Promise<void> {
+      db.insert(schema.sessionSummaries)
+        .values({
+          id: record.id,
+          sessionId: record.sessionId,
+          turnRangeStart: record.turnRangeStart,
+          turnRangeEnd: record.turnRangeEnd,
+          content: record.content,
+          focusSections: toJson(record.focusSections),
+          createdAt: record.createdAt,
+        })
+        .run();
+    },
+
+    async listSessionSummaries(sessionId: string): Promise<readonly SessionSummaryRecord[]> {
+      const rows = db
+        .select()
+        .from(schema.sessionSummaries)
+        .where(eq(schema.sessionSummaries.sessionId, sessionId))
+        .all();
+      return rows.map(toSessionSummaryRecord);
+    },
+
+    async deleteSessionSummaries(sessionId: string): Promise<void> {
+      db.delete(schema.sessionSummaries)
+        .where(eq(schema.sessionSummaries.sessionId, sessionId))
+        .run();
+    },
+
+    async tagTurnMessagesCompacted(
+      sessionId: string,
+      messageIds: readonly string[],
+      summaryId: string,
+    ): Promise<void> {
+      for (const msgId of messageIds) {
+        db.update(schema.turnMessages)
+          .set({ compactedAtTurnId: summaryId })
+          .where(
+            and(
+              eq(schema.turnMessages.sessionId, sessionId),
+              eq(schema.turnMessages.id, msgId),
+            ),
+          )
+          .run();
+      }
     },
 
     // ── Transactions (S4-T1) ──────────────────────────────────

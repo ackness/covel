@@ -30,6 +30,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  SessionSummaryRecord,
 } from '../types.js';
 import { createPgTxAdapter } from './pg-store-tx.js';
 import {
@@ -53,6 +54,7 @@ import {
   toTurnMessageRecord,
   toPlayerInputRecord,
   toWorkingMemoryRecord,
+  toSessionSummaryRecord,
 } from './pg-store-mappers.js';
 
 // ── Factory ─────────────────────────────────────────────────────
@@ -730,6 +732,7 @@ export async function createPgStore(
         pendingInput: record.pendingInput ?? null,
         order: record.order,
         createdAt: record.createdAt,
+        compactedAtTurnId: record.compactedAtTurnId ?? null,
       });
     },
 
@@ -850,6 +853,53 @@ export async function createPgStore(
             eq(schema.workingMemory.key, key),
           ),
         );
+    },
+
+    // ── Session Summaries (S2-T2 Compactor) ─────────────────
+
+    async saveSessionSummary(record: SessionSummaryRecord): Promise<void> {
+      await db.insert(schema.sessionSummaries).values({
+        id: record.id,
+        sessionId: record.sessionId,
+        turnRangeStart: record.turnRangeStart,
+        turnRangeEnd: record.turnRangeEnd,
+        content: record.content,
+        focusSections: record.focusSections as string[],
+        createdAt: record.createdAt,
+      });
+    },
+
+    async listSessionSummaries(sessionId: string): Promise<readonly SessionSummaryRecord[]> {
+      const rows = await db
+        .select()
+        .from(schema.sessionSummaries)
+        .where(eq(schema.sessionSummaries.sessionId, sessionId));
+      return rows.map(toSessionSummaryRecord);
+    },
+
+    async deleteSessionSummaries(sessionId: string): Promise<void> {
+      await db
+        .delete(schema.sessionSummaries)
+        .where(eq(schema.sessionSummaries.sessionId, sessionId));
+    },
+
+    async tagTurnMessagesCompacted(
+      sessionId: string,
+      messageIds: readonly string[],
+      summaryId: string,
+    ): Promise<void> {
+      if (messageIds.length === 0) return;
+      for (const msgId of messageIds) {
+        await db
+          .update(schema.turnMessages)
+          .set({ compactedAtTurnId: summaryId })
+          .where(
+            and(
+              eq(schema.turnMessages.sessionId, sessionId),
+              eq(schema.turnMessages.id, msgId),
+            ),
+          );
+      }
     },
 
     // ── Transactions (S4-T1) ──────────────────────────────────

@@ -153,6 +153,7 @@ export const runtimeManifestSchema = z
     i18n: z.record(z.string(), z.string()).optional(),
     ui: uiSpecSchema.optional(),
     hooks: z.array(hookDeclarationSchema).optional(),
+    summaryFocus: z.array(z.string()).optional(),
   })
   .strict();
 

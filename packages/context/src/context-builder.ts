@@ -22,7 +22,70 @@ import {
   resolveLocaleLanguageName,
   renderWorkingMemory,
 } from './prompt-internals.js';
-import type { AssembledContext, ContextBuildParams, LLMMessage } from './types.js';
+import type { AssembledContext, ContextBuildParams, LLMMessage, MessageHistoryRecord, SummaryRecord } from './types.js';
+
+// ── Summary substitution helper (S2-T2 Compactor) ────────────────
+
+/**
+ * Build the LLM message history, substituting compacted message spans with
+ * their summary when `COVEL_COMPACTOR_V1=1` is set.
+ *
+ * When the flag is off, this returns the original history verbatim (no
+ * substitution), preserving byte-for-byte pre-ticket behaviour.
+ *
+ * Algorithm:
+ * - Build a lookup map `summaryById`.
+ * - Walk messages in order; the FIRST message whose `compactedAtTurnId` is set
+ *   triggers a summary emit (as a `system` role message). Subsequent messages
+ *   in the same compacted span are skipped. Once we encounter a message without
+ *   `compactedAtTurnId` we resume normal emission.
+ */
+function buildMessageHistoryWithSummaries(
+  messageHistory: readonly MessageHistoryRecord[],
+  summaries: readonly SummaryRecord[],
+): LLMMessage[] {
+  const compactorEnabled = process.env.COVEL_COMPACTOR_V1 === '1';
+
+  if (!compactorEnabled || summaries.length === 0) {
+    return messageHistory.map(msg => ({
+      role: msg.role as 'system' | 'user' | 'assistant',
+      content: msg.content,
+      ...(msg.name ? { name: msg.name } : {}),
+    }));
+  }
+
+  const summaryById = new Map(summaries.map(s => [s.id, s]));
+  const emittedSummaryIds = new Set<string>();
+  const result: LLMMessage[] = [];
+
+  for (const msg of messageHistory) {
+    const compactedId = (msg as MessageHistoryRecord & { compactedAtTurnId?: string }).compactedAtTurnId;
+
+    if (compactedId) {
+      // This message is compacted. Emit its summary once (on first encounter).
+      if (!emittedSummaryIds.has(compactedId)) {
+        const summary = summaryById.get(compactedId);
+        if (summary) {
+          emittedSummaryIds.add(compactedId);
+          result.push({
+            role: 'system',
+            content: `[Compacted history: sections=${JSON.stringify(summary.focusSections)}]\n\n${summary.content}`,
+          });
+        }
+      }
+      // Skip the original compacted message regardless
+      continue;
+    }
+
+    result.push({
+      role: msg.role as 'system' | 'user' | 'assistant',
+      content: msg.content,
+      ...(msg.name ? { name: msg.name } : {}),
+    });
+  }
+
+  return result;
+}
 
 /**
  * Replace `{{ path }}` template variables in a prompt string.
@@ -124,12 +187,12 @@ export function buildContext(
     systemPrompt += `\n\n[LANGUAGE] You MUST respond in ${langName}. All narrative output, tool parameters, and descriptions must be in ${langName}.`;
   }
 
-  // Build messages: history + current user message
-  const historyMessages: LLMMessage[] = (params.messageHistory ?? []).map(msg => ({
-    role: msg.role as 'system' | 'user' | 'assistant',
-    content: msg.content,
-    ...(msg.name ? { name: msg.name } : {}),
-  }));
+  // Build messages: history + current user message.
+  // When COVEL_COMPACTOR_V1=1 is set, substitute compacted spans with their summary.
+  const historyMessages: LLMMessage[] = buildMessageHistoryWithSummaries(
+    params.messageHistory ?? [],
+    params.summaries ?? [],
+  );
 
   const messages: readonly LLMMessage[] = [
     ...historyMessages,

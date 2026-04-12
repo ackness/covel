@@ -25,6 +25,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  SessionSummaryRecord,
 } from '../types.js';
 
 // ── Table creation DDL ─────────────────────────────────────────
@@ -226,7 +227,8 @@ export const CREATE_TABLES_SQL = `
     ui JSONB,
     pending_input JSONB,
     "order" INTEGER NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    compacted_at_turn_id TEXT
   );
   CREATE INDEX IF NOT EXISTS pg_turn_messages_session_id_idx ON turn_messages(session_id);
 
@@ -251,6 +253,17 @@ export const CREATE_TABLES_SQL = `
     UNIQUE (session_id, scope, key)
   );
   CREATE INDEX IF NOT EXISTS pg_working_memory_session_id_idx ON working_memory(session_id);
+
+  CREATE TABLE IF NOT EXISTS session_summaries (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    turn_range_start TEXT NOT NULL,
+    turn_range_end TEXT NOT NULL,
+    content TEXT NOT NULL,
+    focus_sections JSONB NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS pg_session_summaries_session_id_idx ON session_summaries(session_id);
 `;
 
 // ── Table names for cleanup ─────────────────────────────────────
@@ -259,7 +272,7 @@ export const ALL_TABLE_NAMES = [
   'worlds', 'sessions', 'turn_results', 'runtime_results', 'tool_calls',
   'state_schemas', 'state_entries', 'state_changes', 'events', 'approvals',
   'messages', 'characters', 'plugin_data', 'plugin_configs', 'trace_events',
-  'turn_messages', 'player_inputs', 'working_memory',
+  'turn_messages', 'player_inputs', 'working_memory', 'session_summaries',
 ] as const;
 
 export const DROP_ALL_SQL = ALL_TABLE_NAMES.map(
@@ -475,6 +488,7 @@ export function toTurnMessageRecord(row: typeof schema.turnMessages.$inferSelect
     pendingInput: row.pendingInput ?? undefined,
     order: row.order,
     createdAt: row.createdAt,
+    compactedAtTurnId: row.compactedAtTurnId ?? undefined,
   };
 }
 
@@ -498,5 +512,17 @@ export function toWorkingMemoryRecord(row: typeof schema.workingMemory.$inferSel
     value: row.value ?? null,
     schemaRef: row.schemaRef ?? undefined,
     updatedAt: row.updatedAt,
+  };
+}
+
+export function toSessionSummaryRecord(row: typeof schema.sessionSummaries.$inferSelect): SessionSummaryRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    turnRangeStart: row.turnRangeStart,
+    turnRangeEnd: row.turnRangeEnd,
+    content: row.content,
+    focusSections: (row.focusSections as string[] | null) ?? [],
+    createdAt: row.createdAt,
   };
 }

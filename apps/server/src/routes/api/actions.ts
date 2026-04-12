@@ -13,6 +13,7 @@ import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
 import type { EventBus } from '@covel/events';
 import { executeTurn, processRuntimeResult, createTraceRecorder } from '@covel/runtime';
 import type { RuntimeManifest } from '@covel/shared';
+import type { CompactorRunner } from '@covel/context';
 import { loadSessionConfig } from './load-session-config.js';
 
 // SSE uses ProtocolEventType names directly — no legacy mapping.
@@ -28,6 +29,7 @@ type Env = {
     getConfigFn: (pluginId: string, runtimeId: string) => Readonly<Record<string, unknown>>;
     resolveModel: (manifest: RuntimeManifest, apiOverride?: string) => string | undefined;
     eventBus: EventBus;
+    compactorRunner: CompactorRunner;
   };
 };
 
@@ -50,6 +52,7 @@ actionRoutes.post('/', async (c) => {
   const getConfigFn = c.get('getConfigFn');
   const resolveModel = c.get('resolveModel');
   const eventBus = c.get('eventBus');
+  const compactorRunner = c.get('compactorRunner');
 
   const body = await c.req.json<ActionRequest>();
   const { requestId, type, sessionId, locale, payload } = body;
@@ -220,6 +223,7 @@ actionRoutes.post('/', async (c) => {
               })),
             });
           },
+          compactor: compactorRunner,
         },
       );
 

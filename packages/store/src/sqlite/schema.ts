@@ -318,10 +318,29 @@ export const turnMessages = sqliteTable(
     pendingInput: text('pending_input'), // JSON
     order: integer('order').notNull(),
     createdAt: text('created_at').notNull(),
+    compactedAtTurnId: text('compacted_at_turn_id'), // summaryId — null = not compacted
   },
   (table) => [
     index('turn_messages_session_id_idx').on(table.sessionId),
     index('turn_messages_turn_id_idx').on(table.sessionId, table.turnId),
+  ],
+);
+
+// ── Session Summaries (S2-T2 Compactor) ────────────────────────
+
+export const sessionSummaries = sqliteTable(
+  'session_summaries',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id').notNull(),
+    turnRangeStart: text('turn_range_start').notNull(),
+    turnRangeEnd: text('turn_range_end').notNull(),
+    content: text('content').notNull(),
+    focusSections: text('focus_sections').notNull().default('[]'), // JSON string[]
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    index('session_summaries_session_id_idx').on(table.sessionId),
   ],
 );
 

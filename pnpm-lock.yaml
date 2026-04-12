@@ -53,6 +53,9 @@ importers:
       '@covel/approval':
         specifier: workspace:*
         version: link:../../packages/approval
+      '@covel/context':
+        specifier: workspace:*
+        version: link:../../packages/context
       '@covel/create':
         specifier: workspace:*
         version: link:../../packages/create
@@ -335,6 +338,9 @@ importers:
       '@covel/shared':
         specifier: workspace:*
         version: link:../shared
+      '@covel/store':
+        specifier: workspace:*
+        version: link:../store
     devDependencies:
       typescript:
         specifier: ^6.0.2

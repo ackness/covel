@@ -399,4 +399,53 @@ describe('parsePluginMd', () => {
       ).toThrow();
     });
   });
+
+  describe('summaryFocus field (S2-T2)', () => {
+    it('parses summaryFocus as array of strings', () => {
+      const content = md(
+        [
+          'name: core-narrator',
+          'description: Main narrative',
+          'priority: 500',
+          'summaryFocus:',
+          '  - narrative',
+          '  - character-state',
+          '  - world-facts',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/core-narrator/PLUGIN.md');
+      expect(result.manifest.summaryFocus).toEqual(['narrative', 'character-state', 'world-facts']);
+    });
+
+    it('summaryFocus is optional — omitting it yields undefined', () => {
+      const content = md(
+        [
+          'name: core-narrator',
+          'description: Main narrative',
+          'priority: 500',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/core-narrator/PLUGIN.md');
+      expect(result.manifest.summaryFocus).toBeUndefined();
+    });
+
+    it('accepts empty summaryFocus array', () => {
+      const content = md(
+        [
+          'name: core-narrator',
+          'description: Main narrative',
+          'priority: 500',
+          'summaryFocus: []',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/core-narrator/PLUGIN.md');
+      expect(result.manifest.summaryFocus).toEqual([]);
+    });
+  });
 });

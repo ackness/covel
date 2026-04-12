@@ -9,6 +9,7 @@ import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
 import { executeTurn, processRuntimeResult } from '@covel/runtime';
 import { loadSessionConfig } from './load-session-config.js';
 import type { DataStore } from '@covel/store';
+import type { CompactorRunner } from '@covel/context';
 
 type Env = {
   Variables: {
@@ -19,6 +20,7 @@ type Env = {
     toolExecutor?: ToolExecutor;
     resolveModel?: (manifest: RuntimeManifest, apiOverride?: string) => string | undefined;
     getConfigFn?: (pluginId: string, runtimeId: string) => Readonly<Record<string, unknown>>;
+    compactorRunner?: CompactorRunner;
   };
 };
 
@@ -33,6 +35,7 @@ turnRoutes.post('/:id/turn', async (c) => {
   const resolveModel = c.get('resolveModel');
   const getConfigFn = c.get('getConfigFn');
   const toolExecutor = c.get('toolExecutor');
+  const compactorRunner = c.get('compactorRunner');
   const sessionId = c.req.param('id');
 
   const session = await store.getSession(sessionId);
@@ -78,6 +81,7 @@ turnRoutes.post('/:id/turn', async (c) => {
       store,
       toolExecutor,
       resolveModel,
+      compactor: compactorRunner,
     },
   );
 

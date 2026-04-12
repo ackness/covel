@@ -15,6 +15,7 @@
   "dependencies": {
     "@covel/ai-provider": "workspace:*",
     "@covel/approval": "workspace:*",
+    "@covel/context": "workspace:*",
     "@covel/create": "workspace:*",
     "@covel/events": "workspace:*",
     "@covel/plugin-loader": "workspace:*",

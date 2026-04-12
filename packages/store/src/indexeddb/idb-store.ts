@@ -4,6 +4,7 @@
  */
 
 import { openDB, type IDBPDatabase } from 'idb';
+import type { SessionSummaryRecord } from '../types.js';
 
 function applyPagination<T>(items: T[], pagination?: PaginationOpts): T[] {
   if (!pagination) return items;
@@ -104,6 +105,9 @@ async function initDb(dbName: string): Promise<IDBPDatabase> {
         const workingMemory = db.createObjectStore('working_memory', { keyPath: 'id' });
         workingMemory.createIndex('sessionId', 'sessionId');
         workingMemory.createIndex('scopeKeyLookup', ['sessionId', 'scope', 'key']);
+
+        const summaries = db.createObjectStore('sessionSummaries', { keyPath: 'id' });
+        summaries.createIndex('sessionId', 'sessionId');
       }
     },
   });
@@ -129,6 +133,7 @@ const OBJECT_STORES = [
   'playerInputs',
   'plugin_data',
   'working_memory',
+  'sessionSummaries',
 ] as const;
 
 export async function createIdbStore(dbName?: string): Promise<DataStore> {
@@ -499,6 +504,37 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
       ]);
       if (existing) {
         await db.delete('working_memory', existing.id);
+      }
+    },
+
+    // ── Session Summaries (S2-T2 Compactor) ──
+
+    async saveSessionSummary(record: SessionSummaryRecord): Promise<void> {
+      await db.put('sessionSummaries', structuredClone(record));
+    },
+
+    async listSessionSummaries(sessionId: string): Promise<readonly SessionSummaryRecord[]> {
+      return db.getAllFromIndex('sessionSummaries', 'sessionId', sessionId);
+    },
+
+    async deleteSessionSummaries(sessionId: string): Promise<void> {
+      const all = await db.getAllFromIndex('sessionSummaries', 'sessionId', sessionId);
+      for (const r of all) {
+        await db.delete('sessionSummaries', (r as SessionSummaryRecord).id);
+      }
+    },
+
+    async tagTurnMessagesCompacted(
+      sessionId: string,
+      messageIds: readonly string[],
+      summaryId: string,
+    ): Promise<void> {
+      const idSet = new Set(messageIds);
+      const all = await db.getAllFromIndex('turnMessages', 'sessionId', sessionId);
+      for (const msg of all as TurnMessageRecord[]) {
+        if (idSet.has(msg.id)) {
+          await db.put('turnMessages', structuredClone({ ...msg, compactedAtTurnId: summaryId }));
+        }
       }
     },
 

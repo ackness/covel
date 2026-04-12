@@ -6,6 +6,7 @@ export type {
   ContextBuildParams,
   SessionMeta,
   CharacterSummary,
+  SummaryRecord,
 } from './types.js';
 
 // ── Context Builder ─────────────────────────────────────────────
@@ -18,3 +19,13 @@ export type { PromptSegments } from './prompt-assembler.js';
 // ── Token Budget ────────────────────────────────────────────────
 export { applyBudget } from './budget.js';
 export type { TokenEstimator, BudgetOptions, BudgetResult } from './budget.js';
+
+// ── Compactor (S2-T2) ────────────────────────────────────────────
+export { maybeCompact } from './compactor.js';
+export type {
+  CompactorDeps,
+  CompactorOptions,
+  CompactorResult,
+  CompactorLLMAdapter,
+  CompactorRunner,
+} from './compactor.js';

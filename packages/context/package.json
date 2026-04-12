@@ -14,7 +14,8 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@covel/shared": "workspace:*"
+    "@covel/shared": "workspace:*",
+    "@covel/store": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^6.0.2",

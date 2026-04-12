@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { interpolateTemplate, buildInjectBlocks, buildContext } from '@covel/context';
 import type { ContextBuildParams, MessageHistoryRecord } from '@covel/context';
 import type { RuntimeManifest, RuntimeResult, TurnInput } from '@covel/shared';
@@ -270,5 +270,95 @@ describe('buildContext', () => {
 
     const ctx = buildContext(params);
     expect(ctx.messages).toEqual([{ role: 'user', content: 'hello' }]);
+  });
+});
+
+// ── Summary substitution (S2-T2) ────────────────────────────────
+
+describe('buildContext — summary substitution', () => {
+  const originalCompactorFlag = process.env.COVEL_COMPACTOR_V1;
+
+  afterEach(() => {
+    if (originalCompactorFlag === undefined) {
+      delete process.env.COVEL_COMPACTOR_V1;
+    } else {
+      process.env.COVEL_COMPACTOR_V1 = originalCompactorFlag;
+    }
+  });
+
+  it('passes history verbatim when COVEL_COMPACTOR_V1 is not set', () => {
+    delete process.env.COVEL_COMPACTOR_V1;
+
+    const history: MessageHistoryRecord[] = [
+      { role: 'user', content: 'hello', compactedAtTurnId: 'sum-1' },
+      { role: 'assistant', content: 'world' },
+    ];
+
+    const ctx = buildContext({
+      promptTemplate: 'Template.',
+      manifest: makeManifest(),
+      turnInput: makeTurnInput(),
+      completedResults: new Map(),
+      config: {},
+      messageHistory: history,
+      summaries: [{ id: 'sum-1', content: 'A summary.', focusSections: ['narrative'] }],
+    });
+
+    // Without flag, compacted message is passed through as-is
+    expect(ctx.messages[0]).toMatchObject({ role: 'user', content: 'hello' });
+    expect(ctx.messages[1]).toMatchObject({ role: 'assistant', content: 'world' });
+  });
+
+  it('substitutes compacted spans with summary when COVEL_COMPACTOR_V1=1', () => {
+    process.env.COVEL_COMPACTOR_V1 = '1';
+
+    const history: MessageHistoryRecord[] = [
+      { role: 'user', content: 'older message 1', compactedAtTurnId: 'sum-1' },
+      { role: 'assistant', content: 'older reply 1', compactedAtTurnId: 'sum-1' },
+      { role: 'user', content: 'recent message' },
+    ];
+
+    const ctx = buildContext({
+      promptTemplate: 'Template.',
+      manifest: makeManifest(),
+      turnInput: makeTurnInput({ playerMessage: 'current' }),
+      completedResults: new Map(),
+      config: {},
+      messageHistory: history,
+      summaries: [{ id: 'sum-1', content: 'The hero defeated the goblin.', focusSections: ['narrative'] }],
+    });
+
+    // Should have: [summary_system, recent_user, current_player]
+    expect(ctx.messages).toHaveLength(3);
+    expect(ctx.messages[0]).toMatchObject({
+      role: 'system',
+      content: expect.stringContaining('The hero defeated the goblin.'),
+    });
+    expect(ctx.messages[1]).toMatchObject({ role: 'user', content: 'recent message' });
+    expect(ctx.messages[2]).toMatchObject({ role: 'user', content: 'current' });
+  });
+
+  it('emits summary only once per compactedAtTurnId, even for multiple messages', () => {
+    process.env.COVEL_COMPACTOR_V1 = '1';
+
+    const history: MessageHistoryRecord[] = [
+      { role: 'user', content: 'msg1', compactedAtTurnId: 'sum-1' },
+      { role: 'assistant', content: 'msg2', compactedAtTurnId: 'sum-1' },
+      { role: 'user', content: 'msg3', compactedAtTurnId: 'sum-1' },
+    ];
+
+    const ctx = buildContext({
+      promptTemplate: 'T.',
+      manifest: makeManifest(),
+      turnInput: makeTurnInput({ playerMessage: 'now' }),
+      completedResults: new Map(),
+      config: {},
+      messageHistory: history,
+      summaries: [{ id: 'sum-1', content: 'All summarized.', focusSections: [] }],
+    });
+
+    // Only one summary message + the current user message
+    const systemMessages = ctx.messages.filter((m) => m.role === 'system');
+    expect(systemMessages).toHaveLength(1);
   });
 });

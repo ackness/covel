@@ -32,5 +32,6 @@ export type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  SessionSummaryRecord,
   PaginationOpts,
 } from './types.js';

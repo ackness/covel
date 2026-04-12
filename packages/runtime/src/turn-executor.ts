@@ -14,7 +14,7 @@ import type { EventBus } from '@covel/events';
 import { shouldTrigger } from './trigger.js';
 import { scheduleByPriority } from './scheduler.js';
 import { buildContext } from '@covel/context';
-import type { BudgetOptions, TokenEstimator } from '@covel/context';
+import type { BudgetOptions, TokenEstimator, CompactorRunner } from '@covel/context';
 import { executeParallel } from './parallel-executor.js';
 import type { TriggerContext } from './types.js';
 import type { LLMAdapter, LLMMessage } from './llm-adapter.js';
@@ -84,6 +84,15 @@ export interface TurnExecutorDeps {
    * all hook sites are pure no-ops — identical to pre-S4-T3 behaviour.
    */
   readonly hookPipeline?: HookPipeline;
+
+  /**
+   * Optional compactor runner (S2-T2).
+   * When present AND `process.env.COVEL_COMPACTOR_V1 === '1'`, the compactor
+   * runs before `buildContext` to summarize old history. When absent or flag
+   * is off, the compaction step is a pure no-op — identical to pre-S2-T2
+   * behaviour.
+   */
+  readonly compactor?: CompactorRunner;
 }
 
 export interface TurnExecutorOptions {
@@ -199,6 +208,18 @@ export async function executeTurn(
     });
   }
 
+  // 0b. Compaction (S2-T2): run before buildContext so summaries are stored
+  //     before the turn's context assembly reads them.
+  //     Only runs when COVEL_COMPACTOR_V1=1 AND a compactor is injected.
+  if (process.env.COVEL_COMPACTOR_V1 === '1' && deps.compactor && deps.store) {
+    // Reload messages after appending the player message so the compactor
+    // sees the full updated history (including the just-appended player msg).
+    const freshMessages = await deps.store.listTurnMessages(input.sessionId);
+    await deps.compactor.run(input.sessionId, '', freshMessages);
+    // Reload the history for subsequent processing (trigger counts, etc.)
+    messageHistory = await deps.store.listTurnMessages(input.sessionId);
+  }
+
   // 1. Trigger filter — determine which runtimes should run this turn
   //    Each runtime gets its own triggerContext with accurate triggerCount from store.
   // Build a map of pluginId → number of times it has been triggered (from message history)
@@ -275,12 +296,18 @@ export async function executeTurn(
   // 2. Schedule by priority
   const groups = scheduleByPriority(triggered);
 
+  // Load session summaries for compaction substitution in buildContext (S2-T2)
+  let sessionSummaries: import('@covel/store').SessionSummaryRecord[] = [];
+  if (process.env.COVEL_COMPACTOR_V1 === '1' && deps.store) {
+    sessionSummaries = [...(await deps.store.listSessionSummaries(input.sessionId))];
+  }
+
   // 3. Execute each group
   const completedResults = new Map<string, RuntimeResult>();
 
   for (const group of groups) {
     const results = await executeParallel(group.runtimes, async (manifest) => {
-      return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, timeoutMs, messageHistory, sessionMeta, deps.hookPipeline);
+      return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, timeoutMs, messageHistory, sessionMeta, deps.hookPipeline, sessionSummaries);
     });
 
     // Merge results + apply phase transitions from runtime output
@@ -405,6 +432,7 @@ async function executeOneRuntime(
   messageHistory: readonly TurnMessageRecord[],
   sessionMeta?: { turnNumber: number; phase: string; characters: readonly { name: string; type: string; description?: string; fields?: Record<string, unknown> }[]; lastFormValues?: Record<string, unknown> },
   hookPipeline?: HookPipeline,
+  sessionSummaries?: readonly import('@covel/store').SessionSummaryRecord[],
 ): Promise<RuntimeResult> {
   const startTime = Date.now();
   const runId = crypto.randomUUID();
@@ -646,6 +674,7 @@ async function executeOneRuntime(
       config,
       messageHistory,
       sessionMeta,
+      summaries: sessionSummaries ?? [],
       ...(budgetEligible
         ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
         : {}),

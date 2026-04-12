@@ -26,6 +26,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  SessionSummaryRecord,
 } from '../types.js';
 
 // ── JSON helpers ────────────────────────────────────────────────
@@ -252,9 +253,21 @@ export function createTables(sqlite: Database.Database): void {
       ui TEXT,
       pending_input TEXT,
       "order" INTEGER NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      compacted_at_turn_id TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_turn_messages_session ON turn_messages(session_id);
+
+    CREATE TABLE IF NOT EXISTS session_summaries (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      turn_range_start TEXT NOT NULL,
+      turn_range_end TEXT NOT NULL,
+      content TEXT NOT NULL,
+      focus_sections TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_session_summaries_session ON session_summaries(session_id);
 
     CREATE TABLE IF NOT EXISTS player_inputs (
       id TEXT PRIMARY KEY,
@@ -489,6 +502,7 @@ export function toTurnMessageRecord(row: typeof schema.turnMessages.$inferSelect
     pendingInput: fromJson(row.pendingInput),
     order: row.order,
     createdAt: row.createdAt,
+    compactedAtTurnId: row.compactedAtTurnId ?? undefined,
   };
 }
 
@@ -512,5 +526,17 @@ export function toWorkingMemoryRecord(row: typeof schema.workingMemory.$inferSel
     value: fromJsonRequired(row.value),
     schemaRef: row.schemaRef ?? undefined,
     updatedAt: row.updatedAt,
+  };
+}
+
+export function toSessionSummaryRecord(row: typeof schema.sessionSummaries.$inferSelect): SessionSummaryRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    turnRangeStart: row.turnRangeStart,
+    turnRangeEnd: row.turnRangeEnd,
+    content: row.content,
+    focusSections: (fromJsonRequired(row.focusSections) as string[] | null) ?? [],
+    createdAt: row.createdAt,
   };
 }

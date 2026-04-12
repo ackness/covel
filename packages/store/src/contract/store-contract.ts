@@ -23,6 +23,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  SessionSummaryRecord,
 } from '../types.js';
 
 // ── Record factories ────────────────────────────────────────────
@@ -248,6 +249,19 @@ function makeWorkingMemory(overrides?: Partial<WorkingMemoryRecord>): WorkingMem
     scope: 'player',
     value: { data: 'test' },
     updatedAt: ts(),
+    ...overrides,
+  };
+}
+
+function makeSessionSummary(overrides?: Partial<SessionSummaryRecord>): SessionSummaryRecord {
+  return {
+    id: id(),
+    sessionId: 'sess-1',
+    turnRangeStart: 'turn-1',
+    turnRangeEnd: 'turn-5',
+    content: 'The hero entered the dungeon and defeated a goblin.',
+    focusSections: ['narrative', 'character-state'],
+    createdAt: ts(),
     ...overrides,
   };
 }
@@ -977,6 +991,106 @@ export function runStoreContractTests(
 
         const result = await store.getWorkingMemory('wm-rollback', 'player', 'rolled');
         expect(result).toBeNull();
+      });
+    });
+
+    // ── Session Summaries (S2-T2) ────────────────────────────
+
+    describe('SessionSummaries', () => {
+      it('should saveSessionSummary and listSessionSummaries', async () => {
+        const s = makeSessionSummary({ sessionId: 'sess-sum-1' });
+        await store.saveSessionSummary(s);
+        const list = await store.listSessionSummaries('sess-sum-1');
+        expect(list).toHaveLength(1);
+        expect(list[0]).toMatchObject({
+          id: s.id,
+          sessionId: s.sessionId,
+          content: s.content,
+          focusSections: s.focusSections,
+        });
+      });
+
+      it('should return empty list for unknown session', async () => {
+        const list = await store.listSessionSummaries('nonexistent-session');
+        expect(list).toHaveLength(0);
+      });
+
+      it('should filter summaries by sessionId', async () => {
+        const s1 = makeSessionSummary({ sessionId: 'sess-sum-filter-1' });
+        const s2 = makeSessionSummary({ sessionId: 'sess-sum-filter-2' });
+        await store.saveSessionSummary(s1);
+        await store.saveSessionSummary(s2);
+        const list1 = await store.listSessionSummaries('sess-sum-filter-1');
+        expect(list1).toHaveLength(1);
+        expect(list1[0].id).toBe(s1.id);
+      });
+
+      it('should deleteSessionSummaries by sessionId', async () => {
+        const s1 = makeSessionSummary({ sessionId: 'sess-sum-del' });
+        const s2 = makeSessionSummary({ sessionId: 'sess-sum-del' });
+        await store.saveSessionSummary(s1);
+        await store.saveSessionSummary(s2);
+        await store.deleteSessionSummaries('sess-sum-del');
+        const list = await store.listSessionSummaries('sess-sum-del');
+        expect(list).toHaveLength(0);
+      });
+
+      it('should not delete summaries for other sessions', async () => {
+        const keep = makeSessionSummary({ sessionId: 'sess-sum-keep' });
+        const del = makeSessionSummary({ sessionId: 'sess-sum-nodel' });
+        await store.saveSessionSummary(keep);
+        await store.saveSessionSummary(del);
+        await store.deleteSessionSummaries('sess-sum-nodel');
+        const list = await store.listSessionSummaries('sess-sum-keep');
+        expect(list).toHaveLength(1);
+      });
+
+      it('should tagTurnMessagesCompacted — set compactedAtTurnId', async () => {
+        const m1 = makeTurnMessage({ sessionId: 'sess-tag-1', id: id() });
+        const m2 = makeTurnMessage({ sessionId: 'sess-tag-1', id: id() });
+        await store.appendTurnMessage(m1);
+        await store.appendTurnMessage(m2);
+
+        const summaryId = 'summary-abc';
+        await store.tagTurnMessagesCompacted('sess-tag-1', [m1.id, m2.id], summaryId);
+
+        const messages = await store.listTurnMessages('sess-tag-1');
+        for (const msg of messages) {
+          expect(msg.compactedAtTurnId).toBe(summaryId);
+        }
+      });
+
+      it('should not tag messages from other sessions', async () => {
+        const m1 = makeTurnMessage({ sessionId: 'sess-tag-a', id: id() });
+        const m2 = makeTurnMessage({ sessionId: 'sess-tag-b', id: id() });
+        await store.appendTurnMessage(m1);
+        await store.appendTurnMessage(m2);
+
+        await store.tagTurnMessagesCompacted('sess-tag-a', [m1.id, m2.id], 'summary-xyz');
+
+        const bMessages = await store.listTurnMessages('sess-tag-b');
+        expect(bMessages[0].compactedAtTurnId).toBeUndefined();
+      });
+
+      it('should rollback saveSessionSummary in a transaction', async () => {
+        const s = makeSessionSummary({ sessionId: 'sess-sum-tx' });
+        await store.beginTx();
+        await store.saveSessionSummary(s);
+        await store.rollbackTx();
+        const list = await store.listSessionSummaries('sess-sum-tx');
+        expect(list).toHaveLength(0);
+      });
+
+      it('should rollback tagTurnMessagesCompacted in a transaction', async () => {
+        const m = makeTurnMessage({ sessionId: 'sess-tag-tx', id: id() });
+        await store.appendTurnMessage(m);
+
+        await store.beginTx();
+        await store.tagTurnMessagesCompacted('sess-tag-tx', [m.id], 'summary-rollback');
+        await store.rollbackTx();
+
+        const messages = await store.listTurnMessages('sess-tag-tx');
+        expect(messages[0].compactedAtTurnId).toBeUndefined();
       });
     });
 

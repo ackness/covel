@@ -222,6 +222,15 @@ export interface RuntimeManifest {
    * See HookDeclaration for the full contract.
    */
   readonly hooks?: readonly HookDeclaration[];
+  /**
+   * Sections of the narrative/output this runtime considers important for
+   * history compaction (S2-T2 Compactor). The compactor collects these
+   * across all active runtimes and asks the LLM to preserve those topics
+   * when summarising old message spans.
+   *
+   * Examples: `['narrative', 'character-state', 'world-facts']`
+   */
+  readonly summaryFocus?: readonly string[];
 }
 
 // ── Plugin manifest ──────────────────────────────────────────────

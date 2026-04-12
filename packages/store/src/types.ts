@@ -276,6 +276,19 @@ export interface DataStore {
   listWorkingMemory(sessionId: string): Promise<readonly WorkingMemoryRecord[]>;
   deleteWorkingMemory(sessionId: string, scope: WorkingMemoryRecord['scope'], key: string): Promise<void>;
 
+  // ── Session Summaries (S2-T2 Compactor) ──
+  saveSessionSummary(record: SessionSummaryRecord): Promise<void>;
+  listSessionSummaries(sessionId: string): Promise<readonly SessionSummaryRecord[]>;
+  deleteSessionSummaries(sessionId: string): Promise<void>;
+
+  /**
+   * Tag a set of turn messages as compacted into the given summary.
+   * Sets `compactedAtTurnId = summaryId` on each message identified by
+   * `messageIds`. Original content is preserved; only the prompt-build path
+   * uses the summary in place of the compacted span.
+   */
+  tagTurnMessagesCompacted(sessionId: string, messageIds: readonly string[], summaryId: string): Promise<void>;
+
   // ── Transactions (S4-T1) ──
   /**
    * Begin a transaction. Subsequent writes are buffered until commit or rollback.
@@ -319,6 +332,29 @@ export interface TurnMessageRecord {
   readonly ui?: unknown;           // JSON — UIRenderInstruction[]
   readonly pendingInput?: unknown;  // JSON — PlayerInputForm
   readonly order: number;
+  readonly createdAt: string;
+  /**
+   * When set, this message has been compacted into a session summary.
+   * The value is the `SessionSummaryRecord.id` that replaced this message.
+   * The original content is preserved; only the prompt-build path substitutes
+   * the summary in place of the compacted message span (S2-T2 Compactor).
+   */
+  readonly compactedAtTurnId?: string;  // summaryId, not a turn ID despite the name
+}
+
+// ── Session Summaries (S2-T2 Compactor) ─────────────────────────
+
+export interface SessionSummaryRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  /** First compacted turnId (inclusive). */
+  readonly turnRangeStart: string;
+  /** Last compacted turnId (inclusive). */
+  readonly turnRangeEnd: string;
+  /** The summary text produced by the fast-slot LLM. */
+  readonly content: string;
+  /** Deduped list from plugin summaryFocus fields. */
+  readonly focusSections: readonly string[];
   readonly createdAt: string;
 }
 
