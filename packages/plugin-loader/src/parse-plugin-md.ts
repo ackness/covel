@@ -67,26 +67,33 @@ export function parsePluginMd(content: string, filePath: string): ParsedPluginMd
     const rawHooks: Array<{ event: string; handler: string; [k: string]: unknown }> = [];
 
     if (Array.isArray(data.hooks)) {
-      const lenientHooksSchema = z.array(lenientHookDeclarationSchema);
-      const parsed = lenientHooksSchema.safeParse(data.hooks);
-      if (parsed.success) {
-        for (const h of parsed.data) {
-          if (!VALID_HOOK_EVENTS.has(h.event)) {
-            console.warn(
-              `[plugin-loader] ${filePath}: unknown hook event "${h.event}" — skipping. ` +
-              `Valid events: ${[...VALID_HOOK_EVENTS].join(', ')}`,
-            );
-          } else {
-            rawHooks.push(h as { event: string; handler: string; [k: string]: unknown });
-          }
+      // Validate per-entry (not per-array) so a single malformed entry only drops
+      // itself with a warning, instead of silently dropping the entire hooks
+      // list when one entry has e.g. `handler: 123`. See S4-T3 code review I1.
+      for (const rawEntry of data.hooks) {
+        const parsed = lenientHookDeclarationSchema.safeParse(rawEntry);
+        if (!parsed.success) {
+          console.warn(
+            `[plugin-loader] ${filePath}: malformed hook entry skipped — ${parsed.error.issues.map((i) => i.message).join('; ')}`,
+          );
+          continue;
         }
+        const entry = parsed.data;
+        if (!VALID_HOOK_EVENTS.has(entry.event)) {
+          console.warn(
+            `[plugin-loader] ${filePath}: unknown hook event "${entry.event}" — skipping. ` +
+            `Valid events: ${[...VALID_HOOK_EVENTS].join(', ')}`,
+          );
+          continue;
+        }
+        rawHooks.push(entry as { event: string; handler: string; [k: string]: unknown });
       }
       // Replace hooks in data with the filtered valid ones for strict schema validation.
-    // If none remain, omit the key entirely so strict mode doesn't complain about [].
-    const { hooks: _omitted, ...dataWithoutHooks } = data as Record<string, unknown>;
-    dataToValidate = rawHooks.length > 0
-      ? { ...dataWithoutHooks, hooks: rawHooks }
-      : dataWithoutHooks;
+      // If none remain, omit the key entirely so strict mode doesn't complain about [].
+      const { hooks: _omitted, ...dataWithoutHooks } = data as Record<string, unknown>;
+      dataToValidate = rawHooks.length > 0
+        ? { ...dataWithoutHooks, hooks: rawHooks }
+        : dataWithoutHooks;
     }
 
     const parsed = runtimeManifestSchema.parse(dataToValidate);

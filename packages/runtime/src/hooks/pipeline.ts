@@ -92,12 +92,20 @@ export class HookPipeline {
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
         const isTimeout = reason === timeoutMessage;
-        emitHookEvent(opts?.eventBus, ctx, isTimeout ? 'hook.timeout' : 'hook.error', { hookId: reg.id, reason });
+        emitHookEvent(opts?.eventBus, ctx, isTimeout ? 'hook.timeout' : 'hook.error', {
+          hookId: reg.id,
+          hookPluginId: reg.pluginId,
+          reason,
+        });
         return { action: 'abort', reason };
       }
 
       if (result.action === 'abort') {
-        emitHookEvent(opts?.eventBus, ctx, 'hook.aborted', { hookId: reg.id, reason: result.reason });
+        emitHookEvent(opts?.eventBus, ctx, 'hook.aborted', {
+          hookId: reg.id,
+          hookPluginId: reg.pluginId,
+          reason: result.reason,
+        });
         return result;
       }
 
@@ -169,6 +177,11 @@ function emitHookEvent(
       event: ctx.event,
       sessionId: ctx.sessionId,
       turnId: ctx.turnId,
+      // Context identity of the runtime being gated (e.g. the runtime whose
+      // tool is being wrapped by PreToolUse). May differ from `hookPluginId`
+      // below, which identifies the plugin that REGISTERED this hook.
+      pluginId: ctx.pluginId,
+      runtimeId: ctx.runtimeId,
       ...extra,
     },
   });

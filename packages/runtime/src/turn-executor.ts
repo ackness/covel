@@ -417,6 +417,14 @@ async function executeOneRuntime(
     }
 
     // ── Function runtime: direct handler execution, no LLM ──────
+    //
+    // Function runtimes intentionally skip the PreRuntime hook: PreRuntime is
+    // scoped as an "LLM execution gate" for agent runtimes, fired after the
+    // optional guard passes and before the prompt assembly / LLM tool loop.
+    // Function runtimes have no LLM pipeline to gate — a plugin that wants to
+    // block a function runtime should use a `guard` in its PLUGIN.md instead.
+    // PostRuntime DOES fire for function runtimes so observability stays
+    // symmetric. See S4-T3 code review I2.
     if (manifest.runtimeType === 'function') {
       // Emit start for function runtimes (no guard to check)
       try {

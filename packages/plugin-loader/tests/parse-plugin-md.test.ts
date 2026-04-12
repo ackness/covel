@@ -325,6 +325,34 @@ describe('parsePluginMd', () => {
       warnSpy.mockRestore();
     });
 
+    it('skips malformed hook entry with warning and keeps valid siblings (review I1)', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const content = md(
+        [
+          'name: test-malformed-hook',
+          'description: Mix of valid + malformed entries',
+          'priority: 500',
+          'hooks:',
+          '  - event: PreToolUse',
+          '    handler: ./hooks/ok.ts',
+          '  - event: PreToolUse',
+          '    handler: 42',  // numeric handler — invalid type
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/test-malformed-hook/PLUGIN.md');
+
+      expect(warnSpy).toHaveBeenCalledOnce();
+      const warnMsg = warnSpy.mock.calls[0][0] as string;
+      expect(warnMsg).toContain('malformed hook entry skipped');
+      expect(result.manifest.hooks).toHaveLength(1);
+      expect(result.manifest.hooks![0].handler).toBe('./hooks/ok.ts');
+
+      warnSpy.mockRestore();
+    });
+
     it('parses plugin without hooks field (optional)', () => {
       const content = md(
         [

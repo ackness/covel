@@ -158,6 +158,38 @@ describe('HookPipeline', () => {
       await pipeline.run('TurnStart', makeCtx(), {}, { eventBus: bus });
       expect(emitted).toContain('hook.aborted');
     });
+
+    it('observability payload carries hookId, hookPluginId, ctx.pluginId, reason (review I4)', async () => {
+      const bus = createEventBus();
+      const captured: Array<{ type: string; payload: Record<string, unknown> }> = [];
+      bus.onEmit((e) => { captured.push({ type: e.type, payload: e.payload as Record<string, unknown> }); });
+
+      // Register as a plugin-scoped hook so reg.pluginId is defined.
+      pipeline.register({
+        id: 'plugin-x:TurnStart:0',
+        event: 'TurnStart',
+        pluginId: 'plugin-x',
+        handler: vi.fn().mockResolvedValue({ action: 'abort', reason: 'policy-block' }),
+      });
+
+      // Context identity is a DIFFERENT plugin (the one being gated).
+      await pipeline.run(
+        'TurnStart',
+        { event: 'TurnStart', sessionId: 's1', turnId: 't1', pluginId: 'plugin-narrator' },
+        {},
+        { eventBus: bus },
+      );
+
+      expect(captured).toHaveLength(1);
+      const { type, payload } = captured[0];
+      expect(type).toBe('hook.aborted');
+      expect(payload.hookId).toBe('plugin-x:TurnStart:0');
+      expect(payload.hookPluginId).toBe('plugin-x');
+      expect(payload.pluginId).toBe('plugin-narrator');
+      expect(payload.reason).toBe('policy-block');
+      expect(payload.sessionId).toBe('s1');
+      expect(payload.turnId).toBe('t1');
+    });
   });
 
   describe('timeout', () => {
