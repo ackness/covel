@@ -73,6 +73,11 @@ export interface TurnResult {
   readonly pendingInputs?: readonly PendingInputInfo[];
   readonly durationMs: number;
   readonly timestamp: string;
+  /**
+   * Set when a TurnStart hook aborted the turn before any runtime ran.
+   * Callers should surface this reason to the player / client.
+   */
+  readonly abortReason?: string;
 }
 
 // ── Interaction protocol ────────────────────────────────────────

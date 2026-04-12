@@ -96,6 +96,28 @@ export const pluginConfigFieldSchema = z
   })
   .strict();
 
+// ── Hook declarations ────────────────────────────────────────────
+
+const VALID_HOOK_EVENTS = [
+  'TurnStart',
+  'PreRuntime',
+  'PostRuntime',
+  'PreToolUse',
+  'PostToolUse',
+  'PreStateCommit',
+  'PostStateCommit',
+  'TurnStop',
+] as const;
+
+export const hookDeclarationSchema = z
+  .object({
+    event: z.enum(VALID_HOOK_EVENTS),
+    handler: z.string().min(1),
+    match: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+    timeoutMs: z.number().int().positive().optional(),
+  })
+  .strict();
+
 // ── UI spec ─────────────────────────────────────────────────────
 
 export const uiSpecSchema = z
@@ -130,6 +152,7 @@ export const runtimeManifestSchema = z
     config: z.record(z.string(), pluginConfigFieldSchema).optional(),
     i18n: z.record(z.string(), z.string()).optional(),
     ui: uiSpecSchema.optional(),
+    hooks: z.array(hookDeclarationSchema).optional(),
   })
   .strict();
 

@@ -111,6 +111,37 @@ export interface PluginConfigField {
   readonly description?: string;
 }
 
+// ── Hook declarations ────────────────────────────────────────────
+
+/**
+ * Hook event names a plugin runtime can register handlers for.
+ * Mirrors HookEvent in @covel/runtime — kept here so plugin authors can
+ * reference it from shared types without depending on the runtime package.
+ */
+export type HookEventName =
+  | 'TurnStart'
+  | 'PreRuntime'
+  | 'PostRuntime'
+  | 'PreToolUse'
+  | 'PostToolUse'
+  | 'PreStateCommit'
+  | 'PostStateCommit'
+  | 'TurnStop';
+
+/**
+ * Single hook declaration in PLUGIN.md frontmatter.
+ * Handler files are resolved lazily — no eager import at parse time.
+ */
+export interface HookDeclaration {
+  readonly event: HookEventName;
+  /** Relative path to the handler module inside the plugin package. */
+  readonly handler: string;
+  /** Optional simple equality filter: { tool: "my-tool" } etc. */
+  readonly match?: Readonly<Record<string, string | number>>;
+  /** Per-handler timeout in ms. Default 5000. */
+  readonly timeoutMs?: number;
+}
+
 // ── UI declarations ─────────────────────────────────────────────
 
 /**
@@ -185,6 +216,12 @@ export interface RuntimeManifest {
   readonly config?: Readonly<Record<string, PluginConfigField>>;
   readonly i18n?: Readonly<Record<string, string>>;
   readonly ui?: UISpec;
+  /**
+   * Hook declarations for this runtime.
+   * Each entry registers a lifecycle handler loaded lazily on first invocation.
+   * See HookDeclaration for the full contract.
+   */
+  readonly hooks?: readonly HookDeclaration[];
 }
 
 // ── Plugin manifest ──────────────────────────────────────────────

@@ -212,6 +212,96 @@ describe('parsePluginMd', () => {
     });
   });
 
+  describe('hooks: field (S4-T3)', () => {
+    it('parses a valid hooks declaration with all optional fields', () => {
+      const content = md(
+        [
+          'name: test-guard-plugin',
+          'description: Plugin with hooks',
+          'priority: 500',
+          'hooks:',
+          '  - event: PreToolUse',
+          '    handler: ./hooks/validate.ts',
+          '    timeoutMs: 3000',
+          '    match:',
+          '      tool: create-character',
+          '  - event: PostStateCommit',
+          '    handler: ./hooks/audit.ts',
+        ].join('\n'),
+        '\nGuard plugin body.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/test-guard-plugin/PLUGIN.md');
+
+      expect(result.manifest.hooks).toHaveLength(2);
+      expect(result.manifest.hooks![0]).toMatchObject({
+        event: 'PreToolUse',
+        handler: './hooks/validate.ts',
+        timeoutMs: 3000,
+        match: { tool: 'create-character' },
+      });
+      expect(result.manifest.hooks![1]).toMatchObject({
+        event: 'PostStateCommit',
+        handler: './hooks/audit.ts',
+      });
+    });
+
+    it('parses all 8 valid hook event names', () => {
+      const validEvents = [
+        'TurnStart', 'PreRuntime', 'PostRuntime',
+        'PreToolUse', 'PostToolUse',
+        'PreStateCommit', 'PostStateCommit', 'TurnStop',
+      ];
+
+      for (const event of validEvents) {
+        const content = md(
+          [
+            'name: test-hook-plugin',
+            'description: Hook event test',
+            'priority: 500',
+            'hooks:',
+            `  - event: ${event}`,
+            '    handler: ./hooks/handler.ts',
+          ].join('\n'),
+          '\nBody.\n',
+        );
+
+        const result = parsePluginMd(content, 'plugins/test-hook-plugin/PLUGIN.md');
+        expect(result.manifest.hooks![0].event).toBe(event);
+      }
+    });
+
+    it('throws on invalid hook event name', () => {
+      const content = md(
+        [
+          'name: test-bad-hook',
+          'description: Bad hook event',
+          'priority: 500',
+          'hooks:',
+          '  - event: InvalidEvent',
+          '    handler: ./hooks/bad.ts',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      expect(() => parsePluginMd(content, 'plugins/test-bad-hook/PLUGIN.md')).toThrow();
+    });
+
+    it('parses plugin without hooks field (optional)', () => {
+      const content = md(
+        [
+          'name: no-hooks-plugin',
+          'description: Plugin without hooks',
+          'priority: 500',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/no-hooks-plugin/PLUGIN.md');
+      expect(result.manifest.hooks).toBeUndefined();
+    });
+  });
+
   describe('invalid name format', () => {
     it('should reject uppercase characters in name', () => {
       const content = md(

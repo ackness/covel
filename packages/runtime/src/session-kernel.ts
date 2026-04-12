@@ -13,6 +13,8 @@
  */
 
 import type { Proposal, ProposalSource, ProposalType, SessionEvent, CommitResult } from '@covel/shared';
+import type { HookPipeline } from './hooks/pipeline.js';
+import type { HookContext } from './hooks/types.js';
 
 // ── Proposal Normalizer ─────────────────────────────────────────
 
@@ -125,7 +127,7 @@ export interface CommitPipeline {
   commitAll(proposals: readonly Proposal[]): Promise<CommitResult[]>;
 }
 
-export function createCommitPipeline(store: KernelStore): CommitPipeline {
+export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipeline): CommitPipeline {
   const handlers: Record<string, (p: Proposal) => Promise<CommitResult>> = {
     'narrative.append': commitNarrative,
     'interaction.request': commitInteraction,
@@ -140,19 +142,47 @@ export function createCommitPipeline(store: KernelStore): CommitPipeline {
       return { committed: false, error: `unknown proposal type: ${proposal.type}` };
     }
 
-    const result = await handler(proposal);
+    // ── PreStateCommit hook (S4-T3) ──────────────────────────────
+    let effectiveProposal = proposal;
+    if (process.env.COVEL_HOOKS_V1 === '1' && hookPipeline) {
+      const hookCtx: HookContext = {
+        event: 'PreStateCommit',
+        sessionId: proposal.sessionId,
+        turnId: proposal.turnId,
+      };
+      const preResult = await hookPipeline.run('PreStateCommit', hookCtx, { proposal }, {});
+      if (preResult.action === 'abort') {
+        return { committed: false, error: `pre-state-commit hook aborted: ${preResult.reason}` };
+      }
+      if (preResult.action === 'continue' && 'replace' in preResult && preResult.replace?.proposal) {
+        effectiveProposal = preResult.replace.proposal as Proposal;
+      }
+    }
+
+    const result = await handler(effectiveProposal);
 
     // Trace every committed proposal
     if (result.committed) {
       await store.addTraceEvent({
         id: crypto.randomUUID(),
-        sessionId: proposal.sessionId,
+        sessionId: effectiveProposal.sessionId,
         type: 'proposal.committed',
-        traceId: proposal.turnId,
-        turnId: proposal.turnId,
-        payload: { proposalType: proposal.type, proposalId: proposal.id, source: proposal.source },
+        traceId: effectiveProposal.turnId,
+        turnId: effectiveProposal.turnId,
+        payload: { proposalType: effectiveProposal.type, proposalId: effectiveProposal.id, source: effectiveProposal.source },
         createdAt: new Date().toISOString(),
       });
+    }
+
+    // ── PostStateCommit hook (S4-T3) — Post* cannot abort ────────
+    if (process.env.COVEL_HOOKS_V1 === '1' && hookPipeline && result.committed) {
+      const hookCtx: HookContext = {
+        event: 'PostStateCommit',
+        sessionId: effectiveProposal.sessionId,
+        turnId: effectiveProposal.turnId,
+      };
+      // Fire-and-forget observability; result is not modified
+      await hookPipeline.run('PostStateCommit', hookCtx, { proposal: effectiveProposal, result }, {});
     }
 
     return result;

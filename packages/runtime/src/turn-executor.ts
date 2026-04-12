@@ -19,6 +19,16 @@ import { executeParallel } from './parallel-executor.js';
 import type { TriggerContext } from './types.js';
 import type { LLMAdapter, LLMMessage } from './llm-adapter.js';
 import type { ToolExecutor } from './tool-executor.js';
+import type { HookPipeline } from './hooks/pipeline.js';
+import { buildToolDefinitions, makeFailedResult } from './turn-executor-helpers.js';
+import {
+  runTurnStartHook,
+  runTurnStopHook,
+  runPreRuntimeHook,
+  runPostRuntimeHook,
+  runPreToolUseHook,
+  runPostToolUseHook,
+} from './hooks/wire-helpers.js';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -66,6 +76,14 @@ export interface TurnExecutorDeps {
    * runtimes).
    */
   readonly contextBudget?: Omit<BudgetOptions, 'estimator'>;
+
+  /**
+   * Optional hook pipeline (S4-T3).
+   * When present AND `process.env.COVEL_HOOKS_V1 === '1'`, lifecycle hooks
+   * fire at 8 points during turn execution. When absent or flag is off,
+   * all hook sites are pure no-ops — identical to pre-S4-T3 behaviour.
+   */
+  readonly hookPipeline?: HookPipeline;
 }
 
 export interface TurnExecutorOptions {
@@ -142,6 +160,24 @@ export async function executeTurn(
     turnId: input.turnId,
     sessionId: input.sessionId,
   });
+
+  // ── TurnStart hook (S4-T3) ───────────────────────────────────
+  {
+    const tsResult = await runTurnStartHook(
+      { pipeline: deps.hookPipeline, sessionId: input.sessionId, turnId: input.turnId, eventBus: deps.eventBus },
+      { playerMessage: input.playerMessage, activeRuntimes: activeRuntimes.map((r) => r.name) },
+    );
+    if (tsResult.action === 'abort') {
+      return {
+        turnId: input.turnId,
+        sessionId: input.sessionId,
+        runtimeResults: [],
+        durationMs: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+        abortReason: tsResult.reason,
+      };
+    }
+  }
 
   // 0. Load message history from store (append-only conversation history)
   let messageHistory: readonly TurnMessageRecord[] = [];
@@ -244,7 +280,7 @@ export async function executeTurn(
 
   for (const group of groups) {
     const results = await executeParallel(group.runtimes, async (manifest) => {
-      return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, timeoutMs, messageHistory, sessionMeta);
+      return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, timeoutMs, messageHistory, sessionMeta, deps.hookPipeline);
     });
 
     // Merge results + apply phase transitions from runtime output
@@ -346,6 +382,12 @@ export async function executeTurn(
     durationMs: turnResult.durationMs,
   });
 
+  // ── TurnStop hook (S4-T3) — Post* hooks cannot abort ────────
+  await runTurnStopHook(
+    { pipeline: deps.hookPipeline, sessionId: input.sessionId, turnId: input.turnId, eventBus: deps.eventBus },
+    { runtimeResults: turnResult.runtimeResults, durationMs: turnResult.durationMs },
+  );
+
   return turnResult;
 }
 
@@ -362,6 +404,7 @@ async function executeOneRuntime(
   timeoutMs: number,
   messageHistory: readonly TurnMessageRecord[],
   sessionMeta?: { turnNumber: number; phase: string; characters: readonly { name: string; type: string; description?: string; fields?: Record<string, unknown> }[]; lastFormValues?: Record<string, unknown> },
+  hookPipeline?: HookPipeline,
 ): Promise<RuntimeResult> {
   const startTime = Date.now();
   const runId = crypto.randomUUID();
@@ -453,7 +496,11 @@ async function executeOneRuntime(
         durationMs: result.durationMs,
       });
 
-      return result;
+      // PostRuntime hook — function runtime path (S4-T3)
+      return runPostRuntimeHook(
+        { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus },
+        result,
+      );
     }
 
     // ── Guard: pre-execution gate for agent runtimes ────────────
@@ -517,7 +564,11 @@ async function executeOneRuntime(
           durationMs: result.durationMs,
         });
 
-        return result;
+        // PostRuntime hook — guard-skipped path (S4-T3)
+        return runPostRuntimeHook(
+          { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus },
+          result,
+        );
       }
     }
 
@@ -536,6 +587,27 @@ async function executeOneRuntime(
       pluginId: manifest.pluginId,
       priority: manifest.priority,
     });
+
+    // ── PreRuntime hook (S4-T3) ──────────────────────────────────
+    {
+      const preRtResult = await runPreRuntimeHook(
+        { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, manifest, input, eventBus: deps.eventBus },
+      );
+      if (preRtResult.action === 'abort') {
+        return {
+          pluginId: manifest.pluginId,
+          runtimeId: manifest.name,
+          runId,
+          turnId: input.turnId,
+          status: 'skipped',
+          output: { skipped: true, reason: preRtResult.reason },
+          toolCalls: [],
+          durationMs: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+        };
+      }
+    }
+
     // Build context
     const config = deps.getConfig(manifest.pluginId, manifest.name);
 
@@ -701,16 +773,33 @@ async function executeOneRuntime(
         for (const tc of response.toolCalls) {
           if (deps.toolExecutor) {
             const tcStart = Date.now();
+
+            // ── PreToolUse hook (S4-T3) ──────────────────────────
+            const preToolOpts = { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus };
+            const preToolOutcome = await runPreToolUseHook(preToolOpts, { id: tc.id, name: tc.name, arguments: tc.arguments });
+            if (preToolOutcome.skipped) {
+              // Skip tool execution; push synthetic tool-role message so LLM sees a result
+              messages.push({
+                role: 'tool',
+                content: JSON.stringify({ error: `pre-tool-use hook aborted: ${preToolOutcome.reason}` }),
+                toolCallId: tc.id,
+              });
+              continue;
+            }
+
             const result = await deps.toolExecutor.execute(
               { toolCallId: tc.id, name: tc.name, arguments: tc.arguments },
               { sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name },
             );
 
+            // ── PostToolUse hook (S4-T3) ─────────────────────────
+            const toolResult = await runPostToolUseHook(preToolOpts, { id: tc.id, name: tc.name, arguments: tc.arguments }, result);
+
             executedToolCalls.push({
               name: tc.name,
               arguments: tc.arguments,
-              result: result.parsedResult,
-              success: result.success,
+              result: toolResult.parsedResult,
+              success: toolResult.success,
             });
 
             // Build ToolCallRecord for RuntimeResult.toolCalls
@@ -723,15 +812,15 @@ async function executeOneRuntime(
               runtimeId: manifest.name,
               turnId: input.turnId,
               input: parsedInput,
-              output: result.parsedResult,
+              output: toolResult.parsedResult,
               durationMs: Date.now() - tcStart,
-              approvalStatus: result.success ? 'auto-allowed' : 'auto-allowed',
+              approvalStatus: toolResult.success ? 'auto-allowed' : 'auto-allowed',
               timestamp: new Date().toISOString(),
             });
 
             messages.push({
               role: 'tool',
-              content: result.result,
+              content: toolResult.result,
               toolCallId: tc.id,
             });
           } else {
@@ -860,7 +949,11 @@ async function executeOneRuntime(
       durationMs: result.durationMs,
     });
 
-    return result;
+    // PostRuntime hook — agent success path (S4-T3)
+    return runPostRuntimeHook(
+      { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus },
+      result,
+    );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     const failedResult = makeFailedResult(manifest, input, runId, startTime, message);
@@ -879,69 +972,12 @@ async function executeOneRuntime(
       error: message,
     });
 
-    return failedResult;
+    // PostRuntime hook — failure path (S4-T3)
+    return runPostRuntimeHook(
+      { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus },
+      failedResult,
+    );
   }
 }
 
-/**
- * Build LLM tool definitions from a runtime's manifest declarations.
- * Looks up each declared tool in the ToolExecutor's registry to get its JSON schema.
- */
-function buildToolDefinitions(
-  manifest: RuntimeManifest,
-  toolExecutor: ToolExecutor,
-): import('./llm-adapter.js').LLMToolDefinition[] | undefined {
-  const names: string[] = [...(manifest.tools?.builtin ?? [])];
-
-  // For local tools, extract name from path (e.g., ./tools/unlock-codex-entries.ts → unlock-codex-entries)
-  for (const p of manifest.tools?.local ?? []) {
-    names.push(p.split('/').pop()?.replace(/\.[^.]+$/, '') ?? p);
-  }
-
-  if (names.length === 0) {
-    return undefined;
-  }
-
-  const defs: import('./llm-adapter.js').LLMToolDefinition[] = [];
-
-  for (const name of names) {
-    const info = toolExecutor.getToolInfo(name);
-    if (info) {
-      defs.push({
-        name: info.name,
-        description: info.description,
-        parameters: info.jsonSchema as Record<string, unknown>,
-      });
-    } else {
-      // Tool not found in registry — add a minimal definition so LLM knows it exists
-      defs.push({
-        name,
-        description: `Tool: ${name}`,
-        parameters: { type: 'object' },
-      });
-    }
-  }
-
-  return defs.length > 0 ? defs : undefined;
-}
-
-function makeFailedResult(
-  manifest: RuntimeManifest,
-  input: TurnInput,
-  runId: string,
-  startTime: number,
-  error: string,
-): RuntimeResult {
-  return {
-    pluginId: manifest.pluginId,
-    runtimeId: manifest.name,
-    runId,
-    turnId: input.turnId,
-    status: 'failed',
-    output: null,
-    toolCalls: [],
-    durationMs: Date.now() - startTime,
-    error,
-    timestamp: new Date().toISOString(),
-  };
-}
+// buildToolDefinitions and makeFailedResult extracted to turn-executor-helpers.ts (S4-T3)

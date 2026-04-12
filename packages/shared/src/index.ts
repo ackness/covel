@@ -16,6 +16,7 @@ export {
   toolsConfigSchema,
   configFieldTypeSchema,
   pluginConfigFieldSchema,
+  hookDeclarationSchema,
   runtimeManifestSchema,
 } from './schemas/plugin.js';
 

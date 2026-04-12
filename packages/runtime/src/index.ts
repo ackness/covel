@@ -45,3 +45,14 @@ export type {
 
 // Re-export context types for backward compatibility
 export type { AssembledContext, ContextBuildParams, LLMMessage } from '@covel/context';
+
+// ── Hook Pipeline (S4-T3) ────────────────────────────────────────
+export { HookPipeline, createHookPipeline } from './hooks/index.js';
+export type {
+  HookEvent,
+  HookContext,
+  HookResult,
+  HookHandler,
+  HookRegistration,
+  HookDeclaration,
+} from './hooks/index.js';

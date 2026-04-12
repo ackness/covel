@@ -12,6 +12,8 @@ export type {
   PluginConfigField,
   UISlotType,
   UISpec,
+  HookEventName,
+  HookDeclaration,
   RuntimeManifest,
   PluginManifest,
 } from './plugin.js';
