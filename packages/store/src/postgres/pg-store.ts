@@ -32,6 +32,7 @@ import type {
   WorkingMemoryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
+  SnapshotRecord,
 } from '../types.js';
 import { createPgTxAdapter } from './pg-store-tx.js';
 import {
@@ -57,6 +58,7 @@ import {
   toWorkingMemoryRecord,
   toSessionSummaryRecord,
   toSuspensionRecord,
+  toSnapshotRecord,
 } from './pg-store-mappers.js';
 
 // ── Factory ─────────────────────────────────────────────────────
@@ -955,6 +957,49 @@ export async function createPgStore(
 
     async deleteSuspension(id: string): Promise<void> {
       await db.delete(schema.suspensions).where(eq(schema.suspensions.id, id));
+    },
+
+    // ── Snapshots (S4-T2) ─────────────────────────────────────
+
+    async saveSnapshot(record: SnapshotRecord): Promise<void> {
+      await db.insert(schema.stateSnapshots).values({
+        id: record.id,
+        sessionId: record.sessionId,
+        turnId: record.turnId,
+        kind: record.kind,
+        parentId: record.parentId ?? null,
+        payload: record.payload as unknown as Record<string, unknown>,
+        createdAt: record.createdAt,
+      }).onConflictDoUpdate({
+        target: schema.stateSnapshots.id,
+        set: {
+          turnId: record.turnId,
+          kind: record.kind,
+          parentId: record.parentId ?? null,
+          payload: record.payload as unknown as Record<string, unknown>,
+        },
+      });
+    },
+
+    async getSnapshot(id: string): Promise<SnapshotRecord | null> {
+      const rows = await db
+        .select()
+        .from(schema.stateSnapshots)
+        .where(eq(schema.stateSnapshots.id, id));
+      return rows[0] ? toSnapshotRecord(rows[0]) : null;
+    },
+
+    async listSnapshots(sessionId: string): Promise<readonly SnapshotRecord[]> {
+      const rows = await db
+        .select()
+        .from(schema.stateSnapshots)
+        .where(eq(schema.stateSnapshots.sessionId, sessionId))
+        .orderBy(asc(schema.stateSnapshots.createdAt));
+      return rows.map(toSnapshotRecord);
+    },
+
+    async deleteSnapshot(id: string): Promise<void> {
+      await db.delete(schema.stateSnapshots).where(eq(schema.stateSnapshots.id, id));
     },
 
     // ── Transactions (S4-T1) ──────────────────────────────────

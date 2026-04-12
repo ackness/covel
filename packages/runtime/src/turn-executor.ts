@@ -422,6 +422,37 @@ export async function executeTurn(
       durationMs: turnResult.durationMs,
       createdAt: turnResult.timestamp ?? now,
     });
+
+    // ── Auto-snapshot (S4-T2) ─────────────────────────────────
+    // When COVEL_SNAPSHOTS_V1=1, capture a materialized snapshot of the
+    // session state at turn boundary. Failures are logged but never fail
+    // the turn — snapshots are a best-effort recovery primitive, not a
+    // commit invariant.
+    if (process.env['COVEL_SNAPSHOTS_V1'] === '1') {
+      try {
+        const { buildSnapshotPayload } = await import('./snapshot-payload-builder.js');
+        const payload = await buildSnapshotPayload(
+          deps.store,
+          input.sessionId,
+          input.turnId,
+        );
+        await deps.store.saveSnapshot({
+          id: crypto.randomUUID(),
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          kind: 'auto',
+          payload,
+          createdAt: turnResult.timestamp ?? now,
+        });
+      } catch (err) {
+        // Log and continue — never block turn completion on snapshot failure.
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[turn-executor] auto snapshot failed for session ${input.sessionId} turn ${input.turnId}:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
   }
 
   // Emit turn.completed

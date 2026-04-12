@@ -296,6 +296,17 @@ export interface DataStore {
   listSuspensions(sessionId: string): Promise<readonly SuspensionRecord[]>;
   deleteSuspension(id: string): Promise<void>;
 
+  // ── Snapshots (S4-T2) ──
+  /**
+   * Persist a materialized state snapshot. Used by auto / manual / fork flows.
+   * Upsert semantics: re-saving the same id replaces the payload.
+   */
+  saveSnapshot(record: SnapshotRecord): Promise<void>;
+  getSnapshot(id: string): Promise<SnapshotRecord | null>;
+  /** List snapshots for a session, ordered by `createdAt` asc. */
+  listSnapshots(sessionId: string): Promise<readonly SnapshotRecord[]>;
+  deleteSnapshot(id: string): Promise<void>;
+
   // ── Transactions (S4-T1) ──
   /**
    * Begin a transaction. Subsequent writes are buffered until commit or rollback.
@@ -371,6 +382,53 @@ export interface PlayerInputRecord {
   readonly turnId: string;
   readonly formId: string;
   readonly values: unknown;        // JSON — Record<string, unknown>
+  readonly createdAt: string;
+}
+
+// ── Snapshots (S4-T2) ────────────────────────────────────────────
+
+/**
+ * Materialized state snapshot (S4-T2, §A6).
+ *
+ * Each record captures the full session state at the end of a given turn as a
+ * serialized payload. Snapshots power save / load / fork — every new session
+ * created via `POST /fork` is rebuilt from a snapshot payload.
+ *
+ * `kind`:
+ *  - `auto`   — created at turn commit when `COVEL_SNAPSHOTS_V1=1`.
+ *  - `manual` — created explicitly via `POST /api/sessions/:id/snapshot`.
+ *  - `fork`   — created when a fork rebuilds a new session; `parentId`
+ *               points at the origin snapshot.
+ *
+ * `payload.schemaVersion` allows future migrations without requiring a DB
+ * schema change — the envelope stays stable while the payload can evolve.
+ */
+export type SnapshotKind = 'auto' | 'manual' | 'fork';
+
+export interface SnapshotPayload {
+  readonly schemaVersion: 1;
+  readonly turnId: string;
+  readonly characters: readonly CharacterRecord[];
+  readonly stateEntries: readonly StateEntryRecord[];
+  readonly pluginData: readonly PluginDataRecord[];
+  readonly workingMemory: readonly WorkingMemoryRecord[];
+  /** Session-scoped lorebook entries. See note in snapshot-payload-builder. */
+  readonly lorebookEntries: readonly unknown[];
+  /**
+   * Last `turn_messages.id` persisted for this session at snapshot time.
+   * Used by fork to bound how many messages are copied.
+   * Empty string when there are no messages yet.
+   */
+  readonly messagesCursor: string;
+}
+
+export interface SnapshotRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly kind: SnapshotKind;
+  readonly parentId?: string;
+  readonly payload: SnapshotPayload;
   readonly createdAt: string;
 }
 

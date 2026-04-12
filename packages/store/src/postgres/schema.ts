@@ -383,6 +383,24 @@ export const workingMemory = pgTable(
   ],
 );
 
+// ── State Snapshots (S4-T2) ────────────────────────────────────
+
+export const stateSnapshots = pgTable(
+  'state_snapshots',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id').notNull(),
+    turnId: text('turn_id').notNull(),
+    kind: text('kind').notNull(),                 // 'auto' | 'manual' | 'fork'
+    parentId: text('parent_id'),                  // null except for kind='fork'
+    payload: jsonb('payload').notNull(),          // SnapshotPayload
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    index('pg_state_snapshots_session_id_idx').on(table.sessionId),
+  ],
+);
+
 // ── Suspensions (S4-T4) ────────────────────────────────────────
 
 export const suspensions = pgTable(

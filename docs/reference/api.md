@@ -235,6 +235,16 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | GET | `/api/sessions/:id/suspensions` | 列出当前 session 所有未解决的挂起项 |
 | DELETE | `/api/sessions/:id/suspensions/:suspensionId` | 放弃一个挂起项（删除记录） |
 
+### Snapshot / Fork（S4-T2）
+
+> 需要环境变量 `COVEL_SNAPSHOTS_V1=1`。关闭时所有路径返回 `503`。
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| POST | `/api/sessions/:id/snapshot` | 创建一份手动快照（kind=`manual`） |
+| GET | `/api/sessions/:id/snapshots` | 列出当前 session 所有物化快照（auto / manual / fork） |
+| POST | `/api/sessions/:id/fork` | 从指定 snapshotId 物化一个新 session，拷贝状态与截至 cursor 的消息 |
+
 ### 角色数据
 
 | 方法 | 路径 | 描述 |
@@ -1402,6 +1412,85 @@ curl "http://localhost:3001/api/sessions/<sessionId>/turns?limit=5"
 ```json
 { "deleted": true, "suspensionId": "susp_abc123" }
 ```
+
+---
+
+### Snapshot / Fork（S4-T2）
+
+> 需要环境变量 `COVEL_SNAPSHOTS_V1=1`。关闭时所有路径返回 `503`（`{ "error": "...", "code": "feature_disabled" }`）。
+
+物化快照是存档 / 读档 / 时间线分叉的核心 —— 每个快照把一个回合结束时的完整 session 状态序列化为 `payload`，保存在 `state_snapshots` 表。`kind` 取三种值：`auto`（flag 开启时每回合结束自动写入）、`manual`（`POST /snapshot` 显式创建）、`fork`（`POST /fork` 写到子 session 上记录来源）。
+
+#### `POST /api/sessions/:id/snapshot`
+
+从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 characters、stateEntries、pluginData、workingMemory、messagesCursor（最后一条 `turn_message.id`）。`lorebookEntries` 当前总是空数组，待 Lorebook store API 就绪后填充。
+
+**响应:**
+
+```json
+{
+  "snapshot": {
+    "id": "<uuid>",
+    "sessionId": "cloudmere-a1b2c3d4",
+    "turnId": "turn-42",
+    "kind": "manual",
+    "payload": {
+      "schemaVersion": 1,
+      "turnId": "turn-42",
+      "characters": [ /* ... */ ],
+      "stateEntries": [ /* ... */ ],
+      "pluginData": [ /* ... */ ],
+      "workingMemory": [ /* ... */ ],
+      "lorebookEntries": [],
+      "messagesCursor": "tm_abc"
+    },
+    "createdAt": "2026-04-13T00:00:00.000Z"
+  }
+}
+```
+
+返回 `201 Created`；session 不存在时返回 `404`。
+
+#### `GET /api/sessions/:id/snapshots`
+
+列出指定 session 的所有快照（`auto` / `manual` / `fork`），按 `createdAt` 升序。
+
+```json
+{ "snapshots": [ /* SnapshotRecord[] */ ] }
+```
+
+session 不存在时返回 `404`。
+
+#### `POST /api/sessions/:id/fork`
+
+基于指定 snapshot 物化一个新的 session。请求体：
+
+```json
+{ "fromSnapshotId": "<snapshot-uuid>" }
+```
+
+服务端会：
+1. 创建新 sessionId（`{worldId}-{uuid8}`）；
+2. 复用父 session 的 locale / activePlugins / phase / turnCount；
+3. **拷贝** characters / state entries / plugin data / working memory / state schemas 到新 session；
+4. 从 `turn_messages` 中按顺序拷贝消息直到 `payload.messagesCursor`（含），超过 cursor 的消息不拷贝；
+5. 写入一个 `kind="fork"` 的快照到子 session，`parentId` 指向源 snapshot，供 provenance 追踪；
+6. 在 eventBus 上广播 `session.forked`（SSE topic=`session`）。
+
+**响应:**
+
+```json
+{
+  "sessionId": "cloudmere-<new-uuid8>",
+  "parentSessionId": "cloudmere-a1b2c3d4",
+  "fromSnapshotId": "<parent-snapshot-id>",
+  "forkSnapshotId": "<child-fork-snapshot-id>"
+}
+```
+
+返回 `201 Created`；快照不属于该 session、快照不存在、或父 session 不存在均返回 `404`；`fromSnapshotId` 缺失返回 `400`；内部写入失败返回 `500`。
+
+整个 fork 在 `beginTx` / `commitTx` 下写入，中途任何失败都会 rollback，不会留下半成品子 session。
 
 ---
 

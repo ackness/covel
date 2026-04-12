@@ -37,6 +37,9 @@ export type { KernelStore, CommitPipeline, TraceRecorder } from './session-kerne
 export { buildSessionSnapshot } from './snapshot-builder.js';
 export type { SnapshotStore } from './snapshot-builder.js';
 
+// ── Snapshot Payload Builder (S4-T2) ────────────────────────────
+export { buildSnapshotPayload } from './snapshot-payload-builder.js';
+
 // ── Types ────────────────────────────────────────────────────────
 export type {
   TriggerContext,
