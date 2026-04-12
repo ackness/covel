@@ -141,6 +141,26 @@
 
 ---
 
+### suspend
+
+> 需要环境变量 `COVEL_SUSPEND_V1=1`。flag 关闭时调用本工具不会真的暂停 runtime —— sentinel 会作为普通 tool 结果交还给 LLM，回合继续按常规流程结束。
+
+声明在 `packages/tools/src/builtin/suspend.ts`。Agent runtime 调用 `suspend({ reason, resumeSchema })` 时，工具直接返回一个 sentinel 对象 `{ _covelSuspend: true, reason, resumeSchema }`。turn-executor 在每次 tool 执行后通过 `isSuspendSentinel()` 检测：识别到 sentinel 后会序列化当前 pendingContinuation 写入 `suspensions` 表，并发出 `turn.suspended` 事件，整个 tool loop 立即停止。后续可通过 `POST /api/sessions/:id/resume` 提交匹配 `resumeSchema` 的数据重新启动该 runtime（详见 `docs/reference/api.md`）。
+
+| 参数 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| reason | string | ✓ | 给玩家看的简短说明，解释为什么需要输入 |
+| resumeSchema | object | ✓ | **纯 JSON Schema 对象**（`type` / `properties` / `required`）。插件如需用 Zod 定义，必须先用 `zod-to-json-schema` 转换 —— 不要传 live Zod schema |
+
+**输出**: sentinel `{ _covelSuspend: true, reason, resumeSchema }`（被 turn-executor 拦截，正常情况下不会作为普通工具结果回到 LLM）
+
+**注意事项**：
+- `resumeSchema` 必须可被 `JSON.stringify` —— pendingContinuation 是要落盘的
+- 同一 runtime 同一时刻只能有一个未解决的 suspension（resume 路由通过 `runtimeId + sessionId` 查找）
+- 注册位置：`bootstrap.ts` 中 `toolMap.set(suspendTool.name, suspendTool)` + `builtinToolNames.add(...)`，所有 agent runtime 自动可用
+
+---
+
 ## Character 管理工具
 
 框架级角色管理工具，定义在 `packages/tools/src/builtin/character-tools.ts`。写入 `characters` 表（session 作用域，跨插件可见），同时镜像到调用插件的 `plugin_data[pluginId][namespace="characters"][key=charId]`，让右侧面板通过现成的 `plugin-data.changed` SSE 通道实时更新。
@@ -573,4 +593,39 @@ export const myTool = tool({
 tools:
   local:
     - ./tools/my-tool-name.js
+```
+
+## Proposal 类型
+
+Runtime 输出最终都被规范化为 `Proposal[]`（定义见 `packages/shared/src/types/proposal.ts`），由 commit chain 顺序提交、写入 store、再以 SessionEvent 形式广播。已注册的 `ProposalType` 包括：`narrative.append`、`narrative.template`、`state.patch`、`event.emit`、`record.upsert`、`interaction.request`、`ui.render`、`asset.generate`、`phase.transition`、`plugin.data`、`working_memory.set`。
+
+### `working_memory.set`（S3-T3）
+
+> 需要环境变量 `COVEL_WORKING_MEMORY_V1=1`。flag 关闭时 commit chain 会拒绝该 proposal。
+
+写入 session 级工作记忆。commit handler 把 payload 持久化到 `working_memory` 表，并发出一个名为 `working_memory.changed` 的 KernelEvent（runtime 内部事件，目前**不会**通过 SSE 推到前端 —— 相关接入状态见 `docs/reference/protocol.md` 的 "Working Memory / 上下文压缩事件" 段落）。
+
+**Payload (`WorkingMemorySetPayload`):**
+
+| 字段 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| scope | enum | ✓ | `player` / `story` / `shared` |
+| key | string | ✓ | 条目主键，按 `(sessionId, scope, key)` 唯一 |
+| value | unknown | ✓ | 任意可序列化 JSON 值 |
+| schemaRef | string | | 可选 schema 引用，仅作为元数据持久化 |
+
+**写入路径：**
+- runtime 端：通过 `Proposal` 输出 `{ type: 'working_memory.set', payload: { scope, key, value, schemaRef? } }`
+- HTTP 端：`PUT /api/sessions/:id/working-memory/:scope/:key` 直接调 store，不经 commit chain（详见 `docs/reference/api.md`）
+
+**KernelEvent 输出：**
+
+```json
+{
+  "type": "working_memory.changed",
+  "sessionId": "<id>",
+  "turnId": "<id>",
+  "source": { "pluginId": "...", "runtimeId": "..." },
+  "payload": { "scope": "player", "key": "mood" }
+}
 ```

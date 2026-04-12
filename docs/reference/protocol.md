@@ -84,6 +84,24 @@
 
 `plugin-data-set` / `plugin-data-set-batch` / DELETE `/plugin-data/...` 等所有写路径均会触发此事件。`operation` 字段为 `'set'` 或 `'delete'`（删除时 `value` 为 `null`），由 `wrapStoreWithPluginDataEvents` 在 store 层统一拦截，前端可实时响应插件状态变更。
 
+### Suspend / Resume 事件（S4-T4）
+
+需要环境变量 `COVEL_SUSPEND_V1=1`。关闭时 suspend 路径不会触发。
+
+| 事件类型 | 方向 | 描述 | 负载 |
+|----------|------|------|------|
+| `turn.suspended` | S→C | 插件调用 `suspend()` 工具成功序列化 pendingContinuation 后由 turn-executor 发出 | `{ sessionId, turnId, suspensionId, reason, resumeSchema }` |
+| `turn.resumed` | S→C | `POST /api/sessions/:id/resume` 成功重新启动 runtime 后由 resume 路由发出 | `{ sessionId, turnId, suspensionId }` |
+
+### Working Memory / 上下文压缩事件（部分接入）
+
+下列事件由 commit chain / Compactor 内部发出，**目前不在 `ProtocolEventType` 枚举中**，因此**尚未通过 SSE 推送到前端**。文档化是为了让插件作者知晓内核侧已经在发射对应信号；前端订阅需要等到事件被并入 `ProtocolEventType` 之后才能生效。
+
+| 事件 | 触发点 | 当前出口 | payload | 备注 |
+|------|--------|----------|---------|------|
+| `working_memory.changed` | commit chain 提交 `working_memory.set` proposal 后 | `KernelEvent`（runtime 内部事件，尚未路由到 SSE） | `{ scope, key }`（顶层带有 sessionId/turnId/source） | 需要前端订阅时，需把该 type 加入 `ProtocolEventType` 并在 SSE 转发层接出 |
+| `context.compacted` | Compactor 完成摘要写入后 | `trace_events` 表（仅持久化为 trace） | `{ summaryId, messagesCompacted, tokenSavings, focusSections }` | 同上；目前只能通过 `/api/traces/:sessionId` 查询，没有实时推送 |
+
 ### SSE 命名事件订阅注意事项
 
 所有 ProtocolEventType 在 SSE 流上都以**命名事件**（`event: <type>\ndata: ...`）形式发送，**不会**触发 `EventSource.onmessage` 默认 handler。前端必须为每个关心的事件类型显式注册 `addEventListener('<type>', handler)`，否则事件会被静默丢弃。`apps/web-v2/src/services/sse.ts` 已为 `narrative.delta` / `narrative.completed` / `interaction.requested` / `phase.changed` / `plugin-data.changed` 等关键事件挂载监听。新增事件类型时**必须同步更新该文件**。
