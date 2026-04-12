@@ -395,7 +395,8 @@
 | FU-3 | **loadPrompt 推广**：`apps/server/src/routes/api/ai.ts`（generate-world / extract-dimensions）仍然内联 TS template literal。Wave 0-D 创建的 `loadPrompt` 第一次真正可用，这些 server 路由 prompt 都可以迁移。非阻塞，可作为 Sprint 5 清理票 |
 | FU-4 | **Lorebook list API**：S4-T2 fork 需要 `listLorebookEntries(sessionId, { source: 'session' })` 但 `@covel/lorebook` 的 store 接口还没加。当前 snapshot.lorebookEntries 是空数组 TODO。需要在 `@covel/store` / `@covel/lorebook` 加 `listSessionLorebookEntries`，然后回填 `snapshot-payload-builder.ts`。Wave B 顺手（<30 行），或在 S3-T2 world-init 迁移时一起做 |
 | FU-5 | **S2-T3 第 4 个 Anthropic breakpoint**：`§A15` 规定 4 个 breakpoint，其中 "段 7 中部"（messages 中段）需要 turn-executor 改动。A-1 留作 follow-up，因为 S2-T3 scope 不碰 runtime。Wave B / Wave C 顺手 |
-| FU-6 | **Wave A-3 session.forked SSE 前端消费**：后端已发 SSE 事件，但 `apps/web-v2/src/services/sse.ts` 未 `addEventListener('session.forked', ...)`，等 fork UI（Sprint 5 或 S3-T6）实装时再接 |
+| FU-6 | **Wave A-3 session.forked SSE 前端消费**：后端已发 SSE 事件，但 `apps/web-v2/src/services/sse.ts` 未 `addEventListener('session.forked', ...)`，等 fork UI（Sprint 5 或 S3-T6）实装时再接。S4-T5 把 `state.snapshot.created` 加进同一组，前端挂载时一次性接 2 条 |
+| FU-7 | **流式重试事件未接 SSE**：`packages/ai-provider/src/adapters/http.ts:postJson` 的 S1-T3 retry 路径是**静默** fallback，没有 callback / event hook。S4-T5 调研后确认无法在不改 ai-provider gateway 的前提下接出 `stream.interrupted` / `stream.resumed`。需在 `gateway.ts` / `context-builder` 层插一个 EventBus 注入点（或回调），让 retry 触发时通过 turn-executor 的 `eventBus` 广播。Wave B 或 Sprint 5 单独处理。本 ticket **未** 把这两个 type 加入 `ProtocolEventType`，等真有发射点再加 |
 
 ### 8.4 Progress ledger 更新规则
 
