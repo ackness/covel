@@ -20,6 +20,7 @@ import {
   buildInjectBlocks as _buildInjectBlocks,
   interpolateTemplate as _interpolateTemplate,
   resolveLocaleLanguageName,
+  renderWorkingMemory,
 } from './prompt-internals.js';
 import type { AssembledContext, ContextBuildParams, LLMMessage } from './types.js';
 
@@ -110,6 +111,12 @@ export function buildContext(
 
   // Interpolate template variables
   let systemPrompt = _interpolateTemplate(rawSystemPrompt, variables);
+
+  // Inject Working Memory segment (S3-T3) — placed before other blocks
+  const wmSegment = renderWorkingMemory(params.workingMemory);
+  if (wmSegment) {
+    systemPrompt = `${wmSegment}\n\n${systemPrompt}`;
+  }
 
   // Inject language constraint based on session locale
   if (turnInput.locale) {

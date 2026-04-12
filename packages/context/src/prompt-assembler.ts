@@ -38,6 +38,7 @@ import {
   buildInjectBlocks,
   interpolateTemplate,
   resolveLocaleLanguageName,
+  renderWorkingMemory,
 } from './prompt-internals.js';
 import type { AssembledContext, ContextBuildParams, LLMMessage } from './types.js';
 
@@ -112,9 +113,12 @@ function buildPromptSegments(params: ContextBuildParams): PromptSegments {
   const frameworkPreamble =
     params.frameworkPreamble ?? defaultFrameworkPreamble(params.turnInput.locale);
 
+  // Segment 2 — Working Memory (S3-T3)
+  const workingMemory = renderWorkingMemory(params.workingMemory);
+
   return {
     frameworkPreamble,
-    workingMemory: '',
+    workingMemory,
     pluginInstructions,
     worldInfoBeforePlugin: '',
     upstreamInjects,

@@ -341,3 +341,26 @@ export const playerInputs = sqliteTable(
     index('player_inputs_session_id_idx').on(table.sessionId),
   ],
 );
+
+// ── Working Memory (S3-T3) ────────────────────────────────────
+
+export const workingMemory = sqliteTable(
+  'working_memory',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id').notNull(),
+    key: text('key').notNull(),
+    scope: text('scope').notNull(),    // 'player' | 'story' | 'shared'
+    value: text('value').notNull(),    // JSON
+    schemaRef: text('schema_ref'),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    index('working_memory_session_id_idx').on(table.sessionId),
+    uniqueIndex('working_memory_unique_idx').on(
+      table.sessionId,
+      table.scope,
+      table.key,
+    ),
+  ],
+);

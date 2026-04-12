@@ -29,6 +29,7 @@ import type {
   TraceEventRecord,
   TurnMessageRecord,
   PlayerInputRecord,
+  WorkingMemoryRecord,
 } from '../types.js';
 import {
   toJson,
@@ -52,6 +53,7 @@ import {
   toTraceEventRecord,
   toTurnMessageRecord,
   toPlayerInputRecord,
+  toWorkingMemoryRecord,
 } from './sqlite-store-mappers.js';
 import type { VectorStoreCapability } from '../vector-store.js';
 import { createSqliteVectorCapability } from './sqlite-vector.js';
@@ -807,6 +809,80 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
         .where(eq(schema.playerInputs.sessionId, sessionId))
         .all();
       return rows.map(toPlayerInputRecord);
+    },
+
+    // ── Working Memory (S3-T3) ───────────────────────────────
+
+    async upsertWorkingMemory(record: WorkingMemoryRecord): Promise<void> {
+      db.insert(schema.workingMemory)
+        .values({
+          id: record.id,
+          sessionId: record.sessionId,
+          key: record.key,
+          scope: record.scope,
+          value: toJson(record.value),
+          schemaRef: record.schemaRef ?? null,
+          updatedAt: record.updatedAt,
+        })
+        .onConflictDoUpdate({
+          target: [
+            schema.workingMemory.sessionId,
+            schema.workingMemory.scope,
+            schema.workingMemory.key,
+          ],
+          set: {
+            id: record.id,
+            value: toJson(record.value),
+            schemaRef: record.schemaRef ?? null,
+            updatedAt: record.updatedAt,
+          },
+        })
+        .run();
+    },
+
+    async getWorkingMemory(
+      sessionId: string,
+      scope: WorkingMemoryRecord['scope'],
+      key: string,
+    ): Promise<WorkingMemoryRecord | null> {
+      const rows = db
+        .select()
+        .from(schema.workingMemory)
+        .where(
+          and(
+            eq(schema.workingMemory.sessionId, sessionId),
+            eq(schema.workingMemory.scope, scope),
+            eq(schema.workingMemory.key, key),
+          ),
+        )
+        .all();
+      return rows.length > 0 ? toWorkingMemoryRecord(rows[0]) : null;
+    },
+
+    async listWorkingMemory(sessionId: string): Promise<readonly WorkingMemoryRecord[]> {
+      const rows = db
+        .select()
+        .from(schema.workingMemory)
+        .where(eq(schema.workingMemory.sessionId, sessionId))
+        .orderBy(asc(schema.workingMemory.scope), asc(schema.workingMemory.key))
+        .all();
+      return rows.map(toWorkingMemoryRecord);
+    },
+
+    async deleteWorkingMemory(
+      sessionId: string,
+      scope: WorkingMemoryRecord['scope'],
+      key: string,
+    ): Promise<void> {
+      db.delete(schema.workingMemory)
+        .where(
+          and(
+            eq(schema.workingMemory.sessionId, sessionId),
+            eq(schema.workingMemory.scope, scope),
+            eq(schema.workingMemory.key, key),
+          ),
+        )
+        .run();
     },
 
     // ── Transactions (S4-T1) ──────────────────────────────────

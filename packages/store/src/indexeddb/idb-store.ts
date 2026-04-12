@@ -33,9 +33,10 @@ import type {
   TraceEventRecord,
   TurnMessageRecord,
   PlayerInputRecord,
+  WorkingMemoryRecord,
 } from '../types.js';
 
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 async function initDb(dbName: string): Promise<IDBPDatabase> {
   return openDB(dbName, DB_VERSION, {
@@ -98,6 +99,12 @@ async function initDb(dbName: string): Promise<IDBPDatabase> {
         pluginData.createIndex('sessionId_pluginId', ['sessionId', 'pluginId']);
         pluginData.createIndex('lookup', ['sessionId', 'pluginId', 'namespace', 'key']);
       }
+
+      if (oldVersion < 4) {
+        const workingMemory = db.createObjectStore('working_memory', { keyPath: 'id' });
+        workingMemory.createIndex('sessionId', 'sessionId');
+        workingMemory.createIndex('scopeKeyLookup', ['sessionId', 'scope', 'key']);
+      }
     },
   });
 }
@@ -121,6 +128,7 @@ const OBJECT_STORES = [
   'turnMessages',
   'playerInputs',
   'plugin_data',
+  'working_memory',
 ] as const;
 
 export async function createIdbStore(dbName?: string): Promise<DataStore> {
@@ -436,6 +444,62 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
 
     async listPlayerInputs(sessionId: string): Promise<PlayerInputRecord[]> {
       return db.getAllFromIndex('playerInputs', 'sessionId', sessionId);
+    },
+
+    // ── Working Memory (S3-T3) ───────────────────────────────
+
+    async upsertWorkingMemory(record: WorkingMemoryRecord): Promise<void> {
+      // Find existing entry with same (sessionId, scope, key) to merge id handling
+      const existing = await db.getFromIndex('working_memory', 'scopeKeyLookup', [
+        record.sessionId,
+        record.scope,
+        record.key,
+      ]);
+      if (existing) {
+        // Replace the record keeping the new id (spec: each upsert gets new UUID)
+        await db.delete('working_memory', existing.id);
+      }
+      await db.put('working_memory', structuredClone(record));
+    },
+
+    async getWorkingMemory(
+      sessionId: string,
+      scope: WorkingMemoryRecord['scope'],
+      key: string,
+    ): Promise<WorkingMemoryRecord | null> {
+      const result = await db.getFromIndex('working_memory', 'scopeKeyLookup', [
+        sessionId,
+        scope,
+        key,
+      ]);
+      return result ?? null;
+    },
+
+    async listWorkingMemory(sessionId: string): Promise<readonly WorkingMemoryRecord[]> {
+      const entries = await db.getAllFromIndex('working_memory', 'sessionId', sessionId);
+      // Sort: player → story → shared, then alphabetical key
+      const scopeOrder: Record<string, number> = { player: 0, story: 1, shared: 2 };
+      entries.sort((a, b) => {
+        const scopeDiff = (scopeOrder[a.scope] ?? 99) - (scopeOrder[b.scope] ?? 99);
+        if (scopeDiff !== 0) return scopeDiff;
+        return a.key.localeCompare(b.key);
+      });
+      return entries;
+    },
+
+    async deleteWorkingMemory(
+      sessionId: string,
+      scope: WorkingMemoryRecord['scope'],
+      key: string,
+    ): Promise<void> {
+      const existing = await db.getFromIndex('working_memory', 'scopeKeyLookup', [
+        sessionId,
+        scope,
+        key,
+      ]);
+      if (existing) {
+        await db.delete('working_memory', existing.id);
+      }
     },
 
     // ── Transactions (S4-T1) ──

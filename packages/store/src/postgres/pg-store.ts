@@ -29,6 +29,7 @@ import type {
   TraceEventRecord,
   TurnMessageRecord,
   PlayerInputRecord,
+  WorkingMemoryRecord,
 } from '../types.js';
 import { createPgTxAdapter } from './pg-store-tx.js';
 import {
@@ -51,6 +52,7 @@ import {
   toTraceEventRecord,
   toTurnMessageRecord,
   toPlayerInputRecord,
+  toWorkingMemoryRecord,
 } from './pg-store-mappers.js';
 
 // ── Factory ─────────────────────────────────────────────────────
@@ -776,6 +778,78 @@ export async function createPgStore(
         .from(schema.playerInputs)
         .where(eq(schema.playerInputs.sessionId, sessionId));
       return rows.map(toPlayerInputRecord);
+    },
+
+    // ── Working Memory (S3-T3) ───────────────────────────────
+
+    async upsertWorkingMemory(record: WorkingMemoryRecord): Promise<void> {
+      await db
+        .insert(schema.workingMemory)
+        .values({
+          id: record.id,
+          sessionId: record.sessionId,
+          key: record.key,
+          scope: record.scope,
+          value: record.value ?? null,
+          schemaRef: record.schemaRef ?? null,
+          updatedAt: record.updatedAt,
+        })
+        .onConflictDoUpdate({
+          target: [
+            schema.workingMemory.sessionId,
+            schema.workingMemory.scope,
+            schema.workingMemory.key,
+          ],
+          set: {
+            id: record.id,
+            value: record.value ?? null,
+            schemaRef: record.schemaRef ?? null,
+            updatedAt: record.updatedAt,
+          },
+        });
+    },
+
+    async getWorkingMemory(
+      sessionId: string,
+      scope: WorkingMemoryRecord['scope'],
+      key: string,
+    ): Promise<WorkingMemoryRecord | null> {
+      const rows = await db
+        .select()
+        .from(schema.workingMemory)
+        .where(
+          and(
+            eq(schema.workingMemory.sessionId, sessionId),
+            eq(schema.workingMemory.scope, scope),
+            eq(schema.workingMemory.key, key),
+          ),
+        );
+      return rows.length > 0 ? toWorkingMemoryRecord(rows[0]) : null;
+    },
+
+    async listWorkingMemory(sessionId: string): Promise<readonly WorkingMemoryRecord[]> {
+      const rows = await db
+        .select()
+        .from(schema.workingMemory)
+        .where(eq(schema.workingMemory.sessionId, sessionId))
+        .orderBy(asc(schema.workingMemory.scope), asc(schema.workingMemory.key));
+      return rows.map(toWorkingMemoryRecord);
+    },
+
+    async deleteWorkingMemory(
+      sessionId: string,
+      scope: WorkingMemoryRecord['scope'],
+      key: string,
+    ): Promise<void> {
+      await db
+        .delete(schema.workingMemory)
+        .where(
+          and(
+            eq(schema.workingMemory.sessionId, sessionId),
+            eq(schema.workingMemory.scope, scope),
+            eq(schema.workingMemory.key, key),
+          ),
+        );
     },
 
     // ── Transactions (S4-T1) ──────────────────────────────────

@@ -25,6 +25,7 @@ import type {
   TraceEventRecord,
   TurnMessageRecord,
   PlayerInputRecord,
+  WorkingMemoryRecord,
 } from '../types.js';
 
 // ── JSON helpers ────────────────────────────────────────────────
@@ -264,6 +265,18 @@ export function createTables(sqlite: Database.Database): void {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_player_inputs_session ON player_inputs(session_id);
+
+    CREATE TABLE IF NOT EXISTS working_memory (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      key TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      value TEXT NOT NULL,
+      schema_ref TEXT,
+      updated_at TEXT NOT NULL,
+      UNIQUE (session_id, scope, key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_working_memory_session ON working_memory(session_id);
   `);
 }
 
@@ -487,5 +500,17 @@ export function toPlayerInputRecord(row: typeof schema.playerInputs.$inferSelect
     formId: row.formId,
     values: fromJsonRequired(row.values),
     createdAt: row.createdAt,
+  };
+}
+
+export function toWorkingMemoryRecord(row: typeof schema.workingMemory.$inferSelect): WorkingMemoryRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    key: row.key,
+    scope: row.scope as WorkingMemoryRecord['scope'],
+    value: fromJsonRequired(row.value),
+    schemaRef: row.schemaRef ?? undefined,
+    updatedAt: row.updatedAt,
   };
 }

@@ -24,6 +24,7 @@ import type {
   TraceEventRecord,
   TurnMessageRecord,
   PlayerInputRecord,
+  WorkingMemoryRecord,
 } from '../types.js';
 
 // ── Table creation DDL ─────────────────────────────────────────
@@ -238,6 +239,18 @@ export const CREATE_TABLES_SQL = `
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS pg_player_inputs_session_id_idx ON player_inputs(session_id);
+
+  CREATE TABLE IF NOT EXISTS working_memory (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    value JSONB NOT NULL,
+    schema_ref TEXT,
+    updated_at TEXT NOT NULL,
+    UNIQUE (session_id, scope, key)
+  );
+  CREATE INDEX IF NOT EXISTS pg_working_memory_session_id_idx ON working_memory(session_id);
 `;
 
 // ── Table names for cleanup ─────────────────────────────────────
@@ -246,7 +259,7 @@ export const ALL_TABLE_NAMES = [
   'worlds', 'sessions', 'turn_results', 'runtime_results', 'tool_calls',
   'state_schemas', 'state_entries', 'state_changes', 'events', 'approvals',
   'messages', 'characters', 'plugin_data', 'plugin_configs', 'trace_events',
-  'turn_messages', 'player_inputs',
+  'turn_messages', 'player_inputs', 'working_memory',
 ] as const;
 
 export const DROP_ALL_SQL = ALL_TABLE_NAMES.map(
@@ -473,5 +486,17 @@ export function toPlayerInputRecord(row: typeof schema.playerInputs.$inferSelect
     formId: row.formId,
     values: row.values ?? null,
     createdAt: row.createdAt,
+  };
+}
+
+export function toWorkingMemoryRecord(row: typeof schema.workingMemory.$inferSelect): WorkingMemoryRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    key: row.key,
+    scope: row.scope as WorkingMemoryRecord['scope'],
+    value: row.value ?? null,
+    schemaRef: row.schemaRef ?? undefined,
+    updatedAt: row.updatedAt,
   };
 }

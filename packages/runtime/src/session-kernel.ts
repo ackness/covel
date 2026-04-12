@@ -107,6 +107,11 @@ export interface KernelStore {
   addStateChange(record: { id: string; sessionId: string; tableName: string; fieldName: string; value: unknown; changedBy: string; turnId: string; reason?: string; createdAt: string }): Promise<void>;
   addTraceEvent(record: { id: string; sessionId: string; type: string; traceId: string; turnId: string; payload: unknown; createdAt: string }): Promise<void>;
   /**
+   * Working Memory upsert (S3-T3). Optional so the kernel stays compatible
+   * with thin mock stores in existing tests that don't need WM.
+   */
+  upsertWorkingMemory?(record: { id: string; sessionId: string; key: string; scope: 'player' | 'story' | 'shared'; value: unknown; schemaRef?: string; updatedAt: string }): Promise<void>;
+  /**
    * Optional transaction hooks (S4-T1). When present and opted-in via the
    * COVEL_COMMIT_TXN_V1 feature flag, `commitAll()` wraps the whole proposal
    * chain in begin/commit/rollback so a mid-chain failure leaves no partial
@@ -135,6 +140,7 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
     'phase.transition': commitPhaseTransition,
     'state.patch': commitStatePatch,
     'event.emit': commitEvent,
+    'working_memory.set': commitWorkingMemory,
   };
 
   async function commit(proposal: Proposal): Promise<CommitResult> {
@@ -308,6 +314,61 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
       committed: true,
       event: makeEvent('event.emitted', proposal, proposal.payload),
     };
+  }
+
+  async function commitWorkingMemory(proposal: Proposal): Promise<CommitResult> {
+    // Feature-flag gate: reject when COVEL_WORKING_MEMORY_V1 is not enabled.
+    if (process.env.COVEL_WORKING_MEMORY_V1 !== '1') {
+      return { committed: false, error: 'working_memory disabled' };
+    }
+
+    const payload = proposal.payload as {
+      scope?: unknown;
+      key?: unknown;
+      value?: unknown;
+      schemaRef?: unknown;
+    };
+
+    const validScopes = new Set(['player', 'story', 'shared']);
+    if (typeof payload.scope !== 'string' || !validScopes.has(payload.scope)) {
+      return { committed: false, error: `working_memory.set: invalid scope "${String(payload.scope)}"` };
+    }
+    if (typeof payload.key !== 'string' || payload.key.length === 0) {
+      return { committed: false, error: 'working_memory.set: key must be a non-empty string' };
+    }
+    if (payload.value === undefined) {
+      return { committed: false, error: 'working_memory.set: value must not be undefined' };
+    }
+    if (payload.schemaRef !== undefined && typeof payload.schemaRef !== 'string') {
+      return { committed: false, error: 'working_memory.set: schemaRef must be a string when provided' };
+    }
+
+    // TODO(S3-T3.b): resolve schemaRef against a framework-level Zod schema
+    // registry (A9 refinement) and validate payload.value against the schema.
+    // For now, schemaRef is accepted as an opaque string.
+
+    if (!store.upsertWorkingMemory) {
+      return { committed: false, error: 'working_memory.set: store does not support working memory' };
+    }
+
+    const scope = payload.scope as 'player' | 'story' | 'shared';
+    await store.upsertWorkingMemory({
+      id: crypto.randomUUID(),
+      sessionId: proposal.sessionId,
+      key: payload.key,
+      scope,
+      value: payload.value,
+      schemaRef: payload.schemaRef as string | undefined,
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Emit working_memory.changed session event so subscribers can react
+    const wmEvent = makeEvent('working_memory.changed', proposal, {
+      scope,
+      key: payload.key,
+    });
+
+    return { committed: true, event: wmEvent };
   }
 
   return { commit, commitAll };

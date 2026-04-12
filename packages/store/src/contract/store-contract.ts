@@ -22,6 +22,7 @@ import type {
   TraceEventRecord,
   TurnMessageRecord,
   PlayerInputRecord,
+  WorkingMemoryRecord,
 } from '../types.js';
 
 // ── Record factories ────────────────────────────────────────────
@@ -235,6 +236,18 @@ function makePlayerInput(overrides?: Partial<PlayerInputRecord>): PlayerInputRec
     formId: 'test-form',
     values: { name: 'test' },
     createdAt: ts(),
+    ...overrides,
+  };
+}
+
+function makeWorkingMemory(overrides?: Partial<WorkingMemoryRecord>): WorkingMemoryRecord {
+  return {
+    id: id(),
+    sessionId: 'sess-1',
+    key: 'testKey',
+    scope: 'player',
+    value: { data: 'test' },
+    updatedAt: ts(),
     ...overrides,
   };
 }
@@ -860,6 +873,110 @@ export function runStoreContractTests(
         expect(list).toHaveLength(2);
         expect(list.map((r) => r.id)).toContain(i1.id);
         expect(list.map((r) => r.id)).toContain(i2.id);
+      });
+    });
+
+    // ── Working Memory (S3-T3) ────────────────────────────────
+
+    describe('WorkingMemory', () => {
+      it('upsert + get roundtrip', async () => {
+        const wm = makeWorkingMemory({ sessionId: 'wm-sess', scope: 'player', key: 'prefs' });
+        await store.upsertWorkingMemory(wm);
+        const result = await store.getWorkingMemory('wm-sess', 'player', 'prefs');
+        expect(result).not.toBeNull();
+        expect(result!.key).toBe('prefs');
+        expect(result!.scope).toBe('player');
+        expect(result!.sessionId).toBe('wm-sess');
+        expect(result!.value).toEqual(wm.value);
+      });
+
+      it('list returns all entries for a session', async () => {
+        const w1 = makeWorkingMemory({ sessionId: 'wm-list', scope: 'player', key: 'a' });
+        const w2 = makeWorkingMemory({ sessionId: 'wm-list', scope: 'story', key: 'b' });
+        const w3 = makeWorkingMemory({ sessionId: 'wm-list', scope: 'shared', key: 'c' });
+        await store.upsertWorkingMemory(w1);
+        await store.upsertWorkingMemory(w2);
+        await store.upsertWorkingMemory(w3);
+        const list = await store.listWorkingMemory('wm-list');
+        expect(list).toHaveLength(3);
+        const keys = list.map((r) => r.key);
+        expect(keys).toContain('a');
+        expect(keys).toContain('b');
+        expect(keys).toContain('c');
+      });
+
+      it('upsert-on-conflict replaces the record (same sessionId+scope+key)', async () => {
+        const wm = makeWorkingMemory({ sessionId: 'wm-upsert', scope: 'player', key: 'pref', value: 'v1' });
+        await store.upsertWorkingMemory(wm);
+
+        const wmUpdated = makeWorkingMemory({ sessionId: 'wm-upsert', scope: 'player', key: 'pref', value: 'v2' });
+        await store.upsertWorkingMemory(wmUpdated);
+
+        const list = await store.listWorkingMemory('wm-upsert');
+        expect(list).toHaveLength(1);
+        expect(list[0].value).toBe('v2');
+      });
+
+      it('delete removes only the targeted entry', async () => {
+        const w1 = makeWorkingMemory({ sessionId: 'wm-del', scope: 'player', key: 'keep' });
+        const w2 = makeWorkingMemory({ sessionId: 'wm-del', scope: 'player', key: 'remove' });
+        await store.upsertWorkingMemory(w1);
+        await store.upsertWorkingMemory(w2);
+
+        await store.deleteWorkingMemory('wm-del', 'player', 'remove');
+
+        const list = await store.listWorkingMemory('wm-del');
+        expect(list).toHaveLength(1);
+        expect(list[0].key).toBe('keep');
+
+        const removed = await store.getWorkingMemory('wm-del', 'player', 'remove');
+        expect(removed).toBeNull();
+      });
+
+      it('different sessions do not leak', async () => {
+        await store.upsertWorkingMemory(
+          makeWorkingMemory({ sessionId: 'wm-sess-A', scope: 'player', key: 'k', value: 'A' }),
+        );
+        await store.upsertWorkingMemory(
+          makeWorkingMemory({ sessionId: 'wm-sess-B', scope: 'player', key: 'k', value: 'B' }),
+        );
+
+        const listA = await store.listWorkingMemory('wm-sess-A');
+        const listB = await store.listWorkingMemory('wm-sess-B');
+        expect(listA).toHaveLength(1);
+        expect(listA[0].value).toBe('A');
+        expect(listB).toHaveLength(1);
+        expect(listB[0].value).toBe('B');
+      });
+
+      it('same key under different scopes are distinct records', async () => {
+        const sessId = 'wm-scopes';
+        await store.upsertWorkingMemory(
+          makeWorkingMemory({ sessionId: sessId, scope: 'player', key: 'sameKey', value: 'player-val' }),
+        );
+        await store.upsertWorkingMemory(
+          makeWorkingMemory({ sessionId: sessId, scope: 'story', key: 'sameKey', value: 'story-val' }),
+        );
+
+        const playerEntry = await store.getWorkingMemory(sessId, 'player', 'sameKey');
+        const storyEntry = await store.getWorkingMemory(sessId, 'story', 'sameKey');
+        expect(playerEntry).not.toBeNull();
+        expect(storyEntry).not.toBeNull();
+        expect(playerEntry!.value).toBe('player-val');
+        expect(storyEntry!.value).toBe('story-val');
+
+        const list = await store.listWorkingMemory(sessId);
+        expect(list).toHaveLength(2);
+      });
+
+      it('rollback inside a transaction undoes working memory writes', async () => {
+        const wm = makeWorkingMemory({ sessionId: 'wm-rollback', scope: 'player', key: 'rolled' });
+        await store.beginTx();
+        await store.upsertWorkingMemory(wm);
+        await store.rollbackTx();
+
+        const result = await store.getWorkingMemory('wm-rollback', 'player', 'rolled');
+        expect(result).toBeNull();
       });
     });
 

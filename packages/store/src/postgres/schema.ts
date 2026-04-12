@@ -340,3 +340,26 @@ export const playerInputs = pgTable(
     index('pg_player_inputs_session_id_idx').on(table.sessionId),
   ],
 );
+
+// ── Working Memory (S3-T3) ────────────────────────────────────
+
+export const workingMemory = pgTable(
+  'working_memory',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id').notNull(),
+    key: text('key').notNull(),
+    scope: text('scope').notNull(),    // 'player' | 'story' | 'shared'
+    value: jsonb('value').notNull(),   // JSON
+    schemaRef: text('schema_ref'),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    index('pg_working_memory_session_id_idx').on(table.sessionId),
+    uniqueIndex('pg_working_memory_unique_idx').on(
+      table.sessionId,
+      table.scope,
+      table.key,
+    ),
+  ],
+);

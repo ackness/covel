@@ -215,6 +215,16 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | PUT | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 写入/更新数据 |
 | DELETE | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 删除数据 |
 
+### Working Memory（工作记忆）
+
+> 需要环境变量 `COVEL_WORKING_MEMORY_V1=1`，否则返回 404。
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/sessions/:id/working-memory` | 列出该 session 的所有工作记忆条目 |
+| PUT | `/api/sessions/:id/working-memory/:scope/:key` | 写入/更新工作记忆（scope: player \| story \| shared） |
+| DELETE | `/api/sessions/:id/working-memory/:scope/:key` | 删除工作记忆条目 |
+
 ### 角色数据
 
 | 方法 | 路径 | 描述 |
@@ -1250,6 +1260,60 @@ curl "http://localhost:3001/api/sessions/<sessionId>/turns?limit=5"
 #### `DELETE /api/sessions/:id/plugin-data/:pluginId/:namespace/:key`
 
 删除单条插件数据。
+
+**响应:**
+
+```json
+{ "success": true }
+```
+
+---
+
+### Working Memory（工作记忆）
+
+> 需要环境变量 `COVEL_WORKING_MEMORY_V1=1`，否则所有端点返回 `404 Feature flag not enabled`。
+
+#### `GET /api/sessions/:id/working-memory`
+
+列出该 session 的所有工作记忆条目，按 scope（player → story → shared）和 key 排序。
+
+**响应:**
+
+```json
+{
+  "entries": [
+    {
+      "id": "wm_abc123",
+      "sessionId": "world-uuid8",
+      "key": "mood",
+      "scope": "player",
+      "value": "cautious",
+      "schemaRef": null,
+      "updatedAt": "2026-04-12T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+#### `PUT /api/sessions/:id/working-memory/:scope/:key`
+
+写入或更新工作记忆条目（upsert）。scope 必须是 `player`、`story` 或 `shared` 之一。
+
+**请求体:**
+
+```json
+{ "value": <any JSON>, "schemaRef": "optional-schema-id" }
+```
+
+**响应:**
+
+```json
+{ "success": true }
+```
+
+#### `DELETE /api/sessions/:id/working-memory/:scope/:key`
+
+删除工作记忆条目。
 
 **响应:**
 

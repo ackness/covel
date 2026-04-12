@@ -159,6 +159,43 @@ export function assemblePromptVariables(
 }
 
 /**
+ * Render Working Memory entries as a prompt segment (S3-T3).
+ *
+ * Sorting is deterministic: scope order `player` → `story` → `shared`,
+ * then alphabetical key within scope. If no entries exist, returns an
+ * empty string so callers can skip the segment.
+ *
+ * Gated by `COVEL_WORKING_MEMORY_V1=1`. When unset, returns empty string
+ * unconditionally so the feature has zero overhead when disabled.
+ */
+export function renderWorkingMemory(
+  entries: readonly { scope: 'player' | 'story' | 'shared'; key: string; value: unknown }[] | undefined,
+): string {
+  if (process.env.COVEL_WORKING_MEMORY_V1 !== '1') {
+    return '';
+  }
+  if (!entries || entries.length === 0) {
+    return '';
+  }
+
+  const scopeOrder: Record<string, number> = { player: 0, story: 1, shared: 2 };
+  const sorted = [...entries].sort((a, b) => {
+    const scopeDiff = (scopeOrder[a.scope] ?? 99) - (scopeOrder[b.scope] ?? 99);
+    if (scopeDiff !== 0) return scopeDiff;
+    return a.key.localeCompare(b.key);
+  });
+
+  const lines = sorted.map((entry) => {
+    const valueStr = typeof entry.value === 'string'
+      ? JSON.stringify(entry.value)
+      : JSON.stringify(entry.value);
+    return `${entry.scope}.${entry.key}: ${valueStr}`;
+  });
+
+  return `[Working Memory]\n${lines.join('\n')}`;
+}
+
+/**
  * Map a locale code (BCP-47) to a human-readable language name used in
  * the framework preamble. Falls back to the raw locale string if unknown.
  */

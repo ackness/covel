@@ -33,6 +33,7 @@ import type {
   TraceEventRecord,
   TurnMessageRecord,
   PlayerInputRecord,
+  WorkingMemoryRecord,
 } from '../types.js';
 import type {
   VectorStoreCapability,
@@ -84,6 +85,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
   const traceEvents: TraceEventRecord[] = [];
   const turnMessages: TurnMessageRecord[] = [];
   const playerInputs: PlayerInputRecord[] = [];
+  const workingMemoryEntries = new Map<string, WorkingMemoryRecord>();
 
   function stateEntryKey(sessionId: string, tableName: string, fieldName: string): string {
     return `${sessionId}:${tableName}:${fieldName}`;
@@ -95,6 +97,10 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
 
   function pluginConfigKey(sessionId: string, pluginId: string): string {
     return `${sessionId}:${pluginId}`;
+  }
+
+  function workingMemoryKey(sessionId: string, scope: string, key: string): string {
+    return `${sessionId}:${scope}:${key}`;
   }
 
   function vectorRowKey(
@@ -136,6 +142,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     readonly traceEvents: TraceEventRecord[];
     readonly turnMessages: TurnMessageRecord[];
     readonly playerInputs: PlayerInputRecord[];
+    readonly workingMemoryEntries: Map<string, WorkingMemoryRecord>;
   }
 
   let snapshot: MemorySnapshot | null = null;
@@ -181,6 +188,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
       traceEvents: structuredClone(traceEvents),
       turnMessages: structuredClone(turnMessages),
       playerInputs: structuredClone(playerInputs),
+      workingMemoryEntries: structuredClone(workingMemoryEntries),
     };
   }
 
@@ -221,6 +229,8 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     turnMessages.push(...snap.turnMessages);
     playerInputs.length = 0;
     playerInputs.push(...snap.playerInputs);
+    workingMemoryEntries.clear();
+    for (const [k, v] of snap.workingMemoryEntries) workingMemoryEntries.set(k, v);
   }
 
   const store: DataStore & VectorStoreCapability = {
@@ -507,6 +517,45 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
 
     async listPlayerInputs(sessionId) {
       return playerInputs.filter((r) => r.sessionId === sessionId);
+    },
+
+    // ── Working Memory (S3-T3) ───────────────────────────────
+
+    async upsertWorkingMemory(record: WorkingMemoryRecord): Promise<void> {
+      const k = workingMemoryKey(record.sessionId, record.scope, record.key);
+      workingMemoryEntries.set(k, record);
+    },
+
+    async getWorkingMemory(
+      sessionId: string,
+      scope: WorkingMemoryRecord['scope'],
+      key: string,
+    ): Promise<WorkingMemoryRecord | null> {
+      const k = workingMemoryKey(sessionId, scope, key);
+      return workingMemoryEntries.get(k) ?? null;
+    },
+
+    async listWorkingMemory(sessionId: string): Promise<readonly WorkingMemoryRecord[]> {
+      const entries = Array.from(workingMemoryEntries.values()).filter(
+        (r) => r.sessionId === sessionId,
+      );
+      // Sort: scope order player → story → shared, then alphabetical key
+      const scopeOrder: Record<string, number> = { player: 0, story: 1, shared: 2 };
+      entries.sort((a, b) => {
+        const scopeDiff = (scopeOrder[a.scope] ?? 99) - (scopeOrder[b.scope] ?? 99);
+        if (scopeDiff !== 0) return scopeDiff;
+        return a.key.localeCompare(b.key);
+      });
+      return entries;
+    },
+
+    async deleteWorkingMemory(
+      sessionId: string,
+      scope: WorkingMemoryRecord['scope'],
+      key: string,
+    ): Promise<void> {
+      const k = workingMemoryKey(sessionId, scope, key);
+      workingMemoryEntries.delete(k);
     },
 
     // ── Vector Store (brute-force, O(n) — fine for tests and <1k rows) ──

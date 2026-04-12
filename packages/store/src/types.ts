@@ -159,6 +159,16 @@ export interface PluginConfigRecord {
   readonly updatedAt: string;
 }
 
+export interface WorkingMemoryRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly key: string;
+  readonly scope: 'player' | 'story' | 'shared';
+  readonly value: unknown;        // validated by schema_ref when present
+  readonly schemaRef?: string;
+  readonly updatedAt: string;     // ISO
+}
+
 export interface TraceEventRecord {
   readonly id: string;
   readonly sessionId: string;
@@ -259,6 +269,12 @@ export interface DataStore {
   savePlayerInput(record: PlayerInputRecord): Promise<void>;
   getPlayerInput(sessionId: string, formId: string): Promise<PlayerInputRecord | null>;
   listPlayerInputs(sessionId: string): Promise<PlayerInputRecord[]>;
+
+  // ── Working Memory (S3-T3) ──
+  upsertWorkingMemory(record: WorkingMemoryRecord): Promise<void>;
+  getWorkingMemory(sessionId: string, scope: WorkingMemoryRecord['scope'], key: string): Promise<WorkingMemoryRecord | null>;
+  listWorkingMemory(sessionId: string): Promise<readonly WorkingMemoryRecord[]>;
+  deleteWorkingMemory(sessionId: string, scope: WorkingMemoryRecord['scope'], key: string): Promise<void>;
 
   // ── Transactions (S4-T1) ──
   /**

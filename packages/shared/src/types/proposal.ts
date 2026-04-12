@@ -20,7 +20,8 @@ export type ProposalType =
   | 'ui.render'
   | 'asset.generate'
   | 'phase.transition'
-  | 'plugin.data';
+  | 'plugin.data'
+  | 'working_memory.set';
 
 // ── Proposal ────────────────────────────────────────────────────
 
@@ -80,6 +81,13 @@ export interface PluginDataPayload {
   readonly namespace: string;
   readonly key: string;
   readonly value: unknown;
+}
+
+export interface WorkingMemorySetPayload {
+  readonly scope: 'player' | 'story' | 'shared';
+  readonly key: string;
+  readonly value: unknown;
+  readonly schemaRef?: string;
 }
 
 // ── SessionEvent (emitted to clients after commit) ──────────────

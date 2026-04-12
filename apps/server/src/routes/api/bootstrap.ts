@@ -48,6 +48,7 @@ import { characterRoutes } from './characters.js';
 import { actionRoutes } from './actions.js';
 import { subscribeRoutes } from './subscribe.js';
 import { pluginDataRoutes } from './plugin-data.js';
+import { workingMemoryRoutes } from './working-memory.js';
 import { createRoutes } from './create.js';
 import { aiRoutes } from './ai.js';
 import { traceRoutes } from './traces.js';
@@ -366,6 +367,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   app.route('/api/sessions', messageRoutes);
   app.route('/api/sessions', characterRoutes);
   app.route('/api/sessions', pluginDataRoutes);
+  app.route('/api/sessions', workingMemoryRoutes);
   app.route('/api/plugins', pluginRoutes);
   app.route('/api/events', eventRoutes);
   app.route('/api/events', subscribeRoutes);

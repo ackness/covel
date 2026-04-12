@@ -50,6 +50,13 @@ export interface SessionMeta {
   readonly lastFormValues?: Readonly<Record<string, unknown>>;
 }
 
+/** A single Working Memory entry (minimal shape for context injection). */
+export interface WorkingMemoryEntry {
+  readonly scope: 'player' | 'story' | 'shared';
+  readonly key: string;
+  readonly value: unknown;
+}
+
 /** Parameters for building an execution context. */
 export interface ContextBuildParams {
   /** Runtime's prompt template. */
@@ -66,6 +73,11 @@ export interface ContextBuildParams {
   readonly messageHistory?: readonly MessageHistoryRecord[];
   /** Session-level metadata (turnNumber, phase, characters). */
   readonly sessionMeta?: SessionMeta;
+  /**
+   * Working memory entries (S3-T3). Populated when COVEL_WORKING_MEMORY_V1=1.
+   * When absent or empty, no [Working Memory] segment is rendered.
+   */
+  readonly workingMemory?: readonly WorkingMemoryEntry[];
   /**
    * Token estimator injected by the caller for budget calculation. Optional.
    * When both this and {@link ContextBuildParams.contextBudget} are set and

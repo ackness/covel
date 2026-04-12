@@ -1,0 +1,111 @@
+/**
+ * API Working Memory routes — CRUD for framework-level cross-session state.
+ *
+ * Working Memory is session-scoped and isolated by (sessionId, scope, key).
+ * Unlike plugin_data, this is framework-owned and injected into every turn's
+ * prompt (when COVEL_WORKING_MEMORY_V1=1).
+ *
+ * All three routes return 404 when COVEL_WORKING_MEMORY_V1 is unset (flag off).
+ *
+ * Security: At T3 deployment, this route group should be placed behind
+ * authentication middleware.
+ */
+
+import { Hono } from 'hono';
+import { z } from 'zod';
+import type { DataStore } from '@covel/store';
+
+type Env = {
+  Variables: {
+    store: DataStore;
+  };
+};
+
+export const workingMemoryRoutes = new Hono<Env>();
+
+const VALID_SCOPES = new Set(['player', 'story', 'shared']);
+
+// GET /sessions/:id/working-memory
+workingMemoryRoutes.get('/:id/working-memory', async (c) => {
+  if (process.env.COVEL_WORKING_MEMORY_V1 !== '1') {
+    return c.json({ error: 'Working memory is disabled' }, 404);
+  }
+
+  const store = c.get('store');
+  const sessionId = c.req.param('id');
+  const session = await store.getSession(sessionId);
+  if (!session) return c.json({ error: 'Session not found' }, 404);
+
+  const entries = await store.listWorkingMemory(sessionId);
+  return c.json({ entries });
+});
+
+// PUT /sessions/:id/working-memory/:scope/:key
+workingMemoryRoutes.put('/:id/working-memory/:scope/:key', async (c) => {
+  if (process.env.COVEL_WORKING_MEMORY_V1 !== '1') {
+    return c.json({ error: 'Working memory is disabled' }, 404);
+  }
+
+  const store = c.get('store');
+  const sessionId = c.req.param('id');
+  const session = await store.getSession(sessionId);
+  if (!session) return c.json({ error: 'Session not found' }, 404);
+
+  const scope = c.req.param('scope');
+  if (!VALID_SCOPES.has(scope)) {
+    return c.json({ error: `Invalid scope "${scope}". Must be one of: player, story, shared` }, 400);
+  }
+
+  const key = c.req.param('key');
+  if (!key) {
+    return c.json({ error: 'Key must not be empty' }, 400);
+  }
+
+  const raw = await c.req.json<unknown>();
+  const bodySchema = z.object({
+    value: z.unknown(),
+    schemaRef: z.string().optional(),
+  });
+  const parsed = bodySchema.safeParse(raw);
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid body: value field is required' }, 400);
+  }
+
+  if (parsed.data.value === undefined) {
+    return c.json({ error: 'value must not be undefined' }, 400);
+  }
+
+  const now = new Date().toISOString();
+  await store.upsertWorkingMemory({
+    id: crypto.randomUUID(),
+    sessionId,
+    key,
+    scope: scope as 'player' | 'story' | 'shared',
+    value: parsed.data.value,
+    schemaRef: parsed.data.schemaRef,
+    updatedAt: now,
+  });
+
+  return c.json({ success: true, scope, key });
+});
+
+// DELETE /sessions/:id/working-memory/:scope/:key
+workingMemoryRoutes.delete('/:id/working-memory/:scope/:key', async (c) => {
+  if (process.env.COVEL_WORKING_MEMORY_V1 !== '1') {
+    return c.json({ error: 'Working memory is disabled' }, 404);
+  }
+
+  const store = c.get('store');
+  const sessionId = c.req.param('id');
+  const session = await store.getSession(sessionId);
+  if (!session) return c.json({ error: 'Session not found' }, 404);
+
+  const scope = c.req.param('scope');
+  if (!VALID_SCOPES.has(scope)) {
+    return c.json({ error: `Invalid scope "${scope}". Must be one of: player, story, shared` }, 400);
+  }
+
+  const key = c.req.param('key');
+  await store.deleteWorkingMemory(sessionId, scope as 'player' | 'story' | 'shared', key);
+  return c.json({ success: true });
+});
