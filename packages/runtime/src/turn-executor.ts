@@ -539,12 +539,19 @@ async function executeOneRuntime(
     // Build context
     const config = deps.getConfig(manifest.pluginId, manifest.name);
 
-    // S1-T5 / I1 guard — applyBudget is role-agnostic for `role: 'tool'` messages,
-    // so mid-history pruning could split an assistant↔tool pair and produce a
-    // broken OpenAI-protocol payload. Until S2 introduces pair-aware pruning,
-    // skip budget injection entirely for any runtime that declares tool usage.
-    const runtimeUsesTools =
+    // Tool-pair pruning safety: budget pruning does not understand assistant↔tool
+    // message pairing (see T2 review I1). Skip budget injection whenever this
+    // runtime declares tools via any of the three tool-declaration paths:
+    // `manifest.input.tools` (dependency declarations) or `manifest.tools.builtin`
+    // / `manifest.tools.local` (actual registration, consumed by buildToolDefinitions).
+    // Revisit in S2 when pair-aware pruning lands.
+    const hasInputTools =
       Array.isArray(manifest.input?.tools) && manifest.input!.tools.length > 0;
+    const hasBuiltinTools =
+      manifest.tools?.builtin !== undefined && manifest.tools.builtin.length > 0;
+    const hasLocalTools =
+      manifest.tools?.local !== undefined && manifest.tools.local.length > 0;
+    const runtimeUsesTools = hasInputTools || hasBuiltinTools || hasLocalTools;
     const budgetEligible =
       !runtimeUsesTools &&
       deps.estimator !== undefined &&
