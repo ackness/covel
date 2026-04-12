@@ -368,7 +368,7 @@ function emitPluginDataChangedEvent(
   eventBus: EventBus,
   pluginId: string,
   sessionId: string,
-  changes: readonly { namespace: string; key: string; value: unknown; operation: 'set' }[],
+  changes: readonly { namespace: string; key: string; value: unknown; operation: 'set' | 'delete' }[],
 ): void {
   if (changes.length === 0) return;
   eventBus.emit({
@@ -385,7 +385,7 @@ function emitPluginDataChangedEvent(
   });
 }
 
-function wrapStoreWithPluginDataEvents(baseStore: DataStore, eventBus: EventBus): DataStore {
+export function wrapStoreWithPluginDataEvents(baseStore: DataStore, eventBus: EventBus): DataStore {
   return new Proxy(baseStore, {
     get(target, prop, receiver) {
       if (prop === 'setPluginData') {
@@ -404,7 +404,7 @@ function wrapStoreWithPluginDataEvents(baseStore: DataStore, eventBus: EventBus)
         return async (records: readonly PluginDataRecord[]): Promise<void> => {
           await target.setPluginDataBatch(records);
           // Group by pluginId to emit one event per plugin
-          const byPlugin = new Map<string, { sessionId: string; changes: { namespace: string; key: string; value: unknown; operation: 'set' }[] }>();
+          const byPlugin = new Map<string, { sessionId: string; changes: { namespace: string; key: string; value: unknown; operation: 'set' | 'delete' }[] }>();
           for (const r of records) {
             let entry = byPlugin.get(r.pluginId);
             if (!entry) {
@@ -421,6 +421,18 @@ function wrapStoreWithPluginDataEvents(baseStore: DataStore, eventBus: EventBus)
           for (const [pluginId, { sessionId, changes }] of byPlugin) {
             emitPluginDataChangedEvent(eventBus, pluginId, sessionId, changes);
           }
+        };
+      }
+
+      if (prop === 'deletePluginData') {
+        return async (sessionId: string, pluginId: string, namespace: string, key: string): Promise<void> => {
+          await target.deletePluginData(sessionId, pluginId, namespace, key);
+          emitPluginDataChangedEvent(eventBus, pluginId, sessionId, [{
+            namespace,
+            key,
+            value: null,
+            operation: 'delete',
+          }]);
         };
       }
 
