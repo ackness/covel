@@ -32,7 +32,23 @@ export function connectSSE(options: SSEOptions): () => void {
     options.onEvent?.("plugin-data.changed", data.payload);
   });
 
-  // Generic event handler for other event types
+  // phase.changed — fires when a server-side proposal or tool transitions
+  // session phase. Without this listener, the frontend reducer would only
+  // hear about the previously-hardcoded `phase.changed = playing` emit
+  // (which Task 5 of the audit fixes correctly removed). Followup D wires
+  // the real path: `create-character` tool → eventBus → /api/events/stream
+  // → this listener → session-store reducer.
+  source.addEventListener("phase.changed", (e) => {
+    try {
+      const data = JSON.parse(e.data) as { payload?: { phase?: string } };
+      if (data.payload) options.onEvent?.("phase.changed", data.payload);
+    } catch {
+      // ignore non-JSON messages
+    }
+  });
+
+  // Generic event handler for unnamed events (kept for forward-compat with
+  // protocol additions; named SSE events bypass this handler).
   source.onmessage = (e) => {
     try {
       const data = JSON.parse(e.data) as Record<string, unknown>;

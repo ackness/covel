@@ -183,8 +183,26 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     builtinToolNames.add(t.name);
   }
 
-  // Register character management tools (writes characters table + mirrors to plugin-data)
-  for (const t of createCharacterTools(store)) {
+  // Register character management tools (writes characters table + mirrors to plugin-data).
+  // Hook `onPhaseTransition` lets the tool emit a phase.changed event on the
+  // session SSE stream after `create-character` updates session.phase. Without
+  // this hook, the frontend reducer never learns about tool-driven phase
+  // transitions until a page refresh. (Followup D for the 2026-04-12 audit.)
+  for (const t of createCharacterTools(store, {
+    onPhaseTransition: (sessionId, phase) => {
+      eventBus.emit({
+        id: crypto.randomUUID(),
+        type: 'event',
+        topic: 'session',
+        payload: {
+          _subType: 'phase.changed',
+          phase,
+        },
+        sessionId,
+        timestamp: new Date().toISOString(),
+      });
+    },
+  })) {
     toolMap.set(t.name, t);
     builtinToolNames.add(t.name);
   }

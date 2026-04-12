@@ -216,6 +216,68 @@ describe('builtin character tools', () => {
       expect(store.sessionPatches).toEqual([]);
     });
 
+    // Followup D for the 2026-04-12 audit fix sweep — the tool used to
+    // update session.phase silently, leaving the frontend reducer in the
+    // dark until a page refresh. The host now wires `onPhaseTransition` to
+    // its event bus so the SSE channel learns about the transition.
+    describe('phase transition hook', () => {
+      it('calls onPhaseTransition after a successful player phase transition', async () => {
+        const onPhaseTransition = vi.fn();
+        const hookedTools = createCharacterTools(store, { onPhaseTransition });
+        const t = findByName(hookedTools, 'create-character');
+
+        await t.execute(
+          { name: '柳无痕', type: 'player', transitionPhase: 'playing' },
+          ctx(),
+        );
+
+        expect(onPhaseTransition).toHaveBeenCalledTimes(1);
+        expect(onPhaseTransition).toHaveBeenCalledWith('sess-1', 'playing');
+      });
+
+      it('does not call onPhaseTransition when transitionPhase is omitted', async () => {
+        const onPhaseTransition = vi.fn();
+        const hookedTools = createCharacterTools(store, { onPhaseTransition });
+        const t = findByName(hookedTools, 'create-character');
+
+        await t.execute({ name: 'X', type: 'player' }, ctx());
+
+        expect(onPhaseTransition).not.toHaveBeenCalled();
+      });
+
+      it('does not call onPhaseTransition for non-player characters', async () => {
+        const onPhaseTransition = vi.fn();
+        const hookedTools = createCharacterTools(store, { onPhaseTransition });
+        const t = findByName(hookedTools, 'create-character');
+
+        await t.execute(
+          { name: 'Ghost', type: 'npc', transitionPhase: 'playing' },
+          ctx(),
+        );
+
+        expect(onPhaseTransition).not.toHaveBeenCalled();
+      });
+
+      it('swallows onPhaseTransition errors so the tool call still succeeds', async () => {
+        const onPhaseTransition = vi.fn().mockRejectedValue(new Error('bus dead'));
+        const hookedTools = createCharacterTools(store, { onPhaseTransition });
+        const t = findByName(hookedTools, 'create-character');
+
+        // Should NOT throw — error is logged and swallowed.
+        const result = await t.execute(
+          { name: 'Resilient', type: 'player', transitionPhase: 'playing' },
+          ctx(),
+        );
+
+        expect(onPhaseTransition).toHaveBeenCalledTimes(1);
+        expect((result as { success: boolean }).success).toBe(true);
+        // Phase update still went through to the store
+        expect(store.sessionPatches).toEqual([
+          { id: 'sess-1', patch: expect.objectContaining({ phase: 'playing' }) },
+        ]);
+      });
+    });
+
     it('is idempotent for same (name, type) — returns existing id instead of creating duplicate', async () => {
       const t = findByName(tools, 'create-character');
       const r1 = await t.execute(
