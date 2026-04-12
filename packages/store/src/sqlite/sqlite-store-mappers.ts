@@ -28,6 +28,9 @@ import type {
   WorkingMemoryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
+  SnapshotRecord,
+  SnapshotKind,
+  SnapshotPayload,
 } from '../types.js';
 
 // ── JSON helpers ────────────────────────────────────────────────
@@ -291,6 +294,17 @@ export function createTables(sqlite: Database.Database): void {
       UNIQUE (session_id, scope, key)
     );
     CREATE INDEX IF NOT EXISTS idx_working_memory_session ON working_memory(session_id);
+
+    CREATE TABLE IF NOT EXISTS state_snapshots (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      turn_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      parent_id TEXT,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_state_snapshots_session ON state_snapshots(session_id);
 
     CREATE TABLE IF NOT EXISTS suspensions (
       id TEXT PRIMARY KEY,
@@ -587,3 +601,29 @@ export function toSuspensionRecord(row: SuspensionRow): SuspensionRecord {
 }
 
 export type { SuspensionRow };
+
+// ── Snapshot row type (not in drizzle schema, raw sqlite) ──────
+
+interface SnapshotRow {
+  id: string;
+  session_id: string;
+  turn_id: string;
+  kind: string;
+  parent_id: string | null;
+  payload: string;
+  created_at: string;
+}
+
+export function toSnapshotRecord(row: SnapshotRow): SnapshotRecord {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    turnId: row.turn_id,
+    kind: row.kind as SnapshotKind,
+    parentId: row.parent_id ?? undefined,
+    payload: fromJsonRequired(row.payload) as SnapshotPayload,
+    createdAt: row.created_at,
+  };
+}
+
+export type { SnapshotRow };

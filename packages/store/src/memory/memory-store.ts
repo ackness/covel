@@ -36,6 +36,7 @@ import type {
   WorkingMemoryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
+  SnapshotRecord,
 } from '../types.js';
 import type {
   VectorStoreCapability,
@@ -80,6 +81,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
   const pluginData = new Map<string, PluginDataRecord>();
   const pluginConfigs = new Map<string, PluginConfigRecord>();
   const suspensions = new Map<string, SuspensionRecord>();
+  const snapshots = new Map<string, SnapshotRecord>();
   /** Keyed by `${sessionId}:${pluginId}:${namespace}:${key}:${dim}` so
    *  multiple dims can coexist for the same logical row if a caller ever
    *  re-embeds with a different model. */
@@ -149,6 +151,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     readonly workingMemoryEntries: Map<string, WorkingMemoryRecord>;
     readonly sessionSummaries: SessionSummaryRecord[];
     readonly suspensions: Map<string, SuspensionRecord>;
+    readonly snapshots: Map<string, SnapshotRecord>;
   }
 
   let snapshot: MemorySnapshot | null = null;
@@ -197,6 +200,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
       workingMemoryEntries: structuredClone(workingMemoryEntries),
       sessionSummaries: structuredClone(sessionSummaries),
       suspensions: structuredClone(suspensions),
+      snapshots: structuredClone(snapshots),
     };
   }
 
@@ -243,6 +247,8 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     sessionSummaries.push(...snap.sessionSummaries);
     suspensions.clear();
     for (const [k, v] of snap.suspensions) suspensions.set(k, v);
+    snapshots.clear();
+    for (const [k, v] of snap.snapshots) snapshots.set(k, v);
   }
 
   const store: DataStore & VectorStoreCapability = {
@@ -290,6 +296,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
       for (const [k, v] of characters) { if (v.sessionId === id) characters.delete(k); }
       for (const [k, v] of pluginData) { if (v.sessionId === id) pluginData.delete(k); }
       for (const [k, v] of pluginConfigs) { if (v.sessionId === id) pluginConfigs.delete(k); }
+      for (const [k, v] of snapshots) { if (v.sessionId === id) snapshots.delete(k); }
     },
 
     // ── Turn Results ──
@@ -625,6 +632,29 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
 
     async deleteSuspension(id) {
       suspensions.delete(id);
+    },
+
+    // ── Snapshots (S4-T2) ──
+
+    async saveSnapshot(record) {
+      // Deep-clone so later caller mutation can't affect stored data.
+      snapshots.set(record.id, structuredClone(record));
+    },
+
+    async getSnapshot(id) {
+      const rec = snapshots.get(id);
+      return rec ? structuredClone(rec) : null;
+    },
+
+    async listSnapshots(sessionId) {
+      return [...snapshots.values()]
+        .filter((r) => r.sessionId === sessionId)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .map((r) => structuredClone(r));
+    },
+
+    async deleteSnapshot(id) {
+      snapshots.delete(id);
     },
 
     // ── Vector Store (brute-force, O(n) — fine for tests and <1k rows) ──

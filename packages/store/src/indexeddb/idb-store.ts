@@ -36,9 +36,10 @@ import type {
   WorkingMemoryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
+  SnapshotRecord,
 } from '../types.js';
 
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 async function initDb(dbName: string): Promise<IDBPDatabase> {
   return openDB(dbName, DB_VERSION, {
@@ -113,6 +114,11 @@ async function initDb(dbName: string): Promise<IDBPDatabase> {
         const suspensions = db.createObjectStore('suspensions', { keyPath: 'id' });
         suspensions.createIndex('sessionId', 'sessionId');
       }
+
+      if (oldVersion < 5) {
+        const snapshots = db.createObjectStore('state_snapshots', { keyPath: 'id' });
+        snapshots.createIndex('sessionId', 'sessionId');
+      }
     },
   });
 }
@@ -139,6 +145,7 @@ const OBJECT_STORES = [
   'working_memory',
   'sessionSummaries',
   'suspensions',
+  'state_snapshots',
 ] as const;
 
 export async function createIdbStore(dbName?: string): Promise<DataStore> {
@@ -566,6 +573,25 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
 
     async deleteSuspension(id: string): Promise<void> {
       await db.delete('suspensions', id);
+    },
+
+    // ── Snapshots (S4-T2) ──
+
+    async saveSnapshot(record: SnapshotRecord): Promise<void> {
+      await db.put('state_snapshots', structuredClone(record));
+    },
+
+    async getSnapshot(id: string): Promise<SnapshotRecord | null> {
+      return ((await db.get('state_snapshots', id)) as SnapshotRecord | undefined) ?? null;
+    },
+
+    async listSnapshots(sessionId: string): Promise<readonly SnapshotRecord[]> {
+      const all = await db.getAllFromIndex('state_snapshots', 'sessionId', sessionId);
+      return (all as SnapshotRecord[]).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    },
+
+    async deleteSnapshot(id: string): Promise<void> {
+      await db.delete('state_snapshots', id);
     },
 
     // ── Transactions (S4-T1) ──

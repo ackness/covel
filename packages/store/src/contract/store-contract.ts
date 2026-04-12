@@ -25,6 +25,8 @@ import type {
   WorkingMemoryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
+  SnapshotRecord,
+  SnapshotPayload,
 } from '../types.js';
 
 // ── Record factories ────────────────────────────────────────────
@@ -285,6 +287,33 @@ function makeSuspension(overrides?: Partial<SuspensionRecord>): SuspensionRecord
     },
     createdAt: ts(),
     resolvedAt: undefined,
+    ...overrides,
+  };
+}
+
+function makeSnapshotPayload(overrides?: Partial<SnapshotPayload>): SnapshotPayload {
+  return {
+    schemaVersion: 1,
+    turnId: 'turn-1',
+    characters: [],
+    stateEntries: [],
+    pluginData: [],
+    workingMemory: [],
+    lorebookEntries: [],
+    messagesCursor: '',
+    ...overrides,
+  };
+}
+
+function makeSnapshot(overrides?: Partial<SnapshotRecord>): SnapshotRecord {
+  return {
+    id: id(),
+    sessionId: 'sess-1',
+    turnId: 'turn-1',
+    kind: 'manual',
+    parentId: undefined,
+    payload: makeSnapshotPayload(),
+    createdAt: ts(),
     ...overrides,
   };
 }
@@ -1207,6 +1236,154 @@ export function runStoreContractTests(
 
         const result = await store.getSuspension(suspension.id);
         expect(result!.resumeSchema).toEqual(complexSchema);
+      });
+    });
+
+    // ── Snapshots (S4-T2) ────────────────────────────────────
+
+    describe('Snapshots (S4-T2)', () => {
+      it('should save and retrieve a snapshot (roundtrip)', async () => {
+        const snap = makeSnapshot({ sessionId: 'sess-snap-1', kind: 'manual' });
+        await store.saveSnapshot(snap);
+        const result = await store.getSnapshot(snap.id);
+        expect(result).not.toBeNull();
+        expect(result!.id).toBe(snap.id);
+        expect(result!.sessionId).toBe('sess-snap-1');
+        expect(result!.kind).toBe('manual');
+        expect(result!.turnId).toBe(snap.turnId);
+      });
+
+      it('should return null for non-existent snapshot ID', async () => {
+        const result = await store.getSnapshot('nonexistent-snapshot');
+        expect(result).toBeNull();
+      });
+
+      it('should filter listSnapshots by sessionId and sort by createdAt', async () => {
+        const s1 = makeSnapshot({ sessionId: 'sess-snap-A', createdAt: ts(0) });
+        const s2 = makeSnapshot({ sessionId: 'sess-snap-A', createdAt: ts(1000) });
+        const s3 = makeSnapshot({ sessionId: 'sess-snap-B' });
+        await store.saveSnapshot(s1);
+        await store.saveSnapshot(s2);
+        await store.saveSnapshot(s3);
+
+        const listA = await store.listSnapshots('sess-snap-A');
+        expect(listA).toHaveLength(2);
+        expect(listA[0].id).toBe(s1.id);
+        expect(listA[1].id).toBe(s2.id);
+
+        const listB = await store.listSnapshots('sess-snap-B');
+        expect(listB).toHaveLength(1);
+        expect(listB[0].id).toBe(s3.id);
+      });
+
+      it('should deleteSnapshot — removes only the targeted record', async () => {
+        const s1 = makeSnapshot({ sessionId: 'sess-snap-del' });
+        const s2 = makeSnapshot({ sessionId: 'sess-snap-del' });
+        await store.saveSnapshot(s1);
+        await store.saveSnapshot(s2);
+
+        await store.deleteSnapshot(s1.id);
+
+        expect(await store.getSnapshot(s1.id)).toBeNull();
+        expect(await store.getSnapshot(s2.id)).not.toBeNull();
+      });
+
+      it('should persist all payload slices verbatim', async () => {
+        const payload = makeSnapshotPayload({
+          characters: [
+            {
+              id: 'char-1',
+              sessionId: 'sess-snap-pay',
+              name: 'Hero',
+              type: 'player',
+              version: 1,
+              createdAt: ts(),
+              updatedAt: ts(),
+            },
+          ],
+          stateEntries: [
+            {
+              id: 'se-1',
+              sessionId: 'sess-snap-pay',
+              tableName: 'stats',
+              fieldName: 'hp',
+              value: 100,
+              updatedAt: ts(),
+            },
+          ],
+          pluginData: [
+            {
+              id: 'pd-1',
+              sessionId: 'sess-snap-pay',
+              pluginId: 'test-plugin',
+              namespace: 'ns',
+              key: 'k',
+              value: { a: 1 },
+              createdAt: ts(),
+              updatedAt: ts(),
+            },
+          ],
+          workingMemory: [
+            {
+              id: 'wm-1',
+              sessionId: 'sess-snap-pay',
+              key: 'mood',
+              scope: 'player',
+              value: 'curious',
+              updatedAt: ts(),
+            },
+          ],
+          messagesCursor: 'tm-last-abc',
+        });
+        const snap = makeSnapshot({ sessionId: 'sess-snap-pay', payload });
+        await store.saveSnapshot(snap);
+
+        const result = await store.getSnapshot(snap.id);
+        expect(result).not.toBeNull();
+        expect(result!.payload.characters).toHaveLength(1);
+        expect(result!.payload.characters[0].name).toBe('Hero');
+        expect(result!.payload.stateEntries[0].value).toBe(100);
+        expect(result!.payload.pluginData[0].value).toEqual({ a: 1 });
+        expect(result!.payload.workingMemory[0].scope).toBe('player');
+        expect(result!.payload.messagesCursor).toBe('tm-last-abc');
+      });
+
+      it('should record parentId for kind="fork" snapshots', async () => {
+        const origin = makeSnapshot({ sessionId: 'sess-snap-origin', kind: 'auto' });
+        await store.saveSnapshot(origin);
+
+        const forkChild = makeSnapshot({
+          sessionId: 'sess-snap-fork-child',
+          kind: 'fork',
+          parentId: origin.id,
+        });
+        await store.saveSnapshot(forkChild);
+
+        const result = await store.getSnapshot(forkChild.id);
+        expect(result!.kind).toBe('fork');
+        expect(result!.parentId).toBe(origin.id);
+      });
+
+      it('should roll back saveSnapshot on rollbackTx', async () => {
+        const snap = makeSnapshot({ sessionId: 'sess-snap-tx' });
+
+        await store.beginTx();
+        await store.saveSnapshot(snap);
+        await store.rollbackTx();
+
+        expect(await store.getSnapshot(snap.id)).toBeNull();
+      });
+
+      it('should commit saveSnapshot on commitTx', async () => {
+        const snap = makeSnapshot({ sessionId: 'sess-snap-tx-commit' });
+
+        await store.beginTx();
+        await store.saveSnapshot(snap);
+        await store.commitTx();
+
+        const result = await store.getSnapshot(snap.id);
+        expect(result).not.toBeNull();
+        expect(result!.id).toBe(snap.id);
       });
     });
 

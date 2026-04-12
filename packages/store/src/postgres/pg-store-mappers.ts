@@ -27,6 +27,9 @@ import type {
   WorkingMemoryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
+  SnapshotRecord,
+  SnapshotKind,
+  SnapshotPayload,
 } from '../types.js';
 
 // ── Table creation DDL ─────────────────────────────────────────
@@ -266,6 +269,17 @@ export const CREATE_TABLES_SQL = `
   );
   CREATE INDEX IF NOT EXISTS pg_session_summaries_session_id_idx ON session_summaries(session_id);
 
+  CREATE TABLE IF NOT EXISTS state_snapshots (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    turn_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    parent_id TEXT,
+    payload JSONB NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS pg_state_snapshots_session_id_idx ON state_snapshots(session_id);
+
   CREATE TABLE IF NOT EXISTS suspensions (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
@@ -288,6 +302,7 @@ export const ALL_TABLE_NAMES = [
   'state_schemas', 'state_entries', 'state_changes', 'events', 'approvals',
   'messages', 'characters', 'plugin_data', 'plugin_configs', 'trace_events',
   'turn_messages', 'player_inputs', 'working_memory', 'session_summaries', 'suspensions',
+  'state_snapshots',
 ] as const;
 
 export const DROP_ALL_SQL = ALL_TABLE_NAMES.map(
@@ -538,6 +553,18 @@ export function toSessionSummaryRecord(row: typeof schema.sessionSummaries.$infe
     turnRangeEnd: row.turnRangeEnd,
     content: row.content,
     focusSections: (row.focusSections as string[] | null) ?? [],
+    createdAt: row.createdAt,
+  };
+}
+
+export function toSnapshotRecord(row: typeof schema.stateSnapshots.$inferSelect): SnapshotRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    turnId: row.turnId,
+    kind: row.kind as SnapshotKind,
+    parentId: row.parentId ?? undefined,
+    payload: (row.payload ?? {}) as SnapshotPayload,
     createdAt: row.createdAt,
   };
 }

@@ -35,4 +35,7 @@ export type {
   SessionSummaryRecord,
   PaginationOpts,
   SuspensionRecord,
+  SnapshotRecord,
+  SnapshotPayload,
+  SnapshotKind,
 } from './types.js';
