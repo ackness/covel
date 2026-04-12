@@ -151,8 +151,10 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
 
   const resolveModel = createModelResolver({ pluginLlmConfigs });
 
-  // 4. Create remaining shared state
-  const sessionScopes = new Map();
+  // 4. (sessionScopes was removed 2026-04-12 — see audit Finding 2:
+  //     `createSessionScope` had no production caller, the map was always
+  //     empty, and PATCH /api/plugins/:id/config always 404'd. Real config
+  //     lives in loadSessionConfig() + plugin_data.)
 
   // 5. loadRuntime resolver (locale-aware: loads PLUGIN.en.md when locale is "en-US")
   const loadRuntimeFn = async (manifest: RuntimeManifest, locale?: string): Promise<LoadedRuntime | undefined> => {
@@ -329,7 +331,6 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     c.set('stateManager', stateManager);
     c.set('eventBus', eventBus);
     c.set('pluginRegistry', registry);
-    c.set('sessionScopes', sessionScopes);
     c.set('llmAdapter', config.llmAdapter);
     c.set('loadRuntimeFn', loadRuntimeFn);
     c.set('toolExecutor', toolExecutor);
