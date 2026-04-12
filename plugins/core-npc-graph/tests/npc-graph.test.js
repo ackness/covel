@@ -66,34 +66,45 @@ const PLUGINS_DIR = path.resolve(import.meta.dirname, '../..');
 
 // ── Manifest discovery ──────────────────────────────────────────
 
-describe('core-npc-graph manifest', () => {
-  /** @type {import('@covel/shared').RuntimeManifest} */
-  let manifest;
+describe('core-npc-graph manifests', () => {
+  /** @type {import('@covel/shared').RuntimeManifest[]} */
+  let manifests;
 
   beforeEach(async () => {
     const discoveries = await discoverPlugins(PLUGINS_DIR);
     const discovery = discoveries.find((d) => d.id === 'core-npc-graph');
     expect(discovery).toBeDefined();
-    const manifests = await loadPluginManifest(discovery);
-    manifest = manifests[0].manifest;
+    const parsed = await loadPluginManifest(discovery);
+    manifests = parsed.map((p) => p.manifest);
   });
 
-  it('declares the expected runtime metadata', () => {
-    expect(manifest.pluginType).toBe('plugin');
-    expect(manifest.name).toBe('core-npc-graph');
-    expect(manifest.priority).toBe(620);
-    expect(manifest.capabilities).toContain('npc-graph');
+  it('discovers both extractor and rag-retriever runtimes', () => {
+    const names = manifests.map((m) => m.name);
+    expect(names).toContain('core-npc-graph/extractor');
+    expect(names).toContain('core-npc-graph/rag-retriever');
   });
 
-  it('declares both local tools', () => {
-    expect(manifest.tools?.local).toContain('./tools/upsert-npc-graph.js');
-    expect(manifest.tools?.local).toContain('./tools/list-npc-graph.js');
+  it('extractor declares the expected metadata', () => {
+    const extractor = manifests.find((m) => m.name === 'core-npc-graph/extractor');
+    expect(extractor).toBeDefined();
+    expect(extractor.pluginType).toBe('plugin');
+    expect(extractor.priority).toBe(620);
+    expect(extractor.capabilities).toContain('npc-graph');
+    expect(extractor.tools?.local).toContain('./tools/upsert-npc-graph.js');
+    expect(extractor.tools?.local).toContain('./tools/list-npc-graph.js');
+    expect(extractor.trigger?.type).toBe('scheduled');
+    expect(extractor.trigger?.interval).toBe(2);
+    expect(extractor.trigger?.phases).toContain('playing');
   });
 
-  it('declares a scheduled interval trigger in the playing phase', () => {
-    expect(manifest.trigger?.type).toBe('scheduled');
-    expect(manifest.trigger?.interval).toBe(2);
-    expect(manifest.trigger?.phases).toContain('playing');
+  it('rag-retriever is a function runtime that runs before narrator', () => {
+    const retriever = manifests.find((m) => m.name === 'core-npc-graph/rag-retriever');
+    expect(retriever).toBeDefined();
+    expect(retriever.runtimeType).toBe('function');
+    expect(retriever.handler).toBe('./handler.js');
+    expect(retriever.priority).toBe(490); // before narrator priority 500
+    expect(retriever.capabilities).toContain('graph-rag');
+    expect(retriever.trigger?.phases).toContain('playing');
   });
 });
 

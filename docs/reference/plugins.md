@@ -12,7 +12,8 @@
 | core-world-init/schema-gen | core-plugin | 85 | scheduled（仅首轮） | `fast` | 世界维度初始化（guard + agent） |
 | core-narrator | core-plugin | 500 | auto（`playing` 阶段） | `ds` | 主叙事生成器 |
 | core-guide | plugin | 550 | scheduled（interval=1, cooldown=1） | `fast` | 行动引导 + 选择面板 |
-| core-npc-graph | plugin | 620 | scheduled（interval=2, cooldown=1） | `fast` | NPC 关系图 + Graph-RAG 记忆（受 MiroFish 启发） |
+| core-npc-graph/rag-retriever | plugin | 490 | scheduled（interval=1，function runtime） | — | NPC 图谱结构化检索器，向 narrator 注入相关关系事实 |
+| core-npc-graph/extractor | plugin | 620 | scheduled（interval=2, cooldown=1） | `fast` | NPC 关系图抽取器（受 MiroFish 启发） |
 | core-codex | plugin | 650 | scheduled（interval=2, cooldown=1） | `fast` | 知识图鉴系统 |
 | core-char-creator/player-init | core-plugin | 700 | scheduled（maxTriggerCount=2, guard） | `ds` | 玩家角色创建（LLM agent + create-character tool） |
 | core-char-creator/character-tracker | core-plugin | 750 | scheduled（interval=1, cooldown=1, phases=[playing]） | `fast` | NPC 发现 + 角色状态跟踪 |
@@ -102,9 +103,29 @@
 
 **路径**: `plugins/core-npc-graph/`
 
+多 runtime 插件。包含两个协作的子 runtime：
+
+### core-npc-graph/rag-retriever
+
 | 字段 | 值 |
 |------|----|
 | pluginType | `plugin` |
+| runtimeType | `function`（无 LLM 调用，纯结构化检索） |
+| handler | `./runtimes/rag-retriever/handler.js` |
+| priority | 490（在 `core-narrator=500` **之前**） |
+| capabilities | `[npc-graph, graph-rag]` |
+| trigger | `scheduled`，`interval: 1`，`phases: [playing]` |
+
+每个 playing 回合开始时自动运行：从 `playerMessage` 中匹配 NPC 节点名（含别名，case-insensitive），沿邻接索引做 2-hop BFS，过滤 `invalidAt` 已到期的边，按 `(validAt, |strength|)` 排序后取 top-20，输出 markdown 列表到 `npcContext` 字段。`core-narrator` 通过 `input.inject` 把这段文本作为 `<npc-relationships>` 块注入 prompt 末尾。
+
+**Phase 3.5 升级路径**：当 framework 层向 function handler 暴露 gateway 后，将升级为"先 embed 查询 → vector search → 子图扩展"的混合检索。当前为纯结构化版本。
+
+### core-npc-graph/extractor
+
+| 字段 | 值 |
+|------|----|
+| pluginType | `plugin` |
+| runtimeType | `agent`（LLM 驱动） |
 | priority | 620（位于 narrator=500 与 codex=650 之间） |
 | capabilities | `[npc-graph, relationship-tracking]` |
 | trigger | `scheduled`，`interval: 2`，`cooldownTurns: 1`，`phases: [playing]` |
