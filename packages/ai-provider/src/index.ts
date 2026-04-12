@@ -83,3 +83,11 @@ export {
 // Trace
 export type { TraceContext } from "./trace/context.js";
 export { createLangfuseHook } from "./trace/langfuse.js";
+
+// Tokenizer
+export {
+  estimateTokens,
+  TOKEN_SAFETY_MULTIPLIERS,
+  type ProviderFamily,
+  type EstimateTokensOptions,
+} from "./tokenizer.js";
