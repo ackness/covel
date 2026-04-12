@@ -243,6 +243,25 @@ describe('builtin character tools', () => {
       );
       expect(store.characters).toHaveLength(2);
     });
+
+    it('returns a human-readable _text summary (text-first convention)', async () => {
+      const t = findByName(tools, 'create-character');
+      const result = await t.execute(
+        { name: '柳无痕', type: 'player', description: '外门弟子' },
+        ctx(),
+      ) as { _text: string; characterId: string };
+      expect(typeof result._text).toBe('string');
+      expect(result._text).toContain('柳无痕');
+      expect(result._text).toContain('player');
+      expect(result._text).toContain(result.characterId);
+    });
+
+    it('_text reflects existed=true path when duplicate', async () => {
+      const t = findByName(tools, 'create-character');
+      await t.execute({ name: '孙师叔', type: 'npc' }, ctx());
+      const r2 = await t.execute({ name: '孙师叔', type: 'npc' }, ctx()) as { _text: string };
+      expect(r2._text).toMatch(/already exists|已存在|existed/i);
+    });
   });
 
   describe('update-character', () => {
@@ -322,41 +341,108 @@ describe('builtin character tools', () => {
   describe('list-characters', () => {
     beforeEach(async () => {
       const create = findByName(tools, 'create-character');
-      await create.execute({ name: '柳无痕', type: 'player' }, ctx());
-      await create.execute({ name: '苏婉', type: 'npc' }, ctx());
-      await create.execute({ name: '柳娘', type: 'npc' }, ctx());
+      await create.execute({ name: '柳无痕', type: 'player', description: '外门弟子' }, ctx());
+      await create.execute({ name: '苏婉', type: 'npc', description: '师姐' }, ctx());
+      await create.execute({ name: '柳娘', type: 'npc', description: '药王谷谷主' }, ctx());
     });
 
-    it('lists all characters in the session regardless of type', async () => {
+    it('returns a text summary listing all session characters', async () => {
       const t = findByName(tools, 'list-characters');
-      const result = await t.execute({}, ctx()) as { count: number; characters: unknown[] };
+      const result = await t.execute({}, ctx()) as { _text: string; count: number };
+      expect(typeof result._text).toBe('string');
       expect(result.count).toBe(3);
-      expect(result.characters).toHaveLength(3);
+      // All three names should appear
+      expect(result._text).toContain('柳无痕');
+      expect(result._text).toContain('苏婉');
+      expect(result._text).toContain('柳娘');
+      // Description appears for context
+      expect(result._text).toContain('外门弟子');
+      // Type labels appear
+      expect(result._text).toContain('player');
+      expect(result._text).toContain('npc');
     });
 
     it('filters by type when provided', async () => {
       const t = findByName(tools, 'list-characters');
-      const result = await t.execute(
-        { type: 'npc' },
-        ctx(),
-      ) as { count: number; characters: Array<{ type: string }> };
+      const result = await t.execute({ type: 'npc' }, ctx()) as { _text: string; count: number };
       expect(result.count).toBe(2);
-      expect(result.characters.every((c) => c.type === 'npc')).toBe(true);
+      expect(result._text).toContain('苏婉');
+      expect(result._text).toContain('柳娘');
+      expect(result._text).not.toContain('柳无痕');
     });
 
-    it('returns characters created by other plugins (session-scoped)', async () => {
-      // Another plugin writes a character under its own pluginId
+    it('handles empty session with a clear empty message', async () => {
+      const emptyStore = createMockStore();
+      const emptyTools = createCharacterTools(emptyStore);
+      const t = findByName(emptyTools, 'list-characters');
+      const result = await t.execute({}, ctx()) as { _text: string; count: number };
+      expect(result.count).toBe(0);
+      expect(result._text.toLowerCase()).toMatch(/no character|empty|没有|暂无/);
+    });
+
+    it('sorts by frequency (version) desc, then updatedAt desc', async () => {
+      // Update 苏婉 twice (version=3), update 柳娘 once (version=2).
+      // 柳无痕 stays at version=1.
+      // Expected order: 苏婉 (v3) → 柳娘 (v2) → 柳无痕 (v1)
+      const update = findByName(tools, 'update-character');
+      const get = findByName(tools, 'get-character');
+
+      const suwan = (await get.execute({ name: '苏婉' }, ctx())) as { _text: string };
+      const suwanId = /char-[a-f0-9-]+/.exec(suwan._text)?.[0];
+      const liuniang = (await get.execute({ name: '柳娘' }, ctx())) as { _text: string };
+      const liuniangId = /char-[a-f0-9-]+/.exec(liuniang._text)?.[0];
+
+      expect(suwanId).toBeDefined();
+      expect(liuniangId).toBeDefined();
+
+      await update.execute({ id: suwanId!, fields: { hp: 90 } }, ctx());
+      await update.execute({ id: suwanId!, fields: { hp: 80 } }, ctx());
+      await update.execute({ id: liuniangId!, fields: { hp: 60 } }, ctx());
+
+      const t = findByName(tools, 'list-characters');
+      const list = (await t.execute({}, ctx())) as { _text: string };
+      const suwanPos = list._text.indexOf('苏婉');
+      const liuniangPos = list._text.indexOf('柳娘');
+      const liuwuhenPos = list._text.indexOf('柳无痕');
+      expect(suwanPos).toBeLessThan(liuniangPos);
+      expect(liuniangPos).toBeLessThan(liuwuhenPos);
+    });
+
+    it('recency breaks frequency ties (same version → newer updatedAt first)', async () => {
+      // Need explicit time separation so updatedAt actually differs.
+      // The beforeEach creates all 3 in the same millisecond tick, so we
+      // rebuild state here with delays between creates.
+      const freshStore = createMockStore();
+      const freshTools = createCharacterTools(freshStore);
+      const create = findByName(freshTools, 'create-character');
+      await create.execute({ name: '柳无痕', type: 'player' }, ctx());
+      await new Promise((r) => setTimeout(r, 5));
+      await create.execute({ name: '苏婉', type: 'npc' }, ctx());
+      await new Promise((r) => setTimeout(r, 5));
+      await create.execute({ name: '柳娘', type: 'npc' }, ctx());
+
+      // All three are at version=1, so ordering falls to updatedAt desc.
+      // Expected order: 柳娘 (newest) → 苏婉 → 柳无痕 (oldest)
+      const t = findByName(freshTools, 'list-characters');
+      const list = (await t.execute({}, ctx())) as { _text: string };
+      const liuniangPos = list._text.indexOf('柳娘');
+      const suwanPos = list._text.indexOf('苏婉');
+      const liuwuhenPos = list._text.indexOf('柳无痕');
+      expect(liuniangPos).toBeLessThan(suwanPos);
+      expect(suwanPos).toBeLessThan(liuwuhenPos);
+    });
+
+    it('includes cross-plugin characters (session-scoped)', async () => {
       const create = findByName(tools, 'create-character');
       await create.execute(
-        { name: 'Narrator Ghost', type: 'npc' },
+        { name: 'NarratorGhost', type: 'npc' },
         ctx('core-narrator'),
       );
 
       const t = findByName(tools, 'list-characters');
-      const result = await t.execute({}, ctx('core-char-creator')) as {
-        count: number;
-      };
+      const result = await t.execute({}, ctx('core-char-creator')) as { _text: string; count: number };
       expect(result.count).toBe(4);
+      expect(result._text).toContain('NarratorGhost');
     });
   });
 
@@ -372,35 +458,78 @@ describe('builtin character tools', () => {
       charId = (created as { characterId: string }).characterId;
     });
 
-    it('looks up by id', async () => {
+    it('returns full character detail as text when found by id', async () => {
       const t = findByName(tools, 'get-character');
       const result = await t.execute({ id: charId }, ctx()) as {
+        _text: string;
         found: boolean;
-        character: { name: string };
       };
       expect(result.found).toBe(true);
-      expect(result.character.name).toBe('柳无痕');
+      expect(typeof result._text).toBe('string');
+      expect(result._text).toContain('柳无痕');
+      expect(result._text).toContain('player');
+      expect(result._text).toContain(charId);
+      // Fields appear as key: value in the text
+      expect(result._text).toContain('hp');
+      expect(result._text).toContain('100');
     });
 
-    it('looks up by name', async () => {
+    it('looks up by name and returns full detail', async () => {
       const t = findByName(tools, 'get-character');
       const result = await t.execute({ name: '柳无痕' }, ctx()) as {
+        _text: string;
         found: boolean;
-        character: { type: string };
       };
       expect(result.found).toBe(true);
-      expect(result.character.type).toBe('player');
+      expect(result._text).toContain('柳无痕');
+      expect(result._text).toContain('player');
     });
 
-    it('returns found=false for missing character', async () => {
+    it('returns text saying not found when id is missing', async () => {
       const t = findByName(tools, 'get-character');
-      const result = await t.execute({ id: 'nope' }, ctx()) as { found: boolean };
+      const result = await t.execute({ id: 'nope' }, ctx()) as { _text: string; found: boolean };
       expect(result.found).toBe(false);
+      expect(result._text.toLowerCase()).toMatch(/not found|未找到|不存在/);
     });
 
     it('requires either id or name', async () => {
       const t = findByName(tools, 'get-character');
       await expect(t.execute({}, ctx())).rejects.toThrow();
+    });
+  });
+
+  describe('update-character _text output', () => {
+    it('summarizes what changed in the returned _text', async () => {
+      const create = findByName(tools, 'create-character');
+      const created = await create.execute(
+        { name: '赵铁山', type: 'npc', fields: { hp: 100, status: 'alive' } },
+        ctx(),
+      );
+      const charId = (created as { characterId: string }).characterId;
+
+      const update = findByName(tools, 'update-character');
+      const result = await update.execute(
+        { id: charId, fields: { hp: 50, status: 'wounded' }, description: 'updated desc' },
+        ctx(),
+      ) as { _text: string; version: number };
+
+      expect(result.version).toBe(2);
+      expect(typeof result._text).toBe('string');
+      expect(result._text).toContain('赵铁山');
+      // Shows the change summary
+      expect(result._text).toMatch(/hp/);
+      expect(result._text).toMatch(/status/);
+    });
+
+    it('returns a not-found text when id does not exist', async () => {
+      const update = findByName(tools, 'update-character');
+      const result = await update.execute(
+        { id: 'missing', fields: { hp: 1 } },
+        ctx(),
+      ) as { _text: string; success: boolean; notFound?: boolean };
+      expect(result.success).toBe(false);
+      expect(result.notFound).toBe(true);
+      expect(result._text.toLowerCase()).toMatch(/not found|未找到|不存在/);
     });
   });
 });

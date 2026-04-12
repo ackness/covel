@@ -130,7 +130,17 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           runtimeId: context.runtimeId,
         };
         const rawResult = await tool.execute(params, execContext);
-        const resultStr = JSON.stringify(rawResult);
+
+        // Text-first convention: if the tool result is an object with a
+        // `_text` string field, send ONLY the text as the LLM-facing payload
+        // (instead of JSON-stringifying the whole object). This keeps LLM
+        // prompts human-readable while framework tracing still gets the full
+        // structured object via `parsedResult`. Falls back to JSON.stringify
+        // for tools that don't opt in.
+        const resultStr =
+          rawResult && typeof rawResult === 'object' && typeof (rawResult as { _text?: unknown })._text === 'string'
+            ? (rawResult as { _text: string })._text
+            : JSON.stringify(rawResult);
 
         await recordCall(config.store, call, context, resultStr, startTime, true, approvalStatus);
         return { toolCallId: call.toolCallId, name: call.name, result: resultStr, parsedResult: rawResult, success: true };

@@ -145,9 +145,24 @@
 
 框架级角色管理工具，定义在 `packages/tools/src/builtin/character-tools.ts`。写入 `characters` 表（session 作用域，跨插件可见），同时镜像到调用插件的 `plugin_data[pluginId][namespace="characters"][key=charId]`，让右侧面板通过现成的 `plugin-data.changed` SSE 通道实时更新。
 
+### 文本优先（Text-first）约定
+
+这一组工具（以及任何采用该约定的其他工具）的返回值包含一个特殊字段 `_text`：
+
+- **LLM 看到的内容 = `_text` 的原始文本**，不带 JSON 包装
+- **框架追踪 / 前端 trace UI 看到的是完整 `parsedResult` 对象**（含 `_text` + 结构化字段）
+
+框架层面（`packages/runtime/tool-executor.ts`）检测 `_text` 字段：
+- 如果存在且为字符串 → LLM tool message content 直接写原始文本
+- 如果不存在 → 退回到旧的 `JSON.stringify(result)` 行为（向后兼容）
+
+这样的分层让 LLM 看到的是紧凑可读的自然语言（省 token、降噪），而框架依然有结构化数据做调试和追踪。其他 builtin 工具（如 `plugin-data-*`、`create-form`）目前保持 JSON 格式不变。
+
+---
+
 ### create-character
 
-创建一个新的角色记录（玩家、NPC 或同伴）。
+创建一个新的角色记录（玩家、NPC 或同伴）。同 session 内同 `(name, type)` 会自动去重 —— 返回已存在的角色 id，不会创建重复项。
 
 | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
@@ -157,7 +172,16 @@
 | fields | Record<string, unknown> | | 属性键值对（应符合世界 schema 中的 character-attributes） |
 | transitionPhase | string | | **仅对 type=player 有效**：创建后将 session 转入此 phase（通常 `"playing"`） |
 
-**输出**: `{ success, characterId, name, type, phaseTransitioned }`
+**输出 (parsedResult)**: `{ _text, success, existed, characterId, name, type, phaseTransitioned }`
+
+**LLM 看到的 `_text` 示例**：
+```
+Created npc "苏婉" as char-abc123. — 青萍宗外门首席弟子，冰灵根修士。
+```
+或当去重命中时：
+```
+Character "苏婉" (npc) already exists as char-abc123. No new record created. Use update-character to modify it.
+```
 
 **使用者**: `core-char-creator/player-init`（传 `transitionPhase: "playing"`）、`core-char-creator/character-tracker`（只创建 NPC）
 
@@ -173,32 +197,67 @@
 | description | string | | 新描述（未传则保留原值） |
 | fields | Record<string, unknown> | | 要合并的字段 |
 
-**输出**: `{ success, characterId, version }` 或 `{ success: false, notFound: true }`
+**输出 (parsedResult)**: `{ _text, success, characterId, version }` 或 `{ _text, success: false, notFound: true }`
+
+**LLM 看到的 `_text` 示例**：
+```
+Updated npc "苏婉" (char-abc123) → v2.
+  hp: 100 → 60
+  status: alive → wounded
+```
 
 ---
 
 ### list-characters
 
-列出本 session 所有角色（session 作用域，跨插件可见）。可按 type 过滤。
+列出本 session 所有角色（session 作用域，跨插件可见）。输出是**紧凑文本列表**，一行一个角色，包含 id / 名字 / 类型 / 版本 / 简短描述 —— 方便 LLM 快速对齐已知人物，需要完整属性时再单独调用 `get-character`。
+
+**排序算法**：主键 `version desc`（版本越高 = 被交互次数越多 = 频率越高），次键 `updatedAt desc`（频率相同时最近 turn 的优先）。
 
 | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
-| type | enum | | `player` / `npc` / `companion` |
+| type | enum | | `player` / `npc` / `companion` 过滤 |
 
-**输出**: `{ count, characters: CharacterSnapshot[] }`
+**输出 (parsedResult)**: `{ _text, count, characters: CharacterSnapshot[] }`
+
+**LLM 看到的 `_text` 示例**：
+```
+Characters in session (3 total, sorted by frequency then recency):
+1. 苏婉 [npc] char-abc (v3) — 青萍宗外门首席弟子，冰灵根修士，知晓野生灵脉秘密
+2. 柳娘 [npc] char-def (v2) — 药王谷谷主，三百年前见过碧鳞龙
+3. 柳无痕 [player] char-xyz (v1) — 青萍宗外门弟子，水灵根中品
+```
 
 ---
 
 ### get-character
 
-按 id 或 name 查找单个角色。必须传入 id 或 name 其中之一。
+按 id 或 name 查询单个角色的**完整属性**（description、version、时间戳、全部 fields）。必须传入 id 或 name 其中之一。与 `list-characters` 的简洁列表形成对照，适合需要深入了解某个角色全部状态的场景。
 
 | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
 | id | string | | 角色 id |
 | name | string | | 角色名称（精确匹配） |
 
-**输出**: `{ found: true, character: CharacterSnapshot }` 或 `{ found: false }`
+**输出 (parsedResult)**: `{ _text, found, character: CharacterSnapshot }` 或 `{ _text, found: false }`
+
+**LLM 看到的 `_text` 示例**：
+```
+Character: 苏婉 [npc] char-abc123
+Description: 青萍宗外门首席弟子，冰灵根修士。发现百灵沼泽深处一条野生灵脉...
+Version: 3
+Created: 2026-04-12T04:00:00.000Z
+Updated: 2026-04-12T04:24:55.000Z
+
+Attributes:
+  hp: 60
+  mp: 80
+  maxHp: 100
+  maxMp: 100
+  level: 4
+  lingGen: 冰灵根
+  status: wounded
+```
 
 ---
 
