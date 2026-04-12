@@ -320,33 +320,33 @@
 | S1-T4 Scheduler 死代码清理 | ✅ `4e8251d` | — |
 | S1-T5 长 session 压测脚本 | ✅ `d80c08c` + `16e916c` + `1e1bf29` | — |
 
-**Sprint 2 — Prompt 三段式 + Compactor + Cache** — 2/5
+**Sprint 2 — Prompt 三段式 + Compactor + Cache** — 3/5
 
 | 票号 | 状态 | 备注 |
 |---|---|---|
-| S2-T1 三段式 Prompt assembler | ✅ `df820eb` | 段 1/3/5/7 完成，段 8/9/10 在 S3-T4 |
-| S2-T2 Compactor + `session_summaries` | ✅ `cca779c` | I4: prompt 未外部化，待 §七.4 决策 |
-| S2-T3 Prompt cache 抽象 + Anthropic | ⏳ | 对接 §七.4 的 replay 测试 |
-| S2-T4 core-narrator + core-guide 迁 V2 | ⏳ | 依赖 S2-T3 |
-| S2-T5 `prompt-structure.md` 文档 | ⏳ | 依赖 S2-T1/T3/T4 |
+| S2-T1 三段式 Prompt assembler | ✅ `df820eb` | 段 1/3/5/7 基础；段 9/10 见 S3-T4 |
+| S2-T2 Compactor + `session_summaries` | ✅ `cca779c` + `ee6db4d` (I4 fix) | loadPrompt 已就绪 |
+| S2-T3 Prompt cache + Anthropic `cache_control` | ✅ `35a0374..0b70cd9` merge `6036141` | PUA sentinel 方案；段 1/3/6 打 3 个 breakpoint；第 4 个 mid-history 留作 follow-up |
+| S2-T4 core-narrator + core-guide 迁 V2 | ⏳ | 依赖 S2-T3 完成 ✅ → 可在 Wave B 启动 |
+| S2-T5 `prompt-structure.md` 文档 | ⏳ | 依赖 S2-T3/T4 |
 
-**Sprint 3 — Lorebook + Working Memory + Author's Note** — 2/6
+**Sprint 3 — Lorebook + Working Memory + Author's Note** — 3/6
 
 | 票号 | 状态 | 备注 |
 |---|---|---|
 | S3-T1 Lorebook 核心 | ✅ `4dec3b5` | — |
 | S3-T2 core-world-init 迁 Lorebook | ⏳ | **与 S3-T5 冲突**：拆分见 §九.5 |
 | S3-T3 Working Memory 表 + 段 2 | ✅ `916cba6` | **🚧 B1**：`turn-executor.ts:940` WM 未 inject 到 context |
-| S3-T4 段 9/10 Author's Note + Post-History | ⏳ | 纯 prompt-assembler 扩展 |
+| S3-T4 段 9/10 Author's Note + Post-History | ✅ `9bcb0ee..e1a3997` merge `973c112` | RuntimeManifest 加 authorsNote / postHistory；14 + 9 新测试 |
 | S3-T5 其余 core 插件 V2 迁移 | ⏳ | **拆分**：5a(codex+char-creator) + 5b(world-init 合并到 S3-T2) |
 | S3-T6 Lorebook 玩家 UI | ⏳ | 在 `apps/web-v2/` |
 
-**Sprint 4 — 稳健性** — 3/5
+**Sprint 4 — 稳健性** — 4/5
 
 | 票号 | 状态 | 备注 |
 |---|---|---|
 | S4-T1 Commit 事务 | ✅ `e942fce` + `ce56048` | — |
-| S4-T2 Snapshot + Fork API | ⏳ | **依赖 S3-T3**（`SnapshotPayload.workingMemory`） |
+| S4-T2 Snapshot + Fork API | ✅ `80ff240..a74ac9a` merge `ed42b9f` | 4 backends + 8 contract tests + auto snapshot @ turn-executor.ts:428；fork = copy 策略；CLAUDE.md 20 → 21；session.forked 加入 ProtocolEventType；lorebook entries 仍为 TODO（见 FU-4） |
 | S4-T3 Hook lifecycle pipeline | ✅ `c0bb9ed` + `627787d` + `87ed8d8` | — |
 | S4-T4 Suspend/Resume 原语 | ✅ `f5540cf` + `07c5fd6` (M4) | — |
 | S4-T5 SSE 协议扩展 + 文档同步 | ⏳ | 依赖 S4-T2 完成（`session.forked` 事件） |
@@ -393,6 +393,9 @@
 | FU-1 | **`working_memory.changed` / `context.compacted` → SSE 提升**？当前只是 KernelEvent / trace。若要前端实时反应 WM 与压缩事件，需把这 2 个字符串加入 `packages/shared/src/types/protocol.ts` 的 `ProtocolEventType` union 并接入 SSE forwarder。**决策点**：前端是否真的需要实时感知？如果是——在 Wave A 的 S4-T2 或 S3-T4 顺手做（+5 行）。如果否——更新 §七文档标注为 "kernel-internal by design" 即可 |
 | FU-2 | **Compactor locale 管道**：I4 修复把 locale 参数留在 `maybeCompact()` 签名上，但 `CompactorRunner.run()` 还没 plumbing session locale。需扩展 runner 签名从 session context 提取 locale。半天工作量，可顺手并入 Wave A 的 S2-T3（反正 S2-T3 要动 compactor）|
 | FU-3 | **loadPrompt 推广**：`apps/server/src/routes/api/ai.ts`（generate-world / extract-dimensions）仍然内联 TS template literal。Wave 0-D 创建的 `loadPrompt` 第一次真正可用，这些 server 路由 prompt 都可以迁移。非阻塞，可作为 Sprint 5 清理票 |
+| FU-4 | **Lorebook list API**：S4-T2 fork 需要 `listLorebookEntries(sessionId, { source: 'session' })` 但 `@covel/lorebook` 的 store 接口还没加。当前 snapshot.lorebookEntries 是空数组 TODO。需要在 `@covel/store` / `@covel/lorebook` 加 `listSessionLorebookEntries`，然后回填 `snapshot-payload-builder.ts`。Wave B 顺手（<30 行），或在 S3-T2 world-init 迁移时一起做 |
+| FU-5 | **S2-T3 第 4 个 Anthropic breakpoint**：`§A15` 规定 4 个 breakpoint，其中 "段 7 中部"（messages 中段）需要 turn-executor 改动。A-1 留作 follow-up，因为 S2-T3 scope 不碰 runtime。Wave B / Wave C 顺手 |
+| FU-6 | **Wave A-3 session.forked SSE 前端消费**：后端已发 SSE 事件，但 `apps/web-v2/src/services/sse.ts` 未 `addEventListener('session.forked', ...)`，等 fork UI（Sprint 5 或 S3-T6）实装时再接 |
 
 ### 8.4 Progress ledger 更新规则
 
