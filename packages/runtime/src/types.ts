@@ -30,10 +30,3 @@ export interface ScheduledGroup {
   readonly runtimes: readonly RuntimeManifest[];
 }
 
-export interface DependencyEdge {
-  /** Runtime that depends (format: pluginName/runtimeName or just name). */
-  readonly dependent: string;
-  /** Runtime being depended on. */
-  readonly dependency: string;
-}
-

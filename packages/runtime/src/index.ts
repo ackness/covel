@@ -2,7 +2,7 @@
 export { shouldTrigger } from './trigger.js';
 
 // ── Scheduler ────────────────────────────────────────────────────
-export { scheduleByPriority, extractDependencies, detectCycles } from './scheduler.js';
+export { scheduleByPriority } from './scheduler.js';
 
 // ── Context Builder (re-exported from @covel/context) ───────────
 export { interpolateTemplate, buildInjectBlocks, buildContext } from '@covel/context';
@@ -41,7 +41,6 @@ export type { SnapshotStore } from './snapshot-builder.js';
 export type {
   TriggerContext,
   ScheduledGroup,
-  DependencyEdge,
 } from './types.js';
 
 // Re-export context types for backward compatibility
