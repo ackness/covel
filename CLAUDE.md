@@ -429,7 +429,7 @@ describe("ComponentName", () => {
 ## Conventions
 
 - Validation uses Zod schemas throughout
-- Database access via Drizzle ORM (PostgreSQL/SQLite); 20 tables: worlds, sessions, turn_results, runtime_results, tool_calls, state_schemas, state_entries, state_changes, events, approvals, messages, characters, plugin_data, plugin_configs, trace_events, turn_messages, player_inputs, working_memory, session_summaries, suspensions
+- Database access via Drizzle ORM (PostgreSQL/SQLite); 21 tables: worlds, sessions, turn_results, runtime_results, tool_calls, state_schemas, state_entries, state_changes, events, approvals, messages, characters, plugin_data, plugin_configs, trace_events, turn_messages, player_inputs, working_memory, session_summaries, suspensions, state_snapshots
 - Locale is a **system capability**: enters execution chain via `KernelInput.locale` → `RuntimeContextView.locale`. Resolution: request → run → world default → app default (`zh-CN`)
 - Plugin manifests use `I18nText` (`string | Record<string, string>`) for display fields
 

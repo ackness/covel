@@ -93,6 +93,16 @@
 | `turn.suspended` | S→C | 插件调用 `suspend()` 工具成功序列化 pendingContinuation 后由 turn-executor 发出 | `{ sessionId, turnId, suspensionId, reason, resumeSchema }` |
 | `turn.resumed` | S→C | `POST /api/sessions/:id/resume` 成功重新启动 runtime 后由 resume 路由发出 | `{ sessionId, turnId, suspensionId }` |
 
+### Snapshot / Fork 事件（S4-T2）
+
+需要环境变量 `COVEL_SNAPSHOTS_V1=1`。当 fork 路由执行成功时由服务端经 eventBus 广播（topic=`session`），SSE 命名事件名来自 payload 的 `_subType`。
+
+| 事件类型 | 方向 | 描述 | 负载 |
+|----------|------|------|------|
+| `session.forked` | S→C | `POST /api/sessions/:id/fork` 成功物化子 session 后由 snapshots 路由发出 | `{ parentSessionId, childSessionId, fromSnapshotId, forkSnapshotId }` |
+
+> 前端若要接收该事件，需在 `apps/web-v2/src/services/sse.ts` 里为 `session.forked` 显式 `addEventListener` —— 就像所有具名事件一样。当前 sse.ts 尚未挂载该监听；在 fork UI 真正落地前，服务端已经在 SSE 通道上发送，前端订阅即生效，kernel-only 无需改动。
+
 ### Working Memory / 上下文压缩事件（部分接入）
 
 下列事件由 commit chain / Compactor 内部发出，**目前不在 `ProtocolEventType` 枚举中**，因此**尚未通过 SSE 推送到前端**。文档化是为了让插件作者知晓内核侧已经在发射对应信号；前端订阅需要等到事件被并入 `ProtocolEventType` 之后才能生效。
