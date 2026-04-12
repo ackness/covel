@@ -436,13 +436,22 @@ export async function executeTurn(
           input.sessionId,
           input.turnId,
         );
+        const snapshotId = crypto.randomUUID();
         await deps.store.saveSnapshot({
-          id: crypto.randomUUID(),
+          id: snapshotId,
           sessionId: input.sessionId,
           turnId: input.turnId,
           kind: 'auto',
           payload,
           createdAt: turnResult.timestamp ?? now,
+        });
+        // Emit SSE event so reactive UI can refresh snapshot lists.
+        // Topic 'session' matches the session.forked convention; the
+        // SSE forwarder picks `_subType` as the named event field.
+        emitSubEvent(deps.eventBus, 'session', 'state.snapshot.created', input.sessionId, {
+          turnId: input.turnId,
+          snapshotId,
+          kind: 'auto',
         });
       } catch (err) {
         // Log and continue — never block turn completion on snapshot failure.

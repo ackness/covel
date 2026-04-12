@@ -11,18 +11,30 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
 import { createMemoryStore, type DataStore } from '@covel/store';
+import { createEventBus, type EventBus } from '@covel/events';
+import type { CovelMessage } from '@covel/shared';
 import { snapshotRoutes } from '../../src/routes/api/snapshots.js';
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-function createTestApp(store: DataStore) {
-  const app = new Hono<{ Variables: { store: DataStore } }>();
+function createTestApp(store: DataStore, eventBus?: EventBus) {
+  const app = new Hono<{ Variables: { store: DataStore; eventBus?: EventBus } }>();
   app.use('*', async (c, next) => {
     c.set('store', store);
+    if (eventBus) c.set('eventBus', eventBus);
     await next();
   });
   app.route('/api/sessions', snapshotRoutes);
   return app;
+}
+
+/** Capture every event emitted on the bus during the test. */
+function collectEvents(eventBus: EventBus): CovelMessage[] {
+  const captured: CovelMessage[] = [];
+  eventBus.on('*', (msg) => {
+    captured.push(msg);
+  });
+  return captured;
 }
 
 async function createSession(store: DataStore, id = 'sess-1', worldId = 'test-world') {
@@ -185,6 +197,29 @@ describe('Snapshot routes — flag on', () => {
       const list = await store.listSnapshots('sess-1');
       expect(list).toHaveLength(1);
       expect(list[0].kind).toBe('manual');
+    });
+
+    it('emits state.snapshot.created on the event bus (S4-T5)', async () => {
+      const eventBus = createEventBus();
+      const captured = collectEvents(eventBus);
+      const app = createTestApp(store, eventBus);
+
+      const res = await app.request('/api/sessions/sess-1/snapshot', { method: 'POST' });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as Record<string, unknown>;
+      const snapshot = body.snapshot as Record<string, unknown>;
+
+      const snapshotEvents = captured.filter(
+        (m) => (m.payload as { _subType?: string })._subType === 'state.snapshot.created',
+      );
+      expect(snapshotEvents).toHaveLength(1);
+      const evt = snapshotEvents[0]!;
+      expect(evt.topic).toBe('session');
+      expect(evt.sessionId).toBe('sess-1');
+      const payload = evt.payload as Record<string, unknown>;
+      expect(payload['kind']).toBe('manual');
+      expect(payload['snapshotId']).toBe(snapshot.id);
+      expect(typeof payload['turnId']).toBe('string');
     });
   });
 
@@ -379,6 +414,40 @@ describe('Snapshot routes — flag on', () => {
       expect(childMessages[0]!.content).toBe('The story begins.');
     });
 
+    it('emits state.snapshot.created (kind=fork) and session.forked on fork (S4-T5)', async () => {
+      const eventBus = createEventBus();
+      const captured = collectEvents(eventBus);
+      const app = createTestApp(store, eventBus);
+      const snapId = await createParentSnapshot(store, app);
+
+      const res = await app.request('/api/sessions/sess-1/fork', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as Record<string, unknown>;
+      const childId = body.sessionId as string;
+      const forkSnapshotId = body.forkSnapshotId as string;
+
+      // Two events should be visible against the child session: the
+      // snapshot.created (kind=fork) and session.forked.
+      const childEvents = captured.filter((m) => m.sessionId === childId);
+      const snapshotEvent = childEvents.find(
+        (m) => (m.payload as { _subType?: string })._subType === 'state.snapshot.created',
+      );
+      const forkedEvent = childEvents.find(
+        (m) => (m.payload as { _subType?: string })._subType === 'session.forked',
+      );
+      expect(snapshotEvent).toBeDefined();
+      expect(forkedEvent).toBeDefined();
+
+      const snapshotPayload = snapshotEvent!.payload as Record<string, unknown>;
+      expect(snapshotPayload['kind']).toBe('fork');
+      expect(snapshotPayload['snapshotId']).toBe(forkSnapshotId);
+      expect(snapshotPayload['parentSnapshotId']).toBe(snapId);
+    });
+
     it('records a fork snapshot on the child', async () => {
       const app = createTestApp(store);
       const snapId = await createParentSnapshot(store, app);
@@ -437,5 +506,36 @@ describe('Auto snapshot (COVEL_SNAPSHOTS_V1=1)', () => {
     const auto = snapshots.find((s) => s.kind === 'auto');
     expect(auto).toBeDefined();
     expect(auto!.turnId).toBe('turn-auto-1');
+  });
+
+  it('emits state.snapshot.created (kind=auto) on the event bus (S4-T5)', async () => {
+    const { executeTurn } = await import('@covel/runtime');
+    const eventBus = createEventBus();
+    const captured = collectEvents(eventBus);
+
+    await executeTurn(
+      { sessionId: 'sess-auto', turnId: 'turn-auto-2', playerMessage: 'hi' },
+      [],
+      {
+        loadRuntime: async () => undefined,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        llm: { generate: async () => ({ content: '', toolCalls: [], finishReason: 'stop', usage: { inputTokens: 0, outputTokens: 0 } }) } as any,
+        getConfig: () => ({}),
+        store,
+        eventBus,
+      },
+    );
+
+    const snapshotEvents = captured.filter(
+      (m) => (m.payload as { _subType?: string })._subType === 'state.snapshot.created',
+    );
+    expect(snapshotEvents.length).toBeGreaterThanOrEqual(1);
+    const evt = snapshotEvents[0]!;
+    expect(evt.topic).toBe('session');
+    expect(evt.sessionId).toBe('sess-auto');
+    const payload = evt.payload as Record<string, unknown>;
+    expect(payload['kind']).toBe('auto');
+    expect(payload['turnId']).toBe('turn-auto-2');
+    expect(typeof payload['snapshotId']).toBe('string');
   });
 });

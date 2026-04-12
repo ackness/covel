@@ -83,16 +83,38 @@ snapshotRoutes.post('/:id/snapshot', async (c) => {
     return c.json({ error: `Failed to build snapshot payload: ${message}`, code: 'build_failed' }, 500);
   }
 
+  const now = new Date().toISOString();
   const snapshot: SnapshotRecord = {
     id: randomUUID(),
     sessionId,
     turnId: latestTurnId,
     kind: 'manual',
     payload,
-    createdAt: new Date().toISOString(),
+    createdAt: now,
   };
 
   await store.saveSnapshot(snapshot);
+
+  // S4-T5: Emit state.snapshot.created so reactive UI can refresh snapshot lists.
+  // EventBus is optional in tests; only emit when bound.
+  const eventBus = c.get('eventBus');
+  if (eventBus) {
+    eventBus.emit({
+      id: randomUUID(),
+      type: 'event',
+      topic: 'session',
+      sessionId,
+      timestamp: now,
+      payload: {
+        _subTopic: 'session',
+        _subType: 'state.snapshot.created',
+        turnId: latestTurnId,
+        snapshotId: snapshot.id,
+        kind: 'manual',
+      },
+    });
+  }
+
   return c.json({ snapshot }, 201);
 });
 
@@ -260,6 +282,24 @@ snapshotRoutes.post('/:id/fork', async (c) => {
     // when eventBus is absent in tests.
     const eventBus = c.get('eventBus');
     if (eventBus) {
+      // S4-T5: also publish state.snapshot.created (kind='fork') so a
+      // forked session's snapshot list reacts immediately.
+      eventBus.emit({
+        id: randomUUID(),
+        type: 'event',
+        topic: 'session',
+        sessionId: childSessionId,
+        timestamp: now,
+        payload: {
+          _subTopic: 'session',
+          _subType: 'state.snapshot.created',
+          turnId: snapshot.turnId,
+          snapshotId: forkSnapshot.id,
+          kind: 'fork',
+          parentSnapshotId: snapshot.id,
+        },
+      });
+
       eventBus.emit({
         id: randomUUID(),
         type: 'event',

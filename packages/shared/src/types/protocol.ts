@@ -114,7 +114,8 @@ export type ProtocolEventType =
   // Suspend / Resume (S4-T4)
   | 'turn.suspended'
   | 'turn.resumed'
-  // Snapshot / Fork (S4-T2)
+  // Snapshot / Fork (S4-T2 / S4-T5)
+  | 'state.snapshot.created'
   | 'session.forked';
 
 export interface ProtocolEvent {
