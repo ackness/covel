@@ -3,6 +3,11 @@ export * from './types/index.js';
 
 // ── Utilities ─────────────────────────────────────────────────────
 export { deepMerge } from './utils/deep-merge.js';
+export {
+  PROMPT_CACHE_BREAKPOINT_MARKER,
+  splitPromptCacheSegments,
+  stripPromptCacheMarkers,
+} from './utils/prompt-cache.js';
 
 // ── Plugin Schemas ───────────────────────────────────────────────
 export {
