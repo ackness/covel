@@ -1,0 +1,278 @@
+/**
+ * core-npc-graph plugin tests.
+ *
+ * Covered:
+ *  1. Plugin manifest discovery & parsing
+ *  2. upsert-npc-graph creates new nodes with short IDs
+ *  3. Second upsert on the same name merges instead of duplicating
+ *  4. Edges resolve sourceName/targetName to node IDs
+ *  5. Duplicate edges (same source/target/relation) are skipped
+ *  6. Adjacency index `by-source` / `by-target` is maintained
+ *  7. list-npc-graph returns compact summaries
+ *  8. Orphan-endpoint edges are flagged, not crashed
+ */
+
+import { describe, it, expect, beforeEach } from 'vitest';
+import path from 'node:path';
+import { discoverPlugins, loadPluginManifest } from '@covel/plugin-loader';
+import { tool, z, shortIdBatch } from '@covel/tools';
+import createUpsertNpcGraph from '../tools/upsert-npc-graph.js';
+import createListNpcGraph from '../tools/list-npc-graph.js';
+
+// ── Minimal plugin_data mock store ────────────────────────────────
+
+function createMockStore() {
+  /** @type {Map<string, any>} */
+  const data = new Map();
+  const makeKey = (sid, pid, ns, k) => `${sid}:${pid}:${ns}:${k}`;
+
+  return {
+    data,
+    async setPluginData(record) {
+      data.set(makeKey(record.sessionId, record.pluginId, record.namespace, record.key), {
+        namespace: record.namespace,
+        key: record.key,
+        value: record.value,
+        updatedAt: record.updatedAt,
+      });
+    },
+    async setPluginDataBatch(records) {
+      for (const r of records) await this.setPluginData(r);
+    },
+    async getPluginData(sessionId, pluginId, namespace, key) {
+      return data.get(makeKey(sessionId, pluginId, namespace, key)) ?? null;
+    },
+    async listPluginData(sessionId, pluginId, namespace) {
+      const prefix = namespace
+        ? `${sessionId}:${pluginId}:${namespace}:`
+        : `${sessionId}:${pluginId}:`;
+      const results = [];
+      for (const [k, v] of data) {
+        if (k.startsWith(prefix)) results.push(v);
+      }
+      return results;
+    },
+  };
+}
+
+const ctx = {
+  sessionId: 'sess-npc',
+  turnId: 'turn-3',
+  pluginId: 'core-npc-graph',
+  runtimeId: 'core-npc-graph',
+};
+
+const PLUGINS_DIR = path.resolve(import.meta.dirname, '../..');
+
+// ── Manifest discovery ──────────────────────────────────────────
+
+describe('core-npc-graph manifest', () => {
+  /** @type {import('@covel/shared').RuntimeManifest} */
+  let manifest;
+
+  beforeEach(async () => {
+    const discoveries = await discoverPlugins(PLUGINS_DIR);
+    const discovery = discoveries.find((d) => d.id === 'core-npc-graph');
+    expect(discovery).toBeDefined();
+    const manifests = await loadPluginManifest(discovery);
+    manifest = manifests[0].manifest;
+  });
+
+  it('declares the expected runtime metadata', () => {
+    expect(manifest.pluginType).toBe('plugin');
+    expect(manifest.name).toBe('core-npc-graph');
+    expect(manifest.priority).toBe(620);
+    expect(manifest.capabilities).toContain('npc-graph');
+  });
+
+  it('declares both local tools', () => {
+    expect(manifest.tools?.local).toContain('./tools/upsert-npc-graph.js');
+    expect(manifest.tools?.local).toContain('./tools/list-npc-graph.js');
+  });
+
+  it('declares a scheduled interval trigger in the playing phase', () => {
+    expect(manifest.trigger?.type).toBe('scheduled');
+    expect(manifest.trigger?.interval).toBe(2);
+    expect(manifest.trigger?.phases).toContain('playing');
+  });
+});
+
+// ── Tool behaviour ──────────────────────────────────────────────
+
+describe('upsert-npc-graph', () => {
+  let store;
+  let upsertTool;
+  let listTool;
+
+  beforeEach(() => {
+    store = createMockStore();
+    upsertTool = createUpsertNpcGraph({ tool, z, shortIdBatch, store });
+    listTool = createListNpcGraph({ tool, z, store });
+  });
+
+  it('creates new nodes with short IDs and persists them', async () => {
+    const result = await upsertTool.execute(
+      {
+        nodes: [
+          {
+            name: '萧衍笙',
+            type: 'individual',
+            labels: ['sect-leader'],
+            summary: '碧波宗宗主，云梦泽修为最高者，金丹九层。',
+          },
+          {
+            name: '碧波宗',
+            type: 'faction',
+            labels: ['sect'],
+            summary: '云梦泽最大的宗门，占据一等灵脉碧波灵渊。',
+          },
+        ],
+      },
+      ctx,
+    );
+
+    expect(result.nodes.created).toBe(2);
+    expect(result.nodes.updated).toBe(0);
+    expect(result.nodes.results).toHaveLength(2);
+    for (const r of result.nodes.results) {
+      expect(r.id).toMatch(/^npc-/);
+    }
+
+    const list = await listTool.execute({}, ctx);
+    expect(list.nodeCount).toBe(2);
+    expect(list.nodes.map((n) => n.name).sort()).toEqual(['萧衍笙', '碧波宗'].sort());
+  });
+
+  it('merges when a node with the same name is upserted twice', async () => {
+    await upsertTool.execute(
+      {
+        nodes: [{ name: '陆沉渊', type: 'individual', summary: '青萍宗宗主。' }],
+      },
+      ctx,
+    );
+    const second = await upsertTool.execute(
+      {
+        nodes: [
+          {
+            name: '陆沉渊',
+            type: 'individual',
+            labels: ['sect-leader', 'researcher'],
+            summary: '青萍宗宗主，据说正在研究一种古老的阵法。',
+            attributes: { suspected: true },
+          },
+        ],
+      },
+      ctx,
+    );
+
+    expect(second.nodes.created).toBe(0);
+    expect(second.nodes.updated).toBe(1);
+
+    const list = await listTool.execute({}, ctx);
+    expect(list.nodeCount).toBe(1);
+    expect(list.nodes[0].labels).toEqual(['sect-leader', 'researcher']);
+    expect(list.nodes[0].summary).toMatch(/古老的阵法/);
+  });
+
+  it('resolves edge sourceName/targetName to node IDs and persists the adjacency index', async () => {
+    const out = await upsertTool.execute(
+      {
+        nodes: [
+          { name: '萧衍笙', type: 'individual', summary: '碧波宗宗主。' },
+          { name: '陆沉渊', type: 'individual', summary: '青萍宗宗主。' },
+        ],
+        edges: [
+          {
+            sourceName: '萧衍笙',
+            targetName: '陆沉渊',
+            relation: 'COMPETES_WITH',
+            strength: -0.3,
+            fact: '萧衍笙长期视陆沉渊为潜在竞争者，在公开场合保持表面客套。',
+          },
+        ],
+      },
+      ctx,
+    );
+
+    expect(out.nodes.created).toBe(2);
+    expect(out.edges.created).toBe(1);
+    const edgeRow = out.edges.results[0];
+    expect(edgeRow.id).toMatch(/^edge-/);
+
+    // Adjacency index must include the new edge
+    const bySource = await store.getPluginData(
+      ctx.sessionId,
+      ctx.pluginId,
+      'index',
+      `by-source:${edgeRow.source}`,
+    );
+    const byTarget = await store.getPluginData(
+      ctx.sessionId,
+      ctx.pluginId,
+      'index',
+      `by-target:${edgeRow.target}`,
+    );
+    expect(bySource?.value).toContain(edgeRow.id);
+    expect(byTarget?.value).toContain(edgeRow.id);
+  });
+
+  it('skips duplicate edges (same source, target, relation)', async () => {
+    await upsertTool.execute(
+      {
+        nodes: [
+          { name: 'A', type: 'individual', summary: 'First character placeholder.' },
+          { name: 'B', type: 'individual', summary: 'Second character placeholder.' },
+        ],
+        edges: [
+          {
+            sourceName: 'A',
+            targetName: 'B',
+            relation: 'TRUSTS',
+            strength: 0.5,
+            fact: 'A initially trusted B after a shared ordeal in the bamboo grove.',
+          },
+        ],
+      },
+      ctx,
+    );
+
+    const dup = await upsertTool.execute(
+      {
+        edges: [
+          {
+            sourceName: 'A',
+            targetName: 'B',
+            relation: 'TRUSTS',
+            strength: 0.9,
+            fact: 'Another phrasing of the same trust relationship — should be dropped.',
+          },
+        ],
+      },
+      ctx,
+    );
+
+    expect(dup.edges.created).toBe(0);
+    expect(dup.edges.skipped).toBe(1);
+    expect(dup.edges.results[0].skipped).toBe('duplicate relation');
+  });
+
+  it('flags edges whose endpoint node cannot be resolved', async () => {
+    const out = await upsertTool.execute(
+      {
+        edges: [
+          {
+            sourceName: 'Ghost',
+            targetName: 'Phantom',
+            relation: 'KNOWS_ABOUT',
+            strength: 0.1,
+            fact: 'Ghost has heard rumours about Phantom but both are unknown to the graph.',
+          },
+        ],
+      },
+      ctx,
+    );
+    expect(out.edges.created).toBe(0);
+    expect(out.edges.skipped).toBe(1);
+    expect(out.edges.results[0].skipped).toBe('missing endpoint node');
+  });
+});

@@ -12,6 +12,7 @@
 | core-world-init/schema-gen | core-plugin | 85 | scheduled（仅首轮） | `fast` | 世界维度初始化（guard + agent） |
 | core-narrator | core-plugin | 500 | auto（`playing` 阶段） | `ds` | 主叙事生成器 |
 | core-guide | plugin | 550 | scheduled（interval=1, cooldown=1） | `fast` | 行动引导 + 选择面板 |
+| core-npc-graph | plugin | 620 | scheduled（interval=2, cooldown=1） | `fast` | NPC 关系图 + Graph-RAG 记忆（受 MiroFish 启发） |
 | core-codex | plugin | 650 | scheduled（interval=2, cooldown=1） | `fast` | 知识图鉴系统 |
 | core-char-creator/player-init | core-plugin | 700 | scheduled（maxTriggerCount=2, guard） | `ds` | 玩家角色创建（LLM agent + create-character tool） |
 | core-char-creator/character-tracker | core-plugin | 750 | scheduled（interval=1, cooldown=1, phases=[playing]） | `fast` | NPC 发现 + 角色状态跟踪 |
@@ -94,6 +95,49 @@
 - `{{ session.phase }}` — 当前会话阶段
 
 **Phase 门控**: 通过 `phases: [playing]` 触发门控，narrator 仅在角色创建完成后（session phase 转入 `playing`）开始执行。首轮（`init` / `character_creation` 阶段）不触发。
+
+---
+
+## core-npc-graph
+
+**路径**: `plugins/core-npc-graph/`
+
+| 字段 | 值 |
+|------|----|
+| pluginType | `plugin` |
+| priority | 620（位于 narrator=500 与 codex=650 之间） |
+| capabilities | `[npc-graph, relationship-tracking]` |
+| trigger | `scheduled`，`interval: 2`，`cooldownTurns: 1`，`phases: [playing]` |
+| input.inject | `core-narrator.narrative` → `<narrator-output>` |
+| model slot | `fast` |
+| tools.local | `upsert-npc-graph`（批量写节点+边）、`list-npc-graph`（列出现有图） |
+| tools.builtin | `plugin-data-list`、`plugin-data-get` |
+| ui.right | `./ui/npc-graph-panel.json`（Phase 4 接入可视化组件） |
+
+**职责**: 维护一张会话级的人物-关系图。从叙事文本中抽取 NPC 节点（individual / group / faction）、它们的关系（信任、结盟、欠债、背叛等）以及每条关系的自然语言事实，持久化到 `plugin_data` 的 `nodes`、`edges`、`index`、`meta` 四个 namespace。
+
+**数据模型**（`packages/shared/src/types/npc-graph.ts`）:
+
+- `NpcNode`: `{id, name, aliases?, type, labels, summary ≤200 字符, firstSeenTurn, lastSeenTurn, attributes?}`
+- `NpcEdge`: `{id, source, target, relation (UPPER_SNAKE_CASE), strength [-1..1], fact (完整一句话), validAt, invalidAt?, evidenceTurnIds}`
+- `NpcGraphOntology`: `{version, entityTypes, edgeTypes, createdAt, updatedAt}` — 本体约束
+
+**本体设计（受 MiroFish 启发）**:
+- 节点类型固定三类：`individual | group | faction`
+- 关系类型推荐 10 种 `TRUSTS / FEARS / RESPECTS / ALLY_OF / OPPOSES / COMPETES_WITH / WORKS_FOR / SUBORDINATE_OF / OWES_DEBT_TO / KNOWS_ABOUT`
+- LLM 使用 `upsert-npc-graph` 时通过 **name** 而非 ID 引用节点，工具内部去重并分配短 ID（`npc-xxxx`、`edge-xxxx`）
+- 每条 edge 的 `fact` 必须是完整自然语言句子 —— 这是 Phase 3 Graph-RAG 的检索单元
+
+**存储布局**（`plugin_data` 表中）:
+
+```
+namespace="nodes"  key=npcId      value=NpcNode
+namespace="edges"  key=edgeId     value=NpcEdge
+namespace="index"  key=by-source:{npcId} | by-target:{npcId}  value=string[] (edge IDs)
+namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
+```
+
+**Phase 进度**: 本文档记录 Phase 2 —— 数据模型 + agent runtime + 两个插件工具。Phase 3 将在同一插件内引入 embedding 的 edge.fact 写入 + Graph-RAG 混合检索工具；Phase 4 将补充 `ui/npc-graph-panel.json` 与 `GraphCanvas` 组件。
 
 ---
 

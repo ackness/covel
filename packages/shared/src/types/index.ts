@@ -124,6 +124,14 @@ export type {
 } from './character-schema.js';
 
 export type {
+  NpcNodeType,
+  NpcNode,
+  NpcEdge,
+  NpcGraphOntology,
+  NpcGraphSubgraph,
+} from './npc-graph.js';
+
+export type {
   I18nText,
   WorldLandmark,
   WorldRegion,

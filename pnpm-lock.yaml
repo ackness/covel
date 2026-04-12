@@ -582,6 +582,21 @@ importers:
 
   plugins/core-narrator: {}
 
+  plugins/core-npc-graph:
+    devDependencies:
+      '@covel/plugin-loader':
+        specifier: workspace:*
+        version: link:../../packages/plugin-loader
+      '@covel/plugin-test-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-test-utils
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.2(@opentelemetry/api@1.9.0)(@types/node@25.5.2)(jsdom@26.1.0)(vite@8.0.8(@types/node@25.5.2)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+
   plugins/core-pregame: {}
 
   plugins/core-world-init: {}

@@ -104,6 +104,7 @@ plugins/                    — Core gameplay plugins (PLUGIN.md-centric, see Pl
   core-world-init/          — World dimension initialization (guard + agent runtime)
   core-narrator/            — Main narrative generation
   core-guide/               — Action guidance + choice panels (after narrator)
+  core-npc-graph/           — NPC relationship graph + Graph-RAG memory (MiroFish-inspired)
   core-codex/               — Knowledge codex with local tools
   core-char-creator/        — Character subsystem (player-init + character-tracker runtimes)
 
@@ -199,6 +200,7 @@ Current plugins (PLUGIN.md-centric format):
 | 85 | core-world-init/schema-gen | World dimension schema + entries via LLM (guard skips if data exists) | scheduled (first turn only) |
 | 500 | core-narrator | Main narrative generation | auto (every turn, playing phase) |
 | 550 | core-guide | Action guidance + choice panels (analyzes narrator output) | scheduled (interval=1, cooldown=1, playing phase) |
+| 620 | core-npc-graph | NPC relationship graph + Graph-RAG memory (capabilities: `npc-graph`, `relationship-tracking`) | scheduled (interval=2, cooldown=1, playing phase) |
 | 650 | core-codex | Knowledge/lore codex with persistent plugin-data | scheduled (interval=2, cooldown=1, playing phase) |
 | 700 | core-char-creator/player-init | Player character creation via create-character builtin tool | scheduled (maxTriggerCount=2, guard skips if player exists) |
 | 750 | core-char-creator/character-tracker | NPC detection + character state tracking | scheduled (interval=1, cooldown=1, playing phase) |
