@@ -7,9 +7,21 @@
  * NOTE: The framework MUST NOT hardcode any plugin ID. The world data provider
  * plugin ID is discovered via the `world-data-provider` capability tag declared
  * in the plugin's RuntimeManifest.
+ *
+ * ## `{{ config.worldEntries }}` resolution order (FU-8)
+ *
+ * 1. **Session lorebook** (canonical) — aggregate all `constant` entries from
+ *    `listSessionLorebookEntries`, sorted by `insertionOrder`, joined on blank
+ *    lines. This is the post-FU-8 destination for world dimensions.
+ * 2. **Plugin data** (fallback) — read the world-data-provider plugin's
+ *    `entries` namespace. Covers sessions created before the lorebook
+ *    migration and thin mock stores that don't implement the lorebook table.
+ *
+ * `{{ config.worldSchema }}` keeps its plugin_data source — world schemas are
+ * structured JSON, not a natural fit for the free-form lorebook content field.
  */
 
-import type { DataStore } from '@covel/store';
+import type { DataStore, LorebookEntryRecord } from '@covel/store';
 
 export async function loadSessionConfig(
   store: DataStore,
@@ -24,7 +36,6 @@ export async function loadSessionConfig(
     // If no such plugin is found, skip gracefully.
     if (worldDataPluginId) {
       const schemaRecords = await store.listPluginData(sessionId, worldDataPluginId, 'schema');
-      const entryRecords = await store.listPluginData(sessionId, worldDataPluginId, 'entries');
 
       if (schemaRecords.length > 0) {
         const schemaMap: Record<string, unknown> = {};
@@ -32,10 +43,17 @@ export async function loadSessionConfig(
         configData.worldSchema = schemaMap;
       }
 
-      if (entryRecords.length > 0) {
-        const entryMap: Record<string, unknown> = {};
-        for (const r of entryRecords) entryMap[r.key] = r.value;
-        configData.worldEntries = entryMap;
+      // worldEntries: prefer lorebook (canonical, FU-8), fall back to plugin_data.
+      const lorebookEntries = await readLorebookWorldEntries(store, sessionId, worldDataPluginId);
+      if (lorebookEntries !== undefined) {
+        configData.worldEntries = lorebookEntries;
+      } else {
+        const entryRecords = await store.listPluginData(sessionId, worldDataPluginId, 'entries');
+        if (entryRecords.length > 0) {
+          const entryMap: Record<string, unknown> = {};
+          for (const r of entryRecords) entryMap[r.key] = r.value;
+          configData.worldEntries = entryMap;
+        }
       }
     }
 
@@ -62,4 +80,50 @@ export async function loadSessionConfig(
   }
 
   return configData;
+}
+
+/**
+ * Read session-scoped lorebook entries and compose them into the legacy
+ * `worldEntries` map shape expected by plugin templates.
+ *
+ * Returns:
+ * - `undefined` if the store has no session lorebook entries for this
+ *   world-data-provider plugin (caller should fall back to plugin_data).
+ * - A `Record<string, unknown>` keyed by the first lorebook `keys[]`
+ *   entry (or the row id when no keys are declared). Values are the
+ *   lorebook content string so templates rendering `{{ config.worldEntries }}`
+ *   can still iterate entries by key.
+ *
+ * Entries are filtered to `strategy === 'constant'` so selective entries
+ * (which are activated by scanning, not bulk-injected) don't leak into
+ * the always-on config surface.
+ */
+async function readLorebookWorldEntries(
+  store: DataStore,
+  sessionId: string,
+  worldDataPluginId: string,
+): Promise<Record<string, unknown> | undefined> {
+  if (typeof store.listSessionLorebookEntries !== 'function') {
+    return undefined;
+  }
+  let entries: readonly LorebookEntryRecord[];
+  try {
+    entries = await store.listSessionLorebookEntries(sessionId);
+  } catch (err) {
+    console.warn('[loadSessionConfig] listSessionLorebookEntries failed:', err);
+    return undefined;
+  }
+  const relevant = entries
+    .filter(e => e.pluginId === worldDataPluginId && e.strategy === 'constant' && e.enabled)
+    .slice()
+    .sort((a, b) => a.insertionOrder - b.insertionOrder);
+  if (relevant.length === 0) {
+    return undefined;
+  }
+  const map: Record<string, unknown> = {};
+  for (const entry of relevant) {
+    const key = (entry.keys && entry.keys.length > 0) ? entry.keys[0] : entry.id;
+    map[key] = entry.content;
+  }
+  return map;
 }
