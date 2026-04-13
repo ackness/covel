@@ -4,6 +4,7 @@ description: Knowledge codex system. Analyzes narrative text and records monster
 pluginType: plugin
 priority: 650
 model: fast
+promptVersion: 2
 trigger:
   type: auto
 tools:
