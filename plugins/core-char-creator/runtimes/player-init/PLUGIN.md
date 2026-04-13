@@ -4,6 +4,7 @@ description: 玩家角色创建 agent。首轮基于开场叙事和世界 schema
 pluginType: core-plugin
 priority: 700
 model: ds
+promptVersion: 2
 guard: ./guard.js
 trigger:
   type: scheduled

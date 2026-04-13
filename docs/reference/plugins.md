@@ -63,8 +63,17 @@
 **Agent 职责**: 读取世界观文档，通过专用 local tools 批量生成角色属性 schema 和世界词条。只需 2 次工具调用（`set-world-schema` + `set-world-entries-batch`）。
 
 **数据存储结构**:
-- namespace `schema` — 维度 schema 定义
-- namespace `entries` — 世界词条数据
+- namespace `schema` — 维度 schema 定义（plugin_data）
+- namespace `entries` — 世界词条数据（plugin_data，legacy fallback）
+- session lorebook（`strategy: 'constant'`）— 世界词条数据（FU-8 canonical 目的地）
+
+**FU-8 lorebook 迁移**（S3-T2 收尾）：`set-world-entries-batch` 工具从 FU-8 起会 **double-write**：
+既写 `plugin_data` namespace=`entries`（保留给旧会话 / 仍未实现 lorebook 表的 store），
+也通过 `store.upsertLorebookEntries()` 写入 session 级 lorebook。
+每个词条成为一条 `constant` 类型的 lorebook row，id 按 `world-entry:<key>` 稳定化，
+`insertionOrder` 按批内顺序以 100 为步长递增。`loadSessionConfig` 在构造
+`{{ config.worldEntries }}` 时优先读 lorebook，空才回退 plugin_data。
+`{{ config.worldSchema }}` 仍从 plugin_data 读取，不进入 lorebook（结构化 JSON 不适合 free-form content）。
 
 ---
 
@@ -407,6 +416,9 @@ V2 的路由需要**同时**满足两个条件：
 |------|---------------|-------------|
 | core-narrator | 2 | S2-T4 |
 | core-guide | 2 | S2-T4 |
+| core-codex | 2 | S3-T5a |
+| core-char-creator/player-init | 2 | S3-T5a |
+| core-char-creator/character-tracker | 2 | S3-T5a |
 
 示例 frontmatter：
 

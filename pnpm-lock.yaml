@@ -568,6 +568,9 @@ importers:
 
   plugins/core-char-creator:
     devDependencies:
+      '@covel/context':
+        specifier: workspace:*
+        version: link:../../packages/context
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../../packages/plugin-loader
@@ -577,6 +580,9 @@ importers:
       '@covel/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@covel/store':
         specifier: workspace:*
         version: link:../../packages/store
@@ -589,12 +595,18 @@ importers:
 
   plugins/core-codex:
     devDependencies:
+      '@covel/context':
+        specifier: workspace:*
+        version: link:../../packages/context
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../../packages/plugin-loader
       '@covel/plugin-test-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-test-utils
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@covel/tools':
         specifier: workspace:*
         version: link:../../packages/tools

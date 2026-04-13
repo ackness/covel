@@ -4,6 +4,7 @@ description: NPC 与角色状态跟踪 agent。每轮扫描 narrator 输出，�
 pluginType: core-plugin
 priority: 750
 model: fast
+promptVersion: 2
 trigger:
   type: scheduled
   interval: 1

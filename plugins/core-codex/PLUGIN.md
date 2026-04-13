@@ -4,6 +4,7 @@ description: 知识图鉴系统。分析叙事文本，记录玩家发现的怪�
 pluginType: plugin
 priority: 650
 model: fast
+promptVersion: 2
 trigger:
   type: scheduled
   interval: 2
