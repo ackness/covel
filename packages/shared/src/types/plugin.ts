@@ -183,6 +183,17 @@ export interface RuntimeManifest {
   readonly priority: number;
   readonly version?: string;
   /**
+   * Prompt assembler version (S2-T4).
+   * - `1` or omitted: V1 single-pass `buildContext`.
+   * - `2`: V2 three-tier assembler (segments 1–10).
+   *
+   * The runtime only routes a manifest to V2 when **both** the environment
+   * flag `COVEL_PROMPT_V2=1` and `promptVersion: 2` are set. This double gate
+   * keeps migration opt-in at both the deployment level (env flag) and the
+   * plugin level (manifest field) per §A8 of the improvement plan.
+   */
+  readonly promptVersion?: 1 | 2;
+  /**
    * Execution type: 'agent' (default) uses LLM pipeline, 'function' runs a pure handler.
    * Function runtimes declare `handler` pointing to a JS module with a default export.
    */

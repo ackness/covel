@@ -15,7 +15,16 @@ import type { RuntimeManifest, RuntimeResult, TurnInput } from '@covel/shared';
 // ── Helpers ─────────────────────────────────────────────────────
 
 function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
-  return { name: 'test-rt', description: 'test', priority: 500, ...overrides };
+  // Default to promptVersion: 2 so the V2-path tests in this file continue to
+  // route through buildContextV2 when COVEL_PROMPT_V2=1 is set. Individual
+  // tests that need to verify the V1-fallback behaviour override this.
+  return {
+    name: 'test-rt',
+    description: 'test',
+    priority: 500,
+    promptVersion: 2,
+    ...overrides,
+  };
 }
 
 function makeRuntimeResult(overrides?: Partial<RuntimeResult>): RuntimeResult {
@@ -491,32 +500,55 @@ describe('prompt-assembler V2', () => {
     });
   });
 
-  it('is correctly gated by COVEL_PROMPT_V2: exact "1" selects V2, any other value keeps V1', () => {
+  it('is correctly gated by COVEL_PROMPT_V2 + manifest.promptVersion (S2-T4 double-gate)', () => {
     // V1 and V2 produce structurally different prompts when locale is set:
     // V1 appends locale at the tail, V2 prepends it in segment 1.
-    const params = baselineParams({
+    const baseTurn = makeTurnInput({ locale: 'zh-CN', playerMessage: 'go' });
+    const v2Params = baselineParams({
       promptTemplate: 'Plugin body.',
-      turnInput: makeTurnInput({ locale: 'zh-CN', playerMessage: 'go' }),
+      manifest: makeManifest({ promptVersion: 2 }),
+      turnInput: baseTurn,
+    });
+    const v1ManifestParams = baselineParams({
+      promptTemplate: 'Plugin body.',
+      manifest: makeManifest({ promptVersion: 1 }),
+      turnInput: baseTurn,
+    });
+    const unversionedParams = baselineParams({
+      promptTemplate: 'Plugin body.',
+      manifest: makeManifest({ promptVersion: undefined }),
+      turnInput: baseTurn,
     });
 
-    const v1Direct = buildContext({ ...params }); // no flag → V1
-    expect(v1Direct.systemPrompt.startsWith('Plugin body.')).toBe(true);
-    expect(v1Direct.systemPrompt.endsWith('in 中文.')).toBe(true);
+    // No env flag → always V1 regardless of manifest opt-in.
+    const v1NoFlag = buildContext({ ...v2Params });
+    expect(v1NoFlag.systemPrompt.startsWith('Plugin body.')).toBe(true);
+    expect(v1NoFlag.systemPrompt.endsWith('in 中文.')).toBe(true);
 
-    // Flag set to literal "1" → V2 path.
+    // Env flag + manifest.promptVersion === 2 → V2 path.
     process.env.COVEL_PROMPT_V2 = '1';
-    const v2Gated = buildContext({ ...params });
+    const v2Gated = buildContext({ ...v2Params });
     expect(v2Gated.systemPrompt.startsWith('[LANGUAGE]')).toBe(true);
     expect(v2Gated.systemPrompt).toContain('Plugin body.');
 
-    // Any other truthy-ish value → still V1 (strict equality on "1").
+    // Env flag ON but manifest declares promptVersion: 1 → still V1.
+    const v1Explicit = buildContext({ ...v1ManifestParams });
+    expect(v1Explicit.systemPrompt.startsWith('Plugin body.')).toBe(true);
+    expect(v1Explicit.systemPrompt.endsWith('in 中文.')).toBe(true);
+
+    // Env flag ON but manifest omits promptVersion → still V1 (default = V1).
+    const v1Unversioned = buildContext({ ...unversionedParams });
+    expect(v1Unversioned.systemPrompt.startsWith('Plugin body.')).toBe(true);
+    expect(v1Unversioned.systemPrompt.endsWith('in 中文.')).toBe(true);
+
+    // Any env value other than exact "1" → still V1 (strict equality).
     process.env.COVEL_PROMPT_V2 = 'true';
-    const v1Again = buildContext({ ...params });
-    expect(v1Again.systemPrompt).toBe(v1Direct.systemPrompt);
+    const v1Truey = buildContext({ ...v2Params });
+    expect(v1Truey.systemPrompt).toBe(v1NoFlag.systemPrompt);
 
     process.env.COVEL_PROMPT_V2 = '0';
-    const v1Zero = buildContext({ ...params });
-    expect(v1Zero.systemPrompt).toBe(v1Direct.systemPrompt);
+    const v1Zero = buildContext({ ...v2Params });
+    expect(v1Zero.systemPrompt).toBe(v1NoFlag.systemPrompt);
   });
 });
 

@@ -385,6 +385,41 @@ outputKind: story
 capabilities: [narrative, world-data-provider]
 ```
 
+### promptVersion（S2-T4，V2 opt-in 闸门）
+
+声明本 runtime 使用哪个版本的 prompt assembler：
+
+| 值 | 含义 |
+|----|------|
+| 省略 / `1` | V1 单遍组装器（legacy 路径） |
+| `2` | V2 三段式组装器（10 个结构化段） |
+
+V2 的路由需要**同时**满足两个条件：
+
+1. 环境变量 `COVEL_PROMPT_V2=1`（部署级启用）
+2. manifest 声明 `promptVersion: 2`（插件级启用）
+
+任一缺失都走 V1。这一"双闸门"让运维可以在部署层面统一切换，而插件作者按节奏逐个迁移（§A8 渐进策略）。
+
+当前已迁移的核心插件：
+
+| 插件 | promptVersion | 迁移 ticket |
+|------|---------------|-------------|
+| core-narrator | 2 | S2-T4 |
+| core-guide | 2 | S2-T4 |
+
+示例 frontmatter：
+
+```yaml
+promptVersion: 2
+```
+
+**迁移说明**：将 V1 插件迁移到 V2 通常只需要在 frontmatter 中添加 `promptVersion: 2`。`assemblePromptVariables` 在 V1/V2 路径下共享一份实现，因此 `{{ player.message }}`、`{{ player.lastFormValues }}`、`{{ world.* }}`、`{{ config.* }}`、`{{ inputs.* }}` 等模板变量在两条路径下行为一致。结构差异仅体现在：
+
+- V2 把 `[LANGUAGE]` 约束从系统 prompt 尾部移到段 1（framework preamble）
+- V2 的段间分隔符是 `\n\n`
+- V2 对 `authorsNote` / `postHistory` 生效（V1 忽略）
+
 ### authorsNote（S3-T4，V2 prompt 段 9）
 
 声明"导演级"指令，插入到消息历史倒数第 `depth` 条之前。借鉴 SillyTavern / NovelAI 的 author's note 语义 —— 用于在长历史中重新锚定模型的叙事方向。

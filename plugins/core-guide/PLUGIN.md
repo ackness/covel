@@ -4,6 +4,7 @@ description: 行动引导插件。分析叙事结果，为玩家生成分风格�
 pluginType: plugin
 priority: 550
 model: fast
+promptVersion: 2
 trigger:
   type: scheduled
   interval: 1

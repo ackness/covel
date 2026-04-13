@@ -164,6 +164,15 @@ export const runtimeManifestSchema = z
     description: z.string().min(1),
     priority: z.number().int().min(0).max(1000),
     version: z.string().optional(),
+    /**
+     * Prompt assembler version (S2-T4).
+     * - `1` (default, omitted): legacy single-pass `buildContext` path
+     * - `2`: three-tier V2 assembler (gated on `COVEL_PROMPT_V2=1` at runtime)
+     *
+     * V2 is opt-in per-plugin. The runtime only routes a manifest to V2 when
+     * BOTH the environment flag and this field declare opt-in.
+     */
+    promptVersion: z.union([z.literal(1), z.literal(2)]).optional(),
     runtimeType: z.enum(['agent', 'function']).optional(),
     handler: z.string().optional(),
     guard: z.string().optional(),

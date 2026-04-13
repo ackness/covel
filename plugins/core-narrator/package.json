@@ -2,5 +2,15 @@
   "name": "@covel/plugin-core-narrator",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@covel/context": "workspace:*",
+    "@covel/plugin-loader": "workspace:*",
+    "@covel/shared": "workspace:*",
+    "vitest": "^4.1.2"
+  }
 }
