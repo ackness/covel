@@ -19,6 +19,7 @@
 | **update-character** | builtin | — | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++ |
 | **list-characters** | builtin | — | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见） |
 | **get-character** | builtin | — | auto-allow | 按 id 或 name 查找单个角色 |
+| **world-dimension-get** | builtin | — | auto-allow | 按需读取当前 session 世界的结构化维度字段 |
 | set-world-schema | local | core-world-init | auto-allow | 定义世界角色属性 Schema |
 | set-world-entries-batch | local | core-world-init | auto-allow | 批量写入世界词条 |
 | unlock-codex-entries | local | core-codex | auto-allow | 批量解锁图鉴条目 |
@@ -28,7 +29,7 @@
 
 ## Builtin 工具
 
-框架级原语，定义在 `packages/tools/src/builtin/ui-tools.ts`。所有插件可通过 `tools.builtin` 声明引用，无需编写代码。
+框架级原语，定义在 `packages/tools/src/builtin/*.ts`。所有插件可通过 `tools.builtin` 声明引用，无需编写代码。
 
 ### create-form
 
@@ -138,6 +139,67 @@
 | namespace | string | | 数据命名空间（不传则列出所有） |
 
 **输出**: `{ count, items: [{ namespace, key, value, updatedAt }] }`
+
+---
+
+### world-dimension-get
+
+按需读取当前 session 绑定世界的结构化维度数据。适合 world 信息字段很多、但 LLM 只需要少量精确字段时使用。
+
+读取顺序：
+
+1. 优先读当前 session 中 `world-data-provider` 插件写入的 `plugin_data[namespace="entries"]`
+2. 若该维度不存在，则回退到 `world.metadata.dimensions`
+
+| 参数 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| queries | Array<{ dimension, path? }> | ✓ | 查询列表，至少 1 项，最多 20 项 |
+| resolveI18n | boolean | | 是否按 session locale 解析 i18n 文本对象，默认 `true` |
+
+`dimension` 可选值：
+- `geography`
+- `factions`
+- `powerSystem`
+- `history`
+- `economy`
+- `socialStructure`
+- `tone`
+- `mechanics`
+- `startingConditions`
+
+`path` 语法支持对象点路径与数组下标，例如：
+- `contentRating`
+- `regions[0].name`
+- `tiers[2].description`
+- `startingResources.硬币`
+
+**输出 (parsedResult)**:
+```json
+{
+  "_text": "1. tone.contentRating [plugin-data] = \"mature\"",
+  "success": true,
+  "locale": "zh-CN",
+  "results": [
+    {
+      "dimension": "tone",
+      "path": "contentRating",
+      "found": true,
+      "source": "plugin-data",
+      "value": "mature",
+      "error": null
+    }
+  ]
+}
+```
+
+**文本优先约定**：
+- LLM 看到的是 `_text`
+- trace / 调试里保留完整 `results`
+
+**适用场景**：
+- narrator 只需读取 `startingConditions.openingScenario`
+- guide 只需读取 `tone.themes`
+- 角色或剧情 agent 只需读取某个势力、地区、力量阶位的精确字段
 
 ---
 

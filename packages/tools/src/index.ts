@@ -16,6 +16,8 @@ export { createFormTool, createChoicesTool, createNotificationTool, builtinUIToo
 export { createPluginDataTools } from './builtin/plugin-data-tools.js';
 export { createCharacterTools } from './builtin/character-tools.js';
 export type { CharacterStore, CharacterToolHooks } from './builtin/character-tools.js';
+export { createWorldDimensionTools } from './builtin/world-dimension-tools.js';
+export type { WorldDimensionToolDeps } from './builtin/world-dimension-tools.js';
 export { suspendTool, isSuspendSentinel } from './builtin/suspend.js';
 export type { SuspendSentinel } from './builtin/suspend.js';
 

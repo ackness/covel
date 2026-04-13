@@ -3,7 +3,7 @@ name: core-char-creator/character-tracker
 description: NPC 与角色状态跟踪 agent。每轮扫描 narrator 输出，识别新出现的 NPC 并按世界 schema 创建；检测现有角色的状态变化（属性更新、受伤、死亡、装备）并通过 update-character 维护。
 pluginType: core-plugin
 priority: 750
-model: fast
+model: plugin
 promptVersion: 2
 trigger:
   type: scheduled

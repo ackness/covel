@@ -3,7 +3,7 @@ name: {{pluginName}}
 description: {{pluginDescription}}
 pluginType: plugin
 priority: 600
-model: fast
+model: plugin
 trigger:
   type: auto
 tools:

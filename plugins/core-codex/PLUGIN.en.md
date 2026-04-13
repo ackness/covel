@@ -3,7 +3,7 @@ name: core-codex
 description: Knowledge codex system. Analyzes narrative text and records monsters, items, locations, legends, and characters discovered by the player. Non-core plugin, enable as needed.
 pluginType: plugin
 priority: 650
-model: fast
+model: plugin
 promptVersion: 2
 trigger:
   type: auto

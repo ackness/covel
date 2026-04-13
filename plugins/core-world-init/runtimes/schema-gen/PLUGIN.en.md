@@ -3,7 +3,7 @@ name: core-world-init/schema-gen
 description: World dimension schema generator. Reads world lore and batch-creates character attribute schema and world entries via specialized tools.
 pluginType: core-plugin
 priority: 85
-model: fast
+model: plugin
 capabilities: [world-data-provider]
 guard: ../../guard.js
 trigger:

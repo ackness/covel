@@ -3,7 +3,7 @@ name: core-world-init/schema-gen
 description: 世界维度 Schema 生成器。读取世界观文档，通过专用工具批量创建角色属性维度和世界词条。
 pluginType: core-plugin
 priority: 85
-model: fast
+model: plugin
 capabilities: [world-data-provider]
 guard: ../../guard.js
 trigger:

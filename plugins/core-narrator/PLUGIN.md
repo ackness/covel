@@ -3,12 +3,15 @@ name: core-narrator
 description: 主叙事生成器，负责根据玩家输入和世界观设定生成故事内容。每个 Turn 自动执行。
 pluginType: core-plugin
 priority: 500
-model: ds
+model: story
 outputKind: story
 capabilities: [narrative]
 promptVersion: 2
 trigger:
   type: auto
+tools:
+  builtin:
+    - world-dimension-get
 input:
   inject:
     - from: core-npc-graph/rag-retriever
@@ -22,11 +25,6 @@ input:
 <world-lore>
 {{ world.lore }}
 </world-lore>
-
-## 世界维度信息
-<world-dimensions>
-{{ world.dimensions }}
-</world-dimensions>
 
 ## 开场场景
 {{ world.openingScenario }}
@@ -43,6 +41,7 @@ input:
 
 ## 叙事规则
 - 使用第二人称叙述（"你..."）
+- 当需要具体的地理、势力、力量体系、经济、社会结构或开场约束字段时，调用 `world-dimension-get` 按需读取，不要凭空补设定
 - 可以称呼玩家角色名，融入角色的背景和特征进行叙事
 - 严格遵循世界观中的地理、势力、力量体系等设定
 - 人物对话要符合其身份和所属势力的特征

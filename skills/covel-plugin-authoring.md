@@ -25,7 +25,7 @@ name: my-plugin                    # lowercase-hyphen, unique ID
 description: 简短描述。包含激活时机说明。
 pluginType: plugin                 # 'plugin' (default) or 'core-plugin' (always-on)
 priority: 650                      # 0-1000, lower = runs first
-model: fast                        # LLM slot name from llm.toml (ds/fast/qwen/etc.)
+model: plugin                        # LLM slot name from llm.toml (ds/fast/qwen/etc.)
 trigger:
   type: auto                       # auto | manual | scheduled | event | conditional | error-retry
   interval: 5                      # for scheduled

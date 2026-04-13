@@ -3,7 +3,7 @@ name: core-npc-graph/extractor
 description: NPC 关系图抽取器 — 分析叙事文本抽取人物、群体、势力及其关系事实，维护一张可检索的知识图谱。
 pluginType: plugin
 priority: 620
-model: fast
+model: plugin
 capabilities: [npc-graph, relationship-tracking]
 outputKind: plugin
 trigger:

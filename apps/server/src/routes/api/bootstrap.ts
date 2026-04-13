@@ -28,7 +28,17 @@ import type { DataStore } from '@covel/store';
 import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
 import { createToolExecutor, createModelResolver } from '@covel/runtime';
 import { maybeCompact, type CompactorRunner, type CompactorLLMAdapter } from '@covel/context';
-import { builtinUITools, createPluginDataTools, createCharacterTools, suspendTool, tool, shortId, shortIdBatch, type ToolModule } from '@covel/tools';
+import {
+  builtinUITools,
+  createPluginDataTools,
+  createCharacterTools,
+  createWorldDimensionTools,
+  suspendTool,
+  tool,
+  shortId,
+  shortIdBatch,
+  type ToolModule,
+} from '@covel/tools';
 import { z } from 'zod';
 import { createApprovalPipeline } from '@covel/approval';
 import type { PermissionRule } from '@covel/approval';
@@ -213,6 +223,15 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
         timestamp: new Date().toISOString(),
       });
     },
+  })) {
+    toolMap.set(t.name, t);
+    builtinToolNames.add(t.name);
+  }
+
+  // Register world-dimension query tools so agent runtimes can fetch only the
+  // fields they need instead of relying on bulk prompt injection.
+  for (const t of createWorldDimensionTools(store, {
+    findWorldDataPluginId: (sessionId) => registry.findPluginByCapability(sessionId, 'world-data-provider'),
   })) {
     toolMap.set(t.name, t);
     builtinToolNames.add(t.name);

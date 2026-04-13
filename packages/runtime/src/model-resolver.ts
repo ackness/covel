@@ -11,7 +11,7 @@
  *   5. System default slot — undefined, gateway uses its first configured slot
  *
  * Example:
- *   PLUGIN.md has `model: fast`
+ *   PLUGIN.md has `model: plugin`
  *   Plugin's llm.toml has [plugin.fast] with model="qwen3.5-flash"
  *   System's llm.toml has [slots.fast] with model="qwen3.5-flash-different"
  *   → Uses plugin's version (qwen3.5-flash), NOT system's

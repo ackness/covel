@@ -118,7 +118,7 @@ name: my-event-tracker
 description: 追踪故事中发生的重要事件
 pluginType: plugin
 priority: 650
-model: fast
+model: plugin
 trigger:
   type: auto
 ---
@@ -466,7 +466,7 @@ name: my-guide
 description: 故事引导插件，在叙事后为玩家提供 2-4 个行动选项。
 pluginType: plugin
 priority: 600
-model: fast
+model: plugin
 trigger:
   type: auto
 tools:

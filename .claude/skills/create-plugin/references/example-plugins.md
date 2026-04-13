@@ -40,7 +40,7 @@ name: core-codex
 description: 知识图鉴系统。分析叙事文本，记录玩家发现的怪物、道具、地点、传说和人物。
 pluginType: plugin
 priority: 650
-model: fast
+model: plugin
 trigger:
   type: auto
 tools:
