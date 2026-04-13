@@ -493,6 +493,18 @@ describe("ComponentName", () => {
 - **速率限制**：`middleware/rate-limit.ts` 提供 `rateLimiter()` 和 `singleFlight()` 中间件
 - **错误消息**：`middleware/sanitize-error.ts` 在生产环境剥离文件路径和堆栈信息
 
+### Dev-Mode LLM Replay Cache
+
+`packages/ai-provider/src/adapters/replay-cache.ts` + `http.ts` 为开发期提供 LLM 请求录制/回放，方便定位问题时反复重放同一次模型调用。**仅在 `COVEL_LLM_REPLAY` 环境变量被设置时启用**，未设置时整链路零开销、零行为变化。
+
+环境变量：
+- `COVEL_LLM_REPLAY=auto` — 命中缓存就回放，未命中调真实 provider 后录制（开发首选）
+- `COVEL_LLM_REPLAY=record` — 强制调真实 provider 并覆盖缓存
+- `COVEL_LLM_REPLAY=replay` — 只读缓存，未命中抛错（用于调试断点重现）
+- `COVEL_LLM_REPLAY_DIR` — 缓存目录，默认 `debugs/llm-cache/`（已 gitignore）
+
+缓存键 = `sha256(method + url + canonicalJson(body))`，相同 ai-provider + 相同参数稳定命中。`authorization`/`api_key` 等敏感字段在哈希和落盘前会被屏蔽为 `<REDACTED>`。流式响应通过 `TransformStream` tee：实时转发给调用方的同时缓存原始 SSE 文本，buffer 上限 10MB，超过则跳过录制。
+
 ### Store File Organization
 
 每个 SQL store backend 分为两个文件：

@@ -1,4 +1,15 @@
 import type { ProviderConfig, UsageSummary } from "../types.js";
+import {
+  buildStreamEntry,
+  getReplayMode,
+  hashRequest,
+  loadCached,
+  recordJsonResponse,
+  responseFromCache,
+  saveCached,
+  teeStreamResponse,
+  type ReplayMode,
+} from "./replay-cache.js";
 
 /** Maximum characters to include in error message previews. */
 const ERROR_PREVIEW_MAX_CHARS = 200;
@@ -208,6 +219,21 @@ export async function postJson(
   const serializedBody = JSON.stringify(body);
   const effectiveSignal = signal ?? config.signal;
 
+  // Replay cache: dev-only request record/replay. No-op when env unset.
+  const replayMode = getReplayMode();
+  const replayHash = replayMode !== "off" ? hashRequest("POST", url, body) : null;
+  if (replayHash && (replayMode === "replay" || replayMode === "auto")) {
+    const cached = loadCached(replayHash);
+    if (cached) {
+      return responseFromCache(cached);
+    }
+    if (replayMode === "replay") {
+      throw new Error(
+        `[replay-cache] No cached entry for ${replayHash} at ${url} (mode=replay)`
+      );
+    }
+  }
+
   const doFetch = (): Promise<Response> =>
     fetch(url, {
       method: "POST",
@@ -218,14 +244,15 @@ export async function postJson(
 
   // Fast path: retry disabled via escape hatch. Exactly one fetch, no retry logic.
   if (isRetryDisabled()) {
-    return doFetch();
+    const response = await doFetch();
+    return maybeRecordResponse(response, replayMode, replayHash, "POST", url, body);
   }
 
   let response = await doFetch();
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     if (!isRetriableStatus(response.status)) {
-      return response;
+      return maybeRecordResponse(response, replayMode, replayHash, "POST", url, body);
     }
 
     // Drain the failed body to free the socket before retrying.
@@ -244,7 +271,35 @@ export async function postJson(
   }
 
   // Retries exhausted — return whatever we have and let assertSuccess classify it.
-  return response;
+  return maybeRecordResponse(response, replayMode, replayHash, "POST", url, body);
+}
+
+/**
+ * Persist the response into the replay cache when in record/auto mode.
+ * Streaming responses are tee'd; JSON responses are cloned and read.
+ * Errors and non-2xx responses are NOT cached.
+ */
+async function maybeRecordResponse(
+  response: Response,
+  mode: ReplayMode,
+  hash: string | null,
+  method: string,
+  url: string,
+  body: unknown
+): Promise<Response> {
+  if (!hash || mode === "off" || mode === "replay") return response;
+  if (!response.ok) return response;
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("text/event-stream")) {
+    return teeStreamResponse(response, (sseText, headers, status, statusText) => {
+      if (sseText === null) return;
+      saveCached(
+        hash,
+        buildStreamEntry(hash, method, url, body, sseText, headers, status, statusText)
+      );
+    });
+  }
+  return recordJsonResponse(hash, method, url, body, response);
 }
 
 /**
