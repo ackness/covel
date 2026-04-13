@@ -320,36 +320,36 @@
 | S1-T4 Scheduler 死代码清理 | ✅ `4e8251d` | — |
 | S1-T5 长 session 压测脚本 | ✅ `d80c08c` + `16e916c` + `1e1bf29` | — |
 
-**Sprint 2 — Prompt 三段式 + Compactor + Cache** — 3/5
+**Sprint 2 — Prompt 三段式 + Compactor + Cache** — 4/5
 
 | 票号 | 状态 | 备注 |
 |---|---|---|
 | S2-T1 三段式 Prompt assembler | ✅ `df820eb` | 段 1/3/5/7 基础；段 9/10 见 S3-T4 |
 | S2-T2 Compactor + `session_summaries` | ✅ `cca779c` + `ee6db4d` (I4 fix) | loadPrompt 已就绪 |
-| S2-T3 Prompt cache + Anthropic `cache_control` | ✅ `35a0374..0b70cd9` merge `6036141` | PUA sentinel 方案；段 1/3/6 打 3 个 breakpoint；第 4 个 mid-history 留作 follow-up |
-| S2-T4 core-narrator + core-guide 迁 V2 | ⏳ | 依赖 S2-T3 完成 ✅ → 可在 Wave B 启动 |
-| S2-T5 `prompt-structure.md` 文档 | ⏳ | 依赖 S2-T3/T4 |
+| S2-T3 Prompt cache + Anthropic `cache_control` | ✅ `35a0374..0b70cd9` merge `6036141` | PUA sentinel 方案；段 1/3/6 打 3 个 breakpoint；第 4 个 mid-history 留作 FU-5 |
+| S2-T4 core-narrator + core-guide 迁 V2 | ✅ `bbf2889` merge Wave B | `promptVersion: 2` 双重 gate；6+6 parity tests；V1/V2 语义等价 |
+| S2-T5 `prompt-structure.md` 文档 | ⏳ | Wave C |
 
-**Sprint 3 — Lorebook + Working Memory + Author's Note** — 3/6
+**Sprint 3 — Lorebook + Working Memory + Author's Note** — 3/6（S3-T2 部分完成见下）
 
 | 票号 | 状态 | 备注 |
 |---|---|---|
 | S3-T1 Lorebook 核心 | ✅ `4dec3b5` | — |
-| S3-T2 core-world-init 迁 Lorebook | ⏳ | **与 S3-T5 冲突**：拆分见 §九.5 |
-| S3-T3 Working Memory 表 + 段 2 | ✅ `916cba6` | **🚧 B1**：`turn-executor.ts:940` WM 未 inject 到 context |
+| S3-T2 core-world-init 迁 Lorebook | 🟡 partial — `4ebf79a` + `207307c` merge Wave B | Store 层（4 backends + contract）+ `lorebook.upsert` proposal + commit handler + snapshot FU-4 wiring 完成；插件本身仍未迁移 → **FU-8** |
+| S3-T3 Working Memory 表 + 段 2 | ✅ `916cba6` + `fe0264d` (B1) | WM 实际 inject 到 context |
 | S3-T4 段 9/10 Author's Note + Post-History | ✅ `9bcb0ee..e1a3997` merge `973c112` | RuntimeManifest 加 authorsNote / postHistory；14 + 9 新测试 |
-| S3-T5 其余 core 插件 V2 迁移 | ⏳ | **拆分**：5a(codex+char-creator) + 5b(world-init 合并到 S3-T2) |
+| S3-T5 其余 core 插件 V2 迁移 | ⏳ | **拆分**：5a(codex+char-creator) + 5b(world-init 合并到 FU-8) |
 | S3-T6 Lorebook 玩家 UI | ⏳ | 在 `apps/web-v2/` |
 
-**Sprint 4 — 稳健性** — 4/5
+**Sprint 4 — 稳健性** — 5/5 ✅
 
 | 票号 | 状态 | 备注 |
 |---|---|---|
 | S4-T1 Commit 事务 | ✅ `e942fce` + `ce56048` | — |
-| S4-T2 Snapshot + Fork API | ✅ `80ff240..a74ac9a` merge `ed42b9f` | 4 backends + 8 contract tests + auto snapshot @ turn-executor.ts:428；fork = copy 策略；CLAUDE.md 20 → 21；session.forked 加入 ProtocolEventType；lorebook entries 仍为 TODO（见 FU-4） |
+| S4-T2 Snapshot + Fork API | ✅ `80ff240..a74ac9a` merge `ed42b9f` | 4 backends + 8 contract tests + auto snapshot @ turn-executor.ts:428；fork = copy 策略；CLAUDE.md 20 → 21；session.forked 加入 ProtocolEventType；lorebook FU-4 在 S3-T2 合一起做 ✅ |
 | S4-T3 Hook lifecycle pipeline | ✅ `c0bb9ed` + `627787d` + `87ed8d8` | — |
 | S4-T4 Suspend/Resume 原语 | ✅ `f5540cf` + `07c5fd6` (M4) | — |
-| S4-T5 SSE 协议扩展 + 文档同步 | ⏳ | 依赖 S4-T2 完成（`session.forked` 事件） |
+| S4-T5 SSE 协议扩展 + 文档同步 | ✅ `9114802..c00d108` merge | `state.snapshot.created` 加入 union + 3 emit 点；`stream.interrupted/resumed` 延迟为 FU-7 |
 
 **Sprint 5 — 生态长尾** — 0/5 ⏳
 
@@ -397,6 +397,7 @@
 | FU-5 | **S2-T3 第 4 个 Anthropic breakpoint**：`§A15` 规定 4 个 breakpoint，其中 "段 7 中部"（messages 中段）需要 turn-executor 改动。A-1 留作 follow-up，因为 S2-T3 scope 不碰 runtime。Wave B / Wave C 顺手 |
 | FU-6 | **Wave A-3 session.forked SSE 前端消费**：后端已发 SSE 事件，但 `apps/web-v2/src/services/sse.ts` 未 `addEventListener('session.forked', ...)`，等 fork UI（Sprint 5 或 S3-T6）实装时再接。S4-T5 把 `state.snapshot.created` 加进同一组，前端挂载时一次性接 2 条 |
 | FU-7 | **流式重试事件未接 SSE**：`packages/ai-provider/src/adapters/http.ts:postJson` 的 S1-T3 retry 路径是**静默** fallback，没有 callback / event hook。S4-T5 调研后确认无法在不改 ai-provider gateway 的前提下接出 `stream.interrupted` / `stream.resumed`。需在 `gateway.ts` / `context-builder` 层插一个 EventBus 注入点（或回调），让 retry 触发时通过 turn-executor 的 `eventBus` 广播。Wave B 或 Sprint 5 单独处理。本 ticket **未** 把这两个 type 加入 `ProtocolEventType`，等真有发射点再加 |
+| FU-8 | **`core-world-init` 插件迁移到 `lorebook.upsert`**：Wave B-1 agent rate limit 在 store 层完成后中断；runtime commit handler + snapshot FU-4 wiring 由主干补齐。还缺最后一步：`plugins/core-world-init/server/*.ts` 的 schema-gen runtime 改为 emit `lorebook.upsert` proposal（而非写 plugin_data），`packages/context/src/context-builder.ts` 把 `{{ config.worldEntries }}` 的值源从 plugin_data 改为 `listSessionLorebookEntries`。单文件级别的插件改动，Wave C 顺手或 Sprint 5 清理即可 |
 
 ### 8.4 Progress ledger 更新规则
 
