@@ -55,6 +55,7 @@ import { aiRoutes } from './ai.js';
 import { traceRoutes } from './traces.js';
 import { resumeRoutes } from './resume.js';
 import { snapshotRoutes } from './snapshots.js';
+import { lorebookRoutes } from './lorebook.js';
 
 // ── Bootstrap config ─────────────────────────────────────────────
 
@@ -428,6 +429,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   app.route('/api/sessions', workingMemoryRoutes);
   app.route('/api/sessions', resumeRoutes);  // S4-T4: suspend/resume (resume + suspensions list/delete)
   app.route('/api/sessions', snapshotRoutes); // S4-T2: state snapshots + fork
+  app.route('/api/sessions', lorebookRoutes); // S3-T6: session-level lorebook viewer
   app.route('/api/plugins', pluginRoutes);
   app.route('/api/events', eventRoutes);
   app.route('/api/events', subscribeRoutes);

@@ -63,6 +63,20 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 > `core-char-creator` 的 character-panel 由 player-init runtime 声明，character-tracker runtime 共享同一个 namespace `characters`（由 `create-character` / `update-character` builtin 工具写入）。
 > `core-npc-graph/extractor` 的 npc-graph-panel 引用 `GraphCanvas` 组件读取 `nodes` + `edges` 两个 namespace，呈现 force-directed 关系图（react-force-graph-2d 懒加载）。
 
+### Lorebook（框架自持 Tab）
+
+`Lorebook` 是 activity bar 中**框架自持**的 Tab（S3-T6），与插件驱动的 Tab 并列但不受 `/api/ui-specs` 影响：
+
+- **数据源**：`GET /api/sessions/:id/lorebook` → `{ entries: LorebookEntryRecord[] }`，直接读取 store 层的 session 级 lorebook 表（由插件通过 proposal commit 写入）。
+- **交互**：
+  - 展示每条 entry 的 `id` / `pluginId` / `strategy` / `position` / `insertionOrder` / `keys`
+  - 内容支持展开/收起（预览 120 字符）
+  - 启用/禁用开关 → `PATCH /api/sessions/:id/lorebook/:entryId { enabled }`
+  - 删除 → `DELETE /api/sessions/:id/lorebook/:entryId`
+- **刷新策略（MVP）**：首次挂载 fetch + 顶部手动刷新按钮。没有专用 SSE 事件；lorebook 通过回合 commit 路径写入，接受回合间最终一致。
+- **实现**：`apps/web-v2/src/components/panels/lorebook-panel.tsx`，在 `right-panel.tsx` 中以独立的 activity-bar 按钮挂载（`FRAMEWORK_TAB_LOREBOOK` 常量），仅在 session 存在时显示。
+- **隔离规则**：Tab 代码属于框架，但不硬编码任何具体插件 ID —— 每条 entry 的 `pluginId` 字段由数据自身携带，仅作显示用途。
+
 ### 声明方式
 
 插件在 PLUGIN.md frontmatter 中声明 `ui.right`，引用 `ui/` 目录下的 JSON 文件：
