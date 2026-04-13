@@ -58,7 +58,13 @@ function resolveEmptyMessage(value: unknown): string {
   if (typeof value === "string") return value;
   if (typeof value === "object") {
     const obj = value as Record<string, string>;
-    return obj["zh"] ?? obj["zh-CN"] ?? obj["en"] ?? Object.values(obj)[0] ?? "";
+    const candidates = [obj["zh"], obj["zh-CN"], obj["en"], ...Object.values(obj)];
+    for (const candidate of candidates) {
+      if (candidate && typeof candidate === "string" && candidate.trim() !== "") {
+        return candidate;
+      }
+    }
+    return "";
   }
   return String(value);
 }
@@ -76,9 +82,9 @@ export function PluginPanel({ pluginId, spec, onAction }: PluginPanelProps) {
 
   const handlers = onAction
     ? {
-        apiCall: async (params: Record<string, unknown>) => { onAction("apiCall", params); },
-        emitEvent: async (params: Record<string, unknown>) => { onAction("emitEvent", params); },
-      }
+      apiCall: async (params: Record<string, unknown>) => { onAction("apiCall", params); },
+      emitEvent: async (params: Record<string, unknown>) => { onAction("emitEvent", params); },
+    }
     : undefined;
 
   if (!flatSpec) {
