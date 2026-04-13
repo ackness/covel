@@ -1,0 +1,4 @@
+interface:
+  display_name: "Aimock Test Playbook"
+  short_description: "Adopt aimock with layered AI testing workflows"
+  default_prompt: "Use $aimock-test-playbook to design a layered AI testing strategy with fake adapters, aimock replay fixtures, and opt-in live checks."
