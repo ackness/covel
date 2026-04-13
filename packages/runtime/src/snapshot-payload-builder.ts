@@ -8,11 +8,11 @@
  * Feature flag: `COVEL_SNAPSHOTS_V1=1`. Auto-snapshots are driven by the
  * turn-executor; manual and fork snapshots by the server routes.
  *
- * Lorebook note: the store does not yet expose a `listLorebookEntries`
- * method. We return an empty array here to avoid inventing a store API
- * that belongs to a separate ticket (see Lorebook S3-T1 follow-ups).
- * Forks ignore this slice today; entries continue to live in world/plugin
- * layers and are re-resolved by the registry on the forked session.
+ * Session lorebook entries (FU-4 close-out): included once the store
+ * exposes `listSessionLorebookEntries` (added in S3-T2). World- and
+ * plugin-level lorebook data remain file-backed and are re-resolved by
+ * the registry on the forked session — only session-scoped entries need
+ * to travel with the snapshot.
  */
 
 import type {
@@ -22,6 +22,7 @@ import type {
   StateEntryRecord,
   PluginDataRecord,
   WorkingMemoryRecord,
+  LorebookEntryRecord,
 } from '@covel/store';
 
 /**
@@ -71,9 +72,13 @@ export async function buildSnapshotPayload(
   const turnMessages = await store.listTurnMessages(sessionId);
   const messagesCursor = turnMessages.length > 0 ? turnMessages[turnMessages.length - 1]!.id : '';
 
-  // Session lorebook entries. See module docstring — deferred to the
-  // lorebook store API ticket.
-  const lorebookEntries: readonly unknown[] = [];
+  // Session lorebook entries — FU-4 close-out. Only session-scoped entries
+  // travel with the snapshot; world/plugin-level entries are re-resolved
+  // from the package registry on the forked session.
+  const lorebookEntries: readonly LorebookEntryRecord[] =
+    typeof store.listSessionLorebookEntries === 'function'
+      ? await store.listSessionLorebookEntries(sessionId)
+      : [];
 
   return {
     schemaVersion: 1,

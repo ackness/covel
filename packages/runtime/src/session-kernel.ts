@@ -112,6 +112,24 @@ export interface KernelStore {
    */
   upsertWorkingMemory?(record: { id: string; sessionId: string; key: string; scope: 'player' | 'story' | 'shared'; value: unknown; schemaRef?: string; updatedAt: string }): Promise<void>;
   /**
+   * Session lorebook upsert (S3-T2). Optional for the same reason as
+   * upsertWorkingMemory — thin mock stores may not implement it.
+   */
+  upsertLorebookEntries?(records: ReadonlyArray<{
+    id: string;
+    sessionId: string;
+    pluginId: string;
+    keys: readonly string[];
+    content: string;
+    strategy: 'constant' | 'selective';
+    position: string;
+    insertionOrder: number;
+    enabled: boolean;
+    extra?: unknown;
+    createdAt: string;
+    updatedAt: string;
+  }>): Promise<void>;
+  /**
    * Optional transaction hooks (S4-T1). When present and opted-in via the
    * COVEL_COMMIT_TXN_V1 feature flag, `commitAll()` wraps the whole proposal
    * chain in begin/commit/rollback so a mid-chain failure leaves no partial
@@ -141,6 +159,7 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
     'state.patch': commitStatePatch,
     'event.emit': commitEvent,
     'working_memory.set': commitWorkingMemory,
+    'lorebook.upsert': commitLorebookUpsert,
   };
 
   async function commit(proposal: Proposal): Promise<CommitResult> {
@@ -369,6 +388,69 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
     });
 
     return { committed: true, event: wmEvent };
+  }
+
+  async function commitLorebookUpsert(proposal: Proposal): Promise<CommitResult> {
+    // The lorebook core itself is always on — only the session-scoped write
+    // path is gated so plugins authored for earlier versions keep working.
+    const payload = proposal.payload as { entries?: unknown };
+    if (!Array.isArray(payload.entries) || payload.entries.length === 0) {
+      return { committed: false, error: 'lorebook.upsert: entries must be a non-empty array' };
+    }
+
+    if (!store.upsertLorebookEntries) {
+      return { committed: false, error: 'lorebook.upsert: store does not support session lorebook entries' };
+    }
+
+    const now = new Date().toISOString();
+    const records: Array<{
+      id: string;
+      sessionId: string;
+      pluginId: string;
+      keys: readonly string[];
+      content: string;
+      strategy: 'constant' | 'selective';
+      position: string;
+      insertionOrder: number;
+      enabled: boolean;
+      extra?: unknown;
+      createdAt: string;
+      updatedAt: string;
+    }> = [];
+
+    for (const raw of payload.entries) {
+      const entry = raw as Record<string, unknown>;
+      if (typeof entry.id !== 'string' || entry.id.length === 0) {
+        return { committed: false, error: 'lorebook.upsert: each entry needs a non-empty id' };
+      }
+      if (typeof entry.content !== 'string') {
+        return { committed: false, error: `lorebook.upsert: entry ${entry.id} missing content` };
+      }
+      if (entry.strategy !== 'constant' && entry.strategy !== 'selective') {
+        return { committed: false, error: `lorebook.upsert: entry ${entry.id} has invalid strategy` };
+      }
+      const keys = Array.isArray(entry.keys)
+        ? (entry.keys as unknown[]).filter((k): k is string => typeof k === 'string')
+        : [];
+      records.push({
+        id: entry.id,
+        sessionId: proposal.sessionId,
+        pluginId: proposal.source.pluginId,
+        keys,
+        content: entry.content,
+        strategy: entry.strategy,
+        position: typeof entry.position === 'string' ? entry.position : 'after_char_defs',
+        insertionOrder: typeof entry.insertionOrder === 'number' ? entry.insertionOrder : 100,
+        enabled: typeof entry.enabled === 'boolean' ? entry.enabled : true,
+        extra: entry.extra,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    await store.upsertLorebookEntries(records);
+
+    return { committed: true };
   }
 
   return { commit, commitAll };
