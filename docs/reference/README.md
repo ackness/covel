@@ -20,6 +20,12 @@ Covel 框架能力注册表与 API 参考。
 |------|------|
 | [ui-panels.md](ui-panels.md) | 右侧面板 Tab 定义 — 7 个 Tab 的职责、数据源、渲染模式、扩展指南 |
 
+## Prompt 组装
+
+| 文档 | 描述 |
+|------|------|
+| [prompt-structure.md](prompt-structure.md) | V2 三段式 Prompt Assembler — 10 段结构、Author's Note / Post-History、Anthropic cache_control 注入、V1→V2 迁移 playbook |
+
 ## 注册表
 
 | 文档 | 描述 |
