@@ -12,6 +12,75 @@
  * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
  * @returns {Promise<Record<string, unknown>>}
  */
+/**
+ * Derive a character attribute schema from world dimensions.
+ * Used when world.yaml has dimensions but no explicit schemas field —
+ * avoids an LLM call by inferring sensible attributes from world data.
+ *
+ * @param {Record<string, unknown>} dimensions
+ * @returns {Array<Record<string, unknown>>}
+ */
+function deriveSchema(dimensions) {
+  /** @type {Array<Record<string, unknown>>} */
+  const attrs = [
+    { id: 'hp', name: '生命值', type: 'number', min: 0, max: 100, defaultValue: 100, category: 'stats', description: '当前生命值' },
+    { id: 'stamina', name: '体力', type: 'number', min: 0, max: 100, defaultValue: 100, category: 'stats', description: '行动耐力' },
+    { id: 'name', name: '姓名', type: 'string', category: 'bio', description: '角色名称' },
+    { id: 'background', name: '背景', type: 'string', category: 'bio', description: '出身与经历' },
+    { id: 'occupation', name: '职业', type: 'string', category: 'bio', description: '当前职业或身份' },
+    { id: 'reputation', name: '声望', type: 'number', min: -100, max: 100, defaultValue: 0, category: 'social', description: '社会评价' },
+    { id: 'skills', name: '技能', type: 'array', itemType: 'string', category: 'abilities', defaultValue: [], description: '掌握的技能列表' },
+    { id: 'traits', name: '特征', type: 'array', itemType: 'string', category: 'abilities', defaultValue: [], description: '性格/身体特征' },
+  ];
+
+  // Add currency attribute from economy.currencies[0] if defined
+  const economy = /** @type {any} */ (dimensions.economy);
+  const firstCurrency = economy?.currencies?.[0];
+  if (firstCurrency) {
+    const currName = typeof firstCurrency.name === 'object'
+      ? (firstCurrency.name['zh-CN'] ?? firstCurrency.name['en-US'] ?? '货币')
+      : (firstCurrency.name ?? '货币');
+    attrs.push({
+      id: 'gold',
+      name: currName,
+      type: 'number',
+      min: 0,
+      defaultValue: 0,
+      category: 'stats',
+      description: `持有的${currName}数量`,
+    });
+  } else {
+    attrs.push({ id: 'gold', name: '金币', type: 'number', min: 0, defaultValue: 0, category: 'stats' });
+  }
+
+  // Add power tier enum from powerSystem.tiers if defined
+  const powerSystem = /** @type {any} */ (dimensions.powerSystem);
+  if (Array.isArray(powerSystem?.tiers) && powerSystem.tiers.length > 0) {
+    const tierOptions = powerSystem.tiers.map((/** @type {any} */ t) => {
+      const n = t.name;
+      return typeof n === 'object' ? (n['zh-CN'] ?? n['en-US'] ?? JSON.stringify(n)) : String(n ?? '');
+    }).filter(Boolean);
+
+    if (tierOptions.length > 0) {
+      const psName = powerSystem.name;
+      const attrName = typeof psName === 'object'
+        ? (psName['zh-CN'] ?? psName['en-US'] ?? '境界')
+        : (psName ?? '境界');
+      attrs.push({
+        id: 'powerTier',
+        name: attrName,
+        type: 'enum',
+        options: tierOptions,
+        defaultValue: tierOptions[0],
+        category: 'abilities',
+        description: `${attrName}等级`,
+      });
+    }
+  }
+
+  return attrs;
+}
+
 export default async function guard(ctx) {
   const { sessionId, store, pluginId } = ctx;
   const s = /** @type {any} */ (store);
@@ -87,7 +156,9 @@ export default async function guard(ctx) {
       }
     }
 
-    // 3. Check if the world has pre-built dimensions in metadata
+    // 3. Check if the world has pre-built dimensions in metadata.
+    //    When dimensions exist, import entries + derive schema from world data,
+    //    then skip the LLM entirely — no generation needed.
     if (worldId) {
       const world = await s.getWorld(worldId);
       const dimensions = /** @type {Record<string, unknown> | undefined} */ (
@@ -95,9 +166,10 @@ export default async function guard(ctx) {
       );
 
       if (dimensions && Object.keys(dimensions).length > 0) {
-        // Import dimensions from world.yaml into plugin_data
         const now = new Date().toISOString();
-        const records = Object.entries(dimensions).map(([key, value]) => ({
+
+        // Import all dimension keys as plugin_data entries
+        const entryRecords = Object.entries(dimensions).map(([key, value]) => ({
           id: crypto.randomUUID(),
           sessionId,
           pluginId,
@@ -107,15 +179,32 @@ export default async function guard(ctx) {
           createdAt: now,
           updatedAt: now,
         }));
-        await s.setPluginDataBatch(records);
+        await s.setPluginDataBatch(entryRecords);
 
-        // Entries imported but still need LLM to generate character attribute schema
+        // Derive character attribute schema from world data (no LLM needed)
+        const explicitSchemas = world?.metadata?.schemas;
+        const attributes = Array.isArray(explicitSchemas) && explicitSchemas.length > 0
+          ? explicitSchemas
+          : deriveSchema(dimensions);
+
+        await s.setPluginData({
+          id: crypto.randomUUID(),
+          sessionId,
+          pluginId,
+          namespace: 'schema',
+          key: 'character-attributes',
+          value: { version: 1, attributes },
+          createdAt: now,
+          updatedAt: now,
+        });
+
         return {
-          skip: false,
+          skip: true,
           initialized: true,
           importedDimensions: true,
-          entryCount: records.length,
-          narrativeOutput: `[系统] 从世界包导入了 ${records.length} 个维度词条`,
+          entryCount: entryRecords.length,
+          schemaCount: attributes.length,
+          narrativeOutput: `[系统] 从世界包全量导入：${entryRecords.length} 个维度词条，${attributes.length} 个角色属性`,
         };
       }
     }

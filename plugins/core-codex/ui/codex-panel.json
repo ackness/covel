@@ -4,6 +4,7 @@
   "label": { "zh": "知识图鉴", "en": "Codex" },
   "icon": "book-open",
   "dataSource": { "namespace": "entries" },
+  "emptyState": { "message": { "zh": "图鉴暂无词条，等待 narrator 发现新知识……", "en": "No codex entries yet, waiting for the narrator to uncover new knowledge…" } },
   "view": {
     "component": "CardList",
     "repeat": { "statePath": "/entries", "key": "key" },

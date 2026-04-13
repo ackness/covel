@@ -223,14 +223,17 @@ export async function executeTurn(
 
   // 1. Trigger filter — determine which runtimes should run this turn
   //    Each runtime gets its own triggerContext with accurate triggerCount from store.
-  // Build a map of pluginId → number of times it has been triggered (from message history)
-  // We use TurnMessages with sourceType='runtime' as the trigger count source
+  // Build a map of runtimeId → number of times it has been triggered (from message history)
+  // We use TurnMessages with sourceType='runtime' as the trigger count source.
+  // Key by sourceRuntimeId (e.g. "core-world-init/schema-gen") to match rt.name used in lookup,
+  // since sourcePluginId stores the plugin package ID (e.g. "core-world-init") which differs for
+  // multi-runtime plugins.
   const runtimeTriggerCounts = new Map<string, number>();
   for (const msg of messageHistory) {
-    if (msg.sourceType === 'runtime' && msg.sourcePluginId) {
+    if (msg.sourceType === 'runtime' && msg.sourceRuntimeId) {
       runtimeTriggerCounts.set(
-        msg.sourcePluginId,
-        (runtimeTriggerCounts.get(msg.sourcePluginId) ?? 0) + 1,
+        msg.sourceRuntimeId,
+        (runtimeTriggerCounts.get(msg.sourceRuntimeId) ?? 0) + 1,
       );
     }
   }
@@ -272,7 +275,7 @@ export async function executeTurn(
     let lastRuntimeMsgIdx = -1;
     for (let i = messageHistory.length - 1; i >= 0; i--) {
       const m = messageHistory[i];
-      if (m.sourceType === 'runtime' && m.sourcePluginId === rt.name) {
+      if (m.sourceType === 'runtime' && m.sourceRuntimeId === rt.name) {
         lastRuntimeMsgIdx = i;
         break;
       }

@@ -18,7 +18,7 @@ export function App() {
   const store = useSessionStore();
 
   useEffect(() => {
-    store.boot();
+    void store.boot();
   }, []);
 
   // Loading
@@ -46,8 +46,11 @@ export function App() {
         <SessionPrep
           world={store.selectedWorld}
           plugins={store.plugins}
+          worldSessions={store.worldSessions}
           onStart={store.startGame}
           onBack={store.backToWorldSelect}
+          onResume={store.resumeSession}
+          onDelete={store.deleteSession}
         />
       </div>
     );
@@ -59,10 +62,16 @@ export function App() {
       {/* Header */}
       <header className="shrink-0 border-b border-zinc-200 dark:border-zinc-700 px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h1 className="text-sm font-semibold tracking-wide">COVEL</h1>
+          <button
+            type="button"
+            onClick={store.backToWorldSelect}
+            className="text-xs font-semibold tracking-wide hover:text-zinc-500 transition-colors"
+          >
+            COVEL
+          </button>
           {store.session && (
             <span className="text-[10px] text-zinc-400 font-mono">
-              {store.session.id}
+              #{store.session.id.split("-").at(-1)}
             </span>
           )}
         </div>

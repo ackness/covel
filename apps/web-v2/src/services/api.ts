@@ -25,6 +25,7 @@ export interface SessionRecord {
   worldId: string;
   phase: string;
   locale?: string;
+  createdAt?: string;
 }
 
 // ── Health ───────────────────────────────────────────────────────
@@ -47,12 +48,21 @@ export async function listWorlds(): Promise<WorldRecord[]> {
 
 // ── Sessions ─────────────────────────────────────────────────────
 
+export async function listSessions(): Promise<SessionRecord[]> {
+  const res = await request<{ items: SessionRecord[] }>("/api/sessions");
+  return res.items ?? [];
+}
+
 export async function createSession(worldId: string, plugins: string[]): Promise<SessionRecord> {
   return request<SessionRecord>("/api/sessions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ worldId, plugins, locale: "zh-CN" }),
   });
+}
+
+export async function deleteSession(sessionId: string): Promise<void> {
+  await request(`/api/sessions/${sessionId}`, { method: "DELETE" });
 }
 
 // ── Actions (SSE) ────────────────────────────────────────────────

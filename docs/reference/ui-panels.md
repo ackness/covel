@@ -98,6 +98,9 @@ ui:
   "label": { "zh": "词条", "en": "Entries" },
   "icon": "book-marked",
   "dataSource": { "namespace": "entries" },
+  "emptyState": {
+    "message": { "zh": "世界维度词条尚未生成，等待初始化完成……", "en": "World entries not yet generated, waiting for initialization…" }
+  },
   "view": {
     "component": "Accordion",
     "repeat": { "statePath": "/entries", "key": "key" },
@@ -121,7 +124,39 @@ ui:
 - `label` — 面板自身名（在子 Tab 上显示）
 - `icon` — Lucide 图标名（kebab-case）
 - `dataSource.namespace` — 从 `pluginData[pluginId][namespace]` 读取数据
+- `emptyState.message` — 数据为空时显示的提示文字（见下方"空状态渲染"章节）
 - `view` — json-render nested spec，使用框架 catalog 中的组件
+
+### 空状态渲染
+
+当面板对应的 namespace 数据为空时（`Object.keys(data).length === 0`），`PluginPanel` 不渲染 `view`，而是显示一段居中的斜体提示文字。
+
+**优先级**：`emptyState.message`（spec 声明）> 自动回退（`${panelLabel} 暂无数据，等待游戏推进……`）
+
+**消息格式**：支持 i18n 对象或纯字符串：
+
+```json
+// i18n 对象（推荐）
+"emptyState": {
+  "message": { "zh": "尚未创建角色，完成角色创建流程后将在此显示……", "en": "No characters yet…" }
+}
+
+// 纯字符串
+"emptyState": {
+  "message": "暂无数据，等待游戏推进……"
+}
+```
+
+**约定**：所有插件面板 spec **必须**声明 `emptyState.message`，使用与面板业务语境匹配的提示语，而非通用文字。已内置 `emptyState` 的面板：
+
+| 面板 spec | 空状态提示 |
+|-----------|-----------|
+| `character-panel.json` | 尚未创建角色，完成角色创建流程后将在此显示…… |
+| `codex-panel.json` | 图鉴暂无词条，等待 narrator 发现新知识…… |
+| `world-schema.json` | 角色属性定义尚未生成，等待世界初始化…… |
+| `world-entries.json` | 世界维度词条尚未生成，等待初始化完成…… |
+
+**实现位置**：`apps/web-v2/src/components/panels/plugin-panel.tsx` 的 `PluginPanel` 组件（`isEmpty` 分支）。
 
 ### json-render 绑定速查
 

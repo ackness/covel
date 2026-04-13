@@ -53,6 +53,16 @@ function rewriteComponentToType(node: Record<string, unknown>): Record<string, u
   return result;
 }
 
+function resolveEmptyMessage(value: unknown): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object") {
+    const obj = value as Record<string, string>;
+    return obj["zh"] ?? obj["zh-CN"] ?? obj["en"] ?? Object.values(obj)[0] ?? "";
+  }
+  return String(value);
+}
+
 export function PluginPanel({ pluginId, spec, onAction }: PluginPanelProps) {
   const namespace = (spec.dataSource as Record<string, string> | undefined)?.namespace ?? "default";
   const data = usePluginNamespace(pluginId, namespace);
@@ -73,6 +83,20 @@ export function PluginPanel({ pluginId, spec, onAction }: PluginPanelProps) {
 
   if (!flatSpec) {
     return <p className="text-xs text-zinc-400 italic">Invalid panel spec</p>;
+  }
+
+  // Empty state: namespace has no data yet
+  const isEmpty = Object.keys(data).length === 0;
+  if (isEmpty) {
+    const emptySpec = spec.emptyState as Record<string, unknown> | undefined;
+    const customMsg = resolveEmptyMessage(emptySpec?.message);
+    const label = resolveEmptyMessage(spec.label) || pluginId;
+    const emptyMsg = customMsg || `${label} 暂无数据，等待游戏推进……`;
+    return (
+      <p className="text-xs text-zinc-400 italic text-center leading-relaxed px-4 pt-6">
+        {emptyMsg}
+      </p>
+    );
   }
 
   return (

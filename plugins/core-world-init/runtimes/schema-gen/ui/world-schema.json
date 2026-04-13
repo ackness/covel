@@ -5,6 +5,7 @@
   "label": { "zh": "属性", "en": "Schema" },
   "icon": "sliders-horizontal",
   "dataSource": { "namespace": "schema" },
+  "emptyState": { "message": { "zh": "角色属性定义尚未生成，等待世界初始化……", "en": "Character attribute schema not yet generated, waiting for world init…" } },
   "view": {
     "component": "CardList",
     "repeat": { "statePath": "/character-attributes/attributes", "key": "id" },

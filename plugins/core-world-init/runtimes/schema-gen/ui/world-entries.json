@@ -5,6 +5,7 @@
   "label": { "zh": "词条", "en": "Entries" },
   "icon": "book-marked",
   "dataSource": { "namespace": "entries" },
+  "emptyState": { "message": { "zh": "世界维度词条尚未生成，等待初始化完成……", "en": "World entries not yet generated, waiting for initialization…" } },
   "view": {
     "component": "Accordion",
     "repeat": { "statePath": "/entries", "key": "key" },

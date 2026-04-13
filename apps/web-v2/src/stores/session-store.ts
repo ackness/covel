@@ -41,6 +41,27 @@ function openSse(sessionId: string): void {
   });
 }
 
+// ── URL Session ID ───────────────────────────────────────────────
+//
+// ?sid=xxx is the tab-local session identifier. Multiple tabs can open
+// different sessions by having different ?sid params in the URL.
+
+function getSidFromUrl(): string | null {
+  return new URLSearchParams(window.location.search).get("sid");
+}
+
+function setSidInUrl(sid: string): void {
+  const url = new URL(window.location.href);
+  url.searchParams.set("sid", sid);
+  history.replaceState(null, "", url.toString());
+}
+
+function clearSidFromUrl(): void {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("sid");
+  history.replaceState(null, "", url.toString());
+}
+
 // ── LocalStorage Keys ───────────────────────────────────────────
 
 const LS_SESSION_ID = "covel:sessionId";
@@ -97,6 +118,7 @@ interface SessionState {
   executionSteps: ExecutionStep[];
   error: string | null;
   plugins: api.PluginInfo[];
+  worldSessions: api.SessionRecord[];
 }
 
 // ── Store ────────────────────────────────────────────────────────
@@ -111,10 +133,11 @@ let state: SessionState = {
   executionSteps: [],
   error: null,
   plugins: [],
+  worldSessions: [],
 };
 
-// Re-export WorldRecord for components
-export type { WorldRecord, PluginInfo } from "@/services/api.js";
+// Re-export types for components
+export type { WorldRecord, PluginInfo, SessionRecord } from "@/services/api.js";
 
 const listeners = new Set<() => void>();
 function notify() { for (const l of listeners) l(); }
@@ -304,14 +327,24 @@ export async function boot() {
     ]);
     update({ worlds, plugins });
 
-    // Check for a saved session and attempt to resume
+    // 1. URL-based resume — tab-specific, takes priority over localStorage
+    const urlSid = getSidFromUrl();
+    if (urlSid) {
+      try {
+        await resumeSessionById(urlSid);
+        return;
+      } catch {
+        clearSidFromUrl();
+      }
+    }
+
+    // 2. localStorage fallback — last session across tabs
     const saved = getSavedSession();
     if (saved) {
       try {
         await resumeSession(saved.sessionId, saved.worldId);
         return;
       } catch {
-        // Session no longer valid — clear and fall through to world select
         clearSessionStorage();
       }
     }
@@ -325,14 +358,16 @@ export async function boot() {
 export function selectWorld(worldId: string) {
   const world = state.worlds.find((w) => w.id === worldId);
   if (world) {
-    update({ selectedWorld: world, phase: "session-prep" });
+    update({ selectedWorld: world, phase: "session-prep", worldSessions: [] });
+    void loadWorldSessions(worldId);
   }
 }
 
 export function backToWorldSelect() {
   closeSse();
   clearSessionStorage();
-  update({ selectedWorld: null, session: null, messages: [], executionSteps: [], phase: "world-select" });
+  clearSidFromUrl();
+  update({ selectedWorld: null, session: null, messages: [], executionSteps: [], worldSessions: [], phase: "world-select" });
 }
 
 export async function startGame() {
@@ -343,6 +378,7 @@ export async function startGame() {
     const session = await api.createSession(state.selectedWorld.id, state.plugins.map((p) => p.name));
     resetPluginData();
     saveSessionToStorage(session.id, state.selectedWorld.id);
+    setSidInUrl(session.id);
     update({ session, phase: "playing", messages: [], executionSteps: [] });
     openSse(session.id);
 
@@ -408,6 +444,7 @@ export async function resumeSession(sessionId: string, worldId: string) {
   );
 
   saveSessionToStorage(sessionId, worldId);
+  setSidInUrl(sessionId);
   update({
     session,
     selectedWorld,
@@ -417,6 +454,37 @@ export async function resumeSession(sessionId: string, worldId: string) {
     executionSteps: [],
   });
   openSse(sessionId);
+}
+
+export async function resumeSessionById(sessionId: string): Promise<void> {
+  const snapshot = await api.fetchSnapshot(sessionId);
+  const worldId = snapshot.session.worldId ?? "";
+  await resumeSession(sessionId, worldId);
+}
+
+export async function loadWorldSessions(worldId: string): Promise<void> {
+  try {
+    const all = await api.listSessions();
+    const worldSessions = all
+      .filter((s) => s.worldId === worldId)
+      .sort((a, b) => {
+        // Most recent first (by createdAt if available, else by id lexicographic desc)
+        if (a.createdAt && b.createdAt) return b.createdAt.localeCompare(a.createdAt);
+        return b.id.localeCompare(a.id);
+      });
+    update({ worldSessions });
+  } catch {
+    update({ worldSessions: [] });
+  }
+}
+
+export async function deleteSession(sessionId: string): Promise<void> {
+  await api.deleteSession(sessionId);
+  update({ worldSessions: state.worldSessions.filter((s) => s.id !== sessionId) });
+  // If deleting the currently active session, return to world select
+  if (state.session?.id === sessionId) {
+    backToWorldSelect();
+  }
 }
 
 export async function sendMessage(content: string) {
@@ -500,5 +568,8 @@ export function useSessionStore() {
     startGame: useCallback(startGame, []),
     sendMessage: useCallback(sendMessage, []),
     resumeSession: useCallback(resumeSession, []),
+    resumeSessionById: useCallback(resumeSessionById, []),
+    loadWorldSessions: useCallback(loadWorldSessions, []),
+    deleteSession: useCallback(deleteSession, []),
   };
 }
