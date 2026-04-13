@@ -13,6 +13,8 @@ import type { ContextBuildParams } from '../src/types.js';
 import type { RuntimeManifest } from '@covel/shared';
 
 function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
+  // Default to promptVersion: 2 so V2-path tests route through buildContextV2
+  // under the new S2-T4 double-gate (env flag + manifest opt-in).
   return {
     name: 'test-runtime',
     pluginId: 'test-plugin',
@@ -23,6 +25,7 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     trigger: { mode: 'always' },
     tools: { builtin: [], local: [] },
     priority: 500,
+    promptVersion: 2,
     ...overrides,
   };
 }

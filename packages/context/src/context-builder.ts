@@ -156,8 +156,19 @@ export const buildInjectBlocks = _buildInjectBlocks;
 export function buildContext(
   params: ContextBuildParams,
 ): AssembledContext {
-  // V2 gate (S2-T1). Any value other than exactly "1" falls through to V1.
-  if (process.env.COVEL_PROMPT_V2 === '1') {
+  // V2 gate (S2-T1 + S2-T4 per-plugin opt-in).
+  //
+  // Routing requires BOTH:
+  //   1. Environment flag `COVEL_PROMPT_V2=1` (deployment opt-in)
+  //   2. Manifest `promptVersion === 2` (plugin opt-in)
+  //
+  // Either alone falls through to V1. This double gate lets operators roll
+  // out V2 at the environment level while individual plugins migrate at
+  // their own pace. See §A8 of `devs/docs/insights/covel-improvement-plan.md`.
+  if (
+    process.env.COVEL_PROMPT_V2 === '1' &&
+    params.manifest.promptVersion === 2
+  ) {
     return buildContextV2(params);
   }
 

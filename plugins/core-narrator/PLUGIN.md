@@ -6,6 +6,7 @@ priority: 500
 model: ds
 outputKind: story
 capabilities: [narrative]
+promptVersion: 2
 trigger:
   type: auto
 input:
