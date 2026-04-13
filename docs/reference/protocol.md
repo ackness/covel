@@ -93,28 +93,39 @@
 | `turn.suspended` | S→C | 插件调用 `suspend()` 工具成功序列化 pendingContinuation 后由 turn-executor 发出 | `{ sessionId, turnId, suspensionId, reason, resumeSchema }` |
 | `turn.resumed` | S→C | `POST /api/sessions/:id/resume` 成功重新启动 runtime 后由 resume 路由发出 | `{ sessionId, turnId, suspensionId }` |
 
-### Snapshot / Fork 事件（S4-T2）
+### Snapshot / Fork 事件（S4-T2 / S4-T5）
 
-需要环境变量 `COVEL_SNAPSHOTS_V1=1`。当 fork 路由执行成功时由服务端经 eventBus 广播（topic=`session`），SSE 命名事件名来自 payload 的 `_subType`。
+需要环境变量 `COVEL_SNAPSHOTS_V1=1`。所有 snapshot 事件由服务端经 eventBus 广播（topic=`session`），SSE 命名事件名来自 payload 的 `_subType`。
 
 | 事件类型 | 方向 | 描述 | 负载 |
 |----------|------|------|------|
-| `session.forked` | S→C | `POST /api/sessions/:id/fork` 成功物化子 session 后由 snapshots 路由发出 | `{ parentSessionId, childSessionId, fromSnapshotId, forkSnapshotId }` |
+| `state.snapshot.created` | S→C | 新 snapshot 已写入。由 turn-executor（auto）和 snapshots 路由（manual / fork）发出 | `{ turnId, snapshotId, kind: 'auto' \| 'manual' \| 'fork', parentSnapshotId? }` |
+| `session.forked` | S→C | `POST /api/sessions/:id/fork` 成功物化子 session 后由 snapshots 路由发出。fork 同时发出一条 `state.snapshot.created`（kind='fork'） | `{ parentSessionId, childSessionId, fromSnapshotId, forkSnapshotId }` |
 
-> 前端若要接收该事件，需在 `apps/web-v2/src/services/sse.ts` 里为 `session.forked` 显式 `addEventListener` —— 就像所有具名事件一样。当前 sse.ts 尚未挂载该监听；在 fork UI 真正落地前，服务端已经在 SSE 通道上发送，前端订阅即生效，kernel-only 无需改动。
+发射点对照：
 
-### Working Memory / 上下文压缩事件（部分接入）
+| 触发路径 | 事件序列 | 来源 |
+|----------|----------|------|
+| `executeTurn` 自动捕获 | `state.snapshot.created` (kind=auto) | `packages/runtime/src/turn-executor.ts` (auto-snapshot 块) |
+| `POST /api/sessions/:id/snapshot` | `state.snapshot.created` (kind=manual) | `apps/server/src/routes/api/snapshots.ts` |
+| `POST /api/sessions/:id/fork` | `state.snapshot.created` (kind=fork) → `session.forked` | `apps/server/src/routes/api/snapshots.ts` |
 
-下列事件由 commit chain / Compactor 内部发出，**目前不在 `ProtocolEventType` 枚举中**，因此**尚未通过 SSE 推送到前端**。文档化是为了让插件作者知晓内核侧已经在发射对应信号；前端订阅需要等到事件被并入 `ProtocolEventType` 之后才能生效。
+> 前端若要接收上述事件，需在 `apps/web-v2/src/services/sse.ts` 里为 `state.snapshot.created` / `session.forked` 显式 `addEventListener`。当前 sse.ts 尚未挂载这两个监听；在 fork / save UI 真正落地前，服务端已经在 SSE 通道上发送，前端订阅即生效。
+
+### Working Memory / 上下文压缩事件（kernel-only by design）
+
+下列事件由 commit chain / Compactor 内部发出，**保留为内核内部事件**，**不进入 `ProtocolEventType` 枚举**，**没有 SSE 推送计划**。它们的设计意图是让 runtime / hook 内部消费，而非驱动 UI。如果将来确实需要前端实时反应，需要先评审：①是否真的需要实时？还是可以靠 `state.changed` / 轮询拿到？②若需要再把对应 type promote 到 `ProtocolEventType` 并接 SSE forwarder。
 
 | 事件 | 触发点 | 当前出口 | payload | 备注 |
 |------|--------|----------|---------|------|
-| `working_memory.changed` | commit chain 提交 `working_memory.set` proposal 后 | `KernelEvent`（runtime 内部事件，尚未路由到 SSE） | `{ scope, key }`（顶层带有 sessionId/turnId/source） | 需要前端订阅时，需把该 type 加入 `ProtocolEventType` 并在 SSE 转发层接出 |
-| `context.compacted` | Compactor 完成摘要写入后 | `trace_events` 表（仅持久化为 trace） | `{ summaryId, messagesCompacted, tokenSavings, focusSections }` | 同上；目前只能通过 `/api/traces/:sessionId` 查询，没有实时推送 |
+| `working_memory.changed` | commit chain 提交 `working_memory.set` proposal 后 | `KernelEvent`（runtime 内部事件） | `{ scope, key }`（顶层带有 sessionId/turnId/source） | kernel-only by design，UI 应通过 `state.changed` 感知 |
+| `context.compacted` | Compactor 完成摘要写入后 | `trace_events` 表 | `{ summaryId, messagesCompacted, tokenSavings, focusSections }` | trace-only by design，仅可通过 `/api/traces/:sessionId` 离线查询 |
 
 ### SSE 命名事件订阅注意事项
 
 所有 ProtocolEventType 在 SSE 流上都以**命名事件**（`event: <type>\ndata: ...`）形式发送，**不会**触发 `EventSource.onmessage` 默认 handler。前端必须为每个关心的事件类型显式注册 `addEventListener('<type>', handler)`，否则事件会被静默丢弃。`apps/web-v2/src/services/sse.ts` 已为 `narrative.delta` / `narrative.completed` / `interaction.requested` / `phase.changed` / `plugin-data.changed` 等关键事件挂载监听。新增事件类型时**必须同步更新该文件**。
+
+> S4-T5 注意：`state.snapshot.created` / `session.forked` 服务端已经发出但前端尚未挂载 listener（FU-6 / 等 fork & save UI 落地）。此 follow-up 是已知的，与 framework 实现无关。
 
 ## 二、命令类型（CommandType）
 
