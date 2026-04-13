@@ -55,7 +55,10 @@ function rewriteComponentToType(node: Record<string, unknown>): Record<string, u
 
 function resolveEmptyMessage(value: unknown): string {
   if (!value) return "";
-  if (typeof value === "string") return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed !== "" ? value : "";
+  }
   if (typeof value === "object") {
     const obj = value as Record<string, string>;
     const candidates = [obj["zh"], obj["zh-CN"], obj["en"], ...Object.values(obj)];
