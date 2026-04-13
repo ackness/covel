@@ -169,6 +169,36 @@ export interface WorkingMemoryRecord {
   readonly updatedAt: string;     // ISO
 }
 
+/**
+ * Session-scoped lorebook entry persisted to the store (S3-T2).
+ *
+ * Mirrors the `LorebookEntry` shape from `@covel/lorebook` but stays as a
+ * plain record so the store package does not have to take a runtime
+ * dependency on lorebook itself. The runtime/loader bridges between the
+ * two by mapping fields one-to-one.
+ *
+ * Only session-source entries land here. World/plugin layer entries are
+ * loaded from disk by the lorebook loaders and never persisted via this
+ * table — A3 keeps them as authoring artefacts, not session state.
+ */
+export interface LorebookEntryRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  /** Plugin that owns this entry. Mirrors lorebook `pluginId` for traceability. */
+  readonly pluginId: string;
+  /** JSON string[] — keys for selective scanning (constant entries can pass `[]`). */
+  readonly keys: readonly string[];
+  readonly content: string;
+  readonly strategy: 'constant' | 'selective';
+  readonly position: string;            // LorebookPosition — keep stringly-typed at the store edge
+  readonly insertionOrder: number;
+  readonly enabled: boolean;
+  /** Free-form JSON for forward-compatible fields (atDepth, budgetCap, etc.). */
+  readonly extra?: unknown;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
 export interface TraceEventRecord {
   readonly id: string;
   readonly sessionId: string;
@@ -275,6 +305,24 @@ export interface DataStore {
   getWorkingMemory(sessionId: string, scope: WorkingMemoryRecord['scope'], key: string): Promise<WorkingMemoryRecord | null>;
   listWorkingMemory(sessionId: string): Promise<readonly WorkingMemoryRecord[]>;
   deleteWorkingMemory(sessionId: string, scope: WorkingMemoryRecord['scope'], key: string): Promise<void>;
+
+  // ── Lorebook Entries (S3-T2) ──
+  /**
+   * Upsert a batch of session-scoped lorebook entries. Same `(sessionId, id)`
+   * replaces the existing row. Used by the `lorebook.upsert` proposal commit
+   * handler and by plugins that emit world data through the lorebook
+   * pipeline (S3-T2 §A3).
+   */
+  upsertLorebookEntries(records: readonly LorebookEntryRecord[]): Promise<void>;
+  /**
+   * List all session-scoped lorebook entries for the given session, sorted
+   * by `insertionOrder` ascending then `id` ascending for deterministic
+   * output. Used by snapshot payload builder (FU-4) and by the context
+   * loader to populate `{{ config.worldEntries }}` for backward compatibility.
+   */
+  listSessionLorebookEntries(sessionId: string): Promise<readonly LorebookEntryRecord[]>;
+  /** Delete one session-scoped lorebook entry by `(sessionId, id)`. */
+  deleteLorebookEntry(sessionId: string, id: string): Promise<void>;
 
   // ── Session Summaries (S2-T2 Compactor) ──
   saveSessionSummary(record: SessionSummaryRecord): Promise<void>;
@@ -412,8 +460,12 @@ export interface SnapshotPayload {
   readonly stateEntries: readonly StateEntryRecord[];
   readonly pluginData: readonly PluginDataRecord[];
   readonly workingMemory: readonly WorkingMemoryRecord[];
-  /** Session-scoped lorebook entries. See note in snapshot-payload-builder. */
-  readonly lorebookEntries: readonly unknown[];
+  /**
+   * Session-scoped lorebook entries (S3-T2). Captured from the
+   * `lorebook_entries` table at snapshot time so forks can rehydrate the
+   * session-layer lorebook without re-running world-init plugins.
+   */
+  readonly lorebookEntries: readonly LorebookEntryRecord[];
   /**
    * Last `turn_messages.id` persisted for this session at snapshot time.
    * Used by fork to bound how many messages are copied.

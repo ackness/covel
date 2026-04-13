@@ -25,6 +25,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  LorebookEntryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
   SnapshotRecord,
@@ -258,6 +259,23 @@ export const CREATE_TABLES_SQL = `
   );
   CREATE INDEX IF NOT EXISTS pg_working_memory_session_id_idx ON working_memory(session_id);
 
+  CREATE TABLE IF NOT EXISTS lorebook_entries (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    plugin_id TEXT NOT NULL,
+    keys JSONB NOT NULL,
+    content TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    position TEXT NOT NULL,
+    insertion_order INTEGER NOT NULL DEFAULT 100,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    extra JSONB,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS pg_lorebook_entries_session_id_idx ON lorebook_entries(session_id);
+  CREATE INDEX IF NOT EXISTS pg_lorebook_entries_plugin_id_idx ON lorebook_entries(session_id, plugin_id);
+
   CREATE TABLE IF NOT EXISTS session_summaries (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
@@ -301,7 +319,7 @@ export const ALL_TABLE_NAMES = [
   'worlds', 'sessions', 'turn_results', 'runtime_results', 'tool_calls',
   'state_schemas', 'state_entries', 'state_changes', 'events', 'approvals',
   'messages', 'characters', 'plugin_data', 'plugin_configs', 'trace_events',
-  'turn_messages', 'player_inputs', 'working_memory', 'session_summaries', 'suspensions',
+  'turn_messages', 'player_inputs', 'working_memory', 'lorebook_entries', 'session_summaries', 'suspensions',
   'state_snapshots',
 ] as const;
 
@@ -541,6 +559,25 @@ export function toWorkingMemoryRecord(row: typeof schema.workingMemory.$inferSel
     scope: row.scope as WorkingMemoryRecord['scope'],
     value: row.value ?? null,
     schemaRef: row.schemaRef ?? undefined,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export function toLorebookEntryRecord(
+  row: typeof schema.lorebookEntries.$inferSelect,
+): LorebookEntryRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    pluginId: row.pluginId,
+    keys: ((row.keys as string[] | null) ?? []) as readonly string[],
+    content: row.content,
+    strategy: row.strategy as LorebookEntryRecord['strategy'],
+    position: row.position,
+    insertionOrder: row.insertionOrder,
+    enabled: row.enabled !== 0,
+    extra: row.extra == null ? undefined : row.extra,
+    createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
 }

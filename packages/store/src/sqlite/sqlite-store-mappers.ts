@@ -26,6 +26,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  LorebookEntryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
   SnapshotRecord,
@@ -295,6 +296,23 @@ export function createTables(sqlite: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_working_memory_session ON working_memory(session_id);
 
+    CREATE TABLE IF NOT EXISTS lorebook_entries (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      plugin_id TEXT NOT NULL,
+      keys TEXT NOT NULL,
+      content TEXT NOT NULL,
+      strategy TEXT NOT NULL,
+      position TEXT NOT NULL,
+      insertion_order INTEGER NOT NULL DEFAULT 100,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      extra TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_lorebook_entries_session ON lorebook_entries(session_id);
+    CREATE INDEX IF NOT EXISTS idx_lorebook_entries_plugin ON lorebook_entries(session_id, plugin_id);
+
     CREATE TABLE IF NOT EXISTS state_snapshots (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL,
@@ -554,6 +572,25 @@ export function toWorkingMemoryRecord(row: typeof schema.workingMemory.$inferSel
     scope: row.scope as WorkingMemoryRecord['scope'],
     value: fromJsonRequired(row.value),
     schemaRef: row.schemaRef ?? undefined,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export function toLorebookEntryRecord(
+  row: typeof schema.lorebookEntries.$inferSelect,
+): LorebookEntryRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    pluginId: row.pluginId,
+    keys: ((fromJsonRequired(row.keys) as string[] | null) ?? []) as readonly string[],
+    content: row.content,
+    strategy: row.strategy as LorebookEntryRecord['strategy'],
+    position: row.position,
+    insertionOrder: row.insertionOrder,
+    enabled: row.enabled !== 0,
+    extra: row.extra == null ? undefined : fromJsonRequired(row.extra),
+    createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
 }
