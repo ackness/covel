@@ -320,7 +320,7 @@
 | S1-T4 Scheduler 死代码清理 | ✅ `4e8251d` | — |
 | S1-T5 长 session 压测脚本 | ✅ `d80c08c` + `16e916c` + `1e1bf29` | — |
 
-**Sprint 2 — Prompt 三段式 + Compactor + Cache** — 4/5
+**Sprint 2 — Prompt 三段式 + Compactor + Cache** — 5/5 ✅
 
 | 票号 | 状态 | 备注 |
 |---|---|---|
@@ -328,18 +328,18 @@
 | S2-T2 Compactor + `session_summaries` | ✅ `cca779c` + `ee6db4d` (I4 fix) | loadPrompt 已就绪 |
 | S2-T3 Prompt cache + Anthropic `cache_control` | ✅ `35a0374..0b70cd9` merge `6036141` | PUA sentinel 方案；段 1/3/6 打 3 个 breakpoint；第 4 个 mid-history 留作 FU-5 |
 | S2-T4 core-narrator + core-guide 迁 V2 | ✅ `bbf2889` merge Wave B | `promptVersion: 2` 双重 gate；6+6 parity tests；V1/V2 语义等价 |
-| S2-T5 `prompt-structure.md` 文档 | ⏳ | Wave C |
+| S2-T5 `prompt-structure.md` 文档 | ✅ `a3618ec` merge Wave C | 10 段结构 + 迁移 playbook + 已迁移插件清单 |
 
-**Sprint 3 — Lorebook + Working Memory + Author's Note** — 3/6（S3-T2 部分完成见下）
+**Sprint 3 — Lorebook + Working Memory + Author's Note** — 6/6 ✅（S3-T2 含 FU-8 double-write 兜底）
 
 | 票号 | 状态 | 备注 |
 |---|---|---|
 | S3-T1 Lorebook 核心 | ✅ `4dec3b5` | — |
-| S3-T2 core-world-init 迁 Lorebook | 🟡 partial — `4ebf79a` + `207307c` merge Wave B | Store 层（4 backends + contract）+ `lorebook.upsert` proposal + commit handler + snapshot FU-4 wiring 完成；插件本身仍未迁移 → **FU-8** |
+| S3-T2 core-world-init 迁 Lorebook | ✅ `4ebf79a` + `207307c` (store/runtime) + `85d0d8a..347428b` (插件 double-write + context-builder) merge Wave B/C | Store + commit handler + snapshot FU-4 + `set-world-entries-batch.js` 双写 lorebook + plugin_data；context-builder `{{ config.worldEntries }}` lorebook-first fallback，通过 `world-data-provider` capability 发现插件 id，无硬编码 |
 | S3-T3 Working Memory 表 + 段 2 | ✅ `916cba6` + `fe0264d` (B1) | WM 实际 inject 到 context |
 | S3-T4 段 9/10 Author's Note + Post-History | ✅ `9bcb0ee..e1a3997` merge `973c112` | RuntimeManifest 加 authorsNote / postHistory；14 + 9 新测试 |
-| S3-T5 其余 core 插件 V2 迁移 | ⏳ | **拆分**：5a(codex+char-creator) + 5b(world-init 合并到 FU-8) |
-| S3-T6 Lorebook 玩家 UI | ⏳ | 在 `apps/web-v2/` |
+| S3-T5 其余 core 插件 V2 迁移 | ✅ `85d0d8a..347428b` merge Wave C | 5a: codex (6 parity) + char-creator 双 runtime (12 parity)；5b: world-init 并入 S3-T2 |
+| S3-T6 Lorebook 玩家 UI | ✅ `7e5387a..556b0b2` merge Wave C | `GET/PATCH/DELETE /api/sessions/:id/lorebook`；React 右面板 tab；11+5 新测试 |
 
 **Sprint 4 — 稳健性** — 5/5 ✅
 
