@@ -163,6 +163,51 @@ export async function fetchUiSpecs(sessionId?: string): Promise<UISpecsResponse>
   return request<UISpecsResponse>(`/api/ui-specs${qs}`);
 }
 
+// ── Lorebook (framework-owned) ───────────────────────────────────
+
+export interface LorebookEntry {
+  id: string;
+  sessionId: string;
+  pluginId: string;
+  keys: readonly string[];
+  content: string;
+  strategy: "constant" | "selective";
+  position: string;
+  insertionOrder: number;
+  enabled: boolean;
+  extra?: unknown;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function fetchLorebookEntries(sessionId: string): Promise<LorebookEntry[]> {
+  const res = await request<{ entries: LorebookEntry[] }>(
+    `/api/sessions/${sessionId}/lorebook`,
+  );
+  return res.entries ?? [];
+}
+
+export async function updateLorebookEntryEnabled(
+  sessionId: string,
+  entryId: string,
+  enabled: boolean,
+): Promise<void> {
+  await request(`/api/sessions/${sessionId}/lorebook/${entryId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export async function deleteLorebookEntry(
+  sessionId: string,
+  entryId: string,
+): Promise<void> {
+  await request(`/api/sessions/${sessionId}/lorebook/${entryId}`, {
+    method: "DELETE",
+  });
+}
+
 // ── Plugin Data ──────────────────────────────────────────────────
 
 export async function fetchPluginData(

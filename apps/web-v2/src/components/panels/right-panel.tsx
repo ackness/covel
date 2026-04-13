@@ -27,6 +27,15 @@ import { clsx } from "clsx";
 import { fetchUiSpecs, type UISlotEntry } from "@/services/api.js";
 import { useSessionStore } from "@/stores/session-store.js";
 import { PluginPanel } from "./plugin-panel.js";
+import { LorebookPanel } from "./lorebook-panel.js";
+
+/**
+ * Framework-owned tab identifiers. These sit alongside plugin-driven tab
+ * groups in the activity bar but are rendered by hardcoded React components
+ * rather than json-render specs, because the underlying capability is owned
+ * by the framework (not a plugin).
+ */
+const FRAMEWORK_TAB_LOREBOOK = "__framework__::lorebook";
 
 interface SubPanel {
   id: string;
@@ -159,6 +168,17 @@ export function RightPanel() {
   );
   const activeSubIdx = activeSubByGroup[activeGroupId] ?? 0;
   const currentSub = currentGroup?.subPanels[activeSubIdx];
+  const isFrameworkTabActive = activeGroupId === FRAMEWORK_TAB_LOREBOOK;
+  const hasSession = Boolean(sessionId);
+
+  // On first paint for a new session, prefer the first plugin tab if present;
+  // otherwise fall back to the framework Lorebook tab so the panel is never
+  // empty once a session exists.
+  useEffect(() => {
+    if (!activeGroupId && !loading && hasSession && rawGroups.length === 0) {
+      setActiveGroupId(FRAMEWORK_TAB_LOREBOOK);
+    }
+  }, [activeGroupId, loading, hasSession, rawGroups.length]);
 
   if (loading) {
     return (
@@ -168,7 +188,10 @@ export function RightPanel() {
     );
   }
 
-  if (rawGroups.length === 0) {
+  // Lorebook is always available when a session exists, even if no plugin
+  // panels are registered. Only show the "no panels" message for the
+  // pre-session state.
+  if (!hasSession && rawGroups.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-zinc-400 text-xs">
         No plugin panels registered
@@ -176,9 +199,11 @@ export function RightPanel() {
     );
   }
 
+  const LorebookIcon = resolveIcon("book-open");
+
   return (
     <div className="flex h-full">
-      {/* Activity bar — vertical icon strip (one icon per group) */}
+      {/* Activity bar — vertical icon strip (one icon per group + framework tabs) */}
       <div className="flex flex-col items-center w-10 shrink-0 border-r border-zinc-200 dark:border-zinc-700 py-2 gap-1">
         {rawGroups.map((group) => {
           const GroupIcon = resolveIcon(group.icon);
@@ -203,11 +228,33 @@ export function RightPanel() {
             </button>
           );
         })}
+
+        {/* Framework-owned: Lorebook (always visible when a session exists) */}
+        {hasSession && (
+          <button
+            type="button"
+            title="Lorebook"
+            onClick={() => setActiveGroupId(FRAMEWORK_TAB_LOREBOOK)}
+            className={clsx(
+              "relative flex items-center justify-center w-8 h-8 rounded-md transition-colors",
+              isFrameworkTabActive
+                ? "bg-zinc-100 dark:bg-zinc-800 text-blue-600 dark:text-blue-400"
+                : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50",
+            )}
+          >
+            {isFrameworkTabActive && (
+              <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r bg-blue-500" />
+            )}
+            <LorebookIcon className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Panel content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {currentGroup && (
+        {isFrameworkTabActive && sessionId ? (
+          <LorebookPanel key={sessionId} sessionId={sessionId} />
+        ) : currentGroup ? (
           <>
             <div className="shrink-0 px-3 py-2 border-b border-zinc-200 dark:border-zinc-700">
               <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
@@ -253,6 +300,10 @@ export function RightPanel() {
               )}
             </div>
           </>
+        ) : (
+          <div className="flex items-center justify-center h-full text-zinc-400 text-xs">
+            Select a tab
+          </div>
         )}
       </div>
     </div>
