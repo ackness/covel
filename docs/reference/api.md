@@ -225,6 +225,23 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | PUT | `/api/sessions/:id/working-memory/:scope/:key` | 写入/更新工作记忆（scope: player \| story \| shared） |
 | DELETE | `/api/sessions/:id/working-memory/:scope/:key` | 删除工作记忆条目 |
 
+### Lorebook（S3-T6）
+
+Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由插件通过 proposal commit 管道写入 store 层的 `lorebook_entries` 表，这些端点提供玩家 UI 与程序化读取视图，**不走提案系统**（单项 toggle/删除为 MVP 级别的直接写入）。
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/sessions/:id/lorebook` | 列出该 session 的所有 lorebook 词条（按 `insertionOrder` 升序） |
+| PATCH | `/api/sessions/:id/lorebook/:entryId` | 切换单条词条的 `enabled` 标志，body: `{ enabled: boolean }` |
+| DELETE | `/api/sessions/:id/lorebook/:entryId` | 删除单条词条 |
+
+响应：
+- `GET` → `{ entries: LorebookEntryRecord[] }`（见 `packages/store/src/types.ts`）
+- `PATCH` → `{ success: true, entryId, enabled }`
+- `DELETE` → `{ success: true }`
+
+404 场景：session 不存在、entryId 不存在。无 feature-flag 开关，始终启用。消费方：`apps/web-v2/` 右侧面板的 "Lorebook" 框架自持 Tab。
+
 ### Suspend / Resume（S4-T4）
 
 > 需要环境变量 `COVEL_SUSPEND_V1=1`。关闭时 `POST /resume` 与 `DELETE /suspensions/:suspensionId` 返回 `503`，`GET /suspensions` 返回空列表。
