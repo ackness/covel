@@ -34,6 +34,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  LorebookEntryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
   SnapshotRecord,
@@ -91,6 +92,8 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
   const turnMessages: TurnMessageRecord[] = [];
   const playerInputs: PlayerInputRecord[] = [];
   const workingMemoryEntries = new Map<string, WorkingMemoryRecord>();
+  /** Keyed by `${sessionId}:${entryId}`. */
+  const lorebookEntries = new Map<string, LorebookEntryRecord>();
   const sessionSummaries: SessionSummaryRecord[] = [];
 
   function stateEntryKey(sessionId: string, tableName: string, fieldName: string): string {
@@ -107,6 +110,10 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
 
   function workingMemoryKey(sessionId: string, scope: string, key: string): string {
     return `${sessionId}:${scope}:${key}`;
+  }
+
+  function lorebookEntryKey(sessionId: string, id: string): string {
+    return `${sessionId}:${id}`;
   }
 
   function vectorRowKey(
@@ -149,6 +156,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     readonly turnMessages: TurnMessageRecord[];
     readonly playerInputs: PlayerInputRecord[];
     readonly workingMemoryEntries: Map<string, WorkingMemoryRecord>;
+    readonly lorebookEntries: Map<string, LorebookEntryRecord>;
     readonly sessionSummaries: SessionSummaryRecord[];
     readonly suspensions: Map<string, SuspensionRecord>;
     readonly snapshots: Map<string, SnapshotRecord>;
@@ -198,6 +206,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
       turnMessages: structuredClone(turnMessages),
       playerInputs: structuredClone(playerInputs),
       workingMemoryEntries: structuredClone(workingMemoryEntries),
+      lorebookEntries: structuredClone(lorebookEntries),
       sessionSummaries: structuredClone(sessionSummaries),
       suspensions: structuredClone(suspensions),
       snapshots: structuredClone(snapshots),
@@ -243,6 +252,8 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     playerInputs.push(...snap.playerInputs);
     workingMemoryEntries.clear();
     for (const [k, v] of snap.workingMemoryEntries) workingMemoryEntries.set(k, v);
+    lorebookEntries.clear();
+    for (const [k, v] of snap.lorebookEntries) lorebookEntries.set(k, v);
     sessionSummaries.length = 0;
     sessionSummaries.push(...snap.sessionSummaries);
     suspensions.clear();
@@ -576,6 +587,33 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     ): Promise<void> {
       const k = workingMemoryKey(sessionId, scope, key);
       workingMemoryEntries.delete(k);
+    },
+
+    // ── Lorebook Entries (S3-T2) ───────────────────────────────
+
+    async upsertLorebookEntries(records: readonly LorebookEntryRecord[]): Promise<void> {
+      for (const record of records) {
+        lorebookEntries.set(lorebookEntryKey(record.sessionId, record.id), record);
+      }
+    },
+
+    async listSessionLorebookEntries(
+      sessionId: string,
+    ): Promise<readonly LorebookEntryRecord[]> {
+      const out = Array.from(lorebookEntries.values()).filter(
+        (r) => r.sessionId === sessionId,
+      );
+      out.sort((a, b) => {
+        if (a.insertionOrder !== b.insertionOrder) {
+          return a.insertionOrder - b.insertionOrder;
+        }
+        return a.id.localeCompare(b.id);
+      });
+      return out;
+    },
+
+    async deleteLorebookEntry(sessionId: string, id: string): Promise<void> {
+      lorebookEntries.delete(lorebookEntryKey(sessionId, id));
     },
 
     // ── Session Summaries (S2-T2 Compactor) ──

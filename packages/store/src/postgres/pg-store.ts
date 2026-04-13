@@ -30,6 +30,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  LorebookEntryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
   SnapshotRecord,
@@ -56,6 +57,7 @@ import {
   toTurnMessageRecord,
   toPlayerInputRecord,
   toWorkingMemoryRecord,
+  toLorebookEntryRecord,
   toSessionSummaryRecord,
   toSuspensionRecord,
   toSnapshotRecord,
@@ -855,6 +857,67 @@ export async function createPgStore(
             eq(schema.workingMemory.sessionId, sessionId),
             eq(schema.workingMemory.scope, scope),
             eq(schema.workingMemory.key, key),
+          ),
+        );
+    },
+
+    // ── Lorebook Entries (S3-T2) ──────────────────────────────
+
+    async upsertLorebookEntries(records: readonly LorebookEntryRecord[]): Promise<void> {
+      if (records.length === 0) return;
+      for (const r of records) {
+        await db
+          .insert(schema.lorebookEntries)
+          .values({
+            id: r.id,
+            sessionId: r.sessionId,
+            pluginId: r.pluginId,
+            keys: r.keys as unknown as string[],
+            content: r.content,
+            strategy: r.strategy,
+            position: r.position,
+            insertionOrder: r.insertionOrder,
+            enabled: r.enabled ? 1 : 0,
+            extra: (r.extra ?? null) as unknown,
+            createdAt: r.createdAt,
+            updatedAt: r.updatedAt,
+          })
+          .onConflictDoUpdate({
+            target: schema.lorebookEntries.id,
+            set: {
+              sessionId: r.sessionId,
+              pluginId: r.pluginId,
+              keys: r.keys as unknown as string[],
+              content: r.content,
+              strategy: r.strategy,
+              position: r.position,
+              insertionOrder: r.insertionOrder,
+              enabled: r.enabled ? 1 : 0,
+              extra: (r.extra ?? null) as unknown,
+              updatedAt: r.updatedAt,
+            },
+          });
+      }
+    },
+
+    async listSessionLorebookEntries(
+      sessionId: string,
+    ): Promise<readonly LorebookEntryRecord[]> {
+      const rows = await db
+        .select()
+        .from(schema.lorebookEntries)
+        .where(eq(schema.lorebookEntries.sessionId, sessionId))
+        .orderBy(asc(schema.lorebookEntries.insertionOrder), asc(schema.lorebookEntries.id));
+      return rows.map(toLorebookEntryRecord);
+    },
+
+    async deleteLorebookEntry(sessionId: string, id: string): Promise<void> {
+      await db
+        .delete(schema.lorebookEntries)
+        .where(
+          and(
+            eq(schema.lorebookEntries.sessionId, sessionId),
+            eq(schema.lorebookEntries.id, id),
           ),
         );
     },

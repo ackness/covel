@@ -23,6 +23,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  LorebookEntryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
   SnapshotRecord,
@@ -287,6 +288,24 @@ function makeSuspension(overrides?: Partial<SuspensionRecord>): SuspensionRecord
     },
     createdAt: ts(),
     resolvedAt: undefined,
+    ...overrides,
+  };
+}
+
+function makeLorebookEntry(overrides?: Partial<LorebookEntryRecord>): LorebookEntryRecord {
+  return {
+    id: id(),
+    sessionId: 'sess-1',
+    pluginId: 'plugin-1',
+    keys: [],
+    content: 'Some lore content',
+    strategy: 'constant',
+    position: 'after_char_defs',
+    insertionOrder: 100,
+    enabled: true,
+    extra: undefined,
+    createdAt: ts(),
+    updatedAt: ts(),
     ...overrides,
   };
 }
@@ -1236,6 +1255,96 @@ export function runStoreContractTests(
 
         const result = await store.getSuspension(suspension.id);
         expect(result!.resumeSchema).toEqual(complexSchema);
+      });
+    });
+
+    // ── Lorebook Entries (S3-T2) ─────────────────────────────
+
+    describe('LorebookEntries (S3-T2)', () => {
+      it('returns an empty list when the session has no entries', async () => {
+        const result = await store.listSessionLorebookEntries('sess-lore-empty');
+        expect(result).toEqual([]);
+      });
+
+      it('upserts a batch and lists them sorted by insertionOrder then id', async () => {
+        const a = makeLorebookEntry({
+          id: 'lore-a',
+          sessionId: 'sess-lore-1',
+          insertionOrder: 200,
+          content: 'second',
+        });
+        const b = makeLorebookEntry({
+          id: 'lore-b',
+          sessionId: 'sess-lore-1',
+          insertionOrder: 100,
+          content: 'first',
+          keys: ['ancient', 'temple'],
+          strategy: 'selective',
+          enabled: true,
+        });
+        const c = makeLorebookEntry({
+          id: 'lore-c',
+          sessionId: 'sess-lore-1',
+          insertionOrder: 200,
+          content: 'third',
+          enabled: false,
+          extra: { atDepth: 4, note: 'kept disabled for now' },
+        });
+
+        await store.upsertLorebookEntries([a, b, c]);
+
+        const list = await store.listSessionLorebookEntries('sess-lore-1');
+        expect(list.map((r) => r.id)).toEqual(['lore-b', 'lore-a', 'lore-c']);
+        expect(list[0].keys).toEqual(['ancient', 'temple']);
+        expect(list[0].strategy).toBe('selective');
+        expect(list[2].enabled).toBe(false);
+        expect(list[2].extra).toEqual({ atDepth: 4, note: 'kept disabled for now' });
+      });
+
+      it('replaces existing entries on re-upsert with the same id', async () => {
+        const original = makeLorebookEntry({
+          id: 'lore-update',
+          sessionId: 'sess-lore-2',
+          content: 'original',
+          insertionOrder: 300,
+        });
+        await store.upsertLorebookEntries([original]);
+
+        const updated = {
+          ...original,
+          content: 'updated',
+          insertionOrder: 50,
+          updatedAt: ts(1),
+        };
+        await store.upsertLorebookEntries([updated]);
+
+        const list = await store.listSessionLorebookEntries('sess-lore-2');
+        expect(list).toHaveLength(1);
+        expect(list[0].content).toBe('updated');
+        expect(list[0].insertionOrder).toBe(50);
+      });
+
+      it('isolates entries by sessionId', async () => {
+        await store.upsertLorebookEntries([
+          makeLorebookEntry({ id: 'lore-x', sessionId: 'sess-lore-A' }),
+          makeLorebookEntry({ id: 'lore-y', sessionId: 'sess-lore-B' }),
+        ]);
+
+        const a = await store.listSessionLorebookEntries('sess-lore-A');
+        const b = await store.listSessionLorebookEntries('sess-lore-B');
+        expect(a.map((r) => r.id)).toEqual(['lore-x']);
+        expect(b.map((r) => r.id)).toEqual(['lore-y']);
+      });
+
+      it('deleteLorebookEntry removes a single entry by sessionId+id', async () => {
+        await store.upsertLorebookEntries([
+          makeLorebookEntry({ id: 'lore-keep', sessionId: 'sess-lore-del' }),
+          makeLorebookEntry({ id: 'lore-drop', sessionId: 'sess-lore-del' }),
+        ]);
+
+        await store.deleteLorebookEntry('sess-lore-del', 'lore-drop');
+        const list = await store.listSessionLorebookEntries('sess-lore-del');
+        expect(list.map((r) => r.id)).toEqual(['lore-keep']);
       });
     });
 

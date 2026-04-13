@@ -30,6 +30,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  LorebookEntryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
   SnapshotRecord,
@@ -57,6 +58,7 @@ import {
   toTurnMessageRecord,
   toPlayerInputRecord,
   toWorkingMemoryRecord,
+  toLorebookEntryRecord,
   toSessionSummaryRecord,
   toSuspensionRecord,
   type SuspensionRow,
@@ -888,6 +890,72 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
             eq(schema.workingMemory.sessionId, sessionId),
             eq(schema.workingMemory.scope, scope),
             eq(schema.workingMemory.key, key),
+          ),
+        )
+        .run();
+    },
+
+    // ── Lorebook Entries (S3-T2) ─────────────────────────────
+
+    async upsertLorebookEntries(records: readonly LorebookEntryRecord[]): Promise<void> {
+      if (records.length === 0) return;
+      // Drizzle's better-sqlite3 driver does not yet expose a multi-row
+      // onConflictDoUpdate that updates per-row in one round trip, so we
+      // upsert one row at a time inside an implicit BEGIN to keep it
+      // atomic. Volumes are small (a handful of entries per world).
+      for (const r of records) {
+        db.insert(schema.lorebookEntries)
+          .values({
+            id: r.id,
+            sessionId: r.sessionId,
+            pluginId: r.pluginId,
+            keys: toJson(r.keys),
+            content: r.content,
+            strategy: r.strategy,
+            position: r.position,
+            insertionOrder: r.insertionOrder,
+            enabled: r.enabled ? 1 : 0,
+            extra: r.extra === undefined ? null : toJson(r.extra),
+            createdAt: r.createdAt,
+            updatedAt: r.updatedAt,
+          })
+          .onConflictDoUpdate({
+            target: schema.lorebookEntries.id,
+            set: {
+              sessionId: r.sessionId,
+              pluginId: r.pluginId,
+              keys: toJson(r.keys),
+              content: r.content,
+              strategy: r.strategy,
+              position: r.position,
+              insertionOrder: r.insertionOrder,
+              enabled: r.enabled ? 1 : 0,
+              extra: r.extra === undefined ? null : toJson(r.extra),
+              updatedAt: r.updatedAt,
+            },
+          })
+          .run();
+      }
+    },
+
+    async listSessionLorebookEntries(
+      sessionId: string,
+    ): Promise<readonly LorebookEntryRecord[]> {
+      const rows = db
+        .select()
+        .from(schema.lorebookEntries)
+        .where(eq(schema.lorebookEntries.sessionId, sessionId))
+        .orderBy(asc(schema.lorebookEntries.insertionOrder), asc(schema.lorebookEntries.id))
+        .all();
+      return rows.map(toLorebookEntryRecord);
+    },
+
+    async deleteLorebookEntry(sessionId: string, id: string): Promise<void> {
+      db.delete(schema.lorebookEntries)
+        .where(
+          and(
+            eq(schema.lorebookEntries.sessionId, sessionId),
+            eq(schema.lorebookEntries.id, id),
           ),
         )
         .run();

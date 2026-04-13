@@ -32,6 +32,7 @@ export type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  LorebookEntryRecord,
   SessionSummaryRecord,
   PaginationOpts,
   SuspensionRecord,

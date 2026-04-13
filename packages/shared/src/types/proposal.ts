@@ -21,7 +21,8 @@ export type ProposalType =
   | 'asset.generate'
   | 'phase.transition'
   | 'plugin.data'
-  | 'working_memory.set';
+  | 'working_memory.set'
+  | 'lorebook.upsert';
 
 // ── Proposal ────────────────────────────────────────────────────
 
@@ -88,6 +89,35 @@ export interface WorkingMemorySetPayload {
   readonly key: string;
   readonly value: unknown;
   readonly schemaRef?: string;
+}
+
+/**
+ * Payload for `lorebook.upsert` proposals (S3-T2).
+ *
+ * Each entry in `entries` becomes one row in the `lorebook_entries` table.
+ * The commit handler stamps the proposal's `sessionId` and the source
+ * plugin's `pluginId` automatically — callers do not need to repeat them
+ * inside each entry.
+ *
+ * Fields here mirror the relevant subset of `LorebookEntry` from
+ * `@covel/lorebook` so the kernel does not need a runtime dependency on
+ * the lorebook package itself.
+ */
+export interface LorebookUpsertPayload {
+  readonly entries: readonly LorebookUpsertEntry[];
+}
+
+export interface LorebookUpsertEntry {
+  /** Stable id; re-using an existing id replaces the previous entry. */
+  readonly id: string;
+  readonly content: string;
+  readonly strategy: 'constant' | 'selective';
+  readonly position?: string;       // defaults to 'after_char_defs'
+  readonly insertionOrder?: number; // defaults to 100
+  readonly enabled?: boolean;       // defaults to true
+  readonly keys?: readonly string[];
+  /** Free-form forward-compatible fields (atDepth, budgetCap, …). */
+  readonly extra?: unknown;
 }
 
 // ── SessionEvent (emitted to clients after commit) ──────────────

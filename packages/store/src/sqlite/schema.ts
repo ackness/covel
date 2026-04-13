@@ -383,3 +383,27 @@ export const workingMemory = sqliteTable(
     ),
   ],
 );
+
+// ── Lorebook Entries (S3-T2) ──────────────────────────────────
+
+export const lorebookEntries = sqliteTable(
+  'lorebook_entries',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id').notNull(),
+    pluginId: text('plugin_id').notNull(),
+    keys: text('keys').notNull(),       // JSON string[]
+    content: text('content').notNull(),
+    strategy: text('strategy').notNull(), // 'constant' | 'selective'
+    position: text('position').notNull(),
+    insertionOrder: integer('insertion_order').notNull().default(100),
+    enabled: integer('enabled').notNull().default(1), // 0/1
+    extra: text('extra'),                // JSON | null
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    index('lorebook_entries_session_id_idx').on(table.sessionId),
+    index('lorebook_entries_plugin_id_idx').on(table.sessionId, table.pluginId),
+  ],
+);

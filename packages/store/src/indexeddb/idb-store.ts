@@ -34,12 +34,13 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  LorebookEntryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
   SnapshotRecord,
 } from '../types.js';
 
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 async function initDb(dbName: string): Promise<IDBPDatabase> {
   return openDB(dbName, DB_VERSION, {
@@ -119,6 +120,11 @@ async function initDb(dbName: string): Promise<IDBPDatabase> {
         const snapshots = db.createObjectStore('state_snapshots', { keyPath: 'id' });
         snapshots.createIndex('sessionId', 'sessionId');
       }
+
+      if (oldVersion < 6) {
+        const lorebookEntries = db.createObjectStore('lorebook_entries', { keyPath: 'id' });
+        lorebookEntries.createIndex('sessionId', 'sessionId');
+      }
     },
   });
 }
@@ -143,6 +149,7 @@ const OBJECT_STORES = [
   'playerInputs',
   'plugin_data',
   'working_memory',
+  'lorebook_entries',
   'sessionSummaries',
   'suspensions',
   'state_snapshots',
@@ -516,6 +523,42 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
       ]);
       if (existing) {
         await db.delete('working_memory', existing.id);
+      }
+    },
+
+    // ── Lorebook Entries (S3-T2) ─────────────────────────────
+
+    async upsertLorebookEntries(records: readonly LorebookEntryRecord[]): Promise<void> {
+      if (records.length === 0) return;
+      const tx = db.transaction('lorebook_entries', 'readwrite');
+      for (const record of records) {
+        await tx.store.put(structuredClone(record));
+      }
+      await tx.done;
+    },
+
+    async listSessionLorebookEntries(
+      sessionId: string,
+    ): Promise<readonly LorebookEntryRecord[]> {
+      const all = (await db.getAllFromIndex(
+        'lorebook_entries',
+        'sessionId',
+        sessionId,
+      )) as LorebookEntryRecord[];
+      return all.slice().sort((a, b) => {
+        if (a.insertionOrder !== b.insertionOrder) {
+          return a.insertionOrder - b.insertionOrder;
+        }
+        return a.id.localeCompare(b.id);
+      });
+    },
+
+    async deleteLorebookEntry(sessionId: string, id: string): Promise<void> {
+      const existing = (await db.get('lorebook_entries', id)) as
+        | LorebookEntryRecord
+        | undefined;
+      if (existing && existing.sessionId === sessionId) {
+        await db.delete('lorebook_entries', id);
       }
     },
 
