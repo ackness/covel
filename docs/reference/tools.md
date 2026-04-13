@@ -320,7 +320,13 @@ Attributes:
 
 **所属**: core-world-init (`plugins/core-world-init/tools/set-world-entries-batch.js`)
 
-批量写入世界词条。一次调用传入所有词条（地理、阵营、货币等），存储到 `plugin_data` 的 `entries` namespace。
+批量写入世界词条。一次调用传入所有词条（地理、阵营、货币等）。
+
+**FU-8 double-write**（S3-T2 lorebook 迁移收尾）：
+1. 写入 `plugin_data` namespace=`entries`（legacy，保持向后兼容 — 旧会话 / 未实现 lorebook 表的 store 依赖这条路径）
+2. 同步写入 session lorebook（`store.upsertLorebookEntries`）— 每个词条成为一条 `constant` lorebook row，id 稳定化为 `world-entry:<key>`，`insertionOrder` 按批次递增（100, 200, …）
+
+`loadSessionConfig` 构造 `{{ config.worldEntries }}` 时 **优先读 lorebook**，空才回退 plugin_data；这样新会话走 canonical 路径，老会话 / mock store 仍可回退。
 
 | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
