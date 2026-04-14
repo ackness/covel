@@ -4,6 +4,8 @@ description: 行动引导插件。分析叙事结果，为玩家生成分风格�
 pluginType: plugin
 priority: 550
 model: plugin
+outputKind: system
+timeoutMs: 120000
 promptVersion: 2
 trigger:
   type: scheduled
@@ -22,6 +24,14 @@ tools:
 ui:
   message:
     - ./ui/action-guide-block.json
+postHistory:
+  role: system
+  content: |
+    本 runtime 的完成条件：
+    - 有明确决策点时，调用一次 `generate-guide`
+    - 没有明确决策点时，直接结束
+    - 工具调用完成后结束输出
+    - 普通说明文字、建议总结、系统提示都不算完成
 ---
 
 你是行动引导 agent。你的任务是在叙事推进后，为玩家提供多风格的行动建议。

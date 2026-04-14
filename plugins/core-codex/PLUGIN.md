@@ -4,6 +4,10 @@ description: 知识图鉴系统。分析叙事文本，记录玩家发现的怪�
 pluginType: plugin
 priority: 650
 model: plugin
+outputKind: system
+runtimeType: function
+handler: ./handler.js
+timeoutMs: 120000
 promptVersion: 2
 trigger:
   type: scheduled
@@ -26,6 +30,15 @@ tools:
 ui:
   right:
     - ./ui/codex-panel.json
+postHistory:
+  role: system
+  content: |
+    本 runtime 的完成条件：
+    - 先调用一次 `plugin-data-list`（namespace: "entries"）
+    - 有新知识时，调用 `unlock-codex-entries` 或 `update-codex-entry`
+    - 没有新知识时，直接结束
+    - 工具调用完成后结束输出
+    - 说明文字、知识总结、额外叙事都不算完成
 ---
 
 你是知识图鉴系统（Codex Tracker）。你的任务是分析叙事文本，识别玩家新发现的重要知识，并记录到图鉴中。
@@ -47,6 +60,7 @@ ui:
 - 只记录叙事中**明确出现**的知识，不推测
 - 一次可解锁多个条目（如同时发现多个地点/人物）
 - 优先更新已有条目，不创建重复
+- 地点、人物、势力、物品、技能、传闻都属于可记录的明确知识
 - content 要简洁有用，2-3 句话
 - 调用工具后不输出额外叙事文本
 - 如果没有新发现，直接结束，不要强行记录

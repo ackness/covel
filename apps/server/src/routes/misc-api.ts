@@ -4,10 +4,183 @@
  * These endpoints are consumed by the frontend boot sequence.
  */
 
+import fs from 'node:fs/promises';
+import { resolve, relative } from 'node:path';
 import { Hono } from 'hono';
 import type { AiStack } from '../ai-setup.js';
-import type { PluginRegistry } from '@covel/plugin-loader';
+import {
+  discoverPlugins,
+  loadPluginManifest,
+  loadPluginSummary,
+  type PluginRegistry,
+  type PluginDiscoveryResult,
+} from '@covel/plugin-loader';
 import type { DataStore } from '@covel/store';
+
+type FlowSegmentId = 'start' | 'pre-game' | 'core-game-loop';
+
+function resolvePluginsDir(): string {
+  return process.env.COVEL_PLUGINS_DIR
+    ?? resolve(import.meta.dirname, '../../../../plugins');
+}
+
+function textValue(value: unknown, locale = 'zh-CN'): string {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, string>;
+    return record[locale] ?? record['en-US'] ?? Object.values(record)[0] ?? '';
+  }
+  return '';
+}
+
+function segmentForPriority(priority: number): Exclude<FlowSegmentId, 'start'> {
+  return priority < 100 ? 'pre-game' : 'core-game-loop';
+}
+
+function docPathFromAbsolute(pluginsDir: string, absolutePath: string): string {
+  return `plugins/${relative(pluginsDir, absolutePath).replace(/\\/g, '/')}`;
+}
+
+function uiSlotsOf(manifest: {
+  ui?: {
+    right?: readonly string[];
+    message?: readonly string[];
+    left?: readonly string[];
+  };
+}): string[] {
+  const slots: string[] = [];
+  if (manifest.ui?.right?.length) slots.push('right');
+  if (manifest.ui?.message?.length) slots.push('message');
+  if (manifest.ui?.left?.length) slots.push('left');
+  return slots;
+}
+
+async function loadPluginDiscovery(pluginId: string): Promise<PluginDiscoveryResult | undefined> {
+  const pluginsDir = resolvePluginsDir();
+  const discoveries = await discoverPlugins(pluginsDir);
+  return discoveries.find((item) => item.id === pluginId);
+}
+
+async function buildPluginFlowResponse() {
+  const pluginsDir = resolvePluginsDir();
+  const discoveries = await discoverPlugins(pluginsDir);
+
+  const plugins: Array<{
+    id: string;
+    name: string;
+    description: string;
+    pluginType: string;
+    runtimeIds: string[];
+  }> = [];
+
+  const steps: Array<{
+    id: string;
+    pluginId: string;
+    pluginName: string;
+    runtimeId: string;
+    runtimeName: string;
+    description: string;
+    pluginType: string;
+    priority: number;
+    segmentId: 'pre-game' | 'core-game-loop';
+    runtimeType: string;
+    outputKind: string;
+    model?: string;
+    trigger: {
+      type: string;
+      interval?: number;
+      cooldownTurns?: number;
+      maxTriggerCount?: number;
+      phases: string[];
+    };
+    injects: Array<{ from: string; field: string; as: string }>;
+    tools: { builtin: string[]; local: string[] };
+    uiSlots: string[];
+    docPath: string;
+    isNarrator: boolean;
+  }> = [];
+
+  for (const discovery of discoveries) {
+    const [summary, manifests] = await Promise.all([
+      loadPluginSummary(discovery),
+      loadPluginManifest(discovery),
+    ]);
+
+    const pluginName = textValue(summary.name) || discovery.id;
+    const pluginDescription = textValue(summary.description);
+
+    plugins.push({
+      id: discovery.id,
+      name: pluginName,
+      description: pluginDescription,
+      pluginType: summary.pluginType,
+      runtimeIds: manifests.map((item) => item.manifest.name),
+    });
+
+    for (const [index, parsed] of manifests.entries()) {
+      const manifest = parsed.manifest;
+      const runtimeId = manifest.name;
+      const runtimeName = runtimeId.includes('/') ? runtimeId.split('/').at(-1) ?? runtimeId : runtimeId;
+      const priority = manifest.priority ?? 500;
+      const docPath = docPathFromAbsolute(
+        pluginsDir,
+        discovery.pluginMdPaths[index] ?? discovery.pluginMdPaths[0] ?? '',
+      );
+
+      steps.push({
+        id: runtimeId,
+        pluginId: discovery.id,
+        pluginName,
+        runtimeId,
+        runtimeName,
+        description: textValue(manifest.description),
+        pluginType: summary.pluginType,
+        priority,
+        segmentId: segmentForPriority(priority),
+        runtimeType: manifest.runtimeType ?? 'agent',
+        outputKind: manifest.outputKind ?? 'plugin',
+        model: manifest.model,
+        trigger: {
+          type: manifest.trigger?.type ?? 'auto',
+          interval: manifest.trigger?.interval,
+          cooldownTurns: manifest.trigger?.cooldownTurns,
+          maxTriggerCount: manifest.trigger?.maxTriggerCount,
+          phases: [...(manifest.trigger?.phases ?? [])],
+        },
+        injects: (manifest.input?.inject ?? []).map((inject) => ({
+          from: inject.from,
+          field: inject.field,
+          as: inject.as,
+        })),
+        tools: {
+          builtin: [...(manifest.tools?.builtin ?? [])],
+          local: [...(manifest.tools?.local ?? [])].map((toolPath) => {
+            const fileName = toolPath.split('/').at(-1) ?? toolPath;
+            return fileName.replace(/\.[^.]+$/, '');
+          }),
+        },
+        uiSlots: uiSlotsOf(manifest),
+        docPath,
+        isNarrator: runtimeId === 'core-narrator' || manifest.capabilities?.includes('narrative') === true,
+      });
+    }
+  }
+
+  steps.sort((a, b) => a.priority - b.priority || a.runtimeId.localeCompare(b.runtimeId));
+  plugins.sort((a, b) => a.id.localeCompare(b.id));
+
+  return {
+    version: 'v1',
+    generatedAt: new Date().toISOString(),
+    segments: [
+      { id: 'start', label: '开始游戏', rangeLabel: '0', minPriority: 0, maxPriority: 0 },
+      { id: 'pre-game', label: 'Pre-Game', rangeLabel: '0-100', minPriority: 0, maxPriority: 100 },
+      { id: 'core-game-loop', label: 'Core-Game-Loop', rangeLabel: '100-1000', minPriority: 100, maxPriority: 1000 },
+    ],
+    plugins,
+    steps,
+  };
+}
 
 export function createMiscApiRoutes(
   ai: AiStack,
@@ -62,6 +235,7 @@ export function createMiscApiRoutes(
         name: entry.id,
         displayName: entry.summary.name,
         description: entry.summary.description,
+        pluginType: entry.summary.pluginType,
         enabled: true,
         runtimes,
         tools,
@@ -69,6 +243,43 @@ export function createMiscApiRoutes(
     }
 
     return c.json({ packages, loadErrors });
+  });
+
+  // GET /api/plugin-flows — framework-orchestrated flow data for pre-game preview
+  app.get('/api/plugin-flows', async (c) => {
+    const payload = await buildPluginFlowResponse();
+    return c.json(payload);
+  });
+
+  // GET /api/plugin-docs/:pluginId — raw PLUGIN.md documents for preview
+  app.get('/api/plugin-docs/:pluginId', async (c) => {
+    const pluginId = c.req.param('pluginId');
+    const discovery = await loadPluginDiscovery(pluginId);
+    if (!discovery) {
+      return c.json({ error: `Plugin "${pluginId}" not found` }, 404);
+    }
+
+    const pluginsDir = resolvePluginsDir();
+    const [summary, manifests] = await Promise.all([
+      loadPluginSummary(discovery),
+      loadPluginManifest(discovery),
+    ]);
+
+    const docs = await Promise.all(
+      discovery.pluginMdPaths.map(async (mdPath, index) => ({
+        id: manifests[index]?.manifest.name ?? `${pluginId}:${index}`,
+        runtimeId: manifests[index]?.manifest.name ?? `${pluginId}:${index}`,
+        label: manifests[index]?.manifest.name ?? pluginId,
+        path: docPathFromAbsolute(pluginsDir, mdPath),
+        content: await fs.readFile(mdPath, 'utf-8'),
+      })),
+    );
+
+    return c.json({
+      pluginId,
+      name: textValue(summary.name) || pluginId,
+      docs,
+    });
   });
 
   // GET /api/commands — list registered commands

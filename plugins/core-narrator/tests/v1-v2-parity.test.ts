@@ -176,9 +176,11 @@ describe('core-narrator V1/V2 prompt parity', () => {
     expect(v1.systemPrompt).toContain('Cloudmere is a high-altitude');
     expect(v2.systemPrompt).toContain('Cloudmere is a high-altitude');
 
-    // World dimensions
-    expect(v1.systemPrompt).toContain('Geography: five floating isles');
-    expect(v2.systemPrompt).toContain('Geography: five floating isles');
+    // World dimensions: narrator fetches dimensions on-demand via world-dimension-get
+    // tool rather than injecting them statically into the prompt. The prompt
+    // instead refers players to call the tool when specific dimension info is needed.
+    expect(v1.systemPrompt).toContain('world-dimension-get');
+    expect(v2.systemPrompt).toContain('world-dimension-get');
 
     // Opening scenario
     expect(v1.systemPrompt).toContain('Halcyon Wharf');
@@ -218,12 +220,15 @@ describe('core-narrator V1/V2 prompt parity', () => {
     process.env.COVEL_PROMPT_V2 = '1';
     const v2 = buildContext(params);
 
-    // core-narrator declares neither authorsNote nor postHistory, so V2's
-    // message array is identical to V1: history + current user turn.
-    expect(v2.messages).toEqual(v1.messages);
+    // core-narrator declares postHistory, so V2 appends one extra system
+    // instruction after the current user turn.
+    expect(v2.messages).toHaveLength(v1.messages.length + 1);
+    expect(v2.messages.at(-2)).toEqual(v1.messages.at(-1));
+    expect(v2.messages.at(-1)?.role).toBe('system');
+    expect(v2.messages.at(-1)?.content).toContain('末尾只保留自然悬念');
 
-    // Explicit shape check — last message is the current user turn.
-    const last = v2.messages[v2.messages.length - 1];
+    // Explicit shape check — V1 still ends with the current user turn.
+    const last = v1.messages[v1.messages.length - 1];
     expect(last?.role).toBe('user');
     expect(last?.content).toBe('I push open the heavy oak door.');
   });

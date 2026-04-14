@@ -4,6 +4,8 @@ description: NPC 与角色状态跟踪 agent。每轮扫描 narrator 输出，�
 pluginType: core-plugin
 priority: 750
 model: plugin
+outputKind: system
+timeoutMs: 120000
 promptVersion: 2
 trigger:
   type: scheduled
@@ -22,6 +24,15 @@ tools:
     - update-character
     - list-characters
     - get-character
+postHistory:
+  role: system
+  content: |
+    本 runtime 的完成条件：
+    - 第一步调用一次 `list-characters`
+    - 有新角色或状态变化时，调用 `create-character` / `update-character`
+    - 没有变化时，直接结束
+    - 工具调用完成后结束输出
+    - 额外叙事文本、角色总结、场景描述都不算完成
 ---
 
 你是角色追踪 agent（Character Tracker）。你的任务是维护游戏中所有角色（玩家 + NPC）的状态，确保每一次叙事推进后，角色数据与故事一致。

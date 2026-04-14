@@ -4,6 +4,7 @@ description: 游戏初始化插件。仅在 session 首轮触发，初始化世�
 pluginType: core-plugin
 priority: 10
 runtimeType: function
+outputKind: system
 handler: ./handler.js
 trigger:
   type: scheduled

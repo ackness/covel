@@ -118,6 +118,8 @@ interface SessionState {
   executionSteps: ExecutionStep[];
   error: string | null;
   plugins: api.PluginInfo[];
+  selectedPlugins: string[];
+  pluginFlow: api.PluginFlowResponse | null;
   worldSessions: api.SessionRecord[];
 }
 
@@ -133,6 +135,8 @@ let state: SessionState = {
   executionSteps: [],
   error: null,
   plugins: [],
+  selectedPlugins: [],
+  pluginFlow: null,
   worldSessions: [],
 };
 
@@ -174,6 +178,35 @@ function updateStep(runtimeId: string, patch: Partial<ExecutionStep>) {
   }
   state = { ...state, executionSteps: steps };
   notify();
+}
+
+function mergeSelectedPlugins(
+  plugins: api.PluginInfo[],
+  currentSelection: string[],
+): string[] {
+  const available = new Set(plugins.map((plugin) => plugin.name));
+  const next = new Set(currentSelection.filter((pluginId) => available.has(pluginId)));
+
+  for (const plugin of plugins) {
+    if (plugin.pluginType === "core-plugin") {
+      next.add(plugin.name);
+    }
+  }
+
+  return [...next];
+}
+
+async function loadPluginCatalog() {
+  const [plugins, pluginFlow] = await Promise.all([
+    api.listPlugins(),
+    api.fetchPluginFlows(),
+  ]);
+
+  update({
+    plugins,
+    pluginFlow,
+    selectedPlugins: mergeSelectedPlugins(plugins, state.selectedPlugins),
+  });
 }
 
 // ── SSE Event Processing ─────────────────────────────────────────
@@ -321,11 +354,9 @@ async function readActionStream(response: Response) {
 
 export async function boot() {
   try {
-    const [worlds, plugins] = await Promise.all([
-      api.listWorlds(),
-      api.listPlugins(),
-    ]);
-    update({ worlds, plugins });
+    const worlds = await api.listWorlds();
+    update({ worlds });
+    await loadPluginCatalog();
 
     // 1. URL-based resume — tab-specific, takes priority over localStorage
     const urlSid = getSidFromUrl();
@@ -355,6 +386,14 @@ export async function boot() {
   }
 }
 
+export async function refreshPluginCatalog() {
+  try {
+    await loadPluginCatalog();
+  } catch (e) {
+    update({ error: (e as Error).message });
+  }
+}
+
 export function selectWorld(worldId: string) {
   const world = state.worlds.find((w) => w.id === worldId);
   if (world) {
@@ -375,7 +414,7 @@ export async function startGame() {
   try {
     clearSessionStorage();
     update({ error: null, executing: true });
-    const session = await api.createSession(state.selectedWorld.id, state.plugins.map((p) => p.name));
+    const session = await api.createSession(state.selectedWorld.id, state.selectedPlugins);
     resetPluginData();
     saveSessionToStorage(session.id, state.selectedWorld.id);
     setSidInUrl(session.id);
@@ -392,6 +431,27 @@ export async function startGame() {
   } catch (e) {
     update({ error: (e as Error).message, executing: false });
   }
+}
+
+export function togglePluginSelection(pluginName: string) {
+  const plugin = state.plugins.find((item) => item.name === pluginName);
+  if (!plugin || plugin.pluginType === "core-plugin") return;
+
+  const selected = new Set(state.selectedPlugins);
+  if (selected.has(pluginName)) {
+    selected.delete(pluginName);
+  } else {
+    selected.add(pluginName);
+  }
+
+  // Core plugins stay present even if state was externally mutated.
+  for (const item of state.plugins) {
+    if (item.pluginType === "core-plugin") {
+      selected.add(item.name);
+    }
+  }
+
+  update({ selectedPlugins: [...selected] });
 }
 
 export async function resumeSession(sessionId: string, worldId: string) {
@@ -521,6 +581,10 @@ export async function submitFormInputs(payload: {
   turnId: string;
   interactionId: string;
   values: Record<string, unknown>;
+  submitBehavior?: {
+    echoFilledNarrative?: boolean;
+    autoContinue?: boolean;
+  };
 }) {
   if (!state.session) return;
 
@@ -532,8 +596,11 @@ export async function submitFormInputs(payload: {
       values: payload.values,
     });
 
-    // 2. Show the filled narrative as a player message (story text, not raw field data)
-    if (result.filledNarrative) {
+    const shouldEcho = payload.submitBehavior?.echoFilledNarrative !== false;
+    const submitContent = shouldEcho ? (result.filledNarrative || "(继续)") : "";
+
+    // 2. Optionally show the filled narrative as a player message.
+    if (result.filledNarrative && shouldEcho) {
       addMessage({
         id: `input-${Date.now()}`,
         role: "user",
@@ -547,10 +614,21 @@ export async function submitFormInputs(payload: {
     const response = await api.postAction({
       type: "send_message",
       sessionId: state.session.id,
-      payload: { content: result.filledNarrative || "(继续)" },
+      payload: { content: submitContent },
       locale: "zh-CN",
     });
     await readActionStream(response);
+
+    if (payload.submitBehavior?.autoContinue) {
+      update({ executing: true, executionSteps: [] });
+      const followup = await api.postAction({
+        type: "send_message",
+        sessionId: state.session.id,
+        payload: { content: "" },
+        locale: "zh-CN",
+      });
+      await readActionStream(followup);
+    }
   } catch (e) {
     update({ error: (e as Error).message, executing: false });
   }
@@ -571,5 +649,7 @@ export function useSessionStore() {
     resumeSessionById: useCallback(resumeSessionById, []),
     loadWorldSessions: useCallback(loadWorldSessions, []),
     deleteSession: useCallback(deleteSession, []),
+    togglePluginSelection: useCallback(togglePluginSelection, []),
+    refreshPluginCatalog: useCallback(refreshPluginCatalog, []),
   };
 }

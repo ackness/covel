@@ -3,25 +3,28 @@ name: core-char-creator/player-init
 description: 玩家角色创建 agent。首轮基于开场叙事和世界 schema 生成角色表单；表单提交后基于提交值调用 create-character 工具写入 characters 表。
 pluginType: core-plugin
 priority: 700
-model: ds
+runtimeType: function
+handler: ./handler.js
+outputKind: system
+model: plugin
+timeoutMs: 180000
 promptVersion: 2
 guard: ./guard.js
 trigger:
   type: scheduled
   interval: 1
   maxTriggerCount: 2
-input:
-  inject:
-    - from: core-narrator
-      field: narrativeOutput
-      as: "<narrator-opening>"
-tools:
-  builtin:
-    - create-form
-    - create-character
 ui:
   right:
     - ../../ui/character-panel.json
+postHistory:
+  role: system
+  content: |
+    本 runtime 的完成条件：
+    - `<player-submission>` 为空时，调用一次 `create-form`
+    - `<player-submission>` 有值时，调用一次 `create-character`
+    - 工具调用完成后结束输出
+    - 普通说明文字、建议列表、任务确认话术都不算完成
 ---
 
 你是玩家角色创建 agent。你的任务根据当前状态分两种模式：
@@ -51,6 +54,10 @@ ui:
 **查看 `<player-submission>`**：
 - **为空 / 未提交**：你处于"**第 1 步：生成表单**"模式
 - **包含表单字段值**：你处于"**第 2 步：提交创建**"模式
+
+本轮完成条件：
+- `<player-submission>` 为空时，必须调用一次 `create-form`
+- `<player-submission>` 有值时，必须调用一次 `create-character`
 
 ---
 
@@ -94,6 +101,7 @@ ui:
    - `type`: `"player"`
    - `description`: 基于选择生成的简短人物描述（2-3 句）
    - `fields`: 合并后的完整属性键值对
+   - `transitionPhase`: `"playing"`
 
 **单次调用**，不要重复调。调用工具后不要输出额外文本。
 

@@ -91,11 +91,23 @@ export interface TurnResult {
 
 export type InteractionType = 'form' | 'choice' | 'confirmation';
 
+export interface InteractionSubmitBehavior {
+  /** Whether the filled narrative should appear as a visible player bubble. */
+  readonly echoFilledNarrative?: boolean;
+  /**
+   * Whether the client should automatically trigger one follow-up empty turn
+   * if the submit-triggered turn produced no story output.
+   */
+  readonly autoContinue?: boolean;
+}
+
 interface BaseInteraction {
   readonly interactionId: string;
   readonly type: InteractionType;
   /** Narrative template with placeholders — filled after player responds. */
   readonly narrativeTemplate?: string;
+  /** Optional generic client-side submit behavior. */
+  readonly submitBehavior?: InteractionSubmitBehavior;
 }
 
 export interface FormInteraction extends BaseInteraction {

@@ -32,6 +32,7 @@ export function normalizeOutput(
   turnId: string,
   sessionId: string,
   outputKind?: string,
+  toolCalls?: ReadonlyArray<{ output?: unknown }>,
 ): Proposal[] {
   const proposals: Proposal[] = [];
   const kind = outputKind ?? 'plugin';
@@ -65,6 +66,18 @@ export function normalizeOutput(
       interactionId: (form.formId ?? '') as string,
       type: 'form',
       ...form,
+    }));
+  }
+
+  // ui blocks — from runtime output or tool-call parsed results
+  const uiBlocks = collectUiBlocks(output, toolCalls);
+  for (const [index, block] of uiBlocks.entries()) {
+    proposals.push(makeProposal('interaction.request', source, turnId, sessionId, {
+      interactionId:
+        (typeof block.interactionId === 'string' && block.interactionId) ||
+        (typeof block.id === 'string' && block.id) ||
+        `ui-${index + 1}`,
+      ...block,
     }));
   }
 
@@ -259,7 +272,7 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
     await store.addMessage({
       id: proposal.id,
       sessionId: proposal.sessionId,
-      role: 'assistant',
+      role: kind === 'system' ? 'system' : 'assistant',
       content,
       metadata: { turnId: proposal.turnId, runtimeId: proposal.source.runtimeId, kind },
       createdAt: proposal.timestamp,
@@ -274,7 +287,7 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
     const payload = proposal.payload as Record<string, unknown>;
     const block = {
       id: proposal.id,
-      type: payload.type === 'form' ? 'interactive_form' : 'interactive_choice',
+      type: resolveBlockType(payload),
       data: payload,
       meta: { runtimeId: proposal.source.runtimeId, pluginId: proposal.source.pluginId, turnId: proposal.turnId },
     };
@@ -470,7 +483,14 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
  * Returns empty array for failed/skipped runtimes.
  */
 export async function processRuntimeResult(
-  result: { pluginId: string; runtimeId: string; turnId: string; status: string; output: Record<string, unknown> | null },
+  result: {
+    pluginId: string;
+    runtimeId: string;
+    turnId: string;
+    status: string;
+    output: Record<string, unknown> | null;
+    toolCalls?: ReadonlyArray<{ output?: unknown }>;
+  },
   store: KernelStore,
   sessionId: string,
   outputKind?: string,
@@ -481,7 +501,14 @@ export async function processRuntimeResult(
   }
 
   const source = { pluginId: result.pluginId, runtimeId: result.runtimeId };
-  const proposals = normalizeOutput(result.output, source, result.turnId, sessionId, outputKind);
+  const proposals = normalizeOutput(
+    result.output,
+    source,
+    result.turnId,
+    sessionId,
+    outputKind,
+    result.toolCalls,
+  );
 
   if (proposals.length === 0) {
     return [];
@@ -547,6 +574,44 @@ function makeEvent(type: string, proposal: Proposal, payload: Record<string, unk
     payload,
     timestamp: proposal.timestamp,
   };
+}
+
+function collectUiBlocks(
+  output: Record<string, unknown>,
+  toolCalls?: ReadonlyArray<{ output?: unknown }>,
+): Array<Record<string, unknown>> {
+  const blocks: Array<Record<string, unknown>> = [];
+  const seen = new Set<string>();
+
+  const appendUi = (value: unknown): void => {
+    if (!value || typeof value !== 'object') return;
+    const ui = (value as Record<string, unknown>).ui;
+    if (!Array.isArray(ui)) return;
+
+    for (const entry of ui) {
+      if (!entry || typeof entry !== 'object') continue;
+      const block = entry as Record<string, unknown>;
+      const key = JSON.stringify(block);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      blocks.push(block);
+    }
+  };
+
+  appendUi(output);
+  for (const call of toolCalls ?? []) {
+    appendUi(call.output);
+  }
+
+  return blocks;
+}
+
+function resolveBlockType(payload: Record<string, unknown>): string {
+  const type = typeof payload.type === 'string' ? payload.type : '';
+  if (type === 'form') return 'interactive_form';
+  if (type === 'choice') return 'interactive_choice';
+  if (type === 'confirmation') return 'interactive_confirmation';
+  return type || 'interactive_block';
 }
 
 function makeProposal(

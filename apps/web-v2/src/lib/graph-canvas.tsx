@@ -30,6 +30,9 @@ interface ForceNode {
   summary: string;
   labels: string[];
   color: string;
+  radius: number;
+  x?: number;
+  y?: number;
 }
 
 interface ForceLink {
@@ -41,6 +44,11 @@ interface ForceLink {
   fact: string;
   color: string;
   width: number;
+}
+
+interface PositionedNode extends ForceNode {
+  x?: number;
+  y?: number;
 }
 
 interface GraphCanvasProps {
@@ -80,6 +88,7 @@ function buildNodes(nodes: Record<string, unknown>): ForceNode[] {
       summary: node.summary,
       labels: [...node.labels],
       color: NODE_COLORS[node.type] ?? "#9ca3af",
+      radius: nodeRadius(node.name),
     }));
 }
 
@@ -98,16 +107,75 @@ function buildLinks(edges: Record<string, unknown>): ForceLink[] {
     }));
 }
 
+function seedNodePositions(nodes: ForceNode[], width: number, height: number): ForceNode[] {
+  if (nodes.length === 0) return nodes;
+
+  const cx = width / 2;
+  const cy = height / 2;
+  const seedRadius = Math.min(width, height) * 0.28;
+  return nodes.map((node, index) => {
+    const angle = (-Math.PI / 2) + (index / Math.max(nodes.length, 1)) * 2 * Math.PI;
+    return {
+      ...node,
+      x: cx + Math.cos(angle) * seedRadius,
+      y: cy + Math.sin(angle) * seedRadius,
+    };
+  });
+}
+
+function nodeRadius(name: string): number {
+  const glyphs = Array.from(name ?? "");
+  return Math.max(18, Math.min(32, 14 + Math.max(0, glyphs.length - 2) * 2.6));
+}
+
+function splitNodeLabel(name: string): string[] {
+  const glyphs = Array.from(name ?? "");
+  if (glyphs.length <= 4) return [glyphs.join("")];
+  const middle = Math.ceil(glyphs.length / 2);
+  return [glyphs.slice(0, middle).join(""), glyphs.slice(middle).join("")];
+}
+
+function drawNodeLabel(
+  ctx: CanvasRenderingContext2D,
+  node: ForceNode,
+  x: number,
+  y: number,
+  globalScale: number,
+  selected: boolean,
+): void {
+  const lines = splitNodeLabel(node.name);
+  const fontSize = Math.max(8, Math.min(12, (node.radius * 0.8) / Math.max(...lines.map((line) => Array.from(line).length), 1)));
+  const lineHeight = fontSize + 1;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.fillStyle = node.color;
+  ctx.arc(x, y, node.radius, 0, 2 * Math.PI, false);
+  ctx.fill();
+
+  ctx.lineWidth = selected ? 2.5 : 1.25;
+  ctx.strokeStyle = selected ? "#f8fafc" : "rgba(255,255,255,0.32)";
+  ctx.stroke();
+
+  ctx.fillStyle = "#f8fafc";
+  ctx.font = `${fontSize}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  const startY = y - ((lines.length - 1) * lineHeight) / 2;
+  for (const [index, line] of lines.entries()) {
+    ctx.fillText(line, x, startY + index * lineHeight);
+  }
+
+  ctx.restore();
+}
+
 // ── Component ────────────────────────────────────────────────────
 
 const Inner = ({ pluginId, nodesNamespace, edgesNamespace, height = 480 }: GraphCanvasProps) => {
   const nodes = usePluginNamespace(pluginId, nodesNamespace);
   const edges = usePluginNamespace(pluginId, edgesNamespace);
-
-  const graphData = useMemo(
-    () => ({ nodes: buildNodes(nodes), links: buildLinks(edges) }),
-    [nodes, edges],
-  );
+  const graphRef = useRef<any>(null);
 
   const [selected, setSelected] = useState<ForceNode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -122,6 +190,28 @@ const Inner = ({ pluginId, nodesNamespace, edgesNamespace, height = 480 }: Graph
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
+
+  const graphData = useMemo(() => {
+    const builtNodes = buildNodes(nodes);
+    return {
+      nodes: seedNodePositions(builtNodes, width, height),
+      links: buildLinks(edges),
+    };
+  }, [nodes, edges, width, height]);
+
+  useEffect(() => {
+    if (!graphRef.current) return;
+    const chargeForce = graphRef.current.d3Force("charge");
+    const linkForce = graphRef.current.d3Force("link");
+    const collisionForce = graphRef.current.d3Force("collision");
+
+    chargeForce?.strength?.(-320);
+    linkForce?.distance?.((link: ForceLink) => 110 + Math.abs(link.strength) * 30);
+    collisionForce?.radius?.((node: PositionedNode) => node.radius + 16);
+
+    graphRef.current.d3VelocityDecay?.(0.28);
+    graphRef.current.zoomToFit?.(250, 28);
+  }, [graphData]);
 
   const handleNodeClick = useCallback((node: object) => {
     setSelected(node as ForceNode);
@@ -161,26 +251,56 @@ const Inner = ({ pluginId, nodesNamespace, edgesNamespace, height = 480 }: Graph
           }
         >
           <ForceGraph2D
+            ref={graphRef}
             graphData={graphData}
             width={width}
             height={height}
             backgroundColor="rgba(0,0,0,0)"
+            enablePanInteraction={true}
+            enableZoomInteraction={true}
+            enableNodeDrag={true}
             nodeRelSize={6}
             nodeColor={(n: object) => (n as ForceNode).color}
+            nodeVal={(n: object) => (n as ForceNode).radius}
+            nodeCanvasObject={(node: object, ctx, globalScale) => {
+              const forceNode = node as ForceNode & { x?: number; y?: number };
+              drawNodeLabel(
+                ctx,
+                forceNode,
+                forceNode.x ?? 0,
+                forceNode.y ?? 0,
+                globalScale,
+                selected?.id === forceNode.id,
+              );
+            }}
+            nodeCanvasObjectMode={() => "replace"}
+            nodePointerAreaPaint={(node: object, color: string, ctx) => {
+              const forceNode = node as ForceNode & { x?: number; y?: number };
+              ctx.fillStyle = color;
+              ctx.beginPath();
+              ctx.arc(forceNode.x ?? 0, forceNode.y ?? 0, forceNode.radius, 0, 2 * Math.PI, false);
+              ctx.fill();
+            }}
             nodeLabel={(n: object) => {
               const fn = n as ForceNode;
               return `${fn.name} — ${fn.type}`;
             }}
             linkColor={(l: object) => (l as ForceLink).color}
-            linkWidth={(l: object) => (l as ForceLink).width}
-            linkDirectionalArrowLength={3}
-            linkDirectionalArrowRelPos={0.95}
-            linkCurvature={0.15}
+            linkWidth={(l: object) => Math.max(2.5, (l as ForceLink).width)}
+            linkDirectionalArrowColor={(l: object) => (l as ForceLink).color}
+            linkDirectionalArrowLength={8}
+            linkDirectionalArrowRelPos={0.9}
+            linkCurvature={0.28}
             linkLabel={(l: object) => {
               const fl = l as ForceLink;
-              return `${fl.relation} (${fl.strength.toFixed(2)})\n${fl.fact}`;
+              return fl.fact;
             }}
             onNodeClick={handleNodeClick}
+            onNodeDragEnd={(node: object) => {
+              const dragged = node as ForceNode & { fx?: number; fy?: number; x?: number; y?: number };
+              dragged.fx = dragged.x;
+              dragged.fy = dragged.y;
+            }}
             cooldownTicks={120}
           />
         </Suspense>

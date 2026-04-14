@@ -51,8 +51,10 @@ export default function ({ tool, z, shortIdBatch, store }) {
     targetName: z.string().min(1).describe('目标节点的 name'),
     relation: z
       .string()
-      .regex(/^[A-Z][A-Z0-9_]*$/)
-      .describe('关系类型，UPPER_SNAKE_CASE（如 TRUSTS, OPPOSES）'),
+      .min(1)
+      .max(48)
+      .regex(/^[\p{Letter}][\p{Letter}\p{Number}_\-\s]*$/u)
+      .describe('关系类型，支持结构化英文标识或中文关系名（如 TRUSTS、同盟、竞争）'),
     strength: z
       .number()
       .min(-1)

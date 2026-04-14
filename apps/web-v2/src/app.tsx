@@ -5,7 +5,7 @@
  * Right panel: plugin-driven tabs via json-render
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState, useCallback, type PointerEvent as ReactPointerEvent } from "react";
 import { Loader2 } from "lucide-react";
 import { useSessionStore } from "@/stores/session-store.js";
 import { WorldSelect } from "@/components/session/world-select.js";
@@ -14,11 +14,56 @@ import { MessageList } from "@/components/chat/message-list.js";
 import { InputBar } from "@/components/chat/input-bar.js";
 import { RightPanel } from "@/components/panels/right-panel.js";
 
+const RIGHT_PANEL_WIDTH_KEY = "covel:web-v2:right-panel-width-pct";
+const DEFAULT_RIGHT_PANEL_WIDTH = 28;
+const MIN_RIGHT_PANEL_PX = 300;
+const MAX_RIGHT_PANEL_PX = 680;
+
+function loadInitialRightPanelWidth(): number {
+  if (typeof window === "undefined") return DEFAULT_RIGHT_PANEL_WIDTH;
+  const stored = Number(window.localStorage.getItem(RIGHT_PANEL_WIDTH_KEY));
+  if (Number.isFinite(stored) && stored >= 18 && stored <= 48) {
+    return stored;
+  }
+  return DEFAULT_RIGHT_PANEL_WIDTH;
+}
+
 export function App() {
   const store = useSessionStore();
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const [rightPanelWidthPct, setRightPanelWidthPct] = useState(loadInitialRightPanelWidth);
 
   useEffect(() => {
     void store.boot();
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(RIGHT_PANEL_WIDTH_KEY, String(rightPanelWidthPct));
+  }, [rightPanelWidthPct]);
+
+  const startRightPanelResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const layout = layoutRef.current;
+    if (!layout) return;
+
+    event.preventDefault();
+    const rect = layout.getBoundingClientRect();
+    const minPct = (MIN_RIGHT_PANEL_PX / rect.width) * 100;
+    const maxPct = Math.min(48, (MAX_RIGHT_PANEL_PX / rect.width) * 100);
+
+    const onMove = (moveEvent: PointerEvent) => {
+      const nextWidthPx = rect.right - moveEvent.clientX;
+      const nextPct = (nextWidthPx / rect.width) * 100;
+      const clampedPct = Math.max(minPct, Math.min(maxPct, nextPct));
+      setRightPanelWidthPct(clampedPct);
+    };
+
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
   }, []);
 
   // Loading
@@ -46,11 +91,15 @@ export function App() {
         <SessionPrep
           world={store.selectedWorld}
           plugins={store.plugins}
+          selectedPlugins={store.selectedPlugins}
+          pluginFlow={store.pluginFlow}
           worldSessions={store.worldSessions}
           onStart={store.startGame}
           onBack={store.backToWorldSelect}
           onResume={store.resumeSession}
           onDelete={store.deleteSession}
+          onTogglePlugin={store.togglePluginSelection}
+          onRefreshPlugins={store.refreshPluginCatalog}
         />
       </div>
     );
@@ -91,7 +140,7 @@ export function App() {
       </header>
 
       {/* Main layout */}
-      <div className="flex-1 flex min-h-0">
+      <div ref={layoutRef} className="flex-1 flex min-h-0">
         {/* Center: message area */}
         <main className="flex-1 flex flex-col min-w-0">
           {/* Execution steps */}
@@ -143,8 +192,25 @@ export function App() {
           )}
         </main>
 
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整侧边栏宽度"
+          onPointerDown={startRightPanelResize}
+          className="group relative w-3 shrink-0 cursor-col-resize touch-none bg-transparent"
+        >
+          <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-zinc-200 dark:bg-zinc-700 transition-colors group-hover:bg-blue-500" />
+          <div className="absolute left-1/2 top-1/2 h-12 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-zinc-300/80 dark:bg-zinc-600/80 transition-colors group-hover:bg-blue-500" />
+        </div>
+
         {/* Right: plugin panels */}
-        <aside className="w-72 shrink-0 border-l border-zinc-200 dark:border-zinc-700">
+        <aside
+          className="shrink-0 border-l border-zinc-200 dark:border-zinc-700 min-w-[300px] max-w-[48%]"
+          style={{
+            width: `${rightPanelWidthPct}%`,
+            flexBasis: `${rightPanelWidthPct}%`,
+          }}
+        >
           <RightPanel />
         </aside>
       </div>

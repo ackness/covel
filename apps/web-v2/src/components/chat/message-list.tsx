@@ -30,22 +30,42 @@ export function MessageList({ messages }: MessageListProps) {
 
   return (
     <div className="space-y-4 pb-4">
-      {visible.map((msg) => (
-        <MessageRenderer key={msg.id} message={msg} />
+      {visible.map((msg, index) => (
+        <MessageRenderer
+          key={msg.id}
+          message={msg}
+          hasLaterUserMessage={visible.slice(index + 1).some((item) => item.role === "user")}
+          hasLaterStoryMessage={visible.slice(index + 1).some((item) => item.role === "assistant" && item.kind === "story")}
+        />
       ))}
       <div ref={endRef} />
     </div>
   );
 }
 
-function MessageRenderer({ message }: { message: GameMessage }) {
+function MessageRenderer({
+  message,
+  hasLaterUserMessage,
+  hasLaterStoryMessage,
+}: {
+  message: GameMessage;
+  hasLaterUserMessage: boolean;
+  hasLaterStoryMessage: boolean;
+}) {
   const [submitted, setSubmitted] = useState(false);
   const formStateRef = useRef<Record<string, unknown>>({});
 
   const hasInteraction = Boolean(message.block);
+  const submittedFromHistory = hasLaterUserMessage && isFormLikeBlock(message.block);
+  const effectiveSubmitted = submitted || submittedFromHistory;
+  const collapseResolvedInteraction =
+    hasInteraction &&
+    hasLaterStoryMessage &&
+    shouldCollapseAfterStory(message.block);
 
   const spec = useMemo(() => {
-    const nested = submitted && hasInteraction
+    if (collapseResolvedInteraction) return null;
+    const nested = effectiveSubmitted && hasInteraction
       ? messageToSpecDisabled(message)
       : messageToSpec(message);
     if (!nested) return null;
@@ -54,7 +74,7 @@ function MessageRenderer({ message }: { message: GameMessage }) {
     } catch {
       return null;
     }
-  }, [message, submitted, hasInteraction]);
+  }, [message, effectiveSubmitted, hasInteraction, collapseResolvedInteraction]);
 
   const handleStateChange = useCallback((changes: Array<{ path: string; value: unknown }>) => {
     for (const { path, value } of changes) {
@@ -64,8 +84,7 @@ function MessageRenderer({ message }: { message: GameMessage }) {
 
   const handlers = useMemo(() => ({
     submitForm: async () => {
-      if (submitted) return;
-      setSubmitted(true);
+      if (effectiveSubmitted) return;
 
       // Extract form field values from tracked json-render state
       const formValues: Record<string, string> = {};
@@ -80,8 +99,17 @@ function MessageRenderer({ message }: { message: GameMessage }) {
       const block = message.block;
       if (block) {
         const data = (block.data ?? block) as Record<string, unknown>;
+        const fields = (data.fields as Array<{ name?: string; required?: boolean }> | undefined) ?? [];
+        const missingRequired = fields.some((field) => {
+          if (!field?.required || !field.name) return false;
+          return !(formValues[field.name]?.trim());
+        });
+        if (missingRequired) return;
+
+        setSubmitted(true);
         const interactionId = (data.interactionId ?? data.formId ?? "form") as string;
         const turnId = ((block.meta as Record<string, unknown>)?.turnId ?? message.turnId ?? "") as string;
+        const submitBehavior = data.submitBehavior as Record<string, unknown> | undefined;
 
         // Submit raw form values. Character creation is now owned by the
         // plugin's player-init runtime, which reads the submission from context
@@ -90,8 +118,15 @@ function MessageRenderer({ message }: { message: GameMessage }) {
           turnId,
           interactionId,
           values: formValues,
+          submitBehavior: submitBehavior
+            ? {
+              echoFilledNarrative: submitBehavior.echoFilledNarrative as boolean | undefined,
+              autoContinue: submitBehavior.autoContinue as boolean | undefined,
+            }
+            : undefined,
         });
       } else {
+        setSubmitted(true);
         // Fallback: just send form values as message
         const parts = Object.entries(formValues)
           .filter(([, v]) => v.trim())
@@ -100,7 +135,7 @@ function MessageRenderer({ message }: { message: GameMessage }) {
       }
     },
     selectChoice: async (params: Record<string, unknown>) => {
-      if (submitted) return;
+      if (effectiveSubmitted) return;
       setSubmitted(true);
       const label = params.label as string;
       if (label) sendMessage(label);
@@ -109,7 +144,7 @@ function MessageRenderer({ message }: { message: GameMessage }) {
       const text = params.text as string;
       if (text) sendMessage(text);
     },
-  }), [submitted, message]);
+  }), [effectiveSubmitted, message]);
 
   if (!spec) return null;
 
@@ -123,4 +158,19 @@ function MessageRenderer({ message }: { message: GameMessage }) {
       <Renderer spec={spec} registry={covelRegistry} />
     </JSONUIProvider>
   );
+}
+
+function isFormLikeBlock(block: GameMessage["block"]): boolean {
+  if (!block) return false;
+  const data = (block.data ?? block) as Record<string, unknown>;
+  const type = block.type as string | undefined;
+  const innerType = data.type as string | undefined;
+  return innerType === "form" || type === "interactive_form" || Array.isArray(data.fields);
+}
+
+function shouldCollapseAfterStory(block: GameMessage["block"]): boolean {
+  if (!block) return false;
+  const data = (block.data ?? block) as Record<string, unknown>;
+  const submitBehavior = data.submitBehavior as Record<string, unknown> | undefined;
+  return submitBehavior?.autoContinue === true;
 }

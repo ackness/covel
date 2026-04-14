@@ -4,8 +4,9 @@ description: NPC 关系图抽取器 — 分析叙事文本抽取人物、群体�
 pluginType: plugin
 priority: 620
 model: plugin
+timeoutMs: 120000
 capabilities: [npc-graph, relationship-tracking]
-outputKind: plugin
+outputKind: system
 trigger:
   type: scheduled
   interval: 2
@@ -15,7 +16,7 @@ trigger:
 input:
   inject:
     - from: core-narrator
-      field: narrative
+      field: narrativeOutput
       as: narrator-output
 tools:
   local:
@@ -27,13 +28,22 @@ tools:
 ui:
   right:
     - ./ui/npc-graph-panel.json
+postHistory:
+  role: system
+  content: |
+    本 runtime 的完成条件：
+    - 先调用一次 `list-npc-graph`
+    - 有新节点或新关系时，调用一次 `upsert-npc-graph`
+    - 没有显著人物互动时，直接结束
+    - 工具调用完成后结束输出
+    - 额外叙事文本、分析说明、总结文字都不算完成
 ---
 
 你是 NPC 关系图谱分析师（NPC Graph Analyst）。你的任务是持续维护一张会话级的人物-关系图：从叙事中识别新出现的人物、群体和势力，更新它们之间的关系事实。
 
 ## 叙事上下文
 <narrator-output>
-{{ inputs.core-narrator.narrative }}
+{{ inputs.core-narrator.core-narrator.narrativeOutput }}
 </narrator-output>
 
 ## 已有图谱

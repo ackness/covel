@@ -127,6 +127,38 @@ function blockToSpec(block: Record<string, unknown>): NestedSpec | null {
     };
   }
 
+  if (type === "codex-batch") {
+    const entries = (data.entries ?? []) as Array<Record<string, unknown>>;
+    return {
+      type: "Stack",
+      props: { gap: "sm" },
+      children: [
+        {
+          type: "Row",
+          props: { gap: "sm" },
+          children: [
+            { type: "Icon", props: { name: "book-open", size: "sm" } },
+            { type: "Text", props: { content: data.title ?? "图鉴更新", weight: "bold", size: "sm" } },
+          ],
+        },
+        {
+          type: "CardList",
+          children: entries.map((entry) => ({
+            type: "EntryCard",
+            props: {
+              title: entry.title ?? "",
+              category: entry.category ?? "lore",
+              content: entry.content ?? "",
+              tags: entry.tags ?? [],
+              rarity: entry.rarity ?? "common",
+              compact: true,
+            },
+          })),
+        },
+      ],
+    };
+  }
+
   // Unknown block — raw display
   return {
     type: "Card",
@@ -208,6 +240,18 @@ function formToSpec(data: Record<string, unknown>): NestedSpec {
  */
 function formToSpecDisabled(data: Record<string, unknown>): NestedSpec {
   const title = data.title as string ?? "表单";
+  const interactionId = (data.interactionId ?? data.formId ?? "") as string;
+  if (interactionId === "char-creation") {
+    return {
+      type: "Stack",
+      props: { gap: "xs" },
+      children: [
+        { type: "FormHeader", props: { title } },
+        { type: "Text", props: { content: "角色身份已确认，故事继续推进。", variant: "muted", size: "sm" } },
+      ],
+    };
+  }
+
   const fields = (data.fields ?? []) as Array<{
     name: string;
     label?: string;

@@ -12,11 +12,11 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import path from 'node:path';
-import { MockLLM, createTestHarness } from '@covel/plugin-test-utils';
 import { discoverPlugins, loadPluginManifest, loadRuntime } from '@covel/plugin-loader';
 import { tool, z, shortIdBatch } from '@covel/tools';
 import createUnlockCodexEntries from '../tools/unlock-codex-entries.js';
 import createUpdateCodexEntry from '../tools/update-codex-entry.js';
+import codexHandler from '../handler.js';
 
 // In-memory mock store for plugin-data operations
 function createMockPluginDataStore() {
@@ -231,6 +231,7 @@ describe('core-codex plugin manifest', () => {
     expect(manifest.pluginType).toBe('plugin');
     expect(manifest.name).toBe('core-codex');
     expect(manifest.priority).toBe(650);
+    expect(manifest.runtimeType).toBe('function');
   });
 
   it('should declare local tools', () => {
@@ -269,60 +270,33 @@ describe('core-codex plugin manifest', () => {
 // ── Integration test with TestHarness ────────────────────────────
 
 describe('core-codex integration', () => {
-  it('should execute tool calls and produce UI cards via harness', async () => {
+  it('should extract codex discoveries and persist them via handler', async () => {
     const mockStore = createMockPluginDataStore();
-    const unlockTool = createUnlockCodexEntries({ tool, z, shortIdBatch, store: mockStore });
-    const updateTool = createUpdateCodexEntry({ tool, z, store: mockStore });
-
-    const llm = new MockLLM({
-      defaultResponse: {
-        content: '',
-        toolCalls: [],
-        finishReason: 'stop',
-        usage: { inputTokens: 50, outputTokens: 10 },
-      },
+    const result = await codexHandler({
+      sessionId: 'sess-harness',
+      turnId: 'turn-2',
+      pluginId: 'core-codex',
+      playerMessage: '我环顾四周，观察周围环境',
+      locale: 'zh-CN',
+      store: mockStore,
+      completedResults: new Map([[
+        'core-narrator',
+        {
+          output: {
+            narrativeOutput:
+              '苏婉压低声音：“林风，我们得立刻动身——百灵沼泽离这里有两百里。” 你注意到她左手袖口有一处焦痕，腰间佩剑微微作响。溪对岸宿舍区二楼的窗户后，有个人影正朝你们这边看。',
+          },
+        },
+      ]]),
+      config: {},
     });
 
-    llm.generate = async (params) => {
-      llm.calls.push({ messages: params.messages });
-      const sys = params.messages.find(m => m.role === 'system');
-      if (sys?.content.includes('知识图鉴')) {
-        const hasToolResult = params.messages.some(m => m.role === 'tool');
-        if (hasToolResult) {
-          return { content: '', toolCalls: [], finishReason: 'stop', usage: { inputTokens: 50, outputTokens: 10 } };
-        }
-        return {
-          content: '',
-          toolCalls: [{
-            id: 'call-codex-1',
-            name: 'unlock-codex-entries',
-            arguments: JSON.stringify({
-              entries: [
-                { category: 'location', title: '坊市', content: '青萍山外门弟子交易灵石、丹药的集市。', tags: ['交易', '青萍宗'], rarity: 'common' },
-              ],
-            }),
-          }],
-          finishReason: 'tool_calls',
-          usage: { inputTokens: 100, outputTokens: 50 },
-        };
-      }
-      return { content: '你走进坊市...', toolCalls: [], finishReason: 'stop', usage: { inputTokens: 50, outputTokens: 30 } };
-    };
+    expect(result.ui).toHaveLength(1);
+    expect(result.ui[0].type).toBe('codex-batch');
+    expect(result.ui[0].entries.length).toBeGreaterThanOrEqual(1);
 
-    const harness = await createTestHarness({
-      pluginsDir: PLUGINS_DIR,
-      llm,
-      tools: [unlockTool, updateTool],
-      activePlugins: ['core-codex'],
-    });
-
-    const result = await harness.executeTurn('我走进坊市');
-
-    expect(result.runtimeResults).toHaveLength(1);
-    expect(result.runtimeResults[0].status).toBe('success');
-
-    const toolCalls = await harness.store.listToolCalls('sess-harness');
-    expect(toolCalls.length).toBeGreaterThanOrEqual(1);
-    expect(toolCalls[0].toolName).toBe('unlock-codex-entries');
+    const stored = await mockStore.listPluginData('sess-harness', 'core-codex', 'entries');
+    expect(stored.length).toBeGreaterThanOrEqual(1);
+    expect(stored.some((entry) => entry.value.title === '百灵沼泽')).toBe(true);
   });
 });

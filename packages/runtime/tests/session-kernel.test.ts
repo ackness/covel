@@ -88,6 +88,46 @@ describe('normalizeOutput', () => {
       expect(interactionProposals).toHaveLength(1);
       expect(interactionProposals[0].payload.interactionId).toBe('legacy-form');
     });
+
+    it('should extract ui blocks from tool-call outputs as interaction proposals', () => {
+      const output = { narrativeOutput: 'Guide updated.' };
+      const proposals = normalizeOutput(
+        output,
+        SOURCE,
+        TURN_ID,
+        SESSION_ID,
+        'system',
+        [
+          {
+            output: {
+              ui: [
+                {
+                  type: 'action-guide',
+                  topic: 'Next move',
+                  categories: [{ style: 'safe', suggestions: ['先观察周围环境'] }],
+                },
+              ],
+            },
+          },
+          {
+            output: {
+              ui: [
+                {
+                  type: 'action-guide',
+                  topic: 'Next move',
+                  categories: [{ style: 'safe', suggestions: ['先观察周围环境'] }],
+                },
+              ],
+            },
+          },
+        ],
+      );
+
+      const interactionProposals = proposals.filter((p) => p.type === 'interaction.request');
+      expect(interactionProposals).toHaveLength(1);
+      expect(interactionProposals[0].payload.type).toBe('action-guide');
+      expect(interactionProposals[0].payload.interactionId).toBe('ui-1');
+    });
   });
 
   describe('state.patch', () => {
@@ -234,6 +274,18 @@ describe('createCommitPipeline', () => {
       expect(msgArg.metadata.turnId).toBe(TURN_ID);
       expect(msgArg.metadata.runtimeId).toBe('test-runtime');
     });
+
+    it('should persist system-kind narrative as a system message', async () => {
+      const store = createMockStore();
+      const pipeline = createCommitPipeline(store as any);
+      const proposal = makeProposal('narrative.append', { content: 'Internal note.', kind: 'system' });
+
+      await pipeline.commit(proposal);
+
+      const msgArg = store.addMessage.mock.calls[0][0];
+      expect(msgArg.role).toBe('system');
+      expect(msgArg.metadata.kind).toBe('system');
+    });
   });
 
   describe('interaction.request commit', () => {
@@ -257,6 +309,21 @@ describe('createCommitPipeline', () => {
       const msgArg = store.addMessage.mock.calls[0][0];
       expect(msgArg.content).toBe('');
       expect(msgArg.metadata.block).toBeDefined();
+    });
+
+    it('should preserve generic ui block types', async () => {
+      const store = createMockStore();
+      const pipeline = createCommitPipeline(store as any);
+      const proposal = makeProposal('interaction.request', {
+        interactionId: 'ui-1',
+        type: 'action-guide',
+        topic: 'Test guide',
+      });
+
+      await pipeline.commit(proposal);
+
+      const msgArg = store.addMessage.mock.calls[0][0];
+      expect(msgArg.metadata.block.type).toBe('action-guide');
     });
   });
 
@@ -440,6 +507,44 @@ describe('processRuntimeResult', () => {
 
     // 2 addMessage calls: one for narrative, one for block
     expect(store.addMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('should commit ui blocks from tool-call outputs', async () => {
+    const store = createMockStore();
+    const result = makeRuntimeResult(
+      { narrativeOutput: 'Hidden guide text.' },
+      {
+        toolCalls: [
+          {
+            toolCallId: 'call-1',
+            toolName: 'generate-guide',
+            pluginId: 'test-plugin',
+            runtimeId: 'test-runtime',
+            turnId: TURN_ID,
+            input: {},
+            output: {
+              ui: [
+                {
+                  type: 'action-guide',
+                  topic: 'Where next?',
+                  categories: [{ style: 'safe', suggestions: ['先观察周围环境'] }],
+                },
+              ],
+            },
+            durationMs: 1,
+            approvalStatus: 'auto-allowed',
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      },
+    );
+
+    const events = await processRuntimeResult(result, store as any, SESSION_ID, 'system');
+
+    expect(events.map((e) => e.type).sort()).toEqual(['interaction.requested', 'narrative.completed']);
+    expect(store.addMessage).toHaveBeenCalledTimes(2);
+    expect(store.addMessage.mock.calls[0][0].role).toBe('system');
+    expect(store.addMessage.mock.calls[1][0].metadata.block.type).toBe('action-guide');
   });
 
   it('should use runtimeId and pluginId from the RuntimeResult', async () => {

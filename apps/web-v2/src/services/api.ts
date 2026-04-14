@@ -122,12 +122,85 @@ export async function submitInputs(
 
 export interface PluginInfo {
   name: string;
-  displayName: string;
+  displayName?: string | Record<string, string>;
+  description?: string | Record<string, string>;
+  pluginType?: string;
 }
 
 export async function listPlugins(): Promise<PluginInfo[]> {
   const res = await request<{ packages: PluginInfo[] }>("/api/packages");
   return res.packages;
+}
+
+export interface PluginFlowSegment {
+  id: "start" | "pre-game" | "core-game-loop";
+  label: string;
+  rangeLabel: string;
+  minPriority: number;
+  maxPriority: number;
+}
+
+export interface PluginFlowStep {
+  id: string;
+  pluginId: string;
+  pluginName: string;
+  runtimeId: string;
+  runtimeName: string;
+  description: string;
+  pluginType: string;
+  priority: number;
+  segmentId: "pre-game" | "core-game-loop";
+  runtimeType: string;
+  outputKind: string;
+  model?: string;
+  trigger: {
+    type: string;
+    interval?: number;
+    cooldownTurns?: number;
+    maxTriggerCount?: number;
+    phases: string[];
+  };
+  injects: Array<{ from: string; field: string; as: string }>;
+  tools: { builtin: string[]; local: string[] };
+  uiSlots: string[];
+  docPath: string;
+  isNarrator: boolean;
+}
+
+export interface PluginFlowResponse {
+  version: string;
+  generatedAt: string;
+  segments: PluginFlowSegment[];
+  plugins: Array<{
+    id: string;
+    name: string;
+    description: string;
+    pluginType: string;
+    runtimeIds: string[];
+  }>;
+  steps: PluginFlowStep[];
+}
+
+export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
+  return request<PluginFlowResponse>("/api/plugin-flows");
+}
+
+export interface PluginDocEntry {
+  id: string;
+  runtimeId: string;
+  label: string;
+  path: string;
+  content: string;
+}
+
+export interface PluginDocsResponse {
+  pluginId: string;
+  name: string;
+  docs: PluginDocEntry[];
+}
+
+export async function fetchPluginDocs(pluginId: string): Promise<PluginDocsResponse> {
+  return request<PluginDocsResponse>(`/api/plugin-docs/${encodeURIComponent(pluginId)}`);
 }
 
 // ── Session Snapshot (restore) ──────────────────────────────────
