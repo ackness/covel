@@ -5,7 +5,7 @@
  * Right panel: plugin-driven tabs via json-render
  */
 
-import { useEffect, useRef, useState, useCallback, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, type PointerEvent as ReactPointerEvent } from "react";
 import { Loader2 } from "lucide-react";
 import { useSessionStore } from "@/stores/session-store.js";
 import { WorldSelect } from "@/components/session/world-select.js";
@@ -13,6 +13,24 @@ import { SessionPrep } from "@/components/session/session-prep.js";
 import { MessageList } from "@/components/chat/message-list.js";
 import { InputBar } from "@/components/chat/input-bar.js";
 import { RightPanel } from "@/components/panels/right-panel.js";
+import { DebugPage } from "@/components/debug/debug-page.js";
+
+function readDebugViewParams(): { active: boolean; sid: string | null } {
+  if (typeof window === "undefined") return { active: false, sid: null };
+  const params = new URLSearchParams(window.location.search);
+  return {
+    active: params.get("view") === "debug",
+    sid: params.get("sid"),
+  };
+}
+
+function exitDebugView(): void {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  url.searchParams.delete("view");
+  url.searchParams.delete("sid");
+  window.location.replace(url.toString());
+}
 
 const RIGHT_PANEL_WIDTH_KEY = "covel:web-v2:right-panel-width-pct";
 const DEFAULT_RIGHT_PANEL_WIDTH = 28;
@@ -29,13 +47,15 @@ function loadInitialRightPanelWidth(): number {
 }
 
 export function App() {
+  const debugView = useMemo(readDebugViewParams, []);
   const store = useSessionStore();
   const layoutRef = useRef<HTMLDivElement>(null);
   const [rightPanelWidthPct, setRightPanelWidthPct] = useState(loadInitialRightPanelWidth);
 
   useEffect(() => {
+    if (debugView.active) return;
     void store.boot();
-  }, []);
+  }, [debugView.active]);
 
   useEffect(() => {
     window.localStorage.setItem(RIGHT_PANEL_WIDTH_KEY, String(rightPanelWidthPct));
@@ -65,6 +85,15 @@ export function App() {
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   }, []);
+
+  if (debugView.active) {
+    return (
+      <DebugPage
+        initialSessionId={debugView.sid ?? undefined}
+        onExit={exitDebugView}
+      />
+    );
+  }
 
   // Loading
   if (store.phase === "loading") {
