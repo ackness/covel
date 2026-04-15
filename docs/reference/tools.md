@@ -27,6 +27,52 @@
 
 ---
 
+## 工具调用方向
+
+本页当前以 `apps/server/src/routes/api/bootstrap.ts` 与 `plugins/**/tools/` 下的实现为准。
+
+### 选择顺序
+
+1. 通用、重复、跨插件复用的能力，使用 `tools.builtin`
+2. 插件专属 schema、RAG、NPC 关系维护、图鉴整理等能力，使用 `tools.local`
+3. 多个插件长期共享且契约稳定的能力，升级为新的 builtin 工具
+
+### Builtin 的职责
+
+Builtin 工具承接系统级 building blocks，例如：
+
+- `plugin-data-*`
+- `create-form`
+- `create-choices`
+- `create-character`
+- `world-dimension-get`
+
+这类能力适合被多个插件直接复用。
+
+### Local 的职责
+
+Local 工具承接插件自己的业务封装，例如：
+
+- `generate-guide`
+- `upsert-npc-graph`
+- `unlock-codex-entries`
+
+这类能力的 schema、文案、数据结构由插件包自己定义和演进。
+
+### 目录与访问边界
+
+- local 工具路径通过 `tools.local` 声明，路径基于插件根目录解析
+- bootstrap 会校验路径边界，并只加载位于插件目录内的文件
+- local 工具访问权限按 `pluginId` 隔离，调用插件只能访问自己声明的 local tool
+
+### 当前代码状态
+
+当前实现允许 local tool 与 deterministic function handler 使用注入的 `store` 完成插件包内批量写入。
+
+这条能力适合插件内部实现。插件对外暴露给 runtime 的稳定契约依旧建议留在插件目录内，由插件自己维护测试。
+
+---
+
 ## Builtin 工具
 
 框架级原语，定义在 `packages/tools/src/builtin/*.ts`。所有插件可通过 `tools.builtin` 声明引用，无需编写代码。
@@ -63,7 +109,7 @@
 **Choice**: `{ id, label, description?, category? }`
 - category: `safe` | `aggressive` | `creative` | `wild` 等
 
-**使用者**: 待实现（core-guide 计划使用）
+**使用者**: 通用交互插件。当前 `core-guide` 采用 `generate-guide + ui.message` 路径来承接更完整的插件自定义 UI。
 
 ---
 
@@ -347,7 +393,14 @@ Attributes:
 
 ## Local 工具
 
-插件自带的工具，定义在插件的 `tools/` 目录下，使用 `tool()` 包装函数创建。
+插件自带的工具，定义在插件包自己的 `tools/` 目录或 runtime 子目录下，使用 `tool()` 包装函数创建。
+
+### Local 工具的推荐使用方式
+
+- 文件放在插件自己的 `tools/` 或 runtime 子目录下
+- 在 `PLUGIN.md` 里通过 `tools.local` 显式声明
+- 为每个 local tool 提供独立测试
+- 通过 local tool 封装插件自己的数据 schema 和批量写入逻辑
 
 ### set-world-schema
 
@@ -520,6 +573,12 @@ Bootstrap 时自动分类：
 ### 新增插件的工具
 
 新插件只需在 `PLUGIN.md` frontmatter 中声明 `tools.local` 或 `tools.builtin`，bootstrap 会自动发现、注册并归类为对应来源，无需手动修改白名单。
+
+推荐同时补齐三项测试：
+
+1. manifest 中的工具声明可被正确加载
+2. tool 参数校验与返回结构稳定
+3. tool 对 `plugin_data` / lorebook / `characters` 的写入行为稳定
 
 ---
 

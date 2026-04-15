@@ -1,58 +1,141 @@
 {
   "id": "action-guide",
-  "trigger": "action-guide",
+  "dataSource": { "namespace": "message" },
   "view": {
-    "component": "Card",
-    "props": { "variant": "guide" },
+    "component": "Stack",
+    "props": { "gap": "sm" },
     "children": [
       {
-        "component": "Row",
-        "props": { "gap": "sm" },
+        "component": "Card",
+        "props": { "variant": "subtle" },
         "children": [
-          { "component": "Icon", "props": { "name": "compass", "size": "sm" } },
-          { "component": "Text", "props": { "content": { "$state": "/topic" }, "weight": "bold", "size": "sm" } }
+          {
+            "component": "Row",
+            "props": { "gap": "sm", "align": "center" },
+            "children": [
+              { "component": "Icon", "props": { "name": "compass", "size": "sm" } },
+              { "component": "Text", "props": { "content": { "$state": "/topic" }, "weight": "bold", "size": "sm" } }
+            ]
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": "从下列策略里选择一个切入点继续推进。",
+              "variant": "muted",
+              "size": "xs"
+            }
+          }
         ]
       },
       {
-        "component": "Stack",
-        "props": { "gap": "sm" },
-        "repeat": { "$state": "/categories" },
+        "component": "Grid",
+        "props": { "cols": 2 },
         "children": [
           {
             "component": "Card",
+            "props": { "variant": "subtle" },
+            "visible": { "$state": "/category1Label" },
             "children": [
               {
                 "component": "Row",
-                "props": { "gap": "xs" },
+                "props": { "gap": "xs", "align": "center" },
                 "children": [
-                  { "component": "Icon", "props": { "name": { "$bindItem": "/icon" }, "size": "xs" } },
-                  { "component": "Badge", "props": { "label": { "$bindItem": "/label" }, "color": { "$bindItem": "/color" } } }
+                  { "component": "Icon", "props": { "name": { "$state": "/category1Icon" }, "size": "xs" } },
+                  { "component": "Badge", "props": { "label": { "$state": "/category1Label" }, "color": { "$state": "/category1Color" } } }
+                ]
+              },
+              { "component": "Button", "visible": { "$state": "/category1Suggestion1" }, "props": { "label": { "$state": "/category1Suggestion1" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category1Suggestion1" }, "selectionGroup": "guide:category1" } } } },
+              { "component": "Button", "visible": { "$state": "/category1Suggestion2" }, "props": { "label": { "$state": "/category1Suggestion2" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category1Suggestion2" }, "selectionGroup": "guide:category1" } } } },
+              { "component": "Button", "visible": { "$state": "/category1Suggestion3" }, "props": { "label": { "$state": "/category1Suggestion3" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category1Suggestion3" }, "selectionGroup": "guide:category1" } } } }
+            ]
+          },
+          {
+            "component": "Card",
+            "props": { "variant": "subtle" },
+            "visible": { "$state": "/category2Label" },
+            "children": [
+              {
+                "component": "Row",
+                "props": { "gap": "xs", "align": "center" },
+                "children": [
+                  { "component": "Icon", "props": { "name": { "$state": "/category2Icon" }, "size": "xs" } },
+                  { "component": "Badge", "props": { "label": { "$state": "/category2Label" }, "color": { "$state": "/category2Color" } } }
+                ]
+              },
+              { "component": "Button", "visible": { "$state": "/category2Suggestion1" }, "props": { "label": { "$state": "/category2Suggestion1" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category2Suggestion1" }, "selectionGroup": "guide:category2" } } } },
+              { "component": "Button", "visible": { "$state": "/category2Suggestion2" }, "props": { "label": { "$state": "/category2Suggestion2" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category2Suggestion2" }, "selectionGroup": "guide:category2" } } } },
+              { "component": "Button", "visible": { "$state": "/category2Suggestion3" }, "props": { "label": { "$state": "/category2Suggestion3" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category2Suggestion3" }, "selectionGroup": "guide:category2" } } } }
+            ]
+          },
+          {
+            "component": "Card",
+            "props": { "variant": "subtle" },
+            "visible": { "$state": "/category3Label" },
+            "children": [
+              {
+                "component": "Row",
+                "props": { "gap": "xs", "align": "center" },
+                "children": [
+                  { "component": "Icon", "props": { "name": { "$state": "/category3Icon" }, "size": "xs" } },
+                  { "component": "Badge", "props": { "label": { "$state": "/category3Label" }, "color": { "$state": "/category3Color" } } }
+                ]
+              },
+              { "component": "Button", "visible": { "$state": "/category3Suggestion1" }, "props": { "label": { "$state": "/category3Suggestion1" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category3Suggestion1" }, "selectionGroup": "guide:category3" } } } },
+              { "component": "Button", "visible": { "$state": "/category3Suggestion2" }, "props": { "label": { "$state": "/category3Suggestion2" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category3Suggestion2" }, "selectionGroup": "guide:category3" } } } },
+              { "component": "Button", "visible": { "$state": "/category3Suggestion3" }, "props": { "label": { "$state": "/category3Suggestion3" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category3Suggestion3" }, "selectionGroup": "guide:category3" } } } }
+            ]
+          },
+          {
+            "component": "Card",
+            "props": { "variant": "subtle" },
+            "children": [
+              {
+                "component": "Row",
+                "props": { "gap": "sm", "align": "center" },
+                "children": [
+                  { "component": "Icon", "props": { "name": "pen-line", "size": "xs" } },
+                  { "component": "Text", "props": { "content": "自定义行动", "weight": "bold", "size": "sm" } }
                 ]
               },
               {
-                "component": "Stack",
-                "props": { "gap": "xs" },
-                "repeat": { "$bindItem": "/suggestions" },
-                "children": [
-                  {
-                    "component": "Button",
-                    "props": {
-                      "label": { "$bindItem": "" },
-                      "variant": "default"
-                    },
-                    "on": {
-                      "click": {
-                        "action": "selectSuggestion",
-                        "params": { "text": { "$bindItem": "" } }
-                      }
-                    }
+                "component": "Text",
+                "props": {
+                  "content": "在这里补充你自己的行动描述，也可以只点上面的建议后到底部统一发送。",
+                  "variant": "muted",
+                  "size": "xs"
+                }
+              },
+              {
+                "component": "Input",
+                "props": {
+                  "placeholder": "例如：先让苏婉展示地下结构的灵识影像，再决定是否动身",
+                  "value": { "$bindState": "/customText" }
+                }
+              },
+              {
+                "component": "Button",
+                "props": {
+                  "label": "加入待发送区",
+                  "variant": "primary",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "draftMessage",
+                    "params": { "text": { "$bindState": "/customText" }, "selectionGroup": "guide:custom" }
                   }
-                ]
+                }
               }
             ]
           }
         ]
       }
     ]
+  },
+  "emptyState": {
+    "message": {
+      "zh": "引导建议会在新的叙事节点出现后显示在这里。",
+      "en": "Guide suggestions will appear here after the next narrative turn."
+    }
   }
 }

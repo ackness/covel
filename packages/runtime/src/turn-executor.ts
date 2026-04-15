@@ -33,6 +33,18 @@ import {
 
 // ── Types ────────────────────────────────────────────────────────
 
+interface ExecutedToolCallState {
+  readonly name: string;
+  readonly arguments: string;
+  readonly result: unknown;
+  readonly success: boolean;
+}
+
+interface FailedToolCallState {
+  readonly toolName: string;
+  readonly message?: string;
+}
+
 export interface TurnExecutorDeps {
   /** Resolve a runtime manifest to its fully loaded data. Locale enables localized PLUGIN.md (e.g., PLUGIN.en.md). */
   readonly loadRuntime: (manifest: RuntimeManifest, locale?: string) => Promise<LoadedRuntime | undefined>;
@@ -124,6 +136,122 @@ function emitSubEvent(
   });
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function parseFinalOutput(finalContent: string): Record<string, unknown> {
+  const stripped = finalContent.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+  try {
+    return JSON.parse(stripped) as Record<string, unknown>;
+  } catch {
+    return { narrativeOutput: finalContent };
+  }
+}
+
+function parseFinalOutputEnvelope(finalContent: string): {
+  readonly output: Record<string, unknown>;
+  readonly parsedAsJson: boolean;
+} {
+  const stripped = finalContent.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+  try {
+    return {
+      output: JSON.parse(stripped) as Record<string, unknown>,
+      parsedAsJson: true,
+    };
+  } catch {
+    return {
+      output: { narrativeOutput: finalContent },
+      parsedAsJson: false,
+    };
+  }
+}
+
+function shouldSuppressToolLoopNarrative(args: {
+  outputKind?: string;
+  executedToolCalls: readonly ExecutedToolCallState[];
+  parsedAsJson: boolean;
+}): boolean {
+  return (
+    args.outputKind === 'system' &&
+    args.executedToolCalls.length > 0 &&
+    !args.parsedAsJson
+  );
+}
+
+function findPresentableToolOutput(executedToolCalls: readonly ExecutedToolCallState[]): Record<string, unknown> | null {
+  for (let i = executedToolCalls.length - 1; i >= 0; i--) {
+    const result = executedToolCalls[i]?.result;
+    if (!isRecord(result)) continue;
+    if (Array.isArray(result.ui) || isRecord(result.interaction)) {
+      return { ...result };
+    }
+  }
+  return null;
+}
+
+function findLastStructuredToolOutput(executedToolCalls: readonly ExecutedToolCallState[]): Record<string, unknown> | null {
+  for (let i = executedToolCalls.length - 1; i >= 0; i--) {
+    const result = executedToolCalls[i]?.result;
+    if (isRecord(result)) return { ...result };
+  }
+  return null;
+}
+
+function extractToolFailureMessage(result: string): string | undefined {
+  try {
+    const parsed = JSON.parse(result) as { error?: unknown };
+    if (typeof parsed.error === 'string' && parsed.error.length > 0) {
+      return parsed.error;
+    }
+  } catch {
+    // Ignore parse failures and fall back to the raw text below.
+  }
+  return result.length > 0 ? result : undefined;
+}
+
+function formatToolLoopFailure(args: {
+  runtimeId: string;
+  reason: 'max_steps' | 'timeout' | 'tool_failed_without_output';
+  maxSteps?: number;
+  failedToolCalls: readonly FailedToolCallState[];
+}): string {
+  const reasonText =
+    args.reason === 'max_steps'
+      ? `exhausted the tool loop after ${args.maxSteps ?? 0} steps without producing final output`
+      : args.reason === 'timeout'
+        ? 'timed out while waiting for final output after tool execution'
+        : 'stopped without final output after a tool failure';
+  const lastFailure = args.failedToolCalls.at(-1);
+  if (!lastFailure) {
+    return `Runtime "${args.runtimeId}" ${reasonText}.`;
+  }
+  return `Runtime "${args.runtimeId}" ${reasonText}. Last tool failure: ${lastFailure.toolName}${lastFailure.message ? ` — ${lastFailure.message}` : ''}`;
+}
+
+function shouldRetryMalformedToolArguments(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('function.arguments') && message.includes('JSON format');
+}
+
+function isMetaChoiceParagraph(paragraph: string): boolean {
+  const plain = paragraph.replace(/\*\*/g, '').trim();
+  return /^(?:现在，你需要(?:做出选择|做出决定)|你的选择是|你需要决定|你要如何选择|你会怎么做|请选择)/u.test(plain);
+}
+
+function sanitizeStoryNarrativeText(content: string): string {
+  const paragraphs = content
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
+  while (paragraphs.length > 0 && isMetaChoiceParagraph(paragraphs[paragraphs.length - 1]!)) {
+    paragraphs.pop();
+  }
+
+  return paragraphs.join('\n\n').trim();
+}
+
 // ── Implementation ───────────────────────────────────────────────
 
 /**
@@ -163,7 +291,7 @@ export async function executeTurn(
 ): Promise<TurnResult> {
   const startTime = Date.now();
   const maxSteps = options?.maxSteps ?? 10;
-  const timeoutMs = options?.timeoutMs ?? 60000;
+  const defaultTimeoutMs = options?.timeoutMs ?? 60000;
 
   // Emit turn.started
   emitSubEvent(deps.eventBus, 'game', 'turn.started', input.sessionId, {
@@ -195,6 +323,11 @@ export async function executeTurn(
     messageHistory = await deps.store.listTurnMessages(input.sessionId);
   }
 
+  // turnNumber = number of player messages BEFORE the current one.
+  // Must be computed from the pre-append history to preserve 0-based semantics
+  // that interval-based triggers depend on (e.g. interval:2 fires at 0,2,4…).
+  const turnNumber = messageHistory.filter((m) => m.sourceType === 'player').length;
+
   // Save player message to the append-only history
   if (deps.store) {
     await deps.store.appendTurnMessage({
@@ -207,6 +340,12 @@ export async function executeTurn(
       order: 0,
       createdAt: new Date().toISOString(),
     });
+    // Reload so messageHistory includes the current player message.
+    // This ensures turnsSinceLastTrigger counts the current turn correctly —
+    // without this, cooldownTurns checks always see 0 player messages after
+    // the last runtime message, blocking plugins like core-guide on every
+    // subsequent turn.
+    messageHistory = await deps.store.listTurnMessages(input.sessionId);
   }
 
   // 0b. Compaction (S2-T2): run before buildContext so summaries are stored
@@ -238,8 +377,6 @@ export async function executeTurn(
     }
   }
 
-  const turnNumber = messageHistory.filter((m) => m.sourceType === 'player').length;
-
   // Load session metadata for context injection (turnNumber, phase, characters, lastFormValues)
   let sessionPhase: string | undefined;
   let sessionCharacters: { name: string; type: string; description?: string; fields?: Record<string, unknown> }[] = [];
@@ -269,6 +406,9 @@ export async function executeTurn(
     }
   }
   let sessionMeta = { turnNumber, phase: sessionPhase ?? 'unknown', characters: sessionCharacters, lastFormValues };
+  const promptHistory = messageHistory.filter(
+    (msg) => !(msg.turnId === input.turnId && msg.sourceType === 'player'),
+  );
 
   const triggered = activeRuntimes.filter((rt) => {
     // Compute turnsSinceLastTrigger: count player messages after this runtime's last message
@@ -332,7 +472,7 @@ export async function executeTurn(
 
   for (const group of groups) {
     const results = await executeParallel(group.runtimes, async (manifest) => {
-      return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, timeoutMs, messageHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory);
+      return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, defaultTimeoutMs, promptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory);
     });
 
     // Merge results + apply phase transitions from runtime output
@@ -514,7 +654,7 @@ export async function resumeSuspendedRuntime(
 ): Promise<RuntimeResult> {
   const startTime = Date.now();
   const maxSteps = options?.maxSteps ?? 10;
-  const timeoutMs = options?.timeoutMs ?? 60000;
+  const timeoutMs = options?.timeoutMs ?? manifest.timeoutMs ?? 60000;
   const runId = crypto.randomUUID();
 
   const { pendingContinuation } = suspension;
@@ -558,9 +698,12 @@ export async function resumeSuspendedRuntime(
   }
 
   const collectedToolCalls: ToolCallRecord[] = [...(pendingContinuation.toolCallsSoFar as ToolCallRecord[])];
+  const executedToolCalls: ExecutedToolCallState[] = [];
+  const failedToolCalls: FailedToolCallState[] = [];
   let finalContent: string | null = pendingContinuation.partialContent ?? null;
   let steps = 0;
   const deadline = Date.now() + timeoutMs;
+  let stoppedWithResponse = false;
 
   const toolDefs = deps.toolExecutor ? buildToolDefinitions(manifest, deps.toolExecutor) : undefined;
 
@@ -594,6 +737,13 @@ export async function resumeSuspendedRuntime(
             { sessionId: suspension.sessionId, turnId: suspension.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name },
           );
 
+          if (!result.success) {
+            failedToolCalls.push({
+              toolName: tc.name,
+              message: extractToolFailureMessage(result.result),
+            });
+          }
+
           // Detect nested suspend — not supported, treat as error result
           if (process.env['COVEL_SUSPEND_V1'] === '1' && isSuspendSentinel(result.parsedResult)) {
             messages.push({
@@ -603,6 +753,13 @@ export async function resumeSuspendedRuntime(
             });
             continue;
           }
+
+          executedToolCalls.push({
+            name: tc.name,
+            arguments: tc.arguments,
+            result: result.parsedResult,
+            success: result.success,
+          });
 
           let parsedInput: Record<string, unknown> = {};
           try { parsedInput = JSON.parse(tc.arguments) as Record<string, unknown>; } catch { /* keep empty */ }
@@ -636,20 +793,91 @@ export async function resumeSuspendedRuntime(
     }
 
     finalContent = response.content;
+    stoppedWithResponse = true;
     break;
+  }
+
+  if (!stoppedWithResponse && !finalContent) {
+    return {
+      pluginId: manifest.pluginId,
+      runtimeId: manifest.name,
+      runId,
+      turnId: suspension.turnId,
+      status: 'failed',
+      output: null,
+      toolCalls: collectedToolCalls,
+      durationMs: Date.now() - startTime,
+      error: formatToolLoopFailure({
+        runtimeId: manifest.name,
+        reason: Date.now() >= deadline ? 'timeout' : 'max_steps',
+        maxSteps,
+        failedToolCalls,
+      }),
+      timestamp: new Date().toISOString(),
+    };
   }
 
   // Parse final output
   let output: Record<string, unknown>;
+  const presentableToolOutput = findPresentableToolOutput(executedToolCalls);
+  const structuredToolOutput = findLastStructuredToolOutput(executedToolCalls);
   if (finalContent) {
-    const stripped = finalContent.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-    try {
-      output = JSON.parse(stripped) as Record<string, unknown>;
-    } catch {
-      output = { narrativeOutput: finalContent };
-    }
+    const parsed = parseFinalOutputEnvelope(finalContent);
+    output = shouldSuppressToolLoopNarrative({
+      outputKind: manifest.outputKind,
+      executedToolCalls,
+      parsedAsJson: parsed.parsedAsJson,
+    })
+      ? (structuredToolOutput ?? presentableToolOutput ?? { narrativeOutput: '' })
+      : parsed.output;
+  } else if (failedToolCalls.length > 0) {
+    return {
+      pluginId: manifest.pluginId,
+      runtimeId: manifest.name,
+      runId,
+      turnId: suspension.turnId,
+      status: 'failed',
+      output: null,
+      toolCalls: collectedToolCalls,
+      durationMs: Date.now() - startTime,
+      error: formatToolLoopFailure({
+        runtimeId: manifest.name,
+        reason: 'tool_failed_without_output',
+        failedToolCalls,
+      }),
+      timestamp: new Date().toISOString(),
+    };
   } else {
-    output = { narrativeOutput: '' };
+    output = presentableToolOutput ?? { narrativeOutput: '' };
+  }
+
+  const interactions: Array<Record<string, unknown>> = [];
+  for (const tc of executedToolCalls) {
+    if (!tc.success || !isRecord(tc.result)) continue;
+    if (isRecord(tc.result.interaction)) {
+      interactions.push(tc.result.interaction);
+    }
+  }
+
+  if (interactions.length > 0) {
+    output.interactions = interactions;
+    const firstForm = interactions.find(i => i.type === 'form');
+    if (firstForm) {
+      output.form = {
+        formId: firstForm.interactionId,
+        title: firstForm.title,
+        fields: firstForm.fields,
+        submitLabel: firstForm.submitLabel,
+      };
+      output.narrativeTemplate = firstForm.narrativeTemplate;
+    }
+    if (finalContent && !output.narrativeOutput) {
+      output.narrativeOutput = finalContent;
+    }
+  }
+
+  if (manifest.outputKind === 'story' && typeof output.narrativeOutput === 'string') {
+    output.narrativeOutput = sanitizeStoryNarrativeText(output.narrativeOutput);
   }
 
   // Mark suspension as resolved
@@ -687,7 +915,7 @@ async function executeOneRuntime(
   completedResults: ReadonlyMap<string, RuntimeResult>,
   deps: TurnExecutorDeps,
   maxSteps: number,
-  timeoutMs: number,
+  defaultTimeoutMs: number,
   messageHistory: readonly TurnMessageRecord[],
   sessionMeta?: { turnNumber: number; phase: string; characters: readonly { name: string; type: string; description?: string; fields?: Record<string, unknown> }[]; lastFormValues?: Record<string, unknown> },
   hookPipeline?: HookPipeline,
@@ -696,6 +924,7 @@ async function executeOneRuntime(
 ): Promise<RuntimeResult> {
   const startTime = Date.now();
   const runId = crypto.randomUUID();
+  const timeoutMs = manifest.timeoutMs ?? defaultTimeoutMs;
 
   try {
     // Load the runtime (prompt template, references, handler, etc.)
@@ -1026,13 +1255,19 @@ async function executeOneRuntime(
     // LLM call with tool-calling loop
     let finalContent: string | null = null;
     const collectedToolCalls: ToolCallRecord[] = [];
-    const executedToolCalls: Array<{ name: string; arguments: string; result: unknown; success: boolean }> = [];
+    const executedToolCalls: ExecutedToolCallState[] = [];
+    const failedToolCalls: FailedToolCallState[] = [];
     let steps = 0;
 
     const deadline = Date.now() + timeoutMs;
+    let stoppedWithResponse = false;
 
     // Build tool definitions from manifest declarations (computed once, reused across steps)
     const toolDefs = deps.toolExecutor ? buildToolDefinitions(manifest, deps.toolExecutor) : undefined;
+    const runtimeModelOverride =
+      input.modelOverride && manifest.outputKind === 'story'
+        ? input.modelOverride
+        : undefined;
 
     // Use streaming for pure narrative runtimes (no tools) when callbacks are available
     const useStreaming = !!(deps.onDelta && deps.llm.stream && !toolDefs);
@@ -1040,10 +1275,13 @@ async function executeOneRuntime(
     while (steps < maxSteps && Date.now() < deadline) {
       steps++;
 
-      // Model resolution chain: API override > plugin llm.toml > manifest.model > undefined
+      // Model resolution chain for story runtimes:
+      // API override > plugin llm.toml > manifest.model > undefined.
+      // Tool-heavy plugin runtimes stay on their declared slot so E2E story
+      // overrides do not destabilize function-calling behaviour.
       const effectiveModel = deps.resolveModel
-        ? deps.resolveModel(manifest, input.modelOverride)
-        : (input.modelOverride ?? manifest.model);
+        ? deps.resolveModel(manifest, runtimeModelOverride)
+        : (runtimeModelOverride ?? manifest.model);
 
       let response: import('./llm-adapter.js').LLMResponse;
 
@@ -1121,11 +1359,22 @@ async function executeOneRuntime(
         }
       } else {
         // Non-streaming path: standard generate()
-        response = await deps.llm.generate({
-          model: effectiveModel,
-          messages,
-          tools: toolDefs,
-        });
+        try {
+          response = await deps.llm.generate({
+            model: effectiveModel,
+            messages,
+            tools: toolDefs,
+          });
+        } catch (error) {
+          if (!toolDefs || !shouldRetryMalformedToolArguments(error)) {
+            throw error;
+          }
+          response = await deps.llm.generate({
+            model: effectiveModel,
+            messages,
+            tools: toolDefs,
+          });
+        }
       }
 
       if (response.toolCalls.length > 0) {
@@ -1171,6 +1420,13 @@ async function executeOneRuntime(
 
             // ── PostToolUse hook (S4-T3) ─────────────────────────
             const toolResult = await runPostToolUseHook(preToolOpts, { id: effectiveTc.id, name: effectiveTc.name, arguments: effectiveTc.arguments }, result);
+
+            if (!toolResult.success) {
+              failedToolCalls.push({
+                toolName: effectiveTc.name,
+                message: extractToolFailureMessage(toolResult.result),
+              });
+            }
 
             // ── Suspend detection (S4-T4) ────────────────────────
             // When COVEL_SUSPEND_V1=1 and the suspend tool was called, capture
@@ -1302,22 +1558,72 @@ async function executeOneRuntime(
 
       // Final response (no more tool calls)
       finalContent = response.content;
+      stoppedWithResponse = true;
       break;
+    }
+
+    if (!stoppedWithResponse && !finalContent) {
+      const result: RuntimeResult = {
+        pluginId: manifest.pluginId,
+        runtimeId: manifest.name,
+        runId,
+        turnId: input.turnId,
+        status: 'failed',
+        output: null,
+        toolCalls: collectedToolCalls,
+        durationMs: Date.now() - startTime,
+        error: formatToolLoopFailure({
+          runtimeId: manifest.name,
+          reason: Date.now() >= deadline ? 'timeout' : 'max_steps',
+          maxSteps,
+          failedToolCalls,
+        }),
+        timestamp: new Date().toISOString(),
+      };
+
+      return runPostRuntimeHook(
+        { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus },
+        result,
+      );
     }
 
     // Build output from LLM final content + tool call results
     let output: Record<string, unknown>;
+    const presentableToolOutput = findPresentableToolOutput(executedToolCalls);
+    const structuredToolOutput = findLastStructuredToolOutput(executedToolCalls);
     if (finalContent) {
-      // Strip markdown code fences if present (```json ... ```)
-      const stripped = finalContent.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-      try {
-        output = JSON.parse(stripped) as Record<string, unknown>;
-      } catch {
-        // Not JSON — treat as narrative text output
-        output = { narrativeOutput: finalContent };
-      }
+      const parsed = parseFinalOutputEnvelope(finalContent);
+      output = shouldSuppressToolLoopNarrative({
+        outputKind: manifest.outputKind,
+        executedToolCalls,
+        parsedAsJson: parsed.parsedAsJson,
+      })
+        ? (structuredToolOutput ?? presentableToolOutput ?? { narrativeOutput: '' })
+        : parsed.output;
+    } else if (failedToolCalls.length > 0) {
+      const result: RuntimeResult = {
+        pluginId: manifest.pluginId,
+        runtimeId: manifest.name,
+        runId,
+        turnId: input.turnId,
+        status: 'failed',
+        output: null,
+        toolCalls: collectedToolCalls,
+        durationMs: Date.now() - startTime,
+        error: formatToolLoopFailure({
+          runtimeId: manifest.name,
+          reason: 'tool_failed_without_output',
+          failedToolCalls,
+        }),
+        timestamp: new Date().toISOString(),
+      };
+
+      return runPostRuntimeHook(
+        { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus },
+        result,
+      );
     } else {
-      output = { narrativeOutput: '' };
+      output = presentableToolOutput ?? { narrativeOutput: '' };
     }
 
     // Extract interactions from all tool call results (generic interaction protocol)
@@ -1347,6 +1653,10 @@ async function executeOneRuntime(
       if (finalContent && !output.narrativeOutput) {
         output.narrativeOutput = finalContent;
       }
+    }
+
+    if (manifest.outputKind === 'story' && typeof output.narrativeOutput === 'string') {
+      output.narrativeOutput = sanitizeStoryNarrativeText(output.narrativeOutput);
     }
 
     const result: RuntimeResult = {

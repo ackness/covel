@@ -218,6 +218,14 @@ trigger:
 
 框架提供三个内置 UI 工具，**无需写代码**，只需在 frontmatter 中声明，然后在提示词中告诉 LLM 如何调用即可。
 
+在写工具前，先做一次选择：
+
+1. 通用、重复、跨插件复用的操作，优先使用 `tools.builtin`
+2. 插件自己的 schema、RAG、批量写入、领域动作，放进插件自己的 `tools.local`
+3. local tool 文件保持在插件目录内，例如 `plugins/my-plugin/tools/*.js`
+
+当前实现里，local tool 与 deterministic function handler 可以使用注入的 `store` 完成插件包内批量写入。插件自己的公开契约依旧建议通过 `PLUGIN.md + tools/ + tests/` 保持完整。
+
 #### create-form — 创建玩家表单
 
 在 frontmatter 中声明：
@@ -273,6 +281,8 @@ tools:
 - `choices`: 至少 2 个选项，每个 { id, label, description?, category? }
   - category: safe / aggressive / creative / wild（可选）
 ```
+
+`create-choices` 适合通用的 `interaction.request` 流程。像 guide、codex 这类持续存在的插件消息面，也可以采用 `ui.message + plugin_data + local tool` 的路径，把具体 UI 保持在插件包内。
 
 #### create-notification — 显示通知
 
@@ -727,6 +737,13 @@ input:
 ### 2.4 测试你的插件
 
 使用 `@covel/plugin-test-utils` 提供的 `TestHarness` 进行集成测试。
+
+推荐最少覆盖四类行为：
+
+1. manifest / runtime 发现与加载
+2. local tool 参数与返回结构
+3. handler / agent runtime 的核心输出
+4. `plugin_data` 与 `ui.message / ui.right` 的契约
 
 **安装依赖：**
 

@@ -37,6 +37,13 @@ function getSnapshot(): PluginData {
   return data;
 }
 
+export function getPluginNamespaceSnapshot(
+  pluginId: string,
+  namespace: string,
+): Record<string, unknown> {
+  return data[pluginId]?.[namespace] ?? {};
+}
+
 /** Apply a batch of changes from a plugin-data.changed event. */
 export function applyChanges(pluginId: string, changes: readonly PluginDataChange[]): void {
   const prev = data;

@@ -12,8 +12,9 @@ import { nestedToFlat } from "@json-render/core";
 import type { Spec } from "@json-render/core";
 import { covelRegistry } from "@/lib/catalog.js";
 import { messageToSpec, messageToSpecDisabled } from "@/lib/message-to-spec.js";
+import { PluginPanel } from "@/components/panels/plugin-panel.js";
 import type { GameMessage } from "@/stores/session-store.js";
-import { sendMessage, submitFormInputs } from "@/stores/session-store.js";
+import { sendMessage, setComposerText, submitFormInputs, upsertPendingInteractionDraft } from "@/stores/session-store.js";
 
 interface MessageListProps {
   messages: GameMessage[];
@@ -64,6 +65,7 @@ function MessageRenderer({
     shouldCollapseAfterStory(message.block);
 
   const spec = useMemo(() => {
+    if (isPluginMessageBlock(message.block)) return null;
     if (collapseResolvedInteraction) return null;
     const nested = effectiveSubmitted && hasInteraction
       ? messageToSpecDisabled(message)
@@ -118,6 +120,7 @@ function MessageRenderer({
           turnId,
           interactionId,
           values: formValues,
+          label: (data.title as string | undefined) ?? interactionId,
           submitBehavior: submitBehavior
             ? {
               echoFilledNarrative: submitBehavior.echoFilledNarrative as boolean | undefined,
@@ -131,20 +134,111 @@ function MessageRenderer({
         const parts = Object.entries(formValues)
           .filter(([, v]) => v.trim())
           .map(([k, v]) => `${k}: ${v}`);
-        sendMessage(parts.join(", ") || "(表单已提交)");
+        setComposerText(parts.join(", ") || "(表单已提交)");
       }
     },
     selectChoice: async (params: Record<string, unknown>) => {
       if (effectiveSubmitted) return;
       setSubmitted(true);
+      const block = message.block;
       const label = params.label as string;
-      if (label) sendMessage(label);
+      if (!block || !label) return;
+      const data = (block.data ?? block) as Record<string, unknown>;
+      const interactionId = (data.interactionId ?? data.formId ?? "choice") as string;
+      const turnId = ((block.meta as Record<string, unknown>)?.turnId ?? message.turnId ?? "") as string;
+      const submitBehavior = data.submitBehavior as Record<string, unknown> | undefined;
+      upsertPendingInteractionDraft({
+        id: `${turnId}:${interactionId}`,
+        turnId,
+        interactionId,
+        type: "choice",
+        label,
+        values: {
+          selectedId: params.choiceId,
+          selectedLabel: label,
+        },
+        submitBehavior: submitBehavior
+          ? {
+            echoFilledNarrative: submitBehavior.echoFilledNarrative as boolean | undefined,
+            autoContinue: submitBehavior.autoContinue as boolean | undefined,
+          }
+          : undefined,
+      });
     },
     selectSuggestion: async (params: Record<string, unknown>) => {
       const text = params.text as string;
-      if (text) sendMessage(text);
+      if (!text) return;
+      const selectionGroup = typeof params.selectionGroup === "string" ? params.selectionGroup : undefined;
+      upsertPendingInteractionDraft({
+        id: selectionGroup
+          ? `${message.turnId ?? "suggestion"}:${selectionGroup}`
+          : `suggestion:${text}`,
+        turnId: message.turnId ?? "suggestion",
+        interactionId: selectionGroup ?? `suggestion:${text}`,
+        type: "suggestion",
+        label: text,
+        values: { text },
+        selectionGroup,
+      });
+    },
+    sendCustomAction: async (params: Record<string, unknown>) => {
+      const text = String(params.text ?? "").trim();
+      if (!text) return;
+      await sendMessage(text);
     },
   }), [effectiveSubmitted, message]);
+
+  if (isPluginMessageBlock(message.block)) {
+    const pluginBlock = message.block;
+    const data = (pluginBlock.data ?? pluginBlock) as Record<string, unknown>;
+    const pluginId = data.pluginId as string;
+    const specs = (data.specs ?? []) as Array<Record<string, unknown>>;
+    const state = (data.state ?? {}) as Record<string, unknown>;
+    const locked = hasLaterUserMessage;
+
+    return (
+      <div className="space-y-4">
+        {specs.map((pluginSpec, index) => (
+          <PluginPanel
+            key={`${message.id}:${index}`}
+            pluginId={pluginId}
+            spec={pluginSpec}
+            stateOverride={state}
+            interactionLocked={locked}
+            handlers={{
+              draftMessage: async (params: Record<string, unknown>) => {
+                if (locked) return;
+                const text = String(params.text ?? "").trim();
+                if (!text) return;
+                const selectionGroup = typeof params.selectionGroup === "string" ? params.selectionGroup : undefined;
+                upsertPendingInteractionDraft({
+                  id: selectionGroup
+                    ? `${message.turnId ?? "plugin"}:${selectionGroup}`
+                    : `plugin-draft:${text}`,
+                  turnId: message.turnId ?? "plugin",
+                  interactionId: selectionGroup ?? `plugin-draft:${text}`,
+                  type: "suggestion",
+                  label: text,
+                  values: { text },
+                  selectionGroup,
+                });
+              },
+              sendMessage: async (params: Record<string, unknown>) => {
+                if (locked) return;
+                const text = String(params.text ?? "").trim();
+                if (!text) return;
+                await sendMessage(text);
+              },
+              setComposerText: async (params: Record<string, unknown>) => {
+                if (locked) return;
+                setComposerText(String(params.text ?? ""));
+              },
+            }}
+          />
+        ))}
+      </div>
+    );
+  }
 
   if (!spec) return null;
 
@@ -158,6 +252,11 @@ function MessageRenderer({
       <Renderer spec={spec} registry={covelRegistry} />
     </JSONUIProvider>
   );
+}
+
+function isPluginMessageBlock(block: GameMessage["block"]): block is Record<string, unknown> {
+  if (!block) return false;
+  return block.type === "plugin_message";
 }
 
 function isFormLikeBlock(block: GameMessage["block"]): boolean {

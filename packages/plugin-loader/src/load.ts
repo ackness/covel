@@ -81,7 +81,8 @@ async function dirExists(p: string): Promise<boolean> {
 export async function loadPluginSummary(discovery: PluginDiscoveryResult, locale?: string): Promise<PluginSummary> {
   // For multi-runtime, prefer root PLUGIN.md; fall back to first runtime's PLUGIN.md
   let summaryPath = await resolveLocalizedPluginMd(discovery.rootPath, locale);
-  if (!(await fileExists(summaryPath))) {
+  const hasRootSummary = await fileExists(summaryPath);
+  if (!hasRootSummary) {
     // Root PLUGIN.md doesn't exist (multi-runtime) — use first runtime's PLUGIN.md
     const fallbackDir = path.dirname(discovery.pluginMdPaths[0]);
     summaryPath = await resolveLocalizedPluginMd(fallbackDir, locale);
@@ -93,7 +94,9 @@ export async function loadPluginSummary(discovery: PluginDiscoveryResult, locale
   // Support I18nText: string or { "zh-CN": "...", "en-US": "..." } (reject arrays)
   const isI18n = (v: unknown): v is string | Record<string, string> =>
     typeof v === 'string' || (typeof v === 'object' && v !== null && !Array.isArray(v));
-  const name = isI18n(data.name) ? data.name : discovery.id;
+  const name = hasRootSummary
+    ? (isI18n(data.name) ? data.name : discovery.id)
+    : discovery.id;
   const description = isI18n(data.description) ? data.description : '';
   const pluginType: PluginType =
     data.pluginType === 'core-plugin' ? 'core-plugin' : 'plugin';

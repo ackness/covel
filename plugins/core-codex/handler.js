@@ -29,14 +29,19 @@ const STOP_TITLES = new Set([
   '地下结构',
   '灵气',
   '宿舍区',
+  '山谷',
+  '坊市',
+  '主峰',
 ]);
 
 const BAD_TITLE_PREFIXES = [
-  '你', '我', '他', '她', '它', '这', '那', '把', '从', '在', '向', '将', '让', '用', '于', '就',
+  '你', '我', '他', '她', '它', '这', '那', '把', '从', '在', '向', '将', '让', '用', '于', '就', '的', '一群',
 ];
 
 const BAD_TITLE_FRAGMENTS = [
   '看见', '带到', '这里', '那里', '刚用', '师姐', '声音', '角落', '前往', '调查', '决定', '观察',
+  '还在', '弥漫', '回荡', '飘散', '走来', '走到', '走进', '来到', '等待', '需要', '选择', '动身',
+  '脚步声', '惊起', '栖息',
 ];
 
 const LORE_TERMS = [
@@ -92,29 +97,61 @@ export default async function codexHandler(ctx) {
     updatedAt: now,
   }));
 
-  await s.setPluginDataBatch(records);
+  const messageRecords = [
+    ...records,
+    {
+      id: crypto.randomUUID(),
+      sessionId,
+      pluginId,
+      namespace: 'message',
+      key: '__turnId',
+      value: narrator?.turnId ?? ctx.turnId,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: crypto.randomUUID(),
+      sessionId,
+      pluginId,
+      namespace: 'message',
+      key: 'title',
+      value: `图鉴更新 · ${discoveries.length} 条`,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+
+  for (let index = 0; index < 4; index += 1) {
+    const entry = discoveries[index];
+    messageRecords.push(
+      {
+        id: crypto.randomUUID(),
+        sessionId,
+        pluginId,
+        namespace: 'message',
+        key: `item${index + 1}Title`,
+        value: entry?.title ?? '',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: crypto.randomUUID(),
+        sessionId,
+        pluginId,
+        namespace: 'message',
+        key: `item${index + 1}Category`,
+        value: entry?.category ?? '',
+        createdAt: now,
+        updatedAt: now,
+      },
+    );
+  }
+
+  await s.setPluginDataBatch(messageRecords);
 
   return {
     entries: discoveries,
-    ui: [
-      {
-        type: 'codex-batch',
-        title: `图鉴更新 · ${discoveries.length} 条`,
-        entries: discoveries.map((entry) => ({
-          entryId: entry.entryId,
-          category: entry.category,
-          title: entry.title,
-          content: entry.content,
-          tags: entry.tags,
-          rarity: entry.rarity,
-          style: {
-            borderColor: entry.style.borderColor,
-            icon: entry.style.icon,
-            animation: entry.style.animation,
-          },
-        })),
-      },
-    ],
+    summaryCount: discoveries.length,
   };
 }
 
@@ -201,11 +238,19 @@ function extractFixedTerms(text, terms, category) {
  */
 function normalizeTitle(title, category) {
   let next = title.trim().replace(/[，。、“”‘’：:；;（）()【】[\]]/gu, '');
+  next = next
+    .replace(/^(?:春日午后的|午后的|远处的|这里的|那里的|坊市里的|主峰上的|几株垂落的|淡蓝色的|远处|午后|春日午后)/u, '')
+    .replace(/^[一-龥]{1,6}(?:就是|便是)/u, '')
+    .replace(/^[一-龥]{1,6}(?:低声说|轻声说|说道|说|问道|看见|听见|注意到|发现)/u, '')
+    .replace(/^(?:沿着|顺着|穿过|路过|经过)/u, '')
+    .replace(/^[一-龥]{1,8}从(?=.+(?:沼泽|坊市|山|峰|谷|林|镇|城|岛|溪|河|湖|海|渊|宫|殿|塔|洞府)$)/u, '')
+    .trim();
+  next = next.replace(/^(?:的)+/u, '');
   if (category === 'lore') {
     next = next.replace(/(外门|内门|弟子|长老)$/u, '');
   }
   if (category === 'location') {
-    next = next.replace(/^(午后的|春日午后|远处的|这里的)/u, '');
+    next = next.replace(/^(?:位于|坐落在|靠近|通往)/u, '');
   }
   if (category === 'item') {
     next = next.replace(/^(腰间|手中|袖口|身上|掌中|怀里)/u, '');
@@ -219,7 +264,19 @@ function normalizeTitle(title, category) {
 function isBadTitle(title) {
   if (BAD_TITLE_PREFIXES.some((prefix) => title.startsWith(prefix))) return true;
   if (BAD_TITLE_FRAGMENTS.some((fragment) => title.includes(fragment))) return true;
+  if (!isEntityLikeTitle(title)) return true;
   return false;
+}
+
+/**
+ * @param {string} title
+ */
+function isEntityLikeTitle(title) {
+  if (title.length < 2 || title.length > 12) return false;
+  if (/[，。！？；：“”"'（）()【】]/u.test(title)) return false;
+  if (/^(?:还有|以及|因为|如果|而且|但是)/u.test(title)) return false;
+  if (/(?:余音|人头攒动|光点|喧嚣|情绪|机会|命运|方向)$|^(?:余音|人头攒动|光点|喧嚣)/u.test(title)) return false;
+  return true;
 }
 
 /**

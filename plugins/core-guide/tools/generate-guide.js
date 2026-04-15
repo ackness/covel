@@ -15,7 +15,7 @@ const STYLE_CONFIG = {
   wild:       { zh: '疯狂', en: 'Wild',        icon: 'flame',      color: 'amber' },
 };
 
-export default function ({ tool, z }) {
+export default function ({ tool, z, store }) {
   const categorySchema = z.object({
     style: z.enum(['safe', 'aggressive', 'creative', 'wild']),
     label: z.string().optional(),
@@ -31,12 +31,13 @@ export default function ({ tool, z }) {
       categories: z.array(categorySchema).min(2).max(4)
         .describe('2-4 个风格分类，每个包含 1-3 个建议'),
     }),
-    execute: async (params) => {
+    execute: async (params, context) => {
       const { topic, categories } = params;
 
-      const resolvedCategories = categories.map((cat) => {
+      const resolvedCategories = categories.map((cat, index) => {
         const config = STYLE_CONFIG[cat.style];
         return {
+          slot: index + 1,
           style: cat.style,
           label: cat.label ?? config.zh,
           icon: config.icon,
@@ -45,14 +46,85 @@ export default function ({ tool, z }) {
         };
       });
 
+      if (store && typeof store.setPluginDataBatch === "function") {
+        const now = new Date().toISOString();
+        const messageRecords = [
+          {
+            id: crypto.randomUUID(),
+            sessionId: context.sessionId,
+            pluginId: context.pluginId,
+            namespace: "message",
+            key: "__turnId",
+            value: context.turnId,
+            createdAt: now,
+            updatedAt: now,
+          },
+          {
+            id: crypto.randomUUID(),
+            sessionId: context.sessionId,
+            pluginId: context.pluginId,
+            namespace: "message",
+            key: "topic",
+            value: topic,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ];
+
+        for (const category of resolvedCategories.slice(0, 3)) {
+          messageRecords.push(
+            {
+              id: crypto.randomUUID(),
+              sessionId: context.sessionId,
+              pluginId: context.pluginId,
+              namespace: "message",
+              key: `category${category.slot}Label`,
+              value: category.label,
+              createdAt: now,
+              updatedAt: now,
+            },
+            {
+              id: crypto.randomUUID(),
+              sessionId: context.sessionId,
+              pluginId: context.pluginId,
+              namespace: "message",
+              key: `category${category.slot}Icon`,
+              value: category.icon,
+              createdAt: now,
+              updatedAt: now,
+            },
+            {
+              id: crypto.randomUUID(),
+              sessionId: context.sessionId,
+              pluginId: context.pluginId,
+              namespace: "message",
+              key: `category${category.slot}Color`,
+              value: category.color,
+              createdAt: now,
+              updatedAt: now,
+            },
+          );
+
+          for (let i = 0; i < 3; i += 1) {
+            messageRecords.push({
+              id: crypto.randomUUID(),
+              sessionId: context.sessionId,
+              pluginId: context.pluginId,
+              namespace: "message",
+              key: `category${category.slot}Suggestion${i + 1}`,
+              value: category.suggestions[i] ?? "",
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+        }
+
+        await store.setPluginDataBatch(messageRecords);
+      }
+
       return {
         topic,
         categories: resolvedCategories,
-        ui: [{
-          type: 'action-guide',
-          topic,
-          categories: resolvedCategories,
-        }],
       };
     },
   });

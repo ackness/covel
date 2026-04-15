@@ -158,19 +158,19 @@ LLM 返回                     框架翻译层                        玩家看�
 narrativeOutput:    ──►    Session Kernel      ──►    ┌─────────────────┐
 "沼泽的雾气..."              │                         │  叙事文本         │
                             │ normalizeOutput()        │  (Prose 组件)    │
-toolCalls:          ──►     │ → Proposal[]      ──►    ├─────────────────┤
-unlock-codex-entries        │                         │  图鉴发现卡      │
-                            │ commitAll()              │  (EntryCard)     │
-interactions:       ──►     │ → SessionEvent[]  ──►    ├─────────────────┤
-create-form                 │                         │  角色创建表单    │
-                            │ SSE emit()               │  (Form 组件)     │
-phase: "playing"    ──►     │                  ──►    ├─────────────────┤
+interactions:       ──►     │ → Proposal[]      ──►    ├─────────────────┤
+create-form / form          │                         │  角色创建表单    │
+                            │ commitAll()              │  (Form 组件)     │
+phase: "playing"    ──►     │ → SessionEvent[]  ──►    ├─────────────────┤
+plugin_data 写入      ──►    │ SSE emit()               │  插件消息面 /    │
+                            │                         │  右侧面板         │
+                            │                  ──►    ├─────────────────┤
                             │                         │  状态更新        │
                                                       └─────────────────┘
 
                             每个 SessionEvent 通过 SSE 推送到前端
-                            前端 messageToSpec() 转为 json-render spec
-                            json-render Renderer 渲染最终 UI
+                            MessageList 渲染 turn messages
+                            MessagePluginSurface / RightPanel 渲染 plugin surfaces
 ```
 
 ### 3.3 翻译细节：Tool 调用链
@@ -189,11 +189,12 @@ LLM: "调用 unlock-         ToolExecutor:
                               └─ local → allow (或需审批)
                            3. tool.execute(params, context)
                               ├─ 工具逻辑执行
-                              ├─ 写入 plugin-data store
-                              ├─ eventBus emit plugin-data.changed ──► SSE → 前端面板更新
-                              └─ 返回 { entries, ui }
-                           4. 结果序列化为 JSON 字符串
-                              → 作为 tool message 送回 LLM
+                              ├─ 写入 plugin-data / lorebook / characters
+                              ├─ eventBus emit plugin-data.changed ──► SSE → 前端 surface 更新
+                              └─ 返回结构化结果或 `_text`
+                           4. 结果序列化为 tool message
+                              → `_text` 优先作为 LLM 可读文本
+                              → 结构化结果保留给 trace / commit / 调试
                            5. LLM 看到结果，决定是否继续调用
 
                            Tool Loop 直到 LLM 返回 finishReason: 'stop'
@@ -332,9 +333,10 @@ plugins/my-plugin/
 │                                            │  ...25个组件  │      │
 │                                            └─────────────┘      │
 │                                                                  │
-│  plugin-data.changed ──► pluginData store  ──► 右侧面板          │
-│                          更新 namespace         json-render      │
-│                                                  Renderer        │
+│  plugin-data.changed ──► pluginData store  ──► MessagePluginSurface │
+│                          更新 namespace         + RightPanel         │
+│                                                  json-render        │
+│                                                  Renderer           │
 │                                                                  │
 │  execution.started  ──►  executionSteps[]  ──►  进度条           │
 │  runtime.completed  ──►                                          │
@@ -592,21 +594,20 @@ turn_messages (追加式，永不删除):
                        │
                        ▼
                        渲染叙事(Prose) + 表单(Form)
-                       pluginData 更新 → 右侧面板渲染
+                       pluginData 更新 → 聊天内插件消息面 + 右侧面板渲染
 
   填写角色表单 ──────► submitFormInputs()
                        POST /api/sessions/:id/submit-inputs
                                             ──► 仅填充 narrativeTemplate
                                                 返回 filledNarrative
-                                                (不创建角色，不切 phase)
+                                                并按 submitBehavior 决定是否自动继续
                        POST /api/actions  ──► send_message(filledNarrative)
                        (Turn 2)               ├── narrator 叙事
-                                              └── char-creator 调用
-                                                  create-character tool
+                                              └── char-creator deterministic handler
                                                   ├── store.upsertCharacter
-                                                  ├── store.updateSession({phase})
-                                                  └── hooks.onPhaseTransition
-                                                      → eventBus.emit
+                                                  ├── mirror plugin_data[characters]
+                                                  ├── 输出 phase: "playing"
+                                                  └── eventBus.emit
                                                       → SSE phase.changed
                        ◄── phase.changed ─────┘
                        POST /api/actions  ──► SSE 流打开 (Turn 2)

@@ -145,6 +145,7 @@ const Card: ComponentRenderer = ({ element, children }) => {
     <div className={clsx(
       "border border-zinc-200 dark:border-zinc-700 rounded-md p-3",
       variant === "glow" && "shadow-lg shadow-amber-500/20 border-amber-500/50",
+      variant === "subtle" && "bg-zinc-50/70 dark:bg-zinc-900/30",
     )}>
       {children}
     </div>
@@ -367,14 +368,17 @@ const JsonView: ComponentRenderer = ({ element }) => {
 const Button: ComponentRenderer = ({ element, emit }) => {
   const label = resolveI18n(element.props?.label);
   const variant = element.props?.variant as string ?? "default";
+  const size = element.props?.size as string ?? "md";
   return (
     <button
       type="button"
       onClick={() => emit("click")}
       className={clsx(
-        "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+        "font-medium rounded-md transition-colors text-left",
+        size === "compact" ? "px-2.5 py-1 text-[11px]" : "px-3 py-1.5 text-xs",
         variant === "primary" && "bg-blue-600 text-white hover:bg-blue-700",
         variant === "default" && "bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700",
+        variant === "ghost" && "bg-white/70 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900",
         variant === "danger" && "bg-red-600 text-white hover:bg-red-700",
       )}
     >

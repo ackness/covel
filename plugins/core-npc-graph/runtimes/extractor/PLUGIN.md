@@ -9,7 +9,7 @@ capabilities: [npc-graph, relationship-tracking]
 outputKind: system
 trigger:
   type: scheduled
-  interval: 2
+  interval: 1
   cooldownTurns: 1
   phases:
     - playing
@@ -36,6 +36,7 @@ postHistory:
     - 有新节点或新关系时，调用一次 `upsert-npc-graph`
     - 没有显著人物互动时，直接结束
     - 工具调用完成后结束输出
+    - 最终文本只允许空字符串或 `{}`
     - 额外叙事文本、分析说明、总结文字都不算完成
 ---
 
@@ -81,3 +82,4 @@ postHistory:
 - 如果本轮叙事没有显著的人物互动，**不要**强行创造关系；直接结束（不调用 upsert-npc-graph）
 - 一次 upsert 最多 8 个节点 + 12 条边，避免 prompt 爆炸
 - 不输出额外的叙事文本，所有信息通过工具调用传达
+- 如果没有工具调用，最终只返回 `{}`

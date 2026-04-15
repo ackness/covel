@@ -6,7 +6,12 @@
 
 import { useSyncExternalStore, useCallback } from "react";
 import * as api from "@/services/api.js";
-import { applyChanges, resetPluginData, loadPluginData } from "./plugin-data-store.js";
+import {
+  applyChanges,
+  resetPluginData,
+  loadPluginData,
+  getPluginNamespaceSnapshot,
+} from "./plugin-data-store.js";
 import { connectSSE } from "@/services/sse.js";
 
 // ── Session-level SSE subscription ──────────────────────────────
@@ -35,7 +40,12 @@ function openSse(sessionId: string): void {
       // The /api/events/stream envelope wraps the payload under .payload,
       // matching how /api/actions stream events are shaped. Pass the inner
       // payload to the same reducer so both code paths converge.
-      const payload = (data.payload ?? data) as Record<string, unknown>;
+      const payload = data.payload
+        ? {
+          ...(data.payload as Record<string, unknown>),
+          ...(data.turnId ? { turnId: data.turnId } : {}),
+        }
+        : (data as Record<string, unknown>);
       processSSEEvent(type, payload);
     },
   });
@@ -108,6 +118,20 @@ export interface ExecutionStep {
   durationMs?: number;
 }
 
+export interface PendingInteractionDraft {
+  id: string;
+  turnId: string;
+  interactionId: string;
+  type: "form" | "choice" | "confirmation" | "suggestion";
+  label: string;
+  values: Record<string, unknown>;
+  selectionGroup?: string;
+  submitBehavior?: {
+    echoFilledNarrative?: boolean;
+    autoContinue?: boolean;
+  };
+}
+
 interface SessionState {
   phase: AppPhase;
   worlds: api.WorldRecord[];
@@ -120,6 +144,9 @@ interface SessionState {
   plugins: api.PluginInfo[];
   selectedPlugins: string[];
   pluginFlow: api.PluginFlowResponse | null;
+  messageUiSpecs: api.UISlotEntry[];
+  composerText: string;
+  pendingInteractionDrafts: PendingInteractionDraft[];
   worldSessions: api.SessionRecord[];
 }
 
@@ -137,6 +164,9 @@ let state: SessionState = {
   plugins: [],
   selectedPlugins: [],
   pluginFlow: null,
+  messageUiSpecs: [],
+  composerText: "",
+  pendingInteractionDrafts: [],
   worldSessions: [],
 };
 
@@ -148,6 +178,15 @@ function notify() { for (const l of listeners) l(); }
 function subscribe(l: () => void) { listeners.add(l); return () => listeners.delete(l); }
 function getSnapshot() { return state; }
 
+let clientMessageSeq = 0;
+function nextClientId(prefix: string): string {
+  clientMessageSeq += 1;
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${clientMessageSeq}`;
+}
+
 function update(patch: Partial<SessionState>) {
   state = { ...state, ...patch };
   notify();
@@ -158,13 +197,118 @@ function addMessage(msg: GameMessage) {
   notify();
 }
 
+export function setComposerText(composerText: string) {
+  update({ composerText });
+}
+
+export function upsertPendingInteractionDraft(draft: PendingInteractionDraft) {
+  const existing = state.pendingInteractionDrafts.filter((item) =>
+    item.id !== draft.id &&
+    !(draft.selectionGroup && item.turnId === draft.turnId && item.selectionGroup === draft.selectionGroup),
+  );
+  update({ pendingInteractionDrafts: [...existing, draft] });
+}
+
+export function removePendingInteractionDraft(id: string) {
+  update({ pendingInteractionDrafts: state.pendingInteractionDrafts.filter((item) => item.id !== id) });
+}
+
+function clearPendingInteractionDrafts() {
+  update({ pendingInteractionDrafts: [] });
+}
+
 function appendDelta(runtimeId: string, delta: string) {
   const msgs = [...state.messages];
-  const idx = msgs.findLastIndex((m) => m.runtimeId === runtimeId && m.role === "assistant");
+  const idx = msgs.findLastIndex((m) =>
+    m.runtimeId === runtimeId &&
+    m.role === "assistant" &&
+    m.kind === "story" &&
+    m.content === "",
+  );
   if (idx >= 0) {
     msgs[idx] = { ...msgs[idx], content: msgs[idx].content + delta };
     state = { ...state, messages: msgs };
     notify();
+  }
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function stripPrivateMessageKeys(data: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(data).filter(([key]) => !key.startsWith("__")),
+  );
+}
+
+function upsertPluginMessageSurface(pluginId: string): void {
+  const uiEntry = state.messageUiSpecs.find((entry) => entry.pluginId === pluginId);
+  if (!uiEntry || uiEntry.specs.length === 0) return;
+
+  const namespaceState = getPluginNamespaceSnapshot(pluginId, "message");
+  const turnId = typeof namespaceState.__turnId === "string" ? namespaceState.__turnId : "";
+  if (!turnId) return;
+
+  const blockState = stripPrivateMessageKeys(namespaceState);
+  const messageId = `plugin-message:${pluginId}:${turnId}`;
+  const block = {
+    type: "plugin_message",
+    data: {
+      pluginId,
+      specs: cloneJson(uiEntry.specs),
+      state: cloneJson(blockState),
+    },
+    meta: {
+      pluginId,
+      turnId,
+    },
+  };
+
+  const existingIndex = state.messages.findIndex((message) => message.id === messageId);
+  if (existingIndex >= 0) {
+    const messages = [...state.messages];
+    messages[existingIndex] = {
+      ...messages[existingIndex],
+      block,
+      timestamp: new Date().toISOString(),
+    };
+    update({ messages });
+    return;
+  }
+
+  const nextMessage: GameMessage = {
+    id: messageId,
+    role: "assistant",
+    content: "",
+    pluginId,
+    turnId,
+    kind: "plugin-message",
+    block,
+    timestamp: new Date().toISOString(),
+  };
+
+  const anchorIndex = [...state.messages]
+    .map((message, index) => ({ message, index }))
+    .filter(({ message }) => message.turnId === turnId && (message.kind === "story" || message.kind === "plugin-message"))
+    .map(({ index }) => index)
+    .at(-1);
+
+  const messages = [...state.messages];
+  if (anchorIndex == null) {
+    messages.push(nextMessage);
+  } else {
+    messages.splice(anchorIndex + 1, 0, nextMessage);
+  }
+  update({ messages });
+}
+
+async function loadSessionUiSpecs(sessionId: string): Promise<void> {
+  try {
+    const specs = await api.fetchUiSpecs(sessionId);
+    update({ messageUiSpecs: specs.message });
+  } catch {
+    update({ messageUiSpecs: [] });
   }
 }
 
@@ -224,17 +368,31 @@ function processSSEEvent(eventType: string, data: Record<string, unknown>) {
       const runtimeId = data.runtimeId as string;
       const kind = data.kind as string;
       if (content && kind === "story") {
-        // Replace the streaming message with completed one
-        const msgs = state.messages.filter((m) => m.runtimeId !== runtimeId || m.role !== "assistant");
-        msgs.push({
-          id: `msg-${Date.now()}`,
+        const msgs = [...state.messages];
+        const placeholderIndex = msgs.findLastIndex((message) =>
+          message.runtimeId === runtimeId &&
+          message.role === "assistant" &&
+          message.kind === "story" &&
+          message.content === "",
+        );
+        const nextMessage: GameMessage = {
+          id: nextClientId("msg"),
           role: "assistant",
           content,
           runtimeId,
           pluginId: data.pluginId as string,
+          turnId: data.turnId as string | undefined,
           kind,
           timestamp: new Date().toISOString(),
-        });
+        };
+        if (placeholderIndex >= 0) {
+          msgs[placeholderIndex] = {
+            ...nextMessage,
+            id: msgs[placeholderIndex].id,
+          };
+        } else {
+          msgs.push(nextMessage);
+        }
         update({ messages: msgs });
       }
       break;
@@ -243,7 +401,7 @@ function processSSEEvent(eventType: string, data: Record<string, unknown>) {
       const block = data.block as Record<string, unknown>;
       if (block) {
         addMessage({
-          id: `block-${Date.now()}`,
+          id: nextClientId("block"),
           role: "assistant",
           content: "",
           block,
@@ -269,12 +427,13 @@ function processSSEEvent(eventType: string, data: Record<string, unknown>) {
         });
         // Create placeholder message for streaming
         addMessage({
-          id: `stream-${runtimeId}`,
+          id: nextClientId("stream"),
           role: "assistant",
           content: "",
           runtimeId,
           pluginId: data.pluginId as string,
           kind: "story",
+          turnId: data.turnId as string | undefined,
           timestamp: new Date().toISOString(),
         });
       }
@@ -308,7 +467,12 @@ function processSSEEvent(eventType: string, data: Record<string, unknown>) {
     case "plugin-data.changed": {
       const pluginId = data.pluginId as string;
       const changes = data.changes as Array<{ namespace: string; key: string; value: unknown; operation: "set" | "delete" }>;
-      if (pluginId && changes) applyChanges(pluginId, changes);
+      if (pluginId && changes) {
+        applyChanges(pluginId, changes);
+        if (changes.some((change) => change.namespace === "message")) {
+          upsertPluginMessageSurface(pluginId);
+        }
+      }
       break;
     }
   }
@@ -340,7 +504,15 @@ async function readActionStream(response: Response) {
         try {
           const data = JSON.parse(raw) as Record<string, unknown>;
           const eventType = currentEventType || (data.type as string) || "unknown";
-          processSSEEvent(eventType, data.payload ? data.payload as Record<string, unknown> : data);
+          processSSEEvent(
+            eventType,
+            data.payload
+              ? {
+                ...(data.payload as Record<string, unknown>),
+                ...(data.turnId ? { turnId: data.turnId } : {}),
+              }
+              : data,
+          );
         } catch {
           // skip non-JSON lines
         }
@@ -406,7 +578,17 @@ export function backToWorldSelect() {
   closeSse();
   clearSessionStorage();
   clearSidFromUrl();
-  update({ selectedWorld: null, session: null, messages: [], executionSteps: [], worldSessions: [], phase: "world-select" });
+  update({
+    selectedWorld: null,
+    session: null,
+    messages: [],
+    executionSteps: [],
+    messageUiSpecs: [],
+    worldSessions: [],
+    composerText: "",
+    pendingInteractionDrafts: [],
+    phase: "world-select",
+  });
 }
 
 export async function startGame() {
@@ -418,8 +600,17 @@ export async function startGame() {
     resetPluginData();
     saveSessionToStorage(session.id, state.selectedWorld.id);
     setSidInUrl(session.id);
-    update({ session, phase: "playing", messages: [], executionSteps: [] });
+    update({
+      session,
+      phase: "playing",
+      messages: [],
+      executionSteps: [],
+      messageUiSpecs: [],
+      composerText: "",
+      pendingInteractionDrafts: [],
+    });
     openSse(session.id);
+    await loadSessionUiSpecs(session.id);
 
     // Start the game — post start_session action
     const response = await api.postAction({
@@ -482,6 +673,7 @@ export async function resumeSession(sessionId: string, worldId: string) {
 
   // Restore plugin data for active plugins
   resetPluginData();
+  await loadSessionUiSpecs(sessionId);
   const activePlugins = snapshot.plugins.filter((p) => p.isActive);
   await Promise.all(
     activePlugins.map(async (plugin) => {
@@ -496,6 +688,9 @@ export async function resumeSession(sessionId: string, worldId: string) {
         }
         for (const [ns, entries] of byNs) {
           loadPluginData(plugin.id, ns, entries);
+        }
+        if (byNs.has("message")) {
+          upsertPluginMessageSurface(plugin.id);
         }
       } catch {
         // Non-critical: plugin data load failure shouldn't block restore
@@ -512,6 +707,9 @@ export async function resumeSession(sessionId: string, worldId: string) {
     phase: "playing",
     executing: false,
     executionSteps: [],
+    messageUiSpecs: state.messageUiSpecs,
+    composerText: "",
+    pendingInteractionDrafts: [],
   });
   openSse(sessionId);
 }
@@ -547,79 +745,75 @@ export async function deleteSession(sessionId: string): Promise<void> {
   }
 }
 
-export async function sendMessage(content: string) {
+export async function sendMessage(content?: string) {
   if (!state.session || state.executing) return;
 
-  // Add player message
-  addMessage({
-    id: `user-${Date.now()}`,
-    role: "user",
-    content,
-    timestamp: new Date().toISOString(),
-  });
+  const manualText = (content ?? state.composerText).trim();
+  const pendingDrafts = [...state.pendingInteractionDrafts];
+  if (!manualText && pendingDrafts.length === 0) return;
 
-  try {
-    update({ executing: true, executionSteps: [] });
-    const response = await api.postAction({
-      type: "send_message",
-      sessionId: state.session.id,
-      payload: { content },
-      locale: "zh-CN",
-    });
-    await readActionStream(response);
-  } catch (e) {
-    update({ error: (e as Error).message, executing: false });
+  const groupedSubmissions = new Map<string, PendingInteractionDraft[]>();
+  for (const draft of pendingDrafts) {
+    if (draft.type === "suggestion") continue;
+    const group = groupedSubmissions.get(draft.turnId) ?? [];
+    group.push(draft);
+    groupedSubmissions.set(draft.turnId, group);
   }
-}
 
-/**
- * Submit form/choice/confirmation inputs via the submit-inputs API.
- * This handles: narrativeTemplate filling, character creation, phase transition.
- * Then triggers the next turn via send_message.
- */
-export async function submitFormInputs(payload: {
-  turnId: string;
-  interactionId: string;
-  values: Record<string, unknown>;
-  submitBehavior?: {
-    echoFilledNarrative?: boolean;
-    autoContinue?: boolean;
-  };
-}) {
-  if (!state.session) return;
+  const suggestionLabels = pendingDrafts
+    .filter((draft) => draft.type === "suggestion")
+    .map((draft) => draft.label);
+
+  const suggestionText = suggestionLabels.join("；");
+  let visibleUserText = [suggestionText, manualText].filter(Boolean).join("\n");
+  let autoContinue = false;
+  const echoedFilledNarratives: string[] = [];
 
   try {
-    // 1. Submit to submit-inputs API (creates character, transitions phase, fills narrative template)
-    const result = await api.submitInputs(state.session.id, {
-      turnId: payload.turnId,
-      interactionId: payload.interactionId,
-      values: payload.values,
-    });
+    for (const [turnId, drafts] of groupedSubmissions) {
+      const result = await api.submitInputsBatch(state.session.id, {
+        turnId,
+        submissions: drafts.map((draft) => ({
+          turnId: draft.turnId,
+          interactionId: draft.interactionId,
+          type: draft.type === "suggestion" ? "choice" : draft.type,
+          values: draft.values,
+        })),
+      });
 
-    const shouldEcho = payload.submitBehavior?.echoFilledNarrative !== false;
-    const submitContent = shouldEcho ? (result.filledNarrative || "(继续)") : "";
+      for (const draft of drafts) {
+        if (draft.submitBehavior?.autoContinue) autoContinue = true;
+        const matched = result.results.find((item) => item.interactionId === draft.interactionId);
+        if (!matched?.filledNarrative) continue;
+        if (draft.submitBehavior?.echoFilledNarrative !== false) {
+          echoedFilledNarratives.push(matched.filledNarrative);
+        }
+      }
+    }
 
-    // 2. Optionally show the filled narrative as a player message.
-    if (result.filledNarrative && shouldEcho) {
+    if (!visibleUserText && echoedFilledNarratives.length > 0) {
+      visibleUserText = echoedFilledNarratives.join("\n");
+    }
+
+    if (visibleUserText) {
       addMessage({
-        id: `input-${Date.now()}`,
+        id: nextClientId("user"),
         role: "user",
-        content: result.filledNarrative,
+        content: visibleUserText,
         timestamp: new Date().toISOString(),
       });
     }
 
-    // 3. Trigger next turn
-    update({ executing: true, executionSteps: [] });
+    update({ executing: true, executionSteps: [], composerText: "", pendingInteractionDrafts: [] });
     const response = await api.postAction({
       type: "send_message",
       sessionId: state.session.id,
-      payload: { content: submitContent },
+      payload: { content: visibleUserText },
       locale: "zh-CN",
     });
     await readActionStream(response);
 
-    if (payload.submitBehavior?.autoContinue) {
+    if (autoContinue) {
       update({ executing: true, executionSteps: [] });
       const followup = await api.postAction({
         type: "send_message",
@@ -634,6 +828,32 @@ export async function submitFormInputs(payload: {
   }
 }
 
+/**
+ * Submit form/choice/confirmation inputs via the submit-inputs API.
+ * This records a pending submission draft, then the unified send path fills
+ * narrative templates and advances the session through the next turn.
+ */
+export async function submitFormInputs(payload: {
+  turnId: string;
+  interactionId: string;
+  values: Record<string, unknown>;
+  label?: string;
+  submitBehavior?: {
+    echoFilledNarrative?: boolean;
+    autoContinue?: boolean;
+  };
+}) {
+  upsertPendingInteractionDraft({
+    id: `${payload.turnId}:${payload.interactionId}`,
+    turnId: payload.turnId,
+    interactionId: payload.interactionId,
+    type: "form",
+    label: payload.label ?? payload.interactionId,
+    values: payload.values,
+    submitBehavior: payload.submitBehavior,
+  });
+}
+
 // ── Hook ─────────────────────────────────────────────────────────
 
 export function useSessionStore() {
@@ -645,11 +865,15 @@ export function useSessionStore() {
     backToWorldSelect: useCallback(backToWorldSelect, []),
     startGame: useCallback(startGame, []),
     sendMessage: useCallback(sendMessage, []),
+    setComposerText: useCallback(setComposerText, []),
+    removePendingInteractionDraft: useCallback(removePendingInteractionDraft, []),
+    submitFormInputs: useCallback(submitFormInputs, []),
     resumeSession: useCallback(resumeSession, []),
     resumeSessionById: useCallback(resumeSessionById, []),
     loadWorldSessions: useCallback(loadWorldSessions, []),
     deleteSession: useCallback(deleteSession, []),
     togglePluginSelection: useCallback(togglePluginSelection, []),
     refreshPluginCatalog: useCallback(refreshPluginCatalog, []),
+    upsertPendingInteractionDraft: useCallback(upsertPendingInteractionDraft, []),
   };
 }

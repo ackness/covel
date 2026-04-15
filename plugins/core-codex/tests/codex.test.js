@@ -291,12 +291,48 @@ describe('core-codex integration', () => {
       config: {},
     });
 
-    expect(result.ui).toHaveLength(1);
-    expect(result.ui[0].type).toBe('codex-batch');
-    expect(result.ui[0].entries.length).toBeGreaterThanOrEqual(1);
+    expect(result.summaryCount).toBeGreaterThanOrEqual(1);
 
     const stored = await mockStore.listPluginData('sess-harness', 'core-codex', 'entries');
     expect(stored.length).toBeGreaterThanOrEqual(1);
     expect(stored.some((entry) => entry.value.title === '百灵沼泽')).toBe(true);
+    const summary = await mockStore.listPluginData('sess-harness', 'core-codex', 'message');
+    expect(summary.some((entry) => entry.key === 'title')).toBe(true);
+    expect(summary.some((entry) => entry.key === 'item1Title')).toBe(true);
+  });
+
+  it('should reject noisy pseudo-entities and keep stable location names', async () => {
+    const mockStore = createMockPluginDataStore();
+    await codexHandler({
+      sessionId: 'sess-noise',
+      turnId: 'turn-noise',
+      pluginId: 'core-codex',
+      playerMessage: '',
+      locale: 'zh-CN',
+      store: mockStore,
+      completedResults: new Map([[
+        'core-narrator',
+        {
+          output: {
+            narrativeOutput:
+              '春日午后的青萍宗坊市弥漫着花粉甜香，钟楼余音还在山谷间回荡。苏婉低声说百灵沼泽深处有一条新灵脉。熟悉的脚步声从坊市东侧传来，你沿着青萍山石阶看向远处。'
+              + ' 远处钟声惊起一群栖息在坊市屋檐下的灵雀。',
+          },
+        },
+      ]]),
+      config: {},
+    });
+
+    const stored = await mockStore.listPluginData('sess-noise', 'core-codex', 'entries');
+    const titles = stored.map((entry) => entry.value.title);
+
+    expect(titles).toContain('青萍宗坊市');
+    expect(titles).toContain('百灵沼泽');
+    expect(titles).not.toContain('的青萍宗坊市');
+    expect(titles).not.toContain('余音还在山谷');
+    expect(titles).not.toContain('三天后就是试炼大会');
+    expect(titles).not.toContain('熟悉的脚步声从坊市');
+    expect(titles).not.toContain('沿着青萍山');
+    expect(titles).not.toContain('惊起一群栖息在坊市');
   });
 });

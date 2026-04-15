@@ -1,6 +1,6 @@
 # 前端面板架构（V2）
 
-> V2 前端（`apps/web-v2/`）采用插件驱动的 UI 架构。所有面板由插件通过 json-render 声明式定义，框架负责发现和渲染。
+> V2 前端（`apps/web-v2/`）采用插件驱动的 UI 架构。右侧面板与聊天内插件消息面都由插件通过 json-render spec 声明，框架负责发现、装配与渲染。
 
 ## 架构总览
 
@@ -11,14 +11,14 @@
 │  Center: Message Area    │                  │  Right: Plugin    │
 │  ────────────────────    │                  │  Panels           │
 │                          │                  │  ──────────       │
-│  所有消息通过 json-render │                  │  VSCode-style     │
-│  统一渲染：               │                  │  vertical bar     │
-│  - Prose (叙事文本)      │                  │  ┌──┐             │
-│  - Form (角色创建)       │                  │  │📖│ Codex       │
-│  - Alert (通知)          │                  │  │👤│ Character   │
-│  - Button (选择)         │                  │  │🌍│ World Data  │
-│  - EntryCard (图鉴)      │                  │  │..│ (更多插件)  │
-│  - ActionGuide (引导)    │                  │  └──┘             │
+│  两条 json-render 链路   │                  │  VSCode-style     │
+│  - Turn messages         │                  │  vertical bar     │
+│  - Plugin message surface│                  │  ┌──┐             │
+│  - Prose / Form / Alert  │                  │  │📖│ Codex       │
+│  - Guide / Codex 摘要    │                  │  │👤│ Character   │
+│                          │                  │  │🌍│ World Data  │
+│                          │                  │  │..│ (更多插件)  │
+│                          │                  │  └──┘             │
 │                          │                  │                   │
 │  Player Input            │                  │  Panel Content    │
 │  [输入你的行动...]  [→]   │                  │  (json-render)    │
@@ -31,7 +31,7 @@
 
 ### 设计原则
 
-- **仅 World Tab 由框架固定**，其余全部由插件通过 `ui.right` 声明
+- **Lorebook Tab 由框架固定**，其余右侧面板由插件通过 `ui.right` 声明
 - **框架不知道具体插件**，通过 `/api/ui-specs` 发现面板
 - **json-render 渲染**，插件提供 JSON spec，框架提供组件 catalog
 - **pluginData 驱动数据**，通过 `plugin-data.changed` SSE 事件实时更新
@@ -210,18 +210,19 @@ ui:
 
 ## 消息区（Message Area）
 
-### 统一 json-render 渲染
+### 两条渲染链路
 
-所有消息类型通过 `messageToSpec()` 转换为 json-render spec，由框架 catalog 渲染：
+当前消息区有两条并行链路：
 
-| 消息类型 | json-render 组件 | 来源 |
-|----------|-----------------|------|
-| 叙事文本 | `Prose` | core-narrator `narrative.completed` 事件 |
-| 玩家输入 | `PlayerMessage` | 用户发送 |
-| 角色创建表单 | `Form` + `FormField` + `SubmitButton` | core-char-creator `interaction.requested` |
-| 行动引导 | `Card` + `Badge` + `Button` | core-guide `generate-guide` 工具 |
-| 通知 | `Alert` | 任何插件的 `create-notification` 工具 |
-| 图鉴发现 | `EntryCard` | core-codex `unlock-codex-entries` 工具 |
+1. **Turn message 链路**：`MessageList` 读取 `turn_messages` / SSE 事件，经 `messageToSpec()` 转成 json-render spec
+2. **Plugin message 链路**：`MessagePluginSurface` 通过 `/api/ui-specs?sessionId=` 发现 `ui.message`，再用 `PluginPanel` + `plugin_data` 渲染插件消息面
+
+两条链路都使用同一套 json-render catalog。
+
+| 链路 | 当前承载内容 | 实现位置 |
+|------|-------------|---------|
+| Turn message | 叙事文本、玩家输入、`interaction.requested` 表单/选择、通知 | `apps/web-v2/src/components/chat/message-list.tsx` |
+| Plugin message | guide 建议卡、codex 本轮摘要、其他插件自定义消息面 | `apps/web-v2/src/components/chat/message-plugin-surface.tsx` |
 
 ### 消息 Block 声明
 
@@ -239,19 +240,18 @@ ui:
 玩家填写表单 → 点击提交按钮
   → submitFormInputs():
     1. POST /api/sessions/:id/submit-inputs
-       (narrativeTemplate 填充 + 角色创建 + phase 转换)
-    2. 返回 filledNarrative（叙事文本，非原始字段数据）
-    3. 显示叙事文本为玩家消息
-    4. POST /api/actions (player_action) → 触发下一轮 Turn
+       (记录 submission + narrativeTemplate 填充)
+    2. 根据 `submitBehavior` 决定是否回显自然语言与是否自动继续下一轮
+    3. 下一轮由对应插件读取 `player.lastFormValues` 完成业务写入
 ```
 
 ### 行动引导交互
 
 ```
-core-guide 分析叙事 → 生成建议卡片
-  → 按风格分类渲染：稳妥/激进/创意/疯狂
-  → 每个建议是 Button 组件
-  → 玩家点击 → sendMessage(建议文本) → 触发下一轮 Turn
+core-guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
+  → `ui.message` 渲染三组策略卡 + 自定义输入
+  → 玩家点击建议后进入待发送区
+  → InputBar 统一发送待发送草稿与手写输入
 ```
 
 ## 组件 Catalog
@@ -322,7 +322,7 @@ core-guide 分析叙事 → 生成建议卡片
 ### 右侧面板数据流
 
 ```
-插件工具调用 plugin-data-set
+插件 local tool / builtin tool / function handler 写入 plugin_data
   → store 写入
   → eventBus 发射 plugin-data.changed
   → SSE 推送到前端
@@ -340,15 +340,15 @@ Turn 执行 → 各 Runtime 按优先级运行
     interaction.requested → 交互 block（表单/选择）
     execution.started/completed → 执行步骤状态
     plugin-data.changed → 插件数据更新
-  → messageToSpec() 转换为 json-render spec
-  → Renderer 渲染
+  → MessageList 渲染 turn messages
+  → MessagePluginSurface 渲染 `ui.message`
 ```
 
 ## 迁移说明（V1 → V2）
 
 | V1（`apps/web/`） | V2（`apps/web-v2/`） |
 |--------------------|----------------------|
-| 7 个硬编码 Tab | 1 个固定 Tab (World) + 插件动态注册 |
+| 7 个硬编码 Tab | 1 个固定 Tab (Lorebook) + 插件动态注册 |
 | React 组件直接渲染 | json-render 声明式渲染 |
 | gameState 字段驱动 | pluginData namespace 驱动 |
 | CodexPanel/EventPanel 等框架组件 | 插件 `ui/*.json` spec |
@@ -361,12 +361,18 @@ Turn 执行 → 各 Runtime 按优先级运行
 
 1. 在 `PLUGIN.md` frontmatter 添加 `ui.right: [./ui/my-panel.json]`
 2. 创建 `ui/my-panel.json`，使用 catalog 中的组件编写 json-render spec
-3. 在工具中通过 `plugin-data-set` 写入数据
+3. 在 local tool、builtin tool 或 function handler 中写入 `plugin_data`
 4. 框架自动发现面板 → 渲染 Tab → pluginData 驱动更新
 
-添加新的消息 block：
+添加新的插件消息面：
 
 1. 在 `PLUGIN.md` frontmatter 添加 `ui.message: [./ui/my-block.json]`
 2. 创建 `ui/my-block.json`
-3. 在工具返回值中设置 `ui: [{ type: "my-block", ...data }]`
-4. 框架匹配 block type → 渲染 json-render spec
+3. 在 runtime / tool 中写入 `plugin_data[pluginId][message]`
+4. `MessagePluginSurface` 自动发现 spec 并渲染
+
+添加新的 turn-bound 交互块：
+
+1. 在 runtime 输出或 tool 返回值里写 `interaction`
+2. 由 session-kernel 归一化为 `interaction.request`
+3. `MessageList` 经 `messageToSpec()` 渲染表单、选择或确认 UI

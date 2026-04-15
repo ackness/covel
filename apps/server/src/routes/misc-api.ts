@@ -11,6 +11,7 @@ import type { AiStack } from '../ai-setup.js';
 import {
   discoverPlugins,
   loadPluginManifest,
+  loadRuntime,
   loadPluginSummary,
   type PluginRegistry,
   type PluginDiscoveryResult,
@@ -18,6 +19,13 @@ import {
 import type { DataStore } from '@covel/store';
 
 type FlowSegmentId = 'start' | 'pre-game' | 'core-game-loop';
+type UiSlotName = 'right' | 'message' | 'left';
+
+const UI_NAMESPACE_BY_SLOT: Record<UiSlotName, string> = {
+  right: '__ui_right__',
+  message: '__ui_message__',
+  left: '__ui_left__',
+};
 
 function resolvePluginsDir(): string {
   return process.env.COVEL_PLUGINS_DIR
@@ -53,6 +61,13 @@ function uiSlotsOf(manifest: {
   if (manifest.ui?.message?.length) slots.push('message');
   if (manifest.ui?.left?.length) slots.push('left');
   return slots;
+}
+
+function isStoryRuntime(manifest: {
+  outputKind?: string;
+  capabilities?: readonly string[];
+}): boolean {
+  return manifest.outputKind === 'story' || manifest.capabilities?.includes('narrative') === true;
 }
 
 async function loadPluginDiscovery(pluginId: string): Promise<PluginDiscoveryResult | undefined> {
@@ -97,7 +112,7 @@ async function buildPluginFlowResponse() {
     tools: { builtin: string[]; local: string[] };
     uiSlots: string[];
     docPath: string;
-    isNarrator: boolean;
+    isStoryRuntime: boolean;
   }> = [];
 
   for (const discovery of discoveries) {
@@ -122,10 +137,8 @@ async function buildPluginFlowResponse() {
       const runtimeId = manifest.name;
       const runtimeName = runtimeId.includes('/') ? runtimeId.split('/').at(-1) ?? runtimeId : runtimeId;
       const priority = manifest.priority ?? 500;
-      const docPath = docPathFromAbsolute(
-        pluginsDir,
-        discovery.pluginMdPaths[index] ?? discovery.pluginMdPaths[0] ?? '',
-      );
+      const mdPath = discovery.pluginMdPaths[index] ?? discovery.pluginMdPaths[0];
+      const docPath = mdPath ? docPathFromAbsolute(pluginsDir, mdPath) : ''
 
       steps.push({
         id: runtimeId,
@@ -161,7 +174,7 @@ async function buildPluginFlowResponse() {
         },
         uiSlots: uiSlotsOf(manifest),
         docPath,
-        isNarrator: runtimeId === 'core-narrator' || manifest.capabilities?.includes('narrative') === true,
+        isStoryRuntime: isStoryRuntime(manifest),
       });
     }
   }
@@ -180,6 +193,84 @@ async function buildPluginFlowResponse() {
     plugins,
     steps,
   };
+}
+
+async function loadLivePluginMaps() {
+  const pluginsDir = resolvePluginsDir();
+  const discoveries = await discoverPlugins(pluginsDir);
+  const summaryMap = new Map<string, Awaited<ReturnType<typeof loadPluginSummary>>>();
+  const manifestMap = new Map<string, Awaited<ReturnType<typeof loadPluginManifest>>>();
+
+  await Promise.all(
+    discoveries.map(async (discovery) => {
+      const [summary, manifests] = await Promise.all([
+        loadPluginSummary(discovery),
+        loadPluginManifest(discovery),
+      ]);
+      summaryMap.set(discovery.id, summary);
+      manifestMap.set(discovery.id, manifests);
+    }),
+  );
+
+  return { summaryMap, manifestMap };
+}
+
+async function syncUiSpecsToStore(
+  sessionId: string,
+  activePluginIds: ReadonlySet<string>,
+  store: DataStore,
+): Promise<void> {
+  const pluginsDir = resolvePluginsDir();
+  const discoveries = await discoverPlugins(pluginsDir);
+  const now = new Date().toISOString();
+  const writes: Array<{
+    id: string;
+    sessionId: string;
+    pluginId: string;
+    namespace: string;
+    key: string;
+    value: unknown;
+    createdAt: string;
+    updatedAt: string;
+  }> = [];
+
+  for (const discovery of discoveries) {
+    if (!activePluginIds.has(discovery.id)) continue;
+
+    const manifests = await loadPluginManifest(discovery);
+
+    // Clear old cached specs for this plugin so hot-reloads don't leave stale blocks behind.
+    for (const namespace of Object.values(UI_NAMESPACE_BY_SLOT)) {
+      const existing = await store.listPluginData(sessionId, discovery.id, namespace);
+      for (const row of existing) {
+        await store.deletePluginData(sessionId, discovery.id, namespace, row.key);
+      }
+    }
+
+    for (const [runtimeIndex, parsed] of manifests.entries()) {
+      const loaded = await loadRuntime(discovery, parsed.manifest.name);
+      if (!loaded.uiSpecs) continue;
+
+      for (const slot of Object.keys(UI_NAMESPACE_BY_SLOT) as UiSlotName[]) {
+        const specs = loaded.uiSpecs[slot];
+        if (!specs || specs.length === 0) continue;
+        writes.push({
+          id: crypto.randomUUID(),
+          sessionId,
+          pluginId: discovery.id,
+          namespace: UI_NAMESPACE_BY_SLOT[slot],
+          key: `${String(runtimeIndex).padStart(3, '0')}:${loaded.manifest.name}`,
+          value: specs,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    }
+  }
+
+  if (writes.length > 0) {
+    await store.setPluginDataBatch(writes);
+  }
 }
 
 export function createMiscApiRoutes(
@@ -204,8 +295,9 @@ export function createMiscApiRoutes(
   });
 
   // GET /api/packages — list loaded plugin packages with runtime/tool info
-  app.get('/api/packages', (c) => {
+  app.get('/api/packages', async (c) => {
     const all = registry.getAll();
+    const { summaryMap, manifestMap } = await loadLivePluginMaps();
     const packages: Array<Record<string, unknown>> = [];
     const loadErrors: Array<{ pluginId: string; errors: string[] }> = [];
 
@@ -215,14 +307,17 @@ export function createMiscApiRoutes(
         continue;
       }
 
-      const runtimes = (entry.manifests ?? (entry.manifest ? [entry.manifest] : [])).map((m) => ({
+      const liveSummary = summaryMap.get(entry.id) ?? entry.summary;
+      const liveManifests = manifestMap.get(entry.id) ?? (entry.manifests ?? (entry.manifest ? [entry.manifest] : []));
+
+      const runtimes = liveManifests.map((m) => ({
         id: m.manifest.name,
         kind: m.manifest.runtimeType ?? 'agent',
         priority: m.manifest.priority ?? 500,
         trigger: m.manifest.trigger ?? { mode: 'always' },
       }));
 
-      const tools = (entry.manifests ?? (entry.manifest ? [entry.manifest] : []))
+      const tools = liveManifests
         .flatMap((m) => [
           ...(m.manifest.tools?.builtin ?? []).map((t) => ({ id: t, kind: 'builtin' })),
           ...(m.manifest.tools?.local ?? []).map((t) => {
@@ -233,9 +328,9 @@ export function createMiscApiRoutes(
 
       packages.push({
         name: entry.id,
-        displayName: entry.summary.name,
-        description: entry.summary.description,
-        pluginType: entry.summary.pluginType,
+        displayName: liveSummary.name,
+        description: liveSummary.description,
+        pluginType: liveSummary.pluginType,
         enabled: true,
         runtimes,
         tools,
@@ -324,26 +419,50 @@ export function createMiscApiRoutes(
       const session = await store.getSession(sessionId);
       if (session) {
         activeFilter = new Set(session.activePlugins ?? []);
+        await syncUiSpecsToStore(sessionId, activeFilter, store);
       }
     }
 
-    const all = registry.getAll();
-    for (const [, entry] of all) {
-      if (entry.status === 'error') continue;
-      if (activeFilter && !activeFilter.has(entry.id)) continue;
+    if (sessionId && activeFilter) {
+      for (const pluginId of activeFilter) {
+        const [rightRows, messageRows, leftRows] = await Promise.all([
+          store.listPluginData(sessionId, pluginId, UI_NAMESPACE_BY_SLOT.right),
+          store.listPluginData(sessionId, pluginId, UI_NAMESPACE_BY_SLOT.message),
+          store.listPluginData(sessionId, pluginId, UI_NAMESPACE_BY_SLOT.left),
+        ]);
 
-      for (const [, loaded] of entry.loadedRuntimes) {
-        if (!loaded.uiSpecs) continue;
-        const pluginId = loaded.manifest.pluginId;
+        const toSpecs = (rows: typeof rightRows) =>
+          rows
+            .sort((a, b) => a.key.localeCompare(b.key))
+            .flatMap((row) => Array.isArray(row.value) ? row.value as Record<string, unknown>[] : []);
 
-        if (loaded.uiSpecs.right?.length) {
-          right.push({ pluginId, specs: loaded.uiSpecs.right });
-        }
-        if (loaded.uiSpecs.message?.length) {
-          message.push({ pluginId, specs: loaded.uiSpecs.message });
-        }
-        if (loaded.uiSpecs.left?.length) {
-          left.push({ pluginId, specs: loaded.uiSpecs.left });
+        const rightSpecs = toSpecs(rightRows);
+        const messageSpecs = toSpecs(messageRows);
+        const leftSpecs = toSpecs(leftRows);
+
+        if (rightSpecs.length) right.push({ pluginId, specs: rightSpecs });
+        if (messageSpecs.length) message.push({ pluginId, specs: messageSpecs });
+        if (leftSpecs.length) left.push({ pluginId, specs: leftSpecs });
+      }
+    } else {
+      const all = registry.getAll();
+      for (const [, entry] of all) {
+        if (entry.status === 'error') continue;
+        if (activeFilter && !activeFilter.has(entry.id)) continue;
+
+        for (const [, loaded] of entry.loadedRuntimes) {
+          if (!loaded.uiSpecs) continue;
+          const pluginId = loaded.manifest.pluginId;
+
+          if (loaded.uiSpecs.right?.length) {
+            right.push({ pluginId, specs: loaded.uiSpecs.right });
+          }
+          if (loaded.uiSpecs.message?.length) {
+            message.push({ pluginId, specs: loaded.uiSpecs.message });
+          }
+          if (loaded.uiSpecs.left?.length) {
+            left.push({ pluginId, specs: loaded.uiSpecs.left });
+          }
         }
       }
     }

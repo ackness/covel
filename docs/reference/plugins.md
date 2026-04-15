@@ -1,6 +1,6 @@
 # 插件注册表
 
-> 所有已实现的 Covel 插件。每个插件以 `PLUGIN.md` 为核心定义，包含 frontmatter 元信息和 Markdown 提示词。
+> 所有已实现的 Covel 插件。本页当前以 `plugins/**/PLUGIN.md` 与对应 `handler.js / tools/*.js` 的实现为准。
 
 ---
 
@@ -9,14 +9,14 @@
 | ID | 类型 | 优先级 | 触发方式 | 模型 slot | 描述 |
 |----|------|--------|----------|-----------|------|
 | core-pregame | core-plugin | 10 | scheduled（仅首轮） | — | 游戏初始化（function runtime） |
-| core-world-init/schema-gen | core-plugin | 85 | scheduled（仅首轮） | `fast` | 世界维度初始化（guard + agent） |
-| core-narrator | core-plugin | 500 | auto（`playing` 阶段） | `ds` | 主叙事生成器 |
-| core-guide | plugin | 550 | scheduled（interval=1, cooldown=1） | `fast` | 行动引导 + 选择面板 |
+| core-world-init/schema-gen | core-plugin | 85 | scheduled（仅首轮） | `plugin` | 世界维度初始化（guard + agent） |
+| core-narrator | core-plugin | 500 | auto（`playing` 阶段） | `story` | 主叙事生成器 |
+| core-guide | plugin | 550 | scheduled（interval=1, cooldown=1） | `plugin` | 行动引导 + 聊天内建议面 |
 | core-npc-graph/rag-retriever | plugin | 490 | scheduled（interval=1，function runtime） | — | NPC 图谱结构化检索器，向 narrator 注入相关关系事实 |
-| core-npc-graph/extractor | plugin | 620 | scheduled（interval=2, cooldown=1） | `fast` | NPC 关系图抽取器（受 MiroFish 启发） |
-| core-codex | plugin | 650 | scheduled（interval=2, cooldown=1） | `fast` | 知识图鉴系统 |
-| core-char-creator/player-init | core-plugin | 700 | scheduled（maxTriggerCount=2, guard） | `ds` | 玩家角色创建（LLM agent + create-character tool） |
-| core-char-creator/character-tracker | core-plugin | 750 | scheduled（interval=1, cooldown=1, phases=[playing]） | `fast` | NPC 发现 + 角色状态跟踪 |
+| core-npc-graph/extractor | plugin | 620 | scheduled（interval=1, cooldown=1） | `plugin` | NPC 关系图抽取器（受 MiroFish 启发） |
+| core-codex | plugin | 650 | scheduled（interval=2, cooldown=1） | `plugin` | 知识图鉴系统（deterministic handler） |
+| core-char-creator/player-init | core-plugin | 700 | scheduled（maxTriggerCount=2, guard, function runtime） | `plugin` | 玩家角色创建（deterministic handler） |
+| core-char-creator/character-tracker | core-plugin | 750 | scheduled（interval=1, cooldown=1, phases=[playing]） | `plugin` | NPC 发现 + 角色状态跟踪 |
 
 ---
 
@@ -52,11 +52,12 @@
 | pluginType | `core-plugin`（不可禁用） |
 | priority | 85（Pre-Game 阶段） |
 | trigger | `scheduled`，`interval: 1`，`maxTriggerCount: 1` — 仅首轮触发 |
-| model | `fast` |
+| model | `plugin` |
 | guard | `../../guard.js` |
 | capabilities | `[world-data-provider]` |
 | tools.local | `set-world-schema`, `set-world-entries-batch` |
 | tools.builtin | `plugin-data-get`, `plugin-data-list` |
+| ui.right | `./ui/world-entries.json`, `./ui/world-schema.json` |
 
 **Guard 门控**: `guard.js` 在 LLM 调用前执行（纯函数，零 LLM 开销）。检查 plugin_data 中是否已有世界维度数据，或从 world.yaml 导入 dimensions。若数据已存在，返回 `{ skip: true }` 跳过 LLM。
 
@@ -87,12 +88,12 @@
 | priority | 500 |
 | trigger | `auto`，`phases: [playing]` — 仅 `playing` 阶段执行 |
 | outputKind | `story`（输出显示在主聊天区） |
-| model | `ds`（DeepSeek slot） |
+| model | `story` |
 | capabilities | `[narrative]` |
-| tools | 无 |
-| input.inject | 无 |
+| tools.builtin | `world-dimension-get` |
+| input.inject | `core-npc-graph/rag-retriever` → `npcContext` → `<npc-relationships>` |
 
-**职责**: 根据玩家输入、世界观和历史上下文生成主线叙事。输出 `narrativeOutput` 字段供其他插件引用。
+**职责**: 根据玩家输入、世界观和历史上下文生成主线叙事。输出 `narrativeOutput` 字段供其他插件引用；需要精确世界字段时调用 `world-dimension-get` 按需读取。
 
 **上下文变量**:
 - `{{ world.lore }}` — 世界观全文
@@ -137,12 +138,12 @@
 | runtimeType | `agent`（LLM 驱动） |
 | priority | 620（位于 narrator=500 与 codex=650 之间） |
 | capabilities | `[npc-graph, relationship-tracking]` |
-| trigger | `scheduled`，`interval: 2`，`cooldownTurns: 1`，`phases: [playing]` |
+| trigger | `scheduled`，`interval: 1`，`cooldownTurns: 1`，`phases: [playing]` |
 | input.inject | `core-narrator.narrative` → `<narrator-output>` |
-| model slot | `fast` |
+| model slot | `plugin` |
 | tools.local | `upsert-npc-graph`（批量写节点+边）、`list-npc-graph`（列出现有图） |
 | tools.builtin | `plugin-data-list`、`plugin-data-get` |
-| ui.right | `./ui/npc-graph-panel.json`（Phase 4 接入可视化组件） |
+| ui.right | `./ui/npc-graph-panel.json` |
 
 **职责**: 维护一张会话级的人物-关系图。从叙事文本中抽取 NPC 节点（individual / group / faction）、它们的关系（信任、结盟、欠债、背叛等）以及每条关系的自然语言事实，持久化到 `plugin_data` 的 `nodes`、`edges`、`index`、`meta` 四个 namespace。
 
@@ -167,7 +168,7 @@ namespace="index"  key=by-source:{npcId} | by-target:{npcId}  value=string[] (ed
 namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 ```
 
-**Phase 进度**: 本文档记录 Phase 2 —— 数据模型 + agent runtime + 两个插件工具。Phase 3 将在同一插件内引入 embedding 的 edge.fact 写入 + Graph-RAG 混合检索工具；Phase 4 将补充 `ui/npc-graph-panel.json` 与 `GraphCanvas` 组件。
+**Phase 进度**: 当前实现已经包含 `ui/npc-graph-panel.json` 与 `GraphCanvas`。后续演进点集中在 Graph-RAG 的向量检索部分。
 
 ---
 
@@ -179,18 +180,21 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 |------|----|
 | pluginType | `plugin`（可禁用） |
 | priority | 650 |
-| trigger | `scheduled`，`interval: 2`，`cooldownTurns: 2`，`phases: [playing]` |
-| model | `fast`（轻量模型 slot） |
+| runtimeType | `function` |
+| handler | `./handler.js` |
+| trigger | `scheduled`，`interval: 2`，`cooldownTurns: 1`，`phases: [playing]` |
+| model | `plugin` |
 | tools.local | `unlock-codex-entries`, `update-codex-entry` |
 | tools.builtin | `plugin-data-list`, `create-notification` |
 | ui.right | `./ui/codex-panel.json` |
+| ui.message | `./ui/codex-message.json` |
 | input.inject | 无 |
 
-**职责**: 分析叙事文本，识别并记录玩家发现的知识条目（怪物、道具、地点、传说、人物、技能）。通过本地工具生成带稀有度分级的"知识发现"UI 卡片。工具调用自动持久化到 plugin-data store，前端通过 `plugin-data.changed` SSE 事件实时更新。
+**职责**: 分析叙事文本，识别并记录玩家发现的知识条目（怪物、道具、地点、传说、人物、技能）。当前实现是 deterministic handler：它直接提取高信号条目，写入 `plugin_data[entries]`，并同步写入 `plugin_data[message]` 作为聊天内摘要。
 
-**数据持久化**: `unlock-codex-entries` 工具内部调用 `store.setPluginDataBatch()` 将条目写入 plugin-data（namespace: `entries`），`update-codex-entry` 工具读取已有条目、合并更新后写回。
+**数据持久化**: 当前 `handler.js` 直接完成 `plugin_data` 写入；`tools/` 目录中的 codex 工具仍保留在插件包内，供独立测试与后续演进使用。
 
-**UI 面板**: `ui/codex-panel.json` 声明右侧面板（json-render spec），包含搜索框、分类筛选栏和条目卡片列表。框架通过 `/api/ui-specs` 发现并渲染。
+**UI 面板**: `ui/codex-panel.json` 承接完整图鉴，`ui/codex-message.json` 负责聊天内的本轮新增摘要。框架通过 `/api/ui-specs` 发现并渲染这两个 surface。
 
 ---
 
@@ -206,28 +210,27 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 |------|----|
 | pluginType | `core-plugin`（不可禁用） |
 | priority | 700 |
+| runtimeType | `function` |
+| handler | `./handler.js` |
 | trigger | `scheduled`，`interval: 1`，`maxTriggerCount: 2`（首轮生成表单 + 表单提交后写库） |
 | guard | `./guard.js` — 若 player 已存在则 skip，并保证 session 在 playing phase |
-| model | `ds`（DeepSeek slot） |
-| tools.builtin | `create-form`（第 1 步）、`create-character`（第 2 步） |
-| input.inject | `core-narrator` → `narrativeOutput` → `<narrator-opening>` |
-| config.inject | `{{ config.worldSchema }}` — 世界维度系统的角色属性 schema |
+| model | `plugin` |
 | ui.right | `../../ui/character-panel.json` |
 
-**两步流程**（通过 `{{ player.lastFormValues }}` 判断当前步骤）：
+**两步流程**（当前由 deterministic handler 完成）：
 
 1. **第 1 步 - 生成表单**（`<player-submission>` 为空时）：
-   - 读取开场叙事 + 世界 schema
-   - 写一段角色觉醒短叙事
-   - 调用 `create-form` 工具生成表单，字段从 `<world-schema>` 的 `character-attributes.attributes` 映射（bio > abilities > stats 优先级，最多 4 字段含 `characterName`）
+   - 读取世界 schema
+   - 直接返回 `interaction.request` 形式的角色创建表单
+   - 表单字段从 `worldSchema.character-attributes.attributes` 中选取，最多 4 个字段含 `characterName`
 
 2. **第 2 步 - 提交创建**（`<player-submission>` 包含表单值时）：
-   - 读取 `{{ player.lastFormValues }}`（JSON 字符串）
-   - 合并 schema `defaultValue`（数值型 stats 走默认值）
-   - 调用 `create-character` 工具一次，参数 `type: "player"`, `transitionPhase: "playing"`
-   - 工具原子地写 characters 表 + 镜像到 plugin-data + 转换 session phase
+   - 读取最近一次 player input submission
+   - 合并 schema `defaultValue`
+   - 直接写入 `characters` 表与 `plugin_data[characters]`
+   - 输出 `phase: "playing"` 推动 session 进入正式游戏
 
-**框架隔离**: `submit-inputs.ts` 不再有 `_createCharacter` 魔法路径。角色创建完全由插件用 builtin 工具完成，session phase 转换通过 `create-character(transitionPhase="playing")` 参数触发。
+**当前代码状态**: 这一条路径已经保持在插件包内部，实现位于 `runtimes/player-init/handler.js`。如果后续希望统一 deterministic runtime 的 trace 与工具链，可以把这条流程收敛到 builtin character tools。
 
 ### core-char-creator/character-tracker
 
@@ -236,7 +239,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | pluginType | `core-plugin` |
 | priority | 750 |
 | trigger | `scheduled`，`interval: 1`，`cooldownTurns: 1`，`phases: [playing]` |
-| model | `fast` |
+| model | `plugin` |
 | tools.builtin | `create-character`, `update-character`, `list-characters`, `get-character` |
 | input.inject | `core-narrator` → `narrativeOutput` → `<narrator-output>` |
 
@@ -258,7 +261,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | pluginType | `plugin`（可禁用） |
 | priority | 550（narrator 之后、codex 之前） |
 | trigger | `scheduled`，`interval: 1`，`cooldownTurns: 1`，`phases: [playing]` |
-| model | `fast`（轻量模型 slot） |
+| model | `plugin` |
 | tools.local | `generate-guide` |
 | ui.message | `./ui/action-guide-block.json` |
 | input.inject | `core-narrator` → `narrativeOutput` → `<narrator-output>` |
@@ -269,11 +272,10 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 - **safe（稳妥）** — 低风险、谨慎的选择
 - **aggressive（激进）** — 直接、对抗性的选择
 - **creative（创意）** — 非常规、巧妙的选择
-- **wild（疯狂）** — 高风险、出人意料的选择
 
 **触发逻辑**: `cooldownTurns: 1` 确保首轮不触发（避免与角色创建冲突）。仅在 `playing` 阶段执行。如果叙事中没有明显决策点，LLM 不会调用工具。
 
-**UI 渲染**: 工具返回的 `action-guide` block 通过 json-render 渲染为分类卡片，每个建议是一个可点击按钮，点击后作为玩家消息发送给模型。
+**UI 渲染**: 当前 `generate-guide` 会把 `topic` 与三组建议写入 `plugin_data[message]`。`ui/action-guide-block.json` 读取这些字段，渲染三组策略卡和自定义输入；玩家点击建议后进入待发送区，由底部输入栏统一发送。
 
 ---
 

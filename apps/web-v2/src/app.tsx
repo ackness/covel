@@ -173,13 +173,19 @@ export function App() {
                 等待游戏开始...
               </div>
             ) : (
-              <MessageList messages={store.messages} />
+              <div className="space-y-4">
+                <MessageList messages={store.messages} />
+              </div>
             )}
           </div>
 
           {/* Input */}
           <InputBar
-            onSend={store.sendMessage}
+            value={store.composerText}
+            onChange={store.setComposerText}
+            onSend={() => void store.sendMessage()}
+            pendingDrafts={store.pendingInteractionDrafts}
+            onRemoveDraft={store.removePendingInteractionDraft}
             disabled={store.executing}
             placeholder={store.executing ? "等待回合结束..." : "输入你的行动..."}
           />

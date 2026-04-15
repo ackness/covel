@@ -16,6 +16,9 @@ interface PluginPanelProps {
   pluginId: string;
   spec: Record<string, unknown>;
   onAction?: (actionName: string, params?: Record<string, unknown>) => void;
+  handlers?: Record<string, (params: Record<string, unknown>) => Promise<void> | void>;
+  stateOverride?: Record<string, unknown>;
+  interactionLocked?: boolean;
 }
 
 /**
@@ -57,7 +60,7 @@ function resolveEmptyMessage(value: unknown): string {
   if (!value) return "";
   if (typeof value === "string") {
     const trimmed = value.trim();
-    return trimmed !== "" ? value : "";
+    return trimmed !== "" ? trimmed : "";
   }
   if (typeof value === "object") {
     const obj = value as Record<string, string>;
@@ -72,23 +75,33 @@ function resolveEmptyMessage(value: unknown): string {
   return String(value);
 }
 
-export function PluginPanel({ pluginId, spec, onAction }: PluginPanelProps) {
+export function PluginPanel({
+  pluginId,
+  spec,
+  onAction,
+  handlers: explicitHandlers,
+  stateOverride,
+  interactionLocked = false,
+}: PluginPanelProps) {
   const namespace = (spec.dataSource as Record<string, string> | undefined)?.namespace ?? "default";
-  const data = usePluginNamespace(pluginId, namespace);
+  const liveData = usePluginNamespace(pluginId, namespace);
+  const data = stateOverride ?? liveData;
 
   const initialState = useMemo(() => {
     const entries = Object.entries(data).map(([key, value]) => ({ key, value }));
-    return { ...data, entries };
+    return { ...expandIndexedState(data), entries };
   }, [data]);
 
   const flatSpec = useMemo(() => convertToSpec(spec.view), [spec.view]);
 
-  const handlers = onAction
-    ? {
-      apiCall: async (params: Record<string, unknown>) => { onAction("apiCall", params); },
-      emitEvent: async (params: Record<string, unknown>) => { onAction("emitEvent", params); },
-    }
-    : undefined;
+  const handlers = explicitHandlers ?? (
+    onAction
+      ? {
+        apiCall: async (params: Record<string, unknown>) => { onAction("apiCall", params); },
+        emitEvent: async (params: Record<string, unknown>) => { onAction("emitEvent", params); },
+      }
+      : undefined
+  );
 
   if (!flatSpec) {
     return <p className="text-xs text-zinc-400 italic">Invalid panel spec</p>;
@@ -109,12 +122,70 @@ export function PluginPanel({ pluginId, spec, onAction }: PluginPanelProps) {
   }
 
   return (
-    <JSONUIProvider
-      registry={covelRegistry}
-      initialState={initialState}
-      handlers={handlers}
-    >
-      <Renderer spec={flatSpec} registry={covelRegistry} />
-    </JSONUIProvider>
+    <div className={interactionLocked ? "pointer-events-none opacity-80 select-none" : undefined} aria-disabled={interactionLocked}>
+      <JSONUIProvider
+        registry={covelRegistry}
+        initialState={initialState}
+        handlers={handlers}
+      >
+        <Renderer spec={flatSpec} registry={covelRegistry} />
+      </JSONUIProvider>
+    </div>
   );
+}
+
+function expandIndexedState(data: Record<string, unknown>): Record<string, unknown> {
+  const expanded: Record<string, unknown> = { ...data };
+
+  for (const [key, value] of Object.entries(data)) {
+    flattenIndexedValue(expanded, singularize(key), value);
+  }
+
+  return expanded;
+}
+
+function flattenIndexedValue(
+  target: Record<string, unknown>,
+  baseKey: string,
+  value: unknown,
+): void {
+  if (!Array.isArray(value)) return;
+
+  value.forEach((item, index) => {
+    const itemKey = `${baseKey}${index + 1}`;
+    if (Array.isArray(item)) {
+      item.forEach((entry, entryIndex) => {
+        target[`${itemKey}${entryIndex + 1}`] = entry;
+      });
+      return;
+    }
+
+    if (item && typeof item === "object") {
+      for (const [childKey, childValue] of Object.entries(item as Record<string, unknown>)) {
+        const nestedKey = `${itemKey}${capitalize(childKey)}`;
+        if (Array.isArray(childValue)) {
+          flattenIndexedValue(target, nestedKey, childValue);
+        } else if (childValue && typeof childValue === "object") {
+          for (const [innerKey, innerValue] of Object.entries(childValue as Record<string, unknown>)) {
+            target[`${nestedKey}${capitalize(innerKey)}`] = innerValue;
+          }
+        } else {
+          target[nestedKey] = childValue;
+        }
+      }
+      return;
+    }
+
+    target[itemKey] = item;
+  });
+}
+
+function singularize(value: string): string {
+  if (value.endsWith("ies")) return `${value.slice(0, -3)}y`;
+  if (value.endsWith("s")) return value.slice(0, -1);
+  return value;
+}
+
+function capitalize(value: string): string {
+  return value.length > 0 ? `${value[0].toUpperCase()}${value.slice(1)}` : value;
 }

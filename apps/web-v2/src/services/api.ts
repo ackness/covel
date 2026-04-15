@@ -100,22 +100,54 @@ export interface SubmitInputPayload {
   values: Record<string, unknown>;
 }
 
-export async function submitInputs(
+export async function submitInputsBatch(
   sessionId: string,
-  payload: SubmitInputPayload,
-): Promise<{ filledNarrative: string; accepted: boolean }> {
-  return request<{ filledNarrative: string; accepted: boolean }>(
+  payload: {
+    turnId: string;
+    submissions: SubmitInputPayload[];
+  },
+): Promise<{
+  results: Array<{
+    submissionId: string;
+    interactionId: string;
+    filledNarrative: string;
+    accepted: boolean;
+  }>;
+  accepted: boolean;
+}> {
+  return request<{
+    results: Array<{
+      submissionId: string;
+      interactionId: string;
+      filledNarrative: string;
+      accepted: boolean;
+    }>;
+    accepted: boolean;
+  }>(
     `/api/sessions/${sessionId}/submit-inputs`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         turnId: payload.turnId,
-        formId: payload.interactionId,
-        values: payload.values,
+        submissions: payload.submissions,
       }),
     },
   );
+}
+
+export async function submitInputs(
+  sessionId: string,
+  payload: SubmitInputPayload,
+): Promise<{ filledNarrative: string; accepted: boolean }> {
+  const result = await submitInputsBatch(sessionId, {
+    turnId: payload.turnId,
+    submissions: [payload],
+  });
+  return {
+    filledNarrative: result.results[0]?.filledNarrative ?? "",
+    accepted: result.accepted,
+  };
 }
 
 // ── Plugins ──────────────────────────────────────────────────────
@@ -164,7 +196,7 @@ export interface PluginFlowStep {
   tools: { builtin: string[]; local: string[] };
   uiSlots: string[];
   docPath: string;
-  isNarrator: boolean;
+  isStoryRuntime: boolean;
 }
 
 export interface PluginFlowResponse {

@@ -1,7 +1,7 @@
 {
   "id": "npc-graph",
   "group": "npc-graph",
-  "label": { "zh": "人物图谱", "en": "NPC Graph" },
+  "label": { "zh": "关系图谱", "en": "Relationship Graph" },
   "icon": "network",
   "dataSource": { "namespace": "nodes" },
   "view": {
@@ -12,8 +12,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "已知人物的关系图。绿线=正向关系，红线=负向关系，灰线=中立。点击节点查看档案。",
-            "en": "Known NPC relationship graph. Green = positive, red = negative, gray = neutral. Click a node to inspect."
+            "zh": "当前会话里的角色、群体与势力关系。绿线=正向关系，红线=负向关系，灰线=中立。点击节点查看档案。",
+            "en": "Relationships among characters, groups, and factions in the current session. Green = positive, red = negative, gray = neutral."
           },
           "variant": "muted",
           "size": "xs"

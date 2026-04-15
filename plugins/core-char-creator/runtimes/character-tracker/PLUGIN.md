@@ -32,6 +32,7 @@ postHistory:
     - 有新角色或状态变化时，调用 `create-character` / `update-character`
     - 没有变化时，直接结束
     - 工具调用完成后结束输出
+    - 最终文本只允许空字符串或 `{}`
     - 额外叙事文本、角色总结、场景描述都不算完成
 ---
 
@@ -104,3 +105,4 @@ Characters in session (3 total, sorted by frequency then recency):
 - `fields` 中的键名必须和 `<world-schema>` 的 `character-attributes.attributes[*].id` 一致
 - 一次运行内最多创建 5 个新 NPC，避免 runaway
 - **调用工具后不输出任何文本**。你的输出应该只有 tool calls，没有叙事或解释
+- 如果没有任何变化，最终只返回 `{}`

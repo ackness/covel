@@ -5,15 +5,17 @@
  * Plugin discovery → Load → Trigger → Schedule → Context → LLM call → Result
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import path from 'node:path';
 import type { RuntimeManifest, TurnInput } from '@covel/shared';
 import { discoverPlugins, loadPluginManifest, loadRuntime } from '@covel/plugin-loader';
 import type { LoadedRuntime } from '@covel/plugin-loader';
 import { createMemoryStore } from '@covel/store';
+import { tool } from '@covel/tools';
 import { executeTurn } from '../src/turn-executor.js';
 import type { TurnExecutorDeps } from '../src/turn-executor.js';
 import type { LLMAdapter, LLMResponse } from '../src/llm-adapter.js';
+import { z } from 'zod';
 
 // ── Mock LLM ─────────────────────────────────────────────────────
 
@@ -104,6 +106,27 @@ describe('TurnExecutor E2E', () => {
     expect((narratorResult.output as Record<string, unknown>).narrativeOutput).toContain('黑暗的森林');
   });
 
+  it('should trim trailing meta choice prompts from story output', async () => {
+    mockLLM.response = {
+      content: '你望向雾中的栈桥，听见远处传来钟声。\n\n**现在，你需要做出决定。**',
+      toolCalls: [],
+      finishReason: 'stop',
+      usage: { inputTokens: 100, outputTokens: 50 },
+    };
+
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => narratorLoaded,
+      llm: mockLLM,
+      getConfig: () => ({}),
+    };
+
+    const result = await executeTurn(makeTurnInput(), [narratorManifest], deps);
+    const narratorResult = result.runtimeResults[0]!;
+    expect((narratorResult.output as Record<string, unknown>).narrativeOutput).toBe(
+      '你望向雾中的栈桥，听见远处传来钟声。',
+    );
+  });
+
   it('should pass player message to LLM in context', async () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
@@ -164,6 +187,146 @@ describe('TurnExecutor E2E', () => {
 
     // LLM should be called twice (once for pre-process at 300, once for narrator at 500)
     expect(mockLLM.calls).toHaveLength(2);
+  });
+
+  it('applies API model override only to story runtimes', async () => {
+    const storyManifest: RuntimeManifest = {
+      name: 'story-runtime',
+      pluginId: 'story-runtime',
+      description: 'Story runtime',
+      priority: 500,
+      outputKind: 'story',
+      model: 'story',
+    };
+    const helperManifest: RuntimeManifest = {
+      name: 'helper-runtime',
+      pluginId: 'helper-runtime',
+      description: 'Helper runtime',
+      priority: 550,
+      model: 'plugin',
+    };
+
+    const storyLoaded: LoadedRuntime = {
+      manifest: storyManifest,
+      promptTemplate: 'Story runtime prompt.',
+      references: [],
+    };
+    const helperLoaded: LoadedRuntime = {
+      manifest: helperManifest,
+      promptTemplate: 'Helper runtime prompt.',
+      references: [],
+    };
+
+    const resolveCalls: Array<{ name: string; override: string | undefined }> = [];
+    const resolveModel = vi.fn((manifest: RuntimeManifest, override?: string) => {
+      resolveCalls.push({ name: manifest.name, override });
+      return override ?? manifest.model;
+    });
+
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async (manifest) => manifest.name === 'story-runtime' ? storyLoaded : helperLoaded,
+      llm: mockLLM,
+      getConfig: () => ({}),
+      resolveModel,
+    };
+
+    await executeTurn(
+      makeTurnInput(),
+      [storyManifest, helperManifest],
+      deps,
+      { maxSteps: 1 },
+    );
+
+    expect(resolveCalls).toEqual([
+      { name: 'story-runtime', override: undefined },
+      { name: 'helper-runtime', override: undefined },
+    ]);
+
+    mockLLM.calls.length = 0;
+    resolveCalls.length = 0;
+
+    await executeTurn(
+      { ...makeTurnInput(), playerMessage: '继续前进', modelOverride: 'e2e3' },
+      [storyManifest, helperManifest],
+      deps,
+      { maxSteps: 1 },
+    );
+
+    expect(resolveCalls).toEqual([
+      { name: 'story-runtime', override: 'e2e3' },
+      { name: 'helper-runtime', override: undefined },
+    ]);
+  });
+
+  it('retries once when the provider rejects malformed tool-call arguments', async () => {
+    const store = createMemoryStore();
+    const { createToolExecutor } = await import('../src/tool-executor.js');
+    const presentableTool = tool({
+      name: 'generate-guide',
+      description: 'Builds a guide UI block',
+      parameters: z.object({ topic: z.string() }),
+      execute: async ({ topic }) => ({
+        topic,
+        categories: [{ style: 'safe', suggestions: ['先观察周围环境'] }],
+        ui: [{ type: 'action-guide', topic, categories: [{ style: 'safe', suggestions: ['先观察周围环境'] }] }],
+      }),
+    });
+
+    const manifest: RuntimeManifest = {
+      name: 'retry-guide',
+      pluginId: 'retry-guide',
+      description: 'Guide runtime with retryable tool-call error',
+      priority: 550,
+      tools: { local: ['./tools/generate-guide.js'] },
+    };
+    const loaded: LoadedRuntime = {
+      manifest,
+      promptTemplate: 'Generate guidance.',
+      references: [],
+    };
+
+    let callCount = 0;
+    const llm: LLMAdapter = {
+      async generate() {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error('[openai-chat] HTTP 400 — <400> InternalError.Algo.InvalidParameter: The "function.arguments" parameter of the code model must be in JSON format.');
+        }
+        if (callCount === 2) {
+          return {
+            content: null,
+            toolCalls: [{
+              id: 'tc-retry-guide',
+              name: 'generate-guide',
+              arguments: JSON.stringify({ topic: '探查前准备' }),
+            }],
+            finishReason: 'tool_calls',
+            usage: { inputTokens: 10, outputTokens: 10 },
+          };
+        }
+        return {
+          content: null,
+          toolCalls: [],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 5 },
+        };
+      },
+    };
+
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => loaded,
+      llm,
+      getConfig: () => ({}),
+      store,
+      toolExecutor: createToolExecutor({
+        findTool: (name) => (name === 'generate-guide' ? presentableTool : undefined),
+        store,
+      }),
+    };
+
+    const result = await executeTurn(makeTurnInput(), [manifest], deps, { maxSteps: 2 });
+    expect(callCount).toBe(3);
+    expect(result.runtimeResults[0]?.status).toBe('success');
   });
 
   it('should handle LLM failure gracefully', async () => {
@@ -251,6 +414,299 @@ describe('TurnExecutor E2E', () => {
     expect(runtimeMsg!.content).toContain('黑暗的森林');
   });
 
+  it('should promote presentable tool output when a runtime stops without final text', async () => {
+    const store = createMemoryStore();
+    const presentableTool = tool({
+      name: 'generate-guide',
+      description: 'Builds a guide UI block',
+      parameters: z.object({ topic: z.string() }),
+      execute: async ({ topic }) => ({
+        topic,
+        categories: [
+          { style: 'safe', suggestions: ['先观察周围灵气流向'] },
+          { style: 'creative', suggestions: ['借水雾掩护靠近入口'] },
+        ],
+        ui: [{
+          type: 'action-guide',
+          topic,
+          categories: [
+            { style: 'safe', suggestions: ['先观察周围灵气流向'] },
+            { style: 'creative', suggestions: ['借水雾掩护靠近入口'] },
+          ],
+        }],
+      }),
+    });
+    const { createToolExecutor } = await import('../src/tool-executor.js');
+
+    const guideManifest: RuntimeManifest = {
+      name: 'test-guide',
+      pluginId: 'test-guide',
+      description: 'Tool-only guide runtime',
+      priority: 550,
+      tools: { local: ['./tools/generate-guide.js'] },
+    };
+    const guideLoaded: LoadedRuntime = {
+      manifest: guideManifest,
+      promptTemplate: 'Generate action guidance.',
+      references: [],
+    };
+
+    let llmCallCount = 0;
+    const guideLLM: LLMAdapter = {
+      async generate() {
+        llmCallCount++;
+        if (llmCallCount === 1) {
+          return {
+            content: null,
+            toolCalls: [{
+              id: 'tc-guide-1',
+              name: 'generate-guide',
+              arguments: JSON.stringify({ topic: '探查百灵沼泽入口' }),
+            }],
+            finishReason: 'tool_calls',
+            usage: { inputTokens: 10, outputTokens: 10 },
+          };
+        }
+        return {
+          content: null,
+          toolCalls: [],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 5 },
+        };
+      },
+    };
+
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => guideLoaded,
+      llm: guideLLM,
+      getConfig: () => ({}),
+      store,
+      toolExecutor: createToolExecutor({
+        findTool: (name) => (name === 'generate-guide' ? presentableTool : undefined),
+        store,
+      }),
+    };
+
+    const result = await executeTurn(makeTurnInput(), [guideManifest], deps);
+    const guideResult = result.runtimeResults[0]!;
+
+    expect(guideResult.status).toBe('success');
+    expect(guideResult.output).toMatchObject({
+      topic: '探查百灵沼泽入口',
+      categories: expect.any(Array),
+      ui: expect.any(Array),
+    });
+    expect((guideResult.output as Record<string, unknown>).narrativeOutput).toBeUndefined();
+  });
+
+  it('should suppress plain-language final text after tool calls for system runtimes', async () => {
+    const store = createMemoryStore();
+    const presentableTool = tool({
+      name: 'generate-guide',
+      description: 'Builds a guide state payload',
+      parameters: z.object({ topic: z.string() }),
+      execute: async ({ topic }) => ({
+        topic,
+        categories: [{ style: 'safe', suggestions: ['先观察周围环境'] }],
+      }),
+    });
+    const { createToolExecutor } = await import('../src/tool-executor.js');
+
+    const manifest: RuntimeManifest = {
+      name: 'test-system-guide',
+      pluginId: 'test-system-guide',
+      description: 'System runtime that should not leak prose after tool calls',
+      priority: 550,
+      outputKind: 'system',
+      tools: { local: ['./tools/generate-guide.js'] },
+    };
+    const loaded: LoadedRuntime = {
+      manifest,
+      promptTemplate: 'Generate guidance and stop.',
+      references: [],
+    };
+
+    let llmCallCount = 0;
+    const llm: LLMAdapter = {
+      async generate() {
+        llmCallCount++;
+        if (llmCallCount === 1) {
+          return {
+            content: null,
+            toolCalls: [{
+              id: 'tc-system-guide-1',
+              name: 'generate-guide',
+              arguments: JSON.stringify({ topic: '探查百灵沼泽入口' }),
+            }],
+            finishReason: 'tool_calls',
+            usage: { inputTokens: 10, outputTokens: 10 },
+          };
+        }
+        return {
+          content: '先给玩家解释局势，再补一组建议。',
+          toolCalls: [],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 5 },
+        };
+      },
+    };
+
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => loaded,
+      llm,
+      getConfig: () => ({}),
+      store,
+      toolExecutor: createToolExecutor({
+        findTool: (name) => (name === 'generate-guide' ? presentableTool : undefined),
+        store,
+      }),
+    };
+
+    const result = await executeTurn(makeTurnInput(), [manifest], deps);
+    const runtimeResult = result.runtimeResults[0]!;
+
+    expect(runtimeResult.status).toBe('success');
+    expect(runtimeResult.output).toMatchObject({
+      topic: '探查百灵沼泽入口',
+      categories: expect.any(Array),
+    });
+    expect((runtimeResult.output as Record<string, unknown>).narrativeOutput).toBeUndefined();
+  });
+
+  it('should fail when a runtime exhausts tool steps without producing final output', async () => {
+    const store = createMemoryStore();
+    const lookupTool = tool({
+      name: 'world-dimension-get',
+      description: 'Returns lore snippets',
+      parameters: z.object({ dimension: z.string() }),
+      execute: async ({ dimension }) => ({
+        _text: `Loaded ${dimension}`,
+        dimension,
+        found: true,
+      }),
+    });
+    const { createToolExecutor } = await import('../src/tool-executor.js');
+
+    const lookupManifest: RuntimeManifest = {
+      name: 'test-narrator',
+      pluginId: 'test-narrator',
+      description: 'Narrative runtime that keeps calling tools',
+      priority: 500,
+      tools: { builtin: ['world-dimension-get'] },
+    };
+    const lookupLoaded: LoadedRuntime = {
+      manifest: lookupManifest,
+      promptTemplate: 'Narrate after reading lore.',
+      references: [],
+    };
+
+    const loopingLLM: LLMAdapter = {
+      async generate() {
+        return {
+          content: null,
+          toolCalls: [{
+            id: `tc-lookup-${Math.random()}`,
+            name: 'world-dimension-get',
+            arguments: JSON.stringify({ dimension: 'geography' }),
+          }],
+          finishReason: 'tool_calls',
+          usage: { inputTokens: 10, outputTokens: 10 },
+        };
+      },
+    };
+
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => lookupLoaded,
+      llm: loopingLLM,
+      getConfig: () => ({}),
+      store,
+      toolExecutor: createToolExecutor({
+        findTool: (name) => (name === 'world-dimension-get' ? lookupTool : undefined),
+        store,
+      }),
+    };
+
+    const result = await executeTurn(makeTurnInput(), [lookupManifest], deps, { maxSteps: 3 });
+    const runtimeResult = result.runtimeResults[0]!;
+
+    expect(runtimeResult.status).toBe('failed');
+    expect(runtimeResult.output).toBeNull();
+    expect(runtimeResult.error).toContain('exhausted the tool loop after 3 steps');
+    expect(runtimeResult.toolCalls).toHaveLength(3);
+  });
+
+  it('should fail when tool validation errors end without any final output', async () => {
+    const store = createMemoryStore();
+    const strictTool = tool({
+      name: 'generate-guide',
+      description: 'Requires at least one suggestion',
+      parameters: z.object({
+        topic: z.string(),
+        suggestions: z.array(z.string()).min(1),
+      }),
+      execute: async ({ topic, suggestions }) => ({ topic, suggestions }),
+    });
+    const { createToolExecutor } = await import('../src/tool-executor.js');
+
+    const manifest: RuntimeManifest = {
+      name: 'test-guide-invalid',
+      pluginId: 'test-guide-invalid',
+      description: 'Guide runtime with invalid tool args',
+      priority: 550,
+      tools: { local: ['./tools/generate-guide.js'] },
+    };
+    const loaded: LoadedRuntime = {
+      manifest,
+      promptTemplate: 'Generate guidance.',
+      references: [],
+    };
+
+    let llmCallCount = 0;
+    const invalidGuideLLM: LLMAdapter = {
+      async generate(params) {
+        llmCallCount++;
+        const hasToolResult = params.messages.some((m) => m.role === 'tool');
+        if (hasToolResult) {
+          return {
+            content: null,
+            toolCalls: [],
+            finishReason: 'stop',
+            usage: { inputTokens: 5, outputTokens: 5 },
+          };
+        }
+        return {
+          content: null,
+          toolCalls: [{
+            id: 'tc-invalid-guide',
+            name: 'generate-guide',
+            arguments: JSON.stringify({ topic: '探查百灵沼泽', suggestion_list: ['错误字段'] }),
+          }],
+          finishReason: 'tool_calls',
+          usage: { inputTokens: 5, outputTokens: 5 },
+        };
+      },
+    };
+
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => loaded,
+      llm: invalidGuideLLM,
+      getConfig: () => ({}),
+      store,
+      toolExecutor: createToolExecutor({
+        findTool: (name) => (name === 'generate-guide' ? strictTool : undefined),
+        store,
+      }),
+    };
+
+    const result = await executeTurn(makeTurnInput(), [manifest], deps);
+    const runtimeResult = result.runtimeResults[0]!;
+
+    expect(llmCallCount).toBe(2);
+    expect(runtimeResult.status).toBe('failed');
+    expect(runtimeResult.error).toContain('stopped without final output after a tool failure');
+    expect(runtimeResult.error).toContain('generate-guide');
+  });
+
   it('should pass message history to context builder', async () => {
     const store = createMemoryStore();
 
@@ -311,6 +767,7 @@ describe('TurnExecutor E2E', () => {
     const currentUser = llmMessages[llmMessages.length - 1];
     expect(currentUser.role).toBe('user');
     expect(currentUser.content).toBe('继续探索');
+    expect(llmMessages.filter(m => m.content === '继续探索')).toHaveLength(1);
   });
 });
 

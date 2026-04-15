@@ -1,10 +1,9 @@
 /**
  * GraphCanvas — react-force-graph-2d wrapper for json-render catalog.
  *
- * Renders a force-directed NPC relationship graph from the live
- * pluginData store. Designed to plug into PluginPanel via a JSON spec
- * that points at the plugin ID and the two namespaces (`nodes`,
- * `edges`) maintained by core-npc-graph.
+ * Renders a force-directed relationship graph from the live pluginData
+ * store. Designed to plug into PluginPanel via a JSON spec that points
+ * at a plugin ID and two namespaces that hold nodes and edges.
  *
  * Lazy-loaded via React.lazy so the force-graph + d3 bundle is only
  * pulled in when the user actually opens the NPC tab.
@@ -12,7 +11,6 @@
 
 import { Suspense, lazy, useMemo, useState, useRef, useEffect, useCallback } from "react";
 import type { ComponentRenderer } from "@json-render/react";
-import type { NpcNode, NpcEdge } from "@covel/shared";
 import { usePluginNamespace } from "@/stores/plugin-data-store.js";
 
 // Defer the heavy d3-force + canvas bundle until first mount.
@@ -46,6 +44,23 @@ interface ForceLink {
   width: number;
 }
 
+interface GraphNodeRecord {
+  id: string;
+  name: string;
+  type: "individual" | "group" | "faction";
+  summary?: string;
+  labels?: readonly string[];
+}
+
+interface GraphEdgeRecord {
+  id: string;
+  source: string;
+  target: string;
+  relation: string;
+  strength: number;
+  fact?: string;
+}
+
 interface PositionedNode extends ForceNode {
   x?: number;
   y?: number;
@@ -76,17 +91,39 @@ function pickEdgeColor(strength: number): string {
   return NEUTRAL_EDGE;
 }
 
+function isGraphNodeRecord(value: unknown): value is GraphNodeRecord {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.id === "string" &&
+    typeof record.name === "string" &&
+    (record.type === "individual" || record.type === "group" || record.type === "faction")
+  );
+}
+
+function isGraphEdgeRecord(value: unknown): value is GraphEdgeRecord {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.id === "string" &&
+    typeof record.source === "string" &&
+    typeof record.target === "string" &&
+    typeof record.relation === "string" &&
+    typeof record.strength === "number"
+  );
+}
+
 // ── Data adapters ────────────────────────────────────────────────
 
 function buildNodes(nodes: Record<string, unknown>): ForceNode[] {
   return Object.values(nodes)
-    .filter((v): v is NpcNode => Boolean(v) && typeof v === "object" && "id" in (v as object))
+    .filter(isGraphNodeRecord)
     .map((node) => ({
       id: node.id,
       name: node.name,
       type: node.type,
-      summary: node.summary,
-      labels: [...node.labels],
+      summary: node.summary ?? "",
+      labels: [...(node.labels ?? [])],
       color: NODE_COLORS[node.type] ?? "#9ca3af",
       radius: nodeRadius(node.name),
     }));
@@ -94,14 +131,14 @@ function buildNodes(nodes: Record<string, unknown>): ForceNode[] {
 
 function buildLinks(edges: Record<string, unknown>): ForceLink[] {
   return Object.values(edges)
-    .filter((v): v is NpcEdge => Boolean(v) && typeof v === "object" && "id" in (v as object))
+    .filter(isGraphEdgeRecord)
     .map((edge) => ({
       source: edge.source,
       target: edge.target,
       edgeId: edge.id,
       relation: edge.relation,
       strength: edge.strength,
-      fact: edge.fact,
+      fact: edge.fact ?? "",
       color: pickEdgeColor(edge.strength),
       width: 1 + Math.abs(edge.strength) * 2,
     }));
@@ -220,7 +257,7 @@ const Inner = ({ pluginId, nodesNamespace, edgesNamespace, height = 480 }: Graph
   if (graphData.nodes.length === 0) {
     return (
       <div className="text-xs text-zinc-400 italic px-3 py-6 text-center">
-        NPC 关系图为空，等待 narrator 推进剧情……
+        关系图当前为空，等待新的图谱数据……
       </div>
     );
   }

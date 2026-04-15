@@ -20,6 +20,12 @@ Covel 框架能力注册表与 API 参考。
 |------|------|
 | [ui-panels.md](ui-panels.md) | 右侧面板 Tab 定义 — 7 个 Tab 的职责、数据源、渲染模式、扩展指南 |
 
+## 开发指南
+
+| 文档 | 描述 |
+|------|------|
+| [../guide/plugin-ui-runtime-guidelines.md](../guide/plugin-ui-runtime-guidelines.md) | 插件 UI 与交互运行时指南 — `ui.message / ui.right`、`plugin_data`、`submitBehavior`、session 起始流程与图谱/图鉴边界 |
+
 ## Prompt 组装
 
 | 文档 | 描述 |
