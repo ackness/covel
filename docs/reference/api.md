@@ -174,7 +174,11 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| POST | `/api/sessions/:id/submit-inputs` | 提交玩家交互响应 |
+| POST | `/api/sessions/:id/submit-inputs` | 提交玩家交互响应(legacy alias,转发到 plugin-rpc `submit-form`) |
+| POST | `/api/sessions/:id/plugin-rpc` | **PR-3** 统一插件 RPC 通道(action 级 / runtime 级) |
+| GET  | `/api/sessions/:id/approvals` | **PR-7** 列出该 session 的待批准 RPC 请求 |
+| GET  | `/api/approvals/:approvalId` | **PR-7** 查询单个 pending approval |
+| POST | `/api/approvals/:approvalId/decision` | **PR-7** 提交玩家批准决定(allow/deny + once/session) |
 
 ### 会话插件管理
 
@@ -205,6 +209,64 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 |------|------|------|
 | GET | `/api/sessions/:id/messages` | 获取会话消息列表 |
 | POST | `/api/sessions/:id/messages/sync` | 同步消息（LocalDataService 用） |
+
+### 统一翻译层（Runtime Outputs / Interaction Records，PR-1）
+
+为跨 runtime 消费和观测接入而设计的规范记录。每次 runtime 执行产生一条 `RuntimeOutput`，每次外部输入（玩家消息、插件 UI、RPC 调用）产生一条 `InteractionRecord`。两张表与 `trace_events` 并存 —— 翻译层面向"被组件消费"，trace 层面向"调试时钻取细节"。
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/sessions/:id/runtime-outputs` | 列出该 session 的 runtime 输出记录，支持 `?runtimeId=` / `?pluginId=` / `?since=` / `?limit=` 过滤，按 timestamp 降序 |
+| GET | `/api/sessions/:id/runtime-outputs/:outputId` | 获取单条 runtime 输出记录 |
+| GET | `/api/sessions/:id/runtime-outputs/:outputId/full-prompt` | 从 `turn_messages` + `rawPromptDelta` 重建该次 LLM 调用的完整 prompt 历史（best-effort） |
+| GET | `/api/sessions/:id/interaction-records` | 列出该 session 的外部输入记录，支持 `?type=` / `?source=` / `?targetPluginId=` / `?limit=` 过滤 |
+
+**`RuntimeOutput` 结构**：
+```ts
+{
+  id: string,
+  sessionId: string,
+  turnId: string,
+  runtimeResultId?: string,  // 关联到 runtime_results 表
+  pluginId: string,
+  runtimeId: string,         // "{plugin}" 或 "{plugin}/{runtime}"
+  timestamp: string,
+  results: [{ text: string, structured?: unknown }],
+  metaData: {
+    turn: number,
+    playingTurn?: number,
+    phase: string,
+    rawPromptDelta?: [{ role, content }],   // 相对上次调用的 prompt 增量
+    outputResponses?: string[],             // 流式输出合并后的裸文本
+    toolCallList?: [{ tool, input, output, status, durationMs }],
+    modelSlot?: string,
+    tokenUsage?: { input, output },
+  }
+}
+```
+
+**`InteractionRecord` 结构**：
+```ts
+{
+  id: string,
+  sessionId: string,
+  turnId?: string,
+  timestamp: string,
+  source: 'player' | 'plugin-ui' | 'external-api',
+  channel: 'web' | 'cli' | 'api' | 'external',
+  type: 'message' | 'click' | 'form-submit' | 'rpc-call' | 'skill-invoke',
+  targetPluginId?: string,
+  targetRuntimeId?: string,
+  payload: unknown,
+  metaData?: { selectionSnapshot?, userAgent? }
+}
+```
+
+**注意**：
+- 翻译层写入是 best-effort。失败只打 warn，不阻塞 turn pipeline
+- `rawPromptDelta` 在 PR-1 首迭代中不会被 turn-executor 自动填充。接入 LLM 调用链的 delta 采集在后续迭代完成
+- full-prompt 重建端点目前用 turn_messages + delta 做近似还原，对 compaction 后的 session 可能不完全精确 —— 调试用途足够，审计场景需要走 trace_events
+
 
 ### 插件数据（Plugin Data）
 
@@ -620,7 +682,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 #### `PATCH /api/sessions/:id`
 
-更新会话字段（当前支持 `phase`）。
+更新会话字段。当前支持 `phase` 与 `runtimeModelOverrides`。
 
 **参数:**
 
@@ -632,9 +694,23 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ```json
 {
-  "phase": "playing"
+  "phase": "playing",
+  "runtimeModelOverrides": {
+    "core-narrator": "balance",
+    "core-codex/unlocker": "fast"
+  }
 }
 ```
+
+**字段说明:**
+
+- `phase`(可选,string) — 会话阶段(`pre-game` / `playing` / `paused` / `ended`)
+- `runtimeModelOverrides`(可选,object) — PR-6 引入。Per-runtime 模型 slot 覆盖,key 为 runtime ID(`pluginId` 或 `pluginId/runtimeName`),value 为 `llm.toml` 中定义的 slot 名(如 `default` / `fast` / `balance`)。框架在每次 turn 执行前快照该字段,resolver 优先查找 session override → 然后 fallback 到 `manifest.model` → 最后 `default`。空对象 `{}` 清除所有覆盖。**Provider 与 API key 仍走前端 localStorage + `X-Provider-Keys` header,不入库,以保护隐私。**
+
+**校验规则(runtimeModelOverrides):**
+- 必须是对象(`null` / 数组 / 非对象类型 → 400)
+- 空字符串 key / 非字符串 value 会被静默剥离
+- 没传该字段 → 不动现有覆盖
 
 **响应 200:** 返回合并后的会话对象。
 
@@ -923,6 +999,239 @@ curl "http://localhost:3001/api/sessions/<sessionId>/turns?limit=5"
 - 该文本作为玩家消息追加到对话历史，供叙事者在下一轮 Turn 中参考（**不再生成合成的 assistant-role 消息**）
 - 模板由插件提供，使用 `{{fieldName}}` 占位符语法
 - 如果找不到模板，会生成一条简单的回退叙事（如 `[玩家输入] name: 艾尔文, class: 战士`）
+
+> **PR-3 注意**: 此端点现在是 `POST /api/sessions/:id/plugin-rpc` 的薄封装,内部转发到框架默认的 `submit-form` action。新代码建议直接走 plugin-rpc。submit-inputs 路由会保留至少一个废弃周期。
+
+---
+
+### 插件 RPC 通道(PR-3)
+
+#### `POST /api/sessions/:id/plugin-rpc`
+
+统一的"结构化插件指令"通道。同时支持:
+
+1. **Action 级**: `{ pluginId, action, payload }` — 调用插件在 PLUGIN.md `rpc` 字段中声明的 RPC handler,或框架默认 handler(如 `submit-form`)
+2. **Runtime 级**: `{ pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行(目前返回 501,留给 PR-3.b)
+
+**参数:**
+
+| 参数 | 位置 | 说明 |
+|------|------|------|
+| `id` | 路径 | 会话 ID |
+| `mode` | 查询(可选) | `sync`(默认,单次 JSON 响应)。SSE 流式预留给后续 PR |
+
+**请求体:**
+
+```json
+{
+  "pluginId": "framework",
+  "action": "submit-form",
+  "payload": {
+    "turnId": "a1b2c3d4-...",
+    "submissions": [
+      { "interactionId": "char-form", "type": "form", "values": { "name": "艾尔文" } }
+    ]
+  }
+}
+```
+
+或者:
+
+```json
+{
+  "pluginId": "core-codex",
+  "action": "regenerate",
+  "payload": { "cardId": "shrine-of-stars" }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `pluginId` | string | 插件 ID(框架默认 handler 用 `framework` 占位即可) |
+| `action` | string(可选) | RPC action 名,kebab-case。与 `runtimeId` 互斥 |
+| `runtimeId` | string(可选) | runtime 全名,用于手动触发。与 `action` 互斥 |
+| `payload` | unknown | handler 的输入数据 |
+
+**解析顺序(action 级):**
+
+1. 插件声明的 action(`manifest.rpc[action]`,通过 `pluginId` 命名空间隔离)
+2. 框架默认 action(全局,如 `submit-form` / `cancel`)
+
+**框架默认 action:**
+
+| Action | 说明 |
+|--------|------|
+| `submit-form` | 等同于 submit-inputs:持久化玩家输入、找模板消息、按 `{{字段}}` 填充自然语言 |
+
+**响应 200(sync 模式):**
+
+```json
+{
+  "status": "ok",
+  "result": { /* 取决于 handler */ }
+}
+```
+
+**错误响应:**
+
+| 状态码 | 触发条件 |
+|-------|---------|
+| 400 | `pluginId` 缺失 / `action` 与 `runtimeId` 同时设置 / `RpcValidationError` |
+| 404 | 会话不存在 / `unknown-action`(action 未注册) |
+| 500 | handler 抛出未处理异常 / handler 模块加载失败 |
+| 501 | runtime 级 RPC(留给 PR-3.b) |
+
+**插件 PLUGIN.md 中声明 RPC action:**
+
+```yaml
+---
+name: my-plugin
+description: ...
+rpc:
+  regenerate:
+    handler: ./rpc/regenerate.js
+    input: ./rpc/regenerate.schema.json   # 可选
+    streaming: false                       # 默认 false
+    description: 重新生成上一次叙事
+  cancel:
+    handler: ./rpc/cancel.js
+    trustLevel: builtin                    # 强制 builtin 信任
+---
+```
+
+> Action 名不能以 `framework-` 开头(保留给框架默认 handler)。所有 action 名必须是 kebab-case。
+
+> Handler 是 `default export` 函数,签名 `(payload, context) => Promise<unknown>`。`context` 至少包含 `{ sessionId, pluginId, action, store }`。模块在首次调用时按需 `import()`。
+
+---
+
+### RPC Approval 流程(PR-7)
+
+第三方插件(`community` 信任级别)的 RPC action 在执行前需要玩家显式批准,防止未审计的代码自动操作 session。
+
+#### 流程
+
+```
+┌─────────┐    POST plugin-rpc                   ┌────────┐
+│ Client  │ ───────────────────────────────────► │ Server │
+└─────────┘    {pluginId, action, payload}       └────────┘
+                                                       │
+                                                       ▼
+                                          gate.evaluate()
+                                                       │
+                       ┌───────────────────────────────┤
+                       │                               │
+              builtin/official                  community
+              + 不在 cache                        + 不在 cache
+                       │                               │
+                       ▼                               ▼
+              直接执行 → 200 ok          创建 pending → 202 approval-required
+                                                       │
+                                            ┌──────────┴──────────┐
+                                            │ Client 弹对话框      │
+                                            │ POST decision        │
+                                            └──────────┬──────────┘
+                                                       │
+                                            allow once / allow session / deny
+                                                       │
+                                            重新发起 plugin-rpc
+                                                       │
+                                                  允许 → 200 ok
+```
+
+#### `POST /api/sessions/:id/plugin-rpc` 的额外响应状态
+
+| 状态码 | 含义 |
+|-------|------|
+| 202 | `community` 信任级别需要 approval。响应体见下 |
+
+**202 响应体:**
+
+```json
+{
+  "status": "approval-required",
+  "approvalId": "9d8c-...",
+  "pending": {
+    "approvalId": "9d8c-...",
+    "sessionId": "sess-...",
+    "pluginId": "third-party-plugin",
+    "action": "do-thing",
+    "payload": { /* 原始 payload */ },
+    "trustLevel": "community",
+    "requestedAt": "2026-04-15T20:00:00.000Z",
+    "description": "Run the thing"
+  }
+}
+```
+
+#### `GET /api/sessions/:id/approvals`
+
+列出该 session 当前所有未决批准。前端在刷新后用此重建对话框队列。
+
+**响应 200:**
+
+```json
+{
+  "pending": [
+    { "approvalId": "9d8c-...", "pluginId": "...", "action": "...", ... }
+  ]
+}
+```
+
+#### `GET /api/approvals/:approvalId`
+
+按 ID 查询单个 pending approval。
+
+**响应 200:** `{ pending: { ... } }`
+**响应 404:** approval 不存在或已被消费
+
+#### `POST /api/approvals/:approvalId/decision`
+
+提交玩家决定。
+
+**请求体:**
+
+```json
+{
+  "decision": "allow",
+  "scope": "once"
+}
+```
+
+| 字段 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| `decision` | `"allow"` \| `"deny"` | 是 | 玩家选择 |
+| `scope` | `"once"` \| `"session"` | 仅 allow 时 | `once`(默认):允许这一次后过期,需重新批准;`session`:缓存到本 session 结束 |
+
+**响应 200:**
+
+```json
+{
+  "ok": true,
+  "decision": "allow",
+  "scope": "once",
+  "pending": { /* 原始 pending 数据,已从队列移除 */ }
+}
+```
+
+**错误响应:**
+
+| 状态码 | 触发条件 |
+|-------|---------|
+| 400 | `decision` 字段缺失 / 非 `allow` 或 `deny` / `scope` 非法 |
+| 404 | `approvalId` 不存在或已被消费 |
+
+#### 信任等级与 approval 行为
+
+| 信任等级 | 来源 | Approval 行为 |
+|---------|------|--------------|
+| `builtin` | 框架自带 / 框架默认 handler | 永远直接执行 |
+| `official` | 维护团队白名单 | 永远直接执行 |
+| `community` | 第三方,默认级别 | 每次都需要玩家批准,除非 session-cache 命中 |
+
+> One-time grant 的 TTL 为 60 秒。如果玩家批准后 60 秒内没有发起对应的 dispatch,grant 会过期,需要重新走 dialog 流程。
+
+> Approval 状态是**进程内 + 内存**,服务器重启后所有 pending / cache 全部清空。如果跨重启的持久化变得必要,可以把 gate 的状态写入 `plugin_data`(见 `packages/approval/src/rpc-approval.ts` 内联说明)。
 
 ---
 

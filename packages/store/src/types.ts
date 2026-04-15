@@ -28,6 +28,23 @@ export interface SessionRecord {
   readonly activePlugins: readonly string[];
   readonly createdAt: string;
   readonly updatedAt: string;
+  /** FK to vector_models.id; null = RAG disabled */
+  readonly embeddingModelId?: number | null;
+  /** ISO 8601 timestamp; null = not locked */
+  readonly embeddingLockedAt?: string | null;
+  /**
+   * PR-2: Global `turnNumber` at the moment this session first entered
+   * the `playing` phase. Null until the transition happens, immutable
+   * afterwards. Used by the trigger router to compute `playingTurnNumber`.
+   */
+  readonly playingTurnOffset?: number | null;
+  /**
+   * PR-6: Per-runtime model slot overrides. Maps runtime ID
+   * (`pluginId` or `pluginId/runtimeName`) → slot name from `llm.toml`.
+   * Empty/undefined means no overrides — slot resolution falls back to
+   * `manifest.model` then `"default"`.
+   */
+  readonly runtimeModelOverrides?: Readonly<Record<string, string>>;
 }
 
 export interface TurnResultRecord {
@@ -209,6 +226,68 @@ export interface TraceEventRecord {
   readonly createdAt: string;
 }
 
+// ── Translation layer: RuntimeOutput + InteractionRecord (PR-1) ──
+
+/**
+ * Normalised record of one runtime execution's output. Written by
+ * `turn-executor` after each runtime finishes. Consumers include downstream
+ * runtimes (via `results[].text` as context), frontends (via
+ * `results[].structured`), and observability tooling (via `metaData`).
+ *
+ * Paired with `trace_events` — this table is the normalised/consumable layer,
+ * `trace_events` remains the low-level debug timeline.
+ */
+export interface RuntimeOutputRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  /** Optional FK back to `runtime_results.id`. */
+  readonly runtimeResultId?: string;
+  readonly pluginId: string;
+  readonly runtimeId: string;
+  readonly timestamp: string;
+  /** JSON — readonly RuntimeOutputResult[] */
+  readonly results: unknown;
+  /** JSON — RuntimeOutputMetaData */
+  readonly metaData: unknown;
+  readonly createdAt: string;
+}
+
+/**
+ * Normalised record of one external input (player message, plugin UI click,
+ * form submit, RPC call, external skill invocation). Complements
+ * `RuntimeOutputRecord` — the two together form the complete event stream
+ * of a session for observability and replay.
+ */
+export interface InteractionRecordRow {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly turnId?: string;
+  readonly timestamp: string;
+  readonly source: string;
+  readonly channel: string;
+  readonly type: string;
+  readonly targetPluginId?: string;
+  readonly targetRuntimeId?: string;
+  readonly payload: unknown;       // JSON
+  readonly metaData?: unknown;     // JSON
+  readonly createdAt: string;
+}
+
+export interface RuntimeOutputFilters {
+  readonly runtimeId?: string;
+  readonly pluginId?: string;
+  readonly sinceTimestamp?: string;
+  readonly limit?: number;
+}
+
+export interface InteractionRecordFilters {
+  readonly type?: string;
+  readonly source?: string;
+  readonly targetPluginId?: string;
+  readonly limit?: number;
+}
+
 // ── Pagination ──────────────────────────────────────────────────
 
 export interface PaginationOpts {
@@ -224,7 +303,7 @@ export interface DataStore {
   // ── Session ──
   createSession(session: SessionRecord): Promise<void>;
   getSession(id: string): Promise<SessionRecord | null>;
-  updateSession(id: string, patch: Partial<Pick<SessionRecord, 'phase' | 'turnCount' | 'activePlugins' | 'updatedAt'>>): Promise<void>;
+  updateSession(id: string, patch: Partial<Pick<SessionRecord, 'phase' | 'turnCount' | 'activePlugins' | 'updatedAt' | 'embeddingModelId' | 'embeddingLockedAt' | 'playingTurnOffset' | 'runtimeModelOverrides'>>): Promise<void>;
   listSessions(): Promise<SessionRecord[]>;
   deleteSession(id: string): Promise<void>;
 
@@ -240,6 +319,21 @@ export interface DataStore {
   // ── Tool Calls ──
   saveToolCall(record: ToolCallRecordRow): Promise<void>;
   listToolCalls(sessionId: string, turnId?: string): Promise<ToolCallRecordRow[]>;
+
+  // ── Runtime Outputs (PR-1 translation layer) ──
+  saveRuntimeOutput(record: RuntimeOutputRecord): Promise<void>;
+  getRuntimeOutput(sessionId: string, id: string): Promise<RuntimeOutputRecord | null>;
+  listRuntimeOutputs(
+    sessionId: string,
+    filters?: RuntimeOutputFilters,
+  ): Promise<RuntimeOutputRecord[]>;
+
+  // ── Interaction Records (PR-1 translation layer) ──
+  saveInteractionRecord(record: InteractionRecordRow): Promise<void>;
+  listInteractionRecords(
+    sessionId: string,
+    filters?: InteractionRecordFilters,
+  ): Promise<InteractionRecordRow[]>;
 
   // ── State Schemas ──
   saveStateSchema(record: StateSchemaRecord): Promise<void>;

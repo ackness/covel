@@ -1,6 +1,9 @@
 /**
  * IndexedDB DataStore implementation using the `idb` library.
  * Used for browser-side storage (T1/T2 deployment tiers).
+ *
+ * @deprecated IdbStore is frozen. Use ApiClient + SQLite/PG backend instead.
+ * web-v2 should not import this module.
  */
 
 import { openDB, type IDBPDatabase } from 'idb';
@@ -31,6 +34,10 @@ import type {
   PluginConfigRecord,
   WorldRecord,
   TraceEventRecord,
+  RuntimeOutputRecord,
+  InteractionRecordRow,
+  RuntimeOutputFilters,
+  InteractionRecordFilters,
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
@@ -40,7 +47,7 @@ import type {
   SnapshotRecord,
 } from '../types.js';
 
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 async function initDb(dbName: string): Promise<IDBPDatabase> {
   return openDB(dbName, DB_VERSION, {
@@ -125,6 +132,19 @@ async function initDb(dbName: string): Promise<IDBPDatabase> {
         const lorebookEntries = db.createObjectStore('lorebook_entries', { keyPath: 'id' });
         lorebookEntries.createIndex('sessionId', 'sessionId');
       }
+
+      if (oldVersion < 7) {
+        // PR-1 translation layer: runtime_outputs + interaction_records
+        const runtimeOutputs = db.createObjectStore('runtime_outputs', { keyPath: 'id' });
+        runtimeOutputs.createIndex('sessionId', 'sessionId');
+        runtimeOutputs.createIndex('session_time', ['sessionId', 'timestamp']);
+        runtimeOutputs.createIndex('session_runtime', ['sessionId', 'runtimeId']);
+
+        const interactionRecords = db.createObjectStore('interaction_records', { keyPath: 'id' });
+        interactionRecords.createIndex('sessionId', 'sessionId');
+        interactionRecords.createIndex('session_time', ['sessionId', 'timestamp']);
+        interactionRecords.createIndex('session_type', ['sessionId', 'type']);
+      }
     },
   });
 }
@@ -153,6 +173,8 @@ const OBJECT_STORES = [
   'sessionSummaries',
   'suspensions',
   'state_snapshots',
+  'runtime_outputs',
+  'interaction_records',
 ] as const;
 
 export async function createIdbStore(dbName?: string): Promise<DataStore> {
@@ -441,6 +463,74 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     async listTraceEvents(sessionId: string, pagination?: PaginationOpts): Promise<TraceEventRecord[]> {
       const all = await db.getAllFromIndex('traceEvents', 'sessionId', sessionId);
       return applyPagination(all, pagination);
+    },
+
+    // ── Runtime Outputs (PR-1) ──
+
+    async saveRuntimeOutput(record: RuntimeOutputRecord): Promise<void> {
+      await db.put('runtime_outputs', structuredClone(record));
+    },
+
+    async getRuntimeOutput(sessionId: string, id: string): Promise<RuntimeOutputRecord | null> {
+      const row = (await db.get('runtime_outputs', id)) as RuntimeOutputRecord | undefined;
+      if (!row || row.sessionId !== sessionId) return null;
+      return row;
+    },
+
+    async listRuntimeOutputs(
+      sessionId: string,
+      filters?: RuntimeOutputFilters,
+    ): Promise<RuntimeOutputRecord[]> {
+      let rows = (await db.getAllFromIndex(
+        'runtime_outputs',
+        'sessionId',
+        sessionId,
+      )) as RuntimeOutputRecord[];
+      if (filters?.runtimeId) {
+        rows = rows.filter((r) => r.runtimeId === filters.runtimeId);
+      }
+      if (filters?.pluginId) {
+        rows = rows.filter((r) => r.pluginId === filters.pluginId);
+      }
+      if (filters?.sinceTimestamp) {
+        rows = rows.filter((r) => r.timestamp >= filters.sinceTimestamp!);
+      }
+      rows.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      if (filters?.limit !== undefined) {
+        rows = rows.slice(0, filters.limit);
+      }
+      return rows;
+    },
+
+    // ── Interaction Records (PR-1) ──
+
+    async saveInteractionRecord(record: InteractionRecordRow): Promise<void> {
+      await db.put('interaction_records', structuredClone(record));
+    },
+
+    async listInteractionRecords(
+      sessionId: string,
+      filters?: InteractionRecordFilters,
+    ): Promise<InteractionRecordRow[]> {
+      let rows = (await db.getAllFromIndex(
+        'interaction_records',
+        'sessionId',
+        sessionId,
+      )) as InteractionRecordRow[];
+      if (filters?.type) {
+        rows = rows.filter((r) => r.type === filters.type);
+      }
+      if (filters?.source) {
+        rows = rows.filter((r) => r.source === filters.source);
+      }
+      if (filters?.targetPluginId) {
+        rows = rows.filter((r) => r.targetPluginId === filters.targetPluginId);
+      }
+      rows.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      if (filters?.limit !== undefined) {
+        rows = rows.slice(0, filters.limit);
+      }
+      return rows;
     },
 
     // ── Turn Messages ──

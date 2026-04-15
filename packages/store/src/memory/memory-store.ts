@@ -31,6 +31,8 @@ import type {
   PluginConfigRecord,
   WorldRecord,
   TraceEventRecord,
+  RuntimeOutputRecord,
+  InteractionRecordRow,
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
@@ -41,6 +43,9 @@ import type {
 } from '../types.js';
 import type {
   VectorStoreCapability,
+  VectorModelOps,
+  EmbeddingModelIdentity,
+  VectorTarget,
   UpsertVectorInput,
   SearchVectorsInput,
   VectorSearchResult,
@@ -53,7 +58,7 @@ interface MemoryVectorRow {
   pluginId: string;
   namespace: string;
   key: string;
-  dimensions: number;
+  dim: number;
   embedding: Float32Array;
   payload: string | null;
 }
@@ -67,7 +72,7 @@ function squaredL2(a: Float32Array, b: Float32Array): number {
   return sum;
 }
 
-export function createMemoryStore(): DataStore & VectorStoreCapability {
+export function createMemoryStore(): DataStore & VectorStoreCapability & VectorModelOps {
   const sessions = new Map<string, SessionRecord>();
   const turnResults: TurnResultRecord[] = [];
   const runtimeResults: RuntimeResultRecord[] = [];
@@ -83,12 +88,17 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
   const pluginConfigs = new Map<string, PluginConfigRecord>();
   const suspensions = new Map<string, SuspensionRecord>();
   const snapshots = new Map<string, SnapshotRecord>();
-  /** Keyed by `${sessionId}:${pluginId}:${namespace}:${key}:${dim}` so
-   *  multiple dims can coexist for the same logical row if a caller ever
-   *  re-embeds with a different model. */
+  /** Keyed by `${sessionId}:${pluginId}:${namespace}:${key}` */
   const vectorRows = new Map<string, MemoryVectorRow>();
+  /** In-memory model registry: modelId → VectorTarget */
+  const vectorModelRegistry = new Map<string, VectorTarget>();
+  let nextModelId = 1;
+  /** Session → locked VectorTarget (null = RAG disabled / not set yet) */
+  const sessionVectorTargets = new Map<string, VectorTarget | null>();
   const worlds = new Map<string, WorldRecord>();
   const traceEvents: TraceEventRecord[] = [];
+  const runtimeOutputs: RuntimeOutputRecord[] = [];
+  const interactionRecords: InteractionRecordRow[] = [];
   const turnMessages: TurnMessageRecord[] = [];
   const playerInputs: PlayerInputRecord[] = [];
   const workingMemoryEntries = new Map<string, WorkingMemoryRecord>();
@@ -121,9 +131,8 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     pluginId: string,
     namespace: string,
     key: string,
-    dimensions: number,
   ): string {
-    return `${sessionId}:${pluginId}:${namespace}:${key}:${dimensions}`;
+    return `${sessionId}:${pluginId}:${namespace}:${key}`;
   }
 
   // ── Transaction snapshot state (S4-T1) ──
@@ -153,6 +162,8 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     readonly vectorRows: Map<string, MemoryVectorRow>;
     readonly worlds: Map<string, WorldRecord>;
     readonly traceEvents: TraceEventRecord[];
+    readonly runtimeOutputs: RuntimeOutputRecord[];
+    readonly interactionRecords: InteractionRecordRow[];
     readonly turnMessages: TurnMessageRecord[];
     readonly playerInputs: PlayerInputRecord[];
     readonly workingMemoryEntries: Map<string, WorkingMemoryRecord>;
@@ -177,7 +188,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
         pluginId: row.pluginId,
         namespace: row.namespace,
         key: row.key,
-        dimensions: row.dimensions,
+        dim: row.dim,
         embedding: new Float32Array(row.embedding),
         payload: row.payload,
       });
@@ -203,6 +214,8 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
       vectorRows: cloneVectorRows(vectorRows),
       worlds: structuredClone(worlds),
       traceEvents: structuredClone(traceEvents),
+      runtimeOutputs: structuredClone(runtimeOutputs),
+      interactionRecords: structuredClone(interactionRecords),
       turnMessages: structuredClone(turnMessages),
       playerInputs: structuredClone(playerInputs),
       workingMemoryEntries: structuredClone(workingMemoryEntries),
@@ -246,6 +259,10 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     for (const [k, v] of snap.worlds) worlds.set(k, v);
     traceEvents.length = 0;
     traceEvents.push(...snap.traceEvents);
+    runtimeOutputs.length = 0;
+    runtimeOutputs.push(...snap.runtimeOutputs);
+    interactionRecords.length = 0;
+    interactionRecords.push(...snap.interactionRecords);
     turnMessages.length = 0;
     turnMessages.push(...snap.turnMessages);
     playerInputs.length = 0;
@@ -262,7 +279,7 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     for (const [k, v] of snap.snapshots) snapshots.set(k, v);
   }
 
-  const store: DataStore & VectorStoreCapability = {
+  const store: DataStore & VectorStoreCapability & VectorModelOps = {
     // ── Session ──
 
     async createSession(session) {
@@ -351,6 +368,61 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
       return toolCalls.filter(
         (r) => r.sessionId === sessionId && (turnId === undefined || r.turnId === turnId),
       );
+    },
+
+    // ── Runtime Outputs (PR-1) ──
+
+    async saveRuntimeOutput(record) {
+      runtimeOutputs.push(record);
+    },
+
+    async getRuntimeOutput(sessionId, id) {
+      return (
+        runtimeOutputs.find((r) => r.sessionId === sessionId && r.id === id) ?? null
+      );
+    },
+
+    async listRuntimeOutputs(sessionId, filters) {
+      let rows = runtimeOutputs.filter((r) => r.sessionId === sessionId);
+      if (filters?.runtimeId) {
+        rows = rows.filter((r) => r.runtimeId === filters.runtimeId);
+      }
+      if (filters?.pluginId) {
+        rows = rows.filter((r) => r.pluginId === filters.pluginId);
+      }
+      if (filters?.sinceTimestamp) {
+        rows = rows.filter((r) => r.timestamp >= filters.sinceTimestamp!);
+      }
+      // Newest first (matches PG default order)
+      rows = [...rows].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      if (filters?.limit !== undefined) {
+        rows = rows.slice(0, filters.limit);
+      }
+      return rows;
+    },
+
+    // ── Interaction Records (PR-1) ──
+
+    async saveInteractionRecord(record) {
+      interactionRecords.push(record);
+    },
+
+    async listInteractionRecords(sessionId, filters) {
+      let rows = interactionRecords.filter((r) => r.sessionId === sessionId);
+      if (filters?.type) {
+        rows = rows.filter((r) => r.type === filters.type);
+      }
+      if (filters?.source) {
+        rows = rows.filter((r) => r.source === filters.source);
+      }
+      if (filters?.targetPluginId) {
+        rows = rows.filter((r) => r.targetPluginId === filters.targetPluginId);
+      }
+      rows = [...rows].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      if (filters?.limit !== undefined) {
+        rows = rows.slice(0, filters.limit);
+      }
+      return rows;
     },
 
     // ── State Schemas ──
@@ -698,9 +770,15 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
     // ── Vector Store (brute-force, O(n) — fine for tests and <1k rows) ──
 
     async upsertVector(input: UpsertVectorInput) {
-      if (input.embedding.length !== input.dimensions) {
+      const target = sessionVectorTargets.get(input.sessionId) ?? null;
+      if (!target) {
         throw new Error(
-          `Memory vector upsert: embedding length ${input.embedding.length} does not match declared dimensions ${input.dimensions}`,
+          `Memory vector upsert: session ${input.sessionId} has no embedding model locked`,
+        );
+      }
+      if (input.embedding.length !== target.dim) {
+        throw new Error(
+          `Memory vector upsert: embedding length ${input.embedding.length} does not match model dim ${target.dim}`,
         );
       }
       const rowKey = vectorRowKey(
@@ -708,7 +786,6 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
         input.pluginId,
         input.namespace,
         input.key,
-        input.dimensions,
       );
       // Copy the Float32Array to decouple from caller-owned buffers.
       vectorRows.set(rowKey, {
@@ -716,28 +793,32 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
         pluginId: input.pluginId,
         namespace: input.namespace,
         key: input.key,
-        dimensions: input.dimensions,
+        dim: target.dim,
         embedding: new Float32Array(input.embedding),
         payload: input.payload ?? null,
       });
     },
 
     async searchVectors(input: SearchVectorsInput): Promise<VectorSearchResult[]> {
-      if (input.query.length !== input.dimensions) {
+      const target = sessionVectorTargets.get(input.sessionId) ?? null;
+      if (!target) {
+        return [];
+      }
+      if (input.query.length !== target.dim) {
         throw new Error(
-          `Memory vector search: query length ${input.query.length} does not match declared dimensions ${input.dimensions}`,
+          `Memory vector search: query length ${input.query.length} does not match model dim ${target.dim}`,
         );
       }
+      const topK = input.topK ?? 8;
       const scored: Array<{ row: MemoryVectorRow; distance: number }> = [];
       for (const row of vectorRows.values()) {
         if (row.sessionId !== input.sessionId) continue;
-        if (row.dimensions !== input.dimensions) continue;
         if (input.pluginId !== undefined && row.pluginId !== input.pluginId) continue;
         if (input.namespace !== undefined && row.namespace !== input.namespace) continue;
         scored.push({ row, distance: squaredL2(input.query, row.embedding) });
       }
       scored.sort((a, b) => a.distance - b.distance);
-      return scored.slice(0, Math.max(0, input.topK)).map(({ row, distance }) => ({
+      return scored.slice(0, Math.max(0, topK)).map(({ row, distance }) => ({
         sessionId: row.sessionId,
         pluginId: row.pluginId,
         namespace: row.namespace,
@@ -752,9 +833,53 @@ export function createMemoryStore(): DataStore & VectorStoreCapability {
         if (row.sessionId !== input.sessionId) continue;
         if (row.pluginId !== input.pluginId) continue;
         if (input.namespace !== undefined && row.namespace !== input.namespace) continue;
-        if (input.dimensions !== undefined && row.dimensions !== input.dimensions) continue;
         vectorRows.delete(rowKey);
       }
+    },
+
+    // ── VectorModelOps (in-memory — dev/test only) ────────────────
+
+    async ensureVectorModel(identity: EmbeddingModelIdentity): Promise<VectorTarget> {
+      const registryKey = `${identity.modelId}:${identity.dim}`;
+      const existing = vectorModelRegistry.get(registryKey);
+      if (existing) return existing;
+      const id = nextModelId++;
+      const target: VectorTarget = {
+        modelRegistryId: id,
+        modelId: identity.modelId,
+        dim: identity.dim,
+        tableName: `vec_mem_m${id}`,
+      };
+      vectorModelRegistry.set(registryKey, target);
+      return target;
+    },
+
+    async lockSessionEmbeddingModel(sessionId: string, target: VectorTarget): Promise<void> {
+      const existing = sessionVectorTargets.get(sessionId);
+      if (existing !== undefined && existing !== null) {
+        throw new Error(
+          `Memory lockSessionEmbeddingModel: session ${sessionId} is already locked to model ${existing.modelId}`,
+        );
+      }
+      sessionVectorTargets.set(sessionId, target);
+    },
+
+    async resolveSessionVectorTarget(sessionId: string): Promise<VectorTarget | null> {
+      const val = sessionVectorTargets.get(sessionId);
+      return val ?? null;
+    },
+
+    async listVectorModels(): Promise<Array<EmbeddingModelIdentity & { id: number; tableName: string; createdAt: number; lastUsedAt: number | null }>> {
+      return Array.from(vectorModelRegistry.values()).map((t) => ({
+        id: t.modelRegistryId,
+        modelId: t.modelId,
+        provider: t.modelId.split('/')[0] ?? t.modelId,
+        modelName: t.modelId.split('/').slice(1).join('/') || t.modelId,
+        dim: t.dim,
+        tableName: t.tableName,
+        createdAt: 0,
+        lastUsedAt: null,
+      }));
     },
 
     // ── Transactions (S4-T1) ──

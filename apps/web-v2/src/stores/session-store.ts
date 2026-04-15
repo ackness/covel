@@ -5,6 +5,7 @@
  */
 
 import { useSyncExternalStore, useCallback } from "react";
+import type { SseEvent } from "@covel/api-client";
 import * as api from "@/services/api.js";
 import {
   applyChanges,
@@ -219,11 +220,15 @@ function clearPendingInteractionDrafts() {
 
 function appendDelta(runtimeId: string, delta: string) {
   const msgs = [...state.messages];
+  // Find the most recent streaming placeholder for this runtime. We
+  // intentionally DO NOT require `content === ""` — after the first delta
+  // the content is non-empty, and the filter would silently drop every
+  // subsequent delta. Because messages are append-only, findLastIndex on
+  // (runtimeId, kind) reliably finds the current turn's placeholder.
   const idx = msgs.findLastIndex((m) =>
     m.runtimeId === runtimeId &&
     m.role === "assistant" &&
-    m.kind === "story" &&
-    m.content === "",
+    m.kind === "story",
   );
   if (idx >= 0) {
     msgs[idx] = { ...msgs[idx], content: msgs[idx].content + delta };
@@ -369,11 +374,13 @@ function processSSEEvent(eventType: string, data: Record<string, unknown>) {
       const kind = data.kind as string;
       if (content && kind === "story") {
         const msgs = [...state.messages];
+        // Match by (runtimeId, kind) regardless of current content — the
+        // placeholder may have accumulated partial text from streaming.
+        // findLastIndex naturally picks the latest turn's placeholder.
         const placeholderIndex = msgs.findLastIndex((message) =>
           message.runtimeId === runtimeId &&
           message.role === "assistant" &&
-          message.kind === "story" &&
-          message.content === "",
+          message.kind === "story",
         );
         const nextMessage: GameMessage = {
           id: nextClientId("msg"),
@@ -425,7 +432,12 @@ function processSSEEvent(eventType: string, data: Record<string, unknown>) {
           pluginId: data.pluginId as string,
           label: data.label as string,
         });
-        // Create placeholder message for streaming
+        // Create a streaming placeholder for every runtime. Non-story runtimes
+        // won't receive any narrative.delta (useStreaming is gated on
+        // outputKind==='story' in the backend), so their placeholders stay
+        // empty and are filtered out by `m.content || m.block` in MessageList.
+        // Keeping the placeholder for all runtimes preserves backward compat
+        // with servers that don't yet emit `kind` on runtime.started.
         addMessage({
           id: nextClientId("stream"),
           role: "assistant",
@@ -458,7 +470,7 @@ function processSSEEvent(eventType: string, data: Record<string, unknown>) {
       update({ executing: false });
       break;
     case "phase.changed": {
-      const phase = data.phase as string;
+      const phase = data.phase as api.SessionRecord["phase"] | undefined;
       if (phase && state.session) {
         update({ session: { ...state.session, phase } });
       }
@@ -480,45 +492,23 @@ function processSSEEvent(eventType: string, data: Record<string, unknown>) {
 
 // ── SSE Stream Reader ────────────────────────────────────────────
 
-async function readActionStream(response: Response) {
-  const reader = response.body?.getReader();
-  if (!reader) return;
-
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-
-    let currentEventType = "";
-    for (const line of lines) {
-      if (line.startsWith("event: ")) {
-        currentEventType = line.slice(7).trim();
-      } else if (line.startsWith("data: ")) {
-        const raw = line.slice(6);
-        try {
-          const data = JSON.parse(raw) as Record<string, unknown>;
-          const eventType = currentEventType || (data.type as string) || "unknown";
-          processSSEEvent(
-            eventType,
-            data.payload
-              ? {
-                ...(data.payload as Record<string, unknown>),
-                ...(data.turnId ? { turnId: data.turnId } : {}),
-              }
-              : data,
-          );
-        } catch {
-          // skip non-JSON lines
+/**
+ * Drain an `@covel/api-client` action SSE stream and dispatch each
+ * event into the session store. The api-client already JSON-parses
+ * each event's `data` field, so we only need to normalise the legacy
+ * "payload-or-data" envelope shape that the server emits.
+ */
+async function readActionStream(stream: AsyncIterable<SseEvent>) {
+  for await (const evt of stream) {
+    const data = (evt.data ?? {}) as Record<string, unknown>;
+    const eventType = evt.type || (data.type as string) || "unknown";
+    const payload = data.payload
+      ? {
+          ...(data.payload as Record<string, unknown>),
+          ...(data.turnId ? { turnId: data.turnId } : {}),
         }
-        currentEventType = "";
-      }
-    }
+      : data;
+    processSSEEvent(eventType, payload);
   }
 }
 
@@ -613,12 +603,12 @@ export async function startGame() {
     await loadSessionUiSpecs(session.id);
 
     // Start the game — post start_session action
-    const response = await api.postAction({
+    const stream = api.postAction({
       type: "start_session",
       sessionId: session.id,
       locale: "zh-CN",
     });
-    await readActionStream(response);
+    await readActionStream(stream);
   } catch (e) {
     update({ error: (e as Error).message, executing: false });
   }
@@ -650,11 +640,16 @@ export async function resumeSession(sessionId: string, worldId: string) {
 
   const snapshot = await api.fetchSnapshot(sessionId);
 
+  const nowIso = new Date().toISOString();
   const session: api.SessionRecord = {
     id: snapshot.session.id,
     worldId: snapshot.session.worldId ?? worldId,
-    phase: snapshot.session.phase,
-    locale: snapshot.session.locale,
+    phase: snapshot.session.phase as api.SessionRecord["phase"],
+    locale: snapshot.session.locale ?? "zh-CN",
+    turnCount: snapshot.session.turnCount ?? 0,
+    activePlugins: [],
+    createdAt: nowIso,
+    updatedAt: nowIso,
   };
 
   const selectedWorld = state.worlds.find((w) => w.id === worldId) ?? null;
@@ -805,17 +800,17 @@ export async function sendMessage(content?: string) {
     }
 
     update({ executing: true, executionSteps: [], composerText: "", pendingInteractionDrafts: [] });
-    const response = await api.postAction({
+    const stream = api.postAction({
       type: "send_message",
       sessionId: state.session.id,
       payload: { content: visibleUserText },
       locale: "zh-CN",
     });
-    await readActionStream(response);
+    await readActionStream(stream);
 
     if (autoContinue) {
       update({ executing: true, executionSteps: [] });
-      const followup = await api.postAction({
+      const followup = api.postAction({
         type: "send_message",
         sessionId: state.session.id,
         payload: { content: "" },
@@ -854,6 +849,44 @@ export async function submitFormInputs(payload: {
   });
 }
 
+// ── Retry ───────────────────────────────────────────────────────
+
+/**
+ * Re-execute the last turn. When `runtimeId` is given, retry from that
+ * specific runtime downward; earlier runtimes replay from cache and emit
+ * progress events without re-streaming their narrative. When omitted,
+ * retry everything in the latest turn.
+ *
+ * The local message list drops messages belonging to the last turn so
+ * the re-run stream repopulates them from scratch.
+ */
+export async function retryRuntime(runtimeId?: string) {
+  if (!state.session || state.executing) return;
+
+  const lastTurnId = [...state.messages]
+    .reverse()
+    .find((m) => m.turnId)?.turnId;
+
+  if (lastTurnId) {
+    const kept = state.messages.filter((m) => m.turnId !== lastTurnId);
+    update({ messages: kept });
+  }
+
+  update({ executing: true, executionSteps: [], error: null });
+
+  try {
+    const stream = api.postAction({
+      type: "retry_runtime",
+      sessionId: state.session.id,
+      payload: runtimeId ? { runtimeId } : {},
+      locale: "zh-CN",
+    });
+    await readActionStream(stream);
+  } catch (e) {
+    update({ error: (e as Error).message, executing: false });
+  }
+}
+
 // ── Hook ─────────────────────────────────────────────────────────
 
 export function useSessionStore() {
@@ -875,5 +908,6 @@ export function useSessionStore() {
     togglePluginSelection: useCallback(togglePluginSelection, []),
     refreshPluginCatalog: useCallback(refreshPluginCatalog, []),
     upsertPendingInteractionDraft: useCallback(upsertPendingInteractionDraft, []),
+    retryRuntime: useCallback(retryRuntime, []),
   };
 }

@@ -1,55 +1,47 @@
 /**
- * API Submit Inputs route — handles player interaction responses.
+ * API submit-inputs route.
  *
- * Supports multiple interaction types: form, choice, confirmation.
- * When a turn produces pendingInputs, the player responds here. The framework:
- * 1. Saves the raw submission(s) to store
- * 2. Finds the interaction's narrative template from the originating runtime
- * 3. Fills template placeholders with player values (translation to natural language)
- * 4. Appends the filled narrative as a TurnMessage (player-input source)
+ * **PR-3 alias**: this route now forwards into the framework default
+ * `submit-form` RPC handler. The actual logic (template fill, persistence,
+ * validation) lives in `@covel/runtime/rpc-defaults/submit-form.ts` so it
+ * is reachable from both the legacy route and the new
+ * `POST /api/sessions/:id/plugin-rpc` channel.
  *
- * The filled message is pure natural language — no JSON structures.
- * It becomes part of the conversation history, visible to the narrator on the next turn.
+ * Backwards-compat response shape: when a single legacy `{ formId, values }`
+ * payload comes in, the old single-form response is returned. Multi-form
+ * `submissions[]` callers see the new `{ accepted, results }` shape.
  *
- * Template authoring is the plugin's responsibility:
- * - form: {{fieldName}} → player's value
- * - choice: {{selectedId}}, {{selectedLabel}} → player's chosen option
- * - confirmation: {{confirmed}} → "确认" or "取消"
+ * The route stays mounted at `POST /api/sessions/:id/submit-inputs` so any
+ * existing client (frontend, e2e scripts, third-party tooling) keeps
+ * working without changes.
  */
 
 import { Hono } from 'hono';
 import type { DataStore } from '@covel/store';
 import type { PluginRegistry } from '@covel/plugin-loader';
+import type { RpcExecutor } from '@covel/runtime';
+import { RpcDispatchError, RpcValidationError } from '@covel/runtime';
 
 type Env = {
   Variables: {
     store: DataStore;
     pluginRegistry: PluginRegistry;
+    rpcExecutor: RpcExecutor;
   };
 };
 
 export const submitInputsRoutes = new Hono<Env>();
 
-// ── Types ────────────────────────────────────────────────────────
-
-interface Submission {
-  readonly interactionId: string;
-  readonly type: 'form' | 'choice' | 'confirmation';
-  readonly values: Record<string, unknown>;
-}
-
-interface SubmitInputBody {
+interface LegacyBody {
   readonly turnId: string;
-  readonly submissions?: readonly Submission[];
-  /** @deprecated Legacy single-form fields. Wrapped into submissions internally. */
+  readonly submissions?: ReadonlyArray<unknown>;
   readonly formId?: string;
   readonly values?: Record<string, unknown>;
 }
 
-// ── Route ────────────────────────────────────────────────────────
-
 submitInputsRoutes.post('/:id/submit-inputs', async (c) => {
   const store = c.get('store');
+  const executor = c.get('rpcExecutor');
   const sessionId = c.req.param('id');
 
   const session = await store.getSession(sessionId);
@@ -57,185 +49,60 @@ submitInputsRoutes.post('/:id/submit-inputs', async (c) => {
     return c.json({ error: `Session "${sessionId}" not found` }, 404);
   }
 
-  const body = await c.req.json<SubmitInputBody>();
-
-  if (!body.turnId || typeof body.turnId !== 'string') {
-    return c.json({ error: 'turnId (string) is required' }, 400);
+  let body: LegacyBody;
+  try {
+    body = await c.req.json<LegacyBody>();
+  } catch {
+    return c.json({ error: 'invalid JSON body' }, 400);
   }
 
-  // Normalize: legacy { formId, values } → submissions array
-  const validTypes = new Set(['form', 'choice', 'confirmation']);
-  const submissions: Submission[] = body.submissions
-    ? [...body.submissions]
-    : body.formId && body.values
-      ? [{ interactionId: body.formId, type: 'form', values: body.values }]
-      : [];
-
-  if (submissions.length === 0) {
-    return c.json({ error: 'submissions[] or formId+values are required' }, 400);
-  }
-
-  // Validate each submission
-  for (const sub of submissions) {
-    if (!sub.interactionId || typeof sub.interactionId !== 'string') {
-      return c.json({ error: 'Each submission requires interactionId (string)' }, 400);
-    }
-    if (!validTypes.has(sub.type)) {
-      return c.json({ error: `Invalid submission type: ${sub.type}. Must be form|choice|confirmation` }, 400);
-    }
-    if (!sub.values || typeof sub.values !== 'object' || Array.isArray(sub.values)) {
-      return c.json({ error: `submission.values must be an object for interactionId: ${sub.interactionId}` }, 400);
-    }
-  }
-
-  // Load turn messages once for all submissions
-  const messages = await store.listTurnMessages(sessionId);
-  const results: Array<{ submissionId: string; interactionId: string; filledNarrative: string; accepted: boolean }> = [];
-
-  for (const sub of submissions) {
-    // 1. Save raw submission
-    const submissionId = crypto.randomUUID();
-    await store.savePlayerInput({
-      id: submissionId,
-      sessionId,
-      turnId: body.turnId,
-      formId: sub.interactionId,
-      values: sub.values,
-      createdAt: new Date().toISOString(),
-    });
-
-    // 2. Find the interaction's template message
-    const templateMessage = findTemplateMessage(messages, body.turnId, sub.interactionId);
-
-    // 3. Fill template → pure natural language narrative
-    const filledNarrative = fillTemplate(sub, templateMessage);
-
-    // NOTE: We deliberately do NOT write `filledNarrative` to turn_messages here.
-    // The frontend will call POST /api/actions { type: 'send_message', payload: { content: filledNarrative } }
-    // which flows to turn-executor.ts and appends a proper { role: 'user', sourceType: 'player' } row.
-    // Writing it here too (with role: 'assistant') used to cause LLM history pollution — see
-    // audits/2026-04-12-backend-webv2-framework-audit Finding 1.
-
-    // NOTE: Character creation is no longer done here. Plugins own character
-    // creation via the create-character builtin tool. The player-init runtime
-    // reads the latest player submission from context ({{ player.lastFormValues }}),
-    // calls create-character(type="player", transitionPhase="playing"), and the
-    // session phase transitions as part of that tool call. This keeps the
-    // framework free of plugin-specific magic strings (`_createCharacter`).
-
-    results.push({ submissionId, interactionId: sub.interactionId, filledNarrative, accepted: true });
-  }
-
-  // Backward compat response shape for single form
-  if (results.length === 1 && body.formId) {
-    return c.json({
-      submissionId: results[0].submissionId,
-      formId: body.formId,
-      filledNarrative: results[0].filledNarrative,
-      accepted: true,
-    });
-  }
-
-  return c.json({ results, accepted: true });
-});
-
-// ── Helpers ──────────────────────────────────────────────────────
-
-interface MessageLike {
-  readonly turnId: string;
-  readonly pendingInput?: unknown;
-  readonly content: string;
-  readonly name?: string;
-  readonly order: number;
-}
-
-function findTemplateMessage(
-  messages: readonly MessageLike[],
-  turnId: string,
-  interactionId: string,
-): MessageLike | undefined {
-  return messages.find((m) => {
-    if (m.turnId !== turnId || !m.pendingInput) return false;
-    const pi = m.pendingInput;
-
-    // New format: pendingInput is array of interactions
-    if (Array.isArray(pi)) {
-      return (pi as Array<Record<string, unknown>>).some(
-        (i) => i.interactionId === interactionId,
-      );
-    }
-
-    // Legacy format: pendingInput is a single form object
-    return (pi as Record<string, unknown>).formId === interactionId;
-  });
-}
-
-function fillTemplate(sub: Submission, templateMessage: MessageLike | undefined): string {
-  if (!templateMessage) {
-    return fallbackNarrative(sub);
-  }
-
-  // Find the specific interaction's narrativeTemplate (new format)
-  let template = templateMessage.content;
-  if (Array.isArray(templateMessage.pendingInput)) {
-    const interaction = (templateMessage.pendingInput as Array<Record<string, unknown>>).find(
-      (i) => i.interactionId === sub.interactionId,
+  try {
+    const dispatch = await executor.dispatch(
+      {
+        // The framework default handler is registered under the framework
+        // namespace and is independent of any actual plugin's pluginId.
+        // We pass an empty pluginId — the dispatcher falls through to
+        // `getFrameworkDefault` because there's no plugin entry.
+        pluginId: 'framework',
+        action: 'submit-form',
+        payload: body,
+      },
+      { sessionId, store },
     );
-    if (interaction?.narrativeTemplate && typeof interaction.narrativeTemplate === 'string') {
-      template = interaction.narrativeTemplate;
+
+    const result = dispatch.result as {
+      accepted: boolean;
+      results: ReadonlyArray<{
+        submissionId: string;
+        interactionId: string;
+        filledNarrative: string;
+        accepted: boolean;
+      }>;
+    };
+
+    // Backwards-compat: single legacy { formId, values } payload returns the
+    // old flat shape, not the new { accepted, results } envelope.
+    if (body.formId && !body.submissions && result.results.length === 1) {
+      const only = result.results[0];
+      return c.json({
+        submissionId: only.submissionId,
+        formId: body.formId,
+        filledNarrative: only.filledNarrative,
+        accepted: true,
+      });
     }
+
+    return c.json(result);
+  } catch (err) {
+    if (err instanceof RpcValidationError) {
+      return c.json({ error: err.message }, 400);
+    }
+    if (err instanceof RpcDispatchError) {
+      return c.json({ error: err.message, code: err.code }, 500);
+    }
+    return c.json(
+      { error: err instanceof Error ? err.message : 'submit-inputs failed' },
+      500,
+    );
   }
-
-  // Build replacement values based on interaction type
-  const replacements = buildReplacements(sub);
-
-  // Replace all {{key}} placeholders
-  return template.replace(
-    /\{\{\s*([^}]+?)\s*\}\}/g,
-    (_match, key: string) => {
-      const value = replacements[key.trim()];
-      return value !== undefined && value !== null ? String(value) : '';
-    },
-  );
-}
-
-function buildReplacements(sub: Submission): Record<string, unknown> {
-  switch (sub.type) {
-    case 'form':
-      // Form: all field values are direct replacements
-      return sub.values;
-
-    case 'choice': {
-      // Choice: provide selectedId and selectedLabel
-      return {
-        ...sub.values,
-        selectedId: sub.values.selectedId,
-        selectedLabel: sub.values.selectedLabel ?? sub.values.selectedId,
-      };
-    }
-
-    case 'confirmation': {
-      // Confirmation: provide confirmed as human-readable text
-      const confirmed = sub.values.confirmed;
-      return {
-        ...sub.values,
-        confirmed: confirmed ? '确认' : '取消',
-      };
-    }
-  }
-}
-
-function fallbackNarrative(sub: Submission): string {
-  switch (sub.type) {
-    case 'form': {
-      const entries = Object.entries(sub.values)
-        .map(([k, v]) => `${k}: ${String(v)}`)
-        .join(', ');
-      return `[玩家输入] ${entries}`;
-    }
-    case 'choice':
-      return `[玩家选择] ${String(sub.values.selectedLabel ?? sub.values.selectedId)}`;
-    case 'confirmation':
-      return `[玩家${sub.values.confirmed ? '确认' : '取消'}] ${String(sub.values.prompt ?? '')}`;
-  }
-}
+});

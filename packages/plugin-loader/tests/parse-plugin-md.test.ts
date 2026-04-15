@@ -212,6 +212,24 @@ describe('parsePluginMd', () => {
     });
   });
 
+  describe('timeoutMs: runtime field', () => {
+    it('parses a valid runtime timeout override', () => {
+      const content = md(
+        [
+          'name: test-slow-runtime',
+          'description: Runtime with custom timeout',
+          'priority: 500',
+          'timeoutMs: 180000',
+        ].join('\n'),
+        '\nBody text.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/test-slow-runtime/PLUGIN.md');
+
+      expect(result.manifest.timeoutMs).toBe(180000);
+    });
+  });
+
   describe('hooks: field (S4-T3)', () => {
     it('parses a valid hooks declaration with all optional fields', () => {
       const content = md(
@@ -555,6 +573,203 @@ describe('parsePluginMd', () => {
       const result = parsePluginMd(content, 'plugins/test-none/PLUGIN.md');
       expect(result.manifest.authorsNote).toBeUndefined();
       expect(result.manifest.postHistory).toBeUndefined();
+    });
+  });
+
+  describe('rpc field (PR-3)', () => {
+    it('parses a single rpc action declaration', () => {
+      const content = md(
+        [
+          'name: test-rpc',
+          'description: RPC plugin',
+          'priority: 500',
+          'rpc:',
+          '  regenerate:',
+          '    handler: ./rpc/regenerate.js',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+      const result = parsePluginMd(content, 'plugins/test-rpc/PLUGIN.md');
+      expect(result.manifest.rpc).toEqual({
+        regenerate: { handler: './rpc/regenerate.js' },
+      });
+    });
+
+    it('parses multiple rpc actions with full options', () => {
+      const content = md(
+        [
+          'name: test-rpc-full',
+          'description: Full RPC plugin',
+          'priority: 500',
+          'rpc:',
+          '  regenerate:',
+          '    handler: ./rpc/regenerate.js',
+          '    streaming: true',
+          '    description: Re-run last narrator output',
+          '  cancel:',
+          '    handler: ./rpc/cancel.js',
+          '    trustLevel: builtin',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+      const result = parsePluginMd(content, 'plugins/test-rpc-full/PLUGIN.md');
+      expect(result.manifest.rpc?.regenerate).toEqual({
+        handler: './rpc/regenerate.js',
+        streaming: true,
+        description: 'Re-run last narrator output',
+      });
+      expect(result.manifest.rpc?.cancel).toEqual({
+        handler: './rpc/cancel.js',
+        trustLevel: 'builtin',
+      });
+    });
+
+    it('skips malformed rpc block with warning and preserves other fields', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const content = md(
+        [
+          'name: test-bad-rpc',
+          'description: Bad RPC',
+          'priority: 500',
+          'rpc:',
+          '  Bad-Name:', // uppercase rejected by schema
+          '    handler: ./h.js',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+      const result = parsePluginMd(content, 'plugins/test-bad-rpc/PLUGIN.md');
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(warnSpy.mock.calls[0][0]).toContain('malformed rpc declaration skipped');
+      expect(result.manifest.rpc).toBeUndefined();
+      expect(result.manifest.name).toBe('test-bad-rpc');
+      warnSpy.mockRestore();
+    });
+
+    it('rejects rpc action names starting with framework-', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const content = md(
+        [
+          'name: test-reserved',
+          'description: Reserved namespace',
+          'priority: 500',
+          'rpc:',
+          '  framework-cancel:',
+          '    handler: ./h.js',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+      const result = parsePluginMd(content, 'plugins/test-reserved/PLUGIN.md');
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(result.manifest.rpc).toBeUndefined();
+      warnSpy.mockRestore();
+    });
+
+    it('rejects rpc handler with absolute path (HIGH-1 fix)', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const content = md(
+        [
+          'name: test-abs-handler',
+          'description: Absolute path attempt',
+          'priority: 500',
+          'rpc:',
+          '  do-thing:',
+          '    handler: /etc/evil.js',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+      const result = parsePluginMd(content, 'plugins/test-abs-handler/PLUGIN.md');
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(result.manifest.rpc).toBeUndefined();
+      warnSpy.mockRestore();
+    });
+
+    it('rejects rpc handler with parent-directory traversal (HIGH-1 fix)', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const content = md(
+        [
+          'name: test-traversal',
+          'description: Traversal attempt',
+          'priority: 500',
+          'rpc:',
+          '  do-thing:',
+          '    handler: ../../../etc/evil.js',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+      const result = parsePluginMd(content, 'plugins/test-traversal/PLUGIN.md');
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(result.manifest.rpc).toBeUndefined();
+      warnSpy.mockRestore();
+    });
+
+    it('rejects rpc handler with mid-path .. segment', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const content = md(
+        [
+          'name: test-mid-traversal',
+          'description: Mid traversal',
+          'priority: 500',
+          'rpc:',
+          '  do-thing:',
+          '    handler: ./rpc/../../etc/evil.js',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+      const result = parsePluginMd(content, 'plugins/test-mid-traversal/PLUGIN.md');
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(result.manifest.rpc).toBeUndefined();
+      warnSpy.mockRestore();
+    });
+
+    it('rejects rpc handler with non-js extension', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const content = md(
+        [
+          'name: test-bad-ext',
+          'description: Bad extension',
+          'priority: 500',
+          'rpc:',
+          '  do-thing:',
+          '    handler: ./rpc/do-thing.ts',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+      const result = parsePluginMd(content, 'plugins/test-bad-ext/PLUGIN.md');
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(result.manifest.rpc).toBeUndefined();
+      warnSpy.mockRestore();
+    });
+
+    it('accepts .mjs and .cjs extensions', () => {
+      const content = md(
+        [
+          'name: test-ext-ok',
+          'description: All extensions',
+          'priority: 500',
+          'rpc:',
+          '  esm:',
+          '    handler: ./rpc/esm.mjs',
+          '  cjs:',
+          '    handler: ./rpc/cjs.cjs',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+      const result = parsePluginMd(content, 'plugins/test-ext-ok/PLUGIN.md');
+      expect(result.manifest.rpc?.esm?.handler).toBe('./rpc/esm.mjs');
+      expect(result.manifest.rpc?.cjs?.handler).toBe('./rpc/cjs.cjs');
+    });
+
+    it('omitting rpc field yields undefined', () => {
+      const content = md(
+        [
+          'name: test-no-rpc',
+          'description: No RPC',
+          'priority: 500',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+      const result = parsePluginMd(content, 'plugins/test-no-rpc/PLUGIN.md');
+      expect(result.manifest.rpc).toBeUndefined();
     });
   });
 

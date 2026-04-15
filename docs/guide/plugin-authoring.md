@@ -212,7 +212,57 @@ trigger:
   type: auto
   cooldownTurns: 3     # 触发后至少间隔 3 轮
   maxTriggerCount: 10  # 整个会话最多触发 10 次
+  startTurn: 2         # 等到 playing 阶段第 2 轮起才开始介入
 ```
+
+> `startTurn` 是按 **playing 段** 计数（不是全局 turnNumber），所以"等待玩家先经历两轮再介入"在 pre-game 多少初始化轮次都不影响结果。
+
+### 1.4.1 段职责约定（软约束）
+
+Covel 的 turn pipeline 把每一轮拆成三段：
+
+| 段 | 优先级 | 推荐职责 | 对 store 的权限 |
+|---|---|---|---|
+| **pre-narrator** | 101–499 | 检索、加载、向本轮 context 注入信息 | **建议只读**（不改持久状态） |
+| **narrator** | 500 | 生成本轮叙事 | 只写 narrativeOutput |
+| **post-narrator** | 501–1000 | 状态变更、抽取、结算、为下一轮准备 | 可写（state.patch / record.upsert / plugin-data-set） |
+
+#### 为什么需要这个约定
+
+如果一个插件既在 pre 段读、又在 pre 段写，那「Turn N 的 post」和「Turn N+1 的 pre」职责就会混淆。后果：
+
+- 同样的数据可能在两个时间点被写入，谁覆盖谁难判断
+- 跨 turn 状态传递的语义不清楚（来自上一轮还是本轮？）
+- 调试观测时间线会乱
+
+#### 落地方式（软约束 — 框架不拦截）
+
+**首选模式**：把"既读又写"的插件拆成两个 runtime：
+
+| 插件 | pre runtime（只读）| post runtime（写）|
+|---|---|---|
+| `core-npc-graph` | `rag-retriever` (490) — 查图谱注入 npcContext | `extractor` (620) — 基于叙事 upsert 节点和边 |
+
+**例外是 OK 的**：
+
+如果一个 runtime 内部的"读"只是**自身去重**而非"为别的 runtime 注入 context"，单 runtime 既读又写没问题：
+
+- `core-codex` (650) 是 function runtime，先 `listPluginData` 查已有 entries 防重复，再 regex 抽取并 upsert。读没有跨 runtime 消费方，不需要拆。
+- `core-char-creator/character-tracker` (750) 是 agent runtime，先 `list-characters` 给自己看现有角色 id 列表，再决定 create/update。同理不需要拆。
+
+判断标准：**这次"读"的结果有没有被别的 runtime 消费？**
+- 是 → 拆出 pre runtime，通过 `input.inject` 显式声明数据流
+- 否 → 留在原 runtime 里，作为内部 dedup / scratch state
+
+#### 框架不拦截写入
+
+PR-1 阶段评估过 commit-service 拒绝 pre 段的写入 proposal，最终决定**不做硬约束**。原因：
+
+1. 约束是为了"结构稳定 + 后续扩展"，不是为了防滥用
+2. 部分 function runtime 用 `store.*` 直接写（绕过 proposal），硬拦截要么漏要么误伤
+3. 早期生态优先迭代速度
+
+PR review 会盯着新插件是否符合段职责约定。代码评审可能因为段位违规打回，但运行时不会拒绝执行。
 
 ### 1.5 使用内置工具
 
@@ -733,6 +783,62 @@ input:
 - `field` 指定要提取的字段名
 - `as` 指定包裹的 XML 标签名，帮助 LLM 区分不同数据来源
 - 如果来源插件尚未执行（优先级更低），注入会为空
+
+### 2.3.1 暴露 RPC action(PR-3)
+
+如果你的插件想被前端或外部代理通过结构化指令调用(而不是触发 turn pipeline),在 PLUGIN.md 加 `rpc:` 字段:
+
+```yaml
+rpc:
+  regenerate:
+    handler: ./rpc/regenerate.js
+    description: 重新生成上一次的 narrator 输出
+  cancel:
+    handler: ./rpc/cancel.js
+    trustLevel: builtin   # 跳过 PR-7 approval 流程,慎用
+```
+
+handler 是一个 ES module,默认导出一个函数:
+
+```js
+// plugins/my-plugin/rpc/regenerate.js
+
+/**
+ * @param {unknown} payload  调用方传入的载荷
+ * @param {{ sessionId: string, pluginId: string, action: string, store: any }} ctx
+ * @returns {Promise<unknown>}
+ */
+export default async function regenerate(payload, ctx) {
+  // 直接读 store / 触发 RPC / 写 plugin_data
+  const messages = await ctx.store.listTurnMessages(ctx.sessionId);
+  // ...
+  return { ok: true, regeneratedAt: new Date().toISOString() };
+}
+```
+
+调用方:
+
+```bash
+curl -X POST http://localhost:3001/api/sessions/$SESSION_ID/plugin-rpc \
+  -H 'Content-Type: application/json' \
+  -d '{"pluginId": "my-plugin", "action": "regenerate", "payload": {}}'
+```
+
+**约束:**
+
+- action 名必须是 kebab-case
+- 不能以 `framework-` 开头(保留命名空间)
+- handler 是按需 lazy import,首次调用时才 `import()`。模块本身可以 throw,框架会捕获并返回 500
+- payload 可以是任意 JSON,推荐在 handler 内自己用 zod 校验
+- handler 的 `store` 是 raw `DataStore`,可以读写,但**不要绕过 commit 链做大型状态变更**——那是 turn pipeline 的职责。RPC 适合小范围读 / 通知 / 重新触发的场景
+
+**框架默认 action(无需声明,所有插件可直接调):**
+
+| Action | 说明 |
+|--------|------|
+| `submit-form` | 持久化玩家输入 + 填模板,等同于 legacy `POST /api/sessions/:id/submit-inputs` |
+
+详细 API 见 [docs/reference/api.md `POST /api/sessions/:id/plugin-rpc`](../reference/api.md#post-apisessionsidplugin-rpc)。
 
 ### 2.4 测试你的插件
 

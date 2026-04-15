@@ -1,91 +1,61 @@
 import type { ProviderConfig, UsageSummary } from "../types.js";
-import {
-  buildStreamEntry,
-  getReplayMode,
-  hashRequest,
-  loadCached,
-  recordJsonResponse,
-  responseFromCache,
-  saveCached,
-  teeStreamResponse,
-  type ReplayMode,
-} from "./replay-cache.js";
 
 /** Maximum characters to include in error message previews. */
 const ERROR_PREVIEW_MAX_CHARS = 200;
 
 // ── SSRF Protection ─────────────────────────────────────────────────
 
-/** Known LLM provider domains (and subdomains). */
-const KNOWN_PROVIDER_DOMAINS = [
-  'api.openai.com',
-  'openai.com',
-  'anthropic.com',
-  'api.anthropic.com',
-  'api.deepseek.com',
-  'deepseek.com',
-  'dashscope.aliyuncs.com',
-  'openrouter.ai',
-  'api.groq.com',
-  'generativelanguage.googleapis.com',
-  'api.mistral.ai',
-  'api.together.xyz',
-  'api.fireworks.ai',
-  'api.cohere.com',
-];
+/** Loopback hostnames always allowed for local development (Ollama etc.). */
+const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
 
-/** RFC1918, link-local, and cloud metadata IP patterns. */
+/** RFC1918 and link-local IP ranges — always blocked (internal network SSRF). */
 const BLOCKED_IP_PATTERNS = [
   /^10\./,
   /^172\.(1[6-9]|2\d|3[01])\./,
   /^192\.168\./,
   /^169\.254\./,
-  /^127\./,
   /^0\./,
   /^fc00:/i,
   /^fe80:/i,
-  /^::1$/,
 ];
 
+/** Cloud metadata service hostnames — blocked regardless of IP. */
 const BLOCKED_HOSTNAMES = [
   'metadata.google.internal',
   'metadata.internal',
 ];
 
-function getCustomAllowedHosts(): string[] {
-  const raw = process.env.COVEL_ALLOWED_LLM_HOSTS;
-  if (!raw) return [];
-  return raw.split(',').map((h) => h.trim()).filter(Boolean);
-}
-
+/**
+ * Check whether a hostname is safe to connect to.
+ *
+ * Policy (open by default, block only dangerous internals):
+ * - Loopback (localhost, 127.0.0.1, ::1) → always allowed (local dev)
+ * - Cloud metadata hostnames → always blocked
+ * - RFC1918 / link-local IP ranges → blocked
+ * - All other public hostnames → allowed (users bring their own providers)
+ */
 function isDomainAllowed(hostname: string): boolean {
-  // localhost is always allowed (dev)
-  if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
+  // Always allow loopback for local development
+  if (LOOPBACK_HOSTNAMES.has(hostname)) return true;
 
-  // Check blocked hostnames
+  // Block known cloud metadata hostnames
   if (BLOCKED_HOSTNAMES.includes(hostname)) return false;
 
-  // Check blocked IP ranges
+  // Block RFC1918 and link-local IP ranges
   for (const pattern of BLOCKED_IP_PATTERNS) {
     if (pattern.test(hostname)) return false;
   }
 
-  // Check known providers (exact or subdomain match)
-  for (const domain of KNOWN_PROVIDER_DOMAINS) {
-    if (hostname === domain || hostname.endsWith(`.${domain}`)) return true;
-  }
-
-  // Check custom allowed hosts from env
-  for (const host of getCustomAllowedHosts()) {
-    if (hostname === host || hostname.endsWith(`.${host}`)) return true;
-  }
-
-  return false;
+  // Allow all other hosts (public providers, self-hosted, custom endpoints)
+  return true;
 }
 
 /**
  * Validate a base URL against SSRF protections.
  * Returns true if the URL is safe to use for server-side requests.
+ *
+ * Allowed: https for any public domain; http for localhost only.
+ * Blocked: private IP ranges, cloud metadata endpoints, non-http(s) protocols.
  */
 export function validateBaseUrl(url: string): boolean {
   if (!url) return false;
@@ -100,8 +70,8 @@ export function validateBaseUrl(url: string): boolean {
   // Only http/https allowed
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
 
-  // http only for localhost
-  if (parsed.protocol === 'http:' && parsed.hostname !== 'localhost' && parsed.hostname !== '127.0.0.1') {
+  // http (non-TLS) only allowed for loopback — all remote endpoints must use https
+  if (parsed.protocol === 'http:' && !LOOPBACK_HOSTNAMES.has(parsed.hostname)) {
     return false;
   }
 
@@ -205,7 +175,7 @@ export async function postJson(
     throw new Error("Provider error: baseUrl is required.");
   }
   if (!validateBaseUrl(config.baseUrl)) {
-    throw new Error(`Provider error: baseUrl "${config.baseUrl}" is not allowed. Add it to COVEL_ALLOWED_LLM_HOSTS if this is a legitimate provider.`);
+    throw new Error(`Provider error: baseUrl "${config.baseUrl}" is not allowed. Only public HTTPS endpoints are permitted (private/internal IPs are blocked).`);
   }
 
   const headers: Record<string, string> = {
@@ -219,21 +189,6 @@ export async function postJson(
   const serializedBody = JSON.stringify(body);
   const effectiveSignal = signal ?? config.signal;
 
-  // Replay cache: dev-only request record/replay. No-op when env unset.
-  const replayMode = getReplayMode();
-  const replayHash = replayMode !== "off" ? hashRequest("POST", url, body) : null;
-  if (replayHash && (replayMode === "replay" || replayMode === "auto")) {
-    const cached = loadCached(replayHash);
-    if (cached) {
-      return responseFromCache(cached);
-    }
-    if (replayMode === "replay") {
-      throw new Error(
-        `[replay-cache] No cached entry for ${replayHash} at ${url} (mode=replay)`
-      );
-    }
-  }
-
   const doFetch = (): Promise<Response> =>
     fetch(url, {
       method: "POST",
@@ -244,15 +199,14 @@ export async function postJson(
 
   // Fast path: retry disabled via escape hatch. Exactly one fetch, no retry logic.
   if (isRetryDisabled()) {
-    const response = await doFetch();
-    return maybeRecordResponse(response, replayMode, replayHash, "POST", url, body);
+    return doFetch();
   }
 
   let response = await doFetch();
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     if (!isRetriableStatus(response.status)) {
-      return maybeRecordResponse(response, replayMode, replayHash, "POST", url, body);
+      return response;
     }
 
     // Drain the failed body to free the socket before retrying.
@@ -271,35 +225,7 @@ export async function postJson(
   }
 
   // Retries exhausted — return whatever we have and let assertSuccess classify it.
-  return maybeRecordResponse(response, replayMode, replayHash, "POST", url, body);
-}
-
-/**
- * Persist the response into the replay cache when in record/auto mode.
- * Streaming responses are tee'd; JSON responses are cloned and read.
- * Errors and non-2xx responses are NOT cached.
- */
-async function maybeRecordResponse(
-  response: Response,
-  mode: ReplayMode,
-  hash: string | null,
-  method: string,
-  url: string,
-  body: unknown
-): Promise<Response> {
-  if (!hash || mode === "off" || mode === "replay") return response;
-  if (!response.ok) return response;
-  const contentType = response.headers.get("content-type") ?? "";
-  if (contentType.includes("text/event-stream")) {
-    return teeStreamResponse(response, (sseText, headers, status, statusText) => {
-      if (sseText === null) return;
-      saveCached(
-        hash,
-        buildStreamEntry(hash, method, url, body, sseText, headers, status, statusText)
-      );
-    });
-  }
-  return recordJsonResponse(hash, method, url, body, response);
+  return response;
 }
 
 /**
@@ -326,8 +252,34 @@ export async function postFormData(
   });
 }
 
+/** Regex for a trailing API version segment like `/v1`, `/v2`, `/v1beta`. */
+const TRAILING_VERSION_RE = /\/(v\d+[a-z0-9]*)$/i;
+
 /**
- * Build full URL from base + path.
+ * Build full URL from base + path with tolerant version handling.
+ *
+ * All OpenAI-compatible / Anthropic endpoints live under `/v1/*`. Users
+ * commonly write their baseUrl either with the `/v1` suffix already
+ * baked in (`https://api.deepseek.com/v1`) or without (`https://api.deepseek.com`).
+ * Before this normalisation, omitting `/v1` silently produced a broken
+ * URL like `https://api.deepseek.com/chat/completions`.
+ *
+ * Rules:
+ *
+ *   1. If baseUrl already ends with `/vN` (`v1`, `v2`, `v1beta`, ...),
+ *      trust the user's explicit version and don't touch it.
+ *   2. Otherwise, inject `/v1` as the default version segment. This
+ *      matches the OpenAI-compat convention used by every adapter in
+ *      this repo (openai-chat, openai-responses, anthropic-messages).
+ *   3. If the *path* also starts with the same version segment, dedupe
+ *      so we never emit `/v1/v1/...` even when both sides include it.
+ *
+ * Examples (all four yield `https://host/v1/chat/completions`):
+ *
+ *   buildProviderUrl("https://host",          "/chat/completions")
+ *   buildProviderUrl("https://host/v1",       "/chat/completions")
+ *   buildProviderUrl("https://host",          "/v1/chat/completions")
+ *   buildProviderUrl("https://host/v1",       "/v1/chat/completions")
  */
 export function buildProviderUrl(baseUrl: string, path: string): string {
   if (
@@ -340,9 +292,28 @@ export function buildProviderUrl(baseUrl: string, path: string): string {
       `[ai-provider] Non-HTTPS base URL detected: ${baseUrl}. API keys may be sent in plaintext.`,
     );
   }
-  const base = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
-  const p = path.startsWith("/") ? path.slice(1) : path;
-  return `${base}/${p}`;
+
+  // Strip trailing slash(es) on baseUrl, normalise leading slash on path.
+  let base = baseUrl.replace(/\/+$/, "");
+  let p = path.startsWith("/") ? path : `/${path}`;
+
+  // Rule 1: Does baseUrl already carry an explicit version segment?
+  const baseVersionMatch = base.match(TRAILING_VERSION_RE);
+  const effectiveVersion = baseVersionMatch?.[1] ?? "v1";
+
+  // Rule 2: If missing, append the default version so we always end up
+  // hitting /v1/<endpoint> (or whichever version the user pinned).
+  if (!baseVersionMatch) {
+    base = `${base}/${effectiveVersion}`;
+  }
+
+  // Rule 3: If the path leads with the same version, dedupe.
+  const pathVersionPrefix = `/${effectiveVersion}/`;
+  if (p === `/${effectiveVersion}` || p.startsWith(pathVersionPrefix)) {
+    p = p.slice(effectiveVersion.length + 1) || "/";
+  }
+
+  return `${base}${p}`;
 }
 
 /**
@@ -557,6 +528,33 @@ export function readOpenAiChatStreamFinishReason(
 ): string | null {
   const reason = asAny(payload).choices?.[0]?.finish_reason;
   return typeof reason === "string" ? reason : null;
+}
+
+/**
+ * Read tool_calls deltas from a streaming chunk.
+ * OpenAI streams tool_calls as partial JSON arguments keyed by index:
+ *   delta.tool_calls = [{ index: 0, id?, type?, function: { name?, arguments? } }]
+ * Caller is responsible for accumulating by index across chunks.
+ */
+export function readOpenAiChatStreamToolCallDeltas(
+  payload: Record<string, unknown>
+): Array<{
+  index: number;
+  id?: string;
+  name?: string;
+  argumentsDelta?: string;
+}> | null {
+  const toolCalls = asAny(payload).choices?.[0]?.delta?.tool_calls;
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) return null;
+  return toolCalls.map((tc: Record<string, unknown>) => {
+    const fn = tc.function as Record<string, unknown> | undefined;
+    return {
+      index: Number(tc.index ?? 0),
+      id: typeof tc.id === "string" ? tc.id : undefined,
+      name: typeof fn?.name === "string" ? fn.name : undefined,
+      argumentsDelta: typeof fn?.arguments === "string" ? fn.arguments : undefined,
+    };
+  });
 }
 
 /**

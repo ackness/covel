@@ -43,6 +43,22 @@ export interface TriggerConfig {
   readonly cooldownTurns?: number;
   /** Session phases in which this runtime is allowed to trigger. If omitted, triggers in all phases. */
   readonly phases?: readonly string[];
+  /**
+   * First **playing-phase** turn at which this runtime may trigger. Optional —
+   * when unset the runtime is eligible from the very first turn (no gating).
+   *
+   * Semantics (PR-2): compared against `TriggerContext.playingTurnNumber`,
+   * which is 0-based from the moment the session first entered `phase:
+   * playing`. Pre-game and character_creation rounds do NOT count, so
+   * plugin authors can declare `startTurn: 2` meaning "wait until the
+   * player has taken two turns of actual gameplay", independent of how
+   * many pre-game setup rounds happened.
+   *
+   * Example:
+   *   `startTurn: 3` — runtime stays silent for the first three playing
+   *   rounds, fires from the fourth onwards.
+   */
+  readonly startTurn?: number;
 }
 
 // ── Input declarations ───────────────────────────────────────────
@@ -208,6 +224,18 @@ export interface RuntimeManifest {
    */
   readonly guard?: string;
   readonly model?: string;
+  /**
+   * Per-runtime hard timeout in ms.
+   * Overrides the executor default for agent runtimes.
+   */
+  readonly timeoutMs?: number;
+  /**
+   * Per-runtime cap on the agent tool-call loop. Overrides the framework
+   * default (10). Lower values prevent runaway LLMs that keep calling the
+   * same tool after a successful result. Set to 1 or 2 for single-shot
+   * plugins that should call one tool and stop.
+   */
+  readonly maxSteps?: number;
   readonly pluginType?: PluginType;
   /**
    * How the framework treats this runtime's output in the UI.
@@ -263,6 +291,23 @@ export interface RuntimeManifest {
    * Only applied by the V2 prompt assembler (`COVEL_PROMPT_V2=1`).
    */
   readonly postHistory?: PostHistoryDecl;
+  /**
+   * PR-3: Plugin RPC action declarations.
+   *
+   * Maps action name → `RpcActionDecl`. Each entry registers a structured
+   * command the plugin exposes through `POST /api/sessions/:id/plugin-rpc`,
+   * dispatched as `{ pluginId, action, payload }`.
+   *
+   * Handlers are loaded lazily on first dispatch — there is no eager
+   * import at parse time. Trust level defaults to the plugin's source
+   * trust (builtin/official auto-allowed; community gated by PR-7
+   * approval flow).
+   *
+   * Action names must be kebab-case. Names starting with `framework-`
+   * are reserved for framework default handlers and will be rejected
+   * by the loader.
+   */
+  readonly rpc?: import('./rpc.js').RpcDeclMap;
 }
 
 // ── Author's note / Post-history declarations (S3-T4) ───────────

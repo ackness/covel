@@ -24,7 +24,10 @@ Covel 框架能力注册表与 API 参考。
 
 | 文档 | 描述 |
 |------|------|
+| [../guide/plugin-authoring.md](../guide/plugin-authoring.md) | 插件作者完整指南 — 零代码到进阶,含 PR-3 RPC action 声明、PR-5 段职责约束 |
 | [../guide/plugin-ui-runtime-guidelines.md](../guide/plugin-ui-runtime-guidelines.md) | 插件 UI 与交互运行时指南 — `ui.message / ui.right`、`plugin_data`、`submitBehavior`、session 起始流程与图谱/图鉴边界 |
+| [../guide/e2e-plugin-verify.md](../guide/e2e-plugin-verify.md) | 插件端到端验证脚本 — `scripts/e2e-plugin-verify.ts` 的 7-Phase 流程、CLI 参数、触发断言、artefact 落盘约定 |
+| [../guide/skills.md](../guide/skills.md) | Skills 使用与编写指南(PR-4) — 外部代理可加载的 markdown skill 包,`skills/` 目录结构,SKILL.md 模板,与 framework 边界 |
 
 ## Prompt 组装
 
@@ -44,6 +47,18 @@ Covel 框架能力注册表与 API 参考。
 | 文档 | 描述 |
 |------|------|
 | [changelog-session-state.md](changelog-session-state.md) | Session State & Narrative Flow 改动记录 — context 注入增强、phase 门控、消息持久化、已知问题清单 |
+
+## 近期能力(本 session 新增)
+
+| 能力 | 文档 | 说明 |
+|------|------|------|
+| **PR-1 翻译层** | [api.md](api.md) `runtime-outputs`/`interaction-records` 端点 | `RuntimeOutput` + `InteractionRecord` 统一观测格式,跨 runtime 消费的标准化输出 |
+| **PR-2 startTurn** | [plugins.md](plugins.md) 触发字段 | `playingTurnNumber` 按 playing 阶段从 0 计数,`trigger.startTurn` 在此基础上做门控 |
+| **PR-3 Plugin RPC** | [api.md](api.md#post-apisessionsidplugin-rpc) + [protocol.md](protocol.md#插件-rpcpr-3) | `POST /api/sessions/:id/plugin-rpc` 统一通道(action 级 + runtime 级),PLUGIN.md 新 `rpc:` 字段,框架默认 `submit-form` handler |
+| **PR-4 Skills** | [../guide/skills.md](../guide/skills.md) | 外部代理可加载的 markdown skill 包 |
+| **PR-5 段职责** | [../guide/plugin-authoring.md](../guide/plugin-authoring.md) §1.4.1 | pre / narrator / post 段写约定(软约束),core-codex 函数化清理,player-init 转 agent runtime |
+| **PR-6 Per-Session 模型覆盖** | [api.md](api.md#patch-apisessionsid) `runtimeModelOverrides` | `PATCH /api/sessions/:id` 接受 runtime → slot 映射,turn-executor 每次执行前快照应用 |
+| **PR-7 RPC Approval** | [api.md](api.md#rpc-approval-流程pr-7) + [protocol.md](protocol.md#rpc-approvalpr-7) | community-trust 插件 RPC 调用的 human-in-loop 批准,`once` / `session` 双 scope,排队封顶 |
 
 ## 计划中
 

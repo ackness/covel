@@ -41,6 +41,9 @@ pnpm --filter @covel/plugin-test-utils test # Run test-utils tests
 
 # E2E scripts (real LLM, requires .env.llm)
 npx tsx --env-file=.env --env-file=.env.llm scripts/test-full-3plugins.ts
+# Plugin-level e2e harness — API-driven, auto-discovers plugins, observes per-runtime
+# See docs/guide/e2e-plugin-verify.md for CLI reference and 7-phase pipeline
+npx tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts --slot e2e_local --turns 3
 
 # E2E tests (Playwright)
 pnpm e2e                  # Run all E2E tests headless
@@ -91,12 +94,12 @@ packages/
   context/          @covel/context          — Context assembly (template interpolation, inject blocks, prompt building)
   ai-provider/      @covel/ai-provider      — Multi-provider LLM abstraction (preset routing, model capability auto-detection, 2597-model LiteLLM database)
   plugin-loader/    @covel/plugin-loader    — Plugin discovery, PLUGIN.md parsing, progressive loading, registry, session scope
-  runtime/          @covel/runtime          — Turn execution engine (trigger → schedule → context → LLM → tool loop → result)
+  runtime/          @covel/runtime          — Turn execution engine (trigger → schedule → context → LLM → tool loop → result) + PR-3 plugin RPC registry/executor/defaults + PR-6 runtime-slot-resolver
   store/            @covel/store            — Data abstraction with 4 backends: MemoryStore, SqliteStore, IdbStore (IndexedDB), PgStore (PostgreSQL)
   state/            @covel/state            — State management (dynamic tables, change history, write conflict collection)
   events/           @covel/events           — Event bus (pub/sub, event persistence)
   tools/            @covel/tools            — Tool system (tool() wrapper, registry, builtin UI tools, short ID generator, output validation)
-  approval/         @covel/approval         — Approval pipeline (permission rules, approval gates)
+  approval/         @covel/approval         — Approval pipeline (permission rules, approval gates, PR-7 RPC approval gate with once/session scope + pending queue cap)
   lorebook/         @covel/lorebook         — World/plugin/session lorebook entries (constant + selective scanning, NovelAI-style Reserved Tokens budget)
   plugin-test-utils/ @covel/plugin-test-utils — Testing utilities for plugin authors (MockLLM, TestHarness, factories)
 
@@ -332,7 +335,7 @@ Store backends (`@covel/store`): MemoryStore (dev/test), IdbStore (browser Index
 
 All endpoints under `/api/` prefix (Vite dev server proxies `/api` → backend). RESTful convention: resources use plural nouns.
 
-- Sessions (CRUD): `GET/POST /api/sessions`, `GET/PATCH/DELETE /api/sessions/:id`
+- Sessions (CRUD): `GET/POST /api/sessions`, `GET/PATCH/DELETE /api/sessions/:id` (PATCH accepts `phase` + PR-6 `runtimeModelOverrides` map of runtime-id → slot)
 - Session Turn: `POST /api/sessions/:id/turn`, `GET /api/sessions/:id/turns`, `GET /api/sessions/:id/results`
 - Session Messages: `GET /api/sessions/:id/messages`, `POST /api/sessions/:id/messages/sync`
 - Session Plugins: `GET /api/sessions/:id/plugins`, `POST /api/sessions/:id/plugins/enable`, `POST /api/sessions/:id/plugins/disable`
@@ -341,7 +344,11 @@ All endpoints under `/api/` prefix (Vite dev server proxies `/api` → backend).
 - Session Plugin Data: `GET/PUT/DELETE /api/sessions/:id/plugin-data/:pluginId/:namespace/:key`
 - Session Characters: `GET/POST /api/sessions/:id/characters`
 - Session Snapshot: `GET /api/sessions/:id/snapshot` (complete state for restore — messages, characters, characterSchema, gameState, traces)
-- Session Submit: `POST /api/sessions/:id/submit-inputs`
+- Session Submit: `POST /api/sessions/:id/submit-inputs` (legacy alias, forwards to plugin-rpc `submit-form`)
+- Session Plugin RPC (PR-3): `POST /api/sessions/:id/plugin-rpc` — unified action/runtime RPC channel, sync mode, framework defaults (`submit-form`) + plugin-declared actions
+- Session Runtime Outputs (PR-1): `GET /api/sessions/:id/runtime-outputs`, `GET /api/sessions/:id/runtime-outputs/:id`, `GET /api/sessions/:id/runtime-outputs/:id/full-prompt`, `GET /api/sessions/:id/interaction-records`
+- Session Approvals (PR-7): `GET /api/sessions/:id/approvals` — list pending RPC approvals for this session
+- Approvals (PR-7): `GET /api/approvals/:approvalId`, `POST /api/approvals/:approvalId/decision` (`{decision: allow|deny, scope?: once|session}`)
 - Worlds: `GET/POST /api/worlds`, `GET/PATCH /api/worlds/:id`
 - Plugins (global): `GET /api/plugins`, `GET /api/plugins/:id`
 - Actions: `POST /api/actions` (SSE action bridge)
@@ -403,7 +410,7 @@ plugins/<plugin>/tests/     # Plugin-specific tests (if any)
 - **Contract tests** (`store-contract.ts`): Shared test suite defining behavioral expectations for the `DataStore` interface. Each backend (MemoryStore, SqliteStore, IdbStore, PgStore) runs the same contract tests to ensure consistency. New store backends MUST pass the contract suite.
 - **Server tests**: `apps/server/tests/api/` — API routes, bootstrap, session management, SSE events.
 - **Plugin tests**: Use `@covel/plugin-test-utils` for consistent test setup — `MockLLM`, `createTestHarness`, factory functions (`makeTurnInput`, `makeTriggerContext`, `makeRuntimeResult`).
-- **E2E scripts**: `scripts/test-full-3plugins.ts` (real LLM, 3-plugin integration via HTTP API), `scripts/test-real-llm.ts` (single-plugin real LLM test).
+- **E2E scripts**: `scripts/test-full-3plugins.ts` (real LLM, 3-plugin integration via HTTP API), `scripts/test-real-llm.ts` (single-plugin real LLM test), `scripts/e2e-plugin-verify.ts` (plugin-level API-driven harness, auto-discovers via `/api/plugin-flows`, 7-phase pipeline, artefacts to `debugs/e2e-logs/`; see `docs/guide/e2e-plugin-verify.md`).
 
 ### Test Style
 
@@ -429,7 +436,8 @@ describe("ComponentName", () => {
 ## Conventions
 
 - Validation uses Zod schemas throughout
-- Database access via Drizzle ORM (PostgreSQL/SQLite); 21 tables: worlds, sessions, turn_results, runtime_results, tool_calls, state_schemas, state_entries, state_changes, events, approvals, messages, characters, plugin_data, plugin_configs, trace_events, turn_messages, player_inputs, working_memory, session_summaries, suspensions, state_snapshots
+- Database access via Drizzle ORM (PostgreSQL/SQLite); 23 tables: worlds, sessions, turn_results, runtime_results, tool_calls, state_schemas, state_entries, state_changes, events, approvals, messages, characters, plugin_data, plugin_configs, trace_events, turn_messages, player_inputs, working_memory, session_summaries, suspensions, state_snapshots, runtime_outputs, interaction_records
+- **PR-6 session columns**: `sessions.runtime_model_overrides` (JSONB map of runtime-id → slot name) — snapshotted into `TurnInput` each turn and consulted by `runtime-slot-resolver` before `manifest.model` / gateway default. Provider + API keys continue through `X-Provider-Keys` header + localStorage (never persisted)
 - Locale is a **system capability**: enters execution chain via `KernelInput.locale` → `RuntimeContextView.locale`. Resolution: request → run → world default → app default (`zh-CN`)
 - Plugin manifests use `I18nText` (`string | Record<string, string>`) for display fields
 
@@ -525,6 +533,9 @@ describe("ComponentName", () => {
 | 修改右侧面板 Tab 或数据源 | `docs/reference/ui-panels.md` |
 | 修改/添加 API 端点 | `docs/reference/api.md` |
 | 修改包结构或依赖关系 | `CLAUDE.md` Workspace Layout + Dependency Flow |
+| 添加/修改 PLUGIN.md frontmatter 字段 | `docs/reference/plugins.md`「新增 frontmatter 字段」小节 + `docs/guide/plugin-authoring.md` |
+| 添加/修改 RPC action 或 framework default | `docs/reference/api.md` `plugin-rpc` 小节 + `docs/reference/protocol.md` 插件 RPC 表 |
+| 添加/修改 approval 流程或信任级别 | `docs/reference/api.md` RPC Approval 流程 + `docs/reference/protocol.md` |
 
 不同步文档的 PR 应被视为未完成。
 

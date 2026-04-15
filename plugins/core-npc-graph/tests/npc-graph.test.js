@@ -93,7 +93,7 @@ describe('core-npc-graph manifests', () => {
     expect(extractor.tools?.local).toContain('./tools/upsert-npc-graph.js');
     expect(extractor.tools?.local).toContain('./tools/list-npc-graph.js');
     expect(extractor.trigger?.type).toBe('scheduled');
-    expect(extractor.trigger?.interval).toBe(2);
+    expect(extractor.trigger?.interval).toBe(1);
     expect(extractor.trigger?.phases).toContain('playing');
   });
 

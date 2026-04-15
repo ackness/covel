@@ -10,9 +10,23 @@
  *   6. Return result string for LLM
  */
 
-import type { ToolModule } from '@covel/tools';
+import { ToolValidationError, type ToolModule } from '@covel/tools';
 import type { DataStore } from '@covel/store';
 import type { ApprovalPipeline } from '@covel/approval';
+
+// ── Structured tool error shape (returned to LLM) ────────────────
+
+type ToolErrorCode = 'NOT_FOUND' | 'DENIED' | 'INVALID_ARGS' | 'VALIDATION_ERROR' | 'EXECUTION_ERROR';
+
+function toolError(
+  code: ToolErrorCode,
+  message: string,
+  details?: string[],
+): string {
+  const payload: Record<string, unknown> = { success: false, error: message, code };
+  if (details && details.length > 0) payload.details = details;
+  return JSON.stringify(payload);
+}
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -75,7 +89,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
       // 1. Find tool (scoped to calling plugin if context available)
       const tool = config.findTool(call.name, context);
       if (!tool) {
-        const errorResult = JSON.stringify({ error: `Unknown tool: ${call.name}` });
+        const errorResult = toolError('NOT_FOUND', `Unknown tool: ${call.name}. Check the tool name and try again.`);
         await recordCall(config.store, call, context, errorResult, startTime, false, 'auto-allowed');
         return { toolCallId: call.toolCallId, name: call.name, result: errorResult, parsedResult: null, success: false };
       }
@@ -104,7 +118,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           } else {
             // Denied — do not execute
             approvalStatus = 'denied';
-            const denyResult = JSON.stringify({ error: `Tool "${call.name}" denied by approval policy (${checkResult.reason})` });
+            const denyResult = toolError('DENIED', `Tool "${call.name}" was denied by the approval policy. Reason: ${checkResult.reason}. Do not retry this tool call.`);
             await recordCall(config.store, call, context, denyResult, startTime, false, approvalStatus);
             return { toolCallId: call.toolCallId, name: call.name, result: denyResult, parsedResult: null, success: false };
           }
@@ -116,7 +130,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
       try {
         params = JSON.parse(call.arguments);
       } catch {
-        const errorResult = JSON.stringify({ error: `Invalid JSON arguments for ${call.name}` });
+        const errorResult = toolError('INVALID_ARGS', `Arguments for tool "${call.name}" are not valid JSON. Ensure the arguments object is properly formatted JSON.`);
         await recordCall(config.store, call, context, errorResult, startTime, false, approvalStatus);
         return { toolCallId: call.toolCallId, name: call.name, result: errorResult, parsedResult: null, success: false };
       }
@@ -145,8 +159,35 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
         await recordCall(config.store, call, context, resultStr, startTime, true, approvalStatus);
         return { toolCallId: call.toolCallId, name: call.name, result: resultStr, parsedResult: rawResult, success: true };
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        const errorResult = JSON.stringify({ error: message });
+        let errorResult: string;
+        if (error instanceof ToolValidationError) {
+          // Dedupe Zod issues by path so only the FIRST issue on any given
+          // field is reported. Zod v4 has a quirk where `z.array(...).max(N)`
+          // will emit a bogus `too_big: expected string to have <=N characters`
+          // alongside the real `invalid_type: expected array, received string`
+          // when the LLM sends a JSON-stringified array. Feeding both to the
+          // LLM confuses it into fixing a phantom "string length" problem
+          // while the real fix ("send an array") is buried. Keeping only the
+          // first issue per path eliminates the contradiction without losing
+          // information — multi-field errors still list each field once.
+          const seenPaths = new Set<string>();
+          const dedupedDetails: typeof error.details = [];
+          for (const detail of error.details) {
+            const key = detail.path ?? '';
+            if (seenPaths.has(key)) continue;
+            seenPaths.add(key);
+            dedupedDetails.push(detail);
+          }
+          const details = dedupedDetails.map(d => `${d.path}: ${d.message}`);
+          errorResult = toolError(
+            'VALIDATION_ERROR',
+            `Invalid parameters for tool "${call.name}": ${dedupedDetails.map(d => d.message).join('; ')}. Fix the highlighted fields and retry.`,
+            details,
+          );
+        } else {
+          const message = error instanceof Error ? error.message : String(error);
+          errorResult = toolError('EXECUTION_ERROR', `Tool "${call.name}" failed during execution: ${message}`);
+        }
         await recordCall(config.store, call, context, errorResult, startTime, false, approvalStatus);
         return { toolCallId: call.toolCallId, name: call.name, result: errorResult, parsedResult: null, success: false };
       }

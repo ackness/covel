@@ -1,5 +1,5 @@
 // ── Tool definition ──────────────────────────────────────────────
-export { tool } from './tool.js';
+export { tool, ToolValidationError } from './tool.js';
 
 // ── Zod re-export (for plugin tool factory injection) ───────────
 export { z } from 'zod';

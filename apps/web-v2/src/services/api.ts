@@ -1,32 +1,61 @@
 /**
- * API client for Covel server.
+ * API facade for Covel server — front-end edge of the front/back split.
+ *
+ * This file is a *thin shim* around `@covel/api-client`. Web-v2 must NOT
+ * make direct `fetch()` calls anywhere else in the codebase: that would
+ * couple the frontend to wire-format details and defeat the separation.
+ *
+ * - All HTTP/SSE traffic flows through a single `ApiClient` singleton.
+ * - Public function signatures preserve the legacy shapes used by stores
+ *   and components, so no caller needs to change when this layer evolves.
+ * - Types are re-exported from `@covel/api-client` (which itself derives
+ *   from `@covel/shared`), giving the whole frontend a single source of
+ *   type truth.
  */
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init);
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`API ${res.status}: ${body}`);
-  }
-  return res.json() as Promise<T>;
-}
+import {
+  ApiClient,
+  type ActionRequest,
+  type Character as ApiCharacter,
+  type LorebookEntry as ApiLorebookEntry,
+  type Message as ApiMessage,
+  type PluginDocsResponse as ApiPluginDocsResponse,
+  type PluginFlowsResponse as ApiPluginFlowsResponse,
+  type PluginPackage,
+  type Session as ApiSession,
+  type SseEvent,
+  type SubmitInputItem as ApiSubmitInputItem,
+  type SubmitInputsBatchResponse,
+  type UiSpecSlotEntry,
+  type UiSpecs,
+  type World as ApiWorld,
+} from "@covel/api-client";
 
-// ── Types ────────────────────────────────────────────────────────
+// ── Singleton client ─────────────────────────────────────────────
 
-export interface WorldRecord {
-  id: string;
-  name: string;
-  description: string;
-  tags?: string[];
-}
+const apiClient = new ApiClient({ baseUrl: "/" });
 
-export interface SessionRecord {
-  id: string;
-  worldId: string;
-  phase: string;
-  locale?: string;
-  createdAt?: string;
-}
+// Expose for advanced consumers that need direct resource access (e.g.
+// future Electron transport injection, debug tools). New code should
+// prefer the named functions below.
+export { apiClient };
+
+// ── Re-exported types (legacy aliases) ───────────────────────────
+
+export type WorldRecord = ApiWorld;
+export type SessionRecord = ApiSession;
+export type Message = ApiMessage;
+export type Character = ApiCharacter;
+export type LorebookEntry = ApiLorebookEntry;
+export type UISlotEntry = UiSpecSlotEntry;
+export type UISpecsResponse = UiSpecs;
+export type PluginInfo = PluginPackage;
+export type PluginFlowResponse = ApiPluginFlowsResponse;
+export type PluginFlowSegment = ApiPluginFlowsResponse["segments"][number];
+export type PluginFlowStep = ApiPluginFlowsResponse["steps"][number];
+export type PluginDocEntry = ApiPluginDocsResponse["docs"][number];
+export type PluginDocsResponse = ApiPluginDocsResponse;
+export type SubmitInputPayload = ApiSubmitInputItem;
 
 // ── Health ───────────────────────────────────────────────────────
 
@@ -36,69 +65,67 @@ export interface HealthResponse {
 }
 
 export async function fetchHealth(): Promise<HealthResponse> {
-  return request<HealthResponse>("/api/health");
+  // The api-client returns the full health envelope; strip down to the
+  // legacy shape that web-v2 callers expect.
+  const res = (await apiClient.health.get()) as unknown as Record<string, unknown>;
+  return {
+    status: typeof res.status === "string" ? res.status : "ok",
+    storeBackend: typeof res.storeBackend === "string" ? res.storeBackend : "",
+  };
 }
 
 // ── Worlds ───────────────────────────────────────────────────────
 
 export async function listWorlds(): Promise<WorldRecord[]> {
-  const res = await request<{ items: WorldRecord[] }>("/api/worlds");
-  return res.items;
+  return apiClient.worlds.list();
 }
 
 // ── Sessions ─────────────────────────────────────────────────────
 
 export async function listSessions(): Promise<SessionRecord[]> {
-  const res = await request<{ items: SessionRecord[] }>("/api/sessions");
-  return res.items ?? [];
+  return apiClient.sessions.list();
 }
 
-export async function createSession(worldId: string, plugins: string[]): Promise<SessionRecord> {
-  return request<SessionRecord>("/api/sessions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ worldId, plugins, locale: "zh-CN" }),
+export async function createSession(
+  worldId: string,
+  plugins: string[],
+): Promise<SessionRecord> {
+  return apiClient.sessions.create({
+    worldId,
+    plugins,
+    locale: "zh-CN",
   });
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
-  await request(`/api/sessions/${sessionId}`, { method: "DELETE" });
+  return apiClient.sessions.delete(sessionId);
 }
 
 // ── Actions (SSE) ────────────────────────────────────────────────
 
 export interface ActionPayload {
-  type: "start_session" | "send_message";
+  type: ActionRequest["type"];
   sessionId: string;
-  payload?: { content: string };
+  payload?: Record<string, unknown>;
   locale?: string;
 }
 
 /**
- * Post an action and return the SSE stream response.
- * Caller is responsible for reading the stream.
+ * Post an action and return an async-iterable SSE event stream.
+ *
+ * Callers consume via `for await (const evt of stream)`. Each event
+ * already has its `data` field JSON-parsed by the api-client SSE parser.
  */
-export async function postAction(payload: ActionPayload): Promise<Response> {
-  const res = await fetch("/api/actions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+export function postAction(payload: ActionPayload): AsyncIterable<SseEvent> {
+  return apiClient.actions.run({
+    type: payload.type,
+    sessionId: payload.sessionId,
+    payload: payload.payload ?? {},
+    ...(payload.locale ? { locale: payload.locale } : {}),
   });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Action failed ${res.status}: ${body}`);
-  }
-  return res;
 }
 
 // ── Submit Inputs (form/choice/confirmation) ─────────────────────
-
-export interface SubmitInputPayload {
-  turnId: string;
-  interactionId: string;
-  type?: "form" | "choice" | "confirmation";
-  values: Record<string, unknown>;
-}
 
 export async function submitInputsBatch(
   sessionId: string,
@@ -106,34 +133,8 @@ export async function submitInputsBatch(
     turnId: string;
     submissions: SubmitInputPayload[];
   },
-): Promise<{
-  results: Array<{
-    submissionId: string;
-    interactionId: string;
-    filledNarrative: string;
-    accepted: boolean;
-  }>;
-  accepted: boolean;
-}> {
-  return request<{
-    results: Array<{
-      submissionId: string;
-      interactionId: string;
-      filledNarrative: string;
-      accepted: boolean;
-    }>;
-    accepted: boolean;
-  }>(
-    `/api/sessions/${sessionId}/submit-inputs`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        turnId: payload.turnId,
-        submissions: payload.submissions,
-      }),
-    },
-  );
+): Promise<SubmitInputsBatchResponse> {
+  return apiClient.sessions.submitInputs(sessionId, payload);
 }
 
 export async function submitInputs(
@@ -152,87 +153,17 @@ export async function submitInputs(
 
 // ── Plugins ──────────────────────────────────────────────────────
 
-export interface PluginInfo {
-  name: string;
-  displayName?: string | Record<string, string>;
-  description?: string | Record<string, string>;
-  pluginType?: string;
-}
-
 export async function listPlugins(): Promise<PluginInfo[]> {
-  const res = await request<{ packages: PluginInfo[] }>("/api/packages");
+  const res = await apiClient.plugins.listPackages();
   return res.packages;
 }
 
-export interface PluginFlowSegment {
-  id: "start" | "pre-game" | "core-game-loop";
-  label: string;
-  rangeLabel: string;
-  minPriority: number;
-  maxPriority: number;
-}
-
-export interface PluginFlowStep {
-  id: string;
-  pluginId: string;
-  pluginName: string;
-  runtimeId: string;
-  runtimeName: string;
-  description: string;
-  pluginType: string;
-  priority: number;
-  segmentId: "pre-game" | "core-game-loop";
-  runtimeType: string;
-  outputKind: string;
-  model?: string;
-  trigger: {
-    type: string;
-    interval?: number;
-    cooldownTurns?: number;
-    maxTriggerCount?: number;
-    phases: string[];
-  };
-  injects: Array<{ from: string; field: string; as: string }>;
-  tools: { builtin: string[]; local: string[] };
-  uiSlots: string[];
-  docPath: string;
-  isStoryRuntime: boolean;
-}
-
-export interface PluginFlowResponse {
-  version: string;
-  generatedAt: string;
-  segments: PluginFlowSegment[];
-  plugins: Array<{
-    id: string;
-    name: string;
-    description: string;
-    pluginType: string;
-    runtimeIds: string[];
-  }>;
-  steps: PluginFlowStep[];
-}
-
 export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
-  return request<PluginFlowResponse>("/api/plugin-flows");
-}
-
-export interface PluginDocEntry {
-  id: string;
-  runtimeId: string;
-  label: string;
-  path: string;
-  content: string;
-}
-
-export interface PluginDocsResponse {
-  pluginId: string;
-  name: string;
-  docs: PluginDocEntry[];
+  return apiClient.plugins.getFlows();
 }
 
 export async function fetchPluginDocs(pluginId: string): Promise<PluginDocsResponse> {
-  return request<PluginDocsResponse>(`/api/plugin-docs/${encodeURIComponent(pluginId)}`);
+  return apiClient.plugins.getDocs(pluginId);
 }
 
 // ── Session Snapshot (restore) ──────────────────────────────────
@@ -249,57 +180,38 @@ export interface SnapshotResponse {
     block?: Record<string, unknown>;
     createdAt: string;
   }>;
-  characters: Array<{ id: string; name: string; type: string; description?: string; fields?: Record<string, unknown> }>;
+  characters: Array<{
+    id: string;
+    name: string;
+    type: string;
+    description?: string;
+    fields?: Record<string, unknown>;
+  }>;
   gameState: Record<string, unknown>;
-  executionSteps: Array<{ type: string; turnId: string; payload: Record<string, unknown>; timestamp: string }>;
+  executionSteps: Array<{
+    type: string;
+    turnId: string;
+    payload: Record<string, unknown>;
+    timestamp: string;
+  }>;
   plugins: Array<{ id: string; name: string; isActive: boolean; priority: number }>;
   characterSchema?: Record<string, unknown>;
 }
 
 export async function fetchSnapshot(sessionId: string): Promise<SnapshotResponse> {
-  return request<SnapshotResponse>(`/api/sessions/${sessionId}/snapshot`);
+  return (await apiClient.sessions.getSnapshot(sessionId)) as SnapshotResponse;
 }
 
 // ── UI Specs ─────────────────────────────────────────────────────
 
-export interface UISlotEntry {
-  pluginId: string;
-  specs: readonly Record<string, unknown>[];
-}
-
-export interface UISpecsResponse {
-  right: UISlotEntry[];
-  message: UISlotEntry[];
-  left: UISlotEntry[];
-}
-
 export async function fetchUiSpecs(sessionId?: string): Promise<UISpecsResponse> {
-  const qs = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
-  return request<UISpecsResponse>(`/api/ui-specs${qs}`);
+  return apiClient.uiSpecs.get(sessionId);
 }
 
 // ── Lorebook (framework-owned) ───────────────────────────────────
 
-export interface LorebookEntry {
-  id: string;
-  sessionId: string;
-  pluginId: string;
-  keys: readonly string[];
-  content: string;
-  strategy: "constant" | "selective";
-  position: string;
-  insertionOrder: number;
-  enabled: boolean;
-  extra?: unknown;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export async function fetchLorebookEntries(sessionId: string): Promise<LorebookEntry[]> {
-  const res = await request<{ entries: LorebookEntry[] }>(
-    `/api/sessions/${sessionId}/lorebook`,
-  );
-  return res.entries ?? [];
+  return apiClient.lorebook.list(sessionId);
 }
 
 export async function updateLorebookEntryEnabled(
@@ -307,20 +219,14 @@ export async function updateLorebookEntryEnabled(
   entryId: string,
   enabled: boolean,
 ): Promise<void> {
-  await request(`/api/sessions/${sessionId}/lorebook/${entryId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled }),
-  });
+  return apiClient.lorebook.setEnabled(sessionId, entryId, enabled);
 }
 
 export async function deleteLorebookEntry(
   sessionId: string,
   entryId: string,
 ): Promise<void> {
-  await request(`/api/sessions/${sessionId}/lorebook/${entryId}`, {
-    method: "DELETE",
-  });
+  return apiClient.lorebook.delete(sessionId, entryId);
 }
 
 // ── Plugin Data ──────────────────────────────────────────────────
@@ -330,9 +236,10 @@ export async function fetchPluginData(
   pluginId: string,
   namespace?: string,
 ): Promise<Array<{ namespace: string; key: string; value: unknown }>> {
-  const path = namespace
-    ? `/api/sessions/${sessionId}/plugin-data/${pluginId}/${namespace}`
-    : `/api/sessions/${sessionId}/plugin-data/${pluginId}`;
-  const res = await request<{ items: Array<{ namespace: string; key: string; value: unknown }> }>(path);
-  return res.items ?? [];
+  const items = await apiClient.pluginData.list(sessionId, pluginId, namespace);
+  return items.map((entry) => ({
+    namespace: entry.namespace,
+    key: entry.key,
+    value: entry.value,
+  }));
 }

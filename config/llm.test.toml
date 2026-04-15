@@ -1,0 +1,10 @@
+# ── Covel LLM Test Configuration ────────────────────────────────
+#
+# 仅用于文档说明，实际测试通过环境变量覆盖 llm.toml 中的 baseUrl：
+#
+#   COVEL_STORY_BASE_URL=http://127.0.0.1:4010/v1   → aimock story 实例
+#   COVEL_PLUGIN_BASE_URL=http://127.0.0.1:4011/v1  → aimock plugin 实例
+#
+# 使用 scripts/e2e-mock.sh 自动完成所有操作。
+#
+# 本文件不被服务器加载，仅供参考。

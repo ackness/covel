@@ -102,7 +102,11 @@ function segmentTone(segmentId: PluginFlowStep["segmentId"] | "start"): {
       label: "text-amber-700 dark:text-amber-300",
     };
   }
-  if (segmentId === "core-game-loop") {
+  if (
+    segmentId === "pre-narrator" ||
+    segmentId === "narrator" ||
+    segmentId === "post-narrator"
+  ) {
     return {
       frame: "border-sky-300/70 bg-[linear-gradient(135deg,rgba(239,246,255,0.92),rgba(255,255,255,0.82))] dark:border-sky-700/50 dark:bg-[linear-gradient(135deg,rgba(8,47,73,0.5),rgba(24,24,27,0.92))]",
       glow: "shadow-[0_18px_55px_-30px_rgba(2,132,199,0.55)]",
@@ -454,7 +458,19 @@ export function SessionPrep({
   const activeSteps = pluginFlow?.steps.filter((step) => selectedPlugins.includes(step.pluginId)) ?? [];
   const startSegment = pluginFlow?.segments.find((segment) => segment.id === "start") ?? null;
   const preGameSegment = pluginFlow?.segments.find((segment) => segment.id === "pre-game") ?? null;
-  const coreSegment = pluginFlow?.segments.find((segment) => segment.id === "core-game-loop") ?? null;
+  const CORE_SEGMENT_IDS = ["pre-narrator", "narrator", "post-narrator"] as const;
+  const coreSubSegments = pluginFlow?.segments.filter((segment) =>
+    (CORE_SEGMENT_IDS as readonly string[]).includes(segment.id),
+  ) ?? [];
+  const coreSegment: PluginFlowSegment | null = coreSubSegments.length
+    ? ({
+        id: "post-narrator",
+        label: "Core-Game-Loop",
+        rangeLabel: `${coreSubSegments[0]!.minPriority}-${coreSubSegments[coreSubSegments.length - 1]!.maxPriority}`,
+        minPriority: coreSubSegments[0]!.minPriority,
+        maxPriority: coreSubSegments[coreSubSegments.length - 1]!.maxPriority,
+      } satisfies PluginFlowSegment)
+    : null;
   const activeRuntime = activeSteps.find((step) => step.runtimeId === focusedRuntimeId) ?? preferredRuntime(activeSteps);
   const previewDocs = activeRuntime ? docsByPlugin[activeRuntime.pluginId]?.docs ?? [] : [];
   const runtimeCountByPlugin = new Map(
@@ -515,7 +531,9 @@ export function SessionPrep({
   }, [activeRuntime, docsByPlugin]);
 
   const preGameSteps = activeSteps.filter((step) => step.segmentId === "pre-game");
-  const coreSteps = activeSteps.filter((step) => step.segmentId === "core-game-loop");
+  const coreSteps = activeSteps.filter((step) =>
+    (CORE_SEGMENT_IDS as readonly string[]).includes(step.segmentId),
+  );
 
   function focusRuntime(step: PluginFlowStep) {
     setFocusedRuntimeId(step.runtimeId);
@@ -565,7 +583,7 @@ export function SessionPrep({
                     </div>
                     <div>
                       <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50 lg:text-4xl">
-                        {world.name}
+                        {textValue(world.name)}
                       </h1>
                       <p className="mt-1 max-w-2xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
                         {world.description}
@@ -614,65 +632,6 @@ export function SessionPrep({
                 </div>
               </div>
             </section>
-
-            <section className={`relative overflow-hidden rounded-[30px] border p-6 ${segmentTone("start").frame} ${segmentTone("start").glow}`}>
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.55),transparent_42%)] dark:bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.05),transparent_42%)]" />
-              <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-                <div className="max-w-2xl">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-zinc-500 dark:text-zinc-400">
-                    {startSegment?.label ?? "开始游戏"}
-                  </div>
-                  <div className="mt-4 flex items-center gap-3">
-                    <div className="rounded-[22px] bg-zinc-900 p-4 text-white dark:bg-zinc-100 dark:text-zinc-900">
-                      <Play className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h2 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
-                        Start Game · 0
-                      </h2>
-                      <p className="mt-1 text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
-                        会话从这里启动，框架按照固定的 priority 区间推进到 Pre-Game，再进入 Core-Game-Loop。
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={onStart}
-                  className="inline-flex items-center justify-center gap-2 rounded-[22px] bg-zinc-950 px-6 py-4 text-sm font-semibold text-white shadow-[0_18px_38px_-20px_rgba(24,24,27,0.8)] transition-transform hover:-translate-y-0.5 dark:bg-zinc-100 dark:text-zinc-900"
-                >
-                  <Play className="h-4 w-4" />
-                  开始新游戏
-                </button>
-              </div>
-            </section>
-
-            <div className="flex items-center justify-center py-1 text-zinc-400 dark:text-zinc-600">
-              <ArrowDown className="h-5 w-5" />
-            </div>
-
-            {preGameSegment && (
-              <FlowBand
-                segment={preGameSegment}
-                steps={preGameSteps}
-                activeRuntimeId={activeRuntime?.runtimeId ?? null}
-                onSelect={focusRuntime}
-              />
-            )}
-
-            <div className="flex items-center justify-center py-1 text-zinc-400 dark:text-zinc-600">
-              <ArrowDown className="h-5 w-5" />
-            </div>
-
-            {coreSegment && (
-              <FlowBand
-                segment={coreSegment}
-                steps={coreSteps}
-                activeRuntimeId={activeRuntime?.runtimeId ?? null}
-                onSelect={focusRuntime}
-              />
-            )}
 
             <section className="relative overflow-hidden rounded-[28px] border border-zinc-200/80 bg-[linear-gradient(145deg,rgba(255,255,255,0.96),rgba(244,244,245,0.93))] p-5 shadow-[0_18px_55px_-34px_rgba(24,24,27,0.55)] dark:border-zinc-800 dark:bg-[linear-gradient(145deg,rgba(24,24,27,0.96),rgba(39,39,42,0.94))]">
               <div className="flex items-center justify-between gap-3">
@@ -750,21 +709,68 @@ export function SessionPrep({
                 })}
               </div>
             </section>
+
+            <section className={`relative overflow-hidden rounded-[30px] border p-6 ${segmentTone("start").frame} ${segmentTone("start").glow}`}>
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.55),transparent_42%)] dark:bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.05),transparent_42%)]" />
+              <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                <div className="max-w-2xl">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-zinc-500 dark:text-zinc-400">
+                    {startSegment?.label ?? "开始游戏"}
+                  </div>
+                  <div className="mt-4 flex items-center gap-3">
+                    <div className="rounded-[22px] bg-zinc-900 p-4 text-white dark:bg-zinc-100 dark:text-zinc-900">
+                      <Play className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
+                        Start Game · 0
+                      </h2>
+                      <p className="mt-1 text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
+                        会话从这里启动，框架按照固定的 priority 区间推进到 Pre-Game，再进入 Core-Game-Loop。
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onStart}
+                  className="inline-flex items-center justify-center gap-2 rounded-[22px] bg-zinc-950 px-6 py-4 text-sm font-semibold text-white shadow-[0_18px_38px_-20px_rgba(24,24,27,0.8)] transition-transform hover:-translate-y-0.5 dark:bg-zinc-100 dark:text-zinc-900"
+                >
+                  <Play className="h-4 w-4" />
+                  开始新游戏
+                </button>
+              </div>
+            </section>
+
+            <div className="flex items-center justify-center py-1 text-zinc-400 dark:text-zinc-600">
+              <ArrowDown className="h-5 w-5" />
+            </div>
+
+            {preGameSegment && (
+              <FlowBand
+                segment={preGameSegment}
+                steps={preGameSteps}
+                activeRuntimeId={activeRuntime?.runtimeId ?? null}
+                onSelect={focusRuntime}
+              />
+            )}
+
+            <div className="flex items-center justify-center py-1 text-zinc-400 dark:text-zinc-600">
+              <ArrowDown className="h-5 w-5" />
+            </div>
+
+            {coreSegment && (
+              <FlowBand
+                segment={coreSegment}
+                steps={coreSteps}
+                activeRuntimeId={activeRuntime?.runtimeId ?? null}
+                onSelect={focusRuntime}
+              />
+            )}
           </div>
 
           <div className="space-y-5">
-            <div className="xl:sticky xl:top-6 xl:z-10">
-              <div ref={docsPanelRef}>
-                <PluginDocsPanel
-                  step={activeRuntime}
-                  docs={previewDocs}
-                  loading={docLoadingPluginId === activeRuntime?.pluginId}
-                  error={docError}
-                  onSelectRuntime={setFocusedRuntimeId}
-                />
-              </div>
-            </div>
-
             <section className="rounded-[28px] border border-zinc-200/80 bg-[linear-gradient(145deg,rgba(255,255,255,0.96),rgba(244,244,245,0.93))] p-5 shadow-[0_18px_55px_-34px_rgba(24,24,27,0.55)] dark:border-zinc-800 dark:bg-[linear-gradient(145deg,rgba(24,24,27,0.96),rgba(39,39,42,0.94))]">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -801,6 +807,14 @@ export function SessionPrep({
                           <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:bg-zinc-900 dark:text-zinc-300">
                             {phaseLabel(session.phase)}
                           </span>
+                          {session.embedding ? (
+                            <span
+                              className="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[9px] font-medium text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/35 dark:text-emerald-300"
+                              title={`${session.embedding.modelId} · ${session.embedding.dim}d`}
+                            >
+                              RAG · {session.embedding.modelName}
+                            </span>
+                          ) : null}
                         </div>
                         {session.createdAt && (
                           <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
@@ -880,6 +894,16 @@ export function SessionPrep({
                 </button>
               </div>
             </section>
+
+            <div ref={docsPanelRef}>
+              <PluginDocsPanel
+                step={activeRuntime}
+                docs={previewDocs}
+                loading={docLoadingPluginId === activeRuntime?.pluginId}
+                error={docError}
+                onSelectRuntime={setFocusedRuntimeId}
+              />
+            </div>
           </div>
         </div>
       </div>

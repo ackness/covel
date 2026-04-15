@@ -14,7 +14,8 @@
 ##
 services:
   postgres:
-    image: postgres:17-alpine
+    # pgvector image: ADR-002 requires the `vector` extension in PG backend.
+    image: pgvector/pgvector:pg17
     container_name: covel-e2e-postgres
     environment:
       POSTGRES_USER: covel

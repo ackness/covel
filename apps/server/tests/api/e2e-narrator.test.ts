@@ -57,6 +57,7 @@ describe('E2E: Narrator game flow', () => {
       pluginsDir: PLUGINS_DIR,
       llmAdapter: mockLLM,
       store: createMemoryStore(),
+      storeBackend: 'memory',
     });
     app = result.app;
 

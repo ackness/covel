@@ -7,7 +7,7 @@
 
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, desc, gte, type SQL } from 'drizzle-orm';
 import * as schema from './schema.js';
 import type {
   DataStore,
@@ -27,6 +27,10 @@ import type {
   PluginConfigRecord,
   WorldRecord,
   TraceEventRecord,
+  RuntimeOutputRecord,
+  InteractionRecordRow,
+  RuntimeOutputFilters,
+  InteractionRecordFilters,
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
@@ -54,6 +58,8 @@ import {
   toPluginDataRecord,
   toPluginConfigRecord,
   toTraceEventRecord,
+  toRuntimeOutputRecord,
+  toInteractionRecordRow,
   toTurnMessageRecord,
   toPlayerInputRecord,
   toWorkingMemoryRecord,
@@ -62,6 +68,8 @@ import {
   toSuspensionRecord,
   toSnapshotRecord,
 } from './pg-store-mappers.js';
+import type { VectorStoreCapability, VectorModelOps } from '../vector-store.js';
+import { createPgVectorCapability } from './pg-vector.js';
 
 // ── Factory ─────────────────────────────────────────────────────
 
@@ -73,7 +81,7 @@ export interface PgStoreOptions {
 export async function createPgStore(
   databaseUrl: string,
   options?: PgStoreOptions,
-): Promise<DataStore> {
+): Promise<DataStore & VectorStoreCapability & VectorModelOps> {
   const client = postgres(databaseUrl);
   const pooledDb = drizzle(client, { schema });
 
@@ -81,7 +89,10 @@ export async function createPgStore(
     await client.unsafe(DROP_ALL_SQL);
   }
 
-  // Create tables (idempotent)
+  // Create tables (idempotent). The pgvector extension is enabled lazily
+  // by pg-vector.ts on first vector operation — that keeps stores that
+  // never touch RAG (e.g. test fixtures, vector-disabled deployments)
+  // bootable on plain postgres.
   await client.unsafe(CREATE_TABLES_SQL);
 
   // Mutable "current db" handle. Outside a transaction this is the pool-bound
@@ -91,7 +102,7 @@ export async function createPgStore(
   let db: typeof pooledDb = pooledDb;
   const txAdapter = createPgTxAdapter({ pooledDb, setDb: (next) => { db = next; } });
 
-  return {
+  const baseStore: DataStore = {
     // ── Session ──────────────────────────────────────────────
 
     async createSession(session: SessionRecord): Promise<void> {
@@ -104,6 +115,8 @@ export async function createPgStore(
         activePlugins: session.activePlugins as string[],
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
+        playingTurnOffset: session.playingTurnOffset ?? null,
+        runtimeModelOverrides: (session.runtimeModelOverrides ?? {}) as Record<string, string>,
       });
     },
 
@@ -117,13 +130,19 @@ export async function createPgStore(
 
     async updateSession(
       id: string,
-      patch: Partial<Pick<SessionRecord, 'phase' | 'turnCount' | 'activePlugins' | 'updatedAt'>>,
+      patch: Partial<Pick<SessionRecord, 'phase' | 'turnCount' | 'activePlugins' | 'updatedAt' | 'embeddingModelId' | 'embeddingLockedAt' | 'playingTurnOffset' | 'runtimeModelOverrides'>>,
     ): Promise<void> {
       const values: Record<string, unknown> = {};
       if (patch.phase !== undefined) values.phase = patch.phase;
       if (patch.turnCount !== undefined) values.turnCount = patch.turnCount;
       if (patch.activePlugins !== undefined) values.activePlugins = patch.activePlugins as string[];
       if (patch.updatedAt !== undefined) values.updatedAt = patch.updatedAt;
+      if ('embeddingModelId' in patch) values.embeddingModelId = patch.embeddingModelId ?? null;
+      if ('embeddingLockedAt' in patch) values.embeddingLockedAt = patch.embeddingLockedAt ?? null;
+      if ('playingTurnOffset' in patch) values.playingTurnOffset = patch.playingTurnOffset ?? null;
+      if ('runtimeModelOverrides' in patch) {
+        values.runtimeModelOverrides = (patch.runtimeModelOverrides ?? {}) as Record<string, string>;
+      }
 
       if (Object.keys(values).length > 0) {
         await db
@@ -721,6 +740,106 @@ export async function createPgStore(
       return rows.map(toTraceEventRecord);
     },
 
+    // ── Runtime Outputs (PR-1) ──────────────────────────────
+
+    async saveRuntimeOutput(record: RuntimeOutputRecord): Promise<void> {
+      await db.insert(schema.runtimeOutputs).values({
+        id: record.id,
+        sessionId: record.sessionId,
+        turnId: record.turnId,
+        runtimeResultId: record.runtimeResultId ?? null,
+        pluginId: record.pluginId,
+        runtimeId: record.runtimeId,
+        timestamp: record.timestamp,
+        results: record.results ?? [],
+        metaData: record.metaData ?? {},
+        createdAt: record.createdAt,
+      });
+    },
+
+    async getRuntimeOutput(sessionId: string, id: string): Promise<RuntimeOutputRecord | null> {
+      const rows = await db
+        .select()
+        .from(schema.runtimeOutputs)
+        .where(
+          and(
+            eq(schema.runtimeOutputs.sessionId, sessionId),
+            eq(schema.runtimeOutputs.id, id),
+          ),
+        )
+        .limit(1);
+      return rows[0] ? toRuntimeOutputRecord(rows[0]) : null;
+    },
+
+    async listRuntimeOutputs(
+      sessionId: string,
+      filters?: RuntimeOutputFilters,
+    ): Promise<RuntimeOutputRecord[]> {
+      const conditions: SQL[] = [eq(schema.runtimeOutputs.sessionId, sessionId)];
+      if (filters?.runtimeId) {
+        conditions.push(eq(schema.runtimeOutputs.runtimeId, filters.runtimeId));
+      }
+      if (filters?.pluginId) {
+        conditions.push(eq(schema.runtimeOutputs.pluginId, filters.pluginId));
+      }
+      if (filters?.sinceTimestamp) {
+        conditions.push(gte(schema.runtimeOutputs.timestamp, filters.sinceTimestamp));
+      }
+      let query = db
+        .select()
+        .from(schema.runtimeOutputs)
+        .where(and(...conditions))
+        .orderBy(desc(schema.runtimeOutputs.timestamp))
+        .$dynamic();
+      if (filters?.limit !== undefined) query = query.limit(filters.limit);
+      const rows = await query;
+      return rows.map(toRuntimeOutputRecord);
+    },
+
+    // ── Interaction Records (PR-1) ──────────────────────────
+
+    async saveInteractionRecord(record: InteractionRecordRow): Promise<void> {
+      await db.insert(schema.interactionRecords).values({
+        id: record.id,
+        sessionId: record.sessionId,
+        turnId: record.turnId ?? null,
+        timestamp: record.timestamp,
+        source: record.source,
+        channel: record.channel,
+        type: record.type,
+        targetPluginId: record.targetPluginId ?? null,
+        targetRuntimeId: record.targetRuntimeId ?? null,
+        payload: record.payload ?? null,
+        metaData: record.metaData ?? null,
+        createdAt: record.createdAt,
+      });
+    },
+
+    async listInteractionRecords(
+      sessionId: string,
+      filters?: InteractionRecordFilters,
+    ): Promise<InteractionRecordRow[]> {
+      const conditions: SQL[] = [eq(schema.interactionRecords.sessionId, sessionId)];
+      if (filters?.type) {
+        conditions.push(eq(schema.interactionRecords.type, filters.type));
+      }
+      if (filters?.source) {
+        conditions.push(eq(schema.interactionRecords.source, filters.source));
+      }
+      if (filters?.targetPluginId) {
+        conditions.push(eq(schema.interactionRecords.targetPluginId, filters.targetPluginId));
+      }
+      let query = db
+        .select()
+        .from(schema.interactionRecords)
+        .where(and(...conditions))
+        .orderBy(desc(schema.interactionRecords.timestamp))
+        .$dynamic();
+      if (filters?.limit !== undefined) query = query.limit(filters.limit);
+      const rows = await query;
+      return rows.map(toInteractionRecordRow);
+    },
+
     // ── Turn Messages ───────────────────────────────────────
 
     async appendTurnMessage(record: TurnMessageRecord): Promise<void> {
@@ -1079,4 +1198,8 @@ export async function createPgStore(
       await client.end();
     },
   };
+
+  // Mixin vector capability onto the base store.
+  const vectorCap = createPgVectorCapability(client);
+  return Object.assign(baseStore, vectorCap);
 }

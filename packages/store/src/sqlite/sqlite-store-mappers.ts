@@ -23,6 +23,8 @@ import type {
   PluginConfigRecord,
   WorldRecord,
   TraceEventRecord,
+  RuntimeOutputRecord,
+  InteractionRecordRow,
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
@@ -245,6 +247,41 @@ export function createTables(sqlite: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS trace_events_session_id_idx ON trace_events(session_id);
 
+    -- Runtime Outputs (PR-1 translation layer)
+    CREATE TABLE IF NOT EXISTS runtime_outputs (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      turn_id TEXT NOT NULL,
+      runtime_result_id TEXT,
+      plugin_id TEXT NOT NULL,
+      runtime_id TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      results TEXT NOT NULL,
+      meta_data TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS runtime_outputs_session_time_idx ON runtime_outputs(session_id, timestamp);
+    CREATE INDEX IF NOT EXISTS runtime_outputs_runtime_idx ON runtime_outputs(session_id, runtime_id);
+    CREATE INDEX IF NOT EXISTS runtime_outputs_plugin_idx ON runtime_outputs(session_id, plugin_id);
+
+    -- Interaction Records (PR-1 translation layer)
+    CREATE TABLE IF NOT EXISTS interaction_records (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      turn_id TEXT,
+      timestamp TEXT NOT NULL,
+      source TEXT NOT NULL,
+      channel TEXT NOT NULL,
+      type TEXT NOT NULL,
+      target_plugin_id TEXT,
+      target_runtime_id TEXT,
+      payload TEXT NOT NULL,
+      meta_data TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS interaction_records_session_time_idx ON interaction_records(session_id, timestamp);
+    CREATE INDEX IF NOT EXISTS interaction_records_type_idx ON interaction_records(session_id, type);
+
     CREATE TABLE IF NOT EXISTS turn_messages (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL,
@@ -337,7 +374,52 @@ export function createTables(sqlite: Database.Database): void {
       resolved_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_suspensions_session ON suspensions(session_id);
+
+    CREATE TABLE IF NOT EXISTS vector_models (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      model_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      model_name TEXT NOT NULL,
+      dim INTEGER NOT NULL,
+      -- Auto-filled by the trigger below from the row id. Application
+      -- code MUST NOT specify this column on INSERT — the schema-side
+      -- trigger derives it as 'vec_mem_m{id}' so the registry stays
+      -- consistent without a placeholder + UPDATE roundtrip.
+      table_name TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL,
+      last_used_at INTEGER,
+      UNIQUE (model_id, dim)
+    );
+
+    -- Atomic table_name backfill: SQLite AFTER INSERT triggers see the
+    -- generated rowid via NEW.id. The UPDATE runs in the same implicit
+    -- transaction as the INSERT, so readers always see a populated row.
+    CREATE TRIGGER IF NOT EXISTS vector_models_fill_table_name
+      AFTER INSERT ON vector_models
+      FOR EACH ROW
+      WHEN NEW.table_name = '' OR NEW.table_name IS NULL
+    BEGIN
+      UPDATE vector_models
+         SET table_name = 'vec_mem_m' || NEW.id
+       WHERE id = NEW.id;
+    END;
   `);
+
+  // Migrations: add columns to sessions if they don't already exist
+  const sessionCols = sqlite.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+  const colNames = new Set(sessionCols.map((c) => c.name));
+  if (!colNames.has('embedding_model_id')) {
+    sqlite.exec("ALTER TABLE sessions ADD COLUMN embedding_model_id INTEGER");
+  }
+  if (!colNames.has('embedding_locked_at')) {
+    sqlite.exec("ALTER TABLE sessions ADD COLUMN embedding_locked_at TEXT");
+  }
+  if (!colNames.has('playing_turn_offset')) {
+    sqlite.exec("ALTER TABLE sessions ADD COLUMN playing_turn_offset INTEGER");
+  }
+  if (!colNames.has('runtime_model_overrides')) {
+    sqlite.exec("ALTER TABLE sessions ADD COLUMN runtime_model_overrides TEXT DEFAULT '{}'");
+  }
 }
 
 // ── Row → Record mappers ────────────────────────────────────────
@@ -352,6 +434,19 @@ export function toSessionRecord(row: typeof schema.sessions.$inferSelect): Sessi
     activePlugins: JSON.parse(row.activePlugins) as string[],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    ...(row.embeddingModelId != null ? { embeddingModelId: row.embeddingModelId } : {}),
+    ...(row.embeddingLockedAt != null ? { embeddingLockedAt: row.embeddingLockedAt } : {}),
+    ...(row.playingTurnOffset != null ? { playingTurnOffset: row.playingTurnOffset } : {}),
+    ...(() => {
+      const rmo = row.runtimeModelOverrides;
+      if (!rmo || rmo === '{}') return {};
+      try {
+        const parsed = JSON.parse(rmo) as Record<string, string>;
+        return Object.keys(parsed).length > 0 ? { runtimeModelOverrides: parsed } : {};
+      } catch {
+        return {};
+      }
+    })(),
   };
 }
 
@@ -530,6 +625,42 @@ export function toTraceEventRecord(row: typeof schema.traceEvents.$inferSelect):
     traceId: row.traceId,
     turnId: row.turnId,
     payload: fromJson(row.payload),
+    createdAt: row.createdAt,
+  };
+}
+
+export function toRuntimeOutputRecord(
+  row: typeof schema.runtimeOutputs.$inferSelect,
+): RuntimeOutputRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    turnId: row.turnId,
+    runtimeResultId: row.runtimeResultId ?? undefined,
+    pluginId: row.pluginId,
+    runtimeId: row.runtimeId,
+    timestamp: row.timestamp,
+    results: fromJsonRequired(row.results),
+    metaData: fromJsonRequired(row.metaData),
+    createdAt: row.createdAt,
+  };
+}
+
+export function toInteractionRecordRow(
+  row: typeof schema.interactionRecords.$inferSelect,
+): InteractionRecordRow {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    turnId: row.turnId ?? undefined,
+    timestamp: row.timestamp,
+    source: row.source,
+    channel: row.channel,
+    type: row.type,
+    targetPluginId: row.targetPluginId ?? undefined,
+    targetRuntimeId: row.targetRuntimeId ?? undefined,
+    payload: fromJsonRequired(row.payload),
+    metaData: fromJson(row.metaData),
     createdAt: row.createdAt,
   };
 }

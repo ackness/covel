@@ -30,6 +30,7 @@ type Env = {
     resolveModel: (manifest: RuntimeManifest, apiOverride?: string) => string | undefined;
     eventBus: EventBus;
     compactorRunner: CompactorRunner;
+    ensureEmbeddingLock?: (sessionId: string) => Promise<void>;
   };
 };
 
@@ -40,6 +41,7 @@ interface ActionRequest {
   type: string;
   sessionId: string;
   locale?: string;
+  model?: string;
   payload: Record<string, unknown>;
 }
 
@@ -55,7 +57,7 @@ actionRoutes.post('/', async (c) => {
   const compactorRunner = c.get('compactorRunner');
 
   const body = await c.req.json<ActionRequest>();
-  const { requestId, type, sessionId, locale, payload } = body;
+  const { requestId, type, sessionId, locale, model, payload } = body;
 
   const SUPPORTED_ACTIONS = ['send_message', 'execute_command', 'trigger_event', 'start_session', 'retry_runtime'];
   if (!SUPPORTED_ACTIONS.includes(type)) {
@@ -65,6 +67,25 @@ actionRoutes.post('/', async (c) => {
   const session = await store.getSession(sessionId);
   if (!session) {
     return c.json({ error: 'Session not found' }, 404);
+  }
+
+  // Lazy-lock the session's embedding model once per process boot.
+  // No-op when the store has no vector capability or no embed slot is
+  // configured. See apps/server/src/embedding-lock.ts for rationale.
+  const ensureEmbeddingLock = c.get('ensureEmbeddingLock');
+  if (ensureEmbeddingLock) {
+    try {
+      await ensureEmbeddingLock(sessionId);
+    } catch (err) {
+      // Don't fail the turn if the lock can't be established —
+      // RAG plugins will simply receive an empty vector store.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[actions] embedding lock failed for ${sessionId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   const playerMessage = type === 'start_session'
@@ -149,14 +170,38 @@ actionRoutes.post('/', async (c) => {
     try {
       // Persist player message to messages table (source of truth for refresh recovery)
       if (playerMessage) {
+        const now = new Date().toISOString();
         await store.addMessage({
           id: crypto.randomUUID(),
           sessionId,
           role: 'user',
           content: playerMessage,
           metadata: { turnId },
-          createdAt: new Date().toISOString(),
+          createdAt: now,
         });
+
+        // PR-1: also emit a normalised InteractionRecord so observability and
+        // downstream consumers see the player's input as part of the unified
+        // event stream (paired with RuntimeOutput records written by the
+        // turn executor).
+        try {
+          await store.saveInteractionRecord({
+            id: crypto.randomUUID(),
+            sessionId,
+            turnId,
+            timestamp: now,
+            source: 'player',
+            channel: 'web',
+            type: type === 'send_message' ? 'message' : 'rpc-call',
+            payload: { content: playerMessage, actionType: type },
+            createdAt: now,
+          });
+        } catch (err) {
+          console.warn(
+            '[actions] saveInteractionRecord failed:',
+            err instanceof Error ? err.message : String(err),
+          );
+        }
       }
 
       // Create trace recorder for this turn (persists all lifecycle events to DB)
@@ -184,6 +229,13 @@ actionRoutes.post('/', async (c) => {
           turnId,
           playerMessage,
           locale: effectiveLocale,
+          modelOverride: model,
+          // PR-6: snapshot session-level per-runtime slot overrides so the
+          // turn executor can consult them when resolving each runtime's
+          // model. The session record was loaded above (line ~67).
+          ...(session?.runtimeModelOverrides
+            ? { runtimeModelOverrides: session.runtimeModelOverrides }
+            : {}),
         },
         activeRuntimes,
         {
@@ -205,11 +257,13 @@ actionRoutes.post('/', async (c) => {
           },
           onRuntimeStart: async (info) => {
             await trace.runtimeStarted({ runtimeId: info.runtimeId, pluginId: info.pluginId, priority: info.priority });
+            const kind = outputKindMap.get(info.runtimeId) ?? 'plugin';
             await stream.writeSSE({
               data: JSON.stringify(makeEnvelope('runtime.started', {
                 runtimeId: info.runtimeId,
                 pluginId: info.pluginId,
-                label: info.pluginId + '/' + (outputKindMap.get(info.runtimeId) ?? 'plugin'),
+                kind,
+                label: info.pluginId + '/' + kind,
               })),
             });
           },

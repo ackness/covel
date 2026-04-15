@@ -7,6 +7,7 @@ import { z } from 'zod';
 import {
   authorsNoteDeclSchema,
   postHistoryDeclSchema,
+  rpcDeclMapSchema,
   runtimeManifestSchema,
 } from '@covel/shared';
 import type { ParsedPluginMd } from './types.js';
@@ -126,6 +127,20 @@ export function parsePluginMd(content: string, filePath: string): ParsedPluginMd
           `[plugin-loader] ${filePath}: malformed postHistory skipped — ${parsedPost.error.issues.map((i) => i.message).join('; ')}`,
         );
         const { postHistory: _omitted, ...rest } = dataToValidate as Record<string, unknown>;
+        dataToValidate = rest;
+      }
+    }
+    // PR-3: rpc declarations. Lenient — drop the whole rpc block on
+    // structural error so a typo in one action doesn't crash the load.
+    if (dataToValidate && typeof dataToValidate === 'object' && 'rpc' in dataToValidate) {
+      const parsedRpc = rpcDeclMapSchema.safeParse(
+        (dataToValidate as Record<string, unknown>).rpc,
+      );
+      if (!parsedRpc.success) {
+        console.warn(
+          `[plugin-loader] ${filePath}: malformed rpc declaration skipped — ${parsedRpc.error.issues.map((i: { message: string }) => i.message).join('; ')}`,
+        );
+        const { rpc: _omitted, ...rest } = dataToValidate as Record<string, unknown>;
         dataToValidate = rest;
       }
     }

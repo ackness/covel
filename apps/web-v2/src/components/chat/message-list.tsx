@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useRef, useMemo, useCallback, useState } from "react";
+import { Copy, Check, RotateCcw } from "lucide-react";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import { nestedToFlat } from "@json-render/core";
 import type { Spec } from "@json-render/core";
@@ -14,7 +15,13 @@ import { covelRegistry } from "@/lib/catalog.js";
 import { messageToSpec, messageToSpecDisabled } from "@/lib/message-to-spec.js";
 import { PluginPanel } from "@/components/panels/plugin-panel.js";
 import type { GameMessage } from "@/stores/session-store.js";
-import { sendMessage, setComposerText, submitFormInputs, upsertPendingInteractionDraft } from "@/stores/session-store.js";
+import {
+  sendMessage,
+  setComposerText,
+  submitFormInputs,
+  upsertPendingInteractionDraft,
+  retryRuntime,
+} from "@/stores/session-store.js";
 
 interface MessageListProps {
   messages: GameMessage[];
@@ -29,6 +36,16 @@ export function MessageList({ messages }: MessageListProps) {
 
   const visible = messages.filter((m) => m.content || m.block);
 
+  // Identify the turnId of the most recent turn so we only show Retry
+  // on messages belonging to that turn — retrying an earlier turn would
+  // produce divergent narrative and is disabled.
+  const latestTurnId = useMemo(() => {
+    for (let i = visible.length - 1; i >= 0; i -= 1) {
+      if (visible[i].turnId) return visible[i].turnId;
+    }
+    return undefined;
+  }, [visible]);
+
   return (
     <div className="space-y-4 pb-4">
       {visible.map((msg, index) => (
@@ -37,9 +54,80 @@ export function MessageList({ messages }: MessageListProps) {
           message={msg}
           hasLaterUserMessage={visible.slice(index + 1).some((item) => item.role === "user")}
           hasLaterStoryMessage={visible.slice(index + 1).some((item) => item.role === "assistant" && item.kind === "story")}
+          isLatestTurn={msg.turnId !== undefined && msg.turnId === latestTurnId}
         />
       ))}
       <div ref={endRef} />
+    </div>
+  );
+}
+
+// ── Message action overlay ──────────────────────────────────────
+
+/**
+ * Floating action bar shown on hover over assistant narrative messages.
+ *
+ * - `Copy`: writes `message.content` to the clipboard.
+ * - `Retry`: re-runs the runtime that produced this message. Only
+ *   visible on messages from the most recent turn — retrying an earlier
+ *   turn would branch the timeline and is not supported.
+ */
+function MessageActionBar({
+  message,
+  showRetry,
+}: {
+  message: GameMessage;
+  showRetry: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    };
+  }, []);
+
+  const handleCopy = useCallback(async () => {
+    const text = message.content ?? "";
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard API can be blocked by browser permissions — swallow.
+    }
+  }, [message.content]);
+
+  const handleRetry = useCallback(() => {
+    void retryRuntime(message.runtimeId);
+  }, [message.runtimeId]);
+
+  return (
+    <div
+      className="pointer-events-none absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100"
+      aria-label="message actions"
+    >
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-300/80 bg-white/90 text-zinc-500 shadow-sm transition-colors hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950/85 dark:text-zinc-400 dark:hover:text-zinc-100"
+        title={copied ? "已复制" : "复制内容"}
+      >
+        {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+      {showRetry && (
+        <button
+          type="button"
+          onClick={handleRetry}
+          className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-300/80 bg-white/90 text-zinc-500 shadow-sm transition-colors hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950/85 dark:text-zinc-400 dark:hover:text-zinc-100"
+          title="重新生成这一轮"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+        </button>
+      )}
     </div>
   );
 }
@@ -48,17 +136,18 @@ function MessageRenderer({
   message,
   hasLaterUserMessage,
   hasLaterStoryMessage,
+  isLatestTurn,
 }: {
   message: GameMessage;
   hasLaterUserMessage: boolean;
   hasLaterStoryMessage: boolean;
+  isLatestTurn: boolean;
 }) {
-  const [submitted, setSubmitted] = useState(false);
   const formStateRef = useRef<Record<string, unknown>>({});
 
   const hasInteraction = Boolean(message.block);
   const submittedFromHistory = hasLaterUserMessage && isFormLikeBlock(message.block);
-  const effectiveSubmitted = submitted || submittedFromHistory;
+  const effectiveSubmitted = submittedFromHistory;
   const collapseResolvedInteraction =
     hasInteraction &&
     hasLaterStoryMessage &&
@@ -108,7 +197,6 @@ function MessageRenderer({
         });
         if (missingRequired) return;
 
-        setSubmitted(true);
         const interactionId = (data.interactionId ?? data.formId ?? "form") as string;
         const turnId = ((block.meta as Record<string, unknown>)?.turnId ?? message.turnId ?? "") as string;
         const submitBehavior = data.submitBehavior as Record<string, unknown> | undefined;
@@ -128,8 +216,16 @@ function MessageRenderer({
             }
             : undefined,
         });
+
+        // Plugin-declared UX hint: if the interaction is marked `immediate`,
+        // submitting advances the turn right away instead of parking the draft
+        // in the input bar for "unified send". This is a plugin-opt-in field
+        // on block.data.submitBehavior — the framework stays neutral and only
+        // honours what the plugin declared.
+        if (submitBehavior?.immediate === true) {
+          await sendMessage();
+        }
       } else {
-        setSubmitted(true);
         // Fallback: just send form values as message
         const parts = Object.entries(formValues)
           .filter(([, v]) => v.trim())
@@ -139,7 +235,6 @@ function MessageRenderer({
     },
     selectChoice: async (params: Record<string, unknown>) => {
       if (effectiveSubmitted) return;
-      setSubmitted(true);
       const block = message.block;
       const label = params.label as string;
       if (!block || !label) return;
@@ -242,7 +337,16 @@ function MessageRenderer({
 
   if (!spec) return null;
 
-  return (
+  // Decorate assistant narrative messages with a hover action bar.
+  // Skip user / system / interactive blocks — those have their own
+  // affordances (or nothing to copy / retry).
+  const showActionBar =
+    message.role === "assistant" &&
+    !hasInteraction &&
+    !effectiveSubmitted &&
+    Boolean(message.content);
+
+  const content = (
     <JSONUIProvider
       registry={covelRegistry}
       initialState={{}}
@@ -251,6 +355,15 @@ function MessageRenderer({
     >
       <Renderer spec={spec} registry={covelRegistry} />
     </JSONUIProvider>
+  );
+
+  if (!showActionBar) return content;
+
+  return (
+    <div className="group relative">
+      {content}
+      <MessageActionBar message={message} showRetry={isLatestTurn} />
+    </div>
   );
 }
 

@@ -12,6 +12,8 @@ plans/
 .playwright-mcp/
 .bg-shell
 .gsd/
+fixtures/
+output/
 
 
 # Cursor
@@ -91,3 +93,7 @@ tmp/
 *.png
 .playwright-mcp/
 .worktrees/
+
+# ── aimock fixtures (recorded LLM responses, do not commit) ──
+fixtures/aimock/
+docker/docker-compose.mock.replay.yml

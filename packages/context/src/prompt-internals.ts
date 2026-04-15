@@ -159,6 +159,51 @@ export function assemblePromptVariables(
 }
 
 /**
+ * Build the current-turn user message passed to the LLM.
+ *
+ * Empty player input commonly happens on framework-driven turns such as
+ * `start_session`. In that case we supply a compact execution cue so models
+ * stay inside the runtime task instead of drifting into assistant small talk.
+ */
+export function buildCurrentTurnUserMessage(
+  turnInput: Pick<ContextBuildParams['turnInput'], 'playerMessage' | 'locale'>,
+): string {
+  if (turnInput.playerMessage.trim().length > 0) {
+    return turnInput.playerMessage;
+  }
+
+  const locale = turnInput.locale ?? '';
+  if (locale === 'zh' || locale.startsWith('zh-')) {
+    return '开始当前游戏回合，并按照系统设定直接给出游戏内结果。';
+  }
+
+  return 'Begin the current game turn and produce the in-game result defined by the system instructions.';
+}
+
+/**
+ * Framework preamble used by V2 prompt assembly (segment 1).
+ *
+ * When a locale is provided, prepends a `[RUNTIME]` header that keeps
+ * task-general assistants from drifting outside the interactive-narrative
+ * frame, then appends the `[LANGUAGE]` constraint. When no locale is
+ * supplied this returns an empty string so segment 1 is skipped — preserving
+ * V1/V2 byte-identity in the locale-less baseline.
+ */
+export function buildFrameworkPreamble(locale?: string): string {
+  if (!locale) {
+    return '';
+  }
+
+  const languageName = resolveLocaleLanguageName(locale);
+  return [
+    '[RUNTIME] You are executing an in-game runtime for an interactive narrative engine.',
+    '[RUNTIME] Follow the runtime instructions and world data below as the complete task context.',
+    '[RUNTIME] Produce only in-world narrative, structured runtime output, and required tool calls.',
+    `[LANGUAGE] You MUST respond in ${languageName}. All narrative output, tool parameters, and descriptions must be in ${languageName}.`,
+  ].join('\n');
+}
+
+/**
  * Render Working Memory entries as a prompt segment (S3-T3).
  *
  * Sorting is deterministic: scope order `player` → `story` → `shared`,

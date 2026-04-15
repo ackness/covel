@@ -11,7 +11,7 @@ import { createPluginRegistry, type PluginRegistry } from '@covel/plugin-loader'
 import { createMemoryStore, type DataStore } from '@covel/store';
 import { sessionRoutes } from '../../src/routes/api/session.js';
 import { stateRoutes } from '../../src/routes/api/state.js';
-import { healthRoutes } from '../../src/routes/api/health.js';
+import { createHealthRoutes } from '../../src/routes/api/health.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -31,7 +31,7 @@ function createTestApp(deps: {
 
   app.route('/api/sessions', sessionRoutes);
   app.route('/api/sessions', stateRoutes);
-  app.route('/api/health', healthRoutes);
+  app.route('/api/health', createHealthRoutes(deps.store, 'memory'));
 
   return app;
 }

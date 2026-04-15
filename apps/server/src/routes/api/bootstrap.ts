@@ -24,9 +24,18 @@ import {
 } from '@covel/plugin-loader';
 import { createStateManager, type StateManager } from '@covel/state';
 import { createEventBus, type EventBus } from '@covel/events';
-import type { DataStore } from '@covel/store';
+import type { DataStore, StoreBackend } from '@covel/store';
 import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
-import { createToolExecutor, createModelResolver } from '@covel/runtime';
+import {
+  createToolExecutor,
+  createModelResolver,
+  createPluginRpcRegistry,
+  createRpcExecutor,
+  submitFormHandler,
+  type PluginRpcRegistry,
+  type RpcExecutor,
+  type RpcHandler,
+} from '@covel/runtime';
 import { maybeCompact, type CompactorRunner, type CompactorLLMAdapter } from '@covel/context';
 import {
   builtinUITools,
@@ -40,8 +49,8 @@ import {
   type ToolModule,
 } from '@covel/tools';
 import { z } from 'zod';
-import { createApprovalPipeline } from '@covel/approval';
-import type { PermissionRule } from '@covel/approval';
+import { createApprovalPipeline, createRpcApprovalGate } from '@covel/approval';
+import type { PermissionRule, RpcApprovalGate } from '@covel/approval';
 
 import type { PluginDataRecord } from '@covel/store';
 
@@ -51,7 +60,7 @@ import { pluginRoutes } from './plugins.js';
 import { stateRoutes } from './state.js';
 import { eventRoutes } from './events.js';
 import { runtimeRoutes } from './runtime.js';
-import { healthRoutes } from './health.js';
+import { createHealthRoutes } from './health.js';
 import { submitInputsRoutes } from './submit-inputs.js';
 import { worldRoutes } from './worlds.js';
 import { messageRoutes } from './messages.js';
@@ -66,6 +75,9 @@ import { traceRoutes } from './traces.js';
 import { resumeRoutes } from './resume.js';
 import { snapshotRoutes } from './snapshots.js';
 import { lorebookRoutes } from './lorebook.js';
+import { runtimeOutputRoutes } from './runtime-outputs.js';
+import { pluginRpcRoutes } from './plugin-rpc.js';
+import { approvalRoutes, sessionApprovalRoutes } from './approvals.js';
 
 // ── Bootstrap config ─────────────────────────────────────────────
 
@@ -76,6 +88,20 @@ export interface ApiBootstrapConfig {
   readonly llmAdapter: LLMAdapter;
   /** DataStore for all persistence. */
   readonly store: DataStore;
+  /**
+   * Active store backend identifier (e.g. `'sqlite'`, `'pg'`, `'memory'`).
+   * Used by the health route to report the actual backend in use rather
+   * than re-deriving it from environment variables.
+   */
+  readonly storeBackend: StoreBackend;
+  /**
+   * Optional embedding-lock helper. When provided, route handlers that
+   * begin a turn (start_session, send_message, …) call it to lazily
+   * register the session's embedding model in vector_models and lock
+   * the session row. No-op when the store has no vector capability or
+   * no embed slot is configured.
+   */
+  readonly ensureEmbeddingLock?: (sessionId: string) => Promise<void>;
   /** Optional pre-created state manager. */
   readonly stateManager?: StateManager;
   /** Optional config provider for injecting world context etc. into runtime execution. */
@@ -361,6 +387,78 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   //    before calling executeTurn, bridging async store reads to sync getConfig interface.
   const getConfigFn = config.getConfigFn ?? ((_pluginId: string, _runtimeId: string): Readonly<Record<string, unknown>> => ({}));
 
+  // 7c. PR-3: Plugin RPC registry + executor.
+  //
+  //   - Register framework defaults (`submit-form`, `cancel`).
+  //   - Register every plugin-declared rpc action discovered in PLUGIN.md.
+  //   - Build the executor with a loader that imports the handler module
+  //     from the plugin's root directory.
+  const rpcRegistry: PluginRpcRegistry = createPluginRpcRegistry();
+  rpcRegistry.registerFrameworkDefault('submit-form', submitFormHandler, {
+    description: 'Persist player input submissions and fill the originating template message.',
+  });
+  rpcRegistry.registerFrameworkDefault(
+    'framework-submit-form',
+    submitFormHandler,
+    {
+      description: 'Alias for submit-form (explicit framework namespace).',
+    },
+  );
+  for (const [pluginId, manifests] of manifestCache) {
+    for (const parsed of manifests) {
+      const rpcMap = parsed.manifest.rpc;
+      if (!rpcMap) continue;
+      const trustInfo = getPluginTrustInfo(pluginId);
+      const trustLevel: 'builtin' | 'official' | 'community' =
+        trustInfo.source === 'builtin'
+          ? 'builtin'
+          : trustInfo.source === 'community'
+            ? 'community'
+            : 'official';
+      for (const [action, decl] of Object.entries(rpcMap)) {
+        try {
+          rpcRegistry.registerPluginAction(pluginId, action, decl, trustLevel);
+        } catch (err) {
+          console.warn(
+            `[bootstrap] plugin-rpc registration failed for ${pluginId}::${action}:`,
+            err instanceof Error ? err.message : err,
+          );
+        }
+      }
+    }
+  }
+  const rpcExecutor: RpcExecutor = createRpcExecutor({
+    registry: rpcRegistry,
+    loadHandler: async (pluginId, handlerPath) => {
+      const discovery = discoveryMap.get(pluginId);
+      if (!discovery) {
+        throw new Error(`plugin "${pluginId}" not found in discovery map`);
+      }
+      // HIGH-1 defence-in-depth: even though the schema rejects `..` and
+      // absolute paths, a future schema change or a hand-crafted manifest
+      // could still produce something that escapes the plugin root. Resolve
+      // and verify containment before importing.
+      const rootPath = path.resolve(discovery.rootPath);
+      const absPath = path.resolve(rootPath, handlerPath);
+      const rootWithSep = rootPath.endsWith(path.sep) ? rootPath : rootPath + path.sep;
+      if (!absPath.startsWith(rootWithSep) && absPath !== rootPath) {
+        throw new Error(
+          `handler path "${handlerPath}" escapes plugin root for "${pluginId}"`,
+        );
+      }
+      const mod = (await import(absPath)) as { default?: RpcHandler };
+      if (typeof mod.default !== 'function') {
+        throw new Error(`handler at ${handlerPath} has no default export function`);
+      }
+      return mod.default;
+    },
+  });
+
+  // PR-7: per-process RPC approval gate. Pending approvals + session-cached
+  // pre-authorizations live in memory; they do not survive a restart and
+  // are not tied to any specific store backend.
+  const rpcApprovalGate: RpcApprovalGate = createRpcApprovalGate();
+
   // 7b. CompactorRunner (S2-T2) — wraps maybeCompact with server-level deps.
   //     Feature-gated by COVEL_COMPACTOR_V1=1 at call site (turn-executor.ts).
   //     Collects summaryFocus from ALL registered manifests (deduplicated).
@@ -433,6 +531,12 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     c.set('getConfigFn', getConfigFn);
     c.set('resolveModel', resolveModel);
     c.set('compactorRunner', compactorRunner);
+    c.set('rpcExecutor', rpcExecutor);
+    c.set('rpcRegistry', rpcRegistry);
+    c.set('rpcApprovalGate', rpcApprovalGate);
+    if (config.ensureEmbeddingLock) {
+      c.set('ensureEmbeddingLock', config.ensureEmbeddingLock);
+    }
     await next();
   });
 
@@ -449,12 +553,16 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   app.route('/api/sessions', resumeRoutes);  // S4-T4: suspend/resume (resume + suspensions list/delete)
   app.route('/api/sessions', snapshotRoutes); // S4-T2: state snapshots + fork
   app.route('/api/sessions', lorebookRoutes); // S3-T6: session-level lorebook viewer
+  app.route('/api/sessions', runtimeOutputRoutes); // PR-1: translation-layer observability
+  app.route('/api/sessions', pluginRpcRoutes); // PR-3: plugin RPC channel
+  app.route('/api/sessions', sessionApprovalRoutes); // PR-7: per-session approvals listing
+  app.route('/api/approvals', approvalRoutes); // PR-7: approval lookup + decision
   app.route('/api/plugins', pluginRoutes);
   app.route('/api/events', eventRoutes);
   app.route('/api/events', subscribeRoutes);
   app.route('/api/runtime', runtimeRoutes);
   app.route('/api/worlds', worldRoutes);
-  app.route('/api/health', healthRoutes);
+  app.route('/api/health', createHealthRoutes(store, config.storeBackend));
   app.route('/api/create', createRoutes);
   app.route('/api/ai', aiRoutes);
   app.route('/api/actions', actionRoutes);

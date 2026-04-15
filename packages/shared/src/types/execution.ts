@@ -63,6 +63,12 @@ export interface TurnInput {
   readonly locale?: string;
   /** API-level model override. Takes highest priority over plugin config. */
   readonly modelOverride?: string;
+  /**
+   * PR-6: Per-runtime model slot overrides snapshotted from the session
+   * record. Maps runtime ID (`pluginId` or `pluginId/runtimeName`) → slot
+   * name. Looked up by the resolver before falling back to `manifest.model`.
+   */
+  readonly runtimeModelOverrides?: Readonly<Record<string, string>>;
 }
 
 export interface TurnResult {

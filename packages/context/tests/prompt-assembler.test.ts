@@ -156,6 +156,21 @@ describe('prompt-assembler V2', () => {
     expect(v2.systemPrompt).not.toMatch(/\n\n\n/);
   });
 
+  it('uses a runtime execution cue for empty current player input', () => {
+    const params = baselineParams({
+      turnInput: makeTurnInput({ locale: 'zh-CN', playerMessage: '' }),
+    });
+
+    const v2 = buildContextV2(params);
+
+    expect(v2.messages).toEqual([
+      {
+        role: 'user',
+        content: '开始当前游戏回合，并按照系统设定直接给出游戏内结果。',
+      },
+    ]);
+  });
+
   it('respects the budget-pruning pass when estimator + contextBudget + COVEL_CONTEXT_BUDGET_V1=1 are provided', () => {
     process.env.COVEL_CONTEXT_BUDGET_V1 = '1';
 
@@ -528,7 +543,8 @@ describe('prompt-assembler V2', () => {
     // Env flag + manifest.promptVersion === 2 → V2 path.
     process.env.COVEL_PROMPT_V2 = '1';
     const v2Gated = buildContext({ ...v2Params });
-    expect(v2Gated.systemPrompt.startsWith('[LANGUAGE]')).toBe(true);
+    expect(v2Gated.systemPrompt.startsWith('[RUNTIME]')).toBe(true);
+    expect(v2Gated.systemPrompt).toContain('[LANGUAGE]');
     expect(v2Gated.systemPrompt).toContain('Plugin body.');
 
     // Env flag ON but manifest declares promptVersion: 1 → still V1.

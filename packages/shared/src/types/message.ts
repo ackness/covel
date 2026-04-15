@@ -79,3 +79,26 @@ export interface PlayerInputSubmission {
   readonly values: Readonly<Record<string, unknown>>;
   readonly createdAt: string;
 }
+
+// ── Wire-format Message ──────────────────────────────────────────
+
+/**
+ * Wire-format `Message` — the contract returned by `/api/sessions/:id/messages`.
+ *
+ * This is a flattened, backwards-compatible projection used by frontend
+ * chat lists and message replay. The richer `TurnMessage` (above) is the
+ * authoritative server-side conversation type and is returned by the
+ * `/turn-messages` endpoint when full UI render instructions are needed.
+ */
+export interface Message {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly role: string;
+  readonly content: string;
+  readonly turnId?: string;
+  readonly runtimeId?: string;
+  readonly kind?: string;
+  readonly block?: unknown;
+  readonly metadata?: unknown;
+  readonly createdAt: string;
+}

@@ -6,12 +6,28 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import { createMemoryStore, type DataStore } from '@covel/store';
+import {
+  createPluginRpcRegistry,
+  createRpcExecutor,
+  submitFormHandler,
+} from '@covel/runtime';
 import { submitInputsRoutes } from '../../src/routes/api/submit-inputs.js';
 
 function makeApp(store: DataStore): Hono {
   const app = new Hono();
+  // PR-3: route now forwards into the framework default submit-form RPC
+  // handler. Tests must wire an executor into context so the dispatch finds it.
+  const registry = createPluginRpcRegistry();
+  registry.registerFrameworkDefault('submit-form', submitFormHandler);
+  const executor = createRpcExecutor({
+    registry,
+    loadHandler: async () => {
+      throw new Error('plugin handlers not used in this test');
+    },
+  });
   app.use('*', async (c, next) => {
     c.set('store', store);
+    c.set('rpcExecutor', executor);
     await next();
   });
   app.route('/api/sessions', submitInputsRoutes);

@@ -1,10 +1,13 @@
-export { createStore, createStoreFromEnv } from './factory.js';
+export { createStore, createStoreFromEnv, resolveBackendFromEnv } from './factory.js';
 export { createMemoryStore } from './memory/memory-store.js';
 export { createSqliteStore } from './sqlite/sqlite-store.js';
 export { createPgStore } from './postgres/pg-store.js';
 export { supportsVector } from './vector-store.js';
 export type {
   VectorStoreCapability,
+  VectorModelOps,
+  EmbeddingModelIdentity,
+  VectorTarget,
   UpsertVectorInput,
   SearchVectorsInput,
   VectorSearchResult,
@@ -29,6 +32,10 @@ export type {
   PluginDataRecord,
   PluginConfigRecord,
   TraceEventRecord,
+  RuntimeOutputRecord,
+  InteractionRecordRow,
+  RuntimeOutputFilters,
+  InteractionRecordFilters,
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,

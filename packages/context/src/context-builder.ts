@@ -17,10 +17,11 @@ import { applyBudget } from './budget.js';
 import { buildContextV2 } from './prompt-assembler.js';
 import {
   assemblePromptVariables,
+  buildCurrentTurnUserMessage,
   buildInjectBlocks as _buildInjectBlocks,
   interpolateTemplate as _interpolateTemplate,
-  resolveLocaleLanguageName,
   renderWorkingMemory,
+  resolveLocaleLanguageName,
 } from './prompt-internals.js';
 import type { AssembledContext, ContextBuildParams, LLMMessage, MessageHistoryRecord, SummaryRecord } from './types.js';
 
@@ -192,7 +193,7 @@ export function buildContext(
     systemPrompt = `${wmSegment}\n\n${systemPrompt}`;
   }
 
-  // Inject language constraint based on session locale
+  // Inject language constraint based on session locale (V1 legacy: tail position).
   if (turnInput.locale) {
     const langName = resolveLocaleLanguageName(turnInput.locale);
     systemPrompt += `\n\n[LANGUAGE] You MUST respond in ${langName}. All narrative output, tool parameters, and descriptions must be in ${langName}.`;
@@ -207,7 +208,7 @@ export function buildContext(
 
   const messages: readonly LLMMessage[] = [
     ...historyMessages,
-    { role: 'user', content: turnInput.playerMessage },
+    { role: 'user', content: buildCurrentTurnUserMessage(turnInput) },
   ];
 
   // Conditional pruning gate — opt-in via feature flag + caller must supply

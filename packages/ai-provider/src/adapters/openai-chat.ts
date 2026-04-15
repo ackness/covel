@@ -15,6 +15,7 @@ import {
   readOpenAiChatStreamDelta,
   readOpenAiChatStreamReasoningDelta,
   readOpenAiChatStreamFinishReason,
+  readOpenAiChatStreamToolCallDeltas,
 } from "./http.js";
 
 import type { TextMessage } from "../types.js";
@@ -260,6 +261,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       };
       if (params.tools && params.tools.length > 0) {
         body.tools = params.tools;
+        body.tool_choice = "auto";
       }
 
       const response = await postJson(config, "/chat/completions", body);
@@ -304,12 +306,17 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
     },
 
     async *streamText(config, params) {
-      const response = await postJson(config, "/chat/completions", {
+      const body: Record<string, unknown> = {
         model: params.model,
         messages: serializeMessages(params.messages),
         stream: true,
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
-      });
+      };
+      if (params.tools && params.tools.length > 0) {
+        body.tools = params.tools;
+        body.tool_choice = "auto";
+      }
+      const response = await postJson(config, "/chat/completions", body);
 
       // Check HTTP status before parsing SSE — a non-2xx response won't be SSE
       if (!response.ok) {
@@ -319,6 +326,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
 
       let usage: UsageSummary = { inputTokens: 0, outputTokens: 0 };
       let finishReason = "stop";
+      // Accumulate tool_call deltas by index across chunks.
+      const toolCallAcc = new Map<
+        number,
+        { id: string | null; name: string | null; arguments: string }
+      >();
 
       for await (const payload of iterateSsePayloads(response)) {
         const reasoningDelta = readOpenAiChatStreamReasoningDelta(payload);
@@ -331,6 +343,21 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
           yield { type: "text-delta", textDelta: delta };
         }
 
+        const toolCallDeltas = readOpenAiChatStreamToolCallDeltas(payload);
+        if (toolCallDeltas) {
+          for (const tcd of toolCallDeltas) {
+            const existing = toolCallAcc.get(tcd.index) ?? {
+              id: null,
+              name: null,
+              arguments: "",
+            };
+            if (tcd.id) existing.id = tcd.id;
+            if (tcd.name) existing.name = tcd.name;
+            if (tcd.argumentsDelta) existing.arguments += tcd.argumentsDelta;
+            toolCallAcc.set(tcd.index, existing);
+          }
+        }
+
         if (payload.usage && typeof payload.usage === "object") {
           const usageObj = payload.usage as Record<string, unknown>;
           usage = {
@@ -341,6 +368,20 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
 
         const reason = readOpenAiChatStreamFinishReason(payload);
         if (reason) finishReason = reason;
+      }
+
+      // Emit accumulated tool calls before done.
+      if (toolCallAcc.size > 0) {
+        const sorted = [...toolCallAcc.entries()].sort((a, b) => a[0] - b[0]);
+        for (const [, tc] of sorted) {
+          if (!tc.id || !tc.name) continue;
+          yield {
+            type: "tool-call",
+            id: tc.id,
+            name: tc.name,
+            arguments: tc.arguments || "{}",
+          };
+        }
       }
 
       yield { type: "done", finishReason, usage };

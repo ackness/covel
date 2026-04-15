@@ -7,6 +7,26 @@
 /** Multilingual text: plain string or locale-keyed record. */
 export type I18nText = string | Record<string, string>;
 
+// ── Wire-format World ────────────────────────────────────────────
+
+/**
+ * Wire-format `World` — the contract between server and API clients.
+ *
+ * This is the shape `/api/worlds` returns. The server's internal
+ * `WorldRecord` (in `@covel/store`) is a superset that includes
+ * backend-specific metadata fields not exposed over the network.
+ */
+export interface World {
+  readonly id: string;
+  readonly name: I18nText;
+  readonly description: string;
+  readonly lore?: string;
+  readonly tags?: readonly string[];
+  readonly locale?: string;
+  readonly createdAt: string;
+  readonly updatedAt?: string;
+}
+
 // ── Geography ────────────────────────────────────────────────────
 
 export interface WorldLandmark {

@@ -107,12 +107,15 @@ function makeBaseParams(
 // ── Normalize helper ─────────────────────────────────────────────
 
 /**
- * Strip the [LANGUAGE] segment and normalize whitespace so we can
- * compare V1/V2 system prompts for content equivalence. The language
- * constraint moves from tail (V1) to head (V2) by design.
+ * Strip framework preamble + [LANGUAGE] segment and normalize whitespace
+ * so we can compare V1/V2 system prompts for content equivalence.
+ * - V1 keeps the legacy structure with `[LANGUAGE]` at the tail.
+ * - V2 wraps a `[RUNTIME]` + `[LANGUAGE]` preamble at the head (segment 1).
  */
 function normalizeSystemPrompt(prompt: string): string {
   return prompt
+    // Remove the [RUNTIME] header lines (V2 segment 1).
+    .replace(/\[RUNTIME\][^\n]*\n?/g, '')
     // Remove the [LANGUAGE] constraint line/segment wherever it lives.
     .replace(/\[LANGUAGE\][^\n]*\.?/g, '')
     // Collapse multiple blank lines → one blank line.
@@ -144,10 +147,11 @@ describe('core-narrator V1/V2 prompt parity', () => {
     const v1 = buildContext(params);
     expect(v1.systemPrompt).toMatch(/in 中文\.\s*$/);
 
-    // V2 (env flag on) — language at the head via segment 1.
+    // V2 (env flag on) — runtime + language preamble at segment 1.
     process.env.COVEL_PROMPT_V2 = '1';
     const v2 = buildContext(params);
-    expect(v2.systemPrompt.startsWith('[LANGUAGE]')).toBe(true);
+    expect(v2.systemPrompt.startsWith('[RUNTIME]')).toBe(true);
+    expect(v2.systemPrompt).toContain('[LANGUAGE]');
   });
 
   it('V1 and V2 produce semantically equivalent system prompts', () => {

@@ -17,6 +17,7 @@ import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import type { PluginRegistry } from '@covel/plugin-loader';
 import type { DataStore, SessionRecord } from '@covel/store';
+import { supportsVector } from '@covel/store';
 import { buildSessionSnapshot } from '@covel/runtime';
 
 const SAFE_WORLD_ID_RE = /^[a-z0-9_-]{1,64}$/i;
@@ -31,6 +32,91 @@ type Env = {
 
 export const sessionRoutes = new Hono<Env>();
 
+/**
+ * Decorate a SessionRecord with the embedding model lock metadata.
+ *
+ * The session row only stores the registry id (`embeddingModelId`); the
+ * UI needs the full identity to render a "session locked to model X"
+ * indicator. We resolve the lazy join here rather than denormalising
+ * into the sessions table to keep the storage model simple.
+ *
+ * Returns the session unchanged when the store has no vector capability
+ * or the session has not yet been locked.
+ */
+async function withEmbeddingMetadata(
+  store: DataStore,
+  session: SessionRecord,
+): Promise<SessionRecord & { embedding?: SessionEmbeddingInfo | null }> {
+  if (!supportsVector(store) || session.embeddingModelId == null) {
+    return session;
+  }
+  try {
+    const models = await store.listVectorModels();
+    const match = models.find((m) => m.id === session.embeddingModelId);
+    if (!match) return session;
+    return {
+      ...session,
+      embedding: {
+        modelId: match.modelId,
+        provider: match.provider,
+        modelName: match.modelName,
+        dim: match.dim,
+        lockedAt: session.embeddingLockedAt ?? null,
+      },
+    };
+  } catch {
+    return session;
+  }
+}
+
+interface SessionEmbeddingInfo {
+  modelId: string;
+  provider: string;
+  modelName: string;
+  dim: number;
+  lockedAt: string | null;
+}
+
+/**
+ * Bulk-decorate a session list with embedding metadata.
+ *
+ * Resolves all `vector_models` rows once and joins in memory, so a list
+ * of N sessions costs one extra DB call instead of N. Sessions without a
+ * lock pass through untouched.
+ */
+async function decorateSessionList(
+  store: DataStore,
+  sessions: readonly SessionRecord[],
+): Promise<SessionRecord[]> {
+  if (!supportsVector(store) || sessions.length === 0) {
+    return sessions.slice();
+  }
+  const anyLocked = sessions.some((s) => s.embeddingModelId != null);
+  if (!anyLocked) return sessions.slice();
+  let models: Awaited<ReturnType<typeof store.listVectorModels>>;
+  try {
+    models = await store.listVectorModels();
+  } catch {
+    return sessions.slice();
+  }
+  const byId = new Map(models.map((m) => [m.id, m]));
+  return sessions.map((session) => {
+    if (session.embeddingModelId == null) return session;
+    const match = byId.get(session.embeddingModelId);
+    if (!match) return session;
+    return {
+      ...session,
+      embedding: {
+        modelId: match.modelId,
+        provider: match.provider,
+        modelName: match.modelName,
+        dim: match.dim,
+        lockedAt: session.embeddingLockedAt ?? null,
+      } satisfies SessionEmbeddingInfo,
+    };
+  });
+}
+
 // ── Collection endpoints ────────────────────────────────────────
 
 // GET /sessions(?worldId=xxx)
@@ -41,7 +127,11 @@ sessionRoutes.get('/', async (c) => {
   const filtered = worldId
     ? sessions.filter((s) => s.worldId === worldId)
     : sessions;
-  return c.json({ items: filtered });
+  // Decorate each session with embedding metadata so the archive list
+  // can show RAG status badges without an extra round-trip per row.
+  // listVectorModels is called once and shared across all sessions.
+  const decorated = await decorateSessionList(store, filtered);
+  return c.json({ items: decorated });
 });
 
 // POST /sessions
@@ -101,7 +191,7 @@ sessionRoutes.get('/:id', async (c) => {
   if (!session) {
     return c.json({ error: `Session not found: ${id}` }, 404);
   }
-  return c.json(session);
+  return c.json(await withEmbeddingMetadata(store, session));
 });
 
 // PATCH /sessions/:id
@@ -116,9 +206,55 @@ sessionRoutes.patch('/:id', async (c) => {
   const body = await c.req.json<Record<string, unknown>>();
   const now = new Date().toISOString();
   const updates: Record<string, unknown> = { updatedAt: now };
-  if (typeof body.phase === 'string') updates.phase = body.phase;
 
-  await store.updateSession(id, updates as Partial<Pick<SessionRecord, 'phase' | 'turnCount' | 'activePlugins' | 'updatedAt'>>);
+  // MEDIUM-2: validate phase against the SessionPhase union. Pre-existing
+  // code accepted any string; this hardens the contract per code review.
+  const VALID_PHASES = new Set(['pre-game', 'character_creation', 'playing', 'paused', 'ended']);
+  if (body.phase !== undefined) {
+    if (typeof body.phase !== 'string' || !VALID_PHASES.has(body.phase)) {
+      return c.json(
+        {
+          error: `phase must be one of: ${[...VALID_PHASES].join(', ')}`,
+        },
+        400,
+      );
+    }
+    updates.phase = body.phase;
+  }
+
+  // PR-6: per-runtime model slot overrides. Validates shape (object of
+  // string→string) before applying. Empty object clears existing overrides.
+  // MEDIUM-3: cap entry count and validate each key shape.
+  const MAX_OVERRIDE_ENTRIES = 64;
+  const RUNTIME_ID_PATTERN = /^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?$/;
+  if (body.runtimeModelOverrides !== undefined) {
+    if (
+      body.runtimeModelOverrides === null
+      || typeof body.runtimeModelOverrides !== 'object'
+      || Array.isArray(body.runtimeModelOverrides)
+    ) {
+      return c.json({ error: 'runtimeModelOverrides must be an object' }, 400);
+    }
+    const raw = body.runtimeModelOverrides as Record<string, unknown>;
+    const rawEntries = Object.entries(raw);
+    if (rawEntries.length > MAX_OVERRIDE_ENTRIES) {
+      return c.json(
+        {
+          error: `runtimeModelOverrides must have at most ${MAX_OVERRIDE_ENTRIES} entries (got ${rawEntries.length})`,
+        },
+        400,
+      );
+    }
+    const cleaned: Record<string, string> = {};
+    for (const [key, value] of rawEntries) {
+      if (typeof key !== 'string' || !RUNTIME_ID_PATTERN.test(key)) continue;
+      if (typeof value !== 'string' || value.length === 0) continue;
+      cleaned[key] = value;
+    }
+    updates.runtimeModelOverrides = cleaned;
+  }
+
+  await store.updateSession(id, updates as Partial<Pick<SessionRecord, 'phase' | 'turnCount' | 'activePlugins' | 'updatedAt' | 'runtimeModelOverrides'>>);
   // Return merged result to avoid a second DB read
   return c.json({ ...session, ...updates });
 });

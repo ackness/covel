@@ -25,6 +25,26 @@ export type { ToolExecutor, ToolInfo, ToolCall, ToolCallContext, ToolCallResult,
 // ── Model Resolver ──────────────────────────────────────────────
 export { createModelResolver } from './model-resolver.js';
 
+// ── Per-Session Runtime Slot Resolver (PR-6) ───────────────────
+export { resolveRuntimeSlot } from './runtime-slot-resolver.js';
+
+// ── Plugin RPC (PR-3) ──────────────────────────────────────────
+export { createPluginRpcRegistry } from './rpc-registry.js';
+export type {
+  PluginRpcRegistry,
+  RpcHandler,
+  RpcHandlerContext,
+  RpcRegistryEntry,
+} from './rpc-registry.js';
+export { createRpcExecutor, RpcDispatchError } from './rpc-executor.js';
+export type {
+  RpcExecutor,
+  RpcDispatchRequest,
+  RpcDispatchResult,
+  RpcDispatchDeps,
+} from './rpc-executor.js';
+export { submitFormHandler, RpcValidationError } from './rpc-defaults/submit-form.js';
+
 // ── Gateway Bridge ──────────────────────────────────────────────
 export { createGatewayAdapter } from './gateway-llm-adapter.js';
 export type { GatewayLike, GatewayAdapterConfig } from './gateway-llm-adapter.js';
@@ -48,6 +68,10 @@ export type {
 
 // Re-export context types for backward compatibility
 export type { AssembledContext, ContextBuildParams, LLMMessage } from '@covel/context';
+
+// ── Prompt Delta (PR-1 translation layer) ──────────────────────
+export { computePromptDelta, applyPromptDelta } from './prompt-delta.js';
+export type { PromptMessage } from './prompt-delta.js';
 
 // ── Hook Pipeline (S4-T3) ────────────────────────────────────────
 export { HookPipeline, createHookPipeline } from './hooks/index.js';

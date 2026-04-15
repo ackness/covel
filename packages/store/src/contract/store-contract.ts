@@ -3,7 +3,7 @@
  * Each backend (Memory, SQLite, PG) runs this same suite.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type {
   DataStore,
   SessionRecord,
@@ -20,6 +20,8 @@ import type {
   PluginConfigRecord,
   WorldRecord,
   TraceEventRecord,
+  RuntimeOutputRecord,
+  InteractionRecordRow,
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
@@ -219,6 +221,43 @@ function makeTraceEvent(overrides?: Partial<TraceEventRecord>): TraceEventRecord
   };
 }
 
+function makeRuntimeOutput(overrides?: Partial<RuntimeOutputRecord>): RuntimeOutputRecord {
+  return {
+    id: id(),
+    sessionId: 'sess-1',
+    turnId: 'turn-1',
+    runtimeResultId: id(),
+    pluginId: 'core-narrator',
+    runtimeId: 'core-narrator',
+    timestamp: ts(),
+    results: [{ text: 'hello world', structured: { narrative: 'hello world' } }],
+    metaData: {
+      turn: 0,
+      phase: 'playing',
+      toolCallList: [],
+    },
+    createdAt: ts(),
+    ...overrides,
+  };
+}
+
+function makeInteractionRecord(
+  overrides?: Partial<InteractionRecordRow>,
+): InteractionRecordRow {
+  return {
+    id: id(),
+    sessionId: 'sess-1',
+    turnId: 'turn-1',
+    timestamp: ts(),
+    source: 'player',
+    channel: 'web',
+    type: 'message',
+    payload: { content: 'test' },
+    createdAt: ts(),
+    ...overrides,
+  };
+}
+
 function makeTurnMessage(overrides?: Partial<TurnMessageRecord>): TurnMessageRecord {
   return {
     id: id(),
@@ -351,6 +390,18 @@ export function runStoreContractTests(
       store = await createStore();
     });
 
+    // Close the store after each test so backends that hold connection
+    // pools (PG) don't pile up sockets across the contract run. Memory /
+    // IDB / SQLite stores either ignore close() or release in-process
+    // resources — all safe no-ops.
+    afterEach(async () => {
+      try {
+        await store.close?.();
+      } catch {
+        // Swallow — close errors must not mask the actual test failure.
+      }
+    });
+
     // ── Session ──────────────────────────────────────────────
 
     describe('Session', () => {
@@ -398,6 +449,49 @@ export function runStoreContractTests(
       it('should return null for unknown session', async () => {
         const result = await store.getSession('nonexistent');
         expect(result).toBeNull();
+      });
+
+      it('PR-6: persists runtimeModelOverrides on create and update', async () => {
+        const session = makeSession();
+        await store.createSession({
+          ...session,
+          runtimeModelOverrides: {
+            'core-narrator': 'balance',
+            'core-codex/unlocker': 'fast',
+          },
+        });
+
+        const created = await store.getSession(session.id);
+        expect(created?.runtimeModelOverrides).toEqual({
+          'core-narrator': 'balance',
+          'core-codex/unlocker': 'fast',
+        });
+
+        await store.updateSession(session.id, {
+          runtimeModelOverrides: { 'core-narrator': 'fast' },
+          updatedAt: ts(),
+        });
+        const updated = await store.getSession(session.id);
+        expect(updated?.runtimeModelOverrides).toEqual({
+          'core-narrator': 'fast',
+        });
+      });
+
+      it('PR-6: clearing runtimeModelOverrides with empty object removes it', async () => {
+        const session = makeSession();
+        await store.createSession({
+          ...session,
+          runtimeModelOverrides: { 'core-narrator': 'fast' },
+        });
+        await store.updateSession(session.id, {
+          runtimeModelOverrides: {},
+          updatedAt: ts(),
+        });
+        const cleared = await store.getSession(session.id);
+        expect(
+          cleared?.runtimeModelOverrides === undefined
+            || Object.keys(cleared?.runtimeModelOverrides ?? {}).length === 0,
+        ).toBe(true);
       });
     });
 
@@ -863,6 +957,170 @@ export function runStoreContractTests(
         const list = await store.listTraceEvents('sess-1');
         expect(list).toHaveLength(1);
         expect(list[0]).toEqual(te);
+      });
+    });
+
+    // ── Runtime Outputs (PR-1 translation layer) ─────────────
+
+    describe('RuntimeOutputs', () => {
+      it('should save and get a runtime output by id', async () => {
+        const ro = makeRuntimeOutput({ sessionId: 'sess-1' });
+        await store.saveRuntimeOutput(ro);
+        const fetched = await store.getRuntimeOutput('sess-1', ro.id);
+        expect(fetched).toBeTruthy();
+        expect(fetched?.id).toBe(ro.id);
+        expect(fetched?.runtimeId).toBe('core-narrator');
+      });
+
+      it('should return null for unknown runtime output', async () => {
+        const missing = await store.getRuntimeOutput('sess-1', 'nonexistent');
+        expect(missing).toBeNull();
+      });
+
+      it('should filter by sessionId', async () => {
+        await store.saveRuntimeOutput(makeRuntimeOutput({ sessionId: 'sess-1' }));
+        await store.saveRuntimeOutput(makeRuntimeOutput({ sessionId: 'sess-2' }));
+        const list = await store.listRuntimeOutputs('sess-1');
+        expect(list).toHaveLength(1);
+        expect(list[0]!.sessionId).toBe('sess-1');
+      });
+
+      it('should filter by runtimeId', async () => {
+        await store.saveRuntimeOutput(
+          makeRuntimeOutput({ sessionId: 'sess-1', runtimeId: 'core-narrator' }),
+        );
+        await store.saveRuntimeOutput(
+          makeRuntimeOutput({ sessionId: 'sess-1', runtimeId: 'core-guide' }),
+        );
+        const list = await store.listRuntimeOutputs('sess-1', { runtimeId: 'core-guide' });
+        expect(list).toHaveLength(1);
+        expect(list[0]!.runtimeId).toBe('core-guide');
+      });
+
+      it('should filter by pluginId', async () => {
+        await store.saveRuntimeOutput(
+          makeRuntimeOutput({ sessionId: 'sess-1', pluginId: 'core-narrator' }),
+        );
+        await store.saveRuntimeOutput(
+          makeRuntimeOutput({ sessionId: 'sess-1', pluginId: 'core-guide' }),
+        );
+        const list = await store.listRuntimeOutputs('sess-1', { pluginId: 'core-guide' });
+        expect(list).toHaveLength(1);
+        expect(list[0]!.pluginId).toBe('core-guide');
+      });
+
+      it('should return results in newest-first order', async () => {
+        const t1 = ts(100);
+        const t2 = ts(300);
+        const t3 = ts(200);
+        await store.saveRuntimeOutput(
+          makeRuntimeOutput({ sessionId: 'sess-ord', timestamp: t1 }),
+        );
+        await store.saveRuntimeOutput(
+          makeRuntimeOutput({ sessionId: 'sess-ord', timestamp: t2 }),
+        );
+        await store.saveRuntimeOutput(
+          makeRuntimeOutput({ sessionId: 'sess-ord', timestamp: t3 }),
+        );
+        const list = await store.listRuntimeOutputs('sess-ord');
+        expect(list).toHaveLength(3);
+        expect(list[0]!.timestamp).toBe(t2);
+        expect(list[1]!.timestamp).toBe(t3);
+        expect(list[2]!.timestamp).toBe(t1);
+      });
+
+      it('should respect limit', async () => {
+        for (let i = 0; i < 5; i++) {
+          await store.saveRuntimeOutput(
+            makeRuntimeOutput({ sessionId: 'sess-lim', timestamp: ts(i * 10) }),
+          );
+        }
+        const list = await store.listRuntimeOutputs('sess-lim', { limit: 2 });
+        expect(list).toHaveLength(2);
+      });
+
+      it('should filter by sinceTimestamp', async () => {
+        const tEarly = ts(100);
+        const tLate = ts(500);
+        const tMid = ts(200);
+        await store.saveRuntimeOutput(
+          makeRuntimeOutput({ sessionId: 'sess-since', timestamp: tEarly }),
+        );
+        await store.saveRuntimeOutput(
+          makeRuntimeOutput({ sessionId: 'sess-since', timestamp: tLate }),
+        );
+        const list = await store.listRuntimeOutputs('sess-since', {
+          sinceTimestamp: tMid,
+        });
+        expect(list).toHaveLength(1);
+        expect(list[0]!.timestamp).toBe(tLate);
+      });
+    });
+
+    // ── Interaction Records (PR-1 translation layer) ─────────
+
+    describe('InteractionRecords', () => {
+      it('should save and list interaction records', async () => {
+        const ir = makeInteractionRecord({ sessionId: 'sess-ir' });
+        await store.saveInteractionRecord(ir);
+        const list = await store.listInteractionRecords('sess-ir');
+        expect(list).toHaveLength(1);
+        expect(list[0]!.id).toBe(ir.id);
+        expect(list[0]!.type).toBe('message');
+      });
+
+      it('should filter by sessionId', async () => {
+        await store.saveInteractionRecord(makeInteractionRecord({ sessionId: 'sess-1' }));
+        await store.saveInteractionRecord(makeInteractionRecord({ sessionId: 'sess-2' }));
+        const list = await store.listInteractionRecords('sess-1');
+        expect(list).toHaveLength(1);
+      });
+
+      it('should filter by type', async () => {
+        await store.saveInteractionRecord(
+          makeInteractionRecord({ sessionId: 'sess-t', type: 'message' }),
+        );
+        await store.saveInteractionRecord(
+          makeInteractionRecord({ sessionId: 'sess-t', type: 'form-submit' }),
+        );
+        const list = await store.listInteractionRecords('sess-t', { type: 'form-submit' });
+        expect(list).toHaveLength(1);
+        expect(list[0]!.type).toBe('form-submit');
+      });
+
+      it('should filter by source', async () => {
+        await store.saveInteractionRecord(
+          makeInteractionRecord({ sessionId: 'sess-s', source: 'player' }),
+        );
+        await store.saveInteractionRecord(
+          makeInteractionRecord({ sessionId: 'sess-s', source: 'plugin-ui' }),
+        );
+        const list = await store.listInteractionRecords('sess-s', { source: 'plugin-ui' });
+        expect(list).toHaveLength(1);
+        expect(list[0]!.source).toBe('plugin-ui');
+      });
+
+      it('should return records in newest-first order', async () => {
+        const tEarly = ts(100);
+        const tLate = ts(300);
+        await store.saveInteractionRecord(
+          makeInteractionRecord({ sessionId: 'sess-ord-ir', timestamp: tEarly }),
+        );
+        await store.saveInteractionRecord(
+          makeInteractionRecord({ sessionId: 'sess-ord-ir', timestamp: tLate }),
+        );
+        const list = await store.listInteractionRecords('sess-ord-ir');
+        expect(list[0]!.timestamp).toBe(tLate);
+      });
+
+      it('should respect limit', async () => {
+        for (let i = 0; i < 4; i++) {
+          await store.saveInteractionRecord(
+            makeInteractionRecord({ sessionId: 'sess-lim-ir', timestamp: ts(i * 10) }),
+          );
+        }
+        const list = await store.listInteractionRecords('sess-lim-ir', { limit: 2 });
+        expect(list).toHaveLength(2);
       });
     });
 

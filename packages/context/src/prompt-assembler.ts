@@ -37,9 +37,10 @@ import { PROMPT_CACHE_BREAKPOINT_MARKER } from '@covel/shared';
 import { applyBudget } from './budget.js';
 import {
   assemblePromptVariables,
+  buildCurrentTurnUserMessage,
+  buildFrameworkPreamble,
   buildInjectBlocks,
   interpolateTemplate,
-  resolveLocaleLanguageName,
   renderWorkingMemory,
 } from './prompt-internals.js';
 import type { AssembledContext, ContextBuildParams, LLMMessage, MessageHistoryRecord, SummaryRecord } from './types.js';
@@ -157,11 +158,7 @@ export interface PromptSegments {
  * Callers may override this entirely via `ContextBuildParams.frameworkPreamble`.
  */
 function defaultFrameworkPreamble(locale: string | undefined): string {
-  if (!locale) {
-    return '';
-  }
-  const languageName = resolveLocaleLanguageName(locale);
-  return `[LANGUAGE] You MUST respond in ${languageName}. All narrative output, tool parameters, and descriptions must be in ${languageName}.`;
+  return buildFrameworkPreamble(locale);
 }
 
 /**
@@ -431,7 +428,7 @@ export function buildContextV2(
   // (segment 10) are appended after.
   const baseMessages: readonly LLMMessage[] = [
     ...historyMessages,
-    { role: 'user', content: params.turnInput.playerMessage },
+    { role: 'user', content: buildCurrentTurnUserMessage(params.turnInput) },
   ];
 
   // Segment 9 — insert author's notes at their declared depth.

@@ -477,6 +477,40 @@ postHistory:
   content: Always respond in valid markdown. Never break character.
 ```
 
+### rpc(PR-3 插件 RPC 通道)
+
+声明插件暴露给 `POST /api/sessions/:id/plugin-rpc` 的结构化 action,供前端或外部代理用统一通道调用。每个 entry 是一个 RPC handler 模块的相对路径。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `<action-name>` | `string`(必须 kebab-case,不可以 `framework-` 开头) | action 名,与 `pluginId` 一起作为路由 key |
+| `<action>.handler` | `string`(必填) | handler 模块的插件相对路径,必须 `.js` / `.mjs` / `.cjs`,**不允许绝对路径或 `..` 段**(框架在 schema 与 loader 两层校验) |
+| `<action>.input` | `string`(可选) | payload 的 JSON Schema 路径,仅作文档参考,框架不强制 |
+| `<action>.trustLevel` | `'builtin' \| 'official' \| 'community'`(可选) | 强制声明此 action 的信任级别,**只能比插件源信任更严格(降级)**;尝试升级会被 clamp 并 warn |
+| `<action>.streaming` | `boolean`(可选,默认 `false`) | 声明 handler 是流式还是单次。当前 v1 路由只走 sync,streaming 留给后续 PR |
+| `<action>.description` | `string`(可选) | 一句话描述,会显示在 PR-7 approval 对话框里 |
+
+handler 模块必须 default export 一个 `(payload, context) => Promise<unknown>` 函数。`context` 包含 `{ sessionId, pluginId, action, store: RpcHandlerStore }`,其中 `store` 是窄结构接口(`getSession` / `listTurnMessages` / `savePlayerInput` / 可选 plugin-data 三件套),不暴露完整的 `DataStore`。
+
+示例 frontmatter:
+```yaml
+rpc:
+  regenerate:
+    handler: ./rpc/regenerate.js
+    description: 重新生成上一段叙事
+  cancel:
+    handler: ./rpc/cancel.js
+    trustLevel: community  # 即使插件本身是 official,也强制对 cancel 走 community 审批
+```
+
+**框架默认 actions(无需声明,通过 `pluginId: "framework"` sentinel 调用):**
+
+| Action | 说明 |
+|--------|------|
+| `submit-form` | 持久化玩家表单 / 选择 / 确认 提交,填充模板 narrative。等同于 legacy `POST /api/sessions/:id/submit-inputs` |
+
+详细 API 说明见 [api.md `POST /api/sessions/:id/plugin-rpc`](api.md#post-apisessionsidplugin-rpc),作者指南见 [../guide/plugin-authoring.md §2.3.1](../guide/plugin-authoring.md)。
+
 ### 优先级分带
 
 ```
@@ -505,6 +539,28 @@ postHistory:
 | `conditional` | 满足条件时触发 |
 | `event` | 监听特定事件触发 |
 | `error-retry` | 前序 Runtime 出错时触发 |
+
+### trigger 字段速查
+
+| 字段 | 默认 | 含义 |
+|------|------|------|
+| `interval` | 1 | `scheduled` 类型每隔 N 轮触发一次 |
+| `cooldownTurns` | — | 上一次触发后多少轮内不可再次触发 |
+| `maxTriggerCount` | — | 整个 session 内最多触发次数（达到后不再触发） |
+| `phases` | 全部 | 限定在哪些 session phase 下才有资格触发 |
+| `startTurn` | — | **PR-2**：从第几个 playing-phase 轮次起开始介入。基于 `playingTurnNumber`（0-based 从首次进入 `playing` 阶段算起），不计入 pre-game / character_creation 期间的轮次 |
+
+**`startTurn` 用例**：
+
+```yaml
+trigger:
+  type: scheduled
+  interval: 1
+  startTurn: 3        # 跳过 playing 的前三轮，从第四轮起开始检查
+  phases: [playing]
+```
+
+这条配置表达"前三轮 playing 玩家先熟悉环境，从第四轮起插件才开始介入"，与 pre-game 阶段执行了多少次 setup runtime 完全解耦。
 
 ---
 

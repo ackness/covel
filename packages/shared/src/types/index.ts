@@ -55,11 +55,15 @@ export type {
   ApprovalDecision,
   ApprovalRequest,
   ApprovalRecord,
+  RpcApprovalPending,
+  RpcApprovalDecision,
+  RpcApprovalScope,
 } from './approval.js';
 
 export type {
   SessionPhase,
   Session,
+  SessionEmbeddingInfo,
 } from './session.js';
 
 export type {
@@ -77,6 +81,7 @@ export type {
   PlayerInputForm,
   TurnMessage,
   PlayerInputSubmission,
+  Message,
 } from './message.js';
 
 export type {
@@ -125,7 +130,33 @@ export type {
   AttributeCategory,
   AttributeDefinition,
   CharacterAttributeSchema,
+  Character,
 } from './character-schema.js';
+
+export type {
+  RuntimeOutput,
+  RuntimeOutputResult,
+  RuntimeOutputToolCall,
+  RuntimeOutputPromptMessage,
+  RuntimeOutputMetaData,
+} from './runtime-output.js';
+
+export type {
+  InteractionRecord,
+  InteractionSource,
+  InteractionChannel,
+  InteractionRecordType,
+  InteractionRecordMetaData,
+} from './interaction-record.js';
+
+export type {
+  RpcTrustLevel,
+  RpcActionDecl,
+  RpcDeclMap,
+  RpcHandlerStore,
+  PluginRpcRequest,
+  PluginRpcResponse,
+} from './rpc.js';
 
 export type {
   NpcNodeType,
@@ -137,6 +168,7 @@ export type {
 
 export type {
   I18nText,
+  World,
   WorldLandmark,
   WorldRegion,
   WorldGeography,

@@ -150,7 +150,7 @@
 
 | 命令 | 方法 | 端点 | 响应 |
 |------|------|------|------|
-| `input.submit` | POST | `/api/sessions/:id/submit-inputs` | JSON: `{ results[], accepted }` |
+| `input.submit` | POST | `/api/sessions/:id/submit-inputs` | JSON: `{ results[], accepted }` (legacy alias,内部转发到 plugin-rpc `submit-form`) |
 
 ### 插件管理
 
@@ -158,6 +158,58 @@
 |------|------|------|------|
 | `plugin.enable` | POST | `/api/sessions/:id/plugins/enable` | JSON: `{ ok, active[] }` |
 | `plugin.disable` | POST | `/api/sessions/:id/plugins/disable` | JSON: `{ ok, active[] }` |
+
+### 插件 RPC(PR-3)
+
+统一的"结构化插件指令"通道。同时承载 action 级与 runtime 级调用,默认 sync 模式,SSE 流式预留给后续 PR。
+
+| 命令 | 方法 | 端点 | 响应 |
+|------|------|------|------|
+| `plugin.rpc` | POST | `/api/sessions/:id/plugin-rpc` | JSON: `{ status: "ok", result }` 或 202 `{ status: "approval-required", approvalId, pending }` |
+
+**请求体:**
+
+```json
+{
+  "pluginId": "framework",          // 框架默认用 "framework" sentinel
+  "action": "submit-form",          // action 级 (与 runtimeId 互斥)
+  "payload": { /* 任意 JSON */ }
+}
+```
+
+**响应分支:**
+
+| 状态码 | status | 触发 |
+|-------|--------|------|
+| 200 | `ok` | 直接执行(builtin / official / 已缓存的 community) |
+| 202 | `approval-required` | 第一次调用 community-trust 插件 action |
+| 400 | `error` | 缺字段 / action+runtimeId 互斥违反 / payload 校验失败 |
+| 404 | `error` (`code: "unknown-action"`) | action 未注册 |
+| 429 | `error` (`code: "queue-full"`) | 排队的 pending approvals 超过 cap |
+| 501 | `error` | runtime 级触发(留给 PR-3.b) |
+
+**框架默认 action:** 见 [api.md](api.md#post-apisessionsidplugin-rpc) 的"框架默认 action"小节。
+
+### RPC Approval(PR-7)
+
+community-trust 插件的 RPC 调用需要玩家显式批准。框架返回 202 后,前端通过下述端点拉取 / 提交决定。
+
+| 命令 | 方法 | 端点 | 响应 |
+|------|------|------|------|
+| `approval.list` | GET | `/api/sessions/:id/approvals` | JSON: `{ pending: RpcApprovalPending[] }` |
+| `approval.get` | GET | `/api/approvals/:approvalId` | JSON: `{ pending }` 或 404 |
+| `approval.decide` | POST | `/api/approvals/:approvalId/decision` | JSON: `{ ok, decision, scope, pending }` |
+
+**Decision 请求体:**
+
+```json
+{
+  "decision": "allow",      // "allow" 或 "deny"
+  "scope": "once"           // "once" (默认,60s 内消费一次) 或 "session" (本 session 内永久缓存)
+}
+```
+
+详细流程图见 [api.md](api.md#rpc-approval-流程pr-7)。
 
 ## 三、查询端点
 

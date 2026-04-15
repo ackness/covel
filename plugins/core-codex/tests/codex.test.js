@@ -234,14 +234,14 @@ describe('core-codex plugin manifest', () => {
     expect(manifest.runtimeType).toBe('function');
   });
 
-  it('should declare local tools', () => {
-    expect(manifest.tools?.local).toContain('./tools/unlock-codex-entries.js');
-    expect(manifest.tools?.local).toContain('./tools/update-codex-entry.js');
-  });
-
-  it('should declare builtin tools', () => {
-    expect(manifest.tools?.builtin).toContain('create-notification');
-    expect(manifest.tools?.builtin).toContain('plugin-data-list');
+  it('should not declare LLM-only fields (function runtime)', () => {
+    // PR-5.4 cleanup: core-codex is a function runtime, so tools/inject/postHistory
+    // declarations are vestigial and have been removed from PLUGIN.md. The handler
+    // does direct store writes via its `store` parameter.
+    expect(manifest.tools).toBeUndefined();
+    expect(manifest.input).toBeUndefined();
+    expect(manifest.postHistory).toBeUndefined();
+    expect(manifest.promptVersion).toBeUndefined();
   });
 
   it('should have scheduled trigger with interval', () => {
@@ -249,9 +249,10 @@ describe('core-codex plugin manifest', () => {
     expect(manifest.trigger?.interval).toBe(2);
   });
 
-  it('should load prompt template', () => {
-    expect(loaded.promptTemplate).toContain('知识图鉴');
-    expect(loaded.promptTemplate).toContain('unlock-codex-entries');
+  it('should load PLUGIN.md body as a function-runtime description', () => {
+    // The body is documentation only — function runtimes never feed it to an LLM.
+    expect(loaded.promptTemplate).toContain('function runtime');
+    expect(loaded.promptTemplate).toContain('handler.js');
   });
 
   it('should declare right panel UI spec', () => {

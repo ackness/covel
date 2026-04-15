@@ -27,6 +27,16 @@ export function shouldTrigger(
   const trigger = manifest.trigger;
   const type = trigger?.type ?? 'auto';
 
+  // Global limits: startTurn — runtime stays silent before this turn.
+  // Compared against `playingTurnNumber` (rounds since session entered
+  // playing phase), not the global `turnNumber`. This matches the plugin
+  // author's intuition of "from the N-th round of actual gameplay",
+  // decoupling the startTurn semantics from pre-game / char-creation
+  // activity. Only applied when explicitly declared.
+  if (trigger?.startTurn !== undefined && context.playingTurnNumber < trigger.startTurn) {
+    return false;
+  }
+
   // Global limits: maxTriggerCount
   if (trigger?.maxTriggerCount !== undefined && context.triggerCount >= trigger.maxTriggerCount) {
     return false;

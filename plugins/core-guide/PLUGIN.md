@@ -6,6 +6,11 @@ priority: 550
 model: plugin
 outputKind: system
 timeoutMs: 120000
+# Single-shot plugin: one generate-guide call is enough. Without this cap
+# some LLMs (gpt-5.4, etc.) keep calling the same tool in a loop after the
+# first success, exhausting the default maxSteps=10 and failing the runtime.
+# 4 = 首次调用 + 一次验证失败重试 + 终止文本 + 缓冲。
+maxSteps: 4
 promptVersion: 2
 trigger:
   type: scheduled

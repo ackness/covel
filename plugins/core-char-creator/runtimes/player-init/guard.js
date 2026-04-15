@@ -23,12 +23,16 @@ export default async function guard(ctx) {
       ? characters.find((c) => c.type === 'player')
       : null;
 
+    console.log(`[player-init/guard] sessionId=${sessionId} characters=${Array.isArray(characters) ? characters.length : 'N/A'} playerFound=${!!player}`);
+
     if (player) {
       // Player already exists — skip and ensure session is in playing phase
+      console.log(`[player-init/guard] SKIP — player already exists id=${player.id} name=${player.name}`);
       try {
         const session = await s.getSession(sessionId);
         if (session && session.phase !== 'playing') {
           await s.updateSession(sessionId, { phase: 'playing' });
+          console.log(`[player-init/guard] phase updated: ${session.phase} → playing`);
         }
       } catch {
         // Non-critical: phase transition failure doesn't block skip
@@ -42,6 +46,7 @@ export default async function guard(ctx) {
       };
     }
 
+    console.log(`[player-init/guard] PROCEED — no player found, running LLM`);
     return { skip: false };
   } catch (err) {
     console.warn('[core-char-creator/player-init] guard error:', err);

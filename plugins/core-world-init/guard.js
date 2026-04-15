@@ -91,13 +91,15 @@ export default async function guard(ctx) {
 
     if (existing && existing.length > 0) {
       const entries = await s.listPluginData(sessionId, pluginId, 'entries');
-      return {
-        skip: true,
-        initialized: true,
-        schemaCount: existing.length,
-        entryCount: entries?.length ?? 0,
-        narrativeOutput: `[系统] 世界维度数据已加载（${existing.length} 个 schema, ${entries?.length ?? 0} 个词条）`,
-      };
+      if ((entries?.length ?? 0) > 0) {
+        return {
+          skip: true,
+          initialized: true,
+          schemaCount: existing.length,
+          entryCount: entries?.length ?? 0,
+          narrativeOutput: `[系统] 世界维度数据已加载（${existing.length} 个 schema, ${entries?.length ?? 0} 个词条）`,
+        };
+      }
     }
 
     // 2. Check previous sessions of the same world for reusable data
@@ -110,49 +112,71 @@ export default async function guard(ctx) {
         (/** @type {any} */ ss) => ss.worldId === worldId && ss.id !== sessionId,
       );
 
+      /** @type {Array<{ prev: any; prevSchema: any[]; prevEntries: any[]; totalCount: number; updatedAt: string }>} */
+      const reusableSessions = [];
+
       for (const prev of previousSessions) {
         const prevSchema = await s.listPluginData(prev.id, pluginId, 'schema');
-        if (prevSchema && prevSchema.length > 0) {
-          const prevEntries = await s.listPluginData(prev.id, pluginId, 'entries');
-
-          // Copy schema + entries to current session
-          const now = new Date().toISOString();
-          const records = [
-            ...prevSchema.map((/** @type {any} */ r) => ({
-              id: crypto.randomUUID(),
-              sessionId,
-              pluginId,
-              namespace: r.namespace,
-              key: r.key,
-              value: r.value,
-              createdAt: now,
-              updatedAt: now,
-            })),
-            ...(prevEntries ?? []).map((/** @type {any} */ r) => ({
-              id: crypto.randomUUID(),
-              sessionId,
-              pluginId,
-              namespace: r.namespace,
-              key: r.key,
-              value: r.value,
-              createdAt: now,
-              updatedAt: now,
-            })),
-          ];
-
-          if (records.length > 0) {
-            await s.setPluginDataBatch(records);
-          }
-
-          return {
-            skip: true,
-            initialized: true,
-            reusedFrom: prev.id,
-            schemaCount: prevSchema.length,
-            entryCount: prevEntries?.length ?? 0,
-            narrativeOutput: `[系统] 从历史会话复用世界维度数据（${prevSchema.length} 个 schema, ${prevEntries?.length ?? 0} 个词条）`,
-          };
+        if (!prevSchema || prevSchema.length === 0) {
+          continue;
         }
+
+        const prevEntries = await s.listPluginData(prev.id, pluginId, 'entries');
+        const entryCount = prevEntries?.length ?? 0;
+        if (entryCount === 0) {
+          continue;
+        }
+
+        reusableSessions.push({
+          prev,
+          prevSchema,
+          prevEntries: prevEntries ?? [],
+          totalCount: prevSchema.length + entryCount,
+          updatedAt: prev.updatedAt ?? prev.createdAt ?? '',
+        });
+      }
+
+      reusableSessions.sort((a, b) => {
+        if (b.totalCount !== a.totalCount) return b.totalCount - a.totalCount;
+        return b.updatedAt.localeCompare(a.updatedAt);
+      });
+
+      const bestReuse = reusableSessions[0];
+      if (bestReuse) {
+        const now = new Date().toISOString();
+        const records = [
+          ...bestReuse.prevSchema.map((/** @type {any} */ r) => ({
+            id: crypto.randomUUID(),
+            sessionId,
+            pluginId,
+            namespace: r.namespace,
+            key: r.key,
+            value: r.value,
+            createdAt: now,
+            updatedAt: now,
+          })),
+          ...bestReuse.prevEntries.map((/** @type {any} */ r) => ({
+            id: crypto.randomUUID(),
+            sessionId,
+            pluginId,
+            namespace: r.namespace,
+            key: r.key,
+            value: r.value,
+            createdAt: now,
+            updatedAt: now,
+          })),
+        ];
+
+        await s.setPluginDataBatch(records);
+
+        return {
+          skip: true,
+          initialized: true,
+          reusedFrom: bestReuse.prev.id,
+          schemaCount: bestReuse.prevSchema.length,
+          entryCount: bestReuse.prevEntries.length,
+          narrativeOutput: `[系统] 从历史会话复用世界维度数据（${bestReuse.prevSchema.length} 个 schema, ${bestReuse.prevEntries.length} 个词条）`,
+        };
       }
     }
 

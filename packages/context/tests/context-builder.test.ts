@@ -218,6 +218,25 @@ describe('buildContext', () => {
     expect(ctx.systemPrompt).toBe('Write in dramatic style.');
   });
 
+  it('uses a runtime execution cue when the current player message is empty', () => {
+    const params: ContextBuildParams = {
+      promptTemplate: 'Plain instructions.',
+      manifest: makeManifest(),
+      turnInput: makeTurnInput({ locale: 'zh-CN', playerMessage: '' }),
+      completedResults: new Map(),
+      config: {},
+    };
+
+    const ctx = buildContext(params);
+
+    expect(ctx.messages).toEqual([
+      {
+        role: 'user',
+        content: '开始当前游戏回合，并按照系统设定直接给出游戏内结果。',
+      },
+    ]);
+  });
+
   it('should include message history before current user message', () => {
     const history: MessageHistoryRecord[] = [
       { role: 'user', content: 'I enter the cave' },

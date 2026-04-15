@@ -130,6 +130,7 @@ export function createGateway(deps: GatewayDependencies) {
     input: {
       presetId?: string;
       messages: TextMessage[];
+      tools?: ToolDefinition[];
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: GatewayOptions
@@ -165,6 +166,7 @@ export function createGateway(deps: GatewayDependencies) {
           {
             model: targetModel(target),
             messages: input.messages,
+            tools: input.tools,
             providerRequestMetadata: input.providerRequestMetadata,
           },
           { profile: target.profile, preset: target.preset, mode: "stream" }

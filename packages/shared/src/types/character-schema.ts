@@ -50,3 +50,23 @@ export interface CharacterAttributeSchema {
   /** Ordered attribute definitions (display order = array order). */
   readonly attributes: readonly AttributeDefinition[];
 }
+
+// ── Wire-format Character ───────────────────────────────────────
+
+/**
+ * Wire-format `Character` — the contract returned by
+ * `/api/sessions/:id/characters`. Mirrors the server's `CharacterRecord`
+ * but lives in `@covel/shared` so it can be consumed by API clients
+ * (web-v2, future Electron, CLI) without importing `@covel/store`.
+ */
+export interface Character {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly name: string;
+  readonly type: string;
+  readonly description?: string;
+  readonly fields?: unknown;
+  readonly version: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}

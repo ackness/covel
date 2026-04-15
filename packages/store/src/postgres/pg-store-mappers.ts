@@ -22,6 +22,8 @@ import type {
   PluginConfigRecord,
   WorldRecord,
   TraceEventRecord,
+  RuntimeOutputRecord,
+  InteractionRecordRow,
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
@@ -56,8 +58,16 @@ export const CREATE_TABLES_SQL = `
     locale TEXT NOT NULL DEFAULT 'zh-CN',
     active_plugins JSONB NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    embedding_model_id INTEGER,
+    embedding_locked_at TEXT,
+    playing_turn_offset INTEGER,
+    runtime_model_overrides JSONB DEFAULT '{}'::jsonb
   );
+  -- PR-2: ensure the column exists on pre-existing databases.
+  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS playing_turn_offset INTEGER;
+  -- PR-6: per-runtime model slot overrides.
+  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS runtime_model_overrides JSONB DEFAULT '{}'::jsonb;
 
   CREATE TABLE IF NOT EXISTS turn_results (
     id TEXT PRIMARY KEY,
@@ -219,6 +229,41 @@ export const CREATE_TABLES_SQL = `
   );
   CREATE INDEX IF NOT EXISTS pg_trace_events_session_id_idx ON trace_events(session_id);
 
+  -- Runtime Outputs (PR-1 translation layer)
+  CREATE TABLE IF NOT EXISTS runtime_outputs (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    turn_id TEXT NOT NULL,
+    runtime_result_id TEXT,
+    plugin_id TEXT NOT NULL,
+    runtime_id TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    results JSONB NOT NULL,
+    meta_data JSONB NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS pg_runtime_outputs_session_time_idx ON runtime_outputs(session_id, timestamp);
+  CREATE INDEX IF NOT EXISTS pg_runtime_outputs_runtime_idx ON runtime_outputs(session_id, runtime_id);
+  CREATE INDEX IF NOT EXISTS pg_runtime_outputs_plugin_idx ON runtime_outputs(session_id, plugin_id);
+
+  -- Interaction Records (PR-1 translation layer)
+  CREATE TABLE IF NOT EXISTS interaction_records (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    turn_id TEXT,
+    timestamp TEXT NOT NULL,
+    source TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    type TEXT NOT NULL,
+    target_plugin_id TEXT,
+    target_runtime_id TEXT,
+    payload JSONB NOT NULL,
+    meta_data JSONB,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS pg_interaction_records_session_time_idx ON interaction_records(session_id, timestamp);
+  CREATE INDEX IF NOT EXISTS pg_interaction_records_type_idx ON interaction_records(session_id, type);
+
   CREATE TABLE IF NOT EXISTS turn_messages (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
@@ -311,6 +356,39 @@ export const CREATE_TABLES_SQL = `
     resolved_at TEXT
   );
   CREATE INDEX IF NOT EXISTS pg_suspensions_session_id_idx ON suspensions(session_id);
+
+  CREATE TABLE IF NOT EXISTS vector_models (
+    id SERIAL PRIMARY KEY,
+    model_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model_name TEXT NOT NULL,
+    dim INTEGER NOT NULL,
+    -- Auto-filled by the trigger below from the row id. Application
+    -- code MUST NOT specify this column on INSERT — the trigger derives
+    -- it as 'vec_mem_m{id}' atomically, eliminating placeholder hacks.
+    table_name TEXT NOT NULL DEFAULT '',
+    created_at BIGINT NOT NULL,
+    last_used_at BIGINT,
+    UNIQUE (model_id, dim)
+  );
+
+  -- BEFORE INSERT trigger: PG evaluates SERIAL defaults before BEFORE
+  -- INSERT triggers fire, so NEW.id is already populated. We mutate
+  -- NEW.table_name in place — no separate UPDATE statement needed.
+  CREATE OR REPLACE FUNCTION vector_models_fill_table_name() RETURNS TRIGGER AS $fn$
+  BEGIN
+    IF NEW.table_name IS NULL OR NEW.table_name = '' THEN
+      NEW.table_name := 'vec_mem_m' || NEW.id;
+    END IF;
+    RETURN NEW;
+  END;
+  $fn$ LANGUAGE plpgsql;
+
+  DROP TRIGGER IF EXISTS vector_models_fill_table_name_trigger ON vector_models;
+  CREATE TRIGGER vector_models_fill_table_name_trigger
+    BEFORE INSERT ON vector_models
+    FOR EACH ROW
+    EXECUTE FUNCTION vector_models_fill_table_name();
 `;
 
 // ── Table names for cleanup ─────────────────────────────────────
@@ -321,6 +399,7 @@ export const ALL_TABLE_NAMES = [
   'messages', 'characters', 'plugin_data', 'plugin_configs', 'trace_events',
   'turn_messages', 'player_inputs', 'working_memory', 'lorebook_entries', 'session_summaries', 'suspensions',
   'state_snapshots',
+  'runtime_outputs', 'interaction_records',
 ] as const;
 
 export const DROP_ALL_SQL = ALL_TABLE_NAMES.map(
@@ -339,6 +418,12 @@ export function toSessionRecord(row: typeof schema.sessions.$inferSelect): Sessi
     activePlugins: (row.activePlugins ?? []) as string[],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    ...(row.embeddingModelId != null ? { embeddingModelId: row.embeddingModelId } : {}),
+    ...(row.embeddingLockedAt != null ? { embeddingLockedAt: row.embeddingLockedAt } : {}),
+    ...(row.playingTurnOffset != null ? { playingTurnOffset: row.playingTurnOffset } : {}),
+    ...(row.runtimeModelOverrides && Object.keys(row.runtimeModelOverrides as object).length > 0
+      ? { runtimeModelOverrides: row.runtimeModelOverrides as Record<string, string> }
+      : {}),
   };
 }
 
@@ -517,6 +602,42 @@ export function toTraceEventRecord(row: typeof schema.traceEvents.$inferSelect):
     traceId: row.traceId,
     turnId: row.turnId,
     payload: row.payload ?? undefined,
+    createdAt: row.createdAt,
+  };
+}
+
+export function toRuntimeOutputRecord(
+  row: typeof schema.runtimeOutputs.$inferSelect,
+): RuntimeOutputRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    turnId: row.turnId,
+    runtimeResultId: row.runtimeResultId ?? undefined,
+    pluginId: row.pluginId,
+    runtimeId: row.runtimeId,
+    timestamp: row.timestamp,
+    results: row.results,
+    metaData: row.metaData,
+    createdAt: row.createdAt,
+  };
+}
+
+export function toInteractionRecordRow(
+  row: typeof schema.interactionRecords.$inferSelect,
+): InteractionRecordRow {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    turnId: row.turnId ?? undefined,
+    timestamp: row.timestamp,
+    source: row.source,
+    channel: row.channel,
+    type: row.type,
+    targetPluginId: row.targetPluginId ?? undefined,
+    targetRuntimeId: row.targetRuntimeId ?? undefined,
+    payload: row.payload,
+    metaData: row.metaData ?? undefined,
     createdAt: row.createdAt,
   };
 }

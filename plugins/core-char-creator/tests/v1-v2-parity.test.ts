@@ -166,6 +166,7 @@ function makeCharacterTrackerParams(
 
 function normalizeSystemPrompt(prompt: string): string {
   return prompt
+    .replace(/\[RUNTIME\][^\n]*\n?/g, '')
     .replace(/\[LANGUAGE\][^\n]*\.?/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .split('\n')
@@ -195,7 +196,8 @@ describe('core-char-creator/player-init V1/V2 prompt parity', () => {
 
     process.env.COVEL_PROMPT_V2 = '1';
     const v2 = buildContext(params);
-    expect(v2.systemPrompt.startsWith('[LANGUAGE]')).toBe(true);
+    expect(v2.systemPrompt.startsWith('[RUNTIME]')).toBe(true);
+    expect(v2.systemPrompt).toContain('[LANGUAGE]');
   });
 
   it('V1 and V2 produce semantically equivalent system prompts', () => {
@@ -243,7 +245,7 @@ describe('core-char-creator/player-init V1/V2 prompt parity', () => {
     expect(v2.systemPrompt).toContain('中文');
   });
 
-  it('V1 and V2 produce identical message arrays', () => {
+  it('V2 appends postHistory instructions after the player turn', () => {
     const parsed = loadPlayerInit();
     const params = makePlayerInitParams(parsed.promptTemplate, parsed.manifest);
 
@@ -251,7 +253,12 @@ describe('core-char-creator/player-init V1/V2 prompt parity', () => {
     process.env.COVEL_PROMPT_V2 = '1';
     const v2 = buildContext(params);
 
-    expect(v2.messages).toEqual(v1.messages);
+    // player-init declares `postHistory`, so V2 appends one extra system
+    // instruction after the current user turn.
+    expect(v2.messages).toHaveLength(v1.messages.length + 1);
+    expect(v2.messages.at(-2)).toEqual(v1.messages.at(-1));
+    expect(v2.messages.at(-1)?.role).toBe('system');
+    expect(v2.messages.at(-1)?.content).toContain('create-form');
   });
 
   it('V2 gate requires both env flag AND promptVersion: 2', () => {
@@ -285,7 +292,8 @@ describe('core-char-creator/character-tracker V1/V2 prompt parity', () => {
 
     process.env.COVEL_PROMPT_V2 = '1';
     const v2 = buildContext(params);
-    expect(v2.systemPrompt.startsWith('[LANGUAGE]')).toBe(true);
+    expect(v2.systemPrompt.startsWith('[RUNTIME]')).toBe(true);
+    expect(v2.systemPrompt).toContain('[LANGUAGE]');
   });
 
   it('V1 and V2 produce semantically equivalent system prompts', () => {
@@ -332,7 +340,7 @@ describe('core-char-creator/character-tracker V1/V2 prompt parity', () => {
     expect(v2.systemPrompt).toContain('中文');
   });
 
-  it('V1 and V2 produce identical message arrays', () => {
+  it('V2 appends postHistory instructions after the player turn', () => {
     const parsed = loadCharacterTracker();
     const params = makeCharacterTrackerParams(
       parsed.promptTemplate,
@@ -343,8 +351,30 @@ describe('core-char-creator/character-tracker V1/V2 prompt parity', () => {
     process.env.COVEL_PROMPT_V2 = '1';
     const v2 = buildContext(params);
 
-    expect(v2.messages).toEqual(v1.messages);
+    expect(v2.messages).toHaveLength(v1.messages.length + 1);
+
+    const playerTurn = v2.messages[v2.messages.length - 2];
+    expect(playerTurn?.role).toBe('user');
+    expect(playerTurn?.content).toBe('I greet Elina.');
+
     const last = v2.messages[v2.messages.length - 1];
+    expect(last?.role).toBe('system');
+    expect(last?.content).toContain('list-characters');
+
+    const v1Last = v1.messages[v1.messages.length - 1];
+    expect(v1Last?.role).toBe('user');
+    expect(v1Last?.content).toBe('I greet Elina.');
+  });
+
+  it('V1 keeps the player turn as the final message', () => {
+    const parsed = loadCharacterTracker();
+    const params = makeCharacterTrackerParams(
+      parsed.promptTemplate,
+      parsed.manifest,
+    );
+
+    const v1 = buildContext(params);
+    const last = v1.messages[v1.messages.length - 1];
     expect(last?.role).toBe('user');
     expect(last?.content).toBe('I greet Elina.');
   });

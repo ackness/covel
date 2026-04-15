@@ -46,10 +46,21 @@ export interface GatewayLike {
         toolCalls?: Array<{ id: string; name: string; arguments: string }>;
         toolCallId?: string;
       }>;
+      tools?: Array<{
+        type: 'function';
+        function: { name: string; description?: string; parameters?: Record<string, unknown> };
+      }>;
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: { apiKeys?: Record<string, string>; traceId?: string },
-  ): AsyncIterable<{ type: string; textDelta?: string; finishReason?: string }>;
+  ): AsyncIterable<{
+    type: string;
+    textDelta?: string;
+    finishReason?: string;
+    id?: string;
+    name?: string;
+    arguments?: string;
+  }>;
 }
 
 export interface GatewayAdapterConfig {
@@ -115,11 +126,13 @@ export function createGatewayAdapter(
       }
 
       const messages = toGatewayMessages(params.messages);
+      const tools = params.tools?.map(toGatewayTool);
 
       for await (const event of gateway.streamText(
         {
           presetId: params.model ?? undefined,
           messages,
+          tools: tools && tools.length > 0 ? tools : undefined,
         },
         {
           apiKeys: config?.apiKeys,
@@ -128,6 +141,13 @@ export function createGatewayAdapter(
       )) {
         if (event.type === 'text-delta' && event.textDelta !== undefined) {
           yield { type: 'text-delta' as const, textDelta: event.textDelta };
+        } else if (event.type === 'tool-call' && event.id && event.name) {
+          yield {
+            type: 'tool-call' as const,
+            id: event.id,
+            name: event.name,
+            arguments: event.arguments ?? '{}',
+          };
         } else if (event.type === 'done') {
           yield { type: 'done' as const, finishReason: event.finishReason ?? 'stop' };
         }

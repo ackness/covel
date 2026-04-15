@@ -258,6 +258,7 @@ export interface ObjectGenerationResult<TObject = unknown> {
 export type StreamEvent =
   | { type: "text-delta"; textDelta: string }
   | { type: "reasoning-delta"; reasoningDelta: string }
+  | { type: "tool-call"; id: string; name: string; arguments: string }
   | { type: "done"; finishReason: string; usage: UsageSummary };
 
 // ── Embedding ──────────────────────────────────────────────────────

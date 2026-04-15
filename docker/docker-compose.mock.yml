@@ -1,0 +1,63 @@
+services:
+  llmock-story:
+    image: ghcr.io/copilotkit/aimock:latest
+    container_name: covel-llmock-story
+    command: >
+      -p 4010
+      --host 0.0.0.0
+      -f /fixtures
+      --record
+      --provider-openai https://api.deepseek.com
+      --log-level info
+    ports:
+      - "4010:4010"
+    volumes:
+      - ../fixtures/aimock/story:/fixtures
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4010/health || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+
+  llmock-plugin:
+    image: ghcr.io/copilotkit/aimock:latest
+    container_name: covel-llmock-plugin
+    command: >
+      -p 4011
+      --host 0.0.0.0
+      -f /fixtures
+      --record
+      --provider-openai https://dashscope.aliyuncs.com/compatible-mode
+      --log-level info
+    ports:
+      - "4011:4011"
+    volumes:
+      - ../fixtures/aimock/plugin:/fixtures
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4011/health || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+
+  llmock-e2e:
+    image: ghcr.io/copilotkit/aimock:latest
+    container_name: covel-llmock-e2e
+    command: >
+      -p 4012
+      --host 0.0.0.0
+      -f /fixtures
+      --record
+      --provider-openai https://api.groq.com/openai
+      --log-level info
+    ports:
+      - "4012:4012"
+    volumes:
+      - ../fixtures/aimock/e2e:/fixtures
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4012/health || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s

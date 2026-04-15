@@ -7,7 +7,7 @@
 
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, desc, gte, type SQL } from 'drizzle-orm';
 import * as schema from './schema.js';
 import type {
   DataStore,
@@ -27,6 +27,10 @@ import type {
   PluginConfigRecord,
   WorldRecord,
   TraceEventRecord,
+  RuntimeOutputRecord,
+  InteractionRecordRow,
+  RuntimeOutputFilters,
+  InteractionRecordFilters,
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
@@ -55,6 +59,8 @@ import {
   toPluginDataRecord,
   toPluginConfigRecord,
   toTraceEventRecord,
+  toRuntimeOutputRecord,
+  toInteractionRecordRow,
   toTurnMessageRecord,
   toPlayerInputRecord,
   toWorkingMemoryRecord,
@@ -65,12 +71,12 @@ import {
   toSnapshotRecord,
   type SnapshotRow,
 } from './sqlite-store-mappers.js';
-import type { VectorStoreCapability } from '../vector-store.js';
+import type { VectorStoreCapability, VectorModelOps } from '../vector-store.js';
 import { createSqliteVectorCapability } from './sqlite-vector.js';
 
 // ── Factory ─────────────────────────────────────────────────────
 
-export function createSqliteStore(dbPath: string): DataStore & Partial<VectorStoreCapability> {
+export function createSqliteStore(dbPath: string): DataStore & Partial<VectorStoreCapability & VectorModelOps> {
   const sqlite = new Database(dbPath);
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
@@ -106,6 +112,8 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
           activePlugins: JSON.stringify(session.activePlugins),
           createdAt: session.createdAt,
           updatedAt: session.updatedAt,
+          playingTurnOffset: session.playingTurnOffset ?? null,
+          runtimeModelOverrides: JSON.stringify(session.runtimeModelOverrides ?? {}),
         })
         .run();
     },
@@ -121,13 +129,19 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
 
     async updateSession(
       id: string,
-      patch: Partial<Pick<SessionRecord, 'phase' | 'turnCount' | 'activePlugins' | 'updatedAt'>>,
+      patch: Partial<Pick<SessionRecord, 'phase' | 'turnCount' | 'activePlugins' | 'updatedAt' | 'embeddingModelId' | 'embeddingLockedAt' | 'playingTurnOffset' | 'runtimeModelOverrides'>>,
     ): Promise<void> {
       const values: Record<string, unknown> = {};
       if (patch.phase !== undefined) values.phase = patch.phase;
       if (patch.turnCount !== undefined) values.turnCount = patch.turnCount;
       if (patch.activePlugins !== undefined) values.activePlugins = JSON.stringify(patch.activePlugins);
       if (patch.updatedAt !== undefined) values.updatedAt = patch.updatedAt;
+      if ('embeddingModelId' in patch) values.embeddingModelId = patch.embeddingModelId ?? null;
+      if ('embeddingLockedAt' in patch) values.embeddingLockedAt = patch.embeddingLockedAt ?? null;
+      if ('playingTurnOffset' in patch) values.playingTurnOffset = patch.playingTurnOffset ?? null;
+      if ('runtimeModelOverrides' in patch) {
+        values.runtimeModelOverrides = JSON.stringify(patch.runtimeModelOverrides ?? {});
+      }
 
       if (Object.keys(values).length > 0) {
         db.update(schema.sessions)
@@ -747,6 +761,109 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
       if (pagination?.limit !== undefined) query = query.limit(pagination.limit);
       if (pagination?.offset) query = query.offset(pagination.offset);
       return query.all().map(toTraceEventRecord);
+    },
+
+    // ── Runtime Outputs (PR-1) ──────────────────────────────
+
+    async saveRuntimeOutput(record: RuntimeOutputRecord): Promise<void> {
+      db.insert(schema.runtimeOutputs)
+        .values({
+          id: record.id,
+          sessionId: record.sessionId,
+          turnId: record.turnId,
+          runtimeResultId: record.runtimeResultId ?? null,
+          pluginId: record.pluginId,
+          runtimeId: record.runtimeId,
+          timestamp: record.timestamp,
+          results: toJson(record.results ?? []),
+          metaData: toJson(record.metaData ?? {}),
+          createdAt: record.createdAt,
+        })
+        .run();
+    },
+
+    async getRuntimeOutput(sessionId: string, id: string): Promise<RuntimeOutputRecord | null> {
+      const rows = db
+        .select()
+        .from(schema.runtimeOutputs)
+        .where(
+          and(
+            eq(schema.runtimeOutputs.sessionId, sessionId),
+            eq(schema.runtimeOutputs.id, id),
+          ),
+        )
+        .limit(1)
+        .all();
+      return rows[0] ? toRuntimeOutputRecord(rows[0]) : null;
+    },
+
+    async listRuntimeOutputs(
+      sessionId: string,
+      filters?: RuntimeOutputFilters,
+    ): Promise<RuntimeOutputRecord[]> {
+      const conditions: SQL[] = [eq(schema.runtimeOutputs.sessionId, sessionId)];
+      if (filters?.runtimeId) {
+        conditions.push(eq(schema.runtimeOutputs.runtimeId, filters.runtimeId));
+      }
+      if (filters?.pluginId) {
+        conditions.push(eq(schema.runtimeOutputs.pluginId, filters.pluginId));
+      }
+      if (filters?.sinceTimestamp) {
+        conditions.push(gte(schema.runtimeOutputs.timestamp, filters.sinceTimestamp));
+      }
+      let query = db
+        .select()
+        .from(schema.runtimeOutputs)
+        .where(and(...conditions))
+        .orderBy(desc(schema.runtimeOutputs.timestamp))
+        .$dynamic();
+      if (filters?.limit !== undefined) query = query.limit(filters.limit);
+      return query.all().map(toRuntimeOutputRecord);
+    },
+
+    // ── Interaction Records (PR-1) ──────────────────────────
+
+    async saveInteractionRecord(record: InteractionRecordRow): Promise<void> {
+      db.insert(schema.interactionRecords)
+        .values({
+          id: record.id,
+          sessionId: record.sessionId,
+          turnId: record.turnId ?? null,
+          timestamp: record.timestamp,
+          source: record.source,
+          channel: record.channel,
+          type: record.type,
+          targetPluginId: record.targetPluginId ?? null,
+          targetRuntimeId: record.targetRuntimeId ?? null,
+          payload: toJson(record.payload ?? null),
+          metaData: record.metaData != null ? toJson(record.metaData) : null,
+          createdAt: record.createdAt,
+        })
+        .run();
+    },
+
+    async listInteractionRecords(
+      sessionId: string,
+      filters?: InteractionRecordFilters,
+    ): Promise<InteractionRecordRow[]> {
+      const conditions: SQL[] = [eq(schema.interactionRecords.sessionId, sessionId)];
+      if (filters?.type) {
+        conditions.push(eq(schema.interactionRecords.type, filters.type));
+      }
+      if (filters?.source) {
+        conditions.push(eq(schema.interactionRecords.source, filters.source));
+      }
+      if (filters?.targetPluginId) {
+        conditions.push(eq(schema.interactionRecords.targetPluginId, filters.targetPluginId));
+      }
+      let query = db
+        .select()
+        .from(schema.interactionRecords)
+        .where(and(...conditions))
+        .orderBy(desc(schema.interactionRecords.timestamp))
+        .$dynamic();
+      if (filters?.limit !== undefined) query = query.limit(filters.limit);
+      return query.all().map(toInteractionRecordRow);
     },
 
     // ── Turn Messages ───────────────────────────────────────

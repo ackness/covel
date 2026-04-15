@@ -27,6 +27,7 @@ export const triggerConfigSchema = z
     maxRetryCount: z.number().int().nonnegative().optional(),
     cooldownTurns: z.number().int().nonnegative().optional(),
     phases: z.array(z.string()).optional(),
+    startTurn: z.number().int().positive().optional(),
   })
   .strict();
 
@@ -144,6 +145,68 @@ export const postHistoryDeclSchema = z
   })
   .strict();
 
+// ── PR-3 Plugin RPC declarations ───────────────────────────────
+
+/**
+ * RPC action declaration for `RuntimeManifest.rpc[actionName]`. Validates
+ * the per-action shape declared in PLUGIN.md frontmatter.
+ *
+ * `handler` and `input` are constrained to plugin-relative paths to block
+ * path-traversal at the schema level (HIGH-1 fix from the code review):
+ *
+ *   - Must NOT start with `/` (absolute paths reset `path.resolve` base).
+ *   - Must NOT contain `..` segments (would escape the plugin root).
+ *   - Must end with `.js`, `.mjs`, or `.cjs` (handler) /
+ *     `.json`, `.yaml`, `.yml` (input schema).
+ *
+ * The runtime loader applies a defence-in-depth check that the resolved
+ * absolute path stays inside the plugin's discovery root — see
+ * `apps/server/src/routes/api/bootstrap.ts` `loadHandler`.
+ */
+const pluginRelativeJsPath = z
+  .string()
+  .min(1)
+  .regex(/^(?!\/)(?!.*\/\.\.\/)(?!\.\.\/)[a-z0-9_./-]+\.[mc]?js$/i, {
+    message:
+      'handler must be a plugin-relative .js/.mjs/.cjs path (no leading `/`, no `..` segments)',
+  });
+
+const pluginRelativeSchemaPath = z
+  .string()
+  .min(1)
+  .regex(/^(?!\/)(?!.*\/\.\.\/)(?!\.\.\/)[a-z0-9_./-]+\.(json|ya?ml)$/i, {
+    message:
+      'input schema must be a plugin-relative .json/.yaml path (no leading `/`, no `..` segments)',
+  });
+
+export const rpcActionDeclSchema = z
+  .object({
+    handler: pluginRelativeJsPath,
+    input: pluginRelativeSchemaPath.optional(),
+    trustLevel: z.enum(['builtin', 'official', 'community']).optional(),
+    streaming: z.boolean().optional(),
+    description: z.string().optional(),
+  })
+  .strict();
+
+/**
+ * Map of action name → declaration. Action names must be kebab-case and
+ * may not start with `framework-` (reserved for framework default handlers).
+ */
+export const rpcDeclMapSchema = z
+  .record(
+    z
+      .string()
+      .min(1)
+      .regex(/^[a-z][a-z0-9-]*$/, {
+        message: 'rpc action name must be kebab-case (lowercase letters, digits, hyphens)',
+      })
+      .refine((name) => !name.startsWith('framework-'), {
+        message: 'rpc action names starting with "framework-" are reserved',
+      }),
+    rpcActionDeclSchema,
+  );
+
 // ── UI spec ─────────────────────────────────────────────────────
 
 export const uiSpecSchema = z
@@ -177,6 +240,14 @@ export const runtimeManifestSchema = z
     handler: z.string().optional(),
     guard: z.string().optional(),
     model: z.string().optional(),
+    timeoutMs: z.number().int().positive().optional(),
+    /**
+     * Per-runtime cap on the agent tool-call loop. Overrides the framework
+     * default (10). Lower values prevent runaway LLMs that keep calling the
+     * same tool indefinitely after a successful result. Set to 1 or 2 for
+     * single-shot plugins that should call one tool and stop.
+     */
+    maxSteps: z.number().int().positive().optional(),
     pluginType: z.enum(['core-plugin', 'plugin']).optional(),
     outputKind: outputKindSchema.optional(),
     capabilities: z.array(z.string().min(1)).optional(),
@@ -191,6 +262,7 @@ export const runtimeManifestSchema = z
     summaryFocus: z.array(z.string()).optional(),
     authorsNote: authorsNoteDeclSchema.optional(),
     postHistory: postHistoryDeclSchema.optional(),
+    rpc: rpcDeclMapSchema.optional(),
   })
   .strict();
 

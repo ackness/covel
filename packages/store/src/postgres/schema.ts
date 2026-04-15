@@ -4,7 +4,7 @@
  * JSON fields use native `jsonb` type — no manual serialization needed.
  */
 
-import { pgTable, text, integer, jsonb, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, bigint, jsonb, serial, index, uniqueIndex } from 'drizzle-orm/pg-core';
 
 // ── Worlds (not session-scoped) ─────────────────────────────────
 
@@ -31,6 +31,10 @@ export const sessions = pgTable('sessions', {
   activePlugins: jsonb('active_plugins').notNull().default([]), // JSON array
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
+  embeddingModelId: integer('embedding_model_id'),    // FK → vector_models.id; NULL = RAG disabled
+  embeddingLockedAt: text('embedding_locked_at'),     // ISO 8601 timestamp
+  playingTurnOffset: integer('playing_turn_offset'),  // PR-2: turnNumber at first playing-phase entry
+  runtimeModelOverrides: jsonb('runtime_model_overrides').default({}), // PR-6: per-runtime slot overrides
 });
 
 // ── Turn Results ────────────────────────────────────────────────
@@ -299,6 +303,53 @@ export const traceEvents = pgTable(
   ],
 );
 
+// ── Runtime Outputs (PR-1 translation layer) ────────────────────
+
+export const runtimeOutputs = pgTable(
+  'runtime_outputs',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id').notNull(),
+    turnId: text('turn_id').notNull(),
+    runtimeResultId: text('runtime_result_id'),
+    pluginId: text('plugin_id').notNull(),
+    runtimeId: text('runtime_id').notNull(),
+    timestamp: text('timestamp').notNull(),
+    results: jsonb('results').notNull(),    // JSON — RuntimeOutputResult[]
+    metaData: jsonb('meta_data').notNull(), // JSON — RuntimeOutputMetaData
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    index('pg_runtime_outputs_session_time_idx').on(table.sessionId, table.timestamp),
+    index('pg_runtime_outputs_runtime_idx').on(table.sessionId, table.runtimeId),
+    index('pg_runtime_outputs_plugin_idx').on(table.sessionId, table.pluginId),
+  ],
+);
+
+// ── Interaction Records (PR-1 translation layer) ────────────────
+
+export const interactionRecords = pgTable(
+  'interaction_records',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id').notNull(),
+    turnId: text('turn_id'),
+    timestamp: text('timestamp').notNull(),
+    source: text('source').notNull(),
+    channel: text('channel').notNull(),
+    type: text('type').notNull(),
+    targetPluginId: text('target_plugin_id'),
+    targetRuntimeId: text('target_runtime_id'),
+    payload: jsonb('payload').notNull(),
+    metaData: jsonb('meta_data'),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    index('pg_interaction_records_session_time_idx').on(table.sessionId, table.timestamp),
+    index('pg_interaction_records_type_idx').on(table.sessionId, table.type),
+  ],
+);
+
 // ── Turn Messages (append-only) ────────────────────────────────
 
 export const turnMessages = pgTable(
@@ -445,3 +496,21 @@ export const suspensions = pgTable(
     index('pg_suspensions_session_id_idx').on(table.sessionId),
   ],
 );
+
+// ── Vector Models (per-model embedding isolation) ──────────────
+
+export const vectorModels = pgTable('vector_models', {
+  id: serial('id').primaryKey(),
+  modelId: text('model_id').notNull(),
+  provider: text('provider').notNull(),
+  modelName: text('model_name').notNull(),
+  dim: integer('dim').notNull(),
+  // Auto-filled by the schema-side trigger as 'vec_mem_m{id}'.
+  // Application code MUST NOT set this on INSERT.
+  tableName: text('table_name').notNull().default(''),
+  // BIGINT to fit Date.now() (~1.7e12). PG `integer` is INT32, would overflow.
+  createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+  lastUsedAt: bigint('last_used_at', { mode: 'number' }),
+}, (table) => [
+  uniqueIndex('pg_vector_models_model_id_dim_idx').on(table.modelId, table.dim),
+]);

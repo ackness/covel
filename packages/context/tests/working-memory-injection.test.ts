@@ -98,7 +98,9 @@ describe('Working Memory context injection (V1 path)', () => {
     });
 
     const ctx = buildContext(params);
-    const wmBlock = ctx.systemPrompt.split('\n\n')[0]; // WM is first block in V1
+    const wmBlock = ctx.systemPrompt
+      .split('\n\n')
+      .find(seg => seg.includes('[Working Memory]')) ?? '';
     const playerAvatarPos = wmBlock.indexOf('player.avatar:');
     const playerPrefsPos = wmBlock.indexOf('player.prefs:');
     const storyFlagsPos = wmBlock.indexOf('story.flags:');

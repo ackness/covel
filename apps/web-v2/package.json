@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@covel/api-client": "workspace:*",
     "@covel/shared": "workspace:*",
     "@json-render/core": "^0.17.0",
     "@json-render/react": "^0.17.0",

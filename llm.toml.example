@@ -68,16 +68,35 @@ fallback = "story"
 # output    = ["image"]
 # imageApi  = "openai-chat"            # ← optional: this is the default
 
-# ── Embedding Slots (optional) ───────────────────────────────────
+# ── Embedding Slots (RAG / Graph-RAG) ────────────────────────────
 #
-# Embedding slots are identified by `output = ["embedding"]`. The first
-# slot so declared becomes the `embed-default` target for gateway.embed().
-# Add `embeddingFormat` to select the request body shape:
-#   "openai"              — standard {input: string[]} (default)
-#   "nemotron-multimodal" — NVIDIA Nemotron {input: [{content: [...]}]}
+# RAG plugins (e.g. core-npc-graph) need an embedding model. Without an
+# embed slot here, vector storage stays empty and those plugins silently
+# fall back to structured retrieval (BFS on the knowledge graph).
 #
-# Example A: local Ollama (recommended default — private, free, no network)
-# Prereq: `ollama pull nomic-embed-text-v2-moe && ollama serve`
+# How it works:
+#   - Slot is identified by `output = ["embedding"]`.
+#   - First such slot becomes the `embed-default` target for gateway.embed().
+#   - On a session's first turn the server probes the model once
+#     (gateway.embed("…")) to detect its output dimension, registers a
+#     `vector_models` entry, and locks the session to that model. Per-model
+#     physical vector tables (`vec_mem_m{id}`) are created on demand —
+#     you do not need to specify dimensions in this file.
+#   - Switching the slot to a different model creates a new vector table
+#     for new sessions; existing sessions continue using their locked
+#     model. Switching back continues writing into the original table.
+#   - `embeddingFormat` selects the request body shape:
+#       "openai"              — standard {input: string[]} (default)
+#       "nemotron-multimodal" — NVIDIA Nemotron {input: [{content: [...]}]}
+#
+# ── RAG Quick Start ──────────────────────────────────────────────
+# Pick ONE of the examples below and uncomment it. After that:
+#   - SQLite backend: sqlite-vec is bundled, RAG works out-of-the-box.
+#   - PG backend: docker-compose uses pgvector image — also out-of-the-box.
+#
+# Example A: local Ollama (recommended for offline / private dev)
+# Prereqs: `ollama pull nomic-embed-text-v2-moe && ollama serve`
+# Output dimension: 768 (probed automatically — no config needed)
 #
 # [covel.embed-default]
 # provider = "ollama"
@@ -87,7 +106,17 @@ fallback = "story"
 # output   = ["embedding"]
 # # embeddingFormat = "openai"   # ← default, can omit
 #
-# Example B: OpenRouter NVIDIA Nemotron multimodal (vision embedding, 2048d)
+# Example B: OpenAI text-embedding-3-small (paid, no local setup)
+# Output dimension: 1536
+#
+# [covel.embed-default]
+# provider = "openai"
+# model    = "text-embedding-3-small"
+# baseUrl  = "https://api.openai.com/v1"
+# protocol = "openai-chat-v1"
+# output   = ["embedding"]
+#
+# Example C: OpenRouter NVIDIA Nemotron multimodal (vision embedding, 2048d)
 # Works for text-only too; accepts image_url content parts when Phase 2
 # multimodal values land.
 #

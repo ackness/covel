@@ -7,6 +7,13 @@ import { Globe, ArrowRight, RotateCcw } from "lucide-react";
 import type { WorldRecord } from "@/services/api.js";
 import { getSavedSession } from "@/stores/session-store.js";
 
+/** Render an I18nText (string | locale map) as a single string. */
+function textValue(value: string | Record<string, string> | undefined): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  return value["zh-CN"] ?? value.zh ?? value.en ?? Object.values(value)[0] ?? "";
+}
+
 interface WorldSelectProps {
   worlds: WorldRecord[];
   onSelect: (worldId: string) => void;
@@ -40,7 +47,7 @@ export function WorldSelect({ worlds, onSelect, onResume }: WorldSelectProps) {
                   <h3 className="text-sm font-medium text-blue-600 dark:text-blue-400">继续上次游戏</h3>
                 </div>
                 <p className="text-xs text-zinc-500 leading-relaxed">
-                  {savedWorld.name}
+                  {textValue(savedWorld.name)}
                 </p>
               </div>
               <ArrowRight className="w-4 h-4 text-blue-400 group-hover:text-blue-600 transition-colors shrink-0 ml-4" />
@@ -58,7 +65,7 @@ export function WorldSelect({ worlds, onSelect, onResume }: WorldSelectProps) {
             >
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <h3 className="text-sm font-medium">{world.name}</h3>
+                  <h3 className="text-sm font-medium">{textValue(world.name)}</h3>
                   <p className="text-xs text-zinc-500 leading-relaxed">{world.description}</p>
                   {world.tags && (
                     <div className="flex gap-1 pt-1">

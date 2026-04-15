@@ -1,60 +1,29 @@
 ---
 name: core-codex
-description: Knowledge codex system. Analyzes narrative text and records monsters, items, locations, legends, and characters discovered by the player. Non-core plugin, enable as needed.
+description: Knowledge codex (function runtime). Deterministically extracts character/item/location/lore/skill entries from narrator output, writes them to plugin_data, and drives the codex UI cards.
 pluginType: plugin
 priority: 650
-model: plugin
-promptVersion: 2
+outputKind: system
+runtimeType: function
+handler: ./handler.js
+timeoutMs: 120000
 trigger:
-  type: auto
-tools:
-  local:
-    - ./tools/unlock-codex-entries.js
-    - ./tools/update-codex-entry.js
-  builtin:
-    - create-notification
+  type: scheduled
+  interval: 2
+  cooldownTurns: 1
+  phases:
+    - playing
+ui:
+  right:
+    - ./ui/codex-panel.json
+  message:
+    - ./ui/codex-message.json
 ---
 
-You are the Knowledge Codex Tracker. Your task is to analyze narrative text, identify important new knowledge discovered by the player, and record it to the codex via tools.
+## This is a function runtime
 
-## Current Narrative
-{{ player.message }}
+This runtime does not call an LLM. The framework invokes `handler.js` directly. The handler reads the previous narrator output via `completedResults.get('core-narrator')`, runs deterministic title-extraction rules (prefix blacklist, fragment filters, category heuristics), then persists the matched entries to `plugin_data[namespace="entries"]`.
 
-## Existing Codex Entries
-<existing-codex>
-{{ codex.entries }}
-</existing-codex>
+Design intent: see the "段职责约定" section in `docs/guide/plugin-authoring.md`. core-codex is a post-narrator runtime that consumes narrator output once. Deduplication happens inside the handler instead of via cross-runtime `input.inject`.
 
-## Your Task
-
-1. Read the narrative content from the current turn
-2. Identify **meaningful** new knowledge discoveries (do not record trivial mentions)
-3. Check existing entries first to avoid duplicates
-4. Call the `unlock-codex-entries` tool for new discoveries (supports unlocking multiple entries at once)
-5. Call the `update-codex-entry` tool for new information about existing entries
-6. Call `create-notification` each time a new entry is unlocked to notify the player
-
-## Tool Usage
-
-### unlock-codex-entries
-Unlock multiple new codex entries at once. Each entry requires:
-- `category`: monster / item / location / lore / character / skill
-- `title`: A concise title
-- `content`: 2-3 sentence description
-- `tags`: 2-5 tags
-- `rarity`: common / uncommon / rare / legendary (affects UI display style)
-- `imageHint`: Optional, visual description hint (for subsequent image generation)
-
-### update-codex-entry
-Update an existing entry by appending newly discovered information.
-
-### create-notification
-Send a notification each time a new entry is unlocked. Use `success` level, title format: "📖 New Discovery: {title}"
-
-## Hard Rules
-
-- Only record knowledge that **explicitly appears** in the narrative, do not speculate
-- Multiple entries can be unlocked at once (e.g., discovering multiple locations/characters simultaneously)
-- Prefer updating existing entries over creating duplicates
-- Content should be concise and useful, 2-3 sentences
-- Do not output additional narrative text after calling tools
+For implementation details, read `handler.js` directly. The previous "agent tool-call workflow" prose embedded here was unrelated to actual execution and has been removed.

@@ -67,10 +67,20 @@ export async function createStore(config: StoreConfig): Promise<DataStore> {
  * ```
  */
 export function createStoreFromEnv(): Promise<DataStore> {
-  const backend = (process.env.STORE_BACKEND ?? 'sqlite') as StoreConfig['backend'];
   return createStore({
-    backend,
+    backend: resolveBackendFromEnv(),
     sqlitePath: process.env.SQLITE_PATH ?? './data/covel.db',
     databaseUrl: process.env.DATABASE_URL,
   });
+}
+
+/**
+ * Resolve the active store backend name from environment variables.
+ *
+ * Mirrors the logic used by {@link createStoreFromEnv}, exposed as a
+ * separate helper so other modules (e.g. health checks, observability)
+ * can report the same value without re-reading or guessing.
+ */
+export function resolveBackendFromEnv(): StoreConfig['backend'] {
+  return (process.env.STORE_BACKEND ?? 'sqlite') as StoreConfig['backend'];
 }

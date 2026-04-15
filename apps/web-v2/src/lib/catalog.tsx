@@ -6,12 +6,17 @@
  * controls the vocabulary, plugins compose from it.
  */
 
-import { useState, type ReactNode } from "react";
+import { useState, useMemo, type ReactNode } from "react";
 import type { ComponentRenderer } from "@json-render/react";
 import { useStateStore } from "@json-render/react";
 import { clsx } from "clsx";
 import * as Icons from "lucide-react";
 import { GraphCanvas } from "./graph-canvas.js";
+import { useSessionStore } from "@/stores/session-store.js";
+import {
+  resolveActionParams,
+  matchesPendingDraft,
+} from "./interaction-selection.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -369,19 +374,56 @@ const Button: ComponentRenderer = ({ element, emit }) => {
   const label = resolveI18n(element.props?.label);
   const variant = element.props?.variant as string ?? "default";
   const size = element.props?.size as string ?? "md";
+
+  // ── Selection feedback for plugin-declared interactions ────────────
+  //
+  // When the user clicks a plugin-supplied button whose action stashes a
+  // pending draft (draftMessage / selectChoice / etc.), we echo the choice
+  // back visually so the player can see what they picked. The match is
+  // framework-neutral: we only inspect the click binding's params and the
+  // active drafts; no plugin IDs anywhere.
+  const { pendingInteractionDrafts } = useSessionStore();
+  const { get: getState } = useStateStore();
+  const isSelected = useMemo(() => {
+    const click = element.on?.click;
+    if (!click) return false;
+    const bindings = Array.isArray(click) ? click : [click];
+    for (const binding of bindings) {
+      const resolved = resolveActionParams(
+        binding.params as Record<string, unknown> | undefined,
+        getState,
+      );
+      if (matchesPendingDraft(resolved, pendingInteractionDrafts)) return true;
+    }
+    return false;
+  }, [element.on, pendingInteractionDrafts, getState]);
+
   return (
     <button
       type="button"
       onClick={() => emit("click")}
+      aria-pressed={isSelected || undefined}
+      data-selected={isSelected ? "true" : undefined}
       className={clsx(
-        "font-medium rounded-md transition-colors text-left",
+        "font-medium rounded-md transition-all text-left relative",
         size === "compact" ? "px-2.5 py-1 text-[11px]" : "px-3 py-1.5 text-xs",
-        variant === "primary" && "bg-blue-600 text-white hover:bg-blue-700",
-        variant === "default" && "bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700",
-        variant === "ghost" && "bg-white/70 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900",
-        variant === "danger" && "bg-red-600 text-white hover:bg-red-700",
+        // Base variant styles — applied only when NOT selected.
+        !isSelected && variant === "primary" && "bg-blue-600 text-white hover:bg-blue-700",
+        !isSelected && variant === "default" && "bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700",
+        !isSelected && variant === "ghost" && "bg-white/70 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900",
+        !isSelected && variant === "danger" && "bg-red-600 text-white hover:bg-red-700",
+        // Selected state — distinct from every variant so the pick is obvious.
+        isSelected && "bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-200 border border-blue-500 dark:border-blue-400 ring-2 ring-blue-500/40 dark:ring-blue-400/30 shadow-sm",
       )}
     >
+      {isSelected && (
+        <span
+          aria-hidden="true"
+          className="inline-block mr-1.5 text-blue-600 dark:text-blue-300"
+        >
+          ✓
+        </span>
+      )}
       {label}
     </button>
   );

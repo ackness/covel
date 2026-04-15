@@ -442,6 +442,15 @@ describe('builtin character tools', () => {
       expect(result._text.toLowerCase()).toMatch(/no character|empty|没有|暂无/);
     });
 
+    it('treats "None" filter values as no filter', async () => {
+      const t = findByName(tools, 'list-characters');
+      const result = await t.execute({ type: 'None' }, ctx()) as { _text: string; count: number };
+      expect(result.count).toBe(3);
+      expect(result._text).toContain('柳无痕');
+      expect(result._text).toContain('苏婉');
+      expect(result._text).toContain('柳娘');
+    });
+
     it('sorts by frequency (version) desc, then updatedAt desc', async () => {
       // Update 苏婉 twice (version=3), update 柳娘 once (version=2).
       // 柳无痕 stays at version=1.

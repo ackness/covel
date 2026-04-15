@@ -18,7 +18,12 @@ import {
 } from '@covel/plugin-loader';
 import type { DataStore } from '@covel/store';
 
-type FlowSegmentId = 'start' | 'pre-game' | 'core-game-loop';
+type FlowSegmentId =
+  | 'start'
+  | 'pre-game'
+  | 'pre-narrator'
+  | 'narrator'
+  | 'post-narrator';
 type UiSlotName = 'right' | 'message' | 'left';
 
 const UI_NAMESPACE_BY_SLOT: Record<UiSlotName, string> = {
@@ -41,8 +46,12 @@ function textValue(value: unknown, locale = 'zh-CN'): string {
   return '';
 }
 
-function segmentForPriority(priority: number): Exclude<FlowSegmentId, 'start'> {
-  return priority < 100 ? 'pre-game' : 'core-game-loop';
+function segmentForPriority(priority: number): FlowSegmentId {
+  if (priority <= 0) return 'start';
+  if (priority <= 100) return 'pre-game';
+  if (priority < 500) return 'pre-narrator';
+  if (priority === 500) return 'narrator';
+  return 'post-narrator';
 }
 
 function docPathFromAbsolute(pluginsDir: string, absolutePath: string): string {
@@ -97,7 +106,7 @@ async function buildPluginFlowResponse() {
     description: string;
     pluginType: string;
     priority: number;
-    segmentId: 'pre-game' | 'core-game-loop';
+    segmentId: FlowSegmentId;
     runtimeType: string;
     outputKind: string;
     model?: string;
@@ -107,6 +116,7 @@ async function buildPluginFlowResponse() {
       cooldownTurns?: number;
       maxTriggerCount?: number;
       phases: string[];
+      startTurn?: number;
     };
     injects: Array<{ from: string; field: string; as: string }>;
     tools: { builtin: string[]; local: string[] };
@@ -159,6 +169,7 @@ async function buildPluginFlowResponse() {
           cooldownTurns: manifest.trigger?.cooldownTurns,
           maxTriggerCount: manifest.trigger?.maxTriggerCount,
           phases: [...(manifest.trigger?.phases ?? [])],
+          startTurn: manifest.trigger?.startTurn,
         },
         injects: (manifest.input?.inject ?? []).map((inject) => ({
           from: inject.from,
@@ -187,8 +198,10 @@ async function buildPluginFlowResponse() {
     generatedAt: new Date().toISOString(),
     segments: [
       { id: 'start', label: '开始游戏', rangeLabel: '0', minPriority: 0, maxPriority: 0 },
-      { id: 'pre-game', label: 'Pre-Game', rangeLabel: '0-100', minPriority: 0, maxPriority: 100 },
-      { id: 'core-game-loop', label: 'Core-Game-Loop', rangeLabel: '100-1000', minPriority: 100, maxPriority: 1000 },
+      { id: 'pre-game', label: 'Pre-Game', rangeLabel: '1-100', minPriority: 1, maxPriority: 100 },
+      { id: 'pre-narrator', label: 'Pre-Narrator', rangeLabel: '101-499', minPriority: 101, maxPriority: 499 },
+      { id: 'narrator', label: 'Narrator', rangeLabel: '500', minPriority: 500, maxPriority: 500 },
+      { id: 'post-narrator', label: 'Post-Narrator', rangeLabel: '501-1000', minPriority: 501, maxPriority: 1000 },
     ],
     plugins,
     steps,
@@ -328,8 +341,8 @@ export function createMiscApiRoutes(
 
       packages.push({
         name: entry.id,
-        displayName: liveSummary.name,
-        description: liveSummary.description,
+        displayName: textValue(liveSummary.name),
+        description: textValue(liveSummary.description),
         pluginType: liveSummary.pluginType,
         enabled: true,
         runtimes,

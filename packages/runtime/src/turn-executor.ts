@@ -9,7 +9,12 @@
 
 import type { RuntimeManifest, RuntimeResult, TurnInput, TurnResult, ToolCallRecord } from '@covel/shared';
 import type { LoadedRuntime } from '@covel/plugin-loader';
-import type { DataStore, TurnMessageRecord, SuspensionRecord } from '@covel/store';
+import type {
+  DataStore,
+  TurnMessageRecord,
+  SuspensionRecord,
+  RuntimeOutputRecord,
+} from '@covel/store';
 import { isSuspendSentinel } from '@covel/tools';
 import type { EventBus } from '@covel/events';
 import { shouldTrigger } from './trigger.js';
@@ -252,6 +257,73 @@ function sanitizeStoryNarrativeText(content: string): string {
   return paragraphs.join('\n\n').trim();
 }
 
+/**
+ * PR-1 translation layer: convert a `RuntimeResult` (the internal execution
+ * record) into a `RuntimeOutputRecord` (the normalised, consumable record).
+ *
+ * This is a lossy projection — the goal is NOT to store the full prompt
+ * history (that lives in `turn_messages` and can be rebuilt), but to give
+ * downstream consumers a stable, cross-runtime shape with a human-readable
+ * `text` field and a plugin-defined `structured` blob.
+ *
+ * `rawPromptDelta` is intentionally left undefined in this first iteration.
+ * Wiring the actual prompt-delta source into the agent loop is a follow-up
+ * once the adapter exposes "what messages were sent on this call".
+ */
+function buildRuntimeOutputFromResult(
+  rr: RuntimeResult,
+  sessionId: string,
+  turn: number,
+  phase: string,
+  createdAt: string,
+): RuntimeOutputRecord {
+  const output = rr.output as Record<string, unknown> | null;
+
+  // Pull a natural-language summary from common fields, fall back to JSON.
+  const narrativeOutput =
+    output && typeof output['narrativeOutput'] === 'string'
+      ? (output['narrativeOutput'] as string)
+      : null;
+  const textValue =
+    output && typeof output['_text'] === 'string'
+      ? (output['_text'] as string)
+      : null;
+  const summaryText =
+    narrativeOutput ?? textValue ?? (output ? JSON.stringify(output) : '');
+
+  const toolCallList = rr.toolCalls.map((tc: ToolCallRecord) => ({
+    tool: tc.toolName,
+    input: tc.input,
+    output: tc.output,
+    status: 'success' as const,
+    durationMs: tc.durationMs,
+  }));
+
+  return {
+    id: crypto.randomUUID(),
+    sessionId,
+    turnId: rr.turnId,
+    runtimeResultId: rr.runId,
+    pluginId: rr.pluginId,
+    runtimeId: rr.runtimeId,
+    timestamp: rr.timestamp ?? createdAt,
+    results: [
+      {
+        text: summaryText,
+        structured: output ?? undefined,
+      },
+    ],
+    metaData: {
+      turn,
+      phase,
+      toolCallList: toolCallList.length > 0 ? toolCallList : undefined,
+      tokenUsage: rr.tokenUsage,
+      // rawPromptDelta / outputResponses / modelSlot: not populated in PR-1
+    },
+    createdAt,
+  };
+}
+
 // ── Implementation ───────────────────────────────────────────────
 
 /**
@@ -379,11 +451,37 @@ export async function executeTurn(
 
   // Load session metadata for context injection (turnNumber, phase, characters, lastFormValues)
   let sessionPhase: string | undefined;
+  let sessionPlayingTurnOffset: number | null | undefined;
   let sessionCharacters: { name: string; type: string; description?: string; fields?: Record<string, unknown> }[] = [];
   let lastFormValues: Record<string, unknown> | undefined;
   if (deps.store) {
     const session = await deps.store.getSession(input.sessionId);
-    if (session) sessionPhase = session.phase;
+    if (session) {
+      sessionPhase = session.phase;
+      sessionPlayingTurnOffset = session.playingTurnOffset;
+    }
+
+    // PR-2: lazily set playingTurnOffset the first time a turn runs while
+    // phase is 'playing'. After this the offset is frozen for the session
+    // lifetime and playingTurnNumber = turnNumber - offset.
+    if (
+      sessionPhase === 'playing'
+      && (sessionPlayingTurnOffset == null || sessionPlayingTurnOffset === undefined)
+    ) {
+      sessionPlayingTurnOffset = turnNumber;
+      try {
+        await deps.store.updateSession(input.sessionId, {
+          playingTurnOffset: turnNumber,
+          updatedAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.warn(
+          '[turn-executor] updateSession(playingTurnOffset) failed:',
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+
     const charRecords = await deps.store.listCharacters(input.sessionId);
     sessionCharacters = charRecords.map(c => ({
       name: c.name,
@@ -424,9 +522,18 @@ export async function executeTurn(
       ? messageHistory.slice(lastRuntimeMsgIdx).filter((m) => m.sourceType === 'player').length
       : 999;
 
+    // PR-2: compute playing-phase turn counter. Only meaningful when the
+    // session is currently in 'playing' phase; otherwise left at 0 so
+    // startTurn comparisons never fire during pre-game / char-creation.
+    const playingTurnNumber =
+      sessionPhase === 'playing' && sessionPlayingTurnOffset != null
+        ? Math.max(0, turnNumber - sessionPlayingTurnOffset)
+        : 0;
+
     const triggerContext: TriggerContext = {
       sessionId: input.sessionId,
       turnNumber,
+      playingTurnNumber,
       triggerCount: runtimeTriggerCounts.get(rt.name) ?? 0,
       turnsSinceLastTrigger,
       pendingEventTopics: [],
@@ -554,6 +661,29 @@ export async function executeTurn(
         error: rr.error,
         createdAt: rr.timestamp ?? now,
       });
+
+      // PR-1: write a normalised RuntimeOutput alongside RuntimeResult so
+      // downstream consumers can read the translation-layer record without
+      // knowing the runtime internals.
+      try {
+        await deps.store.saveRuntimeOutput(
+          buildRuntimeOutputFromResult(
+            rr,
+            input.sessionId,
+            turnNumber,
+            sessionPhase ?? 'unknown',
+            now,
+          ),
+        );
+      } catch (err) {
+        // Translation-layer writes are best-effort in this iteration: a
+        // failure here must not bring the turn down, since RuntimeResult
+        // is still the authoritative record. Log and continue.
+        console.warn(
+          `[turn-executor] saveRuntimeOutput failed for ${rr.runtimeId}:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
     }
 
     // Save the aggregated turn result
@@ -1264,15 +1394,34 @@ async function executeOneRuntime(
 
     // Build tool definitions from manifest declarations (computed once, reused across steps)
     const toolDefs = deps.toolExecutor ? buildToolDefinitions(manifest, deps.toolExecutor) : undefined;
+    // PR-6: per-session per-runtime slot override snapshot. Applies to all
+    // runtime kinds (story + plugin), unlike the legacy story-only API
+    // override below.
+    const sessionRuntimeSlot = input.runtimeModelOverrides?.[manifest.name];
     const runtimeModelOverride =
       input.modelOverride && manifest.outputKind === 'story'
         ? input.modelOverride
-        : undefined;
+        : sessionRuntimeSlot;
 
-    // Use streaming for pure narrative runtimes (no tools) when callbacks are available
-    const useStreaming = !!(deps.onDelta && deps.llm.stream && !toolDefs);
+    // Stream only for story-output runtimes. Plugin runtimes' raw LLM text is
+    // reasoning chatter that feeds into structured tool calls — it should never
+    // reach the user's narrative feed. Story runtimes that also declare tools
+    // (e.g. narrator + world-dimension-get) still stream: tool_call deltas are
+    // accumulated from the stream alongside text deltas, and if the provider
+    // cannot parse tool calls from stream chunks the loop falls back to
+    // generate() when finishReason === 'tool_calls' with an empty accumulator.
+    const useStreaming = !!(
+      deps.onDelta &&
+      deps.llm.stream &&
+      manifest.outputKind === 'story'
+    );
 
-    while (steps < maxSteps && Date.now() < deadline) {
+    // Per-runtime maxSteps override. Plugins that should call a tool once and
+    // stop (e.g. core-guide) set `maxSteps: 2` in their frontmatter to prevent
+    // the LLM from running the same tool in a loop after it already succeeds.
+    const effectiveMaxSteps = manifest.maxSteps ?? maxSteps;
+
+    while (steps < effectiveMaxSteps && Date.now() < deadline) {
       steps++;
 
       // Model resolution chain for story runtimes:
@@ -1286,9 +1435,10 @@ async function executeOneRuntime(
       let response: import('./llm-adapter.js').LLMResponse;
 
       if (useStreaming) {
-        // Streaming path: accumulate content from text-delta events, forward deltas to caller
+        // Streaming path: accumulate text + tool-call deltas, forward text to caller.
         let streamedContent = '';
         let streamFinishReason = 'stop';
+        const streamedToolCalls: Array<{ id: string; name: string; arguments: string }> = [];
         // S1-T3: When the stream throws with no content we fall back to a
         // non-stream generate() call. Holding the fallback response here
         // (vs assigning `response` directly) keeps TypeScript's definite-
@@ -1303,6 +1453,7 @@ async function executeOneRuntime(
           for await (const event of deps.llm.stream!({
             model: effectiveModel,
             messages,
+            tools: toolDefs,
           })) {
             if (event.type === 'text-delta') {
               streamedContent += event.textDelta;
@@ -1316,6 +1467,12 @@ async function executeOneRuntime(
               } catch {
                 // Client disconnected — continue streaming to collect full content
               }
+            } else if (event.type === 'tool-call') {
+              streamedToolCalls.push({
+                id: event.id,
+                name: event.name,
+                arguments: event.arguments,
+              });
             } else if (event.type === 'done') {
               streamFinishReason = event.finishReason;
             }
@@ -1323,12 +1480,11 @@ async function executeOneRuntime(
         } catch (streamError: unknown) {
           const errMsg = streamError instanceof Error ? streamError.message : String(streamError);
 
-          if (streamedContent.length > 0) {
+          if (streamedContent.length > 0 || streamedToolCalls.length > 0) {
             // Salvage: keep what we have and mark the finishReason as 'error'.
-            // No new SSE protocol event is emitted here — SSE formalization is S4-T5 scope.
             streamFinishReason = 'error';
             console.warn(
-              `[stream-recovery] runtime ${manifest.name} stream failed after partial content; salvaging ${streamedContent.length} chars. error=${errMsg}`,
+              `[stream-recovery] runtime ${manifest.name} stream failed after partial content; salvaging ${streamedContent.length} chars, ${streamedToolCalls.length} tool calls. error=${errMsg}`,
             );
           } else {
             // Nothing to salvage — fall back to a single non-stream call.
@@ -1339,8 +1495,25 @@ async function executeOneRuntime(
             fallbackResponse = await deps.llm.generate({
               model: effectiveModel,
               messages,
+              tools: toolDefs,
             });
           }
+        }
+
+        // If the stream finished with tool_calls but our adapter couldn't parse
+        // them from the SSE chunks (some providers don't deliver tool_calls
+        // inside delta), fall back to generate() to get the structured call.
+        if (
+          fallbackResponse === null &&
+          streamFinishReason === 'tool_calls' &&
+          streamedToolCalls.length === 0 &&
+          toolDefs
+        ) {
+          fallbackResponse = await deps.llm.generate({
+            model: effectiveModel,
+            messages,
+            tools: toolDefs,
+          });
         }
 
         if (fallbackResponse !== null) {
@@ -1348,12 +1521,10 @@ async function executeOneRuntime(
         } else {
           response = {
             content: streamedContent || null,
-            toolCalls: [],
+            toolCalls: streamedToolCalls,
             finishReason: streamFinishReason as 'stop' | 'tool_calls' | 'length' | 'error',
             // M5: Streaming responses don't carry token usage from most providers.
             // The LLMStreamEvent 'done' type only has finishReason, not usage.
-            // Streaming responses don't carry token usage from most providers.
-            // OpenAI supports stream_options.include_usage but others don't.
             usage: { inputTokens: 0, outputTokens: 0 },
           };
         }
@@ -1575,7 +1746,7 @@ async function executeOneRuntime(
         error: formatToolLoopFailure({
           runtimeId: manifest.name,
           reason: Date.now() >= deadline ? 'timeout' : 'max_steps',
-          maxSteps,
+          maxSteps: effectiveMaxSteps,
           failedToolCalls,
         }),
         timestamp: new Date().toISOString(),

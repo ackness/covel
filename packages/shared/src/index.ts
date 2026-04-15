@@ -24,6 +24,8 @@ export {
   hookDeclarationSchema,
   authorsNoteDeclSchema,
   postHistoryDeclSchema,
+  rpcActionDeclSchema,
+  rpcDeclMapSchema,
   runtimeManifestSchema,
 } from './schemas/plugin.js';
 
@@ -62,3 +64,24 @@ export type {
   ManifestValidationResult,
   ManifestValidationError,
 } from './schemas/validate.js';
+
+// ── Translation-layer Schemas (PR-1) ─────────────────────────────
+export {
+  runtimeOutputResultSchema,
+  runtimeOutputToolCallSchema,
+  runtimeOutputPromptMessageSchema,
+  runtimeOutputMetaDataSchema,
+  runtimeOutputSchema,
+} from './schemas/runtime-output.js';
+
+export type { RuntimeOutputSchema } from './schemas/runtime-output.js';
+
+export {
+  interactionSourceSchema,
+  interactionChannelSchema,
+  interactionRecordTypeSchema,
+  interactionRecordMetaDataSchema,
+  interactionRecordSchema,
+} from './schemas/interaction-record.js';
+
+export type { InteractionRecordSchema } from './schemas/interaction-record.js';

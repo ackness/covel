@@ -11,6 +11,7 @@ function makeContext(overrides?: Partial<TriggerContext>): TriggerContext {
   return {
     sessionId: 'sess-1',
     turnNumber: 5,
+    playingTurnNumber: 5,
     triggerCount: 0,
     turnsSinceLastTrigger: 999,
     pendingEventTopics: [],
@@ -129,5 +130,41 @@ describe('shouldTrigger', () => {
     });
     const ctx = makeContext({ hasUpstreamFailure: true, triggerCount: 2 });
     expect(shouldTrigger(manifest, ctx)).toBe(false);
+  });
+
+  // ── PR-2: startTurn is compared against playingTurnNumber, not turnNumber
+
+  it('should gate by playingTurnNumber when startTurn is set', () => {
+    const manifest = makeManifest({
+      trigger: { type: 'auto', startTurn: 2 },
+    });
+    // Global turnNumber is high but playingTurnNumber is below startTurn
+    const ctx = makeContext({ turnNumber: 10, playingTurnNumber: 1 });
+    expect(shouldTrigger(manifest, ctx)).toBe(false);
+  });
+
+  it('should trigger once playingTurnNumber reaches startTurn', () => {
+    const manifest = makeManifest({
+      trigger: { type: 'auto', startTurn: 2 },
+    });
+    const ctx = makeContext({ turnNumber: 3, playingTurnNumber: 2 });
+    expect(shouldTrigger(manifest, ctx)).toBe(true);
+  });
+
+  it('should ignore global turnNumber when startTurn is set', () => {
+    // Scenario: large global turnNumber because of many pre-game messages,
+    // but session just entered playing (playingTurnNumber=0). A plugin
+    // declaring startTurn=1 should NOT fire yet.
+    const manifest = makeManifest({
+      trigger: { type: 'auto', startTurn: 1 },
+    });
+    const ctx = makeContext({ turnNumber: 15, playingTurnNumber: 0 });
+    expect(shouldTrigger(manifest, ctx)).toBe(false);
+  });
+
+  it('should not gate when startTurn is undefined', () => {
+    const manifest = makeManifest({ trigger: { type: 'auto' } });
+    const ctx = makeContext({ turnNumber: 0, playingTurnNumber: 0 });
+    expect(shouldTrigger(manifest, ctx)).toBe(true);
   });
 });

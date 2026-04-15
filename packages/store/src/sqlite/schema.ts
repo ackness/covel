@@ -32,6 +32,10 @@ export const sessions = sqliteTable('sessions', {
   activePlugins: text('active_plugins').notNull().default('[]'), // JSON
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
+  embeddingModelId: integer('embedding_model_id'),     // FK → vector_models.id; NULL = RAG disabled
+  embeddingLockedAt: text('embedding_locked_at'),       // ISO 8601 timestamp
+  playingTurnOffset: integer('playing_turn_offset'),    // PR-2: turnNumber at first playing-phase entry
+  runtimeModelOverrides: text('runtime_model_overrides').default('{}'), // PR-6: JSON map runtimeId → slot
 });
 
 // ── Turn Results ────────────────────────────────────────────────
@@ -300,6 +304,53 @@ export const traceEvents = sqliteTable(
   ],
 );
 
+// ── Runtime Outputs (PR-1 translation layer) ────────────────────
+
+export const runtimeOutputs = sqliteTable(
+  'runtime_outputs',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id').notNull(),
+    turnId: text('turn_id').notNull(),
+    runtimeResultId: text('runtime_result_id'),
+    pluginId: text('plugin_id').notNull(),
+    runtimeId: text('runtime_id').notNull(),
+    timestamp: text('timestamp').notNull(),
+    results: text('results').notNull(),     // JSON string
+    metaData: text('meta_data').notNull(),  // JSON string
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    index('runtime_outputs_session_time_idx').on(table.sessionId, table.timestamp),
+    index('runtime_outputs_runtime_idx').on(table.sessionId, table.runtimeId),
+    index('runtime_outputs_plugin_idx').on(table.sessionId, table.pluginId),
+  ],
+);
+
+// ── Interaction Records (PR-1 translation layer) ────────────────
+
+export const interactionRecords = sqliteTable(
+  'interaction_records',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id').notNull(),
+    turnId: text('turn_id'),
+    timestamp: text('timestamp').notNull(),
+    source: text('source').notNull(),
+    channel: text('channel').notNull(),
+    type: text('type').notNull(),
+    targetPluginId: text('target_plugin_id'),
+    targetRuntimeId: text('target_runtime_id'),
+    payload: text('payload').notNull(),   // JSON string
+    metaData: text('meta_data'),          // JSON string | null
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    index('interaction_records_session_time_idx').on(table.sessionId, table.timestamp),
+    index('interaction_records_type_idx').on(table.sessionId, table.type),
+  ],
+);
+
 // ── Turn Messages (append-only) ────────────────────────────────
 
 export const turnMessages = sqliteTable(
@@ -407,3 +458,20 @@ export const lorebookEntries = sqliteTable(
     index('lorebook_entries_plugin_id_idx').on(table.sessionId, table.pluginId),
   ],
 );
+
+// ── Vector Models (per-model embedding isolation) ──────────────
+
+export const vectorModels = sqliteTable('vector_models', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  modelId: text('model_id').notNull(),       // "openai/text-embedding-3-small"
+  provider: text('provider').notNull(),      // "openai"
+  modelName: text('model_name').notNull(),   // "text-embedding-3-small"
+  dim: integer('dim').notNull(),             // 1536
+  // Auto-filled by the schema-side trigger as 'vec_mem_m{id}'.
+  // Application code MUST NOT set this on INSERT.
+  tableName: text('table_name').notNull().default(''),
+  createdAt: integer('created_at').notNull(),
+  lastUsedAt: integer('last_used_at'),
+}, (table) => [
+  uniqueIndex('vector_models_model_id_dim_idx').on(table.modelId, table.dim),
+]);

@@ -1,68 +1,29 @@
 ---
 name: core-codex
-description: 知识图鉴系统。分析叙事文本，记录玩家发现的怪物、道具、地点、传说和人物。
+description: 知识图鉴系统（function runtime）。用确定性算法从叙事文本中抽取人物/物品/地点/传说/技能条目，写入 plugin_data 并触发图鉴 UI。
 pluginType: plugin
 priority: 650
-model: plugin
 outputKind: system
 runtimeType: function
 handler: ./handler.js
 timeoutMs: 120000
-promptVersion: 2
 trigger:
   type: scheduled
   interval: 2
   cooldownTurns: 1
   phases:
     - playing
-input:
-  inject:
-    - from: core-narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
-tools:
-  local:
-    - ./tools/unlock-codex-entries.js
-    - ./tools/update-codex-entry.js
-  builtin:
-    - plugin-data-list
-    - create-notification
 ui:
   right:
     - ./ui/codex-panel.json
   message:
     - ./ui/codex-message.json
-postHistory:
-  role: system
-  content: |
-    本 runtime 的完成条件：
-    - 先调用一次 `plugin-data-list`（namespace: "entries"）
-    - 有新知识时，调用 `unlock-codex-entries` 或 `update-codex-entry`
-    - 没有新知识时，直接结束
-    - 工具调用完成后结束输出
-    - 说明文字、知识总结、额外叙事都不算完成
 ---
 
-你是知识图鉴系统（Codex Tracker）。你的任务是分析叙事文本，识别玩家新发现的重要知识，并记录到图鉴中。
+## 这是一个 function runtime
 
-## 当前叙事结果
-<narrator-output>{{ inputs.core-narrator.core-narrator.narrativeOutput }}</narrator-output>
+该 runtime 不调用 LLM。框架会直接执行 `handler.js`，handler 从 `completedResults.get('core-narrator')` 读取上一段叙事，运行确定性的标题抽取规则（黑名单前缀、片段过滤、类别启发式），再把命中的条目写入 `plugin_data[namespace="entries"]`。
 
-## 你的任务
+设计意图见 `docs/guide/plugin-authoring.md` "段职责约定" 章节：core-codex 是一次性消化 narrator 输出的 post-narrator runtime；为避免重复写入而做的去重发生在 handler 内部，而非通过跨 runtime 的 input.inject 协议。
 
-1. 首先调用 `plugin-data-list`（namespace: "entries"）获取已有图鉴条目
-2. 阅读当前叙事内容，识别**有意义的**新知识发现
-3. 对比已有条目，避免重复
-4. 新发现 → 调用 `unlock-codex-entries`（支持批量）
-5. 已有条目有新信息 → 调用 `update-codex-entry`
-6. 如果本轮没有新发现，不调用任何工具，直接结束
-
-## 硬规则
-
-- 只记录叙事中**明确出现**的知识，不推测
-- 一次可解锁多个条目（如同时发现多个地点/人物）
-- 优先更新已有条目，不创建重复
-- 地点、人物、势力、物品、技能、传闻都属于可记录的明确知识
-- content 要简洁有用，2-3 句话
-- 调用工具后不输出额外叙事文本
-- 如果没有新发现，直接结束，不要强行记录
+实现细节请直接阅读 `handler.js`。该文件之前残留的"agent 工具调用流程"提示词与实际运行无关，已删除。

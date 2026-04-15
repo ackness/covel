@@ -4,6 +4,7 @@ description: World dimension schema generator. Reads world lore and batch-create
 pluginType: core-plugin
 priority: 85
 model: plugin
+timeoutMs: 180000
 capabilities: [world-data-provider]
 guard: ../../guard.js
 trigger:

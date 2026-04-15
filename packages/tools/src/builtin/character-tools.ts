@@ -412,11 +412,22 @@ function createListCharactersTool(store: CharacterStore): ToolModule {
     description:
       '列出本 session 中的所有角色（session 作用域，跨插件可见）。输出按频率降序排序（version 越高表示被交互得越频繁），频率相同时按最近更新时间降序排序。可按 type 过滤：player / npc / companion。返回紧凑的文本列表——每个角色一行，包含 id / 名字 / 类型 / 版本 / 简短描述。需要完整属性时调用 get-character。',
     parameters: z.object({
-      type: characterTypeSchema.optional().describe('按类型过滤（可选）'),
+      type: z.preprocess(
+        (value) => {
+          if (value == null) return undefined;
+          if (typeof value !== 'string') return value;
+          const normalized = value.trim().toLowerCase();
+          if (normalized === '' || normalized === 'none' || normalized === 'null' || normalized === 'all') {
+            return undefined;
+          }
+          return normalized;
+        },
+        characterTypeSchema.optional().nullable(),
+      ).describe('按类型过滤（可选）'),
     }),
     execute: async (params, context) => {
       const all = await store.listCharacters(context.sessionId);
-      const filtered = params.type ? all.filter((c) => c.type === params.type) : all;
+      const filtered = params.type != null ? all.filter((c) => c.type === params.type) : all;
       const sorted = sortByFrequencyThenRecency(filtered);
 
       if (sorted.length === 0) {
