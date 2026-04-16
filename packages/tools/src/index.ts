@@ -20,6 +20,8 @@ export { createWorldDimensionTools } from './builtin/world-dimension-tools.js';
 export type { WorldDimensionToolDeps } from './builtin/world-dimension-tools.js';
 export { suspendTool, isSuspendSentinel } from './builtin/suspend.js';
 export type { SuspendSentinel } from './builtin/suspend.js';
+export { createMemoryTools } from './builtin/memory-tools.js';
+export type { MemoryToolDeps } from './builtin/memory-tools.js';
 
 // ── Short ID (LLM-friendly entity references) ──────────────────
 export { shortId, shortIdBatch, clearSessionCounters } from './short-id.js';

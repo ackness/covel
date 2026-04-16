@@ -40,6 +40,7 @@ export function makeTriggerContext(overrides?: Partial<TriggerContext>): Trigger
   return {
     sessionId: 'sess-test',
     turnNumber: 1,
+    playingTurnNumber: 1,
     triggerCount: 0,
     turnsSinceLastTrigger: 999,
     pendingEventTopics: [],

@@ -19,7 +19,7 @@ import { isSuspendSentinel } from '@covel/tools';
 import type { EventBus } from '@covel/events';
 import { shouldTrigger } from './trigger.js';
 import { scheduleByPriority } from './scheduler.js';
-import { buildContext } from '@covel/context';
+import { buildContext, buildContextAsync, needsAsyncBuild } from '@covel/context';
 import type { BudgetOptions, TokenEstimator, CompactorRunner } from '@covel/context';
 import { executeParallel } from './parallel-executor.js';
 import type { TriggerContext } from './types.js';
@@ -111,6 +111,29 @@ export interface TurnExecutorDeps {
    * behaviour.
    */
   readonly compactor?: CompactorRunner;
+
+  /**
+   * Optional memory system (Letta-style three-tier memory).
+   * When present AND `process.env.COVEL_MEMORY_V1 === '1'`:
+   *   - Pre-turn: loads core memory blocks and passes to buildContext
+   *   - Post-turn: calls memory updater to refresh blocks from turn results
+   * When absent or flag off: zero overhead, identical to pre-memory behaviour.
+   */
+  readonly memorySystem?: {
+    readonly manager: {
+      loadBlocks(sessionId: string): Promise<readonly { label: string; content: string; updatedAt: string }[]>;
+      initializeDefaults(sessionId: string): Promise<void>;
+    };
+    readonly updater: {
+      updateAfterTurn(params: {
+        sessionId: string;
+        narrativeText: string;
+        toolCallSummaries?: readonly string[];
+        currentBlocks: readonly { label: string; content: string; updatedAt: string }[];
+        locale?: string;
+      }): Promise<{ updated: boolean; blocksChanged: readonly string[]; error?: string }>;
+    };
+  };
 }
 
 export interface TurnExecutorOptions {
@@ -574,12 +597,26 @@ export async function executeTurn(
     }
   }
 
+  // Load core memory blocks (Letta-style three-tier memory).
+  // When COVEL_MEMORY_V1=1 and a memory system is injected, load the blocks
+  // so they can be injected into every runtime's prompt as [Core Memory].
+  let coreMemoryBlocks: readonly { label: string; content: string; updatedAt: string }[] = [];
+  if (process.env.COVEL_MEMORY_V1 === '1' && deps.memorySystem) {
+    try {
+      await deps.memorySystem.manager.initializeDefaults(input.sessionId);
+      coreMemoryBlocks = await deps.memorySystem.manager.loadBlocks(input.sessionId);
+    } catch {
+      // Non-critical: memory load failures must not abort the turn.
+      coreMemoryBlocks = [];
+    }
+  }
+
   // 3. Execute each group
   const completedResults = new Map<string, RuntimeResult>();
 
   for (const group of groups) {
     const results = await executeParallel(group.runtimes, async (manifest) => {
-      return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, defaultTimeoutMs, promptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory);
+      return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, defaultTimeoutMs, promptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory, coreMemoryBlocks);
     });
 
     // Merge results + apply phase transitions from runtime output
@@ -743,6 +780,48 @@ export async function executeTurn(
     sessionId: input.sessionId,
     durationMs: turnResult.durationMs,
   });
+
+  // ── Post-turn memory update (Letta-style) ─────────────────────
+  // Fire-and-forget: memory update runs asynchronously so it doesn't
+  // block the turn response. Stale-by-one-turn is acceptable.
+  if (process.env.COVEL_MEMORY_V1 === '1' && deps.memorySystem && coreMemoryBlocks.length > 0) {
+    // Collect narrative text from all successful runtimes
+    const narrativeParts: string[] = [];
+    for (const rr of turnResult.runtimeResults) {
+      const out = rr.output as Record<string, unknown> | null;
+      const text = (out?.narrativeOutput as string) ?? (out?.text as string) ?? '';
+      if (text.trim()) narrativeParts.push(text);
+    }
+    const narrativeText = narrativeParts.join('\n\n');
+
+    // eslint-disable-next-line no-console
+    console.log(`[memory] post-turn: ${narrativeParts.length} narrative parts, ${narrativeText.length} chars, statuses: [${turnResult.runtimeResults.map((r) => `${r.runtimeId}:${r.status}`).join(', ')}]`);
+
+    if (narrativeText.trim()) {
+      const toolSummaries = turnResult.runtimeResults
+        .flatMap((rr) => rr.toolCalls.map((tc) => `[${tc.toolName}] ${JSON.stringify(tc.input).slice(0, 200)}`));
+
+      deps.memorySystem.updater.updateAfterTurn({
+        sessionId: input.sessionId,
+        narrativeText,
+        toolCallSummaries: toolSummaries.length > 0 ? toolSummaries : undefined,
+        currentBlocks: coreMemoryBlocks,
+        locale: input.locale,
+      }).then((result) => {
+        // eslint-disable-next-line no-console
+        console.log(`[memory] update result: updated=${result.updated}, blocks=[${result.blocksChanged.join(',')}]${result.error ? `, error=${result.error}` : ''}`);
+      }).catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[turn-executor] memory update failed for ${input.sessionId}:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      });
+    } else {
+      // eslint-disable-next-line no-console
+      console.log('[memory] post-turn: no narrative text found, skipping memory update');
+    }
+  }
 
   // ── TurnStop hook (S4-T3) — Post* hooks cannot abort ────────
   await runTurnStopHook(
@@ -1051,6 +1130,7 @@ async function executeOneRuntime(
   hookPipeline?: HookPipeline,
   sessionSummaries?: readonly import('@covel/store').SessionSummaryRecord[],
   workingMemory?: readonly import('@covel/context').WorkingMemoryEntry[],
+  coreMemoryBlocks?: readonly { label: string; content: string; updatedAt: string }[],
 ): Promise<RuntimeResult> {
   const startTime = Date.now();
   const runId = crypto.randomUUID();
@@ -1361,20 +1441,66 @@ async function executeOneRuntime(
       deps.estimator !== undefined &&
       deps.contextBudget !== undefined;
 
-    const assembled = buildContext({
+    // Choose sync vs async build path based on whether the manifest
+    // declares any `input.inject` entries of kind `plugin-data`. The async
+    // path resolves those against the store; the sync path is unchanged
+    // and handles all legacy runtime-output injects.
+    // Filter message history based on runtime's outputKind.
+    // Story runtimes (narrator) should only see player messages + their own
+    // previous story outputs. This prevents context pollution where guide JSON,
+    // codex JSON, character-tracker JSON etc. leak into the narrator prompt,
+    // causing the LLM to mimic those formats.
+    //
+    // Filtering uses sourceRuntimeId to look up the runtime's outputKind
+    // from the active manifests. Messages from runtimes not in the active set
+    // are kept (conservative — don't drop unknown messages).
+    let filteredHistory = messageHistory;
+    if (manifest.outputKind === 'story') {
+      // Build a set of runtimeIds whose outputKind is NOT 'story' (plugin/system outputs)
+      const nonStoryRuntimeIds = new Set<string>();
+      for (const rt of completedResults.keys()) {
+        // completedResults only has current turn's runtimes; we also need
+        // historical ones. Use a broader check: any sourceRuntimeId that
+        // matches a known non-story runtime should be filtered.
+      }
+      // Simpler approach: only keep messages where:
+      // - sourceType is player/system (user messages, system messages)
+      // - sourceType is runtime AND sourceRuntimeId matches THIS runtime (own history)
+      // - sourceType is runtime AND the message looks like narrative text (not JSON)
+      filteredHistory = messageHistory.filter((m) => {
+        if (m.sourceType === 'player' || m.sourceType === 'system') return true;
+        if (m.sourceType === 'runtime') {
+          // Keep own previous outputs
+          if (m.sourceRuntimeId === manifest.name) return true;
+          // Filter out messages that look like structured tool output (JSON objects)
+          const content = m.content?.trim() ?? '';
+          if (content.startsWith('{') || content.startsWith('[')) return false;
+          // Keep narrative-like text from other runtimes
+          return true;
+        }
+        return true;
+      });
+    }
+
+    const buildParams = {
       promptTemplate: loaded.promptTemplate,
       manifest,
       turnInput: input,
       completedResults,
       config,
-      messageHistory,
+      messageHistory: filteredHistory,
       sessionMeta,
       summaries: sessionSummaries ?? [],
       workingMemory: workingMemory ?? [],
+      coreMemoryBlocks: coreMemoryBlocks ?? [],
       ...(budgetEligible
         ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
         : {}),
-    });
+    } as const;
+
+    const assembled = needsAsyncBuild({ manifest })
+      ? await buildContextAsync({ ...buildParams, store: deps.store })
+      : buildContext(buildParams);
 
     // Build LLM messages
     const messages: LLMMessage[] = [
@@ -1705,7 +1831,7 @@ async function executeOneRuntime(
               input: parsedInput,
               output: toolResult.parsedResult,
               durationMs: Date.now() - tcStart,
-              approvalStatus: toolResult.success ? 'auto-allowed' : 'auto-allowed',
+              approvalStatus: toolResult.approvalStatus,
               timestamp: new Date().toISOString(),
             });
 

@@ -1,0 +1,34 @@
+{
+  "id": "memory",
+  "label": { "zh": "核心记忆", "en": "Core Memory" },
+  "icon": "brain",
+  "groupOrder": 800,
+  "dataSource": { "namespace": "blocks" },
+  "emptyState": {
+    "message": {
+      "zh": "记忆块尚未初始化，等待首轮游戏结束后自动填充……",
+      "en": "Memory blocks not yet initialized, waiting for first turn to complete…"
+    }
+  },
+  "view": {
+    "component": "Accordion",
+    "repeat": { "statePath": "/entries", "key": "key" },
+    "children": [
+      {
+        "component": "Section",
+        "props": {
+          "title": { "$item": "key" }
+        },
+        "children": [
+          {
+            "component": "Text",
+            "props": {
+              "content": { "$item": "value" },
+              "size": "sm"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

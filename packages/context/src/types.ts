@@ -3,6 +3,7 @@
  */
 
 import type { RuntimeManifest, RuntimeResult, TurnInput } from '@covel/shared';
+import type { DataStore } from '@covel/store';
 import type { BudgetOptions, TokenEstimator } from './budget.js';
 
 /** A single LLM message in the conversation. */
@@ -134,4 +135,21 @@ export interface ContextBuildParams {
    * V1 ignores this field. Only exercised under `COVEL_PROMPT_V2=1`.
    */
   readonly activeManifests?: readonly RuntimeManifest[];
+  /**
+   * Data store handle used by the async build path to resolve
+   * `input.inject` entries of kind `plugin-data`. Only consulted when a
+   * plugin-data inject is present in the manifest. The sync `buildContext`
+   * path ignores this field entirely and stays byte-identical to the
+   * pre-ticket behaviour.
+   */
+  readonly store?: DataStore;
+  /**
+   * Core memory blocks (Letta-style in-context memory).
+   * When present, rendered as a `[Core Memory]` section in the prompt.
+   * Managed by `@covel/memory` — the context builder only consumes the data.
+   */
+  readonly coreMemoryBlocks?: readonly {
+    readonly label: string;
+    readonly content: string;
+  }[];
 }

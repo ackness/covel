@@ -14,6 +14,8 @@
  * package prevents plugin code from reaching in and coupling to internals.
  */
 
+import type { InputInjectDecl, PluginDataInjectDecl, RuntimeInjectDecl } from '@covel/shared';
+import type { PluginDataRecord } from '@covel/store';
 import type { ContextBuildParams } from './types.js';
 
 /**
@@ -60,10 +62,72 @@ function parseTagName(tag: string): string {
 }
 
 /**
+ * Validate that a tag name contains only safe characters (alphanumeric,
+ * hyphens, underscores). Throws if the name is empty or contains unsafe chars.
+ */
+function validateTagName(name: string): string {
+  if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+    throw new Error(
+      `[inject] unsafe tag name "${name}" — only alphanumeric, hyphens, and underscores are allowed`,
+    );
+  }
+  return name;
+}
+
+/**
+ * Escape XML-special characters in content so injected values cannot break
+ * the surrounding XML tag structure.
+ */
+function escapeXmlContent(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * Check whether a declaration is the runtime-output variant.
+ *
+ * The legacy shape has no `kind` field — shared's `inputInjectDeclSchema`
+ * normalises it to `kind: 'runtime'` at parse time. So at runtime we can
+ * just check the discriminator. For defensive reading of hand-built data
+ * (e.g. old fixtures), we also treat `kind === undefined` as `runtime`.
+ */
+function isRuntimeInject(decl: InputInjectDecl): decl is RuntimeInjectDecl {
+  const kind = (decl as { kind?: string }).kind;
+  return kind === 'runtime' || kind === undefined;
+}
+
+function isPluginDataInject(decl: InputInjectDecl): decl is PluginDataInjectDecl {
+  return (decl as { kind?: string }).kind === 'plugin-data';
+}
+
+/**
+ * Resolve a single runtime-output inject to its XML block, or null when
+ * the upstream runtime has no output or the named field is absent.
+ */
+function resolveRuntimeInject(
+  inject: RuntimeInjectDecl,
+  params: ContextBuildParams,
+): string | null {
+  const result = params.completedResults.get(inject.from);
+  if (!result?.output) return null;
+
+  const value = result.output[inject.field];
+  if (value === undefined || value === null) return null;
+
+  const tagName = validateTagName(parseTagName(inject.as));
+  return `<${tagName}>${escapeXmlContent(String(value))}</${tagName}>`;
+}
+
+/**
  * Build the inject XML blocks from `manifest.input.inject` declarations.
  *
- * For each inject declaration, find the corresponding runtime result and
- * wrap the specified field value in the declared XML tag.
+ * Synchronous path — only supports `kind: 'runtime'` entries. Any
+ * `kind: 'plugin-data'` entries are silently skipped here; use
+ * {@link buildInjectBlocksAsync} when the manifest declares plugin-data
+ * injects. Callers decide which path to take by inspecting
+ * `manifest.input?.inject` before building the context.
  */
 export function buildInjectBlocks(params: ContextBuildParams): string {
   const injects = params.manifest.input?.inject;
@@ -72,23 +136,178 @@ export function buildInjectBlocks(params: ContextBuildParams): string {
   }
 
   const blocks: string[] = [];
-
   for (const inject of injects) {
-    const result = params.completedResults.get(inject.from);
-    if (!result?.output) {
-      continue;
-    }
+    if (!isRuntimeInject(inject)) continue;
+    const block = resolveRuntimeInject(inject, params);
+    if (block) blocks.push(block);
+  }
+  return blocks.join('\n');
+}
 
-    const value = result.output[inject.field];
-    if (value === undefined || value === null) {
-      continue;
-    }
-
-    const tagName = parseTagName(inject.as);
-    blocks.push(`<${tagName}>${String(value)}</${tagName}>`);
+/**
+ * Async variant of {@link buildInjectBlocks} — handles both `kind: 'runtime'`
+ * and `kind: 'plugin-data'` declarations.
+ *
+ * `plugin-data` entries trigger a `store.listPluginData(sessionId, pluginId,
+ * namespace)` call to fetch the runtime's own plugin-data, which is then
+ * truncated via {@link twoPassTruncate} and serialised via
+ * {@link serializeEntries}. Store errors are not caught — they propagate to
+ * the caller so the containing runtime fails cleanly and its error stays on
+ * the observability channel (see Phase 0 audit notes in the ticket).
+ */
+export async function buildInjectBlocksAsync(params: ContextBuildParams): Promise<string> {
+  const injects = params.manifest.input?.inject;
+  if (!injects || injects.length === 0) {
+    return '';
   }
 
+  const blocks: string[] = [];
+  for (const inject of injects) {
+    if (isRuntimeInject(inject)) {
+      const block = resolveRuntimeInject(inject, params);
+      if (block) blocks.push(block);
+      continue;
+    }
+
+    if (isPluginDataInject(inject)) {
+      const block = await resolvePluginDataInject(inject, params);
+      if (block) blocks.push(block);
+      continue;
+    }
+  }
   return blocks.join('\n');
+}
+
+/**
+ * Resolve a `kind: 'plugin-data'` inject to an XML block.
+ *
+ * Calls `store.listPluginData(sessionId, pluginId, namespace)` — pluginId
+ * comes from the runtime's own manifest, so cross-plugin reads are
+ * structurally impossible through this path. Errors bubble up to the
+ * caller (runtime fail → Phase 0 audit guarantees no context pollution).
+ */
+async function resolvePluginDataInject(
+  inject: PluginDataInjectDecl,
+  params: ContextBuildParams,
+): Promise<string> {
+  if (!params.store) {
+    throw new Error(
+      `[plugin-data inject] store is required for runtime "${params.manifest.name}" ` +
+        `but was not provided to buildContextAsync`,
+    );
+  }
+
+  const entries = await params.store.listPluginData(
+    params.turnInput.sessionId,
+    params.manifest.pluginId,
+    inject.namespace,
+  );
+
+  const tagName = validateTagName(parseTagName(inject.as));
+
+  if (entries.length === 0) {
+    return `<${tagName}>暂无</${tagName}>`;
+  }
+
+  const format = inject.format ?? 'summary';
+  const maxEntries = inject.maxEntries ?? 50;
+  const truncated = twoPassTruncate(entries, maxEntries);
+  const serialized = escapeXmlContent(serializeEntries(truncated, format));
+  const countLine =
+    entries.length > truncated.length
+      ? `\n[总计 ${entries.length} 条，展示 ${truncated.length} 条]`
+      : '';
+
+  return `<${tagName}>\n${serialized}${countLine}\n</${tagName}>`;
+}
+
+/**
+ * Two-pass deterministic truncation for plugin-data summaries.
+ *
+ * When the namespace has fewer rows than `max`, returns them in their
+ * natural order (caller-observed). Otherwise splits the quota:
+ *
+ * - **Anchor half** (`floor(max/2)`): oldest entries by `createdAt` — keeps
+ *   long-lived references visible even in late-game turns, so the LLM can
+ *   still match early-session codex entries when narrating a callback.
+ * - **Recent half** (`max - floor(max/2)`): most recently updated entries
+ *   by `updatedAt`, excluding anything already in the anchor half.
+ *
+ * The returned array orders anchors first, then recent entries, so the
+ * LLM reads a stable timeline-like layout. Deduplication by `key` ensures
+ * an entry never appears twice in the output even when it qualifies for
+ * both slices.
+ */
+export function twoPassTruncate(
+  entries: readonly PluginDataRecord[],
+  max: number,
+): PluginDataRecord[] {
+  if (entries.length <= max) return [...entries];
+
+  const anchorQuota = Math.floor(max / 2);
+  const recentQuota = max - anchorQuota;
+
+  const byCreatedAsc = [...entries].sort((a, b) => {
+    const diff = a.createdAt.localeCompare(b.createdAt);
+    if (diff !== 0) return diff;
+    return a.key.localeCompare(b.key);
+  });
+  const anchors = byCreatedAsc.slice(0, anchorQuota);
+  const anchorKeys = new Set(anchors.map((e) => e.key));
+
+  const byUpdatedDesc = [...entries]
+    .filter((e) => !anchorKeys.has(e.key))
+    .sort((a, b) => {
+      const diff = b.updatedAt.localeCompare(a.updatedAt);
+      if (diff !== 0) return diff;
+      return a.key.localeCompare(b.key);
+    });
+  const recent = byUpdatedDesc.slice(0, recentQuota);
+
+  return [...anchors, ...recent];
+}
+
+const SUMMARY_VALUE_CAP = 200;
+
+/**
+ * Serialise a truncated plugin-data slice per the declared format.
+ *
+ * `summary` stays agnostic of the value schema — it stringifies each value
+ * to JSON and truncates to 200 chars. This keeps the helper decoupled from
+ * any plugin's internal record shape (codex uses `{title, content, tags,
+ * rarity}`, character-tracker uses something else, etc).
+ */
+export function serializeEntries(
+  entries: readonly PluginDataRecord[],
+  format: 'summary' | 'full' | 'ids-only',
+): string {
+  return entries.map((entry) => formatEntry(entry, format)).join('\n');
+}
+
+function formatEntry(
+  entry: PluginDataRecord,
+  format: 'summary' | 'full' | 'ids-only',
+): string {
+  if (format === 'ids-only') {
+    return `- ${entry.key}`;
+  }
+  const json = safeStringify(entry.value);
+  if (format === 'full') {
+    return `- ${entry.key}: ${json}`;
+  }
+  // summary
+  const compact = json.length > SUMMARY_VALUE_CAP
+    ? `${json.slice(0, SUMMARY_VALUE_CAP)}...`
+    : json;
+  return `- ${entry.key} | ${entry.updatedAt} | ${compact}`;
+}
+
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
 /**
@@ -238,6 +457,39 @@ export function renderWorkingMemory(
   });
 
   return `[Working Memory]\n${lines.join('\n')}`;
+}
+
+/**
+ * Render core memory blocks as a `[Core Memory]` prompt section.
+ *
+ * Core memory blocks (inspired by Letta/MemGPT) are small editable text
+ * segments that provide the LLM with persistent story state across turns.
+ * They are placed in the prompt between framework preamble and message
+ * history, replacing the need for full history injection.
+ *
+ * Gated by `COVEL_MEMORY_V1=1`. When unset, returns empty string.
+ */
+export function renderCoreMemory(
+  blocks: readonly { label: string; content: string }[] | undefined,
+  locale?: string,
+): string {
+  if (process.env.COVEL_MEMORY_V1 !== '1') return '';
+  if (!blocks || blocks.length === 0) return '';
+
+  const nonEmpty = blocks.filter((b) => b.content.trim());
+  if (nonEmpty.length === 0) return '';
+
+  const labels: Record<string, string> = locale?.startsWith('en')
+    ? { story_state: 'Story State', scene: 'Current Scene', character_relationships: 'Character Relationships', player_profile: 'Player Profile' }
+    : { story_state: '剧情状态', scene: '当前场景', character_relationships: '角色关系', player_profile: '玩家状态' };
+
+  const header = locale?.startsWith('en') ? '[Core Memory]' : '[核心记忆]';
+  const sections = nonEmpty.map((b) => {
+    const label = labels[b.label] ?? b.label;
+    return `<${b.label}>\n# ${label}\n${b.content}\n</${b.label}>`;
+  });
+
+  return `${header}\n${sections.join('\n\n')}`;
 }
 
 /**

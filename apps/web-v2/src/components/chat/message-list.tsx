@@ -14,7 +14,8 @@ import type { Spec } from "@json-render/core";
 import { covelRegistry } from "@/lib/catalog.js";
 import { messageToSpec, messageToSpecDisabled } from "@/lib/message-to-spec.js";
 import { PluginPanel } from "@/components/panels/plugin-panel.js";
-import type { GameMessage } from "@/stores/session-store.js";
+import { ExecutionTimeline } from "@/components/chat/execution-timeline.js";
+import type { GameMessage, ExecutionStep } from "@/stores/session-store.js";
 import {
   sendMessage,
   setComposerText,
@@ -25,20 +26,64 @@ import {
 
 interface MessageListProps {
   messages: GameMessage[];
+  executionSteps?: ExecutionStep[];
+  executing?: boolean;
 }
 
-export function MessageList({ messages }: MessageListProps) {
+/**
+ * Group messages into ordered turn segments. Each segment contains
+ * the turnId (or "" for un-attributed messages) and its messages.
+ * A new segment starts when the turnId changes from the previous message.
+ */
+function groupMessagesByTurn(messages: GameMessage[]): Array<{ turnId: string; messages: GameMessage[] }> {
+  const groups: Array<{ turnId: string; messages: GameMessage[] }> = [];
+  let current: { turnId: string; messages: GameMessage[] } | null = null;
+
+  for (const msg of messages) {
+    const tid = msg.turnId ?? "";
+    if (!current || current.turnId !== tid) {
+      current = { turnId: tid, messages: [] };
+      groups.push(current);
+    }
+    current.messages.push(msg);
+  }
+
+  return groups;
+}
+
+export function MessageList({ messages, executionSteps = [], executing = false }: MessageListProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
+  const scrollDeps = messages.length + executionSteps.length + (executing ? 1 : 0);
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+  }, [scrollDeps]);
 
-  const visible = messages.filter((m) => m.content || m.block);
+  // Show only user messages, story narrative, interactions, and plugin-message blocks.
+  // Filter out system/plugin runtime outputs (JSON from codex, npc-graph, char-tracker, etc.)
+  // which should not appear in the chat area.
+  const visible = messages
+    .map((m) => {
+      // Sanitize story messages: strip trailing JSON that leaked from other plugins
+      // (historical data from before the narrator context isolation fix).
+      if (m.kind === "story" && m.content) {
+        const jsonStart = m.content.search(/\n\{"\w+"/);
+        if (jsonStart > 0) {
+          return { ...m, content: m.content.slice(0, jsonStart).trimEnd() };
+        }
+      }
+      return m;
+    })
+    .filter((m) => {
+      if (!m.content && !m.block) return false;
+      if (m.role === "user") return true;
+      if (m.kind === "story" || m.kind === "interaction" || m.kind === "plugin-message") return true;
+      if (m.block) return true;
+      if (m.kind === "system" || m.kind === "plugin") return false;
+      if (!m.kind && m.content && !m.content.trim().startsWith("{") && !m.content.trim().startsWith("[")) return true;
+      return false;
+    });
 
-  // Identify the turnId of the most recent turn so we only show Retry
-  // on messages belonging to that turn — retrying an earlier turn would
-  // produce divergent narrative and is disabled.
   const latestTurnId = useMemo(() => {
     for (let i = visible.length - 1; i >= 0; i -= 1) {
       if (visible[i].turnId) return visible[i].turnId;
@@ -46,17 +91,61 @@ export function MessageList({ messages }: MessageListProps) {
     return undefined;
   }, [visible]);
 
+  // Group execution steps by turnId
+  const stepsByTurn = useMemo(() => {
+    const map = new Map<string, ExecutionStep[]>();
+    for (const step of executionSteps) {
+      const tid = step.turnId ?? "";
+      const arr = map.get(tid) ?? [];
+      arr.push(step);
+      map.set(tid, arr);
+    }
+    return map;
+  }, [executionSteps]);
+
+  const turnGroups = useMemo(() => groupMessagesByTurn(visible), [visible]);
+
+  // Collect turnIds that have messages so we can show unmatched steps
+  const renderedTurnIds = new Set(turnGroups.map((g) => g.turnId));
+
   return (
     <div className="space-y-4 pb-4">
-      {visible.map((msg, index) => (
-        <MessageRenderer
-          key={msg.id}
-          message={msg}
-          hasLaterUserMessage={visible.slice(index + 1).some((item) => item.role === "user")}
-          hasLaterStoryMessage={visible.slice(index + 1).some((item) => item.role === "assistant" && item.kind === "story")}
-          isLatestTurn={msg.turnId !== undefined && msg.turnId === latestTurnId}
-        />
-      ))}
+      {turnGroups.map((group) => {
+        const turnSteps = stepsByTurn.get(group.turnId) ?? [];
+        const isLatest = group.turnId !== "" && group.turnId === latestTurnId;
+
+        return (
+          <div key={group.turnId || `no-turn-${group.messages[0]?.id}`}>
+            {group.messages.map((msg, index) => {
+              const laterInGroup = group.messages.slice(index + 1);
+              const laterInAll = visible.slice(visible.indexOf(msg) + 1);
+              return (
+                <MessageRenderer
+                  key={msg.id}
+                  message={msg}
+                  hasLaterUserMessage={laterInAll.some((item) => item.role === "user")}
+                  hasLaterStoryMessage={laterInAll.some((item) => item.role === "assistant" && item.kind === "story")}
+                  isLatestTurn={msg.turnId !== undefined && msg.turnId === latestTurnId}
+                />
+              );
+            })}
+            {/* Show execution timeline after the last message of this turn */}
+            {turnSteps.length > 0 && (
+              <ExecutionTimeline steps={turnSteps} executing={executing && isLatest} />
+            )}
+          </div>
+        );
+      })}
+
+      {/* Steps for turns that have no messages yet (execution just started) */}
+      {(() => {
+        const unmatchedSteps = executionSteps.filter((s) => !renderedTurnIds.has(s.turnId ?? ""));
+        if (unmatchedSteps.length > 0 || (executing && executionSteps.length === 0)) {
+          return <ExecutionTimeline steps={unmatchedSteps} executing={executing} />;
+        }
+        return null;
+      })()}
+
       <div ref={endRef} />
     </div>
   );

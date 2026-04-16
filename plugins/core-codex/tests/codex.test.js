@@ -1,13 +1,19 @@
 /**
  * core-codex plugin tests.
  *
- * Tests:
- * 1. Plugin discovery & manifest validation
- * 2. Local tools: unlock-codex-entries + update-codex-entry
- * 3. Batch unlock (multiple entries in one call)
- * 4. UI card generation with rarity styles
- * 5. Persistence to plugin-data store
- * 6. Integration: mock LLM calls tool → framework extracts UI
+ * After the function→agent runtime switch (see PLUGIN.md rewrite), the
+ * deterministic-extraction path is gone and the plugin is now LLM-driven
+ * with local tools. These tests cover:
+ *
+ * 1. Local tools: `unlock-codex-entries` + `update-codex-entry` (pure,
+ *    independent of runtime type — verified against an in-memory store stub)
+ * 2. Plugin manifest: agent runtime shape, declares local tools,
+ *    `input.inject` contains both `core-narrator` runtime inject and the
+ *    plugin-data inject that feeds existing entries into the prompt.
+ * 3. UI declarations unchanged.
+ *
+ * Integration-level coverage (real LLM calling the tool chain) lives in
+ * `scripts/e2e-plugin-verify.ts`, not here.
  */
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
@@ -16,7 +22,6 @@ import { discoverPlugins, loadPluginManifest, loadRuntime } from '@covel/plugin-
 import { tool, z, shortIdBatch } from '@covel/tools';
 import createUnlockCodexEntries from '../tools/unlock-codex-entries.js';
 import createUpdateCodexEntry from '../tools/update-codex-entry.js';
-import codexHandler from '../handler.js';
 
 // In-memory mock store for plugin-data operations
 function createMockPluginDataStore() {
@@ -121,7 +126,6 @@ describe('core-codex tools', () => {
       expect(result.ui[1].style.animation).toBe('shimmer');
       expect(result.ui[2].style.borderColor).toBe('#6b7280');
 
-      // All 3 entries persisted
       const stored = await mockStore.listPluginData('sess-1', 'core-codex', 'entries');
       expect(stored).toHaveLength(3);
     });
@@ -146,7 +150,6 @@ describe('core-codex tools', () => {
 
   describe('update-codex-entry', () => {
     it('should update existing entry from store', async () => {
-      // First unlock an entry so it exists in store
       const unlockResult = await unlockCodexEntriesTool.execute({
         entries: [{
           category: 'location',
@@ -168,7 +171,6 @@ describe('core-codex tools', () => {
       expect(result.entryId).toBe(entryId);
       expect(result.ui[0].type).toBe('codex-update');
 
-      // Verify store was updated
       const stored = await mockStore.getPluginData('sess-1', 'core-codex', 'entries', entryId);
       expect(stored.value.content).toContain('衰退迹象');
     });
@@ -184,7 +186,6 @@ describe('core-codex tools', () => {
     });
 
     it('should support rarity upgrade', async () => {
-      // First unlock
       const unlockResult = await unlockCodexEntriesTool.execute({
         entries: [{
           category: 'item',
@@ -205,14 +206,13 @@ describe('core-codex tools', () => {
       expect(result.ui[0].rarityUpgrade).toBe('legendary');
       expect(result.ui[0].style.animation).toBe('upgrade-pulse');
 
-      // Verify rarity updated in store
       const stored = await mockStore.getPluginData('sess-1', 'core-codex', 'entries', entryId);
       expect(stored.value.rarity).toBe('legendary');
     });
   });
 });
 
-// ── Plugin discovery tests ───────────────────────────────────────
+// ── Plugin manifest tests ────────────────────────────────────────
 
 describe('core-codex plugin manifest', () => {
   /** @type {import('@covel/shared').RuntimeManifest} */
@@ -227,32 +227,58 @@ describe('core-codex plugin manifest', () => {
     loaded = await loadRuntime(discovery, manifest.name);
   });
 
-  it('should be a non-core plugin', () => {
+  it('should be a non-core agent-runtime plugin', () => {
     expect(manifest.pluginType).toBe('plugin');
     expect(manifest.name).toBe('core-codex');
     expect(manifest.priority).toBe(650);
-    expect(manifest.runtimeType).toBe('function');
+    // Agent runtime — no `runtimeType` field means default 'agent'
+    expect(manifest.runtimeType).toBeUndefined();
+    expect(manifest.handler).toBeUndefined();
   });
 
-  it('should not declare LLM-only fields (function runtime)', () => {
-    // PR-5.4 cleanup: core-codex is a function runtime, so tools/inject/postHistory
-    // declarations are vestigial and have been removed from PLUGIN.md. The handler
-    // does direct store writes via its `store` parameter.
-    expect(manifest.tools).toBeUndefined();
-    expect(manifest.input).toBeUndefined();
-    expect(manifest.postHistory).toBeUndefined();
-    expect(manifest.promptVersion).toBeUndefined();
+  it('should declare both narrator runtime inject and plugin-data inject', () => {
+    const injects = manifest.input?.inject ?? [];
+    expect(injects).toHaveLength(2);
+
+    // First: runtime inject from core-narrator
+    expect(injects[0]).toMatchObject({
+      kind: 'runtime',
+      from: 'core-narrator',
+      field: 'narrativeOutput',
+      as: '<narrator-output>',
+    });
+
+    // Second: plugin-data inject from its own `entries` namespace
+    expect(injects[1]).toMatchObject({
+      kind: 'plugin-data',
+      namespace: 'entries',
+      as: '<existing-entries>',
+      format: 'summary',
+      maxEntries: 100,
+    });
+  });
+
+  it('should declare unlock + update local tools but NOT plugin-data-list', () => {
+    expect(manifest.tools?.local).toEqual([
+      './tools/unlock-codex-entries.js',
+      './tools/update-codex-entry.js',
+    ]);
+    // plugin-data-list was removed — existing entries now arrive via input.inject
+    expect(manifest.tools?.builtin ?? []).not.toContain('plugin-data-list');
+  });
+
+  it('should declare post-history completion contract', () => {
+    expect(manifest.postHistory?.content).toContain('<existing-entries>');
+  });
+
+  it('should load PLUGIN.md body as the LLM prompt template', () => {
+    expect(loaded.promptTemplate).toContain('知识图鉴');
+    expect(loaded.promptTemplate).toContain('<existing-entries>');
   });
 
   it('should have scheduled trigger with interval', () => {
     expect(manifest.trigger?.type).toBe('scheduled');
     expect(manifest.trigger?.interval).toBe(2);
-  });
-
-  it('should load PLUGIN.md body as a function-runtime description', () => {
-    // The body is documentation only — function runtimes never feed it to an LLM.
-    expect(loaded.promptTemplate).toContain('function runtime');
-    expect(loaded.promptTemplate).toContain('handler.js');
   });
 
   it('should declare right panel UI spec', () => {
@@ -265,75 +291,5 @@ describe('core-codex plugin manifest', () => {
     expect(loaded.uiSpecs?.right).toHaveLength(1);
     expect(loaded.uiSpecs?.right?.[0].id).toBe('codex');
     expect(loaded.uiSpecs?.right?.[0].icon).toBe('book-open');
-  });
-});
-
-// ── Integration test with TestHarness ────────────────────────────
-
-describe('core-codex integration', () => {
-  it('should extract codex discoveries and persist them via handler', async () => {
-    const mockStore = createMockPluginDataStore();
-    const result = await codexHandler({
-      sessionId: 'sess-harness',
-      turnId: 'turn-2',
-      pluginId: 'core-codex',
-      playerMessage: '我环顾四周，观察周围环境',
-      locale: 'zh-CN',
-      store: mockStore,
-      completedResults: new Map([[
-        'core-narrator',
-        {
-          output: {
-            narrativeOutput:
-              '苏婉压低声音：“林风，我们得立刻动身——百灵沼泽离这里有两百里。” 你注意到她左手袖口有一处焦痕，腰间佩剑微微作响。溪对岸宿舍区二楼的窗户后，有个人影正朝你们这边看。',
-          },
-        },
-      ]]),
-      config: {},
-    });
-
-    expect(result.summaryCount).toBeGreaterThanOrEqual(1);
-
-    const stored = await mockStore.listPluginData('sess-harness', 'core-codex', 'entries');
-    expect(stored.length).toBeGreaterThanOrEqual(1);
-    expect(stored.some((entry) => entry.value.title === '百灵沼泽')).toBe(true);
-    const summary = await mockStore.listPluginData('sess-harness', 'core-codex', 'message');
-    expect(summary.some((entry) => entry.key === 'title')).toBe(true);
-    expect(summary.some((entry) => entry.key === 'item1Title')).toBe(true);
-  });
-
-  it('should reject noisy pseudo-entities and keep stable location names', async () => {
-    const mockStore = createMockPluginDataStore();
-    await codexHandler({
-      sessionId: 'sess-noise',
-      turnId: 'turn-noise',
-      pluginId: 'core-codex',
-      playerMessage: '',
-      locale: 'zh-CN',
-      store: mockStore,
-      completedResults: new Map([[
-        'core-narrator',
-        {
-          output: {
-            narrativeOutput:
-              '春日午后的青萍宗坊市弥漫着花粉甜香，钟楼余音还在山谷间回荡。苏婉低声说百灵沼泽深处有一条新灵脉。熟悉的脚步声从坊市东侧传来，你沿着青萍山石阶看向远处。'
-              + ' 远处钟声惊起一群栖息在坊市屋檐下的灵雀。',
-          },
-        },
-      ]]),
-      config: {},
-    });
-
-    const stored = await mockStore.listPluginData('sess-noise', 'core-codex', 'entries');
-    const titles = stored.map((entry) => entry.value.title);
-
-    expect(titles).toContain('青萍宗坊市');
-    expect(titles).toContain('百灵沼泽');
-    expect(titles).not.toContain('的青萍宗坊市');
-    expect(titles).not.toContain('余音还在山谷');
-    expect(titles).not.toContain('三天后就是试炼大会');
-    expect(titles).not.toContain('熟悉的脚步声从坊市');
-    expect(titles).not.toContain('沿着青萍山');
-    expect(titles).not.toContain('惊起一群栖息在坊市');
   });
 });

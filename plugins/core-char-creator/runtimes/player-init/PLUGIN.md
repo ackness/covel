@@ -93,6 +93,7 @@ postHistory:
 - `fields`: 基于 schema 的字段
 - `submitLabel`: 合适的提交按钮文本
 - `narrativeTemplate`: 叙事文本（含 `{{fieldName}}` 占位符）
+- `submitBehavior`: `{ "echoFilledNarrative": true, "autoContinue": true, "immediate": true }`（必填，确保玩家提交后自动推进到叙事阶段）
 - **不要**设置 `createCharacter: true`（旧字段，已废弃，由 player-init 第 2 步处理）
 
 调用工具后不要输出额外文本。

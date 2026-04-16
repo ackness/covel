@@ -63,14 +63,55 @@ export interface TriggerConfig {
 
 // ── Input declarations ───────────────────────────────────────────
 
-export interface InputInjectDecl {
-  /** Source: `pluginId/runtimeId` */
+/**
+ * Inject a field from a completed upstream runtime's output (legacy shape).
+ *
+ * The `kind: 'runtime'` discriminator is materialised by the schema
+ * `preprocess` step. PLUGIN.md files may omit it — the legacy
+ * `{ from, field, as }` shape is still accepted and normalised at parse time.
+ */
+export interface RuntimeInjectDecl {
+  readonly kind: 'runtime';
+  /** Runtime name: `pluginId/runtimeId` or short `pluginId`. */
   readonly from: string;
   /** Field name to extract from source output. */
   readonly field: string;
-  /** XML tag name to wrap the injected data. */
+  /** XML tag wrap, e.g. `"<narrator-output>"`. */
   readonly as: string;
 }
+
+/**
+ * Inject a summary of the current runtime's OWN plugin-data namespace into
+ * the prompt. The framework calls `store.listPluginData(sessionId, pluginId,
+ * namespace)` before building the system prompt and inlines a deterministic,
+ * truncated view under the declared XML tag.
+ *
+ * Cross-plugin reads are intentionally NOT supported — always reads from
+ * the runtime's own `pluginId`.
+ *
+ * `format`:
+ * - `summary` (default): one line per entry `- {key} | {updatedAt} | {json-truncated-200}`
+ * - `ids-only`: one line per entry `- {key}` — cheapest, loses content
+ * - `full`: one line per entry `- {key}: {full-json}` — most expensive
+ *
+ * `maxEntries` bounds the prompt size. When exceeded, a two-pass truncation
+ * reserves half the quota for the oldest entries (stable anchors by
+ * `createdAt`) and half for the most recently updated (active head by
+ * `updatedAt`), with deduplication. See `@covel/context` for the algorithm.
+ */
+export interface PluginDataInjectDecl {
+  readonly kind: 'plugin-data';
+  /** Plugin-data namespace owned by this runtime's plugin. */
+  readonly namespace: string;
+  /** XML tag wrap, e.g. `"<existing-entries>"`. */
+  readonly as: string;
+  /** Serialisation format. Defaults to `'summary'`. */
+  readonly format?: 'summary' | 'full' | 'ids-only';
+  /** Upper bound on entries rendered. Defaults to 50. */
+  readonly maxEntries?: number;
+}
+
+export type InputInjectDecl = RuntimeInjectDecl | PluginDataInjectDecl;
 
 export interface InputToolDecl {
   readonly plugin: string;

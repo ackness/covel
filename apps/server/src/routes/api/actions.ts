@@ -14,6 +14,7 @@ import type { EventBus } from '@covel/events';
 import { executeTurn, processRuntimeResult, createTraceRecorder } from '@covel/runtime';
 import type { RuntimeManifest } from '@covel/shared';
 import type { CompactorRunner } from '@covel/context';
+import { rateLimiter } from '../../middleware/rate-limit.js';
 import { loadSessionConfig } from './load-session-config.js';
 
 // SSE uses ProtocolEventType names directly — no legacy mapping.
@@ -30,11 +31,23 @@ type Env = {
     resolveModel: (manifest: RuntimeManifest, apiOverride?: string) => string | undefined;
     eventBus: EventBus;
     compactorRunner: CompactorRunner;
+    memorySystem?: {
+      readonly manager: { loadBlocks(sid: string): Promise<readonly { label: string; content: string; updatedAt: string }[]>; initializeDefaults(sid: string): Promise<void> };
+      readonly updater: { updateAfterTurn(p: { sessionId: string; narrativeText: string; toolCallSummaries?: readonly string[]; currentBlocks: readonly { label: string; content: string; updatedAt: string }[]; locale?: string }): Promise<{ updated: boolean; blocksChanged: readonly string[]; error?: string }> };
+    };
     ensureEmbeddingLock?: (sessionId: string) => Promise<void>;
   };
 };
 
 export const actionRoutes = new Hono<Env>();
+
+// Module-level memory system reference, set by bootstrap via setMemorySystem().
+// Using a module variable instead of Hono context because Hono's typed
+// c.set/c.get doesn't support optional cross-module types cleanly.
+let _memorySystem: Env['Variables']['memorySystem'] | undefined;
+export function setMemorySystem(ms: Env['Variables']['memorySystem']) {
+  _memorySystem = ms;
+}
 
 interface ActionRequest {
   requestId: string;
@@ -45,7 +58,7 @@ interface ActionRequest {
   payload: Record<string, unknown>;
 }
 
-actionRoutes.post('/', async (c) => {
+actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
   const store = c.get('store');
   const pluginRegistry = c.get('pluginRegistry');
   const llmAdapter = c.get('llmAdapter');
@@ -157,7 +170,7 @@ actionRoutes.post('/', async (c) => {
     //
     // Note: EventBus strips `_subType` from the raw payload and puts it on
     // `event.type`. So we whitelist by `event.type`, not by payload fields.
-    const FORWARDED_SUBTYPES = new Set(['plugin-data.changed', 'world.dimensions.changed']);
+    const FORWARDED_SUBTYPES = new Set(['plugin-data.changed', 'world.dimensions.changed', 'phase.changed']);
     const eventBusUnsubscribe = eventBus.onEmit((ev) => {
       if (ev.sessionId !== sessionId) return;
       if (!FORWARDED_SUBTYPES.has(ev.type)) return;
@@ -278,12 +291,16 @@ actionRoutes.post('/', async (c) => {
             });
           },
           compactor: compactorRunner,
+          memorySystem: _memorySystem,
         },
       );
 
-      // Update session turn count
+      // Update session turn count — derive from actual turn results to avoid
+      // concurrent read-modify-write races (two parallel turns reading the same
+      // stale `session.turnCount` and overwriting each other).
+      const turnResults = await store.listTurnResults(sessionId);
       await store.updateSession(sessionId, {
-        turnCount: session.turnCount + 1,
+        turnCount: turnResults.length,
         updatedAt: new Date().toISOString(),
       });
 
@@ -291,7 +308,7 @@ actionRoutes.post('/', async (c) => {
       // normalize output → commit to Store → emit SessionEvents as SSE
       for (const rr of result.runtimeResults) {
         const kind = outputKindMap.get(rr.runtimeId) ?? 'plugin';
-        const events = await processRuntimeResult(rr, store, sessionId, kind);
+        const { events } = await processRuntimeResult(rr, store, sessionId, kind);
 
         for (const evt of events) {
           // Emit using ProtocolEventType directly — no legacy mapping

@@ -25,9 +25,35 @@ export const workingMemoryRoutes = new Hono<Env>();
 
 const VALID_SCOPES = new Set(['player', 'story', 'shared']);
 
+// GET /sessions/:id/core-memory — Returns core memory blocks (Letta-style)
+// Gated by COVEL_MEMORY_V1=1. Read-only convenience endpoint for the UI panel.
+workingMemoryRoutes.get('/:id/core-memory', async (c) => {
+  if (process.env.COVEL_MEMORY_V1 !== '1') {
+    return c.json({ error: 'Memory system is disabled (set COVEL_MEMORY_V1=1)' }, 404);
+  }
+
+  const store = c.get('store');
+  const sessionId = c.req.param('id');
+  const session = await store.getSession(sessionId);
+  if (!session) return c.json({ error: 'Session not found' }, 404);
+
+  const all = await store.listWorkingMemory(sessionId);
+  const blocks = all
+    .filter((r) => r.scope === 'story')
+    .map((r) => ({
+      label: r.key,
+      content: typeof r.value === 'object' && r.value !== null && 'text' in (r.value as Record<string, unknown>)
+        ? (r.value as Record<string, unknown>).text
+        : r.value,
+      updatedAt: r.updatedAt,
+    }));
+
+  return c.json({ blocks });
+});
+
 // GET /sessions/:id/working-memory
 workingMemoryRoutes.get('/:id/working-memory', async (c) => {
-  if (process.env.COVEL_WORKING_MEMORY_V1 !== '1') {
+  if (process.env.COVEL_WORKING_MEMORY_V1 !== '1' && process.env.COVEL_MEMORY_V1 !== '1') {
     return c.json({ error: 'Working memory is disabled' }, 404);
   }
 

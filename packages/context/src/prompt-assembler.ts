@@ -40,7 +40,9 @@ import {
   buildCurrentTurnUserMessage,
   buildFrameworkPreamble,
   buildInjectBlocks,
+  buildInjectBlocksAsync,
   interpolateTemplate,
+  renderCoreMemory,
   renderWorkingMemory,
 } from './prompt-internals.js';
 import type { AssembledContext, ContextBuildParams, LLMMessage, MessageHistoryRecord, SummaryRecord } from './types.js';
@@ -301,6 +303,28 @@ function insertAuthorsNotes(
  * focused on the public shape.
  */
 function buildPromptSegments(params: ContextBuildParams): PromptSegments {
+  return buildPromptSegmentsCommon(params, buildInjectBlocks(params));
+}
+
+/**
+ * Async variant — same as {@link buildPromptSegments} but resolves
+ * `kind: 'plugin-data'` inject declarations via the injected store.
+ */
+async function buildPromptSegmentsAsync(
+  params: ContextBuildParams,
+): Promise<PromptSegments> {
+  const rawInjects = await buildInjectBlocksAsync(params);
+  return buildPromptSegmentsCommon(params, rawInjects);
+}
+
+/**
+ * Shared segment assembly given a pre-resolved inject-block string. Split
+ * out so the sync and async paths share every other segment unchanged.
+ */
+function buildPromptSegmentsCommon(
+  params: ContextBuildParams,
+  rawInjects: string,
+): PromptSegments {
   const variables = assemblePromptVariables(params);
 
   const pluginInstructions = interpolateTemplate(
@@ -312,7 +336,6 @@ function buildPromptSegments(params: ContextBuildParams): PromptSegments {
   // concatenated `template + injectBlocks` as one string). This keeps
   // behaviour consistent for plugins that reference template vars inside
   // injected output — an edge case, but cheap to preserve.
-  const rawInjects = buildInjectBlocks(params);
   const upstreamInjects = rawInjects
     ? interpolateTemplate(rawInjects, variables)
     : '';
@@ -320,8 +343,11 @@ function buildPromptSegments(params: ContextBuildParams): PromptSegments {
   const frameworkPreamble =
     params.frameworkPreamble ?? defaultFrameworkPreamble(params.turnInput.locale);
 
-  // Segment 2 — Working Memory (S3-T3)
-  const workingMemory = renderWorkingMemory(params.workingMemory);
+  // Segment 2 — Core Memory (Letta-style) + Working Memory (S3-T3)
+  const coreMemory = renderCoreMemory(params.coreMemoryBlocks, params.turnInput.locale);
+  const workingMemory = [coreMemory, renderWorkingMemory(params.workingMemory)]
+    .filter(Boolean)
+    .join('\n\n');
 
   // Segments 9 & 10 — Author's Note + Post-History Instructions (S3-T4).
   // Both segments aggregate across all active plugin manifests.
@@ -415,6 +441,31 @@ export function buildContextV2(
   params: ContextBuildParams,
 ): AssembledContext {
   const segments = buildPromptSegments(params);
+  return finalizeV2(params, segments);
+}
+
+/**
+ * Async V2 path — identical to {@link buildContextV2} but uses
+ * {@link buildPromptSegmentsAsync} so `kind: 'plugin-data'` injects can
+ * await the store. Call site (`buildContextAsync`) chooses between this
+ * and the sync V2 based on the V2 feature flag + manifest opt-in.
+ */
+export async function buildContextV2Async(
+  params: ContextBuildParams,
+): Promise<AssembledContext> {
+  const segments = await buildPromptSegmentsAsync(params);
+  return finalizeV2(params, segments);
+}
+
+/**
+ * Shared V2 finalisation — message history, author's notes, post-history
+ * instructions, and budget pruning. Split out so the sync and async V2
+ * paths share every post-segment step.
+ */
+function finalizeV2(
+  params: ContextBuildParams,
+  segments: PromptSegments,
+): AssembledContext {
   const systemPrompt = concatenateSystemPrompt(segments, isPromptCacheEnabled());
 
   // Segment 7: history with optional compaction substitution (S2-T2)

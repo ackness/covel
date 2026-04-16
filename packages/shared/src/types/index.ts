@@ -4,6 +4,8 @@ export type {
   TriggerType,
   TriggerConfig,
   InputInjectDecl,
+  RuntimeInjectDecl,
+  PluginDataInjectDecl,
   InputToolDecl,
   InputConfig,
   OutputConfig,

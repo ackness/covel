@@ -26,6 +26,7 @@ const formFieldSchema = z.object({
 const submitBehaviorSchema = z.object({
   echoFilledNarrative: z.boolean().optional(),
   autoContinue: z.boolean().optional(),
+  immediate: z.boolean().optional(),
 });
 
 export const createFormTool = tool({

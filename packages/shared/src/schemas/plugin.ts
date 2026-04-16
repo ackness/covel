@@ -33,13 +33,73 @@ export const triggerConfigSchema = z
 
 // ── Input ────────────────────────────────────────────────────────
 
-export const inputInjectDeclSchema = z
+/**
+ * Runtime-output inject — read a field from a completed upstream runtime's
+ * output and wrap it in an XML tag. The legacy shape (no `kind` field) is
+ * normalised to this variant via `inputInjectDeclSchema`'s preprocess step
+ * so existing PLUGIN.md files keep parsing unchanged.
+ */
+export const runtimeInjectDeclSchema = z
   .object({
+    kind: z.literal('runtime').optional().default('runtime'),
     from: z.string().min(1),
     field: z.string().min(1),
     as: z.string().min(1),
   })
   .strict();
+
+/**
+ * Plugin-data inject — read the runtime's OWN plugin-data namespace
+ * (cross-plugin reads are intentionally not supported) and inline a
+ * summarised view into the prompt. Used by increment-maintaining plugins
+ * (codex, char tracker, graph extractor) so the LLM sees existing state
+ * deterministically without needing a tool-call round-trip.
+ *
+ * `format`:
+ *  - `summary` (default): `- {key} | {updatedAt} | {json-truncated-200}`
+ *  - `ids-only`: `- {key}`
+ *  - `full`: `- {key}: {full-json}`
+ *
+ * `maxEntries` bounds token cost. When the namespace has more rows than
+ * the cap, a deterministic two-pass truncation is applied: half the quota
+ * goes to the oldest entries (createdAt ascending, stable "anchor" view)
+ * and the other half to the most recently updated entries. Entries appear
+ * in each slot at most once.
+ */
+export const pluginDataInjectDeclSchema = z
+  .object({
+    kind: z.literal('plugin-data'),
+    namespace: z
+      .string()
+      .min(1)
+      .max(64)
+      .regex(/^[a-z][a-z0-9_-]*$/i, {
+        message: 'namespace must be a short identifier (letters, digits, underscore, hyphen)',
+      }),
+    as: z.string().min(1),
+    format: z.enum(['summary', 'full', 'ids-only']).optional().default('summary'),
+    maxEntries: z.number().int().min(1).max(500).optional().default(50),
+  })
+  .strict();
+
+/**
+ * Discriminated union of inject declarations. The preprocess step normalises
+ * the legacy shape `{ from, field, as }` (no `kind` field) into an explicit
+ * `kind: 'runtime'` variant so we can use `z.discriminatedUnion` without
+ * breaking existing PLUGIN.md files.
+ */
+export const inputInjectDeclSchema = z.preprocess(
+  (val) => {
+    if (val && typeof val === 'object' && !Array.isArray(val) && !('kind' in val)) {
+      return { ...val, kind: 'runtime' };
+    }
+    return val;
+  },
+  z.discriminatedUnion('kind', [
+    runtimeInjectDeclSchema,
+    pluginDataInjectDeclSchema,
+  ]),
+);
 
 export const inputToolDeclSchema = z
   .object({

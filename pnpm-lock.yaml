@@ -65,6 +65,9 @@ importers:
       '@covel/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@covel/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../../packages/plugin-loader
@@ -420,6 +423,22 @@ importers:
       zod:
         specifier: ^4.3.6
         version: 4.3.6
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.2
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.2(@opentelemetry/api@1.9.0)(@types/node@25.5.2)(jsdom@26.1.0)(vite@8.0.8(@types/node@25.5.2)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+
+  packages/memory:
+    dependencies:
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@covel/store':
+        specifier: workspace:*
+        version: link:../store
     devDependencies:
       typescript:
         specifier: ^6.0.2

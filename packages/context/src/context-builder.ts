@@ -14,12 +14,14 @@
  */
 
 import { applyBudget } from './budget.js';
-import { buildContextV2 } from './prompt-assembler.js';
+import { buildContextV2, buildContextV2Async } from './prompt-assembler.js';
 import {
   assemblePromptVariables,
   buildCurrentTurnUserMessage,
   buildInjectBlocks as _buildInjectBlocks,
+  buildInjectBlocksAsync,
   interpolateTemplate as _interpolateTemplate,
+  renderCoreMemory,
   renderWorkingMemory,
   resolveLocaleLanguageName,
 } from './prompt-internals.js';
@@ -187,6 +189,12 @@ export function buildContext(
   // Interpolate template variables
   let systemPrompt = _interpolateTemplate(rawSystemPrompt, variables);
 
+  // Inject Core Memory blocks (Letta-style) — highest priority context
+  const cmSegment = renderCoreMemory(params.coreMemoryBlocks, params.turnInput.locale);
+  if (cmSegment) {
+    systemPrompt = `${cmSegment}\n\n${systemPrompt}`;
+  }
+
   // Inject Working Memory segment (S3-T3) — placed before other blocks
   const wmSegment = renderWorkingMemory(params.workingMemory);
   if (wmSegment) {
@@ -214,6 +222,96 @@ export function buildContext(
   // Conditional pruning gate — opt-in via feature flag + caller must supply
   // both an estimator and a budget config. Default behavior (flag unset) is
   // unchanged from the pre-S1-T2 semantics.
+  const budgetEnabled =
+    params.estimator !== undefined &&
+    params.contextBudget !== undefined &&
+    process.env.COVEL_CONTEXT_BUDGET_V1 === '1';
+
+  if (budgetEnabled) {
+    const result = applyBudget(systemPrompt, messages, {
+      ...params.contextBudget!,
+      estimator: params.estimator!,
+    });
+    return { systemPrompt, messages: result.messages };
+  }
+
+  return { systemPrompt, messages };
+}
+
+/**
+ * Determine whether a manifest requires the async build path.
+ *
+ * Returns `true` when the manifest declares at least one `input.inject`
+ * entry with `kind: 'plugin-data'`. Callers use this to decide between
+ * {@link buildContext} (sync, legacy) and {@link buildContextAsync}
+ * (async, supports plugin-data inject). Manifests without plugin-data
+ * injects stay on the sync path for zero-risk backward compatibility.
+ */
+export function needsAsyncBuild(params: Pick<ContextBuildParams, 'manifest'>): boolean {
+  const injects = params.manifest.input?.inject;
+  if (!injects || injects.length === 0) return false;
+  return injects.some((i) => (i as { kind?: string }).kind === 'plugin-data');
+}
+
+/**
+ * Async assembly path — semantically identical to {@link buildContext} but
+ * supports `input.inject` entries of kind `plugin-data`, which require a
+ * store round-trip to materialise.
+ *
+ * Routing rules mirror the sync path:
+ *   - `COVEL_PROMPT_V2=1` + `manifest.promptVersion === 2` → V2 async
+ *   - otherwise → V1 async
+ *
+ * The V1 async path is a drop-in copy of {@link buildContext} except it
+ * `await`s the inject-block resolver. Keeping both paths around lets the
+ * sync path (and all its tests) remain untouched during the rollout. Once
+ * async is proven stable the sync helpers can be removed per OQ-4.
+ */
+export async function buildContextAsync(
+  params: ContextBuildParams,
+): Promise<AssembledContext> {
+  if (
+    process.env.COVEL_PROMPT_V2 === '1' &&
+    params.manifest.promptVersion === 2
+  ) {
+    return buildContextV2Async(params);
+  }
+
+  const { promptTemplate, turnInput } = params;
+
+  const injectBlocks = await buildInjectBlocksAsync(params);
+  const rawSystemPrompt = injectBlocks
+    ? `${promptTemplate}\n${injectBlocks}`
+    : promptTemplate;
+
+  const variables = assemblePromptVariables(params);
+  let systemPrompt = _interpolateTemplate(rawSystemPrompt, variables);
+
+  const cmSegment2 = renderCoreMemory(params.coreMemoryBlocks, turnInput.locale);
+  if (cmSegment2) {
+    systemPrompt = `${cmSegment2}\n\n${systemPrompt}`;
+  }
+
+  const wmSegment = renderWorkingMemory(params.workingMemory);
+  if (wmSegment) {
+    systemPrompt = `${wmSegment}\n\n${systemPrompt}`;
+  }
+
+  if (turnInput.locale) {
+    const langName = resolveLocaleLanguageName(turnInput.locale);
+    systemPrompt += `\n\n[LANGUAGE] You MUST respond in ${langName}. All narrative output, tool parameters, and descriptions must be in ${langName}.`;
+  }
+
+  const historyMessages: LLMMessage[] = buildMessageHistoryWithSummaries(
+    params.messageHistory ?? [],
+    params.summaries ?? [],
+  );
+
+  const messages: readonly LLMMessage[] = [
+    ...historyMessages,
+    { role: 'user', content: buildCurrentTurnUserMessage(turnInput) },
+  ];
+
   const budgetEnabled =
     params.estimator !== undefined &&
     params.contextBudget !== undefined &&

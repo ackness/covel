@@ -117,6 +117,7 @@ export interface ExecutionStep {
   status: "running" | "completed" | "failed";
   label?: string;
   durationMs?: number;
+  turnId?: string;
 }
 
 export interface PendingInteractionDraft {
@@ -431,6 +432,7 @@ function processSSEEvent(eventType: string, data: Record<string, unknown>) {
           status: "running",
           pluginId: data.pluginId as string,
           label: data.label as string,
+          turnId: data.turnId as string | undefined,
         });
         // Create a streaming placeholder for every runtime. Non-story runtimes
         // won't receive any narrative.delta (useStreaming is gated on
@@ -501,7 +503,7 @@ function processSSEEvent(eventType: string, data: Record<string, unknown>) {
 async function readActionStream(stream: AsyncIterable<SseEvent>) {
   for await (const evt of stream) {
     const data = (evt.data ?? {}) as Record<string, unknown>;
-    const eventType = evt.type || (data.type as string) || "unknown";
+    const eventType = (data.type as string) || evt.type || "unknown";
     const payload = data.payload
       ? {
           ...(data.payload as Record<string, unknown>),
@@ -635,6 +637,59 @@ export function togglePluginSelection(pluginName: string) {
   update({ selectedPlugins: [...selected] });
 }
 
+/**
+ * Rebuild ExecutionStep[] from snapshot trace events (runtime.started / runtime.completed).
+ * This allows historical runtime status to persist across session resume.
+ */
+function rebuildExecutionSteps(
+  traceEvents: Array<{ type: string; turnId: string; payload: Record<string, unknown>; timestamp: string }>,
+): ExecutionStep[] {
+  const map = new Map<string, ExecutionStep>();
+
+  for (const evt of traceEvents) {
+    const payload = evt.payload;
+    const runtimeId = payload.runtimeId as string | undefined;
+    if (!runtimeId) continue;
+
+    if (evt.type === "runtime.started") {
+      map.set(`${evt.turnId}:${runtimeId}`, {
+        runtimeId,
+        pluginId: (payload.pluginId as string) ?? "",
+        status: "running",
+        label: (payload.pluginId as string) ?? runtimeId,
+        turnId: evt.turnId,
+      });
+    } else if (evt.type === "runtime.completed") {
+      const key = `${evt.turnId}:${runtimeId}`;
+      const existing = map.get(key);
+      if (existing) {
+        map.set(key, {
+          ...existing,
+          status: (payload.status as string) === "failed" ? "failed" : "completed",
+          durationMs: payload.durationMs as number | undefined,
+        });
+      } else {
+        map.set(key, {
+          runtimeId,
+          pluginId: (payload.pluginId as string) ?? "",
+          status: (payload.status as string) === "failed" ? "failed" : "completed",
+          label: (payload.pluginId as string) ?? runtimeId,
+          durationMs: payload.durationMs as number | undefined,
+          turnId: evt.turnId,
+        });
+      }
+    } else if (evt.type === "runtime.failed") {
+      const key = `${evt.turnId}:${runtimeId}`;
+      const existing = map.get(key);
+      if (existing) {
+        map.set(key, { ...existing, status: "failed" });
+      }
+    }
+  }
+
+  return Array.from(map.values());
+}
+
 export async function resumeSession(sessionId: string, worldId: string) {
   update({ error: null });
 
@@ -693,6 +748,11 @@ export async function resumeSession(sessionId: string, worldId: string) {
     }),
   );
 
+  // Rebuild execution steps from snapshot trace events so that historical
+  // runtime status (which runtimes ran, how long each took) is preserved
+  // across session resume for post-game analysis.
+  const restoredSteps = rebuildExecutionSteps(snapshot.executionSteps);
+
   saveSessionToStorage(sessionId, worldId);
   setSidInUrl(sessionId);
   update({
@@ -701,7 +761,7 @@ export async function resumeSession(sessionId: string, worldId: string) {
     messages,
     phase: "playing",
     executing: false,
-    executionSteps: [],
+    executionSteps: restoredSteps,
     messageUiSpecs: state.messageUiSpecs,
     composerText: "",
     pendingInteractionDrafts: [],
@@ -799,7 +859,7 @@ export async function sendMessage(content?: string) {
       });
     }
 
-    update({ executing: true, executionSteps: [], composerText: "", pendingInteractionDrafts: [] });
+    update({ executing: true, composerText: "", pendingInteractionDrafts: [] });
     const stream = api.postAction({
       type: "send_message",
       sessionId: state.session.id,
@@ -809,7 +869,7 @@ export async function sendMessage(content?: string) {
     await readActionStream(stream);
 
     if (autoContinue) {
-      update({ executing: true, executionSteps: [] });
+      update({ executing: true });
       const followup = api.postAction({
         type: "send_message",
         sessionId: state.session.id,
@@ -872,7 +932,11 @@ export async function retryRuntime(runtimeId?: string) {
     update({ messages: kept });
   }
 
-  update({ executing: true, executionSteps: [], error: null });
+  // Remove execution steps for the retried turn, keep history from earlier turns
+  const retryKeptSteps = lastTurnId
+    ? state.executionSteps.filter((s) => s.turnId !== lastTurnId)
+    : state.executionSteps;
+  update({ executing: true, executionSteps: retryKeptSteps, error: null });
 
   try {
     const stream = api.postAction({

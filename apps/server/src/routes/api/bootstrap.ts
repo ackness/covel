@@ -42,6 +42,7 @@ import {
   createPluginDataTools,
   createCharacterTools,
   createWorldDimensionTools,
+  createMemoryTools,
   suspendTool,
   tool,
   shortId,
@@ -49,6 +50,7 @@ import {
   type ToolModule,
 } from '@covel/tools';
 import { z } from 'zod';
+import { createMemorySystem, type MemorySystem } from '@covel/memory';
 import { createApprovalPipeline, createRpcApprovalGate } from '@covel/approval';
 import type { PermissionRule, RpcApprovalGate } from '@covel/approval';
 
@@ -65,7 +67,7 @@ import { submitInputsRoutes } from './submit-inputs.js';
 import { worldRoutes } from './worlds.js';
 import { messageRoutes } from './messages.js';
 import { characterRoutes } from './characters.js';
-import { actionRoutes } from './actions.js';
+import { actionRoutes, setMemorySystem } from './actions.js';
 import { subscribeRoutes } from './subscribe.js';
 import { pluginDataRoutes } from './plugin-data.js';
 import { workingMemoryRoutes } from './working-memory.js';
@@ -507,7 +509,51 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     },
   };
 
-  // 8. Create app with dependency injection middleware
+  // 8. Create memory system (Letta-style three-tier memory)
+  // When COVEL_MEMORY_V1=1, creates the full memory system with core memory
+  // blocks, recall/archival search, and compaction. Slot resolution: memory → story.
+  let memorySystem: MemorySystem | undefined;
+  console.log(`[bootstrap] COVEL_MEMORY_V1=${process.env.COVEL_MEMORY_V1 ?? '(unset)'}`);
+  if (process.env.COVEL_MEMORY_V1 === '1') {
+    // Resolve which preset to use for memory LLM calls.
+    // Gateway presets use "slot-<name>" format (e.g. "slot-plugin", "slot-story").
+    // Priority: slot-memory → slot-plugin → slot-story.
+    // We use the `plugin` slot as default because it's always configured and cheap.
+    const resolvedMemoryPreset = 'slot-plugin';
+    console.log(`[bootstrap] Memory system using preset: ${resolvedMemoryPreset}`);
+
+    const memoryLlm = {
+      async complete(params: { systemPrompt: string; messages: readonly { role: string; content: string }[]; model?: string }) {
+        const response = await config.llmAdapter.generate({
+          model: resolvedMemoryPreset,
+          messages: [
+            { role: 'system', content: params.systemPrompt },
+            ...params.messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+          ],
+        });
+        return { content: response.content ?? '' };
+      },
+    };
+    memorySystem = createMemorySystem(
+      { store, llm: memoryLlm, resolveSlot: (slot: string) => resolveModel({ name: slot, model: slot } as RuntimeManifest) },
+      { updater: { modelSlot: resolvedMemoryPreset } },
+    );
+
+    // Register memory tools as builtins
+    for (const t of createMemoryTools({
+      recall: memorySystem.recall,
+      archival: memorySystem.archival,
+      blocks: memorySystem.manager,
+    })) {
+      toolMap.set(t.name, t);
+      builtinToolNames.add(t.name);
+    }
+
+    setMemorySystem(memorySystem);
+    console.log('[bootstrap] Memory system (V1) initialized — core memory blocks + recall/archival search');
+  }
+
+  // 9. Create app with dependency injection middleware
   const app = new Hono();
 
   const isDev = process.env.NODE_ENV !== 'production';
@@ -531,6 +577,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     c.set('getConfigFn', getConfigFn);
     c.set('resolveModel', resolveModel);
     c.set('compactorRunner', compactorRunner);
+    // memorySystem injected via module-level setter, not Hono context
     c.set('rpcExecutor', rpcExecutor);
     c.set('rpcRegistry', rpcRegistry);
     c.set('rpcApprovalGate', rpcApprovalGate);

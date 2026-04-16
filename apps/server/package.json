@@ -18,6 +18,7 @@
     "@covel/context": "workspace:*",
     "@covel/create": "workspace:*",
     "@covel/events": "workspace:*",
+    "@covel/memory": "workspace:*",
     "@covel/plugin-loader": "workspace:*",
     "@covel/runtime": "workspace:*",
     "@covel/shared": "workspace:*",
