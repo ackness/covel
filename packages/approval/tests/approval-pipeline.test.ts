@@ -24,6 +24,7 @@ function makeRecord(overrides?: Partial<ApprovalRecord>): ApprovalRecord {
   return {
     approvalId: 'apr-1',
     toolName: 'covel_test_rt_my_tool',
+    pluginId: 'test',
     decision: 'allow-session',
     decidedAt: new Date().toISOString(),
     turnId: 'turn-1',
@@ -170,16 +171,22 @@ describe('createApprovalPipeline', () => {
 
     it('has session allow — returns true after allow-session decision', () => {
       pipeline.recordDecision(makeRecord({ decision: 'allow-session' }));
-      expect(pipeline.hasSessionAllow('sess-1', 'covel_test_rt_my_tool')).toBe(true);
+      expect(pipeline.hasSessionAllow('sess-1', 'covel_test_rt_my_tool', 'test')).toBe(true);
     });
 
     it('no session allow — returns false when no record exists', () => {
-      expect(pipeline.hasSessionAllow('sess-1', 'covel_test_rt_my_tool')).toBe(false);
+      expect(pipeline.hasSessionAllow('sess-1', 'covel_test_rt_my_tool', 'test')).toBe(false);
     });
 
     it('allow-once does not count as session allow', () => {
       pipeline.recordDecision(makeRecord({ decision: 'allow-once' }));
-      expect(pipeline.hasSessionAllow('sess-1', 'covel_test_rt_my_tool')).toBe(false);
+      expect(pipeline.hasSessionAllow('sess-1', 'covel_test_rt_my_tool', 'test')).toBe(false);
+    });
+
+    it('session allow for one plugin does not apply to another plugin', () => {
+      pipeline.recordDecision(makeRecord({ decision: 'allow-session', pluginId: 'plugin-a' }));
+      expect(pipeline.hasSessionAllow('sess-1', 'covel_test_rt_my_tool', 'plugin-a')).toBe(true);
+      expect(pipeline.hasSessionAllow('sess-1', 'covel_test_rt_my_tool', 'plugin-b')).toBe(false);
     });
   });
 });

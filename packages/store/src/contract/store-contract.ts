@@ -156,6 +156,7 @@ function makeApproval(overrides?: Partial<ApprovalRecord>): ApprovalRecord {
     id: id(),
     sessionId: 'sess-1',
     toolName: 'dangerous-tool',
+    pluginId: 'test-plugin',
     decision: 'approved',
     turnId: 'turn-1',
     createdAt: ts(),

@@ -157,6 +157,12 @@ sessionRoutes.post('/', async (c) => {
 
   const plugins = (Array.isArray(body.plugins) ? body.plugins : []) as string[];
 
+  // Validate that every requested plugin ID exists in the global registry
+  const unknownPlugins = plugins.filter((pid) => typeof pid === 'string' && !pluginRegistry.get(pid));
+  if (unknownPlugins.length > 0) {
+    return c.json({ error: `Unknown plugin IDs: ${unknownPlugins.join(', ')}` }, 400);
+  }
+
   const now = new Date().toISOString();
   const session: SessionRecord = {
     id,

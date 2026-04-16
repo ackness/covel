@@ -49,6 +49,31 @@ async function resolveLocalizedPluginMd(dir: string, locale?: string): Promise<s
 }
 
 /**
+ * Validate that `target` is inside `root` after resolving symlinks.
+ * Uses fs.realpath() to defeat symlink-based path traversal.
+ * Falls back to lexical check when the target does not exist on disk.
+ */
+async function assertInsideRoot(root: string, target: string, label: string): Promise<void> {
+  let realRoot: string;
+  let realTarget: string;
+  try {
+    realRoot = await fs.realpath(root);
+  } catch {
+    realRoot = path.resolve(root);
+  }
+  try {
+    realTarget = await fs.realpath(target);
+  } catch {
+    // Target doesn't exist — fall back to lexical check (safe: non-existent path can't be read)
+    realTarget = path.resolve(target);
+  }
+  const rel = path.relative(realRoot, realTarget);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error(`${label} path traversal rejected`);
+  }
+}
+
+/**
  * Check whether a path exists and is a file.
  */
 async function fileExists(p: string): Promise<boolean> {
@@ -187,10 +212,7 @@ async function loadUiSpecs(
     const specs: Readonly<Record<string, unknown>>[] = [];
     for (const relPath of paths) {
       const fullPath = path.resolve(runtimeDir, relPath);
-      const rel = path.relative(pluginRoot, fullPath);
-      if (rel.startsWith('..') || path.isAbsolute(rel)) {
-        throw new Error(`UI spec path traversal rejected: ${relPath}`);
-      }
+      await assertInsideRoot(pluginRoot, fullPath, 'UI spec');
       if (fullPath.endsWith('.json')) {
         const content = await fs.readFile(fullPath, 'utf-8');
         specs.push(JSON.parse(content) as Record<string, unknown>);
@@ -240,11 +262,7 @@ export async function loadRuntime(
   let handler: FunctionHandler | undefined;
   if (parsed.manifest.runtimeType === 'function' && parsed.manifest.handler) {
     const handlerPath = path.resolve(runtimeDir, parsed.manifest.handler);
-    // Security: prevent path traversal outside plugin root
-    const rel = path.relative(discovery.rootPath, handlerPath);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) {
-      throw new Error(`Handler path traversal rejected: ${parsed.manifest.handler}`);
-    }
+    await assertInsideRoot(discovery.rootPath, handlerPath, 'Handler');
     const mod = await import(handlerPath);
     handler = mod.default as FunctionHandler;
   }
@@ -253,11 +271,13 @@ export async function loadRuntime(
   let guard: FunctionHandler | undefined;
   if (parsed.manifest.guard) {
     const guardPath = path.resolve(runtimeDir, parsed.manifest.guard);
-    const rel = path.relative(discovery.rootPath, guardPath);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) {
-      throw new Error(`Guard path traversal rejected: ${parsed.manifest.guard}`);
-    }
+    await assertInsideRoot(discovery.rootPath, guardPath, 'Guard');
     const mod = await import(guardPath);
+    if (typeof mod.default !== 'function') {
+      throw new Error(
+        `Guard module "${parsed.manifest.guard}" does not export a default function (got ${typeof mod.default})`,
+      );
+    }
     guard = mod.default as FunctionHandler;
   }
 

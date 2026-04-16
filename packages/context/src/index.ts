@@ -11,10 +11,16 @@ export type {
 } from './types.js';
 
 // ── Context Builder ─────────────────────────────────────────────
-export { interpolateTemplate, buildInjectBlocks, buildContext } from './context-builder.js';
+export {
+  interpolateTemplate,
+  buildInjectBlocks,
+  buildContext,
+  buildContextAsync,
+  needsAsyncBuild,
+} from './context-builder.js';
 
 // ── Prompt Assembler V2 (S2-T1) ─────────────────────────────────
-export { buildContextV2 } from './prompt-assembler.js';
+export { buildContextV2, buildContextV2Async } from './prompt-assembler.js';
 export type { PromptSegments } from './prompt-assembler.js';
 
 // ── Token Budget ────────────────────────────────────────────────

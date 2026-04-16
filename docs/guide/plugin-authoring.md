@@ -247,12 +247,62 @@ Covel 的 turn pipeline 把每一轮拆成三段：
 
 如果一个 runtime 内部的"读"只是**自身去重**而非"为别的 runtime 注入 context"，单 runtime 既读又写没问题：
 
-- `core-codex` (650) 是 function runtime，先 `listPluginData` 查已有 entries 防重复，再 regex 抽取并 upsert。读没有跨 runtime 消费方，不需要拆。
+- `core-codex` (650) 是 agent runtime，通过 `input.inject: plugin-data` 让框架在 prompt 构建时把已有条目自动塞进 `<existing-entries>` 块，LLM 一次调用就决定 unlock 或 update（详见 §1.4.2）。读没有跨 runtime 消费方，不需要拆。
 - `core-char-creator/character-tracker` (750) 是 agent runtime，先 `list-characters` 给自己看现有角色 id 列表，再决定 create/update。同理不需要拆。
 
 判断标准：**这次"读"的结果有没有被别的 runtime 消费？**
 - 是 → 拆出 pre runtime，通过 `input.inject` 显式声明数据流
 - 否 → 留在原 runtime 里，作为内部 dedup / scratch state
+
+### 1.4.2 让 agent runtime 看到自己的已有状态（plugin-data inject）
+
+**场景**：任何需要"先看已有状态再决定新增 / 更新"的 agent runtime。典型代表：codex 要避免重复条目、tracker 要避免重复建 NPC、extractor 要避免重复建边。
+
+**错误做法**：在 prompt 里写一句"你必须先调用 `plugin-data-list` 拿已有数据"。
+- 依赖 LLM 的 instruction following，偶发偷懒就会退化成"每轮当全新条目处理" → 重复条目爆炸
+- 多花一次 LLM round-trip（第一次拿数据，第二次才写入），成本和延迟都翻倍
+
+**正确做法**：在 PLUGIN.md frontmatter 里声明 `input.inject: plugin-data`，让框架在 prompt 构建阶段自动把本插件已有的 plugin-data 注入到 system prompt。
+
+```yaml
+input:
+  inject:
+    - from: core-narrator
+      field: narrativeOutput
+      as: "<narrator-output>"
+    - kind: plugin-data
+      namespace: entries
+      as: "<existing-entries>"
+      format: summary          # summary | ids-only | full
+      maxEntries: 100          # 1..500，超出走两段式截断
+```
+
+LLM 拿到的 prompt 里会有两个 XML 块：
+
+```xml
+<narrator-output>
+...本轮叙事...
+</narrator-output>
+<existing-entries>
+- codex-bailing-marsh | 2025-04-10T... | {"title":"百灵沼泽","rarity":"rare",...}
+- codex-qingping-sect | 2025-04-09T... | {"title":"青萍宗",...}
+...
+[总计 120 条，展示 100 条]
+</existing-entries>
+```
+
+LLM 直接对照两个块即可判断"这个发现在不在已有条目里"，一次 LLM 调用就决定 `unlock-codex-entries`（新）或 `update-codex-entry`（补）。
+
+**要点：**
+
+- **只能读自己**：`namespace` 是本插件（`pluginId` 由框架从 manifest 注入）的命名空间。跨插件读不支持，会直接拒绝。
+- **format 选哪个**：`summary` 是默认，每行 `key | updatedAt | JSON-snippet(200)`，通用且不依赖 value schema；`ids-only` 最省 token；`full` 调试用。
+- **maxEntries**：默认 50，codex 这类条目多的可以调到 100。超过 500 会被 schema 拒绝。
+- **两段式截断**：条目数超过 `maxEntries` 时，前半按 `createdAt` 升序（最早的"锚"永远可见，防止 session 后期误把老条目当成新条目），后半按 `updatedAt` 倒序（最近活跃）。两段互斥。末尾追加 `[总计 N 条，展示 M 条]` 提示。
+- **空 namespace**：返回 `<tag>暂无</tag>`，让 LLM 知道"空"而不是"被截断了"。
+- **错误传播**：`listPluginData` 失败会让 runtime 直接失败，错误走观测通道（trace + `runtime_outputs.error`），不会污染下游 runtime 的 context（由 Phase 0 错误隔离审计保证）。
+
+**框架如何识别**：只要 manifest 的 `input.inject` 里出现至少一个 `kind: plugin-data` 条目，`turn-executor` 就会把该 runtime 切到 `buildContextAsync` 路径，调 `store.listPluginData` 拿数据；其他 runtime 继续走原来的同步 `buildContext`，零开销零回归。
 
 #### 框架不拦截写入
 

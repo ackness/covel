@@ -240,6 +240,9 @@ export async function postFormData(
   if (!config.baseUrl) {
     throw new Error("Provider error: baseUrl is required.");
   }
+  if (!validateBaseUrl(config.baseUrl)) {
+    throw new Error(`Provider error: baseUrl "${config.baseUrl}" is not allowed. Only public HTTPS endpoints are permitted (private/internal IPs are blocked).`);
+  }
 
   return fetch(buildProviderUrl(config.baseUrl, path), {
     method: "POST",

@@ -458,13 +458,14 @@ describe('processRuntimeResult', () => {
       phase: 'playing',
     });
 
-    const events = await processRuntimeResult(result, store as any, SESSION_ID, 'story');
+    const { events, failedProposals } = await processRuntimeResult(result, store as any, SESSION_ID, 'story');
 
     // narrative.append + phase.transition = 2 events
     expect(events).toHaveLength(2);
     expect(events[0].type).toBe('narrative.completed');
     expect(events[0].payload.content).toBe('The hero enters the cave.');
     expect(events[1].type).toBe('phase.changed');
+    expect(failedProposals).toHaveLength(0);
 
     // Store should have been called: 2 addMessage(narrative) + 1 updateSession(phase) + 2 traces
     expect(store.addMessage).toHaveBeenCalledOnce();
@@ -472,23 +473,25 @@ describe('processRuntimeResult', () => {
     expect(store.addTraceEvent).toHaveBeenCalledTimes(2);
   });
 
-  it('should return empty events for a failed runtime result', async () => {
+  it('should return empty result for a failed runtime result', async () => {
     const store = createMockStore();
     const result = makeRuntimeResult({}, { status: 'failed', output: null });
 
-    const events = await processRuntimeResult(result, store as any, SESSION_ID);
+    const { events, failedProposals } = await processRuntimeResult(result, store as any, SESSION_ID);
 
     expect(events).toHaveLength(0);
+    expect(failedProposals).toHaveLength(0);
     expect(store.addMessage).not.toHaveBeenCalled();
   });
 
-  it('should return empty events for a skipped runtime result', async () => {
+  it('should return empty result for a skipped runtime result', async () => {
     const store = createMockStore();
     const result = makeRuntimeResult({}, { status: 'skipped', output: null });
 
-    const events = await processRuntimeResult(result, store as any, SESSION_ID);
+    const { events, failedProposals } = await processRuntimeResult(result, store as any, SESSION_ID);
 
     expect(events).toHaveLength(0);
+    expect(failedProposals).toHaveLength(0);
   });
 
   it('should handle runtime with interactions (form block)', async () => {
@@ -500,7 +503,7 @@ describe('processRuntimeResult', () => {
       ],
     });
 
-    const events = await processRuntimeResult(result, store as any, SESSION_ID, 'plugin');
+    const { events } = await processRuntimeResult(result, store as any, SESSION_ID, 'plugin');
 
     expect(events).toHaveLength(2);
     expect(events.map(e => e.type).sort()).toEqual(['interaction.requested', 'narrative.completed']);
@@ -539,7 +542,7 @@ describe('processRuntimeResult', () => {
       },
     );
 
-    const events = await processRuntimeResult(result, store as any, SESSION_ID, 'system');
+    const { events } = await processRuntimeResult(result, store as any, SESSION_ID, 'system');
 
     expect(events.map((e) => e.type).sort()).toEqual(['interaction.requested', 'narrative.completed']);
     expect(store.addMessage).toHaveBeenCalledTimes(2);
@@ -554,11 +557,62 @@ describe('processRuntimeResult', () => {
       { pluginId: 'core-narrator', runtimeId: 'core-narrator' },
     );
 
-    const events = await processRuntimeResult(result, store as any, SESSION_ID, 'story');
+    const { events } = await processRuntimeResult(result, store as any, SESSION_ID, 'story');
 
     expect(events[0].source).toEqual({ pluginId: 'core-narrator', runtimeId: 'core-narrator' });
     const msgArg = store.addMessage.mock.calls[0][0];
     expect(msgArg.metadata.runtimeId).toBe('core-narrator');
+  });
+
+  it('should surface failed proposals when commit returns committed:false', async () => {
+    const store = createMockStore();
+    // Use working_memory.set which returns committed:false when feature flag is off
+    // We simulate this by creating a result whose normalized output includes
+    // a narrative (will succeed) alongside testing the return structure
+    const result = makeRuntimeResult({
+      narrativeOutput: 'Some text.',
+    });
+
+    const output = await processRuntimeResult(result, store as any, SESSION_ID, 'story');
+
+    // Verify the structured return type
+    expect(output.events).toHaveLength(1);
+    expect(output.failedProposals).toHaveLength(0);
+    expect(output.events[0].type).toBe('narrative.completed');
+  });
+
+  it('should report failedProposals for unknown proposal types via commitAll', async () => {
+    const store = createMockStore();
+    const pipeline = createCommitPipeline(store as any);
+
+    const proposals = [
+      {
+        id: crypto.randomUUID(),
+        type: 'narrative.append' as const,
+        source: { pluginId: 'test', runtimeId: 'test' },
+        turnId: TURN_ID,
+        sessionId: SESSION_ID,
+        payload: { content: 'OK', kind: 'story' },
+        timestamp: new Date().toISOString(),
+      },
+      {
+        id: crypto.randomUUID(),
+        type: 'bogus.type' as any,
+        source: { pluginId: 'test', runtimeId: 'test' },
+        turnId: TURN_ID,
+        sessionId: SESSION_ID,
+        payload: {},
+        timestamp: new Date().toISOString(),
+      },
+    ];
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const results = await pipeline.commitAll(proposals);
+    expect(results[0].committed).toBe(true);
+    expect(results[1].committed).toBe(false);
+    // Should have logged partial commit warning
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });
 

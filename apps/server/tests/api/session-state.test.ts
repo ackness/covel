@@ -166,16 +166,17 @@ describe('Session Routes', () => {
       expect(body1.id).not.toBe(body2.id);
     });
 
-    it('accepts optional plugins list', async () => {
+    it('rejects unknown plugin IDs with 400', async () => {
       const res = await app.request('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plugins: ['core-narrator', 'core-combat'] }),
       });
 
-      expect(res.status).toBe(200);
+      // Empty registry → both IDs are unknown → 400
+      expect(res.status).toBe(400);
       const body = await json(res) as Record<string, unknown>;
-      expect(body.activePlugins).toEqual(['core-narrator', 'core-combat']);
+      expect(body).toHaveProperty('error');
     });
   });
 

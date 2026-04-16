@@ -140,6 +140,11 @@ export const stateEntries = sqliteTable(
       table.tableName,
       table.fieldName,
     ),
+    uniqueIndex('state_entries_unique_idx').on(
+      table.sessionId,
+      table.tableName,
+      table.fieldName,
+    ),
   ],
 );
 
@@ -196,6 +201,7 @@ export const approvals = sqliteTable(
     id: text('id').primaryKey(),
     sessionId: text('session_id').notNull(),
     toolName: text('tool_name').notNull(),
+    pluginId: text('plugin_id').notNull().default(''),
     decision: text('decision').notNull(),
     turnId: text('turn_id').notNull(),
     createdAt: text('created_at').notNull(),

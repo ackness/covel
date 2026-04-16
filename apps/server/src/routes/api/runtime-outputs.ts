@@ -109,7 +109,24 @@ runtimeOutputRoutes.get('/:id/runtime-outputs/:outputId/full-prompt', async (c) 
   }
 
   const turnMessages = await store.listTurnMessages(sessionId);
-  const history = turnMessages
+
+  // Find the cutoff: only include messages up to and including the target turn.
+  // Messages are sorted by createdAt; find the last index belonging to the
+  // target turnId, then slice up to (and including) that index.
+  const targetTurnId = record.turnId;
+  let cutoffIndex = -1;
+  for (let i = turnMessages.length - 1; i >= 0; i--) {
+    if (turnMessages[i].turnId === targetTurnId) {
+      cutoffIndex = i;
+      break;
+    }
+  }
+
+  const relevantMessages = cutoffIndex >= 0
+    ? turnMessages.slice(0, cutoffIndex + 1)
+    : turnMessages; // fallback: if turnId not found in messages, include all
+
+  const history = relevantMessages
     .filter((m) => m.compactedAtTurnId == null)
     .map((m) => ({
       role: m.role,

@@ -180,19 +180,19 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 |------|----|
 | pluginType | `plugin`（可禁用） |
 | priority | 650 |
-| runtimeType | `function` |
-| handler | `./handler.js` |
+| runtimeType | `agent`（默认，LLM 驱动） |
 | trigger | `scheduled`，`interval: 2`，`cooldownTurns: 1`，`phases: [playing]` |
 | model | `plugin` |
 | tools.local | `unlock-codex-entries`, `update-codex-entry` |
-| tools.builtin | `plugin-data-list`, `create-notification` |
 | ui.right | `./ui/codex-panel.json` |
 | ui.message | `./ui/codex-message.json` |
-| input.inject | 无 |
+| input.inject | `core-narrator` → `narrativeOutput` → `<narrator-output>`<br>`plugin-data[entries]` → `<existing-entries>`（`format: summary`，`maxEntries: 100`） |
 
-**职责**: 分析叙事文本，识别并记录玩家发现的知识条目（怪物、道具、地点、传说、人物、技能）。当前实现是 deterministic handler：它直接提取高信号条目，写入 `plugin_data[entries]`，并同步写入 `plugin_data[message]` 作为聊天内摘要。
+**职责**: 分析叙事文本，识别并登记本轮出现的知识条目（地点 / 人物 / 势力 / 物品 / 技能 / 传闻 / 怪物）。对"没有新发现"的回合直接结束。prompt 里同时看到本轮叙事 `<narrator-output>` 和已登记条目 `<existing-entries>`，所以 LLM 一次调用即可决定是 `unlock-codex-entries`（新增）还是 `update-codex-entry`（补充已有），无需额外调用 `plugin-data-list` 往返。
 
-**数据持久化**: 当前 `handler.js` 直接完成 `plugin_data` 写入；`tools/` 目录中的 codex 工具仍保留在插件包内，供独立测试与后续演进使用。
+**数据持久化**: `unlock-codex-entries` 批量写入 `plugin_data[entries]`；`update-codex-entry` 读取指定 `entryId`（就是 plugin-data 的 key，形如 `codex-xxx`）并按 append-only 语义合并内容、合并标签、可选升级 `rarity`。
+
+**框架能力依赖**：`input.inject: plugin-data` source 由 `@covel/context` 的 async build 路径提供；当 manifest 声明了任何 `kind: plugin-data` 注入时，turn-executor 会自动切到异步装配路径并调用 `store.listPluginData(sessionId, pluginId, namespace)`。同步路径保持零改动，其他插件不受影响。
 
 **UI 面板**: `ui/codex-panel.json` 承接完整图鉴，`ui/codex-message.json` 负责聊天内的本轮新增摘要。框架通过 `/api/ui-specs` 发现并渲染这两个 surface。
 
@@ -510,6 +510,68 @@ rpc:
 | `submit-form` | 持久化玩家表单 / 选择 / 确认 提交,填充模板 narrative。等同于 legacy `POST /api/sessions/:id/submit-inputs` |
 
 详细 API 说明见 [api.md `POST /api/sessions/:id/plugin-rpc`](api.md#post-apisessionsidplugin-rpc),作者指南见 [../guide/plugin-authoring.md §2.3.1](../guide/plugin-authoring.md)。
+
+### input.inject（prompt 上下文注入）
+
+声明"在 LLM 调用前要注入到 system prompt 里的上下文块"。每条 entry 是一个独立的 XML 块，按声明顺序拼接在 PLUGIN.md 正文末尾。支持两种 `kind`：
+
+#### `kind: runtime`（默认，向后兼容）
+
+读取前序 runtime 的结构化 output 字段。legacy 写法（不写 `kind`）会在 schema 层被自动 normalise 成 `kind: 'runtime'`，所以已有 PLUGIN.md 不需要改。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `kind` | `'runtime'`（可省略） | 省略时等价于 `'runtime'` |
+| `from` | `string`（必填） | 源 runtime name，可以是 `pluginId` 或 `pluginId/runtimeId` |
+| `field` | `string`（必填） | 从源 runtime `output` 里取的字段名 |
+| `as` | `string`（必填） | 包裹 XML 标签，如 `"<narrator-output>"` |
+
+如果源 runtime 本回合没有执行、失败、或指定字段不存在，该 entry 静默跳过，不会污染其他注入块。
+
+#### `kind: plugin-data`（本插件自己的 plugin-data 状态注入）
+
+在 prompt 构建时调用 `store.listPluginData(sessionId, pluginId, namespace)` 拿到本插件**自己**的 plugin-data 记录（跨插件读故意不支持），按声明的 `format` 序列化后注入。适合"增量维护状态"类插件：codex 先看已有条目再决定增/改，character-tracker 先看已有角色再决定 create/update，等等。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `kind` | `'plugin-data'`（必填） | 显式 discriminator |
+| `namespace` | `string`（必填） | 本插件的 plugin-data namespace |
+| `as` | `string`（必填） | XML 标签，如 `"<existing-entries>"` |
+| `format` | `'summary' \| 'full' \| 'ids-only'`（可选，默认 `'summary'`） | 序列化方式，见下 |
+| `maxEntries` | `number`（可选，默认 `50`，范围 `[1, 500]`） | Token 预算保护 |
+
+**Format 说明：**
+
+| format | 每行结构 | 适用场景 |
+|--------|---------|----------|
+| `summary` | `- {key} \| {updatedAt} \| {json-truncated-200}` | 默认，够 LLM 判断重复/匹配 |
+| `ids-only` | `- {key}` | 最省 token，只做 ID 存在性检查 |
+| `full` | `- {key}: {full-json}` | 调试或小条目集 |
+
+**两段式截断**：当条目数 > `maxEntries` 时，框架采用确定性的两段式截断——前半按 `createdAt` 升序取"最早的锚"（保证老条目永远可见，防止 session 后期 callback 老地点被当成重复 unlock），后半按 `updatedAt` 倒序取"最近活跃"，两段互相去重。超出时追加一行 `[总计 N 条，展示 M 条]`。
+
+**空 namespace**：返回 `<tag>暂无</tag>`，让 LLM 明确知道"空"而不是"被截断了"。
+
+**错误路径**：`store.listPluginData` 失败会让 runtime 直接失败，错误走观测通道（`runtime_outputs.error` + trace），**不污染下游任何 runtime 的 context**（由 Phase 0 审计保证：失败 runtime 不进入 `completedResults`，无路径泄漏到 narrator）。
+
+**框架能力**：当 manifest 声明了任意 `kind: plugin-data` 注入时，`turn-executor` 自动切换到 `buildContextAsync` 路径；其他 runtime 继续走同步 `buildContext`，零开销零回归。
+
+示例 frontmatter：
+
+```yaml
+input:
+  inject:
+    # Legacy runtime inject（不写 kind，自动 normalise）
+    - from: core-narrator
+      field: narrativeOutput
+      as: "<narrator-output>"
+    # 新 plugin-data inject
+    - kind: plugin-data
+      namespace: entries
+      as: "<existing-entries>"
+      format: summary
+      maxEntries: 100
+```
 
 ### 优先级分带
 

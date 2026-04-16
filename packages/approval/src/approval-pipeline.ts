@@ -35,8 +35,8 @@ export interface ApprovalPipeline {
   getSessionApprovals(sessionId: string): readonly ApprovalRecord[];
   /** Record an approval decision. */
   recordDecision(record: ApprovalRecord): void;
-  /** Check if a tool has a session-level allow decision. */
-  hasSessionAllow(sessionId: string, toolName: string): boolean;
+  /** Check if a tool has a session-level allow decision for a specific plugin. */
+  hasSessionAllow(sessionId: string, toolName: string, pluginId: string): boolean;
 }
 
 /** Source-category wildcards supported by permission rules. */
@@ -80,6 +80,7 @@ function toStoreApproval(record: ApprovalRecord): StoreApprovalRecord {
     id: record.approvalId,
     sessionId: record.sessionId,
     toolName: record.toolName,
+    pluginId: record.pluginId,
     decision: record.decision,
     turnId: record.turnId,
     createdAt: record.decidedAt,
@@ -162,13 +163,13 @@ export function createApprovalPipeline(store?: DataStore, rules?: readonly Permi
     }
   }
 
-  function hasSessionAllow(sessionId: string, toolName: string): boolean {
+  function hasSessionAllow(sessionId: string, toolName: string, pluginId: string): boolean {
     const records = sessionRecords.get(sessionId);
     if (records === undefined) {
       return false;
     }
     return records.some(
-      (r) => r.toolName === toolName && r.decision === 'allow-session',
+      (r) => r.toolName === toolName && r.pluginId === pluginId && r.decision === 'allow-session',
     );
   }
 

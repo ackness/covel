@@ -4,6 +4,7 @@
 
 import { Hono } from 'hono';
 import type { DataStore } from '@covel/store';
+import { rateLimiter } from '../../middleware/rate-limit.js';
 
 type Env = {
   Variables: {
@@ -41,7 +42,7 @@ messageRoutes.get('/:id/messages', async (c) => {
 });
 
 // POST /sessions/:id/messages/sync — bulk upsert messages (LocalDataService)
-messageRoutes.post('/:id/messages/sync', async (c) => {
+messageRoutes.post('/:id/messages/sync', rateLimiter({ max: 60 }), async (c) => {
   const store = c.get('store');
   const sessionId = c.req.param('id');
   const session = await store.getSession(sessionId);

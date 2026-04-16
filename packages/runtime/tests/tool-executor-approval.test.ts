@@ -129,7 +129,7 @@ describe('ToolExecutor with ApprovalPipeline', () => {
       await executor.execute(makeCall('dangerous-action', { target: 'x' }), ctx);
       const calls = await store.listToolCalls('sess-1');
       expect(calls).toHaveLength(1);
-      expect(calls[0].approvalStatus).toBe('denied');
+      expect(calls[0].approvalStatus).toBe('user-denied');
     });
   });
 

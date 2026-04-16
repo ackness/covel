@@ -7,6 +7,7 @@ import type { RuntimeManifest } from '@covel/shared';
 import type { PluginRegistry, LoadedRuntime } from '@covel/plugin-loader';
 import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
 import { executeTurn, processRuntimeResult } from '@covel/runtime';
+import { rateLimiter } from '../../middleware/rate-limit.js';
 import { loadSessionConfig } from './load-session-config.js';
 import type { DataStore } from '@covel/store';
 import type { CompactorRunner } from '@covel/context';
@@ -27,7 +28,7 @@ type Env = {
 export const turnRoutes = new Hono<Env>();
 
 // POST /session/:id/turn — Execute a player turn
-turnRoutes.post('/:id/turn', async (c) => {
+turnRoutes.post('/:id/turn', rateLimiter({ max: 30 }), async (c) => {
   const store = c.get('store');
   const pluginRegistry = c.get('pluginRegistry');
   const llmAdapter = c.get('llmAdapter');
@@ -85,9 +86,12 @@ turnRoutes.post('/:id/turn', async (c) => {
     },
   );
 
-  // Update session turn count
+  // Update session turn count — derive from actual turn results to avoid
+  // concurrent read-modify-write races (two parallel turns reading the same
+  // stale `session.turnCount` and overwriting each other).
+  const turnResults = await store.listTurnResults(sessionId);
   await store.updateSession(sessionId, {
-    turnCount: session.turnCount + 1,
+    turnCount: turnResults.length,
     updatedAt: new Date().toISOString(),
   });
 

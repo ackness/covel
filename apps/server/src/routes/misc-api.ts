@@ -118,7 +118,7 @@ async function buildPluginFlowResponse() {
       phases: string[];
       startTurn?: number;
     };
-    injects: Array<{ from: string; field: string; as: string }>;
+    injects: Array<{ kind: string; as: string; from?: string; field?: string; namespace?: string; format?: string }>;
     tools: { builtin: string[]; local: string[] };
     uiSlots: string[];
     docPath: string;
@@ -172,8 +172,10 @@ async function buildPluginFlowResponse() {
           startTurn: manifest.trigger?.startTurn,
         },
         injects: (manifest.input?.inject ?? []).map((inject) => ({
-          from: inject.from,
-          field: inject.field,
+          kind: inject.kind,
+          ...(inject.kind === 'runtime'
+            ? { from: inject.from, field: inject.field }
+            : { namespace: inject.namespace, format: inject.format }),
           as: inject.as,
         })),
         tools: {
@@ -508,21 +510,39 @@ export function createMiscApiRoutes(
 
   // GET /api/provider-keys — return server-configured API keys (T1 self-deploy only)
   app.get('/api/provider-keys', (c) => {
-    // Security: only expose server-side keys in T1 (self-deploy) mode.
-    // T2 (demo host) and T3 (commercial) must not leak API keys.
+    const KNOWN_PROVIDERS = ['DEEPSEEK', 'DASHSCOPE', 'OPENAI', 'ANTHROPIC', 'OPENROUTER'] as const;
+
+    // Security: allowlist approach — only expose raw keys when DEPLOYMENT_TIER
+    // is explicitly T1 AND the request originates from localhost.
+    // All other cases return provider availability booleans + masked metadata.
     const tier = process.env.DEPLOYMENT_TIER;
-    if (tier === 'T2' || tier === 'T3') {
-      return c.json({ keys: {} });
+    const host = new URL(c.req.url).hostname;
+    const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+    const allowRawKeys = tier === 'T1' && isLocalhost;
+
+    if (allowRawKeys) {
+      const keys: Record<string, string> = {};
+      for (const provider of KNOWN_PROVIDERS) {
+        const envKey = `${provider}_API_KEY`;
+        const value = process.env[envKey];
+        if (value) keys[provider.toLowerCase()] = value;
+      }
+      return c.json({ keys });
     }
 
-    const KNOWN_PROVIDERS = ['DEEPSEEK', 'DASHSCOPE', 'OPENAI', 'ANTHROPIC', 'OPENROUTER'] as const;
-    const keys: Record<string, string> = {};
+    // Non-T1 or non-localhost: return availability + masked metadata only
+    const providers: Record<string, { configured: boolean; masked: string }> = {};
     for (const provider of KNOWN_PROVIDERS) {
       const envKey = `${provider}_API_KEY`;
       const value = process.env[envKey];
-      if (value) keys[provider.toLowerCase()] = value;
+      if (value) {
+        const masked = value.length > 8
+          ? `${value.slice(0, 4)}...${value.slice(-4)}`
+          : '****';
+        providers[provider.toLowerCase()] = { configured: true, masked };
+      }
     }
-    return c.json({ keys });
+    return c.json({ keys: {}, providers });
   });
 
   // POST /api/ai/ping — test LLM provider connectivity

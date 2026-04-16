@@ -28,11 +28,11 @@ export interface PluginRegistry {
   /** Get active runtimes sorted by priority (ascending). */
   getActiveRuntimes(sessionId: string): readonly RuntimeManifest[];
 
-  /** Activate a plugin for a session. */
-  activate(pluginId: string, sessionId: string): void;
+  /** Activate a plugin for a session. Returns false if pluginId is not registered. */
+  activate(pluginId: string, sessionId: string): boolean;
 
-  /** Deactivate a plugin for a session. */
-  deactivate(pluginId: string, sessionId: string): void;
+  /** Deactivate a plugin for a session. Returns false if pluginId is not registered. */
+  deactivate(pluginId: string, sessionId: string): boolean;
 
   /**
    * Find the plugin package ID of an active plugin that declares a given capability.
@@ -87,7 +87,10 @@ export function createPluginRegistry(options?: PluginRegistryOptions): PluginReg
       return entries.get(id);
     },
 
-    activate(pluginId: string, sessionId: string): void {
+    activate(pluginId: string, sessionId: string): boolean {
+      if (!entries.has(pluginId)) {
+        return false;
+      }
       let sessionSet = sessionActivations.get(sessionId);
       if (sessionSet === undefined) {
         sessionSet = new Set();
@@ -96,15 +99,20 @@ export function createPluginRegistry(options?: PluginRegistryOptions): PluginReg
       sessionSet.add(pluginId);
       emit({ type: 'plugin-activated', pluginId, sessionId });
       emitToEventBus('plugin.activated', sessionId, { pluginId, sessionId });
+      return true;
     },
 
-    deactivate(pluginId: string, sessionId: string): void {
+    deactivate(pluginId: string, sessionId: string): boolean {
+      if (!entries.has(pluginId)) {
+        return false;
+      }
       const sessionSet = sessionActivations.get(sessionId);
       if (sessionSet !== undefined) {
         sessionSet.delete(pluginId);
       }
       emit({ type: 'plugin-deactivated', pluginId, sessionId });
       emitToEventBus('plugin.deactivated', sessionId, { pluginId, sessionId });
+      return true;
     },
 
     onChange(handler: (event: RegistryChangeEvent) => void): () => void {

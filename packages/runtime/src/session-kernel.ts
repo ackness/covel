@@ -244,6 +244,23 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
       for (const p of proposals) {
         results.push(await commit(p));
       }
+
+      // Detect partial commit: some succeeded, some failed — no rollback possible.
+      const committed = results.filter(r => r.committed);
+      const failed = results.filter(r => !r.committed);
+      if (committed.length > 0 && failed.length > 0) {
+        const failureDetails = failed.map((r, i) => {
+          const idx = results.indexOf(r);
+          return { index: idx, type: proposals[idx].type, id: proposals[idx].id, error: r.error };
+        });
+        console.warn(
+          '[session-kernel] commitAll: partial commit detected (non-transactional mode) — %d committed, %d failed. Failures: %s',
+          committed.length,
+          failed.length,
+          JSON.stringify(failureDetails),
+        );
+      }
+
       return results;
     }
 
@@ -472,6 +489,20 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
 // ── High-Level API ──────────────────────────────────────────────
 
 /**
+ * Structured result from processRuntimeResult, exposing both successful
+ * events and any proposals that failed to commit.
+ */
+export interface ProcessRuntimeResultOutput {
+  /** SessionEvents from successfully committed proposals — ready to push to the client. */
+  readonly events: SessionEvent[];
+  /** Proposals that failed to commit. Empty when everything succeeds. */
+  readonly failedProposals: ReadonlyArray<{
+    readonly proposal: Proposal;
+    readonly error: string;
+  }>;
+}
+
+/**
  * Process a single RuntimeResult through the full Kernel pipeline:
  *   RuntimeResult → normalizeOutput → commitAll → SessionEvent[]
  *
@@ -479,8 +510,8 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
  * runtime result. It handles: normalization, persistence, tracing,
  * and event generation.
  *
- * Returns the list of SessionEvents to push to the client.
- * Returns empty array for failed/skipped runtimes.
+ * Returns a structured result with both successful events and failed proposals.
+ * Returns empty arrays for failed/skipped runtimes.
  */
 export async function processRuntimeResult(
   result: {
@@ -494,10 +525,12 @@ export async function processRuntimeResult(
   store: KernelStore,
   sessionId: string,
   outputKind?: string,
-): Promise<SessionEvent[]> {
+): Promise<ProcessRuntimeResultOutput> {
+  const empty: ProcessRuntimeResultOutput = { events: [], failedProposals: [] };
+
   // Skip failed/skipped runtimes — nothing to commit
   if (result.status !== 'success' || !result.output) {
-    return [];
+    return empty;
   }
 
   const source = { pluginId: result.pluginId, runtimeId: result.runtimeId };
@@ -511,15 +544,47 @@ export async function processRuntimeResult(
   );
 
   if (proposals.length === 0) {
-    return [];
+    return empty;
   }
 
   const pipeline = createCommitPipeline(store);
   const commitResults = await pipeline.commitAll(proposals);
 
-  return commitResults
-    .filter(r => r.committed && r.event)
-    .map(r => r.event!);
+  const events: SessionEvent[] = [];
+  const failedProposals: Array<{ proposal: Proposal; error: string }> = [];
+
+  for (let i = 0; i < commitResults.length; i++) {
+    const cr = commitResults[i];
+    if (cr.committed && cr.event) {
+      events.push(cr.event);
+    } else if (!cr.committed) {
+      failedProposals.push({
+        proposal: proposals[i],
+        error: cr.error ?? 'unknown commit failure',
+      });
+    }
+  }
+
+  if (failedProposals.length > 0) {
+    console.warn(
+      '[session-kernel] processRuntimeResult: %d/%d proposals failed to commit for runtime %s (session %s, turn %s)',
+      failedProposals.length,
+      proposals.length,
+      result.runtimeId,
+      sessionId,
+      result.turnId,
+    );
+    for (const fp of failedProposals) {
+      console.warn(
+        '[session-kernel]   failed proposal %s (type=%s): %s',
+        fp.proposal.id,
+        fp.proposal.type,
+        fp.error,
+      );
+    }
+  }
+
+  return { events, failedProposals };
 }
 
 // ── Trace Recorder ──────────────────────────────────────────────

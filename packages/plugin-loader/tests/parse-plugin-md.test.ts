@@ -94,6 +94,8 @@ describe('parsePluginMd', () => {
       expect(result.manifest.input).toEqual({
         inject: [
           {
+            // Legacy shape auto-normalised by schema preprocess.
+            kind: 'runtime',
             from: 'core-narrator',
             field: 'narrativeOutput',
             as: 'narrativeContext',
@@ -113,6 +115,141 @@ describe('parsePluginMd', () => {
           description: 'Combat difficulty level',
         },
       });
+    });
+  });
+
+  describe('input.inject — plugin-data source', () => {
+    it('parses a plugin-data inject with explicit format and maxEntries', () => {
+      const content = md(
+        [
+          'name: core-codex',
+          'description: Knowledge codex',
+          'priority: 650',
+          'input:',
+          '  inject:',
+          '    - kind: plugin-data',
+          '      namespace: entries',
+          '      as: "<existing-entries>"',
+          '      format: summary',
+          '      maxEntries: 100',
+        ].join('\n'),
+        '\ncodex body\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/core-codex/PLUGIN.md');
+
+      expect(result.manifest.input).toEqual({
+        inject: [
+          {
+            kind: 'plugin-data',
+            namespace: 'entries',
+            as: '<existing-entries>',
+            format: 'summary',
+            maxEntries: 100,
+          },
+        ],
+      });
+    });
+
+    it('fills plugin-data defaults when format / maxEntries omitted', () => {
+      const content = md(
+        [
+          'name: core-codex',
+          'description: Knowledge codex',
+          'priority: 650',
+          'input:',
+          '  inject:',
+          '    - kind: plugin-data',
+          '      namespace: entries',
+          '      as: "<existing-entries>"',
+        ].join('\n'),
+        '\ncodex body\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/core-codex/PLUGIN.md');
+
+      expect(result.manifest.input?.inject?.[0]).toEqual({
+        kind: 'plugin-data',
+        namespace: 'entries',
+        as: '<existing-entries>',
+        format: 'summary',
+        maxEntries: 50,
+      });
+    });
+
+    it('allows mixing runtime + plugin-data injects in one list', () => {
+      const content = md(
+        [
+          'name: core-codex',
+          'description: Knowledge codex',
+          'priority: 650',
+          'input:',
+          '  inject:',
+          '    - from: core-narrator',
+          '      field: narrativeOutput',
+          '      as: "<narrator-output>"',
+          '    - kind: plugin-data',
+          '      namespace: entries',
+          '      as: "<existing-entries>"',
+          '      format: ids-only',
+          '      maxEntries: 20',
+        ].join('\n'),
+        '\ncodex body\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/core-codex/PLUGIN.md');
+      const injects = result.manifest.input?.inject ?? [];
+      expect(injects).toHaveLength(2);
+      expect(injects[0]).toMatchObject({
+        kind: 'runtime',
+        from: 'core-narrator',
+        field: 'narrativeOutput',
+      });
+      expect(injects[1]).toMatchObject({
+        kind: 'plugin-data',
+        namespace: 'entries',
+        format: 'ids-only',
+        maxEntries: 20,
+      });
+    });
+
+    it('rejects maxEntries outside [1, 500]', () => {
+      const content = md(
+        [
+          'name: core-codex',
+          'description: Knowledge codex',
+          'priority: 650',
+          'input:',
+          '  inject:',
+          '    - kind: plugin-data',
+          '      namespace: entries',
+          '      as: "<existing-entries>"',
+          '      maxEntries: 9999',
+        ].join('\n'),
+        '\nbody\n',
+      );
+      expect(() =>
+        parsePluginMd(content, 'plugins/core-codex/PLUGIN.md'),
+      ).toThrow();
+    });
+
+    it('rejects invalid namespace characters', () => {
+      const content = md(
+        [
+          'name: core-codex',
+          'description: Knowledge codex',
+          'priority: 650',
+          'input:',
+          '  inject:',
+          '    - kind: plugin-data',
+          '      namespace: "invalid namespace with spaces"',
+          '      as: "<existing-entries>"',
+        ].join('\n'),
+        '\nbody\n',
+      );
+      expect(() =>
+        parsePluginMd(content, 'plugins/core-codex/PLUGIN.md'),
+      ).toThrow();
     });
   });
 

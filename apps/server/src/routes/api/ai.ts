@@ -9,6 +9,7 @@ import { resolve } from 'node:path';
 import { Hono } from 'hono';
 import { createWorld } from '@covel/create';
 import type { LLMAdapter } from '@covel/runtime';
+import { rateLimiter, singleFlight } from '../../middleware/rate-limit.js';
 
 type Env = {
   Variables: {
@@ -19,7 +20,7 @@ type Env = {
 export const aiRoutes = new Hono<Env>();
 
 // POST /ai/generate-world
-aiRoutes.post('/generate-world', async (c) => {
+aiRoutes.post('/generate-world', rateLimiter({ max: 10 }), singleFlight(), async (c) => {
   const llm = c.get('llmAdapter');
   const body = await c.req.json<Record<string, unknown>>();
 

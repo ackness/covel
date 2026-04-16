@@ -13,6 +13,7 @@
 import { ToolValidationError, type ToolModule } from '@covel/tools';
 import type { DataStore } from '@covel/store';
 import type { ApprovalPipeline } from '@covel/approval';
+import type { ApprovalStatus } from '@covel/shared';
 
 // ── Structured tool error shape (returned to LLM) ────────────────
 
@@ -49,6 +50,7 @@ export interface ToolCallResult {
   readonly result: string;  // JSON string for LLM
   readonly parsedResult: unknown; // Parsed result for framework use
   readonly success: boolean;
+  readonly approvalStatus: ApprovalStatus;
 }
 
 export interface ToolInfo {
@@ -91,11 +93,11 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
       if (!tool) {
         const errorResult = toolError('NOT_FOUND', `Unknown tool: ${call.name}. Check the tool name and try again.`);
         await recordCall(config.store, call, context, errorResult, startTime, false, 'auto-allowed');
-        return { toolCallId: call.toolCallId, name: call.name, result: errorResult, parsedResult: null, success: false };
+        return { toolCallId: call.toolCallId, name: call.name, result: errorResult, parsedResult: null, success: false, approvalStatus: 'auto-allowed' as const };
       }
 
       // 2. Check approval
-      let approvalStatus: 'auto-allowed' | 'user-allowed' | 'denied' = 'auto-allowed';
+      let approvalStatus: ApprovalStatus = 'auto-allowed';
 
       if (config.approval) {
         const toolSource = config.getToolSource?.(call.name) ?? 'local';
@@ -113,14 +115,14 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
 
         if (checkResult.needsApproval) {
           // Check session-level prior approval
-          if (config.approval.hasSessionAllow(context.sessionId, call.name)) {
+          if (config.approval.hasSessionAllow(context.sessionId, call.name, context.pluginId)) {
             approvalStatus = 'user-allowed';
           } else {
             // Denied — do not execute
-            approvalStatus = 'denied';
+            approvalStatus = 'user-denied';
             const denyResult = toolError('DENIED', `Tool "${call.name}" was denied by the approval policy. Reason: ${checkResult.reason}. Do not retry this tool call.`);
             await recordCall(config.store, call, context, denyResult, startTime, false, approvalStatus);
-            return { toolCallId: call.toolCallId, name: call.name, result: denyResult, parsedResult: null, success: false };
+            return { toolCallId: call.toolCallId, name: call.name, result: denyResult, parsedResult: null, success: false, approvalStatus };
           }
         }
       }
@@ -132,7 +134,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
       } catch {
         const errorResult = toolError('INVALID_ARGS', `Arguments for tool "${call.name}" are not valid JSON. Ensure the arguments object is properly formatted JSON.`);
         await recordCall(config.store, call, context, errorResult, startTime, false, approvalStatus);
-        return { toolCallId: call.toolCallId, name: call.name, result: errorResult, parsedResult: null, success: false };
+        return { toolCallId: call.toolCallId, name: call.name, result: errorResult, parsedResult: null, success: false, approvalStatus };
       }
 
       // 4. Execute
@@ -157,7 +159,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
             : JSON.stringify(rawResult);
 
         await recordCall(config.store, call, context, resultStr, startTime, true, approvalStatus);
-        return { toolCallId: call.toolCallId, name: call.name, result: resultStr, parsedResult: rawResult, success: true };
+        return { toolCallId: call.toolCallId, name: call.name, result: resultStr, parsedResult: rawResult, success: true, approvalStatus };
       } catch (error: unknown) {
         let errorResult: string;
         if (error instanceof ToolValidationError) {
@@ -189,7 +191,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           errorResult = toolError('EXECUTION_ERROR', `Tool "${call.name}" failed during execution: ${message}`);
         }
         await recordCall(config.store, call, context, errorResult, startTime, false, approvalStatus);
-        return { toolCallId: call.toolCallId, name: call.name, result: errorResult, parsedResult: null, success: false };
+        return { toolCallId: call.toolCallId, name: call.name, result: errorResult, parsedResult: null, success: false, approvalStatus };
       }
     },
   };

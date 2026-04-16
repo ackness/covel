@@ -34,6 +34,7 @@ export interface EventBus {
 }
 
 const RING_BUFFER_MAX = 1000;
+const MAX_PENDING_EVENTS = 1000;
 
 export function createEventBus(store?: DataStore): EventBus {
   const handlers = new Map<string, Set<EventHandler>>();
@@ -91,7 +92,17 @@ export function createEventBus(store?: DataStore): EventBus {
     const topicHandlers = handlers.get(topic);
     if (topicHandlers) {
       for (const handler of [...topicHandlers]) {
-        handler(message);
+        try {
+          const result = handler(message);
+          // If handler returns a promise, catch its rejection
+          if (result && typeof (result as Promise<void>).catch === 'function') {
+            (result as Promise<void>).catch((err) => {
+              console.error(`[EventBus] Async handler error on topic "${topic}":`, err);
+            });
+          }
+        } catch (err) {
+          console.error(`[EventBus] Handler error on topic "${topic}":`, err);
+        }
       }
     }
   }
@@ -111,7 +122,9 @@ export function createEventBus(store?: DataStore): EventBus {
     };
 
     // Fire-and-forget: persistence is for audit trail, not blocking emit
-    void store.saveEvent(record);
+    store.saveEvent(record).catch((err) => {
+      console.error(`[EventBus] Failed to persist event "${record.id}":`, err);
+    });
   }
 
   const bus: EventBus = {
@@ -126,6 +139,21 @@ export function createEventBus(store?: DataStore): EventBus {
       const sessionPending = getOrCreateSessionPending(message.sessionId);
       sessionPending.set(message.id, message);
       messageSession.set(message.id, message.sessionId);
+
+      // Enforce pending queue size limit — drop oldest events
+      if (sessionPending.size > MAX_PENDING_EVENTS) {
+        const excess = sessionPending.size - MAX_PENDING_EVENTS;
+        console.warn(
+          `[EventBus] Pending queue for session "${message.sessionId}" exceeded ${MAX_PENDING_EVENTS}, dropping ${excess} oldest event(s)`
+        );
+        let dropped = 0;
+        for (const oldId of sessionPending.keys()) {
+          if (dropped >= excess) break;
+          sessionPending.delete(oldId);
+          messageSession.delete(oldId);
+          dropped++;
+        }
+      }
 
       // ── Subscription event creation ──────────────────────────
       const seq = nextSeq(message.sessionId);
@@ -145,7 +173,11 @@ export function createEventBus(store?: DataStore): EventBus {
       };
       appendToBuffer(message.sessionId, subEvent);
       for (const cb of emitCallbacks) {
-        cb(subEvent);
+        try {
+          cb(subEvent);
+        } catch (err) {
+          console.error('[EventBus] onEmit callback error:', err);
+        }
       }
 
       // Persist to store for audit trail

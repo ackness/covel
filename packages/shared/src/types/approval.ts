@@ -16,6 +16,7 @@ export interface ApprovalRequest {
 export interface ApprovalRecord {
   readonly approvalId: string;
   readonly toolName: string;
+  readonly pluginId: string;
   readonly decision: ApprovalDecision;
   readonly decidedAt: string;
   readonly turnId: string;

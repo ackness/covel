@@ -250,6 +250,18 @@ Plugins have session-scoped persistent KV storage via the `plugin_data` table. D
 
 **Context injection**: Plugin data from `core-world-init` is pre-loaded at turn start and injected via `getConfig` → `{{ config.worldSchema }}`, `{{ config.worldEntries }}`, `{{ config.worldDimensions }}`. Latest player form submission is exposed via `{{ player.lastFormValues }}` (JSON string) — plugins read this to process form submissions without server-side magic.
 
+**Self plugin-data injection** (agent runtimes only): `input.inject` supports a `kind: plugin-data` source that reads the runtime's OWN plugin-data namespace and inlines a summarised view into the system prompt. This avoids a tool-call round-trip for "increment-maintaining" plugins (codex, character-tracker, extractor). Declared in PLUGIN.md:
+```yaml
+input:
+  inject:
+    - kind: plugin-data
+      namespace: entries
+      as: "<existing-entries>"
+      format: summary   # or: ids-only | full
+      maxEntries: 100
+```
+When any manifest declares a `kind: plugin-data` inject, `turn-executor` switches that runtime to `buildContextAsync` which calls `store.listPluginData(sessionId, pluginId, namespace)` during prompt build. Other runtimes stay on the sync `buildContext` path. Two-pass truncation (oldest anchors + recent active) keeps old entries visible even in late-session turns; store errors propagate to runtime failure (never leak into downstream context per Phase 0 isolation audit). Cross-plugin reads are intentionally not supported.
+
 ### Model Slot System
 
 Named slots for provider routing. The first slot defined in `llm.toml` automatically becomes `default`; its original name is also accessible:

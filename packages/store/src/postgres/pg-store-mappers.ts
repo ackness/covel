@@ -134,6 +134,7 @@ export const CREATE_TABLES_SQL = `
   );
   CREATE INDEX IF NOT EXISTS pg_state_entries_session_id_idx ON state_entries(session_id);
   CREATE INDEX IF NOT EXISTS pg_state_entries_composite_idx ON state_entries(session_id, table_name, field_name);
+  CREATE UNIQUE INDEX IF NOT EXISTS pg_state_entries_unique_idx ON state_entries(session_id, table_name, field_name);
 
   CREATE TABLE IF NOT EXISTS state_changes (
     id TEXT PRIMARY KEY,
@@ -166,6 +167,7 @@ export const CREATE_TABLES_SQL = `
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
     tool_name TEXT NOT NULL,
+    plugin_id TEXT NOT NULL DEFAULT '',
     decision TEXT NOT NULL,
     turn_id TEXT NOT NULL,
     created_at TEXT NOT NULL
@@ -540,6 +542,7 @@ export function toApprovalRecord(row: typeof schema.approvals.$inferSelect): App
     id: row.id,
     sessionId: row.sessionId,
     toolName: row.toolName,
+    pluginId: row.pluginId,
     decision: row.decision,
     turnId: row.turnId,
     createdAt: row.createdAt,

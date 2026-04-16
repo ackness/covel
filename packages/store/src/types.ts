@@ -131,6 +131,7 @@ export interface ApprovalRecord {
   readonly id: string;
   readonly sessionId: string;
   readonly toolName: string;
+  readonly pluginId: string;
   readonly decision: string;
   readonly turnId: string;
   readonly createdAt: string;
