@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useSession } from "@/stores/session-store.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
+import { resolveI18n } from "@/lib/catalog.js";
+import { initDesktopBridge } from "@/lib/desktop-bridge.js";
 import { WorldSelectScreen } from "@/components/session/world-select-screen.js";
 import { SessionPrepScreen } from "@/components/session/session-prep-screen.js";
 import { GameView } from "@/components/session/game-view.js";
@@ -88,6 +90,41 @@ function SessionPage() {
       });
     }
   }, [state.booted, sid, state.session, resumeSessionById, navigate]);
+
+  // Update document.title for Electron window title sync
+  useEffect(() => {
+    const worldName = state.world ? resolveI18n(state.world.name) : "";
+    document.title = worldName ? `Covel \u2014 ${worldName}` : "Covel";
+  }, [state.world]);
+
+  // Desktop bridge: translate Electron menu events into app actions
+  const settingsOpenRef = useRef(setSettingsOpen);
+  settingsOpenRef.current = setSettingsOpen;
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+  const messagesRef = useRef(state.messages);
+  messagesRef.current = state.messages;
+
+  useEffect(() => {
+    return initDesktopBridge({
+      onOpenSettings: () => settingsOpenRef.current(true),
+      onNewWorld: () => navigateRef.current({ to: "/session", search: {} }),
+      onExportChat: () => {
+        const msgs = messagesRef.current;
+        if (msgs.length === 0) return;
+        const text = msgs
+          .map((m) => `[${m.role}] ${m.content}`)
+          .join("\n\n");
+        const blob = new Blob([text], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "covel-chat.txt";
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+    });
+  }, []);
 
   // Loading (boot or auto-resume in progress)
   if (!state.booted && !state.bootError) {

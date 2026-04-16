@@ -80,6 +80,7 @@ export interface PackageSummary {
   name: string;
   displayName?: string | Record<string, string>;
   description?: string | Record<string, string>;
+  pluginType?: string;
   enabled: boolean;
   runtimes?: RuntimeSummary[];
   tools?: ToolSummary[];
@@ -520,10 +521,10 @@ export async function saveStateSnapshot(sessionId: string, snapshot: Record<stri
   });
 }
 
-export async function createSession(worldId: string, presetId?: string, id?: string): Promise<SessionRecord> {
+export async function createSession(worldId: string, presetId?: string, id?: string, plugins?: string[]): Promise<SessionRecord> {
   return request<SessionRecord>("/api/sessions", {
     method: "POST",
-    body: JSON.stringify({ id, worldId, presetId }),
+    body: JSON.stringify({ id, worldId, presetId, ...(plugins ? { plugins } : {}) }),
   });
 }
 
@@ -1064,6 +1065,178 @@ export async function getPluginData(
   } catch {
     return null;
   }
+}
+
+// ── UI Specs (plugin panel discovery) ────────────────────────────
+
+export interface UISlotSpec {
+  id?: string;
+  label: unknown;
+  icon?: string;
+  group?: string;
+  groupLabel?: unknown;
+  groupOrder?: number;
+  dataSource?: { namespace: string };
+  emptyState?: { message: unknown };
+  view: Record<string, unknown>;
+}
+
+export interface UISlotEntry {
+  pluginId: string;
+  specs: UISlotSpec[];
+}
+
+export interface UISpecsResponse {
+  right: UISlotEntry[];
+  message?: UISlotEntry[];
+}
+
+export async function fetchUiSpecs(sessionId?: string): Promise<UISpecsResponse> {
+  const qs = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
+  return request<UISpecsResponse>(`/api/ui-specs${qs}`);
+}
+
+// ── Lorebook (framework-owned) ──────────────────────────────────
+
+export interface LorebookEntry {
+  id: string;
+  content: string;
+  keys: string[];
+  enabled: boolean;
+  strategy: string;
+  insertionOrder: number;
+  pluginId: string;
+  position: string;
+}
+
+export async function fetchLorebookEntries(sessionId: string): Promise<LorebookEntry[]> {
+  const res = await request<{ entries: LorebookEntry[] }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/lorebook`,
+  );
+  return res.entries;
+}
+
+export async function updateLorebookEntryEnabled(
+  sessionId: string,
+  entryId: string,
+  enabled: boolean,
+): Promise<void> {
+  await request(
+    `/api/sessions/${encodeURIComponent(sessionId)}/lorebook/${encodeURIComponent(entryId)}`,
+    { method: "PATCH", body: JSON.stringify({ enabled }) },
+  );
+}
+
+export async function deleteLorebookEntry(
+  sessionId: string,
+  entryId: string,
+): Promise<void> {
+  await request(
+    `/api/sessions/${encodeURIComponent(sessionId)}/lorebook/${encodeURIComponent(entryId)}`,
+    { method: "DELETE" },
+  );
+}
+
+// ── Plugin RPC ──────────────────────────────────────────────────
+
+export async function postPluginRpc(
+  sessionId: string,
+  action: string,
+  params?: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/plugin-rpc`,
+    { method: "POST", body: JSON.stringify({ action, ...params }) },
+  );
+}
+
+// ── Approvals (RPC approval gate) ───────────────────────────────
+
+export interface ApprovalRecord {
+  id: string;
+  sessionId: string;
+  action: string;
+  pluginId: string;
+  status: "pending" | "allowed" | "denied";
+  scope?: "once" | "session";
+  createdAt: string;
+}
+
+export async function listApprovals(sessionId: string): Promise<ApprovalRecord[]> {
+  const res = await request<{ approvals: ApprovalRecord[] }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/approvals`,
+  );
+  return res.approvals;
+}
+
+export async function resolveApproval(
+  approvalId: string,
+  decision: "allow" | "deny",
+  scope?: "once" | "session",
+): Promise<void> {
+  await request(
+    `/api/approvals/${encodeURIComponent(approvalId)}/decision`,
+    { method: "POST", body: JSON.stringify({ decision, scope }) },
+  );
+}
+
+// ── Plugin Flows & Docs ─────────────────────────────────────────
+
+export interface PluginFlowStep {
+  pluginId: string;
+  runtimeId: string;
+  label: string;
+  priority: number;
+  trigger: { mode: string };
+  runtimeType?: string;
+  outputKind?: string;
+  model?: string;
+}
+
+export interface PluginFlowSegment {
+  label: string;
+  range: [number, number];
+}
+
+export interface PluginFlowResponse {
+  steps: PluginFlowStep[];
+  segments: PluginFlowSegment[];
+}
+
+export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
+  return request<PluginFlowResponse>("/api/plugins/flows");
+}
+
+export interface PluginDocEntry {
+  pluginId: string;
+  content: string;
+  format: string;
+}
+
+export interface PluginDocsResponse {
+  docs: PluginDocEntry[];
+}
+
+export async function fetchPluginDocs(pluginId: string): Promise<PluginDocsResponse> {
+  return request<PluginDocsResponse>(
+    `/api/plugins/${encodeURIComponent(pluginId)}/docs`,
+  );
+}
+
+// ── Core Memory (Letta-style) ───────────────────────────────────
+
+export interface CoreMemoryBlock {
+  label: string;
+  content: string;
+  updatedAt: string;
+}
+
+export async function fetchCoreMemory(
+  sessionId: string,
+): Promise<{ blocks: CoreMemoryBlock[] }> {
+  return request<{ blocks: CoreMemoryBlock[] }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/core-memory`,
+  );
 }
 
 // ── Trace API ────────────────────────────────────────────────────

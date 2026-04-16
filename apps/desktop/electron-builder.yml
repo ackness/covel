@@ -1,0 +1,63 @@
+appId: com.covel.app
+productName: Covel
+copyright: Copyright © 2026 Covel
+
+directories:
+  output: ../../release
+  buildResources: resources
+
+files:
+  - dist/**/*
+  - package.json
+
+extraResources:
+  # Built web frontend (static files)
+  - from: staging/web-dist
+    to: web-dist
+    filter:
+      - "**/*"
+  # Server source + dependencies
+  - from: staging/server
+    to: server
+    filter:
+      - "**/*"
+      - "!**/node_modules/.cache/**"
+      - "!**/.git/**"
+      - "!**/tests/**"
+      - "!**/*.test.ts"
+      - "!**/*.spec.ts"
+
+asar: true
+compression: normal
+
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  category: public.app-category.games
+  darkModeSupport: true
+  hardenedRuntime: true
+
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+    - target: portable
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64]
+  category: Game
+  maintainer: covel@example.com

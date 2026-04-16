@@ -335,6 +335,26 @@
       "en": "English (recommended for GPT/Gemini)"
     }
   },
+  "onboarding": {
+    "welcome": "Welcome to Covel",
+    "tagline": "AI-driven RPG engine. Craft interactive stories powered by large language models.",
+    "language": "Language",
+    "getStarted": "Get Started",
+    "configureProvider": "Configure AI Provider",
+    "providerDesc": "Covel needs an LLM API key to generate stories. Pick a provider and paste your key.",
+    "selectProvider": "Provider",
+    "apiKey": "API Key",
+    "testConnection": "Test Connection",
+    "skip": "Skip for now",
+    "continue": "Continue",
+    "ready": "You're all set",
+    "readyDesc": "Select a world, then start your adventure. You can adjust settings anytime from the top bar.",
+    "step1Label": "Pick a world",
+    "step1Desc": "Choose from built-in worlds or create your own.",
+    "step2Label": "Start your adventure",
+    "step2Desc": "The AI narrator will build a story around you.",
+    "enter": "Enter Covel"
+  },
   "common": {
     "loading": "Loading...",
     "error": "Something went wrong",

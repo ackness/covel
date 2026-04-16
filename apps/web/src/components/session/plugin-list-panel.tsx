@@ -34,11 +34,32 @@ interface PluginItemProps {
   sessionPlugin?: SessionPluginInfo;
   executing?: boolean;
   onToggle?: (pluginId: string, enable: boolean) => void;
+  resolvedSlots?: ResolvedSlot[];
+  sessionId?: string;
 }
 
-function PluginItem({ pkg, sessionPlugin, executing, onToggle }: PluginItemProps) {
+function PluginItem({ pkg, sessionPlugin, executing, onToggle, resolvedSlots, sessionId }: PluginItemProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
+
+  // Model slot binding for agent runtimes
+  const agentRuntimes = (pkg.runtimes ?? []).filter((rt) => rt.kind !== "function" && rt.providerTag);
+  const primaryRuntime = agentRuntimes[0];
+  const runtimeKey = primaryRuntime ? `${pkg.name}:${primaryRuntime.id}` : "";
+  const initialSlot = useRef(sessionId && runtimeKey ? (getRuntimeBindings(sessionId)[runtimeKey] ?? "") : "");
+  const [boundSlot, setBoundSlot] = useState<string>(initialSlot.current);
+
+  const handleSlotChange = useCallback((newSlot: string) => {
+    setBoundSlot(newSlot);
+    if (!sessionId || !runtimeKey) return;
+    const bindings = getRuntimeBindings(sessionId);
+    if (newSlot) {
+      bindings[runtimeKey] = newSlot;
+    } else {
+      delete bindings[runtimeKey];
+    }
+    setRuntimeBindings(sessionId, bindings);
+  }, [sessionId, runtimeKey]);
 
   const displayName = text(pkg.displayName) || pkg.name;
   const description = text(pkg.description);
@@ -183,6 +204,38 @@ function PluginItem({ pkg, sessionPlugin, executing, onToggle }: PluginItemProps
                   </Badge>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Model slot binding */}
+          {primaryRuntime && resolvedSlots && resolvedSlots.length > 0 && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                <Cpu className="w-3 h-3" />
+                {t("plugin.modelBinding", "Model")}
+              </div>
+              <select
+                value={boundSlot}
+                onChange={(e) => handleSlotChange(e.target.value)}
+                disabled={executing}
+                className="w-full text-[10px] bg-background border border-border rounded px-1.5 py-1 disabled:opacity-50"
+              >
+                <option value="">
+                  {primaryRuntime.providerTag
+                    ? `${t("plugin.defaultSlot", "default")}: ${primaryRuntime.providerTag}`
+                    : t("plugin.autoSlot", "auto (system default)")}
+                </option>
+                {resolvedSlots.filter(s => s.tag === "text").map((slot) => (
+                  <option key={slot.slotId} value={slot.slotId}>
+                    {slot.slotId.toUpperCase()} — {slot.serverModel ?? slot.presetId}
+                  </option>
+                ))}
+              </select>
+              {boundSlot && (
+                <p className="text-[9px] text-muted-foreground">
+                  {t("plugin.modelOverrideHint", "Override active — next turn will use this model")}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -534,6 +587,8 @@ export function PluginListPanel({
               sessionPlugin={sessionPluginMap.get(pkg.name)}
               executing={executing}
               onToggle={onTogglePlugin}
+              resolvedSlots={resolvedSlots}
+              sessionId={sessionId}
             />
           ))
       }

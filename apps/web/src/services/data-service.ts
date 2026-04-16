@@ -36,7 +36,7 @@ export interface DataService {
   // Sessions
   listSessions(worldId: string): Promise<SessionRecord[]>;
   getSession(sessionId: string): Promise<SessionRecord | null>;
-  createSession(worldId: string, presetId?: string): Promise<SessionRecord>;
+  createSession(worldId: string, presetId?: string, id?: string, plugins?: string[]): Promise<SessionRecord>;
   updateSession(
     sessionId: string,
     updates: Partial<Pick<SessionRecord, "status" | "presetId" | "phase">>,
@@ -98,7 +98,8 @@ export type StorageMode = "local" | "remote";
 
 export function getStorageMode(): StorageMode {
   const val = localStorage.getItem(STORAGE_MODE_KEY);
-  return val === "remote" ? "remote" : "local";
+  // Default to "remote" (server-side SQLite). "local" (IndexedDB) is legacy.
+  return val === "local" ? "local" : "remote";
 }
 
 export function setStorageMode(mode: StorageMode): void {
@@ -138,8 +139,8 @@ class RemoteDataService implements DataService {
       return null;
     }
   }
-  async createSession(worldId: string, presetId?: string) {
-    return api.createSession(worldId, presetId);
+  async createSession(worldId: string, presetId?: string, id?: string, plugins?: string[]) {
+    return api.createSession(worldId, presetId, id, plugins);
   }
   async updateSession(
     sessionId: string,
@@ -357,10 +358,10 @@ class LocalDataService implements DataService {
     return { id: s.id, worldId: s.worldId ?? '', status: s.status ?? 'active', phase: s.phase ?? 'init', presetId: s.presetId, createdAt: s.createdAt } as SessionRecord;
   }
 
-  async createSession(worldId: string, presetId?: string): Promise<SessionRecord> {
+  async createSession(worldId: string, presetId?: string, _id?: string, _plugins?: string[]): Promise<SessionRecord> {
     const store = await this.getStore();
     const session: SessionRecord = { id: humanSessionId(), worldId, status: "active", phase: "init", presetId, createdAt: new Date().toISOString() };
-    await store.createSession({ id: session.id, worldId, phase: session.phase, turnCount: 0, locale: 'zh-CN', activePlugins: [], createdAt: session.createdAt, updatedAt: session.createdAt } as any);
+    await store.createSession({ id: session.id, worldId, phase: session.phase, turnCount: 0, locale: 'zh-CN', activePlugins: _plugins ?? [], createdAt: session.createdAt, updatedAt: session.createdAt } as any);
     return session;
   }
 

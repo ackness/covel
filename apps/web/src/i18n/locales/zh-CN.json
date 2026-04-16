@@ -335,6 +335,26 @@
       "en": "英文（推荐 GPT/Gemini）"
     }
   },
+  "onboarding": {
+    "welcome": "\u6B22\u8FCE\u6765\u5230 Covel",
+    "tagline": "AI \u9A71\u52A8\u7684 RPG \u5F15\u64CE\u3002\u7528\u5927\u8BED\u8A00\u6A21\u578B\u6784\u5EFA\u4EA4\u4E92\u5F0F\u6545\u4E8B\u3002",
+    "language": "\u8BED\u8A00",
+    "getStarted": "\u5F00\u59CB\u4F7F\u7528",
+    "configureProvider": "\u914D\u7F6E AI \u63D0\u4F9B\u5546",
+    "providerDesc": "Covel \u9700\u8981\u4E00\u4E2A LLM API \u5BC6\u94A5\u6765\u751F\u6210\u6545\u4E8B\u3002\u9009\u62E9\u63D0\u4F9B\u5546\u5E76\u7C98\u8D34\u4F60\u7684\u5BC6\u94A5\u3002",
+    "selectProvider": "\u63D0\u4F9B\u5546",
+    "apiKey": "API \u5BC6\u94A5",
+    "testConnection": "\u6D4B\u8BD5\u8FDE\u63A5",
+    "skip": "\u7A0D\u540E\u914D\u7F6E",
+    "continue": "\u7EE7\u7EED",
+    "ready": "\u4E00\u5207\u5C31\u7EEA",
+    "readyDesc": "\u9009\u62E9\u4E00\u4E2A\u4E16\u754C\u5F00\u59CB\u4F60\u7684\u5192\u9669\u3002\u4F60\u53EF\u4EE5\u968F\u65F6\u5728\u9876\u90E8\u680F\u8C03\u6574\u8BBE\u7F6E\u3002",
+    "step1Label": "\u9009\u62E9\u4E16\u754C",
+    "step1Desc": "\u4ECE\u5185\u7F6E\u4E16\u754C\u4E2D\u9009\u62E9\uFF0C\u6216\u521B\u5EFA\u4F60\u81EA\u5DF1\u7684\u3002",
+    "step2Label": "\u5F00\u59CB\u5192\u9669",
+    "step2Desc": "AI \u53D9\u4E8B\u5458\u5C06\u56F4\u7ED5\u4F60\u6784\u5EFA\u6545\u4E8B\u3002",
+    "enter": "\u8FDB\u5165 Covel"
+  },
   "common": {
     "loading": "加载中...",
     "error": "出错了",

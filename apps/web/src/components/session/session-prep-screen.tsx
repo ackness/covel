@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   MapIcon, Play, ArrowLeft, ChevronDown, ChevronUp, FileText,
   Cpu, KeyRound, History, Trash2, Download, Upload,
+  Puzzle, Lock, Zap, Wrench,
 } from "lucide-react";
 import * as api from "@/services/api.js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.js";
@@ -23,7 +24,7 @@ interface SessionPrepScreenProps {
   presets: api.PresetSummary[];
   llmConfig?: api.LlmConfigResponse | null;
   onBack: () => void;
-  onStart: () => void;
+  onStart: (plugins?: string[]) => void;
   onResume: (session: api.SessionRecord) => void;
   onDeleteSession: (sessionId: string) => Promise<void>;
   settingsOpen: boolean;
@@ -74,20 +75,49 @@ export function SessionPrepScreen({
 }: SessionPrepScreenProps) {
   const { t } = useTranslation();
   const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(presets, llmConfig);
-  const enabledPackages = useMemo(() => packages.filter((p) => p.enabled), [packages]);
-  const bindingState = useRuntimeBindings(`prep:${world.id}`, enabledPackages, resolvedSlots);
 
-  // Section expand state — all collapsed by default except sessions
+  // Plugin selection state — default all enabled
+  const [selectedPlugins, setSelectedPlugins] = useState<Set<string>>(() =>
+    new Set(packages.filter((p) => p.enabled).map((p) => p.name)),
+  );
+  const selectedPackages = useMemo(
+    () => packages.filter((p) => selectedPlugins.has(p.name)),
+    [packages, selectedPlugins],
+  );
+  const bindingState = useRuntimeBindings(`prep:${world.id}`, selectedPackages, resolvedSlots);
+
+  // Plugin flow data for execution preview
+  const [flowData, setFlowData] = useState<api.PluginFlowResponse | null>(null);
+  useEffect(() => {
+    api.fetchPluginFlows().then(setFlowData).catch(() => {});
+  }, []);
+
+  const togglePlugin = useCallback((name: string) => {
+    setSelectedPlugins((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
+
+  // Determine core plugins that cannot be deselected
+  const corePluginIds = useMemo(
+    () => new Set(packages.filter((p) => p.pluginType === "builtin").map((p) => p.name)),
+    [packages],
+  );
+
+  // Section expand state — all collapsed by default except plugins
   const [worldInfoExpanded, setWorldInfoExpanded] = useState(false);
   const [sessionsExpanded, setSessionsExpanded] = useState(true);
   const [loreExpanded, setLoreExpanded] = useState(false);
   const [modelsExpanded, setModelsExpanded] = useState(false);
-  const [pluginSectionExpanded, setPluginSectionExpanded] = useState(false);
+  const [pluginSectionExpanded, setPluginSectionExpanded] = useState(true);
 
   const [priorityOverrides, setPriorityOverrides] = useState<Record<string, number>>(() =>
     api.getRuntimePriorityOverrides()
   );
-  const [expandedPlugins, setExpandedPlugins] = useState<Set<string>>(new Set());
+  const [expandedPlugins, setExpandedPluginsList] = useState<Set<string>>(new Set());
   const [existingSessions, setExistingSessions] = useState<api.SessionRecord[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<api.SessionRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -132,8 +162,8 @@ export function SessionPrepScreen({
     void api.removeWorldOverlay(world.id);
   };
 
-  const togglePlugin = (name: string) => {
-    setExpandedPlugins((prev) => {
+  const togglePluginExpand = (name: string) => {
+    setExpandedPluginsList((prev) => {
       const next = new Set(prev);
       if (next.has(name)) next.delete(name); else next.add(name);
       return next;
@@ -161,7 +191,18 @@ export function SessionPrepScreen({
   };
 
   const activeSessions = existingSessions.filter((s) => s.status !== "archived");
-  const totalRuntimes = enabledPackages.reduce((sum, p) => sum + (p.runtimes?.length ?? 0), 0);
+  const totalRuntimes = selectedPackages.reduce((sum, p) => sum + (p.runtimes?.length ?? 0), 0);
+
+  // Build flow steps filtered by selected plugins
+  const selectedFlowSteps = useMemo(() => {
+    if (!flowData) return [];
+    return flowData.steps.filter((s) => selectedPlugins.has(s.pluginId));
+  }, [flowData, selectedPlugins]);
+
+  const handleStart = useCallback(() => {
+    const pluginIds = [...selectedPlugins];
+    onStart(pluginIds.length > 0 ? pluginIds : undefined);
+  }, [selectedPlugins, onStart]);
 
   return (
     <div className="flex h-full w-full overflow-hidden">
@@ -180,7 +221,7 @@ export function SessionPrepScreen({
             <Button
               size="sm"
               className="uppercase tracking-widest font-bold px-5 shrink-0"
-              onClick={onStart}
+              onClick={handleStart}
             >
               <Play className="w-4 h-4 mr-1.5" />
               {t("session.startGame", "Start Game")}
@@ -345,130 +386,166 @@ export function SessionPrepScreen({
             )}
           </Card>
 
-          {/* Plugins, Runtimes & Model Bindings (unified) */}
+          {/* Plugin Selection & Execution Flow Preview */}
           <Card className="mb-6">
             <CollapsibleCardHeader
               expanded={pluginSectionExpanded}
               onToggle={() => setPluginSectionExpanded(!pluginSectionExpanded)}
-              summary={enabledPackages.length > 0
-                ? t("session.pluginsSummary", { pluginCount: enabledPackages.length, runtimeCount: totalRuntimes })
-                : undefined}
+              summary={`${selectedPlugins.size}/${packages.length} ${t("session.pluginsSelected", "plugins selected")} · ${totalRuntimes} runtimes`}
             >
-              <Cpu className="w-4 h-4" />
+              <Puzzle className="w-4 h-4" />
               {t("session.plugins", "Plugins & Runtimes")}
-              {enabledPackages.length > 0 && (
-                <Badge variant="secondary" className="text-[10px] ml-1">
-                  {enabledPackages.length}
-                </Badge>
-              )}
+              <Badge variant="secondary" className="text-[10px] ml-1">
+                {selectedPlugins.size}/{packages.length}
+              </Badge>
             </CollapsibleCardHeader>
             {pluginSectionExpanded && (
-              <CardContent className="space-y-2">
-                {enabledPackages.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">{t("session.noPluginsLoaded")}</p>
-                ) : (
-                  enabledPackages.map((pkg) => {
-                    const isExpanded = expandedPlugins.has(pkg.name);
-                    const displayName = typeof pkg.displayName === "string"
-                      ? pkg.displayName
-                      : (pkg.displayName as Record<string, string> | undefined)?.["zh-CN"] ?? pkg.name;
-                    const description = typeof pkg.description === "string"
-                      ? pkg.description
-                      : (pkg.description as Record<string, string> | undefined)?.["zh-CN"];
+              <CardContent className="space-y-4">
+                {/* Plugin selection grid */}
+                <div className="space-y-1.5">
+                  {packages.map((pkg) => {
+                    const displayName = text(pkg.displayName) || pkg.name;
+                    const description = text(pkg.description);
+                    const isSelected = selectedPlugins.has(pkg.name);
+                    const isCore = corePluginIds.has(pkg.name);
+                    const runtimes = pkg.runtimes ?? [];
+                    const tools = pkg.tools ?? [];
 
                     return (
-                      <div key={pkg.name} className="border border-border">
-                        <button
-                          className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/50 transition-colors text-left"
-                          onClick={() => togglePlugin(pkg.name)}
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <Badge variant="outline" className="shrink-0 text-[10px]">
-                              P{pkg.runtimes?.[0]?.priority ?? "?"}
+                      <div
+                        key={pkg.name}
+                        className={`border px-3 py-2.5 transition-colors ${
+                          isSelected
+                            ? "border-primary/40 bg-primary/5"
+                            : "border-border bg-muted/20 opacity-60"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {/* Toggle */}
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={isSelected}
+                            disabled={isCore}
+                            className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full border-2 border-transparent transition-colors ${
+                              isSelected ? "bg-primary" : "bg-input"
+                            } ${isCore ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                            onClick={() => !isCore && togglePlugin(pkg.name)}
+                          >
+                            <span className={`pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow-sm transition ${
+                              isSelected ? "translate-x-3" : "translate-x-0"
+                            }`} />
+                          </button>
+
+                          {/* Name + badges */}
+                          <span className="text-xs font-medium truncate flex-1">{displayName}</span>
+                          {isCore && <span title={t("plugin.locked")}><Lock className="w-3 h-3 text-muted-foreground/50 shrink-0" /></span>}
+                          {runtimes[0] && (
+                            <Badge variant="outline" className="text-[9px] shrink-0">
+                              P{runtimes[0].priority}
                             </Badge>
-                            <span className="text-sm font-medium truncate">{displayName}</span>
-                            {pkg.runtimes?.[0]?.providerTag && (
-                              <Badge variant="secondary" className="text-[10px] shrink-0">{pkg.runtimes[0].providerTag}</Badge>
-                            )}
-                          </div>
-                          {isExpanded ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
-                        </button>
-                        {isExpanded && (
-                          <div className="px-4 pb-3 space-y-3 border-t border-border pt-3">
-                            {description && (
-                              <p className="text-xs text-muted-foreground">{description}</p>
-                            )}
-                            {pkg.runtimes && pkg.runtimes.length > 0 ? (
-                              <div className="space-y-2">
-                                {pkg.runtimes.map((rt) => {
-                                  const qualifiedId = `${pkg.name}:${rt.id}`;
-                                  const effectivePriority = priorityOverrides[qualifiedId] ?? rt.priority;
-                                  const isOverridden = qualifiedId in priorityOverrides;
-                                  // Model slot binding
-                                  const bindingEntry = bindingState.entries.find((e) => e.qualifiedId === qualifiedId);
-                                  const compatSlots = rt.providerTag ? bindingState.compatibleSlots(rt.providerTag) : [];
-                                  return (
-                                    <div key={rt.id} className="bg-muted/30 px-3 py-2 space-y-2">
-                                      <div className="flex items-center justify-between gap-3">
-                                        <div className="flex items-center gap-2 min-w-0">
-                                          <span className="text-xs font-mono truncate">{rt.id}</span>
-                                          <Badge variant="secondary" className="text-[10px] shrink-0">{rt.kind}</Badge>
-                                          {rt.providerTag && (
-                                            <Badge variant="outline" className="text-[10px] shrink-0">{rt.providerTag}</Badge>
-                                          )}
-                                        </div>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                          <span className="text-[10px] text-muted-foreground uppercase">{t("session.priority")}</span>
-                                          <input
-                                            type="number"
-                                            min={0}
-                                            max={1000}
-                                            value={effectivePriority}
-                                            onChange={(e) => handlePriorityChange(qualifiedId, e.target.value)}
-                                            className={`w-16 bg-background border px-2 py-1 text-xs text-center outline-none focus:ring-1 focus:ring-primary ${
-                                              isOverridden ? "border-primary" : "border-border"
-                                            }`}
-                                          />
-                                          {isOverridden && (
-                                            <button
-                                              className="text-[10px] text-muted-foreground hover:text-primary underline"
-                                              onClick={() => resetPriority(qualifiedId)}
-                                            >
-                                              {t("session.reset")}
-                                            </button>
-                                          )}
-                                        </div>
-                                      </div>
-                                      {/* Inline model slot binding */}
-                                      {rt.providerTag && compatSlots.length > 0 && (
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-[10px] text-muted-foreground uppercase shrink-0">{t("plugin.modelBinding", "Model")}</span>
-                                          <select
-                                            value={bindingEntry?.slotName ?? ""}
-                                            onChange={(e) => bindingState.setBinding(qualifiedId, e.target.value)}
-                                            className="flex-1 bg-background border border-border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
-                                          >
-                                            <option value="">{t("session.selectSlot", "Select slot...")}</option>
-                                            {compatSlots.map((slot) => (
-                                              <option key={slot.slotId} value={slot.slotId}>
-                                                {slot.slotId}{slot.serverModel ? ` (${slot.serverModel})` : ""}
-                                              </option>
-                                            ))}
-                                          </select>
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            ) : (
-                              <p className="text-xs text-muted-foreground italic">{t("session.noRuntimes")}</p>
-                            )}
-                          </div>
+                          )}
+                          {runtimes[0]?.kind && (
+                            <Badge variant="secondary" className="text-[9px] shrink-0">
+                              {runtimes[0].kind === "agent" ? "LLM" : "Fn"}
+                            </Badge>
+                          )}
+                          {tools.length > 0 && (
+                            <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground shrink-0">
+                              <Wrench className="w-2.5 h-2.5" />{tools.length}
+                            </span>
+                          )}
+                        </div>
+                        {description && (
+                          <p className="text-[10px] text-muted-foreground mt-1 ml-9 line-clamp-1">{description}</p>
                         )}
                       </div>
                     );
-                  })
+                  })}
+                </div>
+
+                {/* Execution Flow Preview */}
+                {selectedFlowSteps.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-dashed border-border">
+                    <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                      <Zap className="w-3 h-3" />
+                      {t("session.executionFlow", "Execution Flow")}
+                    </h4>
+                    <div className="space-y-1">
+                      {(flowData?.segments ?? []).map((seg) => {
+                        const stepsInSeg = selectedFlowSteps
+                          .filter((s) => s.priority >= seg.range[0] && s.priority <= seg.range[1])
+                          .sort((a, b) => a.priority - b.priority);
+                        if (stepsInSeg.length === 0) return null;
+                        return (
+                          <div key={seg.label}>
+                            <div className="text-[9px] text-muted-foreground/70 uppercase tracking-widest mb-0.5">
+                              {seg.label}
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {stepsInSeg.map((step) => {
+                                const bindingEntry = bindingState.entries.find(
+                                  (e) => e.qualifiedId === `${step.pluginId}:${step.runtimeId}`,
+                                );
+                                return (
+                                  <div
+                                    key={step.runtimeId}
+                                    className="inline-flex items-center gap-1.5 bg-muted/40 border border-border px-2 py-1 text-[10px]"
+                                    title={`${step.runtimeId} — P${step.priority} — ${step.trigger.mode}`}
+                                  >
+                                    <span className="text-[8px] text-muted-foreground font-mono">P{step.priority}</span>
+                                    <span className="font-medium truncate max-w-[120px]">{step.label}</span>
+                                    {step.runtimeType === "agent" && (
+                                      <Cpu className="w-2.5 h-2.5 text-muted-foreground" />
+                                    )}
+                                    {bindingEntry?.slotName && (
+                                      <Badge variant="outline" className="text-[8px] px-1 py-0 h-3">
+                                        {bindingEntry.slotName}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Model binding section for selected agent runtimes */}
+                {bindingState.entries.length > 0 && resolvedSlots.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-dashed border-border">
+                    <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                      <Cpu className="w-3 h-3" />
+                      {t("session.modelBindings", "Model Assignments")}
+                    </h4>
+                    <div className="space-y-1">
+                      {bindingState.entries
+                        .filter((e) => selectedPlugins.has(e.pluginId))
+                        .map((entry) => {
+                          const compatSlots = bindingState.compatibleSlots(entry.providerTag);
+                          return (
+                            <div key={entry.qualifiedId} className="flex items-center gap-2">
+                              <span className="text-[10px] font-mono text-muted-foreground truncate w-40 shrink-0">{entry.qualifiedId.split(":").pop()}</span>
+                              <select
+                                value={entry.slotName}
+                                onChange={(e) => bindingState.setBinding(entry.qualifiedId, e.target.value)}
+                                className="flex-1 bg-background border border-border px-2 py-1 text-[10px] outline-none focus:ring-1 focus:ring-primary"
+                              >
+                                <option value="">auto (default)</option>
+                                {compatSlots.map((slot) => (
+                                  <option key={slot.slotId} value={slot.slotId}>
+                                    {slot.slotId}{slot.serverModel ? ` — ${slot.serverModel}` : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
                 )}
               </CardContent>
             )}

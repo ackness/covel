@@ -31,6 +31,11 @@ dist/
 build/
 *.tsbuildinfo
 
+# ── Electron desktop ────────────────────────────────────────────
+release/
+apps/desktop/staging/
+apps/desktop/release/
+
 # ── Test / Coverage ─────────────────────────────────────────────
 coverage/
 htmlcov/

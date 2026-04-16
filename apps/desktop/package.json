@@ -1,0 +1,24 @@
+{
+  "name": "@covel/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.mjs",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "tsx": "^4.19.0"
+  },
+  "devDependencies": {
+    "electron": "^40.0.0",
+    "electron-builder": "^26.0.0",
+    "esbuild": "^0.25.0"
+  }
+}

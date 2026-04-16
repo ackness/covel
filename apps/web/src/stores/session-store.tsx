@@ -11,6 +11,11 @@ import {
   type SessionSubscription,
   type SubscriptionEvent,
 } from "@/services/subscription.js";
+import {
+  applyChanges as applyPluginDataStoreChanges,
+  resetPluginData,
+  type PluginDataChange,
+} from "@/stores/plugin-data-store.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -306,7 +311,7 @@ interface SessionContextValue {
   state: SessionState;
   boot: () => Promise<void>;
   selectWorld: (worldId: string) => void;
-  startGame: () => Promise<void>;
+  startGame: (plugins?: string[]) => Promise<void>;
   /** Send start_session action to kick off the narrative from GameView. */
   beginAdventure: () => void;
   /** Resume a previously created session. */
@@ -729,9 +734,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // ── Plugin data events ────────────────────────────────────
       case "plugin-data.changed": {
         const pluginId = payload.pluginId as string;
-        const changes = payload.changes as readonly { namespace: string; key: string; value: unknown; operation: string }[];
+        const changes = payload.changes as readonly PluginDataChange[];
         if (pluginId && changes) {
           dispatch({ type: "PLUGIN_DATA_CHANGED", pluginId, changes });
+          // Sync to standalone plugin-data-store used by json-render panels
+          applyPluginDataStoreChanges(pluginId, changes);
         }
         break;
       }
@@ -762,7 +769,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
    * Create a new session and enter GameView — does NOT start the narrative.
    * The player presses "开始冒险" inside GameView to actually kick off the LLM flow.
    */
-  const startGame = useCallback(async () => {
+  const startGame = useCallback(async (plugins?: string[]) => {
     if (!state.world) return;
     try {
       const slotConfig = api.getSlotConfig();
@@ -778,7 +785,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         ?? defaultPresetId
         ?? state.presets.find((p) => p.isDefault)?.id
         ?? state.presets[0]?.id;
-      const session = await ds.createSession(state.world.id, presetId);
+      const session = await ds.createSession(state.world.id, presetId, undefined, plugins);
       dispatch({ type: "SET_SESSION", session });
       // Copy prep-phase runtime bindings to the real session
       const prepBindings = api.getRuntimeBindings(`prep:${state.world.id}`);
@@ -1253,7 +1260,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
 
     const sub = createSessionSubscription(sid, {
-      topics: ["plugin", "system"],
+      topics: ["plugin", "system", "plugin-data"],
     });
     subscriptionRef.current = sub;
 
@@ -1280,6 +1287,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           }
           break;
         }
+        case "plugin-data.changed": {
+          // Sync out-of-band plugin data changes to both stores
+          const pluginId = event.payload?.pluginId as string;
+          const changes = event.payload?.changes as readonly PluginDataChange[];
+          if (pluginId && changes) {
+            dispatch({ type: "PLUGIN_DATA_CHANGED", pluginId, changes });
+            applyPluginDataStoreChanges(pluginId, changes);
+          }
+          break;
+        }
         default:
           break;
       }
@@ -1295,10 +1312,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const resetSession = useCallback(() => {
     dispatch({ type: "RESET_SESSION" });
+    resetPluginData();
   }, []);
 
   const backToWorldSelect = useCallback(() => {
     dispatch({ type: "RESET_TO_WORLD_SELECT" });
+    resetPluginData();
   }, []);
 
   const updateWorldLocal = useCallback((world: api.WorldRecord) => {
