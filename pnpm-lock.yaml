@@ -14,9 +14,6 @@ importers:
       '@ai-sdk/provider-utils':
         specifier: ^3.0.12
         version: 3.0.23(zod@3.25.76)
-      '@copilotkit/aimock':
-        specifier: ^1.13.0
-        version: 1.13.0
       '@playwright/test':
         specifier: ^1.59.1
         version: 1.59.1
@@ -584,6 +581,9 @@ importers:
 
   packages/store:
     dependencies:
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../shared
       better-sqlite3:
         specifier: ^11.9.1
         version: 11.10.0
@@ -855,11 +855,6 @@ packages:
   '@bcoe/v8-coverage@1.0.2':
     resolution: {integrity: sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA==}
     engines: {node: '>=18'}
-
-  '@copilotkit/aimock@1.13.0':
-    resolution: {integrity: sha512-wcNQdicxSuaHf4MLtoC9bouKeYGcV9aBoIVJbeLtrBUhqz5LUAmo/U/S1WT69kyAEuM0uO1XyD3Jz+V+H9jsUw==}
-    engines: {node: '>=20.15.0'}
-    hasBin: true
 
   '@csstools/color-helpers@5.1.0':
     resolution: {integrity: sha512-S11EXWJyy0Mz5SYvRmY8nJYTFFd1LCNV+7cXyAgQtOOuzb4EsgfqDufL+9esx72/eLhsRdGZwaldu/h+E4t4BA==}
@@ -5372,8 +5367,6 @@ snapshots:
       '@babel/helper-validator-identifier': 7.28.5
 
   '@bcoe/v8-coverage@1.0.2': {}
-
-  '@copilotkit/aimock@1.13.0': {}
 
   '@csstools/color-helpers@5.1.0': {}
 

@@ -5,6 +5,8 @@
  * the STORE_BACKEND environment variable (memory | sqlite | pg).
  */
 
+import type { SessionStatus } from '@covel/shared';
+
 // ── Record types ─────────────────────────────────────────────────
 
 export interface WorldRecord {
@@ -22,8 +24,15 @@ export interface WorldRecord {
 export interface SessionRecord {
   readonly id: string;
   readonly worldId?: string;
-  readonly phase: string;
+  /** Lifecycle flag — `active` / `paused` / `ended`. */
+  readonly status: SessionStatus;
+  /** Band selector — 0 = Pre-Game (only priority 0-99 scheduled, may iterate);
+   *  >=1 = main loop (only priority 100-1000). Advances from 0 → 1 when all
+   *  Pre-Game runtimes report done. */
   readonly turnCount: number;
+  /** RuntimeIds of Pre-Game runtimes that have completed. Used to gate the
+   *  turnCount 0 → 1 transition. */
+  readonly preGameCompleted: readonly string[];
   readonly locale: string;
   readonly activePlugins: readonly string[];
   readonly createdAt: string;
@@ -32,12 +41,6 @@ export interface SessionRecord {
   readonly embeddingModelId?: number | null;
   /** ISO 8601 timestamp; null = not locked */
   readonly embeddingLockedAt?: string | null;
-  /**
-   * PR-2: Global `turnNumber` at the moment this session first entered
-   * the `playing` phase. Null until the transition happens, immutable
-   * afterwards. Used by the trigger router to compute `playingTurnNumber`.
-   */
-  readonly playingTurnOffset?: number | null;
   /**
    * PR-6: Per-runtime model slot overrides. Maps runtime ID
    * (`pluginId` or `pluginId/runtimeName`) → slot name from `llm.toml`.
@@ -304,7 +307,7 @@ export interface DataStore {
   // ── Session ──
   createSession(session: SessionRecord): Promise<void>;
   getSession(id: string): Promise<SessionRecord | null>;
-  updateSession(id: string, patch: Partial<Pick<SessionRecord, 'phase' | 'turnCount' | 'activePlugins' | 'updatedAt' | 'embeddingModelId' | 'embeddingLockedAt' | 'playingTurnOffset' | 'runtimeModelOverrides'>>): Promise<void>;
+  updateSession(id: string, patch: Partial<Pick<SessionRecord, 'status' | 'turnCount' | 'preGameCompleted' | 'activePlugins' | 'updatedAt' | 'embeddingModelId' | 'embeddingLockedAt' | 'runtimeModelOverrides'>>): Promise<void>;
   listSessions(): Promise<SessionRecord[]>;
   deleteSession(id: string): Promise<void>;
 

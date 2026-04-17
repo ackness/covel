@@ -20,6 +20,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@covel/shared": "workspace:*",
     "better-sqlite3": "^11.9.1",
     "drizzle-orm": "^0.45.2",
     "idb": "^8.0.2",
