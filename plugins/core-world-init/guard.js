@@ -98,6 +98,7 @@ export default async function guard(ctx) {
           schemaCount: existing.length,
           entryCount: entries?.length ?? 0,
           narrativeOutput: `[系统] 世界维度数据已加载（${existing.length} 个 schema, ${entries?.length ?? 0} 个词条）`,
+          preGameDone: true,
         };
       }
     }
@@ -176,6 +177,7 @@ export default async function guard(ctx) {
           schemaCount: bestReuse.prevSchema.length,
           entryCount: bestReuse.prevEntries.length,
           narrativeOutput: `[系统] 从历史会话复用世界维度数据（${bestReuse.prevSchema.length} 个 schema, ${bestReuse.prevEntries.length} 个词条）`,
+          preGameDone: true,
         };
       }
     }
@@ -229,6 +231,7 @@ export default async function guard(ctx) {
           entryCount: entryRecords.length,
           schemaCount: attributes.length,
           narrativeOutput: `[系统] 从世界包全量导入：${entryRecords.length} 个维度词条，${attributes.length} 个角色属性`,
+          preGameDone: true,
         };
       }
     }

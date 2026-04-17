@@ -84,3 +84,4 @@ ui:
 - 数值属性必须有合理的 min/max 范围
 - 只需 2 次工具调用：`set-world-schema` + `set-world-entries-batch`
 - 完成后简短总结你创建了什么
+- 完成两次工具调用后，在最终输出里写 `preGameDone: true`（以 JSON 片段或结构化形式暴露在 runtime output 中）

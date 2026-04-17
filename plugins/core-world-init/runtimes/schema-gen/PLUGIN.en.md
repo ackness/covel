@@ -79,3 +79,4 @@ Pass all entries in a single call:
 - Numeric attributes must have reasonable min/max ranges
 - Only 2 tool calls needed: `set-world-schema` + `set-world-entries-batch`
 - Briefly summarize what you created when done
+- After completing the two tool calls, include `preGameDone: true` in the final output (as a JSON fragment or structured field in the runtime output)
