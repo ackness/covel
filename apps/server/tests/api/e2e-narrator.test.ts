@@ -27,8 +27,11 @@ class MockNarratorLLM implements LLMAdapter {
     this.callCount++;
     this.lastMessages = [...params.messages];
 
-    // Find the player message to echo back in the narrative
-    const userMsg = params.messages.find((m) => m.role === 'user');
+    // Find the player message to echo back — use the LAST user turn so
+    // seed messages from the turn-band bootstrap don't shadow the current
+    // player action.
+    const userMsgs = params.messages.filter((m) => m.role === 'user');
+    const userMsg = userMsgs[userMsgs.length - 1];
     const playerAction = userMsg?.content ?? '未知操作';
 
     return {
@@ -45,6 +48,7 @@ class MockNarratorLLM implements LLMAdapter {
 describe('E2E: Narrator game flow', () => {
   let app: Hono;
   let mockLLM: MockNarratorLLM;
+  let store: Awaited<ReturnType<typeof bootstrapApi>>['store'];
 
   const PLUGINS_DIR = path.resolve(
     import.meta.dirname,
@@ -60,10 +64,31 @@ describe('E2E: Narrator game flow', () => {
       storeBackend: 'memory',
     });
     app = result.app;
+    store = result.store;
 
     // Activate core-narrator for all sessions globally
     result.registry.activate('core-narrator', '__global__');
   });
+
+  /**
+   * Turn-band refactor helper: priority-500 narrator only runs when
+   * `turnNumber >= 1` (main loop band). A freshly created session has no
+   * player messages and turnNumber starts at 0 (Pre-Game band), so tests
+   * must seed one prior player message to push the scheduler into the
+   * main band.
+   */
+  async function seedPriorPlayerMessage(sessionId: string) {
+    await store.appendTurnMessage({
+      id: crypto.randomUUID(),
+      sessionId,
+      turnId: 'pre-turn',
+      sourceType: 'player',
+      role: 'user',
+      content: 'session opener',
+      order: 0,
+      createdAt: new Date().toISOString(),
+    });
+  }
 
   it('should complete a full game turn through the API', async () => {
     // 1. Create session
@@ -74,18 +99,15 @@ describe('E2E: Narrator game flow', () => {
     });
     expect(startRes.status).toBe(200);
 
-    const session = await startRes.json() as { id: string; phase: string };
+    const session = await startRes.json() as { id: string; status: string; turnCount: number };
     expect(session.id).toBeDefined();
-    expect(session.phase).toBe('pre-game');
+    expect(session.status).toBe('active');
+    expect(session.turnCount).toBe(0);
 
     const sessionId = session.id;
 
-    // Transition to 'playing' phase so narrator triggers (it only runs in playing phase)
-    await app.request(`/api/sessions/${sessionId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phase: 'playing' }),
-    });
+    // Push the scheduler into the main loop band before the player turn.
+    await seedPriorPlayerMessage(sessionId);
 
     // 2. Execute a turn
     const turnRes = await app.request(`/api/sessions/${sessionId}/turn`, {
@@ -138,12 +160,8 @@ describe('E2E: Narrator game flow', () => {
     });
     const session = await startRes.json() as { id: string };
 
-    // Transition to 'playing' phase so narrator triggers
-    await app.request(`/api/sessions/${session.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phase: 'playing' }),
-    });
+    // Push the scheduler into the main loop band before running turns.
+    await seedPriorPlayerMessage(session.id);
 
     // Turn 1
     const turn1Res = await app.request(`/api/sessions/${session.id}/turn`, {

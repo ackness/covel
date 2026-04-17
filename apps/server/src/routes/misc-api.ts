@@ -115,7 +115,6 @@ async function buildPluginFlowResponse() {
       interval?: number;
       cooldownTurns?: number;
       maxTriggerCount?: number;
-      phases: string[];
       startTurn?: number;
     };
     injects: Array<{ kind: string; as: string; from?: string; field?: string; namespace?: string; format?: string }>;
@@ -168,7 +167,6 @@ async function buildPluginFlowResponse() {
           interval: manifest.trigger?.interval,
           cooldownTurns: manifest.trigger?.cooldownTurns,
           maxTriggerCount: manifest.trigger?.maxTriggerCount,
-          phases: [...(manifest.trigger?.phases ?? [])],
           startTurn: manifest.trigger?.startTurn,
         },
         injects: (manifest.input?.inject ?? []).map((inject) => ({

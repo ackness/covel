@@ -10,7 +10,7 @@ import { Hono } from 'hono';
 import type { RuntimeManifest } from '@covel/shared';
 import {
   createPluginRegistry,
-  discoverPlugins,
+  discoverPluginsMulti,
   loadPluginSummary,
   loadPluginManifest,
   loadRuntime as loadRuntimeFromDisk,
@@ -84,8 +84,16 @@ import { approvalRoutes, sessionApprovalRoutes } from './approvals.js';
 // ── Bootstrap config ─────────────────────────────────────────────
 
 export interface ApiBootstrapConfig {
-  /** Path to plugins directory (e.g., 'plugins/'). */
+  /** Path to plugins directory (e.g., 'plugins/'). Used when `pluginsDirs` is not provided. */
   readonly pluginsDir: string;
+  /**
+   * Optional ordered list of plugin directories (first wins on collision).
+   * When provided, overrides `pluginsDir`. Typical desktop config:
+   *   [bundledPluginsDir, userPluginsDir]
+   * Bundled plugins take precedence so a user plugin with the same id cannot
+   * shadow a core plugin.
+   */
+  readonly pluginsDirs?: readonly string[];
   /** LLM adapter (real or mock). */
   readonly llmAdapter: LLMAdapter;
   /** DataStore for all persistence. */
@@ -140,7 +148,15 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
 
   // 2. Discover plugins
   const registry = createPluginRegistry({ eventBus });
-  const discoveries = await discoverPlugins(config.pluginsDir);
+  const pluginsDirs =
+    config.pluginsDirs && config.pluginsDirs.length > 0
+      ? config.pluginsDirs
+      : [config.pluginsDir];
+  const discoveries = await discoverPluginsMulti(pluginsDirs, (id, kept, skipped) => {
+    console.warn(
+      `[bootstrap] Plugin id collision: "${id}" — keeping ${kept}, ignoring ${skipped}`,
+    );
+  });
 
   // Preload and register each plugin
   const discoveryMap = new Map<string, PluginDiscoveryResult>();
@@ -233,25 +249,10 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   }
 
   // Register character management tools (writes characters table + mirrors to plugin-data).
-  // Hook `onPhaseTransition` lets the tool emit a phase.changed event on the
-  // session SSE stream after `create-character` updates session.phase. Without
-  // this hook, the frontend reducer never learns about tool-driven phase
-  // transitions until a page refresh. (Followup D for the 2026-04-12 audit.)
-  for (const t of createCharacterTools(store, {
-    onPhaseTransition: (sessionId, phase) => {
-      eventBus.emit({
-        id: crypto.randomUUID(),
-        type: 'event',
-        topic: 'session',
-        payload: {
-          _subType: 'phase.changed',
-          phase,
-        },
-        sessionId,
-        timestamp: new Date().toISOString(),
-      });
-    },
-  })) {
+  // The turn-band refactor removed session.phase, so the former phase.changed
+  // hook no longer applies — status transitions are driven by turnCount and
+  // status updates, not character creation side effects.
+  for (const t of createCharacterTools(store)) {
     toolMap.set(t.name, t);
     builtinToolNames.add(t.name);
   }
@@ -273,7 +274,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   // Community plugins register metadata only; their tools are deferred until
   // explicit approval via the plugin management API.
   for (const [pluginId, discovery] of discoveryMap) {
-    const trust = getPluginTrustInfo(pluginId);
+    const trust = getPluginTrustInfo(pluginId, discovery.source);
     if (!trust.autoLoad) {
       // Community plugin — skip import(), tools registered on approval
       continue;
@@ -410,7 +411,8 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     for (const parsed of manifests) {
       const rpcMap = parsed.manifest.rpc;
       if (!rpcMap) continue;
-      const trustInfo = getPluginTrustInfo(pluginId);
+      const discovery = discoveryMap.get(pluginId);
+      const trustInfo = getPluginTrustInfo(pluginId, discovery?.source);
       const trustLevel: 'builtin' | 'official' | 'community' =
         trustInfo.source === 'builtin'
           ? 'builtin'
@@ -536,7 +538,10 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     };
     memorySystem = createMemorySystem(
       { store, llm: memoryLlm, resolveSlot: (slot: string) => resolveModel({ name: slot, model: slot } as RuntimeManifest) },
-      { updater: { modelSlot: resolvedMemoryPreset } },
+      {
+        coreMemory: { pluginId: 'core-memory' },
+        updater: { modelSlot: resolvedMemoryPreset },
+      },
     );
 
     // Register memory tools as builtins

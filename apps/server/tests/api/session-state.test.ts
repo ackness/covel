@@ -86,7 +86,9 @@ describe('Session Routes', () => {
       const body = await json(res) as Record<string, unknown>;
       expect(body.id).toBeDefined();
       expect(typeof body.id).toBe('string');
-      expect(body.phase).toBe('pre-game');
+      expect(body.status).toBe('active');
+      expect(body.turnCount).toBe(0);
+      expect(body.preGameCompleted).toEqual([]);
       expect(body.activePlugins).toEqual([]);
     });
 
@@ -102,8 +104,9 @@ describe('Session Routes', () => {
 
       const session = await store.getSession(sessionId);
       expect(session).not.toBeNull();
-      expect(session!.phase).toBe('pre-game');
+      expect(session!.status).toBe('active');
       expect(session!.turnCount).toBe(0);
+      expect(session!.preGameCompleted).toEqual([]);
     });
 
     it('rejects worldId with invalid characters', async () => {
@@ -196,7 +199,9 @@ describe('Session Routes', () => {
 
       const body = await json(res) as Record<string, unknown>;
       expect(body.id).toBe(sessionId);
-      expect(body.phase).toBe('pre-game');
+      expect(body.status).toBe('active');
+      expect(body.turnCount).toBe(0);
+      expect(body.preGameCompleted).toEqual([]);
       expect(body.worldId).toBe('mistport');
     });
 

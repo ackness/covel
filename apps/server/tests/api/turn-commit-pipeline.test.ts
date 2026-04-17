@@ -108,10 +108,24 @@ describe('POST /api/sessions/:id/turn — commit pipeline (Finding 3 regression)
       id: sessionId,
       worldId: null,
       status: 'active',
-      phase: 'playing',
+      preGameCompleted: [],
       presetId: null,
       activePlugins: [RUNTIME_ID],
-      turnCount: 0,
+      turnCount: 1,
+      createdAt: new Date().toISOString(),
+    });
+
+    // Turn-band refactor: narrator at priority 500 only runs in the main loop
+    // band (turnNumber >= 1). Seed a prior player message so the next call
+    // computes turnNumber = 1 and the narrator is in-band.
+    await store.appendTurnMessage({
+      id: crypto.randomUUID(),
+      sessionId,
+      turnId: 'pre-turn',
+      sourceType: 'player',
+      role: 'user',
+      content: 'session opener',
+      order: 0,
       createdAt: new Date().toISOString(),
     });
 
@@ -140,8 +154,10 @@ describe('POST /api/sessions/:id/turn — commit pipeline (Finding 3 regression)
   });
 
   it('still updates session.turnCount as before', async () => {
-    const before = await store.getSession(sessionId);
-    expect(before?.turnCount ?? 0).toBe(0);
+    // turn.ts derives turnCount from `listTurnResults(sessionId).length` after
+    // the turn commits — one executed turn → turnCount = 1.
+    const turnsBefore = await store.listTurnResults(sessionId);
+    expect(turnsBefore).toHaveLength(0);
 
     await app.request(`/api/sessions/${sessionId}/turn`, {
       method: 'POST',

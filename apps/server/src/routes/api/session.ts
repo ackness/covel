@@ -168,8 +168,9 @@ sessionRoutes.post('/', async (c) => {
     id,
     worldId: rawWorldId,
     locale: typeof body.locale === 'string' ? body.locale : 'zh-CN',
-    phase: 'pre-game',
+    status: 'active',
     turnCount: 0,
+    preGameCompleted: [],
     activePlugins: plugins,
     createdAt: now,
     updatedAt: now,
@@ -213,19 +214,20 @@ sessionRoutes.patch('/:id', async (c) => {
   const now = new Date().toISOString();
   const updates: Record<string, unknown> = { updatedAt: now };
 
-  // MEDIUM-2: validate phase against the SessionPhase union. Pre-existing
-  // code accepted any string; this hardens the contract per code review.
-  const VALID_PHASES = new Set(['pre-game', 'character_creation', 'playing', 'paused', 'ended']);
-  if (body.phase !== undefined) {
-    if (typeof body.phase !== 'string' || !VALID_PHASES.has(body.phase)) {
+  // Validate status against the SessionStatus union. Pre-existing code
+  // previously accepted phase strings; the turn-band refactor replaced
+  // phase with a coarser status (`active`/`paused`/`ended`).
+  const VALID_STATUSES = new Set(['active', 'paused', 'ended']);
+  if (body.status !== undefined) {
+    if (typeof body.status !== 'string' || !VALID_STATUSES.has(body.status)) {
       return c.json(
         {
-          error: `phase must be one of: ${[...VALID_PHASES].join(', ')}`,
+          error: `status must be one of: ${[...VALID_STATUSES].join(', ')}`,
         },
         400,
       );
     }
-    updates.phase = body.phase;
+    updates.status = body.status;
   }
 
   // PR-6: per-runtime model slot overrides. Validates shape (object of
@@ -260,7 +262,7 @@ sessionRoutes.patch('/:id', async (c) => {
     updates.runtimeModelOverrides = cleaned;
   }
 
-  await store.updateSession(id, updates as Partial<Pick<SessionRecord, 'phase' | 'turnCount' | 'activePlugins' | 'updatedAt' | 'runtimeModelOverrides'>>);
+  await store.updateSession(id, updates as Partial<Pick<SessionRecord, 'status' | 'turnCount' | 'preGameCompleted' | 'activePlugins' | 'updatedAt' | 'runtimeModelOverrides'>>);
   // Return merged result to avoid a second DB read
   return c.json({ ...session, ...updates });
 });

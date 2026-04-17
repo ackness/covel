@@ -185,8 +185,9 @@ snapshotRoutes.post('/:id/fork', async (c) => {
     await store.createSession({
       id: childSessionId,
       worldId: parentSession.worldId,
-      phase: parentSession.phase,
+      status: parentSession.status,
       turnCount: parentSession.turnCount,
+      preGameCompleted: parentSession.preGameCompleted,
       locale: parentSession.locale,
       activePlugins: parentSession.activePlugins,
       createdAt: now,

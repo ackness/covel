@@ -40,8 +40,9 @@ function makeSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
   return {
     id: 'sess-overrides-1',
     worldId: 'cloudmere',
-    phase: 'playing',
+    status: 'active',
     turnCount: 3,
+    preGameCompleted: [],
     locale: 'zh-CN',
     activePlugins: ['core-narrator'],
     createdAt: now,
@@ -153,24 +154,24 @@ describe('PATCH /api/sessions/:id runtimeModelOverrides (PR-6)', () => {
     });
   });
 
-  it('rejects invalid phase value with 400 (MEDIUM-2)', async () => {
+  it('rejects invalid status value with 400 (MEDIUM-2)', async () => {
     const res = await app.request('/api/sessions/sess-overrides-1', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ phase: 'not-a-real-phase' }),
+      body: JSON.stringify({ status: 'not-a-real-status' }),
     });
     expect(res.status).toBe(400);
   });
 
-  it('accepts a valid phase value (MEDIUM-2)', async () => {
+  it('accepts a valid status value (MEDIUM-2)', async () => {
     const res = await app.request('/api/sessions/sess-overrides-1', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ phase: 'paused' }),
+      body: JSON.stringify({ status: 'paused' }),
     });
     expect(res.status).toBe(200);
     const fresh = await store.getSession('sess-overrides-1');
-    expect(fresh?.phase).toBe('paused');
+    expect(fresh?.status).toBe('paused');
   });
 
   it('clearing with empty object removes overrides', async () => {
