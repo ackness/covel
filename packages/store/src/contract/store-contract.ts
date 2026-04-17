@@ -235,7 +235,6 @@ function makeRuntimeOutput(overrides?: Partial<RuntimeOutputRecord>): RuntimeOut
     results: [{ text: 'hello world', structured: { narrative: 'hello world' } }],
     metaData: {
       turn: 0,
-      phase: 'playing',
       toolCallList: [],
     },
     createdAt: ts(),

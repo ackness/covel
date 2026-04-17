@@ -70,8 +70,9 @@ async function seedSession(store: DataStore, id = 'sess-approval-1'): Promise<vo
   await store.createSession({
     id,
     worldId: 'cloudmere',
-    phase: 'playing',
-    turnCount: 0,
+    status: 'active',
+    turnCount: 1,
+    preGameCompleted: [],
     locale: 'zh-CN',
     activePlugins: [],
     createdAt: now,

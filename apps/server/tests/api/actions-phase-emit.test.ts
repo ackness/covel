@@ -4,8 +4,8 @@
  * Followup for 2026-04-12 audit Finding 4 / Task 5: actions.ts no longer
  * unconditionally emits `phase.changed { phase: 'playing' }` for every
  * action. The reducer in web-v2 used to overwrite the real session phase
- * with the spurious 'playing' value, breaking sessions still in
- * pre-game / character_creation.
+ * with the spurious 'playing' value, breaking sessions still in pre-game
+ * (turnCount: 0).
  *
  * Real phase transitions still flow through `phase.transition` proposals
  * committed via processRuntimeResult().
@@ -105,16 +105,16 @@ describe('POST /api/actions — phase.changed hygiene (Finding 4 regression)', (
     });
     registry.register(makeEntry({ id: RUNTIME_ID, loaded }));
 
-    // Session starts in character_creation — the broken behavior would have
-    // forced it to 'playing' via the unconditional phase.changed emit.
+    // Session starts in pre-game (turnCount: 0) — the broken behavior would
+    // have forced a 'phase.changed → playing' emit for every action.
     await store.createSession({
       id: sessionId,
       worldId: null,
       status: 'active',
-      phase: 'character_creation',
       presetId: null,
       activePlugins: [RUNTIME_ID],
       turnCount: 0,
+      preGameCompleted: [],
       createdAt: new Date().toISOString(),
     });
 
@@ -138,7 +138,7 @@ describe('POST /api/actions — phase.changed hygiene (Finding 4 regression)', (
     app.route('/api/actions', actionRoutes);
   });
 
-  it('does NOT emit phase.changed for a send_message during character_creation', async () => {
+  it('does NOT emit phase.changed for a send_message during pre-game (turnCount: 0)', async () => {
     const res = await app.request('/api/actions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

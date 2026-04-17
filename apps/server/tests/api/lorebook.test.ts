@@ -58,8 +58,9 @@ describe('Lorebook API routes', () => {
     await store.createSession({
       id: SESSION_ID,
       worldId: 'world-1',
-      phase: 'playing',
-      turnCount: 0,
+      status: 'active',
+      turnCount: 1,
+      preGameCompleted: [],
       locale: 'en',
       activePlugins: [],
       createdAt: new Date().toISOString(),

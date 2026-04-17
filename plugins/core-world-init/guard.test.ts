@@ -26,8 +26,9 @@ describe('core-world-init guard', () => {
     await store.createSession({
       id: 'sess-prev-empty',
       worldId: 'cloudmere',
-      phase: 'playing',
+      status: 'active',
       turnCount: 1,
+      preGameCompleted: [],
       locale: 'zh-CN',
       activePlugins: [],
       createdAt: now,
@@ -48,8 +49,9 @@ describe('core-world-init guard', () => {
     await store.createSession({
       id: 'sess-current',
       worldId: 'cloudmere',
-      phase: 'character_creation',
+      status: 'active',
       turnCount: 0,
+      preGameCompleted: [],
       locale: 'zh-CN',
       activePlugins: [],
       createdAt: now,

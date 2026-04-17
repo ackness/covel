@@ -121,7 +121,6 @@ function makePlayerInitParams(
     messageHistory: [],
     sessionMeta: {
       turnNumber: 1,
-      phase: 'character_creation',
       characters: [],
       lastFormValues: undefined,
     },
@@ -154,7 +153,6 @@ function makeCharacterTrackerParams(
     ],
     sessionMeta: {
       turnNumber: 3,
-      phase: 'playing',
       characters: [
         { name: '柳无痕', type: 'player', description: '青萍宗外门弟子' },
       ],

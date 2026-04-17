@@ -94,7 +94,9 @@ describe('core-npc-graph manifests', () => {
     expect(extractor.tools?.local).toContain('./tools/list-npc-graph.js');
     expect(extractor.trigger?.type).toBe('scheduled');
     expect(extractor.trigger?.interval).toBe(1);
-    expect(extractor.trigger?.phases).toContain('playing');
+    // Main-loop band membership is enforced by priority >= 100 server-side;
+    // manifest no longer carries a `trigger.phases` field.
+    expect(extractor.priority).toBeGreaterThanOrEqual(100);
   });
 
   it('rag-retriever is a function runtime that runs before narrator', () => {
@@ -104,7 +106,8 @@ describe('core-npc-graph manifests', () => {
     expect(retriever.handler).toBe('./handler.js');
     expect(retriever.priority).toBe(490); // before narrator priority 500
     expect(retriever.capabilities).toContain('graph-rag');
-    expect(retriever.trigger?.phases).toContain('playing');
+    // Main-loop band membership enforced by priority >= 100 server-side.
+    expect(retriever.priority).toBeGreaterThanOrEqual(100);
   });
 });
 

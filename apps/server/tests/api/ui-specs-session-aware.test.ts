@@ -95,7 +95,8 @@ describe('GET /api/ui-specs session-aware filter', () => {
       id: sessionId,
       worldId: null,
       status: 'active',
-      phase: 'playing',
+      turnCount: 1,
+      preGameCompleted: [],
       presetId: null,
       activePlugins: ['core-codex'], // only core-codex active in this session
       createdAt: new Date().toISOString(),

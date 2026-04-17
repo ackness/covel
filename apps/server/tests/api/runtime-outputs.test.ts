@@ -45,7 +45,6 @@ function makeRuntimeOutput(
     results: [{ text: 'hello', structured: { narrative: 'hello' } }],
     metaData: {
       turn: 0,
-      phase: 'playing',
       toolCallList: [],
     },
     createdAt: now,
@@ -80,8 +79,9 @@ describe('runtime-outputs API', () => {
     app = setupApp(store);
     await store.createSession({
       id: 'sess-1',
-      phase: 'playing',
-      turnCount: 0,
+      status: 'active',
+      turnCount: 1,
+      preGameCompleted: [],
       locale: 'zh-CN',
       activePlugins: [],
       createdAt: new Date().toISOString(),
@@ -164,7 +164,6 @@ describe('runtime-outputs API', () => {
       const ro = makeRuntimeOutput({
         metaData: {
           turn: 0,
-          phase: 'playing',
           rawPromptDelta: [
             { role: 'user', content: 'go north' },
           ],

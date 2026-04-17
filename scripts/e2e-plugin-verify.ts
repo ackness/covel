@@ -199,7 +199,6 @@ interface PluginFlowTrigger {
   interval?: number;
   cooldownTurns?: number;
   maxTriggerCount?: number;
-  phases: string[];
   startTurn?: number;
 }
 
@@ -234,8 +233,9 @@ interface PluginFlowResponse {
 interface SessionRecord {
   id: string;
   worldId?: string;
-  phase: string;
+  status: string;
   turnCount: number;
+  preGameCompleted?: readonly string[];
   locale?: string;
   activePlugins?: readonly string[];
   createdAt?: string;
@@ -607,7 +607,6 @@ function printTable(headers: string[], rows: string[][]): void {
 function summariseOutput(output: Record<string, unknown> | undefined): string {
   if (!output) return '-';
   const parts: string[] = [];
-  if (typeof output.phase === 'string') parts.push(`phase=${output.phase}`);
   if (typeof output.narrativeOutput === 'string' && output.narrativeOutput.length > 0) {
     parts.push(`narrative(${output.narrativeOutput.length}c)`);
   }
@@ -659,12 +658,16 @@ interface TriggerExpectation {
  * trigger rules. This mirrors packages/runtime/src/trigger.ts. The plugin
  * flow metadata from /api/plugin-flows drives this check, so it adapts
  * automatically when plugins are added or modified.
+ *
+ * Band filtering (priority 0-99 Pre-Game vs 100-1000 main loop) is handled
+ * server-side by the scheduler based on `session.turnCount`. The script
+ * does not re-validate the band — it only checks trigger rules that remain
+ * in the manifest (interval, cooldown, maxTriggerCount, startTurn).
  */
 function computeExpectation(
   step: PluginFlowStep,
   turnNumber: number,
   playingTurnNumber: number,
-  phase: string,
   state: TriggerState,
 ): TriggerExpectation {
   const t = step.trigger;
@@ -692,13 +695,6 @@ function computeExpectation(
     return {
       expected: false,
       reason: `cooldown: turnsSince=${turnsSince}<cd=${t.cooldownTurns}`,
-    };
-  }
-
-  if (t.phases.length > 0 && !t.phases.includes(phase)) {
-    return {
-      expected: false,
-      reason: `phase=${phase} not in [${t.phases.join(',')}]`,
     };
   }
 
@@ -933,12 +929,15 @@ interface PerTurnContext {
   turnNumber: number;
   /**
    * Playing-phase turn counter (PR-2). Mirrors server-side semantics:
-   * 0-based from the first turn that runs while session.phase === 'playing'.
-   * The script increments this whenever it issues a send_message with a
-   * prior phase of 'playing'. Reset back to 0 if phase leaves playing.
+   * 0-based from the first turn that runs after the Pre-Game band ends
+   * (i.e. once `session.turnCount >= 1`). Reset back to 0 if session
+   * rewinds to Pre-Game (turnCount === 0).
    */
   playingTurnNumber: number;
-  phase: string;
+  /** Mirrors `session.turnCount` — 0 for Pre-Game band, >=1 for main loop. */
+  turnCount: number;
+  /** Mirrors `session.status` — 'active' | 'paused' | 'ended'. */
+  status: string;
   flow: PluginFlowResponse;
   triggerStates: Map<string, TriggerState>;
   assertions: Assertions;
@@ -1047,7 +1046,6 @@ function reportTurn(ctx: PerTurnContext, exec: TurnExecution): void {
       step,
       ctx.turnNumber,
       ctx.playingTurnNumber,
-      ctx.phase,
       state,
     );
     const ranIt = ran.has(step.runtimeId);
@@ -1320,7 +1318,7 @@ async function runMain(
   });
   state.sessionId = session.id;
   kv('Session ID', session.id);
-  kv('Phase', session.phase);
+  kv('Status', session.status);
   kv('Turn count', session.turnCount);
 
   // ── Phase 5: Turn execution ────────────────────────────────────
@@ -1334,15 +1332,17 @@ async function runMain(
     });
   }
 
-  // Mirrors server semantics: once the session first enters playing phase,
-  // remember the turnNumber at that moment and use it as the origin for
+  // Mirrors server semantics: once the session first leaves the Pre-Game
+  // band (turnCount advances from 0 → 1), remember the script's own
+  // turnNumber at that moment and use it as the origin for
   // playingTurnNumber from then on.
-  let playingTurnOffset: number | null = null;
+  let playingTurnOrigin: number | null = null;
 
   const ctx: PerTurnContext = {
     turnNumber: 0,
     playingTurnNumber: 0,
-    phase: 'pre-game',
+    turnCount: session.turnCount,
+    status: session.status,
     flow,
     triggerStates,
     assertions,
@@ -1351,18 +1351,22 @@ async function runMain(
   };
 
   function refreshPlayingTurn(): void {
-    if (ctx.phase === 'playing') {
-      if (playingTurnOffset === null) playingTurnOffset = ctx.turnNumber;
-      ctx.playingTurnNumber = Math.max(0, ctx.turnNumber - playingTurnOffset);
+    if (ctx.turnCount >= 1) {
+      if (playingTurnOrigin === null) playingTurnOrigin = ctx.turnNumber;
+      ctx.playingTurnNumber = Math.max(0, ctx.turnNumber - playingTurnOrigin);
     } else {
       ctx.playingTurnNumber = 0;
     }
   }
 
+  function bandLabel(): string {
+    return ctx.turnCount === 0 ? 'pre-game' : 'playing';
+  }
+
   // Turn 1: start_session
   refreshPlayingTurn();
   console.log('');
-  console.log(`  Turn ${ctx.turnNumber + 1}: start_session (phase=${ctx.phase})`);
+  console.log(`  Turn ${ctx.turnNumber + 1}: start_session (band=${bandLabel()}, turnCount=${ctx.turnCount})`);
   console.log(DIV);
   let exec = await runTurn(args, session.id, { type: 'start_session', payload: {} });
   reportTurn(ctx, exec);
@@ -1398,14 +1402,15 @@ async function runMain(
     const filled = submitResp.filledNarrative ?? '';
     if (filled) kv('Filled narrative', truncate(filled, 80));
 
-    // Refresh phase from server — the submit-inputs + turn commit chain may
-    // have moved us past character_creation already.
+    // Refresh band from server — the submit-inputs + turn commit chain may
+    // have advanced session.turnCount past Pre-Game already.
     const sessAfterSubmit = await httpGet<SessionRecord>(args.server, `/sessions/${session.id}`);
-    ctx.phase = sessAfterSubmit.phase;
+    ctx.turnCount = sessAfterSubmit.turnCount;
+    ctx.status = sessAfterSubmit.status;
     refreshPlayingTurn();
 
     console.log('');
-    console.log(`  Turn ${ctx.turnNumber + 1}: send_message (after form submit, phase=${ctx.phase})`);
+    console.log(`  Turn ${ctx.turnNumber + 1}: send_message (after form submit, band=${bandLabel()}, turnCount=${ctx.turnCount})`);
     console.log(DIV);
     exec = await runTurn(args, session.id, {
       type: 'send_message',
@@ -1415,9 +1420,10 @@ async function runMain(
     ctx.turnNumber += 1;
   }
 
-  // Remaining playing-phase turns
+  // Remaining playing-band turns
   const sess = await httpGet<SessionRecord>(args.server, `/sessions/${session.id}`);
-  ctx.phase = sess.phase;
+  ctx.turnCount = sess.turnCount;
+  ctx.status = sess.status;
   refreshPlayingTurn();
 
   const defaultPlayerMessages = [
@@ -1433,7 +1439,7 @@ async function runMain(
       ?? defaultPlayerMessages[i % defaultPlayerMessages.length];
     console.log('');
     console.log(
-      `  Turn ${ctx.turnNumber + 1}: send_message #${i + 1} (phase=${ctx.phase})`,
+      `  Turn ${ctx.turnNumber + 1}: send_message #${i + 1} (band=${bandLabel()}, turnCount=${ctx.turnCount})`,
     );
     console.log(DIV);
     console.log(`  Player: ${truncate(content, 72)}`);
@@ -1445,9 +1451,10 @@ async function runMain(
     reportTurn(ctx, exec);
     ctx.turnNumber += 1;
 
-    // Refresh phase for next turn's trigger check
+    // Refresh band for next turn's trigger check
     const fresh = await httpGet<SessionRecord>(args.server, `/sessions/${session.id}`);
-    ctx.phase = fresh.phase;
+    ctx.turnCount = fresh.turnCount;
+    ctx.status = fresh.status;
     refreshPlayingTurn();
   }
 
@@ -1461,7 +1468,7 @@ async function runMain(
   }>(args.server, `/sessions/${session.id}/snapshot`);
   state.snapshot = snapshot;
   kv('Session ID', snapshot.session.id);
-  kv('Phase', snapshot.session.phase);
+  kv('Status', snapshot.session.status);
   kv('Turn count', snapshot.session.turnCount);
   kv('Messages', snapshot.messages?.length ?? 0);
   kv('Characters', snapshot.characters?.length ?? 0);
@@ -1551,7 +1558,6 @@ function formatTrigger(t: PluginFlowTrigger): string {
   if (t.cooldownTurns !== undefined) parts.push(`cd=${t.cooldownTurns}`);
   if (t.maxTriggerCount !== undefined) parts.push(`max=${t.maxTriggerCount}`);
   if (t.startTurn !== undefined && t.startTurn > 1) parts.push(`start=${t.startTurn}`);
-  if (t.phases.length > 0) parts.push(`phases=[${t.phases.join(',')}]`);
   return parts.join(' ');
 }
 

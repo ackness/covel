@@ -65,7 +65,9 @@ async function createSession(store: DataStore, sessionId = 'sess-1') {
   await store.createSession({
     id: sessionId,
     worldId: 'test-world',
-    phase: 'playing',
+    status: 'active',
+    turnCount: 1,
+    preGameCompleted: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });

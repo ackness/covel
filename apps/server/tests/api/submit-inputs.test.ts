@@ -46,10 +46,10 @@ describe('submit-inputs route — history hygiene', () => {
       id: sessionId,
       worldId: null,
       status: 'active',
-      phase: 'character_creation',
       presetId: null,
       activePlugins: [],
       turnCount: 0,
+      preGameCompleted: [],
       createdAt: new Date().toISOString(),
     });
     // Seed a template message that submit-inputs will fill. We use the legacy

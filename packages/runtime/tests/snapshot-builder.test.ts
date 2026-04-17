@@ -13,8 +13,9 @@ describe('buildSessionSnapshot', () => {
       getSession: vi.fn().mockResolvedValue({
         id: 'sess-1',
         worldId: 'neonridge',
-        phase: 'playing',
+        status: 'active',
         turnCount: 3,
+        preGameCompleted: [],
         locale: 'zh-CN',
       }),
       listMessages: vi.fn().mockResolvedValue([

@@ -53,8 +53,8 @@ describe('core-char-creator plugin', () => {
       manifest = m.manifest;
     });
 
-    it('has priority 700 and is a core-plugin', () => {
-      expect(manifest.priority).toBe(700);
+    it('is a Pre-Game band core-plugin (priority < 100)', () => {
+      expect(manifest.priority).toBeLessThan(100);
       expect(manifest.pluginType).toBe('core-plugin');
     });
 
@@ -72,8 +72,11 @@ describe('core-char-creator plugin', () => {
       expect(inject.as).toBe('<narrator-opening>');
     });
 
-    it('limits triggers to 2 (form creation + post-submit character creation)', () => {
-      expect(manifest.trigger?.maxTriggerCount).toBe(2);
+    it('uses an auto trigger with a guard to gate re-runs', () => {
+      // Pre-Game runtimes use `trigger: { type: 'auto' }` and rely on
+      // the guard + preGameDone output to opt-out after completion.
+      expect(manifest.trigger?.type).toBe('auto');
+      expect(manifest.guard).toBeTruthy();
     });
 
     it('has a guard.js file to skip after player exists', () => {
@@ -101,10 +104,13 @@ describe('core-char-creator plugin', () => {
       manifest = m.manifest;
     });
 
-    it('runs every turn during playing phase', () => {
+    it('runs every turn in the main-loop band (priority >= 100)', () => {
       expect(manifest.trigger?.type).toBe('scheduled');
       expect(manifest.trigger?.interval).toBe(1);
-      expect(manifest.trigger?.phases).toContain('playing');
+      // Band filtering (Pre-Game vs main loop) is enforced server-side by
+      // the priority scheduler based on `session.turnCount`. The manifest
+      // no longer carries a `trigger.phases` field.
+      expect(manifest.priority).toBeGreaterThanOrEqual(100);
     });
 
     it('declares the full character management tool suite', () => {

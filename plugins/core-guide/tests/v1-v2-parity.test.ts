@@ -78,7 +78,6 @@ function makeBaseParams(
     ],
     sessionMeta: {
       turnNumber: 7,
-      phase: 'playing',
       characters: [
         {
           name: 'Aria',

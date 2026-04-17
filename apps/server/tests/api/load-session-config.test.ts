@@ -24,8 +24,9 @@ async function seedSession(store: DataStore): Promise<void> {
   await store.createSession({
     id: SESSION_ID,
     worldId: undefined,
-    phase: 'playing',
-    turnCount: 0,
+    status: 'active',
+    turnCount: 1,
+    preGameCompleted: [],
     locale: 'en',
     activePlugins: [],
     createdAt: new Date().toISOString(),
