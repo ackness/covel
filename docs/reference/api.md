@@ -153,7 +153,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | GET | `/api/sessions` | 列出所有会话（可选 `?worldId=` 过滤） |
 | POST | `/api/sessions` | 创建新会话 |
 | GET | `/api/sessions/:id` | 获取会话信息 |
-| PATCH | `/api/sessions/:id` | 更新会话字段（如 phase） |
+| PATCH | `/api/sessions/:id` | 更新会话字段（`status` / `runtimeModelOverrides`） |
 | DELETE | `/api/sessions/:id` | 删除会话 |
 
 ### 会话快照
@@ -234,8 +234,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
   results: [{ text: string, structured?: unknown }],
   metaData: {
     turn: number,
-    playingTurn?: number,
-    phase: string,
+    preGameDone?: boolean,                  // Pre-Game runtime 声明自身初始化已完成
     rawPromptDelta?: [{ role, content }],   // 相对上次调用的 prompt 增量
     outputResponses?: string[],             // 流式输出合并后的裸文本
     toolCallList?: [{ tool, input, output, status, durationMs }],
@@ -598,8 +597,9 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
     {
       "id": "cloudmere-a1b2c3d4",
       "worldId": "cloudmere",
-      "phase": "pre-game",
+      "status": "active",
       "turnCount": 0,
+      "preGameCompleted": [],
       "locale": "zh-CN",
       "activePlugins": ["core-pregame", "core-narrator"],
       "createdAt": "2025-01-15T10:00:00.000Z",
@@ -637,13 +637,20 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
   "id": "cloudmere-a1b2c3d4",
   "worldId": "cloudmere",
   "locale": "zh-CN",
-  "phase": "pre-game",
+  "status": "active",
   "turnCount": 0,
+  "preGameCompleted": [],
   "activePlugins": ["core-pregame", "core-narrator", "core-codex"],
   "createdAt": "2025-01-15T10:00:00.000Z",
   "updatedAt": "2025-01-15T10:00:00.000Z"
 }
 ```
+
+**响应字段**:
+
+- `status`(`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态（turn-band 重构后替代原先的 `phase` 字段）
+- `turnCount`(number) — 主循环轮数计数（从 0 开始，每次成功 turn +1）
+- `preGameCompleted`(string[]) — 已完成 Pre-Game 初始化的 runtime id 集合，框架据此跳过后续轮次的 Pre-Game 调度
 
 > **Session ID 格式**: 自动生成的 ID 格式为 `{worldId}-{uuid8}`（如 `cloudmere-a1b2c3d4`），使用 `crypto.randomUUID()` 后缀防止枚举。如未提供 worldId 则前缀为 `session`。
 
@@ -663,8 +670,9 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 {
   "id": "cloudmere-a1b2c3d4",
   "worldId": "cloudmere",
-  "phase": "pre-game",
+  "status": "active",
   "turnCount": 3,
+  "preGameCompleted": ["core-pregame", "core-world-init/schema-gen", "core-char-creator/player-init"],
   "locale": "zh-CN",
   "activePlugins": ["core-pregame", "core-narrator"],
   "createdAt": "2025-01-15T10:00:00.000Z",
@@ -682,7 +690,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 #### `PATCH /api/sessions/:id`
 
-更新会话字段。当前支持 `phase` 与 `runtimeModelOverrides`。
+更新会话字段。当前支持 `status` 与 `runtimeModelOverrides`。
 
 **参数:**
 
@@ -694,7 +702,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ```json
 {
-  "phase": "playing",
+  "status": "paused",
   "runtimeModelOverrides": {
     "core-narrator": "balance",
     "core-codex/unlocker": "fast"
@@ -704,15 +712,16 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 **字段说明:**
 
-- `phase`(可选,string) — 会话阶段(`pre-game` / `playing` / `paused` / `ended`)
-- `runtimeModelOverrides`(可选,object) — PR-6 引入。Per-runtime 模型 slot 覆盖,key 为 runtime ID(`pluginId` 或 `pluginId/runtimeName`),value 为 `llm.toml` 中定义的 slot 名(如 `default` / `fast` / `balance`)。框架在每次 turn 执行前快照该字段,resolver 优先查找 session override → 然后 fallback 到 `manifest.model` → 最后 `default`。空对象 `{}` 清除所有覆盖。**Provider 与 API key 仍走前端 localStorage + `X-Provider-Keys` header,不入库,以保护隐私。**
+- `status`(可选,`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态。turn-band 重构后取代原先的 `phase` 字段——`phase` 已从 SessionRecord 中移除，运行进度改由 `turnCount` + `preGameCompleted` 集合描述。非合法枚举值返回 400。
+- `runtimeModelOverrides`(可选,object) — PR-6 引入。Per-runtime 模型 slot 覆盖,key 为 runtime ID(`pluginId` 或 `pluginId/runtimeName`,必须匹配 `/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?$/`),value 为 `llm.toml` 中定义的 slot 名(如 `default` / `fast` / `balance`)。框架在每次 turn 执行前快照该字段,resolver 优先查找 session override → 然后 fallback 到 `manifest.model` → 最后 `default`。空对象 `{}` 清除所有覆盖。**Provider 与 API key 仍走前端 localStorage + `X-Provider-Keys` header,不入库,以保护隐私。**
 
 **校验规则(runtimeModelOverrides):**
 - 必须是对象(`null` / 数组 / 非对象类型 → 400)
-- 空字符串 key / 非字符串 value 会被静默剥离
+- 最多 64 条目
+- 空字符串 key / 非字符串 value / 不匹配 pattern 的 key 会被静默剥离
 - 没传该字段 → 不动现有覆盖
 
-**响应 200:** 返回合并后的会话对象。
+**响应 200:** 返回合并后的会话对象（含 `status` / `turnCount` / `preGameCompleted` / `runtimeModelOverrides`）。
 
 #### `DELETE /api/sessions/:id`
 
@@ -1797,7 +1806,7 @@ session 不存在时返回 `404`。
 
 服务端会：
 1. 创建新 sessionId（`{worldId}-{uuid8}`）；
-2. 复用父 session 的 locale / activePlugins / phase / turnCount；
+2. 复用父 session 的 locale / activePlugins / status / turnCount / preGameCompleted；
 3. **拷贝** characters / state entries / plugin data / working memory / state schemas 到新 session；
 4. 从 `turn_messages` 中按顺序拷贝消息直到 `payload.messagesCursor`（含），超过 cursor 的消息不拷贝；
 5. 写入一个 `kind="fork"` 的快照到子 session，`parentId` 指向源 snapshot，供 provenance 追踪；
@@ -2162,7 +2171,6 @@ Covel 使用 `ProtocolEventType` 定义 server → client 的实时事件。Acti
 | `runtime.completed` | 执行生命周期 | 单个 Runtime 执行完成 |
 | `runtime.failed` | 执行生命周期 | Runtime 执行失败 |
 | `execution.completed` | 执行生命周期 | Turn 执行完成 |
-| `phase.changed` | 会话生命周期 | 会话阶段变更 |
 | `record.updated` | 会话生命周期 | 记录更新（角色、任务等） |
 | `event.emitted` | 会话生命周期 | 事件发射 |
 | `error.occurred` | 系统 | 错误发生 |

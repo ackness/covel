@@ -10,13 +10,14 @@
 |----|------|--------|----------|-----------|------|
 | core-pregame | core-plugin | 10 | scheduled（仅首轮） | — | 游戏初始化（function runtime） |
 | core-world-init/schema-gen | core-plugin | 85 | scheduled（仅首轮） | `plugin` | 世界维度初始化（guard + agent） |
-| core-narrator | core-plugin | 500 | auto（`playing` 阶段） | `story` | 主叙事生成器 |
+| core-char-creator/player-init | core-plugin | 50 | scheduled（maxTriggerCount=2, guard, function runtime） | `plugin` | 玩家角色创建（deterministic handler；Pre-Game 阶段） |
+| core-narrator | core-plugin | 500 | auto | `story` | 主叙事生成器 |
 | core-guide | plugin | 550 | scheduled（interval=1, cooldown=1） | `plugin` | 行动引导 + 聊天内建议面 |
 | core-npc-graph/rag-retriever | plugin | 490 | scheduled（interval=1，function runtime） | — | NPC 图谱结构化检索器，向 narrator 注入相关关系事实 |
 | core-npc-graph/extractor | plugin | 620 | scheduled（interval=1, cooldown=1） | `plugin` | NPC 关系图抽取器（受 MiroFish 启发） |
 | core-codex | plugin | 650 | scheduled（interval=2, cooldown=1） | `plugin` | 知识图鉴系统（deterministic handler） |
-| core-char-creator/player-init | core-plugin | 700 | scheduled（maxTriggerCount=2, guard, function runtime） | `plugin` | 玩家角色创建（deterministic handler） |
-| core-char-creator/character-tracker | core-plugin | 750 | scheduled（interval=1, cooldown=1, phases=[playing]） | `plugin` | NPC 发现 + 角色状态跟踪 |
+| core-char-creator/character-tracker | core-plugin | 750 | scheduled（interval=1, cooldown=1） | `plugin` | NPC 发现 + 角色状态跟踪 |
+| core-memory | core-plugin | — | UI-only（无 runtime） | — | 长期记忆摘要面板（UI 呈现，无独立 runtime） |
 
 ---
 
@@ -33,9 +34,9 @@
 | handler | `./handler.js` |
 | input.inject | 无 |
 
-**职责**: 游戏开始时第一个执行的插件。读取世界观设定，发送欢迎通知，输出世界观摘要供后续叙事插件（narrator、codex、char-creator）作为上下文引导。持久化 session phase → `character_creation`。
+**职责**: 游戏开始时第一个执行的插件。读取世界观设定，发送欢迎通知，输出世界观摘要供后续叙事插件（narrator、codex、char-creator）作为上下文引导。
 
-**Phase 转换**: 输出 `{ phase: 'character_creation' }` → turn-executor 自动调用 `store.updateSession()` 持久化。
+**Pre-Game 契约**: 位于 Pre-Game 区段（priority < 100），`maxTriggerCount: 1` 保证仅在 session 首轮执行。完成后可在 `RuntimeOutput` 中声明 `preGameDone: true`，框架据此在 `session.preGameCompleted` 集合中记录本 runtime 已完成 Pre-Game 初始化。
 
 ---
 
@@ -85,8 +86,8 @@
 | 字段 | 值 |
 |------|----|
 | pluginType | `core-plugin`（不可禁用） |
-| priority | 500 |
-| trigger | `auto`，`phases: [playing]` — 仅 `playing` 阶段执行 |
+| priority | 500（Narrator 带，每轮执行） |
+| trigger | `auto` — 每轮 Narrator 带执行 |
 | outputKind | `story`（输出显示在主聊天区） |
 | model | `story` |
 | capabilities | `[narrative]` |
@@ -102,10 +103,10 @@
 - `{{ world.tone }}` — 叙事风格设定
 - `{{ player.message }}` — 玩家当前输入
 - `{{ player.character }}` — 玩家角色数据（CharacterSummary）
-- `{{ session.turnNumber }}` — 当前回合数
-- `{{ session.phase }}` — 当前会话阶段
+- `{{ session.turnNumber }}` — 当前回合数（全局 turnCount）
+- `{{ session.status }}` — 会话状态（`active` / `paused` / `ended`）
 
-**Phase 门控**: 通过 `phases: [playing]` 触发门控，narrator 仅在角色创建完成后（session phase 转入 `playing`）开始执行。首轮（`init` / `character_creation` 阶段）不触发。
+**调度说明**: Narrator 位于 Narrator 带（priority 500），每个非 Pre-Game 轮都会执行。是否在首轮发声由 Pre-Game 段落的插件流水线决定（例如 char-creator/player-init 在 priority 50 处理玩家建角），Narrator 不再通过 `phases` 自我门控。
 
 ---
 
@@ -124,9 +125,9 @@
 | handler | `./runtimes/rag-retriever/handler.js` |
 | priority | 490（在 `core-narrator=500` **之前**） |
 | capabilities | `[npc-graph, graph-rag]` |
-| trigger | `scheduled`，`interval: 1`，`phases: [playing]` |
+| trigger | `scheduled`，`interval: 1` |
 
-每个 playing 回合开始时自动运行：从 `playerMessage` 中匹配 NPC 节点名（含别名，case-insensitive），沿邻接索引做 2-hop BFS，过滤 `invalidAt` 已到期的边，按 `(validAt, |strength|)` 排序后取 top-20，输出 markdown 列表到 `npcContext` 字段。`core-narrator` 通过 `input.inject` 把这段文本作为 `<npc-relationships>` 块注入 prompt 末尾。
+每个非 Pre-Game 回合开始时自动运行：从 `playerMessage` 中匹配 NPC 节点名（含别名，case-insensitive），沿邻接索引做 2-hop BFS，过滤 `invalidAt` 已到期的边，按 `(validAt, |strength|)` 排序后取 top-20，输出 markdown 列表到 `npcContext` 字段。`core-narrator` 通过 `input.inject` 把这段文本作为 `<npc-relationships>` 块注入 prompt 末尾。
 
 **Phase 3.5 升级路径**：当 framework 层向 function handler 暴露 gateway 后，将升级为"先 embed 查询 → vector search → 子图扩展"的混合检索。当前为纯结构化版本。
 
@@ -138,7 +139,7 @@
 | runtimeType | `agent`（LLM 驱动） |
 | priority | 620（位于 narrator=500 与 codex=650 之间） |
 | capabilities | `[npc-graph, relationship-tracking]` |
-| trigger | `scheduled`，`interval: 1`，`cooldownTurns: 1`，`phases: [playing]` |
+| trigger | `scheduled`，`interval: 1`，`cooldownTurns: 1` |
 | input.inject | `core-narrator.narrative` → `<narrator-output>` |
 | model slot | `plugin` |
 | tools.local | `upsert-npc-graph`（批量写节点+边）、`list-npc-graph`（列出现有图） |
@@ -181,7 +182,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | pluginType | `plugin`（可禁用） |
 | priority | 650 |
 | runtimeType | `agent`（默认，LLM 驱动） |
-| trigger | `scheduled`，`interval: 2`，`cooldownTurns: 1`，`phases: [playing]` |
+| trigger | `scheduled`，`interval: 2`，`cooldownTurns: 1` |
 | model | `plugin` |
 | tools.local | `unlock-codex-entries`, `update-codex-entry` |
 | ui.right | `./ui/codex-panel.json` |
@@ -209,11 +210,11 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | 字段 | 值 |
 |------|----|
 | pluginType | `core-plugin`（不可禁用） |
-| priority | 700 |
+| priority | 50（Pre-Game 带） |
 | runtimeType | `function` |
 | handler | `./handler.js` |
 | trigger | `scheduled`，`interval: 1`，`maxTriggerCount: 2`（首轮生成表单 + 表单提交后写库） |
-| guard | `./guard.js` — 若 player 已存在则 skip，并保证 session 在 playing phase |
+| guard | `./guard.js` — 若 player 已存在则 skip |
 | model | `plugin` |
 | ui.right | `../../ui/character-panel.json` |
 
@@ -228,7 +229,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
    - 读取最近一次 player input submission
    - 合并 schema `defaultValue`
    - 直接写入 `characters` 表与 `plugin_data[characters]`
-   - 输出 `phase: "playing"` 推动 session 进入正式游戏
+   - 输出 `preGameDone: true`，标记本 runtime 已完成 Pre-Game 初始化（框架将其累加到 `session.preGameCompleted`）
 
 **当前代码状态**: 这一条路径已经保持在插件包内部，实现位于 `runtimes/player-init/handler.js`。如果后续希望统一 deterministic runtime 的 trace 与工具链，可以把这条流程收敛到 builtin character tools。
 
@@ -238,7 +239,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 |------|----|
 | pluginType | `core-plugin` |
 | priority | 750 |
-| trigger | `scheduled`，`interval: 1`，`cooldownTurns: 1`，`phases: [playing]` |
+| trigger | `scheduled`，`interval: 1`，`cooldownTurns: 1` |
 | model | `plugin` |
 | tools.builtin | `create-character`, `update-character`, `list-characters`, `get-character` |
 | input.inject | `core-narrator` → `narrativeOutput` → `<narrator-output>` |
@@ -260,7 +261,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 |------|----|
 | pluginType | `plugin`（可禁用） |
 | priority | 550（narrator 之后、codex 之前） |
-| trigger | `scheduled`，`interval: 1`，`cooldownTurns: 1`，`phases: [playing]` |
+| trigger | `scheduled`，`interval: 1`，`cooldownTurns: 1` |
 | model | `plugin` |
 | tools.local | `generate-guide` |
 | ui.message | `./ui/action-guide-block.json` |
@@ -273,7 +274,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 - **aggressive（激进）** — 直接、对抗性的选择
 - **creative（创意）** — 非常规、巧妙的选择
 
-**触发逻辑**: `cooldownTurns: 1` 确保首轮不触发（避免与角色创建冲突）。仅在 `playing` 阶段执行。如果叙事中没有明显决策点，LLM 不会调用工具。
+**触发逻辑**: `cooldownTurns: 1` 确保首轮不触发（避免与角色创建冲突）。位于 After-Turn 带，每轮 narrator 之后执行。如果叙事中没有明显决策点，LLM 不会调用工具。
 
 **UI 渲染**: 当前 `generate-guide` 会把 `topic` 与三组建议写入 `plugin_data[message]`。`ui/action-guide-block.json` 读取这些字段，渲染三组策略卡和自定义输入；玩家点击建议后进入待发送区，由底部输入栏统一发送。
 
@@ -288,7 +289,6 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | core-inventory | 600 | 物品/装备管理 |
 | core-quest | 650 | 任务追踪 |
 | core-image | 800 | 故事配图生成 |
-| core-memory | 900 | 长期记忆摘要 |
 
 ---
 
@@ -573,7 +573,7 @@ input:
       maxEntries: 100
 ```
 
-### 优先级分带
+### 优先级分带（Turn Bands）
 
 ```
 0 ──────────── 100 ───────────────── 500 ───────────────── 1000
@@ -583,13 +583,13 @@ input:
 
 | 区间 | 阶段 | 执行时机 | 说明 |
 |------|------|----------|------|
-| 0-99 | Pre-Game | 仅 session 首轮 | 游戏初始化：世界状态、角色属性、动态表单 |
+| 0-99 | Pre-Game | 首次进入时 | 游戏初始化：世界状态、角色属性、动态表单。按 runtime 粒度跟踪——每个 runtime 首次完成后将自身 id 写入 `session.preGameCompleted`，后续轮次框架不会再调度它。单个 runtime 通过 `maxTriggerCount` 控制首次阶段内的多步流程 |
 | 100-499 | Pre-Turn | 每轮 | 玩家操作后、叙事前的处理 |
 | 500 | Narrator | 每轮 | 主叙事模型输出，Turn 的核心产出 |
 | 501-999 | After-Turn | 每轮 | 叙事后处理：状态更新、图像生成、日志 |
 | 1000 | Audit | 每轮 | 冲突审计（保留位） |
 
-正式游戏循环只执行 **100-1000** 区间的插件。Pre-Game（0-99）仅在首轮执行一次。
+主循环每轮执行 **100-1000** 区间的插件；Pre-Game（0-99）由 `preGameCompleted` 集合控制，默认单次完成后不再触发，无需 `phases: [...]` 自我门控。
 
 ### trigger 类型
 
@@ -609,8 +609,7 @@ input:
 | `interval` | 1 | `scheduled` 类型每隔 N 轮触发一次 |
 | `cooldownTurns` | — | 上一次触发后多少轮内不可再次触发 |
 | `maxTriggerCount` | — | 整个 session 内最多触发次数（达到后不再触发） |
-| `phases` | 全部 | 限定在哪些 session phase 下才有资格触发 |
-| `startTurn` | — | **PR-2**：从第几个 playing-phase 轮次起开始介入。基于 `playingTurnNumber`（0-based 从首次进入 `playing` 阶段算起），不计入 pre-game / character_creation 期间的轮次 |
+| `startTurn` | — | **PR-2**：从第几个主循环轮次起开始介入。基于 `turnCount`（0-based），与 Pre-Game 首轮自动跳过互不冲突。适合"让玩家先熟悉环境再介入"的场景 |
 
 **`startTurn` 用例**：
 
@@ -618,11 +617,10 @@ input:
 trigger:
   type: scheduled
   interval: 1
-  startTurn: 3        # 跳过 playing 的前三轮，从第四轮起开始检查
-  phases: [playing]
+  startTurn: 3        # 前三轮让玩家适应，第四轮起开始检查
 ```
 
-这条配置表达"前三轮 playing 玩家先熟悉环境，从第四轮起插件才开始介入"，与 pre-game 阶段执行了多少次 setup runtime 完全解耦。
+这条配置表达"前三轮玩家先熟悉环境，从第四轮起插件才开始介入"。Pre-Game 段落（priority < 100）由框架按 `session.preGameCompleted` 集合决定是否再次触发，与 `startTurn` 解耦。
 
 ---
 
@@ -651,3 +649,13 @@ Covel 的核心设计原则是**插件承载游戏逻辑，框架提供原语和
 ### 新增 frontmatter 字段
 
 当框架需要区分插件行为时，应在 `RuntimeManifest` 中添加通用字段（如 `outputKind`、`capabilities`），而非在框架代码中添加条件分支。
+
+### Runtime 输出字段：`preGameDone`
+
+Pre-Game 段 runtime（priority < 100）可在 `RuntimeOutput` 中声明：
+
+```json
+{ "preGameDone": true }
+```
+
+框架在 commit 链上看到该字段为 `true` 时，会将该 `runtimeId` 追加到 `session.preGameCompleted`；后续轮次的调度器会跳过已完成的 Pre-Game runtime。这是替代历史上 `session.phase` 状态机的 runtime 粒度闸门，避免"全局 phase 状态 → 单插件职责被迫搬进 trigger.phases"的反模式。

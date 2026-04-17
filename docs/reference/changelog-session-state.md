@@ -2,6 +2,8 @@
 
 > 本文档记录框架改动、新增字段、已知问题和待办事项。
 >
+> **2026-04-17 更新（turn-band 重构）**：以下所有历史条目中提到的 `SessionPhase` / `session.phase` / `character_creation` / `transitionPhase` / `phase.changed` 均已废弃。当前实现：`SessionRecord` 取消 `phase` 字段，改用 `status` (`active`/`paused`/`ended`) + `turnCount` + `preGameCompleted: string[]`。Pre-Game 段落由每个 runtime 自行输出 `preGameDone: true` 完成自身登记，框架据此跳过已完成 runtime；不再有全局 phase 状态机。`trigger.phases` 字段也被移除。此说明对下列所有历史段落统一适用，历史条目保留以便追溯上下文。
+>
 > **2026-04-12 更新**：以下条目中提到的 `_createCharacter` magic flag 与 `submit-inputs.ts` 自动建角色 + 切 phase 的路径已被废弃。当前实现：插件通过 `create-character(transitionPhase="playing")` builtin 工具完成建角色与 phase 切换，框架不再在 submit-inputs 中检测任何插件特定字段。详见 `audits/2026-04-12-backend-webv2-framework-audit/04-changelog.md`。
 
 ---

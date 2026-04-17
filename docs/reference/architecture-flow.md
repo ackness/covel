@@ -2,6 +2,8 @@
 
 > 从设置、游玩前、游玩中、游玩后到状态存储，完整描述框架运行机制。
 > 包含玩家 ↔ LLM Agent 之间的翻译层、消息流动、插件设计和前端交互。
+>
+> **2026-04-17 turn-band 重构注记**：下文若干 ASCII 流程图仍显示历史的 `pre-game / character_creation / playing` phase 状态机与 `transitionPhase` / `phase.changed` 路径，**这些已废弃**。现实模型以"Turn Band（优先级分带）"为准——`SessionRecord.phase` 字段已移除，改用 `status` (`active`/`paused`/`ended`) + `turnCount` + `preGameCompleted: string[]` 描述运行进度；Pre-Game 段落由 runtime 输出 `preGameDone: true` 自行登记完成。权威定义见 `docs/reference/plugins.md` 与 `docs/reference/api.md`。本文图表待下一轮架构文档刷新时同步重画。
 
 ## 一、系统全景
 

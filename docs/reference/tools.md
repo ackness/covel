@@ -298,9 +298,8 @@ Local 工具承接插件自己的业务封装，例如：
 | type | enum | ✓ | `player` / `npc` / `companion` |
 | description | string | | 角色简短描述 |
 | fields | Record<string, unknown> | | 属性键值对（应符合世界 schema 中的 character-attributes） |
-| transitionPhase | string | | **仅对 type=player 有效**：创建后将 session 转入此 phase（通常 `"playing"`） |
 
-**输出 (parsedResult)**: `{ _text, success, existed, characterId, name, type, phaseTransitioned }`
+**输出 (parsedResult)**: `{ _text, success, existed, characterId, name, type }`
 
 **LLM 看到的 `_text` 示例**：
 ```
@@ -311,9 +310,9 @@ Created npc "苏婉" as char-abc123. — 青萍宗外门首席弟子，冰灵根
 Character "苏婉" (npc) already exists as char-abc123. No new record created. Use update-character to modify it.
 ```
 
-**使用者**: `core-char-creator/player-init`（传 `transitionPhase: "playing"`）、`core-char-creator/character-tracker`（只创建 NPC）
+**使用者**: `core-char-creator/player-init`（创建 player 角色，建角完成后输出 `preGameDone: true`）、`core-char-creator/character-tracker`（只创建 NPC）
 
-**框架钩子**：`createCharacterTools(store, hooks?)` 工厂接受可选的 `CharacterToolHooks`，包含 `onPhaseTransition(sessionId, phase)` 回调。`bootstrap.ts` 在装配时注入该回调，使得 `transitionPhase` 触发的 phase 切换会自动通过 `eventBus.emit({ _subType: 'phase.changed', phase })` 广播 SSE 事件 —— 框架不再在路由层硬编码 `phase.changed` 发射。回调失败被吞掉（仅打印警告），不阻塞 tool 执行。
+> **Turn-band 重构注记**：`create-character` 原本接受 `transitionPhase` 参数并通过 `CharacterToolHooks.onPhaseTransition` 驱动 SSE `phase.changed` 广播。该路径在 turn-band 重构中被移除——`SessionRecord.phase` 字段已去除，Pre-Game 段落的完成由 runtime 输出 `preGameDone: true` 累加到 `session.preGameCompleted` 集合表达。现在 `create-character` 只写 `characters` 表（并镜像到调用方 plugin-data 的 `characters` namespace），不再触发任何 phase / status 副作用。
 
 ---
 

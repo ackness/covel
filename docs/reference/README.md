@@ -48,17 +48,17 @@ Covel 框架能力注册表与 API 参考。
 |------|------|
 | [changelog-session-state.md](changelog-session-state.md) | Session State & Narrative Flow 改动记录 — context 注入增强、phase 门控、消息持久化、已知问题清单 |
 
-## 近期能力(本 session 新增)
+## 框架能力索引
 
 | 能力 | 文档 | 说明 |
 |------|------|------|
-| **PR-1 翻译层** | [api.md](api.md) `runtime-outputs`/`interaction-records` 端点 | `RuntimeOutput` + `InteractionRecord` 统一观测格式,跨 runtime 消费的标准化输出 |
-| **PR-2 startTurn** | [plugins.md](plugins.md) 触发字段 | `playingTurnNumber` 按 playing 阶段从 0 计数,`trigger.startTurn` 在此基础上做门控 |
-| **PR-3 Plugin RPC** | [api.md](api.md#post-apisessionsidplugin-rpc) + [protocol.md](protocol.md#插件-rpcpr-3) | `POST /api/sessions/:id/plugin-rpc` 统一通道(action 级 + runtime 级),PLUGIN.md 新 `rpc:` 字段,框架默认 `submit-form` handler |
-| **PR-4 Skills** | [../guide/skills.md](../guide/skills.md) | 外部代理可加载的 markdown skill 包 |
-| **PR-5 段职责** | [../guide/plugin-authoring.md](../guide/plugin-authoring.md) §1.4.1 | pre / narrator / post 段写约定(软约束),core-codex 函数化清理,player-init 转 agent runtime |
-| **PR-6 Per-Session 模型覆盖** | [api.md](api.md#patch-apisessionsid) `runtimeModelOverrides` | `PATCH /api/sessions/:id` 接受 runtime → slot 映射,turn-executor 每次执行前快照应用 |
-| **PR-7 RPC Approval** | [api.md](api.md#rpc-approval-流程pr-7) + [protocol.md](protocol.md#rpc-approvalpr-7) | community-trust 插件 RPC 调用的 human-in-loop 批准,`once` / `session` 双 scope,排队封顶 |
+| **翻译层（PR-1）** | [api.md](api.md) `runtime-outputs`/`interaction-records` 端点 | `RuntimeOutput` + `InteractionRecord` 统一观测格式，跨 runtime 消费的标准化输出 |
+| **startTurn 门控（PR-2）** | [plugins.md](plugins.md) 触发字段 | `trigger.startTurn` 基于 `session.turnCount`（0-based 主循环轮次）做延迟介入门控，与 Pre-Game 段落的 `preGameCompleted` 闸门解耦 |
+| **Plugin RPC（PR-3）** | [api.md](api.md#post-apisessionsidplugin-rpc) + [protocol.md](protocol.md#插件-rpcpr-3) | `POST /api/sessions/:id/plugin-rpc` 统一通道（action 级 + runtime 级），PLUGIN.md 新 `rpc:` 字段，框架默认 `submit-form` handler |
+| **Skills（PR-4）** | [../guide/skills.md](../guide/skills.md) | 外部代理可加载的 markdown skill 包 |
+| **段职责约定（PR-5）** | [../guide/plugin-authoring.md](../guide/plugin-authoring.md) §1.4.1 | pre / narrator / post 段写约定（软约束），core-codex 函数化清理，player-init 转 agent runtime |
+| **Per-Session 模型覆盖（PR-6）** | [api.md](api.md#patch-apisessionsid) `runtimeModelOverrides` | `PATCH /api/sessions/:id` 接受 runtime → slot 映射，turn-executor 每次执行前快照应用 |
+| **RPC Approval（PR-7）** | [api.md](api.md#rpc-approval-流程pr-7) + [protocol.md](protocol.md#rpc-approvalpr-7) | community-trust 插件 RPC 调用的 human-in-loop 批准，`once` / `session` 双 scope，排队封顶 |
 
 ## 计划中
 

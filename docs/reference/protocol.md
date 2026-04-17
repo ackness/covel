@@ -60,9 +60,7 @@
 
 ### 会话生命周期事件
 
-| 事件类型 | 方向 | 描述 | 负载 |
-|----------|------|------|------|
-| `phase.changed` | S→C | 会话阶段转换 | `{ phase }` |
+（turn-band 重构后 `phase.changed` 已废弃：`SessionRecord.phase` 字段移除，运行进度改由 `turnCount` + `preGameCompleted` 描述。未来若需要推送 `status` 变化，将以 `status.changed` 形式重新引入，届时在此补记。）
 
 ### 系统事件
 
@@ -123,7 +121,7 @@
 
 ### SSE 命名事件订阅注意事项
 
-所有 ProtocolEventType 在 SSE 流上都以**命名事件**（`event: <type>\ndata: ...`）形式发送，**不会**触发 `EventSource.onmessage` 默认 handler。前端必须为每个关心的事件类型显式注册 `addEventListener('<type>', handler)`，否则事件会被静默丢弃。`apps/web-v2/src/services/sse.ts` 已为 `narrative.delta` / `narrative.completed` / `interaction.requested` / `phase.changed` / `plugin-data.changed` 等关键事件挂载监听。新增事件类型时**必须同步更新该文件**。
+所有 ProtocolEventType 在 SSE 流上都以**命名事件**（`event: <type>\ndata: ...`）形式发送，**不会**触发 `EventSource.onmessage` 默认 handler。前端必须为每个关心的事件类型显式注册 `addEventListener('<type>', handler)`，否则事件会被静默丢弃。`apps/web-v2/src/services/sse.ts` 已为 `narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等关键事件挂载监听。新增事件类型时**必须同步更新该文件**。
 
 > S4-T5 注意：`state.snapshot.created` / `session.forked` 服务端已经发出但前端尚未挂载 listener（FU-6 / 等 fork & save UI 落地）。此 follow-up 是已知的，与 framework 实现无关。
 
@@ -258,7 +256,6 @@ interaction.requested → messages (block)
 state.changed         → gameState (deep merge) + statePatches
 event.emitted         → gameState.events
 record.updated        → gameState.records
-phase.changed         → session.phase
 execution.started     → executionSteps
 runtime.started       → executionSteps
 runtime.completed     → executionSteps

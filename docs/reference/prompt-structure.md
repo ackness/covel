@@ -101,7 +101,7 @@ summaryFocus:
 - `{{ player.lastFormValues }}` — 最近一次 player 表单提交（JSON 字符串）
 - `{{ config.worldSchema }}` / `{{ config.worldEntries }}` / `{{ config.worldDimensions }}`
 - `{{ story.* }}` / `{{ player.* }}` — Working Memory 字段（需 `COVEL_WORKING_MEMORY_V1=1`）
-- `{{ turn.number }}` / `{{ turn.phase }}`
+- `{{ turn.number }}` / `{{ session.status }}`
 
 ## 4. Prompt Cache 标记（S2-T3）
 
