@@ -1,20 +1,16 @@
 ---
 name: core-char-creator/player-init
-description: 玩家角色创建 agent。首轮基于开场叙事和世界 schema 写一段过渡叙事并生成角色表单；表单提交后基于提交值调用 create-character 工具写入 characters 表并把 session 转入 playing 阶段。
+description: 玩家角色创建 agent。Pre-Game band 插件，基于开场叙事和世界 schema 生成角色表单；表单提交后调用 create-character 并输出 preGameDone=true，内核据此把 turnCount 从 0 推进到 1。
 pluginType: core-plugin
-priority: 700
+priority: 50
 outputKind: system
 model: plugin
 timeoutMs: 180000
-# 典型路径: 单次工具调用即结束（create-form 或 create-character）。
-# 4 给一次 retry + 终止文本预留余量。
 maxSteps: 4
 promptVersion: 2
 guard: ./guard.js
 trigger:
-  type: scheduled
-  interval: 1
-  maxTriggerCount: 2
+  type: auto
 input:
   inject:
     - from: core-narrator
@@ -31,8 +27,8 @@ postHistory:
   role: system
   content: |
     本 runtime 的完成条件：
-    - `<player-submission>` 为空时，调用一次 `create-form`
-    - `<player-submission>` 有值时，调用一次 `create-character`（带 transitionPhase: "playing"）
+    - `<player-submission>` 为空时，调用一次 `create-form`，并在输出里显式写 `preGameDone: false`
+    - `<player-submission>` 有值时，调用一次 `create-character`（不传 transitionPhase 字段），并在输出里写 `preGameDone: true`
     - 工具调用完成后结束输出
     - 普通说明文字、建议列表、任务确认话术都不算完成
 ---

@@ -1,14 +1,17 @@
 /**
  * guard.js — Pre-execution gate for player-init runtime.
  *
- * Skips LLM invocation when the session already has a player character.
- * Without this guard, player-init would fire again on every turn it's
- * scheduled for and risk re-creating the player.
- *
- * Also transitions session phase from `character_creation` → `playing`
- * when it detects the player now exists (post-commit from the previous
- * invocation). This keeps phase management inside the plugin instead of
- * in the server submit-inputs magic path.
+ * Three branches:
+ *   1. Player already exists → skip LLM; emit preGameDone=true so the
+ *      kernel advances turnCount from 0 to 1.
+ *   2. No player AND player has submitted the char-creation form
+ *      → synthesise create-character deterministically from lastFormValues,
+ *        skip LLM, emit preGameDone=true. The LLM version of "Step 2" is
+ *        flaky on weaker models (e.g. qwen3.5-flash) — they often re-render
+ *        the form instead of calling `create-character`. By doing it here
+ *        we remove the non-determinism that blocks the whole turn pipeline.
+ *   3. No player AND no submission yet → proceed to LLM so it generates
+ *      the opening form (Step 1 in PLUGIN.md).
  *
  * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
  * @returns {Promise<Record<string, unknown>>}
@@ -25,31 +28,119 @@ export default async function guard(ctx) {
 
     console.log(`[player-init/guard] sessionId=${sessionId} characters=${Array.isArray(characters) ? characters.length : 'N/A'} playerFound=${!!player}`);
 
+    // ── Branch 1: player already created — skip
     if (player) {
-      // Player already exists — skip and ensure session is in playing phase
       console.log(`[player-init/guard] SKIP — player already exists id=${player.id} name=${player.name}`);
-      try {
-        const session = await s.getSession(sessionId);
-        if (session && session.phase !== 'playing') {
-          await s.updateSession(sessionId, { phase: 'playing' });
-          console.log(`[player-init/guard] phase updated: ${session.phase} → playing`);
-        }
-      } catch {
-        // Non-critical: phase transition failure doesn't block skip
-      }
-
       return {
         skip: true,
         playerExists: true,
         playerId: player.id,
-        narrativeOutput: '', // no-op, don't add messages
+        narrativeOutput: '',
+        preGameDone: true,
       };
     }
 
-    console.log(`[player-init/guard] PROCEED — no player found, running LLM`);
+    // ── Branch 2: player submitted form → create deterministically
+    const submission = await latestSubmission(s, sessionId);
+    if (submission) {
+      const values = /** @type {Record<string, unknown>} */ (submission.values ?? {});
+      const name = pickName(values);
+      if (name) {
+        const now = new Date().toISOString();
+        const id = `char-${crypto.randomUUID()}`;
+        try {
+          await s.upsertCharacter({
+            id,
+            sessionId,
+            name,
+            type: 'player',
+            description: pickDescription(values),
+            fields: stripNameKeys(values),
+            version: 1,
+            createdAt: now,
+            updatedAt: now,
+          });
+          console.log(`[player-init/guard] deterministic create-character succeeded: id=${id} name=${name}`);
+          return {
+            skip: true,
+            playerExists: true,
+            playerId: id,
+            playerName: name,
+            narrativeOutput: `[系统] 已登记弟子 ${name}，宗门生活即将开始……`,
+            preGameDone: true,
+          };
+        } catch (err) {
+          console.warn('[player-init/guard] deterministic create-character failed, falling back to LLM:', err);
+          // Fall through to LLM branch
+        }
+      }
+    }
+
+    // ── Branch 3: nothing submitted yet → let LLM generate the opening form
+    console.log(`[player-init/guard] PROCEED — no player + no submission, running LLM for form generation`);
     return { skip: false };
   } catch (err) {
     console.warn('[core-char-creator/player-init] guard error:', err);
     return { skip: false, error: String(err) };
   }
+}
+
+/**
+ * Fetch the most recent player_inputs row for this session, or null.
+ * @param {any} store
+ * @param {string} sessionId
+ */
+async function latestSubmission(store, sessionId) {
+  if (typeof store.listPlayerInputs !== 'function') return null;
+  try {
+    const inputs = await store.listPlayerInputs(sessionId);
+    if (!Array.isArray(inputs) || inputs.length === 0) return null;
+    return inputs[inputs.length - 1];
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pick the character display name from submitted form values. Tries common
+ * keys the LLM-generated forms tend to use, in priority order.
+ * @param {Record<string, unknown>} values
+ */
+function pickName(values) {
+  const candidates = ['characterName', 'name', '姓名', 'playerName'];
+  for (const key of candidates) {
+    const v = values[key];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return null;
+}
+
+/**
+ * Build a short descriptive blurb from submission values — `background` /
+ * `bio` if present, otherwise joining a handful of scalar fields.
+ * @param {Record<string, unknown>} values
+ */
+function pickDescription(values) {
+  const direct = values.background ?? values.bio ?? values.description;
+  if (typeof direct === 'string' && direct.trim()) return direct.trim();
+
+  const parts = [];
+  for (const [key, val] of Object.entries(values)) {
+    if (key === 'characterName' || key === 'name') continue;
+    if (typeof val === 'string' && val.trim()) {
+      parts.push(`${key}: ${val.trim()}`);
+    }
+    if (parts.length >= 3) break;
+  }
+  return parts.length > 0 ? parts.join('；') : undefined;
+}
+
+/**
+ * Remove name-like keys from the fields payload so `name` isn't duplicated
+ * both on the CharacterRecord and inside fields.
+ * @param {Record<string, unknown>} values
+ */
+function stripNameKeys(values) {
+  const { characterName, name, 姓名, playerName, ...rest } = /** @type {any} */ (values);
+  return rest;
 }
