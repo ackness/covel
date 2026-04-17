@@ -6,6 +6,7 @@
  */
 
 import type Database from 'better-sqlite3';
+import type { SessionStatus } from '@covel/shared';
 import * as schema from './schema.js';
 import type {
   SessionRecord,
@@ -79,12 +80,16 @@ export function createTables(sqlite: Database.Database): void {
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       world_id TEXT,
-      phase TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
       turn_count INTEGER NOT NULL DEFAULT 0,
+      pre_game_completed TEXT NOT NULL DEFAULT '[]',
       locale TEXT NOT NULL DEFAULT 'zh-CN',
       active_plugins TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      embedding_model_id INTEGER,
+      embedding_locked_at TEXT,
+      runtime_model_overrides TEXT DEFAULT '{}'
     );
 
     CREATE TABLE IF NOT EXISTS turn_results (
@@ -416,9 +421,6 @@ export function createTables(sqlite: Database.Database): void {
   if (!colNames.has('embedding_locked_at')) {
     sqlite.exec("ALTER TABLE sessions ADD COLUMN embedding_locked_at TEXT");
   }
-  if (!colNames.has('playing_turn_offset')) {
-    sqlite.exec("ALTER TABLE sessions ADD COLUMN playing_turn_offset INTEGER");
-  }
   if (!colNames.has('runtime_model_overrides')) {
     sqlite.exec("ALTER TABLE sessions ADD COLUMN runtime_model_overrides TEXT DEFAULT '{}'");
   }
@@ -430,25 +432,18 @@ export function toSessionRecord(row: typeof schema.sessions.$inferSelect): Sessi
   return {
     id: row.id,
     worldId: row.worldId ?? undefined,
-    phase: row.phase,
+    status: (row.status ?? 'active') as SessionStatus,
     turnCount: row.turnCount,
+    preGameCompleted: row.preGameCompleted ? JSON.parse(row.preGameCompleted) : [],
     locale: row.locale,
-    activePlugins: JSON.parse(row.activePlugins) as string[],
+    activePlugins: row.activePlugins ? JSON.parse(row.activePlugins) : [],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     ...(row.embeddingModelId != null ? { embeddingModelId: row.embeddingModelId } : {}),
     ...(row.embeddingLockedAt != null ? { embeddingLockedAt: row.embeddingLockedAt } : {}),
-    ...(row.playingTurnOffset != null ? { playingTurnOffset: row.playingTurnOffset } : {}),
-    ...(() => {
-      const rmo = row.runtimeModelOverrides;
-      if (!rmo || rmo === '{}') return {};
-      try {
-        const parsed = JSON.parse(rmo) as Record<string, string>;
-        return Object.keys(parsed).length > 0 ? { runtimeModelOverrides: parsed } : {};
-      } catch {
-        return {};
-      }
-    })(),
+    ...(row.runtimeModelOverrides
+      ? { runtimeModelOverrides: JSON.parse(row.runtimeModelOverrides) as Readonly<Record<string, string>> }
+      : {}),
   };
 }
 

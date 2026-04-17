@@ -26,16 +26,16 @@ export const worlds = sqliteTable('worlds', {
 export const sessions = sqliteTable('sessions', {
   id: text('id').primaryKey(),
   worldId: text('world_id'),
-  phase: text('phase').notNull(),
+  status: text('status').notNull().default('active'),
   turnCount: integer('turn_count').notNull().default(0),
+  preGameCompleted: text('pre_game_completed').notNull().default('[]'), // JSON
   locale: text('locale').notNull().default('zh-CN'),
-  activePlugins: text('active_plugins').notNull().default('[]'), // JSON
+  activePlugins: text('active_plugins').notNull().default('[]'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
-  embeddingModelId: integer('embedding_model_id'),     // FK → vector_models.id; NULL = RAG disabled
-  embeddingLockedAt: text('embedding_locked_at'),       // ISO 8601 timestamp
-  playingTurnOffset: integer('playing_turn_offset'),    // PR-2: turnNumber at first playing-phase entry
-  runtimeModelOverrides: text('runtime_model_overrides').default('{}'), // PR-6: JSON map runtimeId → slot
+  embeddingModelId: integer('embedding_model_id'),
+  embeddingLockedAt: text('embedding_locked_at'),
+  runtimeModelOverrides: text('runtime_model_overrides').default('{}'),
 });
 
 // ── Turn Results ────────────────────────────────────────────────
