@@ -33,19 +33,50 @@ export interface StreamMessage {
   block?: Record<string, unknown>;
 }
 
-/** A single step in the execution timeline, streamed from the kernel. */
+/**
+ * Aggregated runtime status — ONE row per (turnId, runtimeId).
+ *
+ * Previously this was an append-only event log where every runtime.started /
+ * runtime.completed / runtime.failed / llm.calling was pushed as a new step,
+ * and `deriveStatuses` in execution-timeline had to scan the log to derive
+ * the current status. That design cannot distinguish "event hasn't arrived
+ * yet" from "event was lost / reordered" — any dropped runtime.completed
+ * left the chip spinning forever.
+ *
+ * V2 uses a status-aggregation model: each runtime has a single row, and
+ * every SSE event upserts the status in-place. A missed event still leaves
+ * the row in the best known state, and the next arriving event overwrites
+ * cleanly. That is what we adopt here to keep chips from getting stuck.
+ */
 export interface ExecutionStep {
-  type: "runtime.started" | "runtime.completed" | "runtime.failed" | "llm.calling" | "tool.calling" | "tool.completed";
   runtimeId: string;
   pluginId: string;
+  status: "running" | "llm" | "tool" | "completed" | "failed" | "skipped";
   label?: string;
   detail?: string;
-  timestamp: string;
+  /** Qualified tool name when status is "tool". */
+  toolName?: string;
+  durationMs?: number;
   /** Turn this step belongs to — enables grouping across multiple turns. */
   turnId?: string;
+  /** Wall-clock start time (for on-device duration fallback). */
+  startedAt?: string;
 }
 
 const EXEC_STEPS_MAX = 500;
+
+/**
+ * Legacy phase strings still consumed by the V1 chat/game-view UI. Produced
+ * from `SessionRecord.status` + `SessionRecord.turnCount` via `toLegacyPhase`.
+ */
+export type LegacyPhase = "init" | "playing" | "paused" | "ended";
+
+function toLegacyPhase(session: Pick<api.SessionRecord, "status" | "turnCount"> | null | undefined): LegacyPhase {
+  if (!session) return "init";
+  if (session.status === "ended") return "ended";
+  if (session.status === "paused") return "paused";
+  return (session.turnCount ?? 0) >= 1 ? "playing" : "init";
+}
 
 interface SessionState {
   // Boot data
@@ -66,7 +97,16 @@ interface SessionState {
   // Active session
   world: api.WorldRecord | null;
   session: api.SessionRecord | null;
-  phase: api.SessionPhase;
+  /**
+   * Legacy display phase derived from session (`status`, `turnCount`).
+   *
+   * The turn-band refactor replaced the per-session phase enum with a coarser
+   * `status` + `turnCount` pair. UI surfaces that still speak the old phase
+   * vocabulary ("init", "playing", "ended", …) read this derived value so
+   * they can keep rendering phase-specific empty states without each
+   * component re-implementing the mapping.
+   */
+  phase: LegacyPhase;
   messages: StreamMessage[];
 
   /** All sessions for the current world (for switching). */
@@ -87,8 +127,34 @@ interface SessionState {
   /** Plugin data keyed by pluginId → namespace → key → value. Updated via plugin-data.changed events. */
   pluginData: Record<string, Record<string, Record<string, unknown>>>;
 
+  /**
+   * Message-slot UI specs loaded from /api/ui-specs. Each entry contributes
+   * one or more json-render spec trees for the plugin-message surface. Plugins
+   * push data to their `namespace: "message"` plugin-data and the frontend
+   * materialises a synthetic `plugin_message` block using these specs.
+   */
+  messageUiSpecs: api.UISlotEntry[];
+
+  /**
+   * Pending interaction drafts (choice selections, suggestion picks, etc.)
+   * staged by the player before confirmation. Cleared on turn submission,
+   * session reset, or explicit dismissal.
+   */
+  pendingInteractionDrafts: PendingInteractionDraft[];
+
   /** Block IDs that have been submitted by the player (permanently locked). */
   submittedBlockIds: ReadonlySet<string>;
+}
+
+export interface PendingInteractionDraft {
+  id: string;
+  turnId: string;
+  interactionId: string;
+  type: "form" | "choice" | "confirmation" | "suggestion";
+  label: string;
+  values: Record<string, unknown>;
+  selectionGroup?: string;
+  submitBehavior?: { echoFilledNarrative?: boolean; autoContinue?: boolean };
 }
 
 type Action =
@@ -107,10 +173,11 @@ type Action =
   | { type: "ADD_STATE_PATCH"; patch: { id: string; summary: string; packageName: string; data?: unknown } }
   | { type: "LOAD_MESSAGES"; messages: StreamMessage[] }
   | { type: "LOAD_STATE_PATCHES"; patches: Array<{ id: string; summary: string; packageName: string; data?: unknown }> }
-  | { type: "SET_PHASE"; phase: api.SessionPhase }
-  | { type: "ADD_EXECUTION_STEP"; step: ExecutionStep }
+  | { type: "SET_PHASE"; phase: LegacyPhase }
+  | { type: "UPSERT_EXECUTION_STEP"; step: ExecutionStep }
   | { type: "LOAD_EXECUTION_STEPS"; steps: ExecutionStep[] }
   | { type: "CLEAR_EXECUTION_STEPS" }
+  | { type: "FINALIZE_HANGING_RUNTIMES"; reason: string }
   | { type: "RESET_SESSION" }
   | { type: "SUBMIT_BLOCK"; blockId: string }
   | { type: "RESET_TO_WORLD_SELECT" }
@@ -120,7 +187,12 @@ type Action =
   | { type: "LOAD_SESSION_PLUGINS"; plugins: api.SessionPluginInfo[] }
   | { type: "TOGGLE_SESSION_PLUGIN"; pluginId: string; isActive: boolean }
   | { type: "BACKFILL_TURN_ID"; turnId: string }
-  | { type: "PLUGIN_DATA_CHANGED"; pluginId: string; changes: readonly { namespace: string; key: string; value: unknown; operation: string }[] };
+  | { type: "PLUGIN_DATA_CHANGED"; pluginId: string; changes: readonly { namespace: string; key: string; value: unknown; operation: string }[] }
+  | { type: "LOAD_MESSAGE_UI_SPECS"; specs: api.UISlotEntry[] }
+  | { type: "UPSERT_PLUGIN_MESSAGE_SURFACE"; pluginId: string }
+  | { type: "UPSERT_DRAFT"; draft: PendingInteractionDraft }
+  | { type: "REMOVE_DRAFT"; draftId: string }
+  | { type: "CLEAR_DRAFTS" };
 
 const initialState: SessionState = {
   presets: [],
@@ -144,6 +216,8 @@ const initialState: SessionState = {
   pluginData: {},
   submittedBlockIds: new Set<string>(),
   sessionPlugins: [],
+  messageUiSpecs: [],
+  pendingInteractionDrafts: [],
 };
 
 
@@ -164,7 +238,7 @@ function reducer(state: SessionState, action: Action): SessionState {
         world: state.world?.id === action.world.id ? action.world : state.world,
       };
     case "SET_SESSION":
-      return { ...state, session: action.session, phase: action.session.phase ?? "init" };
+      return { ...state, session: action.session, phase: toLegacyPhase(action.session) };
     case "SET_WORLD_SESSIONS":
       return { ...state, worldSessions: action.sessions };
     case "REMOVE_SESSION":
@@ -172,24 +246,35 @@ function reducer(state: SessionState, action: Action): SessionState {
     case "ADD_MESSAGE":
       return { ...state, messages: [...state.messages, action.message] };
     case "COMPLETE_MESSAGE": {
-      // If a streaming message already exists for this turn+runtime, skip the completed message
-      // since the streamed version is already displayed.
-      const streamId = `stream_${action.turnId}_${action.runtimeId}`;
-      const hasStreamed = state.messages.some((m) => m.id === streamId);
-      if (hasStreamed) return state;
-      return { ...state, messages: [...state.messages, action.message] };
-    }
-    case "APPEND_DELTA": {
-      // Find existing streaming message for this runtime, or create one
+      // Replace the streaming placeholder with the final message content.
+      // Previously we skipped when a placeholder existed — but if any delta
+      // frames were dropped mid-stream the placeholder only contains the
+      // partial text the client received, and the user saw a truncated
+      // narrative. V2 replaces the placeholder with the completed content,
+      // which is always the authoritative full text; mirror that here.
       const streamId = `stream_${action.turnId}_${action.runtimeId}`;
       const idx = state.messages.findIndex((m) => m.id === streamId);
       if (idx >= 0) {
-        // Mutate the content string only, create new message + array ref for React
+        const next = [...state.messages];
+        next[idx] = { ...action.message, id: state.messages[idx].id, kind: "story" };
+        return { ...state, messages: next };
+      }
+      return { ...state, messages: [...state.messages, { ...action.message, kind: "story" }] };
+    }
+    case "APPEND_DELTA": {
+      // Find existing streaming message for this runtime, or create one.
+      // IMPORTANT: carry turnId / runtimeId / kind on the placeholder from the
+      // first delta — chat-messages groups execution timelines by turnId and
+      // without these fields each streaming story message would be treated as
+      // "unattributed" and the timeline chips would jump to the very top of
+      // the chat instead of appearing right after the turn's last message.
+      const streamId = `stream_${action.turnId}_${action.runtimeId}`;
+      const idx = state.messages.findIndex((m) => m.id === streamId);
+      if (idx >= 0) {
         const prev = state.messages[idx];
         const newMessages = state.messages.with(idx, { ...prev, content: prev.content + action.delta });
         return { ...state, messages: newMessages };
       }
-      // Create new streaming message — append without spreading existing array
       return {
         ...state,
         messages: state.messages.concat({
@@ -197,6 +282,9 @@ function reducer(state: SessionState, action: Action): SessionState {
           role: "assistant",
           content: action.delta,
           timestamp: new Date().toISOString(),
+          turnId: action.turnId,
+          runtimeId: action.runtimeId,
+          kind: "story",
         }),
       };
     }
@@ -230,23 +318,55 @@ function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, phase: action.phase };
     case "SET_GAME_STATE":
       return { ...state, gameState: action.state };
-    case "ADD_EXECUTION_STEP": {
-      const raw = [...state.executionSteps, action.step];
-      // Cap to prevent unbounded growth
-      const updated = raw.length > EXEC_STEPS_MAX ? raw.slice(raw.length - EXEC_STEPS_MAX) : raw;
-      return { ...state, executionSteps: updated };
+    case "UPSERT_EXECUTION_STEP": {
+      // Upsert on (turnId, runtimeId). Transitions running → completed/failed/
+      // skipped / etc happen in place — missed runtime.completed no longer
+      // leaves the chip spinning. New turn creates a new row; existing turn's
+      // row is merged so we keep label/startedAt while overwriting status.
+      const key = `${action.step.turnId ?? "__no_turn__"}|${action.step.runtimeId}`;
+      const idx = state.executionSteps.findIndex(
+        (s) => `${s.turnId ?? "__no_turn__"}|${s.runtimeId}` === key,
+      );
+      const next = [...state.executionSteps];
+      if (idx >= 0) {
+        next[idx] = { ...next[idx], ...action.step };
+      } else {
+        next.push(action.step);
+      }
+      const capped = next.length > EXEC_STEPS_MAX ? next.slice(next.length - EXEC_STEPS_MAX) : next;
+      return { ...state, executionSteps: capped };
     }
     case "LOAD_EXECUTION_STEPS":
       return { ...state, executionSteps: action.steps };
+    case "FINALIZE_HANGING_RUNTIMES": {
+      // Backend runtimes whose LLM call hangs never emit runtime.completed —
+      // the executor's timeoutMs is a loop guard, not an HTTP AbortSignal,
+      // so /api/actions eventually returns (or is cancelled) while chips
+      // remain "running" forever. When the action stream is known to have
+      // ended, flip any still-running chip to "failed" so the UI stops
+      // pretending work is in progress.
+      const anyRunning = state.executionSteps.some(
+        (s) => s.status === "running" || s.status === "llm" || s.status === "tool",
+      );
+      if (!anyRunning) return state;
+      return {
+        ...state,
+        executionSteps: state.executionSteps.map((s) =>
+          s.status === "running" || s.status === "llm" || s.status === "tool"
+            ? { ...s, status: "failed", detail: s.detail ?? action.reason }
+            : s,
+        ),
+      };
+    }
     case "CLEAR_EXECUTION_STEPS":
       // Only clear in-memory — localStorage is preserved for session history
       return { ...state, executionSteps: [] };
     case "SUBMIT_BLOCK":
       return { ...state, submittedBlockIds: new Set([...state.submittedBlockIds, action.blockId]) };
     case "RESET_SESSION":
-      return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), sessionPlugins: [] };
+      return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [] };
     case "RESET_TO_WORLD_SELECT":
-      return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), sessionPlugins: [] };
+      return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [] };
     case "LOAD_SESSION_PLUGINS":
       return { ...state, sessionPlugins: action.plugins };
     case "TOGGLE_SESSION_PLUGIN":
@@ -298,11 +418,109 @@ function reducer(state: SessionState, action: Action): SessionState {
         }
         pluginNs[change.namespace] = ns;
       }
-      return { ...state, pluginData: { ...prev, [pluginId]: pluginNs } };
+      const nextState = { ...state, pluginData: { ...prev, [pluginId]: pluginNs } };
+      // If any change touched namespace="message", refresh the synthesized
+      // plugin_message surface for this plugin so chat can render it via json-render.
+      if (changes.some((c) => c.namespace === 'message')) {
+        return applyPluginMessageSurface(nextState, pluginId);
+      }
+      return nextState;
     }
+    case "LOAD_MESSAGE_UI_SPECS":
+      return { ...state, messageUiSpecs: action.specs };
+    case "UPSERT_PLUGIN_MESSAGE_SURFACE":
+      return applyPluginMessageSurface(state, action.pluginId);
+    case "UPSERT_DRAFT": {
+      const { draft } = action;
+      const filtered = state.pendingInteractionDrafts.filter((d) =>
+        d.id !== draft.id &&
+        !(draft.selectionGroup && d.turnId === draft.turnId && d.selectionGroup === draft.selectionGroup),
+      );
+      return { ...state, pendingInteractionDrafts: [...filtered, draft] };
+    }
+    case "REMOVE_DRAFT":
+      return { ...state, pendingInteractionDrafts: state.pendingInteractionDrafts.filter((d) => d.id !== action.draftId) };
+    case "CLEAR_DRAFTS":
+      return { ...state, pendingInteractionDrafts: [] };
     default:
       return state;
   }
+}
+
+// ── Plugin message surface ─────────────────────────────────────────
+//
+// Synthesize a StreamMessage with a `plugin_message` block whenever the plugin
+// writes to its `namespace: "message"` plugin-data. The block carries the json-
+// render spec(s) the plugin declared in its manifest's `ui.message`, plus the
+// current namespace snapshot as `state`. MessageRenderer then loops over specs
+// and hands each one to <PluginPanel> to render via json-render.
+
+function stripPrivateMessageKeys(data: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(data).filter(([k]) => !k.startsWith('__')));
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function applyPluginMessageSurface(state: SessionState, pluginId: string): SessionState {
+  const uiEntry = state.messageUiSpecs.find((entry) => entry.pluginId === pluginId);
+  if (!uiEntry || uiEntry.specs.length === 0) return state;
+
+  const namespaceState = state.pluginData[pluginId]?.message ?? {};
+  const turnId = typeof namespaceState.__turnId === 'string' ? namespaceState.__turnId : '';
+  if (!turnId) return state;
+
+  const blockState = stripPrivateMessageKeys(namespaceState);
+  const messageId = `plugin-message:${pluginId}:${turnId}`;
+  const block = {
+    type: 'plugin_message',
+    data: {
+      pluginId,
+      specs: cloneJson(uiEntry.specs) as unknown,
+      state: cloneJson(blockState),
+    },
+    meta: { pluginId, turnId },
+  } as Record<string, unknown>;
+
+  const messages = state.messages;
+  const existingIdx = messages.findIndex((m) => m.id === messageId);
+  if (existingIdx >= 0) {
+    const next = [...messages];
+    next[existingIdx] = {
+      ...next[existingIdx],
+      block,
+      timestamp: new Date().toISOString(),
+    };
+    return { ...state, messages: next };
+  }
+
+  const nextMessage: StreamMessage = {
+    id: messageId,
+    role: 'assistant',
+    content: '',
+    timestamp: new Date().toISOString(),
+    turnId,
+    kind: 'plugin-message',
+    block,
+    runtimeId: pluginId,
+  };
+
+  // Anchor after the latest story/plugin-message from the same turn so that
+  // plugin surfaces follow the narrative they augment.
+  let anchorIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const m = messages[i];
+    if (m.turnId === turnId && (m.kind === 'story' || m.kind === 'plugin-message')) {
+      anchorIndex = i;
+      break;
+    }
+  }
+  const next = [...messages];
+  if (anchorIndex < 0) next.push(nextMessage);
+  else next.splice(anchorIndex + 1, 0, nextMessage);
+
+  return { ...state, messages: next };
 }
 
 // ── Context ────────────────────────────────────────────────────────
@@ -325,8 +543,27 @@ interface SessionContextValue {
   sendMessage: (content: string) => void;
   /** Mark a block as submitted (permanently locks it). */
   submitBlock: (blockId: string) => void;
-  /** Submit an interactive block through the submit-inputs API (form/choice/confirmation). */
-  submitInteraction: (blockId: string, turnId: string, interactionId: string, type: 'form' | 'choice' | 'confirmation', values: Record<string, unknown>) => Promise<void>;
+  /**
+   * Submit an interactive block through the submit-inputs API (form/choice/confirmation).
+   *
+   * `submitBehavior` is a plugin-declared UX hint on the originating block's
+   * `data.submitBehavior`. Currently honoured:
+   *   - `autoContinue`: after the turn triggered by the filled narrative
+   *     completes, fire a second `send_message("")` so runtimes that only
+   *     fire in the new phase (narrator, guide, …) get their first chance
+   *     to run without requiring the player to type anything. Mirrors the
+   *     V2 frontend's behaviour.
+   *   - `echoFilledNarrative`: when `false`, do not surface the filled
+   *     narrative as a user-visible message; send empty content instead.
+   */
+  submitInteraction: (
+    blockId: string,
+    turnId: string,
+    interactionId: string,
+    type: 'form' | 'choice' | 'confirmation',
+    values: Record<string, unknown>,
+    submitBehavior?: { autoContinue?: boolean; echoFilledNarrative?: boolean },
+  ) => Promise<void>;
   executeCommand: (command: string) => void;
   /**
    * Retry the last turn from a specific runtime.
@@ -348,6 +585,14 @@ interface SessionContextValue {
   toggleSessionPlugin: (pluginId: string, enable: boolean) => Promise<void>;
   /** Trigger a custom kernel event (e.g. image generation from a message button). */
   triggerEvent: (eventType: string, eventData: Record<string, unknown>) => void;
+  /** Upsert a pending interaction draft (choice / suggestion selection feedback). */
+  upsertInteractionDraft: (draft: PendingInteractionDraft) => void;
+  /** Remove a pending interaction draft by id. */
+  removeInteractionDraft: (id: string) => void;
+  /** Clear all pending interaction drafts. */
+  clearInteractionDrafts: () => void;
+  /** Update the composer text (single-line input field state). */
+  setComposerText: (text: string) => void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -445,8 +690,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     switch (type) {
       // ── Narrative events ──────────────────────────────────────
-      case "narrative.delta":
-      case "message.delta": {
+      case "narrative.delta": {
         const delta = (payload.delta as string) ?? "";
         const runtimeId = (payload.runtimeId as string) ?? "unknown";
         const pluginId = (payload.pluginId as string) ?? "";
@@ -473,8 +717,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
         break;
       }
-      case "narrative.completed":
-      case "message.completed": {
+      case "narrative.completed": {
         // When streaming is active, message.completed duplicates streamed content.
         // Dispatch a deduplicated action — the reducer checks for existing stream messages.
         const content = (payload.content as string) ?? "";
@@ -516,8 +759,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         break;
       }
       // ── Interaction events ────────────────────────────────────
-      case "interaction.requested":
-      case "block.emitted": {
+      case "interaction.requested": {
         const block = payload.block as Record<string, unknown>;
         if (block) {
           const blockMeta = block.meta as Record<string, unknown> | undefined;
@@ -550,16 +792,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         break;
       }
       // ── State events ─────────────────────────────────────────
-      case "state.changed":
-      case "state.patch.applied": {
+      case "state.changed": {
         // Session Kernel sends: { table, field, value, runtimeId, pluginId }
-        // Legacy format: { patch: { id, summary, packageName, data } }
         const table = payload.table as string | undefined;
         const field = payload.field as string | undefined;
         const value = payload.value;
-        const legacyPatch = payload.patch as { id: string; summary: string; packageName: string; data?: unknown } | undefined;
 
-        const patch = legacyPatch ?? {
+        const patch = {
           id: `sp_${Date.now()}`,
           summary: field ? `${table ?? "default"}.${field}` : "state change",
           packageName: (payload.pluginId as string) ?? "system",
@@ -578,112 +817,82 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
         break;
       }
-      case "state.snapshot": {
-        const snapshotState = payload.state as Record<string, unknown> | undefined;
-        if (snapshotState) {
-          dispatch({ type: "SET_GAME_STATE", state: snapshotState });
-          // Persist to DataService (T1/T2: IndexedDB, T3: no-op)
-          const sid = sessionIdRef.current;
-          if (sid) {
-            getDataService()
-              .persistStateSnapshot(sid, payload as Record<string, unknown>)
-              .catch((e: unknown) => console.warn("[session] persistStateSnapshot failed:", e));
-          }
-        }
-        break;
-      }
-      // ── Session lifecycle events ─────────────────────────────
-      case "phase.changed":
-      case "phase_change": {
-        const phase = payload.phase as api.SessionPhase;
-        if (phase) {
-          dispatch({ type: "SET_PHASE", phase });
-          // Persist phase to IDB session record so it survives refresh
-          const sid = sessionIdRef.current;
-          if (sid) {
-            ds.updateSession(sid, { phase }).catch(() => {});
-          }
-        }
-        break;
-      }
+      // phase.changed is delivered exclusively through the persistent
+      // /events/stream subscription below — both channels share the same
+      // eventBus, so handling it here too would dispatch twice per event.
       // ── Execution lifecycle events ───────────────────────────
       case "execution.started": {
         // Turn-level execution started — tracked by `executing` flag, no fake runtime step needed
         break;
       }
       case "runtime.started": {
-        const step: ExecutionStep = {
-          type: "runtime.started",
-          runtimeId: (payload.runtimeId as string) ?? "unknown",
-          pluginId: (payload.pluginId as string) ?? "",
-          label: payload.label as string | undefined,
-          timestamp: envelope.timestamp,
-          turnId,
-        };
-        // Track runtime kind from label (format: "pluginId/kind")
-        if (step.label) {
-          const slashIdx = step.label.indexOf("/");
-          if (slashIdx >= 0) {
-            runtimeKindRef.current.set(step.runtimeId, step.label.slice(slashIdx + 1));
-          }
+        const runtimeId = (payload.runtimeId as string) ?? "unknown";
+        const pluginId = (payload.pluginId as string) ?? "";
+        const label = payload.label as string | undefined;
+        // Prefer payload.kind (new SSE contract); fall back to "pluginId/kind"
+        // label for legacy servers.
+        let kind = payload.kind as string | undefined;
+        if (!kind && label) {
+          const slashIdx = label.indexOf("/");
+          if (slashIdx >= 0) kind = label.slice(slashIdx + 1);
         }
-        dispatch({ type: "ADD_EXECUTION_STEP", step });
+        if (kind) runtimeKindRef.current.set(runtimeId, kind);
+        dispatch({
+          type: "UPSERT_EXECUTION_STEP",
+          step: {
+            runtimeId,
+            pluginId,
+            status: "running",
+            label,
+            turnId,
+            startedAt: envelope.timestamp,
+          },
+        });
         break;
       }
       case "runtime.completed": {
-        dispatch({ type: "ADD_EXECUTION_STEP", step: {
-          type: "runtime.completed",
-          runtimeId: (payload.runtimeId as string) ?? "unknown",
-          pluginId: (payload.pluginId as string) ?? "",
-          detail: payload.durationMs != null ? `${payload.durationMs}ms` : undefined,
-          timestamp: envelope.timestamp,
-          turnId,
-        }});
+        dispatch({
+          type: "UPSERT_EXECUTION_STEP",
+          step: {
+            runtimeId: (payload.runtimeId as string) ?? "unknown",
+            pluginId: (payload.pluginId as string) ?? "",
+            status: "completed",
+            durationMs: payload.durationMs as number | undefined,
+            turnId,
+          },
+        });
         break;
       }
       case "runtime.failed": {
-        dispatch({ type: "ADD_EXECUTION_STEP", step: {
-          type: "runtime.failed",
-          runtimeId: (payload.runtimeId as string) ?? "unknown",
-          pluginId: (payload.pluginId as string) ?? "",
-          detail: payload.error as string | undefined,
-          timestamp: envelope.timestamp,
-          turnId,
-        }});
+        dispatch({
+          type: "UPSERT_EXECUTION_STEP",
+          step: {
+            runtimeId: (payload.runtimeId as string) ?? "unknown",
+            pluginId: (payload.pluginId as string) ?? "",
+            status: "failed",
+            detail: payload.error as string | undefined,
+            durationMs: payload.durationMs as number | undefined,
+            turnId,
+          },
+        });
+        break;
+      }
+      case "runtime.skipped": {
+        dispatch({
+          type: "UPSERT_EXECUTION_STEP",
+          step: {
+            runtimeId: (payload.runtimeId as string) ?? "unknown",
+            pluginId: (payload.pluginId as string) ?? "",
+            status: "skipped",
+            durationMs: payload.durationMs as number | undefined,
+            turnId,
+          },
+        });
         break;
       }
       case "execution.completed": {
         dispatch({ type: "SET_EXECUTING", value: false });
-        break;
-      }
-      // Legacy compat — remove once all servers emit protocol types
-      case "runtime.progress": {
-        const statusToType: Record<string, ExecutionStep["type"]> = {
-          started: "runtime.started",
-          completed: "runtime.completed",
-          skipped: "runtime.completed",
-          failed: "runtime.failed",
-          executing: "runtime.started",
-        };
-        const stepType = statusToType[payload.status as string] ?? (payload.type as ExecutionStep["type"]);
-        if (stepType) {
-          const step: ExecutionStep = {
-            type: stepType,
-            runtimeId: (payload.runtimeId as string) ?? "__turn__",
-            pluginId: (payload.pluginId as string) ?? "",
-            label: payload.label as string | undefined,
-            detail: payload.durationMs != null ? `${payload.durationMs}ms` : undefined,
-            timestamp: envelope.timestamp,
-            turnId,
-          };
-          if (step.type === "runtime.started" && step.label) {
-            const slashIdx = step.label.indexOf("/");
-            if (slashIdx >= 0) {
-              runtimeKindRef.current.set(step.runtimeId, step.label.slice(slashIdx + 1));
-            }
-          }
-          dispatch({ type: "ADD_EXECUTION_STEP", step });
-        }
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
         break;
       }
       case "event.emitted": {
@@ -712,46 +921,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
         break;
       }
-      case "record.updated": {
-        // Merge record updates into gameState.records
-        const recordType = (payload.recordType as string) ?? (payload.type as string);
-        const recordKey = (payload.key as string) ?? (payload.id as string);
-        if (recordKey) {
-          dispatch({
-            type: "ADD_STATE_PATCH",
-            patch: {
-              id: `rec_${Date.now()}`,
-              summary: `record: ${recordType ?? "update"} ${recordKey}`,
-              packageName: (payload.pluginId as string) ?? "system",
-              data: {
-                records: { [recordKey]: payload.value ?? payload },
-              },
-            },
-          });
-        }
-        break;
-      }
-      // ── Plugin data events ────────────────────────────────────
-      case "plugin-data.changed": {
-        const pluginId = payload.pluginId as string;
-        const changes = payload.changes as readonly PluginDataChange[];
-        if (pluginId && changes) {
-          dispatch({ type: "PLUGIN_DATA_CHANGED", pluginId, changes });
-          // Sync to standalone plugin-data-store used by json-render panels
-          applyPluginDataStoreChanges(pluginId, changes);
-        }
-        break;
-      }
+      // plugin-data.changed is delivered exclusively through the persistent
+      // /events/stream subscription below — both channels share the same
+      // eventBus so handling it here too would dispatch twice per event.
       // ── Error events ──────────────────────────────────────────
-      case "error.occurred":
-      case "flow.failed": {
+      case "error.occurred": {
         dispatch({ type: "SET_EXECUTION_ERROR", error: (payload.message as string) ?? "Execution failed" });
         dispatch({ type: "SET_EXECUTING", value: false });
-        break;
-      }
-      // Legacy compat
-      case "flow.completed": {
-        dispatch({ type: "SET_EXECUTING", value: false });
+        dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
         break;
       }
     }
@@ -787,10 +964,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         ?? state.presets[0]?.id;
       const session = await ds.createSession(state.world.id, presetId, undefined, plugins);
       dispatch({ type: "SET_SESSION", session });
-      // Copy prep-phase runtime bindings to the real session
+      // Copy prep-phase runtime bindings to the real session and PATCH them
+      // onto the server record. The per-runtime slot resolver reads
+      // session.runtimeModelOverrides at turn time; without a PATCH, any
+      // selection made on the prep screen has zero effect on the backend.
       const prepBindings = api.getRuntimeBindings(`prep:${state.world.id}`);
       if (Object.keys(prepBindings).length > 0) {
         api.setRuntimeBindings(session.id, prepBindings);
+        const overrides: Record<string, string> = {};
+        for (const [runtimeId, slot] of Object.entries(prepBindings)) {
+          if (typeof slot === "string" && slot.length > 0) overrides[runtimeId] = slot;
+        }
+        try {
+          await api.updateSession(session.id, { runtimeModelOverrides: overrides });
+        } catch {
+          // Non-fatal: overrides fall back to manifest defaults when missing
+        }
       }
       // Sync context to server so the stateless server can process the first turn
       await ds.syncToServer(session.id);
@@ -804,47 +993,33 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const beginAdventure = useCallback(() => {
     if (!state.session || state.executing) return;
     const sessionId = state.session.id;
-    void api.getWorldOverlay(state.world?.id ?? "").then((overlay) => {
-      const loreOverride = overlay?.lore;
+    const worldId = state.world?.id ?? "";
+
+    const postStart = (loreOverride?: unknown) => {
       dispatch({ type: "SET_EXECUTING", value: true });
+      const payload: Record<string, unknown> = loreOverride ? { loreOverride } : {};
       api.sendAction(
-        {
-          requestId: api.uid(),
-          type: "start_session",
-          sessionId,
-          locale: i18n.language,
-          payload: { ...(loreOverride ? { loreOverride } : {}) },
-        },
+        { requestId: api.uid(), type: "start_session", sessionId, locale: i18n.language, payload },
         handleSseEvent,
         (err) => {
+          // Session stays valid; user can press 开始冒险 again to retry, so
+          // we only surface the error rather than tear anything down.
           dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
           dispatch({ type: "SET_EXECUTING", value: false });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
         },
         () => {
           dispatch({ type: "SET_EXECUTING", value: false });
-        }
-      );
-    }).catch(() => {
-      // Proceed without overlay if fetch fails
-      dispatch({ type: "SET_EXECUTING", value: true });
-      api.sendAction(
-        {
-          requestId: api.uid(),
-          type: "start_session",
-          sessionId,
-          locale: i18n.language,
-          payload: {},
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
         },
-        handleSseEvent,
-        (err) => {
-          dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
-          dispatch({ type: "SET_EXECUTING", value: false });
-        },
-        () => {
-          dispatch({ type: "SET_EXECUTING", value: false });
-        }
       );
-    });
+    };
+
+    // Overlay is optional metadata (world lore override). Fetch failures
+    // should never block the adventure from starting.
+    void api.getWorldOverlay(worldId)
+      .then((overlay) => postStart(overlay?.lore))
+      .catch(() => postStart());
   }, [state.session, state.world, state.executing, handleSseEvent]);
 
   /** Shared logic for fully restoring a session from server data. */
@@ -863,19 +1038,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const targetSessionId = session.id;
     sessionIdRef.current = targetSessionId;
 
-    // Load messages, state patches, and state snapshot in parallel
-    const [messagesResult, patchesResult, snapshotResult] = await Promise.allSettled([
-      ds.listMessages(session.id),
-      ds.listStatePatches(session.id),
-      ds.loadStateSnapshot(session.id),
-    ]);
+    // Server snapshot is the authoritative source of messages, gameState,
+    // characters, characterSchema and execution trace. IDB (T1/T2 self-deploy)
+    // is only used when the server doesn't expose a snapshot endpoint.
+    // Mirrors V2's single-call resume path; replaces the old three-way IDB
+    // fan-out that could race against server state and show stale data.
+    let snapshotLoaded = false;
+    try {
+      const snapshot = await api.getSessionSnapshot(session.id);
+      if (sessionIdRef.current !== targetSessionId) return;
 
-    // Discard if session changed during async loading
-    if (sessionIdRef.current !== targetSessionId) return;
-
-    // Restore messages (including block data)
-    if (messagesResult.status === "fulfilled") {
-      const streamMessages: StreamMessage[] = messagesResult.value.map((m) => ({
+      const streamMessages: StreamMessage[] = snapshot.messages.map((m) => ({
         id: m.id,
         role: m.role as "system" | "user" | "assistant",
         content: m.content,
@@ -883,63 +1056,84 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         turnId: m.turnId,
         runtimeId: m.runtimeId,
         kind: m.kind,
-        ...(m.block ? { block: m.block } : {}),
+        ...(m.block ? { block: m.block as Record<string, unknown> } : {}),
       }));
       dispatch({ type: "LOAD_MESSAGES", messages: streamMessages });
-    } else {
-      // Message loading failed — user won't see historical messages but can still play
-      void messagesResult.reason;
-    }
 
-    // Restore state patches and rebuild gameState
-    if (patchesResult.status === "fulfilled") {
-      dispatch({ type: "LOAD_STATE_PATCHES", patches: patchesResult.value });
-    }
-
-    // Restore state snapshot (overrides patch-rebuilt state if available)
-    if (snapshotResult.status === "fulfilled" && snapshotResult.value) {
-      const snapshot = snapshotResult.value;
-      const snapshotState = snapshot.state as Record<string, unknown> | undefined;
-      if (snapshotState) {
-        dispatch({ type: "SET_GAME_STATE", state: snapshotState });
-      }
-    }
-
-    // Load characters and execution steps from snapshot API for complete restore
-    try {
-      const snapshot = await api.getSessionSnapshot(session.id);
-      if (sessionIdRef.current !== targetSessionId) return;
       if (snapshot.characters.length > 0 || Object.keys(snapshot.gameState).length > 0 || snapshot.characterSchema) {
         const enrichedState: Record<string, unknown> = {
           ...snapshot.gameState,
           characters: snapshot.characters,
         };
-        // Persist character schema for right panel rendering
         if (snapshot.characterSchema) {
           enrichedState.characterSchema = snapshot.characterSchema;
         }
         dispatch({ type: "SET_GAME_STATE", state: enrichedState });
       }
-      // Restore execution steps from trace events
+
       if (snapshot.executionSteps.length > 0) {
-        const steps = snapshot.executionSteps
-          .filter(s => s.type.startsWith('runtime.'))
-          .map(s => {
-            const p = s.payload as Record<string, unknown>;
-            return {
-              type: s.type as "runtime.started" | "runtime.completed" | "runtime.failed",
-              runtimeId: (p.runtimeId as string) ?? '',
-              pluginId: (p.pluginId as string) ?? '',
-              timestamp: s.timestamp,
-              turnId: s.turnId,
-              detail: (p.durationMs != null) ? `${p.durationMs}ms` : undefined,
-            };
-          })
-          .filter(s => s.runtimeId !== '__turn__');
-        dispatch({ type: "LOAD_EXECUTION_STEPS", steps });
+        const byKey = new Map<string, ExecutionStep>();
+        for (const evt of snapshot.executionSteps) {
+          if (!evt.type.startsWith('runtime.')) continue;
+          const p = evt.payload as Record<string, unknown>;
+          const runtimeId = (p.runtimeId as string) ?? '';
+          if (!runtimeId || runtimeId === '__turn__') continue;
+          const key = `${evt.turnId ?? '__no_turn__'}|${runtimeId}`;
+          const prev = byKey.get(key);
+          const status: ExecutionStep["status"] =
+            evt.type === 'runtime.completed' ? 'completed' :
+            evt.type === 'runtime.failed'    ? 'failed'    :
+            evt.type === 'runtime.skipped'   ? 'skipped'   :
+                                               'running';
+          byKey.set(key, {
+            runtimeId,
+            pluginId: (p.pluginId as string) ?? prev?.pluginId ?? '',
+            status,
+            turnId: evt.turnId,
+            label: (p.label as string | undefined) ?? prev?.label,
+            durationMs: (p.durationMs as number | undefined) ?? prev?.durationMs,
+            startedAt: evt.type === 'runtime.started' ? evt.timestamp : prev?.startedAt,
+          });
+        }
+        dispatch({ type: "LOAD_EXECUTION_STEPS", steps: [...byKey.values()] });
       }
+
+      snapshotLoaded = true;
     } catch {
-      // Snapshot API not critical — game can still work without it
+      // Server unavailable or snapshot endpoint missing — fall back to IDB.
+    }
+
+    if (!snapshotLoaded) {
+      // Fallback path for T1/T2 deployments (no server snapshot endpoint).
+      const [messagesResult, patchesResult, stateSnapResult] = await Promise.allSettled([
+        ds.listMessages(session.id),
+        ds.listStatePatches(session.id),
+        ds.loadStateSnapshot(session.id),
+      ]);
+      if (sessionIdRef.current !== targetSessionId) return;
+
+      if (messagesResult.status === "fulfilled") {
+        const streamMessages: StreamMessage[] = messagesResult.value.map((m) => ({
+          id: m.id,
+          role: m.role as "system" | "user" | "assistant",
+          content: m.content,
+          timestamp: m.createdAt,
+          turnId: m.turnId,
+          runtimeId: m.runtimeId,
+          kind: m.kind,
+          ...(m.block ? { block: m.block } : {}),
+        }));
+        dispatch({ type: "LOAD_MESSAGES", messages: streamMessages });
+      }
+      if (patchesResult.status === "fulfilled") {
+        dispatch({ type: "LOAD_STATE_PATCHES", patches: patchesResult.value });
+      }
+      if (stateSnapResult.status === "fulfilled" && stateSnapResult.value) {
+        const snapshotState = stateSnapResult.value.state as Record<string, unknown> | undefined;
+        if (snapshotState) {
+          dispatch({ type: "SET_GAME_STATE", state: snapshotState });
+        }
+      }
     }
 
     // Discard if session changed during restore
@@ -954,14 +1148,32 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
     } catch { /* ignore load errors */ }
 
-    // Restore accumulated execution steps from DataService (persisted across refreshes)
+    // Restore accumulated execution steps from DataService (persisted across refreshes).
+    // Legacy persisted shape used `type: "runtime.started"`; migrate on the fly
+    // so old sessions still restore without leaving chips stuck mid-flow.
     try {
-      const steps = (await ds.loadExecutionSteps(session.id)) as ExecutionStep[];
+      const raw = (await ds.loadExecutionSteps(session.id)) as unknown[];
       if (sessionIdRef.current !== targetSessionId) return;
-      if (steps.length > 0) {
-        for (const step of steps) {
-          dispatch({ type: "ADD_EXECUTION_STEP", step });
-        }
+      const migrated = (raw as Array<Record<string, unknown>>).map((r): ExecutionStep => {
+        const legacyType = r.type as string | undefined;
+        const legacyStatus: ExecutionStep["status"] =
+          legacyType === "runtime.completed" ? "completed" :
+          legacyType === "runtime.failed"    ? "failed"    :
+          legacyType === "runtime.skipped"   ? "skipped"   :
+          (r.status as ExecutionStep["status"] | undefined) ?? "completed";
+        return {
+          runtimeId: (r.runtimeId as string) ?? "unknown",
+          pluginId: (r.pluginId as string) ?? "",
+          status: legacyStatus,
+          label: r.label as string | undefined,
+          detail: r.detail as string | undefined,
+          durationMs: r.durationMs as number | undefined,
+          turnId: r.turnId as string | undefined,
+          startedAt: (r.startedAt as string | undefined) ?? (r.timestamp as string | undefined),
+        };
+      });
+      for (const step of migrated) {
+        dispatch({ type: "UPSERT_EXECUTION_STEP", step });
       }
     } catch { /* ignore load errors */ }
 
@@ -1009,62 +1221,85 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "REMOVE_SESSION", sessionId });
   }, []);
 
+  /**
+   * Fire a single `/api/actions` request and return a Promise that resolves
+   * when the SSE stream either finishes (`onDone`) or errors. The caller is
+   * expected to own the `executing` flag.
+   *
+   * Rationale: `sendMessage` below is the public fire-and-forget entry point,
+   * but `submitInteraction` needs to await turn completion before firing a
+   * follow-up (autoContinue). Promisifying the action call makes that
+   * chaining explicit. See the V2 frontend's equivalent submitInputsBatch
+   * helper for the mirror implementation.
+   */
+  const runSingleAction = useCallback(
+    (content: string, opts: { echoUserMessage: boolean }): Promise<void> => {
+      const session = state.session;
+      if (!session) return Promise.resolve();
+      const sessionId = session.id;
+
+      if (opts.echoUserMessage && content) {
+        const userMsgId = api.uid();
+        const userTimestamp = new Date().toISOString();
+        dispatch({
+          type: "ADD_MESSAGE",
+          message: {
+            id: userMsgId,
+            role: "user",
+            content,
+            timestamp: userTimestamp,
+          },
+        });
+        ds.addMessage({
+          id: userMsgId,
+          sessionId,
+          role: "user",
+          content,
+          createdAt: userTimestamp,
+        }).catch(() => {});
+      }
+
+      return new Promise<void>((resolve) => {
+        const fireAction = () => {
+          const isCommand = content.startsWith("/");
+          api.sendAction(
+            {
+              requestId: api.uid(),
+              type: isCommand ? "execute_command" : "send_message",
+              sessionId,
+              locale: i18n.language,
+              payload: isCommand ? { command: content } : { content },
+            },
+            handleSseEvent,
+            (err) => {
+              dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
+              resolve();
+            },
+            () => {
+              resolve();
+            },
+          );
+        };
+
+        api.ensureServerSession(sessionId, (sid) => ds.syncToServer(sid))
+          .then(fireAction)
+          .catch(fireAction);
+      });
+    },
+    [state.session, handleSseEvent],
+  );
+
   const sendMessage = useCallback((content: string) => {
     if (!state.session || state.executing) return;
-
-    const sessionId = state.session.id;
-
-    // Add user message immediately
-    const userMsgId = api.uid();
-    const userTimestamp = new Date().toISOString();
-    dispatch({
-      type: "ADD_MESSAGE",
-      message: {
-        id: userMsgId,
-        role: "user",
-        content,
-        timestamp: userTimestamp,
-      },
-    });
-
-    // Persist user message to IDB
-    ds.addMessage({
-      id: userMsgId,
-      sessionId,
-      role: "user",
-      content,
-      createdAt: userTimestamp,
-    }).catch(() => {});
 
     dispatch({ type: "SET_EXECUTING", value: true });
     dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
-    const fireAction = () => {
-      const isCommand = content.startsWith("/");
-      api.sendAction(
-        {
-          requestId: api.uid(),
-          type: isCommand ? "execute_command" : "send_message",
-          sessionId,
-          locale: i18n.language,
-          payload: isCommand ? { command: content } : { content },
-        },
-        handleSseEvent,
-        (err) => {
-          dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
-          dispatch({ type: "SET_EXECUTING", value: false });
-        },
-        () => {
-          dispatch({ type: "SET_EXECUTING", value: false });
-        },
-      );
-    };
-
-    // Guard: re-sync if server restarted after idle (e.g. Render free-tier sleep)
-    api.ensureServerSession(sessionId, (sid) => ds.syncToServer(sid))
-      .then(fireAction)
-      .catch(fireAction); // proceed anyway — let the action surface the real error
-  }, [state.session, state.executing, handleSseEvent]);
+    runSingleAction(content, { echoUserMessage: true }).finally(() => {
+      dispatch({ type: "SET_EXECUTING", value: false });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
+    });
+  }, [state.session, state.executing, runSingleAction]);
 
   const submitBlock = useCallback((blockId: string) => {
     dispatch({ type: "SUBMIT_BLOCK", blockId });
@@ -1090,9 +1325,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     interactionId: string,
     type: 'form' | 'choice' | 'confirmation',
     values: Record<string, unknown>,
+    submitBehavior?: { autoContinue?: boolean; echoFilledNarrative?: boolean },
   ) => {
     const sid = sessionIdRef.current;
     if (!sid) return;
+
+    const autoContinue = submitBehavior?.autoContinue === true;
+    const echo = submitBehavior?.echoFilledNarrative !== false; // default true
 
     try {
       // 1. Mark block as submitted (UI lock)
@@ -1120,10 +1359,27 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // Non-critical: character panel will update on next refresh
       }
 
-      // 4. Use filled narrative to trigger next turn
-      const filled = result.results?.[0]?.filledNarrative;
-      if (filled) {
-        sendMessage(filled);
+      // 4. Trigger the next turn with the filled narrative, then optionally
+      //    chain a follow-up empty-message turn so runtimes that only unlock
+      //    after phase transition (narrator, guide, …) get their first run.
+      //    This mirrors the V2 frontend's autoContinue semantics — see
+      //    apps/web-v2/src/stores/session-store.ts `submitInputsBatch`.
+      const filled = result.results?.[0]?.filledNarrative ?? '';
+      const firstContent = echo ? filled : '';
+
+      // Own the executing flag across BOTH chained actions so concurrent
+      // player input is blocked and the UI stays in "executing" throughout.
+      dispatch({ type: "SET_EXECUTING", value: true });
+      dispatch({ type: "SET_EXECUTION_ERROR", error: null });
+
+      try {
+        await runSingleAction(firstContent, { echoUserMessage: echo && Boolean(filled) });
+        if (autoContinue) {
+          await runSingleAction('', { echoUserMessage: false });
+        }
+      } finally {
+        dispatch({ type: "SET_EXECUTING", value: false });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
       }
     } catch (err) {
       console.error('[submitInteraction] Failed:', err);
@@ -1131,7 +1387,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const rawContent = Object.values(values).join(', ');
       sendMessage(rawContent);
     }
-  }, [submitBlock, sendMessage]);
+  }, [submitBlock, sendMessage, runSingleAction]);
 
   const executeCommand = useCallback((command: string) => {
     if (!state.session || state.executing) return;
@@ -1154,9 +1410,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         (err) => {
           dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
           dispatch({ type: "SET_EXECUTING", value: false });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
         },
         () => {
           dispatch({ type: "SET_EXECUTING", value: false });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
         },
       );
     };
@@ -1203,9 +1461,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         (err) => {
           dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
           dispatch({ type: "SET_EXECUTING", value: false });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
         },
         () => {
           dispatch({ type: "SET_EXECUTING", value: false });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
         },
       );
     };
@@ -1228,6 +1488,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (!sid || state.executionSteps.length === 0) return;
     ds.saveExecutionSteps(sid, state.executionSteps).catch(() => {});
   }, [state.executionSteps, state.session?.id, ds]);
+
+  // Load plugin-declared message-slot UI specs from /api/ui-specs. Each
+  // plugin that exposes an `ui.message[]` spec contributes one entry; the
+  // frontend synthesises a `plugin_message` block whenever the plugin writes
+  // to its `namespace: "message"` plugin-data.
+  useEffect(() => {
+    const sid = state.session?.id;
+    if (!sid) {
+      dispatch({ type: "LOAD_MESSAGE_UI_SPECS", specs: [] });
+      return;
+    }
+    let cancelled = false;
+    api.fetchUiSpecs(sid)
+      .then((res) => {
+        if (cancelled) return;
+        dispatch({ type: "LOAD_MESSAGE_UI_SPECS", specs: res.message ?? [] });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        dispatch({ type: "LOAD_MESSAGE_UI_SPECS", specs: [] });
+      });
+    return () => { cancelled = true; };
+  }, [state.session?.id]);
 
   // ── Persistent SSE subscription for out-of-band events ──────
   //
@@ -1375,9 +1658,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         (err) => {
           dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
           dispatch({ type: "SET_EXECUTING", value: false });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
         },
         () => {
           dispatch({ type: "SET_EXECUTING", value: false });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
         },
       );
     };
@@ -1386,6 +1671,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       .then(fireAction)
       .catch(fireAction);
   }, [state.session, state.executing, handleSseEvent]);
+
+  const upsertInteractionDraft = useCallback((draft: PendingInteractionDraft) => {
+    dispatch({ type: "UPSERT_DRAFT", draft });
+  }, []);
+
+  const removeInteractionDraft = useCallback((id: string) => {
+    dispatch({ type: "REMOVE_DRAFT", draftId: id });
+  }, []);
+
+  const clearInteractionDrafts = useCallback(() => {
+    dispatch({ type: "CLEAR_DRAFTS" });
+  }, []);
+
+  // V1 keeps composer text in the GameView local state; exposing a no-op here
+  // lets plugin json-render handlers that target `setComposerText` stay
+  // compatible without surfacing plugin IDs into the store.
+  const setComposerText = useCallback((_text: string) => {
+    // no-op on V1 — composer is local to GameView
+  }, []);
 
   const value: SessionContextValue = {
     state,
@@ -1409,6 +1713,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     loadSessionPlugins,
     toggleSessionPlugin,
     triggerEvent,
+    upsertInteractionDraft,
+    removeInteractionDraft,
+    clearInteractionDrafts,
+    setComposerText,
   };
 
   return (

@@ -190,7 +190,7 @@ export function SessionPrepScreen({
     if (!v) refreshSlots();
   };
 
-  const activeSessions = existingSessions.filter((s) => s.status !== "archived");
+  const activeSessions = existingSessions.filter((s) => s.status !== "ended");
   const totalRuntimes = selectedPackages.reduce((sum, p) => sum + (p.runtimes?.length ?? 0), 0);
 
   // Build flow steps filtered by selected plugins
@@ -284,7 +284,7 @@ export function SessionPrepScreen({
                         <div className="min-w-0">
                           <span className="text-xs font-mono text-muted-foreground">{session.id.slice(0, 16)}</span>
                           <div className="flex items-center gap-2 mt-0.5">
-                            <Badge variant="outline" className="text-[10px]">{session.phase}</Badge>
+                            <Badge variant="outline" className="text-[10px]">{session.status} · t{session.turnCount}</Badge>
                             <span className="text-[10px] text-muted-foreground">
                               {new Date(session.createdAt).toLocaleString("zh-CN")}
                             </span>
@@ -528,7 +528,7 @@ export function SessionPrepScreen({
                           const compatSlots = bindingState.compatibleSlots(entry.providerTag);
                           return (
                             <div key={entry.qualifiedId} className="flex items-center gap-2">
-                              <span className="text-[10px] font-mono text-muted-foreground truncate w-40 shrink-0">{entry.qualifiedId.split(":").pop()}</span>
+                              <span className="text-[10px] font-mono text-muted-foreground truncate w-40 shrink-0">{entry.qualifiedId.split("/").pop()}</span>
                               <select
                                 value={entry.slotName}
                                 onChange={(e) => bindingState.setBinding(entry.qualifiedId, e.target.value)}

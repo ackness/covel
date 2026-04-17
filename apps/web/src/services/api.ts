@@ -19,13 +19,15 @@ export interface WorldRecord {
   updatedAt?: string;
 }
 
-export type SessionPhase = "init" | "character_creation" | "playing" | "ended";
+export type SessionStatus = "active" | "paused" | "ended";
 
 export interface SessionRecord {
   id: string;
   worldId: string;
-  status: "active" | "waiting_for_input" | "archived";
-  phase: SessionPhase;
+  status: SessionStatus;
+  turnCount: number;
+  /** Runtime IDs whose Pre-Game (band 0-99) runs have completed. */
+  preGameCompleted?: readonly string[];
   presetId?: string;
   taskBindings?: Record<string, string>;
   createdAt: string;
@@ -127,16 +129,9 @@ function needsProviderKeys(url: string): boolean {
 }
 
 function buildProviderKeysHeader(): Record<string, string> {
-  const stored = localStorage.getItem("covel:providerKeys");
   const headers: Record<string, string> = {};
-  let keys: Record<string, string> = {};
-  if (stored) {
-    try {
-      keys = JSON.parse(stored);
-    } catch {
-      // skip
-    }
-  }
+  // Start from the in-memory cache (populated at boot via loadProviderKeysFromStorage).
+  const keys: Record<string, string> = { ...providerKeysCache };
   // Merge API keys from custom presets (custom preset key overrides global for same provider)
   const customPresets = getCustomPresets();
   for (const preset of customPresets) {
@@ -530,7 +525,21 @@ export async function createSession(worldId: string, presetId?: string, id?: str
 
 export async function updateSession(
   sessionId: string,
-  updates: Partial<Pick<SessionRecord, "status" | "presetId" | "phase">>
+  updates: Partial<Pick<SessionRecord, "status" | "presetId">> & {
+    /**
+     * Per-runtime model slot overrides. Keys are runtime IDs in the form
+     * `pluginId` (single-runtime plugin) or `pluginId/runtimeName` (multi-
+     * runtime plugin, matching the manifest `name` field). Values are slot
+     * IDs from llm.toml. An empty string clears the override for that
+     * runtime; an empty object clears all overrides.
+     *
+     * Server validation (apps/server/src/routes/api/session.ts):
+     *   key: /^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?$/
+     *   value: non-empty string
+     *   entries: <= 64
+     */
+    runtimeModelOverrides?: Record<string, string>;
+  },
 ): Promise<SessionRecord> {
   return request<SessionRecord>(`/api/sessions/${sessionId}`, {
     method: "PATCH",
@@ -866,20 +875,123 @@ export function triggerEvent(
   );
 }
 
-// ── Provider Keys (localStorage) ───────────────────────────────────
+// ── Provider Keys ──────────────────────────────────────────────────
+//
+// Storage strategy:
+//   - Desktop (Electron): encrypted via safeStorage through `covel:keys:*` IPC.
+//     Keys never touch localStorage; ciphertext lives under `<userData>/config/keys.enc`.
+//   - Browser (web tier): localStorage fallback keyed as `covel:providerKeys`.
+//
+// The functions are kept synchronous because they are called inside the
+// request-building fast path. A process-local cache (`providerKeysCache`) is
+// hydrated on boot via `loadProviderKeysFromStorage()` which the app entry
+// MUST await before making any AI-backed request.
 
-export function getProviderKeys(): Record<string, string> {
-  const stored = localStorage.getItem("covel:providerKeys");
+const LEGACY_KEYS_STORAGE = "covel:providerKeys";
+
+let providerKeysCache: Record<string, string> = {};
+
+interface CovelIpcApiShape {
+  invoke<T = unknown>(channel: string, payload?: unknown): Promise<T>;
+}
+
+function getIpc(): CovelIpcApiShape | null {
+  if (typeof window === "undefined") return null;
+  const bridge = (window as unknown as { covelIpc?: CovelIpcApiShape }).covelIpc;
+  return bridge ?? null;
+}
+
+function readLocalKeys(): Record<string, string> {
+  if (typeof localStorage === "undefined") return {};
+  const stored = localStorage.getItem(LEGACY_KEYS_STORAGE);
   if (!stored) return {};
   try {
-    return JSON.parse(stored);
+    const parsed = JSON.parse(stored);
+    if (parsed && typeof parsed === "object") {
+      return parsed as Record<string, string>;
+    }
   } catch {
-    return {};
+    // ignore
+  }
+  return {};
+}
+
+function writeLocalKeys(keys: Record<string, string>): void {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(LEGACY_KEYS_STORAGE, JSON.stringify(keys));
+}
+
+/**
+ * Hydrate the in-memory provider key cache from disk. Must be awaited once
+ * during app bootstrap, before any AI-backed request is issued.
+ *
+ * On desktop we additionally migrate any legacy localStorage keys into
+ * encrypted storage and then clear them from localStorage.
+ */
+export async function loadProviderKeysFromStorage(): Promise<void> {
+  const ipc = getIpc();
+  if (ipc) {
+    try {
+      const fromSecure = await ipc.invoke<Record<string, string>>("covel:keys:load");
+      const legacy = readLocalKeys();
+      if (Object.keys(legacy).length > 0 && Object.keys(fromSecure ?? {}).length === 0) {
+        // Migrate legacy localStorage keys into safeStorage, then clear them.
+        await ipc.invoke("covel:keys:save", legacy);
+        providerKeysCache = { ...legacy };
+        try { localStorage.removeItem(LEGACY_KEYS_STORAGE); } catch { /* ignore */ }
+      } else {
+        providerKeysCache = { ...(fromSecure ?? {}), ...legacy };
+        if (Object.keys(legacy).length > 0) {
+          // Merge ran — persist the union so future boots only need safeStorage.
+          await ipc.invoke("covel:keys:save", providerKeysCache);
+          try { localStorage.removeItem(LEGACY_KEYS_STORAGE); } catch { /* ignore */ }
+        }
+      }
+    } catch (err) {
+      console.warn("[api] loadProviderKeysFromStorage (desktop) failed:", err);
+      providerKeysCache = readLocalKeys();
+    }
+  } else {
+    providerKeysCache = readLocalKeys();
   }
 }
 
-export function setProviderKeys(keys: Record<string, string>) {
-  localStorage.setItem("covel:providerKeys", JSON.stringify(keys));
+export function getProviderKeys(): Record<string, string> {
+  return { ...providerKeysCache };
+}
+
+export function setProviderKeys(keys: Record<string, string>): void {
+  // Update the sync cache immediately so the next API call sees the new value.
+  providerKeysCache = { ...keys };
+  const ipc = getIpc();
+  if (ipc) {
+    // Fire-and-forget persist; callers that need confirmation should use
+    // setProviderKeysAsync below.
+    void ipc.invoke("covel:keys:save", keys).catch((err) => {
+      console.warn("[api] setProviderKeys (desktop) failed:", err);
+    });
+  } else {
+    writeLocalKeys(keys);
+  }
+}
+
+/** Promise-returning variant for call sites that want to report success. */
+export async function setProviderKeysAsync(
+  keys: Record<string, string>,
+): Promise<{ ok: boolean }> {
+  providerKeysCache = { ...keys };
+  const ipc = getIpc();
+  if (ipc) {
+    try {
+      const result = await ipc.invoke<{ ok: boolean }>("covel:keys:save", keys);
+      return result ?? { ok: false };
+    } catch (err) {
+      console.warn("[api] setProviderKeysAsync (desktop) failed:", err);
+      return { ok: false };
+    }
+  }
+  writeLocalKeys(keys);
+  return { ok: true };
 }
 
 // ── Slot Config (localStorage) ────────────────────────────────────

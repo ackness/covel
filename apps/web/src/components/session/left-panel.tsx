@@ -164,7 +164,7 @@ export function LeftPanel({
                       >
                         <span className="block truncate">{s.id}</span>
                         <span className="text-[10px] text-muted-foreground">
-                          {s.phase} · {new Date(s.createdAt).toLocaleString()}
+                          {s.status} · turn {s.turnCount} · {new Date(s.createdAt).toLocaleString()}
                         </span>
                       </button>
                       <button

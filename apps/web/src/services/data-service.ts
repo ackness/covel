@@ -15,7 +15,7 @@ import type {
   SessionRecord,
   MessageRecord,
   StatePatchRecord,
-  SessionPhase,
+  SessionStatus,
 } from "./api.js";
 import * as api from "./api.js";
 import * as appKv from "./app-kv-store.js";
@@ -39,7 +39,7 @@ export interface DataService {
   createSession(worldId: string, presetId?: string, id?: string, plugins?: string[]): Promise<SessionRecord>;
   updateSession(
     sessionId: string,
-    updates: Partial<Pick<SessionRecord, "status" | "presetId" | "phase">>,
+    updates: Partial<Pick<SessionRecord, "status" | "presetId">>,
   ): Promise<SessionRecord>;
   deleteSession(sessionId: string): Promise<void>;
 
@@ -144,7 +144,7 @@ class RemoteDataService implements DataService {
   }
   async updateSession(
     sessionId: string,
-    updates: Partial<Pick<SessionRecord, "status" | "presetId" | "phase">>,
+    updates: Partial<Pick<SessionRecord, "status" | "presetId">>,
   ) {
     return api.updateSession(sessionId, updates);
   }
@@ -347,7 +347,7 @@ class LocalDataService implements DataService {
     const sessions = await store.listSessions() as any[];
     return sessions
       .filter((s: any) => !worldId || s.worldId === worldId)
-      .map((s: any) => ({ id: s.id, worldId: s.worldId ?? '', status: s.status ?? 'active', phase: s.phase ?? 'init', presetId: s.presetId, createdAt: s.createdAt }) as SessionRecord)
+      .map((s: any) => ({ id: s.id, worldId: s.worldId ?? '', status: (s.status ?? 'active') as SessionStatus, turnCount: s.turnCount ?? 0, preGameCompleted: s.preGameCompleted ?? [], presetId: s.presetId, createdAt: s.createdAt }) as SessionRecord)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
@@ -355,28 +355,55 @@ class LocalDataService implements DataService {
     const store = await this.getStore();
     const s = await store.getSession(sessionId) as any;
     if (!s) return null;
-    return { id: s.id, worldId: s.worldId ?? '', status: s.status ?? 'active', phase: s.phase ?? 'init', presetId: s.presetId, createdAt: s.createdAt } as SessionRecord;
+    return { id: s.id, worldId: s.worldId ?? '', status: (s.status ?? 'active') as SessionStatus, turnCount: s.turnCount ?? 0, preGameCompleted: s.preGameCompleted ?? [], presetId: s.presetId, createdAt: s.createdAt } as SessionRecord;
   }
 
   async createSession(worldId: string, presetId?: string, _id?: string, _plugins?: string[]): Promise<SessionRecord> {
     const store = await this.getStore();
-    const session: SessionRecord = { id: humanSessionId(), worldId, status: "active", phase: "init", presetId, createdAt: new Date().toISOString() };
-    await store.createSession({ id: session.id, worldId, phase: session.phase, turnCount: 0, locale: 'zh-CN', activePlugins: _plugins ?? [], createdAt: session.createdAt, updatedAt: session.createdAt } as any);
+    const nowIso = new Date().toISOString();
+    const session: SessionRecord = {
+      id: humanSessionId(),
+      worldId,
+      status: "active",
+      turnCount: 0,
+      preGameCompleted: [],
+      presetId,
+      createdAt: nowIso,
+    };
+    await store.createSession({
+      id: session.id,
+      worldId,
+      status: "active",
+      turnCount: 0,
+      preGameCompleted: [],
+      locale: 'zh-CN',
+      activePlugins: _plugins ?? [],
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    } as any);
     return session;
   }
 
   async updateSession(
     sessionId: string,
-    updates: Partial<Pick<SessionRecord, "status" | "presetId" | "phase">>,
+    updates: Partial<Pick<SessionRecord, "status" | "presetId">>,
   ): Promise<SessionRecord> {
     const store = await this.getStore();
     const existing = await store.getSession(sessionId) as any;
     if (!existing) throw new Error("Session not found: " + sessionId);
+    const nextStatus = (updates.status ?? existing.status ?? 'active') as SessionStatus;
     const updated: SessionRecord = {
-      id: existing.id, worldId: existing.worldId ?? '', status: updates.status ?? existing.status ?? 'active',
-      phase: (updates.phase ?? existing.phase ?? 'init') as SessionPhase, presetId: updates.presetId ?? existing.presetId, createdAt: existing.createdAt,
+      id: existing.id,
+      worldId: existing.worldId ?? '',
+      status: nextStatus,
+      turnCount: existing.turnCount ?? 0,
+      preGameCompleted: existing.preGameCompleted ?? [],
+      presetId: updates.presetId ?? existing.presetId,
+      createdAt: existing.createdAt,
     };
-    await store.updateSession(sessionId, { phase: updated.phase, updatedAt: new Date().toISOString() });
+    const patch: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+    if (updates.status !== undefined) patch.status = nextStatus;
+    await store.updateSession(sessionId, patch as any);
     return updated;
   }
 

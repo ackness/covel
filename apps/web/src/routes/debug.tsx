@@ -299,7 +299,7 @@ function DebugPage() {
                     <span className="font-mono truncate text-[10px]">{s.id}</span>
                   </div>
                   <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                    <Badge variant="secondary" className="text-[9px] h-4 px-1">{s.phase}</Badge>
+                    <Badge variant="secondary" className="text-[9px] h-4 px-1">{s.status} · t{s.turnCount}</Badge>
                     <span>{new Date(s.createdAt).toLocaleTimeString("zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit" })}</span>
                   </div>
                 </button>
