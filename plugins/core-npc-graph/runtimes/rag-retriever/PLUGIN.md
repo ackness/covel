@@ -10,8 +10,6 @@ handler: ./handler.js
 trigger:
   type: scheduled
   interval: 1
-  phases:
-    - playing
 ---
 
 NPC 关系图检索器（function runtime）。

@@ -10,8 +10,6 @@ capabilities: [narrative]
 promptVersion: 2
 trigger:
   type: auto
-  phases:
-    - playing
 tools:
   builtin:
     - world-dimension-get

@@ -12,8 +12,6 @@ trigger:
   type: scheduled
   interval: 2
   cooldownTurns: 1
-  phases:
-    - playing
 input:
   inject:
     - from: core-narrator

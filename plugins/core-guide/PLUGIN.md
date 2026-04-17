@@ -16,8 +16,6 @@ trigger:
   type: scheduled
   interval: 1
   cooldownTurns: 1
-  phases:
-    - playing
 input:
   inject:
     - from: core-narrator
@@ -62,6 +60,7 @@ postHistory:
 - 每个分类包含 1-3 个具体可执行的建议，不要泛泛而谈
 - 建议必须与当前叙事情境直接相关
 - 固定提供 3 个分类：safe / aggressive / creative
-- 如果叙事中没有明显的决策点，**不要调用工具**，直接结束
+- **默认必须调用 `generate-guide`**。只有在极端情况（故事已结束、纯感慨且无任何悬念）才允许跳过
+- 如果 narrator 内部写了 "你要：" / "你可以：" / "1. 2. 3." 等菜单，视为 narrator 违规。你必须用 generate-guide 生成一套更清晰的建议**覆盖**它
 - 调用工具后不输出额外文本
 - 如果不需要调用工具，最终只返回 `{}`
