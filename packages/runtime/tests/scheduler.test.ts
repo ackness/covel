@@ -1,58 +1,46 @@
 import { describe, it, expect } from 'vitest';
-import type { RuntimeManifest } from '@covel/shared';
 import { scheduleByPriority } from '../src/scheduler.js';
+import type { RuntimeManifest } from '@covel/shared';
 
-function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
-  return { name: 'test-rt', description: 'test', priority: 500, ...overrides };
-}
+const mk = (name: string, priority: number): RuntimeManifest =>
+  ({ name, priority, pluginId: name, instructions: '' }) as unknown as RuntimeManifest;
 
-describe('scheduleByPriority', () => {
-  // 1. Single group — all same priority
-  it('should return 1 group when all runtimes have the same priority', () => {
-    const runtimes = [
-      makeManifest({ name: 'a', priority: 500 }),
-      makeManifest({ name: 'b', priority: 500 }),
-      makeManifest({ name: 'c', priority: 500 }),
-    ];
-    const groups = scheduleByPriority(runtimes);
-    expect(groups).toHaveLength(1);
-    expect(groups[0].priority).toBe(500);
-    expect(groups[0].runtimes).toHaveLength(3);
+describe('scheduleByPriority — turn-band filter', () => {
+  it('turn 0 keeps only priority 0-99', () => {
+    const input = [mk('pregame', 10), mk('narrator', 500), mk('guide', 550)];
+    const groups = scheduleByPriority(input, 0);
+    expect(groups.flatMap(g => g.runtimes.map(r => r.name))).toEqual(['pregame']);
   });
 
-  // 2. Multiple groups — sorted ascending
-  it('should return groups sorted by ascending priority', () => {
-    const runtimes = [
-      makeManifest({ name: 'a', priority: 500 }),
-      makeManifest({ name: 'b', priority: 100 }),
-      makeManifest({ name: 'c', priority: 500 }),
-      makeManifest({ name: 'd', priority: 800 }),
-    ];
-    const groups = scheduleByPriority(runtimes);
-    expect(groups).toHaveLength(3);
-    expect(groups[0].priority).toBe(100);
-    expect(groups[0].runtimes).toHaveLength(1);
-    expect(groups[1].priority).toBe(500);
-    expect(groups[1].runtimes).toHaveLength(2);
-    expect(groups[2].priority).toBe(800);
-    expect(groups[2].runtimes).toHaveLength(1);
+  it('turn 1 drops priority 0-99 and keeps 100+', () => {
+    const input = [mk('pregame', 10), mk('narrator', 500), mk('guide', 550)];
+    const groups = scheduleByPriority(input, 1);
+    expect(groups.flatMap(g => g.runtimes.map(r => r.name))).toEqual(['narrator', 'guide']);
   });
 
-  // 3. Empty input
-  it('should return empty array for empty input', () => {
-    expect(scheduleByPriority([])).toEqual([]);
+  it('turn 7 behaves same as turn 1', () => {
+    const input = [mk('pregame', 10), mk('narrator', 500)];
+    const groups = scheduleByPriority(input, 7);
+    expect(groups.flatMap(g => g.runtimes.map(r => r.name))).toEqual(['narrator']);
   });
 
-  // 4. Already sorted
-  it('should handle already sorted priorities', () => {
-    const runtimes = [
-      makeManifest({ name: 'a', priority: 0 }),
-      makeManifest({ name: 'b', priority: 250 }),
-      makeManifest({ name: 'c', priority: 500 }),
-      makeManifest({ name: 'd', priority: 1000 }),
-    ];
-    const groups = scheduleByPriority(runtimes);
-    expect(groups).toHaveLength(4);
-    expect(groups.map((g) => g.priority)).toEqual([0, 250, 500, 1000]);
+  it('sorts within the kept band', () => {
+    const input = [mk('audit', 1000), mk('narrator', 500), mk('pre', 200)];
+    const groups = scheduleByPriority(input, 1);
+    expect(groups.map(g => g.priority)).toEqual([200, 500, 1000]);
+  });
+
+  it('groups same-priority runtimes together', () => {
+    const input = [mk('a', 500), mk('b', 500), mk('c', 600)];
+    const groups = scheduleByPriority(input, 1);
+    expect(groups).toHaveLength(2);
+    expect(groups[0].runtimes.map(r => r.name).sort()).toEqual(['a', 'b']);
+    expect(groups[1].runtimes.map(r => r.name)).toEqual(['c']);
+  });
+
+  it('returns empty when no runtimes match the band', () => {
+    const input = [mk('audit', 1000)];
+    const groups = scheduleByPriority(input, 0);
+    expect(groups).toEqual([]);
   });
 });
