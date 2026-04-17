@@ -8,20 +8,8 @@ import type { RuntimeManifest } from '@covel/shared';
 
 export interface TriggerContext {
   readonly sessionId: string;
-  /**
-   * Global player-message counter. 0-based from session start, includes all
-   * phases (pre-game, character_creation, playing, ...). Use for interval /
-   * cooldown scheduling that should run across the whole session.
-   */
+  /** Global player-message counter. 0-based from session start. */
   readonly turnNumber: number;
-  /**
-   * Playing-phase turn counter (PR-2). 0-based from when the session first
-   * entered `playing` phase. `0` while the session is still pre-game or
-   * has never entered playing. Plugin authors' `trigger.startTurn` is
-   * compared against THIS value — "from the N-th round of actual gameplay"
-   * rather than "from session start".
-   */
-  readonly playingTurnNumber: number;
   /** How many times this runtime has been triggered in this session. */
   readonly triggerCount: number;
   /** Turns since last trigger. */
@@ -32,8 +20,9 @@ export interface TriggerContext {
   readonly hasUpstreamFailure: boolean;
   /** Whether this is a manual trigger request for this specific runtime. */
   readonly isManualTrigger: boolean;
-  /** Current session phase (e.g. 'pre-game', 'character_creation', 'playing'). */
-  readonly sessionPhase?: string;
+  /** RuntimeIds already in the session's preGameCompleted set — used to skip
+   *  Pre-Game runtimes that are already done during Turn 0 iteration. */
+  readonly preGameCompleted: readonly string[];
 }
 
 // ── Scheduling ───────────────────────────────────────────────────
