@@ -1504,9 +1504,7 @@ async function executeOneRuntime(
       completedResults,
       config,
       messageHistory: filteredHistory,
-      // TODO(T11): drop the `phase` bridge once @covel/context SessionMeta
-      // no longer requires it. Retained here as a transitional placeholder.
-      sessionMeta: sessionMeta ? { ...sessionMeta, phase: 'unknown' } : undefined,
+      sessionMeta,
       summaries: sessionSummaries ?? [],
       workingMemory: workingMemory ?? [],
       coreMemoryBlocks: coreMemoryBlocks ?? [],

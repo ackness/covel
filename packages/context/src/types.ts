@@ -58,7 +58,6 @@ export interface CharacterSummary {
 /** Session-level metadata exposed to plugin templates. */
 export interface SessionMeta {
   readonly turnNumber: number;
-  readonly phase: string;
   readonly characters: readonly CharacterSummary[];
   /**
    * Latest player form submission for this session. Populated from the
@@ -90,7 +89,7 @@ export interface ContextBuildParams {
   readonly config: Readonly<Record<string, unknown>>;
   /** Previous turn messages (append-only history from DataStore). */
   readonly messageHistory?: readonly MessageHistoryRecord[];
-  /** Session-level metadata (turnNumber, phase, characters). */
+  /** Session-level metadata (turnNumber, characters, lastFormValues). */
   readonly sessionMeta?: SessionMeta;
   /**
    * Working memory entries (S3-T3). Populated when COVEL_WORKING_MEMORY_V1=1.

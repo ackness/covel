@@ -366,7 +366,7 @@ export function assemblePromptVariables(
     session: {
       id: turnInput.sessionId,
       turnNumber: sessionMeta?.turnNumber ?? 0,
-      phase: sessionMeta?.phase ?? 'unknown',
+      phase: (sessionMeta?.turnNumber ?? 0) === 0 ? 'pre-game' : 'playing',
     },
     player: {
       message: turnInput.playerMessage,
