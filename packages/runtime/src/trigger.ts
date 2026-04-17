@@ -1,25 +1,12 @@
 /**
  * Trigger Router — decides whether a runtime should execute in the current turn.
+ * Band filtering (Pre-Game vs main loop) happens in the scheduler. This layer
+ * only evaluates per-runtime semantics.
  */
 
 import type { RuntimeManifest } from '@covel/shared';
 import type { TriggerContext } from './types.js';
 
-/**
- * Evaluate whether a runtime should trigger in this turn.
- *
- * Trigger types:
- * - auto: always triggers
- * - manual: only when isManualTrigger is true
- * - scheduled: every N turns (interval)
- * - conditional: evaluates a condition string
- * - event: when a matching event topic is pending
- * - error-retry: when an upstream has failed
- *
- * Also checks global limits:
- * - maxTriggerCount: session-wide max
- * - cooldownTurns: min gap between triggers
- */
 export function shouldTrigger(
   manifest: RuntimeManifest,
   context: TriggerContext,
@@ -27,31 +14,24 @@ export function shouldTrigger(
   const trigger = manifest.trigger;
   const type = trigger?.type ?? 'auto';
 
-  // Global limits: startTurn — runtime stays silent before this turn.
-  // Compared against `playingTurnNumber` (rounds since session entered
-  // playing phase), not the global `turnNumber`. This matches the plugin
-  // author's intuition of "from the N-th round of actual gameplay",
-  // decoupling the startTurn semantics from pre-game / char-creation
-  // activity. Only applied when explicitly declared.
-  if (trigger?.startTurn !== undefined && context.playingTurnNumber < trigger.startTurn) {
+  // Pre-Game completion gate: skip runtimes already marked done for the session.
+  // Main-loop runtimes never enter preGameCompleted, so this is a no-op for them.
+  if (context.preGameCompleted.includes(manifest.name)) {
     return false;
   }
 
-  // Global limits: maxTriggerCount
+  // startTurn — "from the N-th main-loop turn". Turn 0 (Pre-Game) is filtered
+  // by the scheduler, so startTurn only meaningfully applies to turnNumber >= 1.
+  if (trigger?.startTurn !== undefined && context.turnNumber < trigger.startTurn) {
+    return false;
+  }
+
   if (trigger?.maxTriggerCount !== undefined && context.triggerCount >= trigger.maxTriggerCount) {
     return false;
   }
 
-  // Global limits: cooldownTurns
   if (trigger?.cooldownTurns !== undefined && context.turnsSinceLastTrigger < trigger.cooldownTurns) {
     return false;
-  }
-
-  // Phase gate: skip if current session phase is not in the allowed list
-  if (trigger?.phases && trigger.phases.length > 0 && context.sessionPhase) {
-    if (!trigger.phases.includes(context.sessionPhase)) {
-      return false;
-    }
   }
 
   switch (type) {
@@ -77,7 +57,6 @@ export function shouldTrigger(
     }
 
     case 'conditional':
-      // Only known conditions are supported; return false for all conditions for now.
       return false;
 
     default:

@@ -41,22 +41,10 @@ export interface TriggerConfig {
   readonly maxRetryCount?: number;
   /** Min turns between two triggers. */
   readonly cooldownTurns?: number;
-  /** Session phases in which this runtime is allowed to trigger. If omitted, triggers in all phases. */
-  readonly phases?: readonly string[];
   /**
-   * First **playing-phase** turn at which this runtime may trigger. Optional —
-   * when unset the runtime is eligible from the very first turn (no gating).
-   *
-   * Semantics (PR-2): compared against `TriggerContext.playingTurnNumber`,
-   * which is 0-based from the moment the session first entered `phase:
-   * playing`. Pre-game and character_creation rounds do NOT count, so
-   * plugin authors can declare `startTurn: 2` meaning "wait until the
-   * player has taken two turns of actual gameplay", independent of how
-   * many pre-game setup rounds happened.
-   *
-   * Example:
-   *   `startTurn: 3` — runtime stays silent for the first three playing
-   *   rounds, fires from the fourth onwards.
+   * First main-loop turn at which this runtime may trigger. Optional —
+   * when unset the runtime triggers as soon as its band (100-1000) opens.
+   * Compared against `turnNumber` directly.
    */
   readonly startTurn?: number;
 }

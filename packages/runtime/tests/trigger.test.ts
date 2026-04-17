@@ -4,19 +4,19 @@ import type { TriggerContext } from '../src/types.js';
 import { shouldTrigger } from '../src/trigger.js';
 
 function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
-  return { name: 'test-rt', description: 'test', priority: 500, ...overrides };
+  return { name: 'test-rt', pluginId: 'test-rt', description: 'test', priority: 500, ...overrides };
 }
 
 function makeContext(overrides?: Partial<TriggerContext>): TriggerContext {
   return {
     sessionId: 'sess-1',
     turnNumber: 5,
-    playingTurnNumber: 5,
     triggerCount: 0,
     turnsSinceLastTrigger: 999,
     pendingEventTopics: [],
     hasUpstreamFailure: false,
     isManualTrigger: false,
+    preGameCompleted: [],
     ...overrides,
   };
 }
@@ -132,39 +132,74 @@ describe('shouldTrigger', () => {
     expect(shouldTrigger(manifest, ctx)).toBe(false);
   });
 
-  // ── PR-2: startTurn is compared against playingTurnNumber, not turnNumber
+  // ── startTurn is compared against turnNumber directly
 
-  it('should gate by playingTurnNumber when startTurn is set', () => {
+  it('should gate by turnNumber when startTurn is set', () => {
     const manifest = makeManifest({
-      trigger: { type: 'auto', startTurn: 2 },
+      trigger: { type: 'auto', startTurn: 3 },
     });
-    // Global turnNumber is high but playingTurnNumber is below startTurn
-    const ctx = makeContext({ turnNumber: 10, playingTurnNumber: 1 });
+    const ctx = makeContext({ turnNumber: 2 });
     expect(shouldTrigger(manifest, ctx)).toBe(false);
   });
 
-  it('should trigger once playingTurnNumber reaches startTurn', () => {
+  it('should trigger once turnNumber reaches startTurn', () => {
     const manifest = makeManifest({
-      trigger: { type: 'auto', startTurn: 2 },
+      trigger: { type: 'auto', startTurn: 3 },
     });
-    const ctx = makeContext({ turnNumber: 3, playingTurnNumber: 2 });
+    const ctx = makeContext({ turnNumber: 3 });
     expect(shouldTrigger(manifest, ctx)).toBe(true);
-  });
-
-  it('should ignore global turnNumber when startTurn is set', () => {
-    // Scenario: large global turnNumber because of many pre-game messages,
-    // but session just entered playing (playingTurnNumber=0). A plugin
-    // declaring startTurn=1 should NOT fire yet.
-    const manifest = makeManifest({
-      trigger: { type: 'auto', startTurn: 1 },
-    });
-    const ctx = makeContext({ turnNumber: 15, playingTurnNumber: 0 });
-    expect(shouldTrigger(manifest, ctx)).toBe(false);
   });
 
   it('should not gate when startTurn is undefined', () => {
     const manifest = makeManifest({ trigger: { type: 'auto' } });
-    const ctx = makeContext({ turnNumber: 0, playingTurnNumber: 0 });
+    const ctx = makeContext({ turnNumber: 0 });
     expect(shouldTrigger(manifest, ctx)).toBe(true);
+  });
+});
+
+describe('shouldTrigger — preGameCompleted gate', () => {
+  it('skips runtime whose name is in preGameCompleted', () => {
+    const rt = { name: 'core-pregame', pluginId: 'core-pregame', description: 'pre-game', priority: 10, trigger: { type: 'auto' } } as RuntimeManifest;
+    const ctx: TriggerContext = {
+      sessionId: 'sess-1',
+      turnNumber: 0,
+      triggerCount: 0,
+      turnsSinceLastTrigger: 999,
+      pendingEventTopics: [],
+      hasUpstreamFailure: false,
+      isManualTrigger: false,
+      preGameCompleted: ['core-pregame'],
+    };
+    expect(shouldTrigger(rt, ctx)).toBe(false);
+  });
+
+  it('passes runtime whose name is NOT in preGameCompleted', () => {
+    const rt = { name: 'core-pregame', pluginId: 'core-pregame', description: 'pre-game', priority: 10, trigger: { type: 'auto' } } as RuntimeManifest;
+    const ctx: TriggerContext = {
+      sessionId: 'sess-1',
+      turnNumber: 0,
+      triggerCount: 0,
+      turnsSinceLastTrigger: 999,
+      pendingEventTopics: [],
+      hasUpstreamFailure: false,
+      isManualTrigger: false,
+      preGameCompleted: [],
+    };
+    expect(shouldTrigger(rt, ctx)).toBe(true);
+  });
+
+  it('does not affect runtimes not in the preGameCompleted list', () => {
+    const rt = { name: 'core-narrator', pluginId: 'core-narrator', description: 'narrator', priority: 500, trigger: { type: 'auto' } } as RuntimeManifest;
+    const ctx: TriggerContext = {
+      sessionId: 'sess-1',
+      turnNumber: 5,
+      triggerCount: 0,
+      turnsSinceLastTrigger: 999,
+      pendingEventTopics: [],
+      hasUpstreamFailure: false,
+      isManualTrigger: false,
+      preGameCompleted: ['core-pregame', 'core-world-init/schema-gen'],
+    };
+    expect(shouldTrigger(rt, ctx)).toBe(true);
   });
 });
