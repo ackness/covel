@@ -47,8 +47,9 @@ function makeSession(overrides?: Partial<SessionRecord>): SessionRecord {
   return {
     id: id(),
     worldId: 'world-1',
-    phase: 'playing',
-    turnCount: 0,
+    status: 'active',
+    turnCount: 1,
+    preGameCompleted: [],
     locale: 'zh-CN',
     activePlugins: [],
     createdAt: ts(),
@@ -424,17 +425,17 @@ export function runStoreContractTests(
         expect(list.map((s) => s.id)).toContain(s2.id);
       });
 
-      it('should update session phase and turnCount', async () => {
-        const session = makeSession({ phase: 'init', turnCount: 0 });
+      it('should update session status and turnCount', async () => {
+        const session = makeSession({ status: 'active', turnCount: 0, preGameCompleted: [] });
         await store.createSession(session);
         const now = ts();
         await store.updateSession(session.id, {
-          phase: 'playing',
+          status: 'ended',
           turnCount: 5,
           updatedAt: now,
         });
         const result = await store.getSession(session.id);
-        expect(result?.phase).toBe('playing');
+        expect(result?.status).toBe('ended');
         expect(result?.turnCount).toBe(5);
         expect(result?.updatedAt).toBe(now);
       });

@@ -62,8 +62,9 @@ async function setupSessionWithModel(
   // Create a minimal session record so the DB FK holds.
   await store.createSession({
     id: sessionId,
-    phase: "playing",
-    turnCount: 0,
+    status: "active",
+    turnCount: 1,
+    preGameCompleted: [],
     locale: "en",
     activePlugins: [],
     createdAt: new Date().toISOString(),
@@ -274,8 +275,9 @@ export function runVectorStoreContractTests(
       // Create session but do NOT lock an embedding model
       await store.createSession({
         id: "no-model",
-        phase: "playing",
-        turnCount: 0,
+        status: "active",
+        turnCount: 1,
+        preGameCompleted: [],
         locale: "en",
         activePlugins: [],
         createdAt: new Date().toISOString(),
@@ -422,8 +424,9 @@ export function runVectorStoreContractTests(
       // (session_id partitioning is preserved across the switch).
       await store.createSession({
         id: "s3",
-        phase: "playing",
-        turnCount: 0,
+        status: "active",
+        turnCount: 1,
+        preGameCompleted: [],
         locale: "en",
         activePlugins: [],
         createdAt: new Date().toISOString(),

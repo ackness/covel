@@ -47,7 +47,7 @@ import type {
   SnapshotRecord,
 } from '../types.js';
 
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 
 async function initDb(dbName: string): Promise<IDBPDatabase> {
   return openDB(dbName, DB_VERSION, {
@@ -144,6 +144,16 @@ async function initDb(dbName: string): Promise<IDBPDatabase> {
         interactionRecords.createIndex('sessionId', 'sessionId');
         interactionRecords.createIndex('session_time', ['sessionId', 'timestamp']);
         interactionRecords.createIndex('session_type', ['sessionId', 'type']);
+      }
+
+      if (oldVersion < 8) {
+        // SessionRecord schema migration: phase/playingTurnOffset → status/preGameCompleted.
+        // IDB cannot ALTER columns; drop-and-recreate is acceptable because
+        // T1/T2 IdbStore is dev/test only.
+        if (db.objectStoreNames.contains('sessions')) {
+          db.deleteObjectStore('sessions');
+        }
+        db.createObjectStore('sessions', { keyPath: 'id' });
       }
     },
   });
