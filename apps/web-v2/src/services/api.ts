@@ -169,7 +169,7 @@ export async function fetchPluginDocs(pluginId: string): Promise<PluginDocsRespo
 // ── Session Snapshot (restore) ──────────────────────────────────
 
 export interface SnapshotResponse {
-  session: { id: string; worldId?: string; phase: string; turnCount: number; locale?: string };
+  session: { id: string; worldId?: string; status: 'active' | 'paused' | 'ended'; turnCount: number; preGameCompleted?: string[]; locale?: string };
   messages: Array<{
     id: string;
     role: string;

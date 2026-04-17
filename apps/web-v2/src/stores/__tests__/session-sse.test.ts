@@ -75,7 +75,7 @@ function makeFetchStub() {
 
     if (url.startsWith("/api/sessions/") && url.endsWith("/snapshot")) {
       return jsonResponse({
-        session: { id: "sess-1", worldId: "w1", phase: "playing", turnCount: 0, locale: "zh-CN" },
+        session: { id: "sess-1", worldId: "w1", status: "active", turnCount: 1, preGameCompleted: [], locale: "zh-CN" },
         messages: [],
         characters: [],
         gameState: {},
@@ -153,27 +153,11 @@ describe("session-store SSE wiring", () => {
     expect(MockEventSource.instances[1].url).toContain("sessionId=sess-2");
   });
 
-  // Followup D regression — the connectSSE helper must register a listener
-  // for the `phase.changed` SSE event. Before this, only `plugin-data.changed`
-  // had a dedicated listener and phase transitions never reached the frontend
-  // reducer (the unnamed-event onmessage path doesn't fire for named events).
-  it("registers a phase.changed listener that fires when the server emits", async () => {
+  it("registers a plugin-data.changed listener", async () => {
     const { resumeSession } = await import("../session-store.js");
     await resumeSession("sess-1", "w1");
 
     const es = MockEventSource.instances[0];
-    expect(es.hasListener("phase.changed")).toBe(true);
     expect(es.hasListener("plugin-data.changed")).toBe(true);
-
-    // Firing the event should hit the registered handler (returns true).
-    const handled = es.fire("phase.changed", {
-      id: "1",
-      topic: "session",
-      type: "phase.changed",
-      sessionId: "sess-1",
-      timestamp: new Date().toISOString(),
-      payload: { phase: "ended" },
-    });
-    expect(handled).toBe(true);
   });
 });

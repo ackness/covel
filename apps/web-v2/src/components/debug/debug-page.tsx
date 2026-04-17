@@ -42,7 +42,7 @@ type EventCategory =
   | "message"
   | "block"
   | "state"
-  | "phase";
+  | "status";
 
 function categorize(type: string): EventCategory {
   if (type.startsWith("flow.")) return "flow";
@@ -50,7 +50,7 @@ function categorize(type: string): EventCategory {
   if (type.startsWith("message.")) return "message";
   if (type.startsWith("block.")) return "block";
   if (type.startsWith("state.")) return "state";
-  if (type === "phase_change" || type.startsWith("phase.")) return "phase";
+  if (type.startsWith("status.")) return "status";
   if (type.startsWith("llm.") || type.includes("llm")) return "llm";
   if (type.includes("tool")) return "tool";
   return "flow";
@@ -67,7 +67,7 @@ const CATEGORY_STYLES: Record<
   message: { text: "text-cyan-500",    bg: "bg-cyan-500/10",    border: "border-cyan-500/30",    icon: MessageSquare,  label: "message" },
   block:   { text: "text-indigo-500",  bg: "bg-indigo-500/10",  border: "border-indigo-500/30",  icon: Box,            label: "block" },
   state:   { text: "text-orange-500",  bg: "bg-orange-500/10",  border: "border-orange-500/30",  icon: Database,       label: "state" },
-  phase:   { text: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", icon: ArrowRight,     label: "phase" },
+  status:  { text: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", icon: ArrowRight,     label: "status" },
 };
 
 const CATEGORY_ORDER: readonly EventCategory[] = [
@@ -78,7 +78,7 @@ const CATEGORY_ORDER: readonly EventCategory[] = [
   "message",
   "block",
   "state",
-  "phase",
+  "status",
 ];
 
 // ── Formatting helpers ──────────────────────────────────────────
@@ -304,14 +304,14 @@ export function DebugPage({ initialSessionId, onExit }: DebugPageProps) {
                   <div className="mb-1 flex items-center gap-1.5">
                     <span
                       className={`inline-block h-1.5 w-1.5 rounded-full ${
-                        s.phase === "playing" ? "bg-emerald-500" : "bg-zinc-400"
+                        (s.turnCount ?? 0) >= 1 ? "bg-emerald-500" : "bg-zinc-400"
                       }`}
                     />
                     <span className="truncate font-mono text-[10px]">{s.id}</span>
                   </div>
                   <div className="flex items-center gap-2 text-[10px] text-zinc-500 dark:text-zinc-400">
                     <span className="rounded bg-zinc-200 px-1 py-px text-[9px] dark:bg-zinc-800">
-                      {s.phase}
+                      {(s.turnCount ?? 0) === 0 ? "pre-game" : "playing"}
                     </span>
                     <span>
                       {new Date(s.createdAt).toLocaleTimeString("zh-CN", {

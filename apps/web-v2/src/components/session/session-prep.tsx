@@ -58,14 +58,8 @@ interface PositionedStep extends PluginFlowStep {
   lane: number;
 }
 
-function phaseLabel(phase: string): string {
-  const map: Record<string, string> = {
-    init: "初始化",
-    character_creation: "角色创建",
-    playing: "游戏中",
-    ended: "已结束",
-  };
-  return map[phase] ?? phase;
+function bandLabel(turnCount: number): string {
+  return turnCount === 0 ? "游戏前" : "游戏中";
 }
 
 function sessionShortId(id: string): string {
@@ -84,7 +78,6 @@ function triggerSummary(step: PluginFlowStep): string {
   if (step.trigger.interval != null) parts.push(`每${step.trigger.interval}轮`);
   if (step.trigger.cooldownTurns != null) parts.push(`冷却${step.trigger.cooldownTurns}`);
   if (step.trigger.maxTriggerCount != null) parts.push(`上限${step.trigger.maxTriggerCount}`);
-  if (step.trigger.phases.length > 0) parts.push(step.trigger.phases.join(" / "));
   return parts.join(" · ");
 }
 
@@ -805,7 +798,7 @@ export function SessionPrep({
                             #{sessionShortId(session.id)}
                           </span>
                           <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:bg-zinc-900 dark:text-zinc-300">
-                            {phaseLabel(session.phase)}
+                            {bandLabel(session.turnCount)}
                           </span>
                           {session.embedding ? (
                             <span

@@ -162,7 +162,7 @@ export function App() {
           )}
           {store.session && (
             <span className="text-[10px] px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded">
-              {store.session.phase}
+              {(store.session?.turnCount ?? 0) === 0 ? "pre-game" : "playing"}
             </span>
           )}
         </div>

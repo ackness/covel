@@ -471,13 +471,6 @@ function processSSEEvent(eventType: string, data: Record<string, unknown>) {
     case "execution.completed":
       update({ executing: false });
       break;
-    case "phase.changed": {
-      const phase = data.phase as api.SessionRecord["phase"] | undefined;
-      if (phase && state.session) {
-        update({ session: { ...state.session, phase } });
-      }
-      break;
-    }
     case "plugin-data.changed": {
       const pluginId = data.pluginId as string;
       const changes = data.changes as Array<{ namespace: string; key: string; value: unknown; operation: "set" | "delete" }>;
@@ -699,9 +692,10 @@ export async function resumeSession(sessionId: string, worldId: string) {
   const session: api.SessionRecord = {
     id: snapshot.session.id,
     worldId: snapshot.session.worldId ?? worldId,
-    phase: snapshot.session.phase as api.SessionRecord["phase"],
-    locale: snapshot.session.locale ?? "zh-CN",
+    status: snapshot.session.status,
     turnCount: snapshot.session.turnCount ?? 0,
+    preGameCompleted: snapshot.session.preGameCompleted ?? [],
+    locale: snapshot.session.locale ?? "zh-CN",
     activePlugins: [],
     createdAt: nowIso,
     updatedAt: nowIso,
