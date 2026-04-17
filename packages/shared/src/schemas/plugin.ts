@@ -285,7 +285,7 @@ export const runtimeManifestSchema = z
       message: 'name must be lowercase with hyphens, optional slash separators (e.g. "my-runtime" or "my-plugin/sub-runtime")',
     }),
     description: z.string().min(1),
-    priority: z.number().int().min(0).max(1000),
+    priority: z.number().int().min(0).max(1000).optional(),
     version: z.string().optional(),
     /**
      * Prompt assembler version (S2-T4).

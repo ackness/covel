@@ -12,7 +12,8 @@ import type { ScheduledGroup } from './types.js';
 
 const PRE_GAME_BAND_MAX = 99;
 
-function isInBand(priority: number, turnNumber: number): boolean {
+function isInBand(priority: number | undefined, turnNumber: number): boolean {
+  if (priority === undefined) return false; // UI-only / no-schedule runtimes
   if (turnNumber === 0) return priority <= PRE_GAME_BAND_MAX;
   return priority > PRE_GAME_BAND_MAX;
 }
@@ -20,6 +21,7 @@ function isInBand(priority: number, turnNumber: number): boolean {
 /**
  * Group runtimes by priority and sort groups ascending (0 = highest priority = first).
  * Runtimes out of the current turn's band are dropped silently.
+ * Runtimes with `priority === undefined` (UI-only plugins) are never scheduled.
  */
 export function scheduleByPriority(
   runtimes: readonly RuntimeManifest[],
@@ -27,7 +29,9 @@ export function scheduleByPriority(
 ): readonly ScheduledGroup[] {
   if (runtimes.length === 0) return [];
 
-  const inBand = runtimes.filter((rt) => isInBand(rt.priority, turnNumber));
+  const inBand = runtimes.filter(
+    (rt): rt is RuntimeManifest & { priority: number } => isInBand(rt.priority, turnNumber),
+  );
   if (inBand.length === 0) return [];
 
   const grouped = new Map<number, RuntimeManifest[]>();

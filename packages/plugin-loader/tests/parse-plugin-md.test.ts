@@ -312,8 +312,9 @@ describe('parsePluginMd', () => {
 
   describe('invalid frontmatter', () => {
     it('should throw when required fields are missing', () => {
+      // description is required but missing
       const content = md(
-        ['name: core-test', 'description: Test plugin'].join('\n'),
+        ['name: core-test'].join('\n'),
         '\nBody text.\n',
       );
 

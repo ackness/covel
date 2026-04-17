@@ -596,7 +596,7 @@ export async function processRuntimeResult(
 export interface TraceRecorder {
   turnStarted(info: { runtimeCount: number }): Promise<void>;
   turnCompleted(info: { durationMs: number; resultCount: number }): Promise<void>;
-  runtimeStarted(info: { runtimeId: string; pluginId: string; priority: number }): Promise<void>;
+  runtimeStarted(info: { runtimeId: string; pluginId: string; priority: number | undefined }): Promise<void>;
   runtimeCompleted(info: { runtimeId: string; pluginId: string; status: string; durationMs: number }): Promise<void>;
   runtimeFailed(info: { runtimeId: string; pluginId: string; error: string }): Promise<void>;
 }

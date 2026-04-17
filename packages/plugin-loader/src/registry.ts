@@ -160,7 +160,11 @@ export function createPluginRegistry(options?: PluginRegistryOptions): PluginReg
         }
       }
 
-      return manifests.sort((a, b) => a.priority - b.priority);
+      // UI-only plugins (priority === undefined) sort to the end —
+      // they are never scheduled but can appear in listings.
+      return manifests.sort(
+        (a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity),
+      );
     },
   };
 }

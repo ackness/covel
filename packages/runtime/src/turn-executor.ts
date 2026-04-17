@@ -73,7 +73,7 @@ export interface TurnExecutorDeps {
   /** Called for each LLM text delta during streaming (narrative-only runtimes). */
   readonly onDelta?: (delta: { runtimeId: string; pluginId: string; textDelta: string }) => Promise<void>;
   /** Called when a runtime starts execution. */
-  readonly onRuntimeStart?: (info: { runtimeId: string; pluginId: string; priority: number }) => Promise<void>;
+  readonly onRuntimeStart?: (info: { runtimeId: string; pluginId: string; priority: number | undefined }) => Promise<void>;
   /** Called when a runtime completes execution. */
   readonly onRuntimeComplete?: (info: { runtimeId: string; pluginId: string; status: string; durationMs: number; error?: string }) => Promise<void>;
 
@@ -622,7 +622,7 @@ export async function executeTurn(
     // Mark runtimes that hit maxTriggerCount as done — they were never
     // scheduled but shouldn't hold up Pre-Game forever.
     for (const rt of activeRuntimes) {
-      if (rt.priority > 99) continue;
+      if (rt.priority === undefined || rt.priority > 99) continue;
       if (preGameCompleted.includes(rt.name)) continue;
       if (newlyDone.includes(rt.name)) continue;
       const max = rt.trigger?.maxTriggerCount;
@@ -633,7 +633,9 @@ export async function executeTurn(
 
     if (newlyDone.length > 0) {
       const updated = [...preGameCompleted, ...newlyDone];
-      const preGameRuntimes = activeRuntimes.filter((rt) => rt.priority <= 99);
+      const preGameRuntimes = activeRuntimes.filter(
+        (rt) => rt.priority !== undefined && rt.priority <= 99,
+      );
       const allDone = preGameRuntimes.every((rt) => updated.includes(rt.name));
 
       await deps.store.updateSession(input.sessionId, {
@@ -1301,7 +1303,7 @@ async function executeOneRuntime(
           role: 'assistant',
           name: manifest.name,
           content: narrativeContent,
-          order: manifest.priority,
+          order: manifest.priority ?? 500,
           createdAt: new Date().toISOString(),
         });
       }
@@ -1367,7 +1369,7 @@ async function executeOneRuntime(
             role: 'assistant',
             name: manifest.name,
             content: guardOutput.narrativeOutput as string,
-            order: manifest.priority,
+            order: manifest.priority ?? 500,
             createdAt: new Date().toISOString(),
           });
         }
@@ -2021,7 +2023,7 @@ async function executeOneRuntime(
         role: 'assistant',
         name: manifest.name,
         content: narrativeContent,
-        order: manifest.priority,
+        order: manifest.priority ?? 500,
         pendingInput,
         ui,
         createdAt: new Date().toISOString(),

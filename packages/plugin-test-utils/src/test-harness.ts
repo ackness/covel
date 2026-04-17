@@ -89,8 +89,8 @@ export async function createTestHarness(
     }
   }
 
-  // Sort by priority
-  allManifests.sort((a, b) => a.priority - b.priority);
+  // Sort by priority — UI-only manifests (priority === undefined) sort to the end.
+  allManifests.sort((a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity));
 
   // Build tool map
   const toolMap = new Map<string, ToolModule>();

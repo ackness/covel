@@ -175,7 +175,9 @@ function resolveActiveManifests(params: ContextBuildParams): readonly RuntimeMan
   }
   // Stable sort by ascending priority — matches scheduler semantics
   // (0 = highest, runs first → renders first).
-  return [...fromCaller].sort((a, b) => a.priority - b.priority);
+  return [...fromCaller].sort(
+    (a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity),
+  );
 }
 
 /**

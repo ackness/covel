@@ -225,7 +225,7 @@ export interface RuntimeManifest {
    */
   readonly pluginId: string;
   readonly description: string;
-  readonly priority: number;
+  readonly priority?: number;
   readonly version?: string;
   /**
    * Prompt assembler version (S2-T4).
