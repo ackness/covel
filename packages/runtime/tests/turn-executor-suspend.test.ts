@@ -116,11 +116,25 @@ describe('TurnExecutor — agent runtime suspend', () => {
 
   const originalEnv = process.env['COVEL_SUSPEND_V1'];
 
-  beforeEach(() => {
+  beforeEach(async () => {
     process.env['COVEL_SUSPEND_V1'] = '1';
     mockLLM = new MockLLM();
     mockToolExecutor = new MockToolExecutor();
     store = createMemoryStore();
+    // Prime history under multiple session IDs that tests exercise so
+    // turnNumber >= 1 (main-loop band for priority-500 runtimes).
+    for (const sid of ['sess-1', 'sess-42']) {
+      await store.appendTurnMessage({
+        id: `prior-player-${sid}`,
+        sessionId: sid,
+        turnId: 'prior-turn',
+        sourceType: 'player',
+        role: 'user',
+        content: 'prior turn',
+        order: 0,
+        createdAt: '2024-01-01T00:00:00Z',
+      });
+    }
     eventBus = createEventBus();
 
     agentManifest = makeManifest({
@@ -363,9 +377,22 @@ describe('TurnExecutor — function runtime suspend', () => {
   let eventBus: EventBus;
   const originalEnv = process.env['COVEL_SUSPEND_V1'];
 
-  beforeEach(() => {
+  beforeEach(async () => {
     process.env['COVEL_SUSPEND_V1'] = '1';
     store = createMemoryStore();
+    // Prime history under multiple session IDs that tests exercise.
+    for (const sid of ['sess-1', 'sess-fn']) {
+      await store.appendTurnMessage({
+        id: `prior-player-${sid}`,
+        sessionId: sid,
+        turnId: 'prior-turn',
+        sourceType: 'player',
+        role: 'user',
+        content: 'prior turn',
+        order: 0,
+        createdAt: '2024-01-01T00:00:00Z',
+      });
+    }
     eventBus = createEventBus();
   });
 
@@ -455,11 +482,22 @@ describe('resumeSuspendedRuntime', () => {
   let eventBus: EventBus;
   const originalEnv = process.env['COVEL_SUSPEND_V1'];
 
-  beforeEach(() => {
+  beforeEach(async () => {
     process.env['COVEL_SUSPEND_V1'] = '1';
     mockLLM = new MockLLM();
     mockToolExecutor = new MockToolExecutor();
     store = createMemoryStore();
+    // Prime history so turnNumber >= 1 (main-loop band for priority-500 runtimes).
+    await store.appendTurnMessage({
+      id: 'prior-player-0',
+      sessionId: 'sess-1',
+      turnId: 'prior-turn',
+      sourceType: 'player',
+      role: 'user',
+      content: 'prior turn',
+      order: 0,
+      createdAt: '2024-01-01T00:00:00Z',
+    });
     eventBus = createEventBus();
   });
 

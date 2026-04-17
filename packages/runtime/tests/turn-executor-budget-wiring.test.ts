@@ -19,9 +19,27 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RuntimeManifest, TurnInput } from '@covel/shared';
 import type { LoadedRuntime } from '@covel/plugin-loader';
 import type { TokenEstimator } from '@covel/context';
+import { createMemoryStore } from '@covel/store';
 import { executeTurn } from '../src/turn-executor.js';
 import type { TurnExecutorDeps } from '../src/turn-executor.js';
 import type { LLMAdapter, LLMResponse } from '../src/llm-adapter.js';
+
+// Prime a store with one prior player message so turnNumber >= 1 and
+// main-loop priority runtimes survive the Pre-Game band filter.
+async function createMainLoopStore(sessionId: string) {
+  const store = createMemoryStore();
+  await store.appendTurnMessage({
+    id: 'prior-player-0',
+    sessionId,
+    turnId: 'prior-turn',
+    sourceType: 'player',
+    role: 'user',
+    content: 'prior turn',
+    order: 0,
+    createdAt: '2024-01-01T00:00:00Z',
+  });
+  return store;
+}
 
 // ── Fixtures ─────────────────────────────────────────────────────
 
@@ -63,14 +81,15 @@ function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
   };
 }
 
-function makeBaseDeps(
+async function makeBaseDeps(
   llm: LLMAdapter,
   manifest: RuntimeManifest,
-): TurnExecutorDeps {
+): Promise<TurnExecutorDeps> {
   return {
     loadRuntime: async () => makeLoaded(manifest),
     llm,
     getConfig: () => ({}),
+    store: await createMainLoopStore('sess-budget-wire'),
   };
 }
 
@@ -94,7 +113,7 @@ describe('turn-executor → context budget wiring', () => {
     const manifest = makeManifest();
 
     const deps: TurnExecutorDeps = {
-      ...makeBaseDeps(llm, manifest),
+      ...(await makeBaseDeps(llm, manifest)),
       estimator,
       contextBudget: {
         maxInputTokens: 4000,
@@ -126,7 +145,7 @@ describe('turn-executor → context budget wiring', () => {
     });
 
     const deps: TurnExecutorDeps = {
-      ...makeBaseDeps(llm, manifest),
+      ...(await makeBaseDeps(llm, manifest)),
       estimator,
       contextBudget: {
         maxInputTokens: 4000,
@@ -158,7 +177,7 @@ describe('turn-executor → context budget wiring', () => {
     });
 
     const deps: TurnExecutorDeps = {
-      ...makeBaseDeps(llm, manifest),
+      ...(await makeBaseDeps(llm, manifest)),
       estimator,
       contextBudget: {
         maxInputTokens: 4000,
@@ -190,7 +209,7 @@ describe('turn-executor → context budget wiring', () => {
     });
 
     const deps: TurnExecutorDeps = {
-      ...makeBaseDeps(llm, manifest),
+      ...(await makeBaseDeps(llm, manifest)),
       estimator,
       contextBudget: {
         maxInputTokens: 4000,
@@ -215,7 +234,7 @@ describe('turn-executor → context budget wiring', () => {
     const manifest = makeManifest();
 
     const deps: TurnExecutorDeps = {
-      ...makeBaseDeps(llm, manifest),
+      ...(await makeBaseDeps(llm, manifest)),
       estimator,
       contextBudget: {
         maxInputTokens: 4000,

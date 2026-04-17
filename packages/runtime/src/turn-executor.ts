@@ -75,7 +75,7 @@ export interface TurnExecutorDeps {
   /** Called when a runtime starts execution. */
   readonly onRuntimeStart?: (info: { runtimeId: string; pluginId: string; priority: number }) => Promise<void>;
   /** Called when a runtime completes execution. */
-  readonly onRuntimeComplete?: (info: { runtimeId: string; pluginId: string; status: string; durationMs: number }) => Promise<void>;
+  readonly onRuntimeComplete?: (info: { runtimeId: string; pluginId: string; status: string; durationMs: number; error?: string }) => Promise<void>;
 
   /**
    * Optional token estimator for context budgeting. When provided together with
@@ -297,7 +297,6 @@ function buildRuntimeOutputFromResult(
   rr: RuntimeResult,
   sessionId: string,
   turn: number,
-  phase: string,
   createdAt: string,
 ): RuntimeOutputRecord {
   const output = rr.output as Record<string, unknown> | null;
@@ -338,7 +337,6 @@ function buildRuntimeOutputFromResult(
     ],
     metaData: {
       turn,
-      phase,
       toolCallList: toolCallList.length > 0 ? toolCallList : undefined,
       tokenUsage: rr.tokenUsage,
       // rawPromptDelta / outputResponses / modelSlot: not populated in PR-1
@@ -472,39 +470,17 @@ export async function executeTurn(
     }
   }
 
-  // Load session metadata for context injection (turnNumber, phase, characters, lastFormValues)
-  let sessionPhase: string | undefined;
-  let sessionPlayingTurnOffset: number | null | undefined;
+  // Load session metadata for context injection (turnNumber, characters, lastFormValues, status, preGameCompleted).
+  let sessionStatus: 'active' | 'paused' | 'ended' = 'active';
+  let preGameCompleted: readonly string[] = [];
   let sessionCharacters: { name: string; type: string; description?: string; fields?: Record<string, unknown> }[] = [];
   let lastFormValues: Record<string, unknown> | undefined;
   if (deps.store) {
     const session = await deps.store.getSession(input.sessionId);
     if (session) {
-      sessionPhase = session.phase;
-      sessionPlayingTurnOffset = session.playingTurnOffset;
+      sessionStatus = session.status;
+      preGameCompleted = session.preGameCompleted ?? [];
     }
-
-    // PR-2: lazily set playingTurnOffset the first time a turn runs while
-    // phase is 'playing'. After this the offset is frozen for the session
-    // lifetime and playingTurnNumber = turnNumber - offset.
-    if (
-      sessionPhase === 'playing'
-      && (sessionPlayingTurnOffset == null || sessionPlayingTurnOffset === undefined)
-    ) {
-      sessionPlayingTurnOffset = turnNumber;
-      try {
-        await deps.store.updateSession(input.sessionId, {
-          playingTurnOffset: turnNumber,
-          updatedAt: new Date().toISOString(),
-        });
-      } catch (err) {
-        console.warn(
-          '[turn-executor] updateSession(playingTurnOffset) failed:',
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    }
-
     const charRecords = await deps.store.listCharacters(input.sessionId);
     sessionCharacters = charRecords.map(c => ({
       name: c.name,
@@ -526,7 +502,17 @@ export async function executeTurn(
       // Non-critical: player inputs may not exist yet
     }
   }
-  let sessionMeta = { turnNumber, phase: sessionPhase ?? 'unknown', characters: sessionCharacters, lastFormValues };
+  // Abort early if session is paused or ended — no runtimes should execute.
+  if (sessionStatus !== 'active') {
+    return {
+      turnId: input.turnId,
+      sessionId: input.sessionId,
+      runtimeResults: [],
+      durationMs: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+    };
+  }
+  const sessionMeta = { turnNumber, characters: sessionCharacters, lastFormValues };
   const promptHistory = messageHistory.filter(
     (msg) => !(msg.turnId === input.turnId && msg.sourceType === 'player'),
   );
@@ -545,30 +531,21 @@ export async function executeTurn(
       ? messageHistory.slice(lastRuntimeMsgIdx).filter((m) => m.sourceType === 'player').length
       : 999;
 
-    // PR-2: compute playing-phase turn counter. Only meaningful when the
-    // session is currently in 'playing' phase; otherwise left at 0 so
-    // startTurn comparisons never fire during pre-game / char-creation.
-    const playingTurnNumber =
-      sessionPhase === 'playing' && sessionPlayingTurnOffset != null
-        ? Math.max(0, turnNumber - sessionPlayingTurnOffset)
-        : 0;
-
     const triggerContext: TriggerContext = {
       sessionId: input.sessionId,
       turnNumber,
-      playingTurnNumber,
       triggerCount: runtimeTriggerCounts.get(rt.name) ?? 0,
       turnsSinceLastTrigger,
       pendingEventTopics: [],
       hasUpstreamFailure: false,
       isManualTrigger: false,
-      sessionPhase,
+      preGameCompleted,
     };
     return shouldTrigger(rt, triggerContext);
   });
 
-  // 2. Schedule by priority
-  const groups = scheduleByPriority(triggered);
+  // 2. Schedule by priority — band filter uses turnNumber to gate Pre-Game vs main loop.
+  const groups = scheduleByPriority(triggered, turnNumber);
 
   // Load session summaries for compaction substitution in buildContext (S2-T2)
   let sessionSummaries: import('@covel/store').SessionSummaryRecord[] = [];
@@ -619,16 +596,51 @@ export async function executeTurn(
       return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, defaultTimeoutMs, promptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory, coreMemoryBlocks);
     });
 
-    // Merge results + apply phase transitions from runtime output
+    // Merge results
     for (const [name, result] of results) {
       completedResults.set(name, result);
-      const outputPhase = result.output && typeof (result.output as Record<string, unknown>).phase === 'string'
-        ? (result.output as Record<string, unknown>).phase as string
-        : undefined;
-      if (outputPhase && deps.store) {
-        sessionMeta = { ...sessionMeta, phase: outputPhase };
-        await deps.store.updateSession(input.sessionId, { phase: outputPhase });
+    }
+  }
+
+  // Pre-Game completion tracking (Turn 0 only).
+  // Marks Pre-Game runtimes as done when their output reports `preGameDone: true`,
+  // their guard skipped them, or they exhausted `maxTriggerCount`. When all
+  // Pre-Game runtimes are accounted for, advance the session into the main loop
+  // by bumping `turnCount` from 0 → 1.
+  if (turnNumber === 0 && deps.store) {
+    const newlyDone: string[] = [];
+    for (const [name, result] of completedResults) {
+      if (preGameCompleted.includes(name)) continue;
+      const output = result.output as Record<string, unknown> | undefined;
+      const preGameDone = output?.preGameDone === true;
+      const guardSkipped = result.status === 'skipped';
+      if (preGameDone || guardSkipped) {
+        newlyDone.push(name);
       }
+    }
+
+    // Mark runtimes that hit maxTriggerCount as done — they were never
+    // scheduled but shouldn't hold up Pre-Game forever.
+    for (const rt of activeRuntimes) {
+      if (rt.priority > 99) continue;
+      if (preGameCompleted.includes(rt.name)) continue;
+      if (newlyDone.includes(rt.name)) continue;
+      const max = rt.trigger?.maxTriggerCount;
+      if (max !== undefined && (runtimeTriggerCounts.get(rt.name) ?? 0) >= max) {
+        newlyDone.push(rt.name);
+      }
+    }
+
+    if (newlyDone.length > 0) {
+      const updated = [...preGameCompleted, ...newlyDone];
+      const preGameRuntimes = activeRuntimes.filter((rt) => rt.priority <= 99);
+      const allDone = preGameRuntimes.every((rt) => updated.includes(rt.name));
+
+      await deps.store.updateSession(input.sessionId, {
+        preGameCompleted: updated,
+        ...(allDone ? { turnCount: 1 } : {}),
+        updatedAt: new Date().toISOString(),
+      });
     }
   }
 
@@ -708,7 +720,6 @@ export async function executeTurn(
             rr,
             input.sessionId,
             turnNumber,
-            sessionPhase ?? 'unknown',
             now,
           ),
         );
@@ -927,6 +938,10 @@ export async function resumeSuspendedRuntime(
       model: effectiveModel,
       messages,
       tools: toolDefs,
+      // Without this signal a hung provider HTTP call blocks forever — the
+      // while-loop deadline only gates between iterations. Using remaining
+      // budget keeps each LLM call bounded by the runtime's overall timeout.
+      signal: AbortSignal.timeout(Math.max(1000, deadline - Date.now())),
     });
 
     if (response.toolCalls.length > 0) {
@@ -1126,7 +1141,7 @@ async function executeOneRuntime(
   maxSteps: number,
   defaultTimeoutMs: number,
   messageHistory: readonly TurnMessageRecord[],
-  sessionMeta?: { turnNumber: number; phase: string; characters: readonly { name: string; type: string; description?: string; fields?: Record<string, unknown> }[]; lastFormValues?: Record<string, unknown> },
+  sessionMeta?: { turnNumber: number; characters: readonly { name: string; type: string; description?: string; fields?: Record<string, unknown> }[]; lastFormValues?: Record<string, unknown> },
   hookPipeline?: HookPipeline,
   sessionSummaries?: readonly import('@covel/store').SessionSummaryRecord[],
   workingMemory?: readonly import('@covel/context').WorkingMemoryEntry[],
@@ -1489,7 +1504,9 @@ async function executeOneRuntime(
       completedResults,
       config,
       messageHistory: filteredHistory,
-      sessionMeta,
+      // TODO(T11): drop the `phase` bridge once @covel/context SessionMeta
+      // no longer requires it. Retained here as a transitional placeholder.
+      sessionMeta: sessionMeta ? { ...sessionMeta, phase: 'unknown' } : undefined,
       summaries: sessionSummaries ?? [],
       workingMemory: workingMemory ?? [],
       coreMemoryBlocks: coreMemoryBlocks ?? [],
@@ -1560,6 +1577,10 @@ async function executeOneRuntime(
 
       let response: import('./llm-adapter.js').LLMResponse;
 
+      // Per-LLM-call abort budget. Matches the outer deadline so a hung
+      // provider request is torn down instead of blocking the whole turn.
+      const callSignal = AbortSignal.timeout(Math.max(1000, deadline - Date.now()));
+
       if (useStreaming) {
         // Streaming path: accumulate text + tool-call deltas, forward text to caller.
         let streamedContent = '';
@@ -1580,6 +1601,7 @@ async function executeOneRuntime(
             model: effectiveModel,
             messages,
             tools: toolDefs,
+            signal: callSignal,
           })) {
             if (event.type === 'text-delta') {
               streamedContent += event.textDelta;
@@ -1622,6 +1644,7 @@ async function executeOneRuntime(
               model: effectiveModel,
               messages,
               tools: toolDefs,
+              signal: callSignal,
             });
           }
         }
@@ -1639,6 +1662,7 @@ async function executeOneRuntime(
             model: effectiveModel,
             messages,
             tools: toolDefs,
+            signal: callSignal,
           });
         }
 
@@ -1661,6 +1685,7 @@ async function executeOneRuntime(
             model: effectiveModel,
             messages,
             tools: toolDefs,
+            signal: callSignal,
           });
         } catch (error) {
           if (!toolDefs || !shouldRetryMalformedToolArguments(error)) {
@@ -1670,6 +1695,7 @@ async function executeOneRuntime(
             model: effectiveModel,
             messages,
             tools: toolDefs,
+            signal: callSignal,
           });
         }
       }
@@ -2033,6 +2059,7 @@ async function executeOneRuntime(
       pluginId: manifest.pluginId,
       status: failedResult.status,
       durationMs: failedResult.durationMs,
+      error: message,
     });
 
     emitSubEvent(deps.eventBus, 'runtime', 'runtime.failed', input.sessionId, {

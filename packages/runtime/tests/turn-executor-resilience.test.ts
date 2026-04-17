@@ -12,9 +12,28 @@ import path from 'node:path';
 import type { RuntimeManifest, TurnInput } from '@covel/shared';
 import { discoverPlugins, loadPluginManifest } from '@covel/plugin-loader';
 import type { LoadedRuntime } from '@covel/plugin-loader';
+import { createMemoryStore } from '@covel/store';
+import type { DataStore } from '@covel/store';
 import { executeTurn } from '../src/turn-executor.js';
 import type { TurnExecutorDeps } from '../src/turn-executor.js';
 import type { LLMAdapter, LLMResponse, LLMStreamEvent } from '../src/llm-adapter.js';
+
+// Prime a store with one prior player message so turnNumber >= 1 and
+// main-loop priority runtimes survive the Pre-Game band filter.
+async function createMainLoopStore(sessionId: string): Promise<DataStore> {
+  const store = createMemoryStore();
+  await store.appendTurnMessage({
+    id: 'prior-player-0',
+    sessionId,
+    turnId: 'prior-turn',
+    sourceType: 'player',
+    role: 'user',
+    content: 'prior turn',
+    order: 0,
+    createdAt: '2024-01-01T00:00:00Z',
+  });
+  return store;
+}
 
 // ── Mock LLM ─────────────────────────────────────────────────────
 
@@ -93,6 +112,7 @@ describe('TurnExecutor Resilience', () => {
         onRuntimeStart: async () => {
           throw new Error('SSE write failed');
         },
+        store: await createMainLoopStore('sess-1'),
       };
 
       const result = await executeTurn(makeTurnInput(), [narratorManifest], deps);
@@ -108,6 +128,7 @@ describe('TurnExecutor Resilience', () => {
         llm: mockLLM,
         getConfig: () => ({}),
         onRuntimeStart: () => Promise.reject(new Error('Connection closed')),
+        store: await createMainLoopStore('sess-1'),
       };
 
       const result = await executeTurn(makeTurnInput(), [narratorManifest], deps);
@@ -130,6 +151,7 @@ describe('TurnExecutor Resilience', () => {
           deltaCallCount++;
           throw new Error('Client disconnected');
         },
+        store: await createMainLoopStore('sess-1'),
       };
 
       // Use a manifest without tools to trigger streaming path

@@ -50,6 +50,27 @@ function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
   };
 }
 
+/**
+ * Create a memory store primed with one prior player message so that
+ * `turnNumber >= 1` and main-loop runtimes (priority 100-1000) survive
+ * the band-filter. Tests exercising Pre-Game runtimes should skip this
+ * and use a fresh empty store.
+ */
+async function createMainLoopStore(sessionId: string = 'sess-1') {
+  const store = createMemoryStore();
+  await store.appendTurnMessage({
+    id: 'prior-player-0',
+    sessionId,
+    turnId: 'prior-turn',
+    sourceType: 'player',
+    role: 'user',
+    content: 'prior turn',
+    order: 0,
+    createdAt: '2024-01-01T00:00:00Z',
+  });
+  return store;
+}
+
 // ── Tests ─────────────────────────────────────────────────────────
 
 describe('TurnExecutor E2E', () => {
@@ -87,6 +108,7 @@ describe('TurnExecutor E2E', () => {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
       getConfig: () => ({}),
+      store: await createMainLoopStore('sess-1'),
     };
 
     const result = await executeTurn(
@@ -118,6 +140,7 @@ describe('TurnExecutor E2E', () => {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
       getConfig: () => ({}),
+      store: await createMainLoopStore('sess-1'),
     };
 
     const result = await executeTurn(makeTurnInput(), [narratorManifest], deps);
@@ -132,6 +155,7 @@ describe('TurnExecutor E2E', () => {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
       getConfig: () => ({}),
+      store: await createMainLoopStore('sess-1'),
     };
 
     await executeTurn(
@@ -148,10 +172,10 @@ describe('TurnExecutor E2E', () => {
     expect(systemMsg).toBeDefined();
     expect(systemMsg!.content).toContain('我攻击巨龙');
 
-    // User message should also be present
-    const userMsg = mockLLM.calls[0].messages.find((m) => m.role === 'user');
-    expect(userMsg).toBeDefined();
-    expect(userMsg!.content).toBe('我攻击巨龙');
+    // Current turn's user message should be the last user message.
+    const userMessages = mockLLM.calls[0].messages.filter((m) => m.role === 'user');
+    expect(userMessages.length).toBeGreaterThan(0);
+    expect(userMessages[userMessages.length - 1]!.content).toBe('我攻击巨龙');
   });
 
   it('should handle multiple runtimes in priority order', async () => {
@@ -175,6 +199,7 @@ describe('TurnExecutor E2E', () => {
       },
       llm: mockLLM,
       getConfig: () => ({}),
+      store: await createMainLoopStore('sess-1'),
     };
 
     const result = await executeTurn(
@@ -228,6 +253,7 @@ describe('TurnExecutor E2E', () => {
       llm: mockLLM,
       getConfig: () => ({}),
       resolveModel,
+      store: await createMainLoopStore('sess-1'),
     };
 
     await executeTurn(
@@ -259,7 +285,7 @@ describe('TurnExecutor E2E', () => {
   });
 
   it('retries once when the provider rejects malformed tool-call arguments', async () => {
-    const store = createMemoryStore();
+    const store = await createMainLoopStore('sess-1');
     const { createToolExecutor } = await import('../src/tool-executor.js');
     const presentableTool = tool({
       name: 'generate-guide',
@@ -340,6 +366,7 @@ describe('TurnExecutor E2E', () => {
       loadRuntime: async () => narratorLoaded,
       llm: failingLLM,
       getConfig: () => ({}),
+      store: await createMainLoopStore('sess-1'),
     };
 
     const result = await executeTurn(
@@ -366,6 +393,7 @@ describe('TurnExecutor E2E', () => {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
       getConfig: () => ({}),
+      store: await createMainLoopStore('sess-1'),
     };
 
     const result = await executeTurn(
@@ -380,7 +408,7 @@ describe('TurnExecutor E2E', () => {
   });
 
   it('should save player and runtime messages to store when store is provided', async () => {
-    const store = createMemoryStore();
+    const store = await createMainLoopStore('sess-msg');
 
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
@@ -400,11 +428,12 @@ describe('TurnExecutor E2E', () => {
     // Should have at least 2 messages: player message + runtime output
     expect(messages.length).toBeGreaterThanOrEqual(2);
 
-    // First message should be the player message
-    const playerMsg = messages.find(m => m.sourceType === 'player');
-    expect(playerMsg).toBeDefined();
-    expect(playerMsg!.role).toBe('user');
-    expect(playerMsg!.content).toBe('我走进森林');
+    // The current turn's player message is the last player message appended.
+    const playerMessages = messages.filter(m => m.sourceType === 'player');
+    expect(playerMessages.length).toBeGreaterThan(0);
+    const playerMsg = playerMessages[playerMessages.length - 1]!;
+    expect(playerMsg.role).toBe('user');
+    expect(playerMsg.content).toBe('我走进森林');
 
     // Second message should be the runtime output
     const runtimeMsg = messages.find(m => m.sourceType === 'runtime');
@@ -415,7 +444,7 @@ describe('TurnExecutor E2E', () => {
   });
 
   it('should promote presentable tool output when a runtime stops without final text', async () => {
-    const store = createMemoryStore();
+    const store = await createMainLoopStore('sess-1');
     const presentableTool = tool({
       name: 'generate-guide',
       description: 'Builds a guide UI block',
@@ -500,7 +529,7 @@ describe('TurnExecutor E2E', () => {
   });
 
   it('should suppress plain-language final text after tool calls for system runtimes', async () => {
-    const store = createMemoryStore();
+    const store = await createMainLoopStore('sess-1');
     const presentableTool = tool({
       name: 'generate-guide',
       description: 'Builds a guide state payload',
@@ -574,7 +603,7 @@ describe('TurnExecutor E2E', () => {
   });
 
   it('should fail when a runtime exhausts tool steps without producing final output', async () => {
-    const store = createMemoryStore();
+    const store = await createMainLoopStore('sess-1');
     const lookupTool = tool({
       name: 'world-dimension-get',
       description: 'Returns lore snippets',
@@ -636,7 +665,7 @@ describe('TurnExecutor E2E', () => {
   });
 
   it('should fail when tool validation errors end without any final output', async () => {
-    const store = createMemoryStore();
+    const store = await createMainLoopStore('sess-1');
     const strictTool = tool({
       name: 'generate-guide',
       description: 'Requires at least one suggestion',
@@ -775,7 +804,7 @@ describe('TurnExecutor E2E', () => {
 
 describe('TurnExecutor _interaction protocol', () => {
   it('should detect _interaction from tool results and populate pendingInputs', async () => {
-    const store = createMemoryStore();
+    const store = await createMainLoopStore('sess-1');
     const discoveries = await discoverPlugins(PLUGINS_DIR);
     const charDiscovery = discoveries.find(d => d.id === 'core-char-creator')!;
     const charManifests = await loadPluginManifest(charDiscovery);

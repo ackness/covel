@@ -12,11 +12,30 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { RuntimeManifest, TurnInput } from '@covel/shared';
+import { createMemoryStore } from '@covel/store';
+import type { DataStore } from '@covel/store';
 import { executeTurn } from '../src/turn-executor.js';
 import type { TurnExecutorDeps } from '../src/turn-executor.js';
 import type { LLMAdapter, LLMResponse } from '../src/llm-adapter.js';
 import { createHookPipeline } from '../src/hooks/pipeline.js';
 import type { HookPipeline } from '../src/hooks/pipeline.js';
+
+// Prime a store with one prior player message so turnNumber >= 1 and
+// main-loop priority runtimes survive the Pre-Game band filter.
+async function createMainLoopStore(sessionId: string): Promise<DataStore> {
+  const store = createMemoryStore();
+  await store.appendTurnMessage({
+    id: 'prior-player-0',
+    sessionId,
+    turnId: 'prior-turn',
+    sourceType: 'player',
+    role: 'user',
+    content: 'prior turn',
+    order: 0,
+    createdAt: '2024-01-01T00:00:00Z',
+  });
+  return store;
+}
 
 // ── Helpers ────────────────────────────────────────────────���─────
 
@@ -61,7 +80,7 @@ class SimpleMockLLM implements LLMAdapter {
 
 // ── Fixture: manifest + loaded runtime ──────────────────────────
 
-function makeDeps(llm: LLMAdapter, hookPipeline?: HookPipeline): TurnExecutorDeps {
+async function makeDeps(llm: LLMAdapter, hookPipeline?: HookPipeline, store?: DataStore): Promise<TurnExecutorDeps> {
   const manifest = makeManifest();
   return {
     loadRuntime: async () => ({
@@ -72,6 +91,7 @@ function makeDeps(llm: LLMAdapter, hookPipeline?: HookPipeline): TurnExecutorDep
     llm,
     getConfig: () => ({}),
     hookPipeline,
+    store: store ?? await createMainLoopStore('sess-hook-wire'),
   };
 }
 
@@ -97,7 +117,7 @@ describe('Turn executor hook wire-in (S4-T3)', () => {
   describe('Flag-off path', () => {
     it('runs normally without hookPipeline — no side effects', async () => {
       const llm = new SimpleMockLLM();
-      const deps = makeDeps(llm);
+      const deps = await makeDeps(llm);
       // Flag is OFF, no hookPipeline
       const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
       expect(result.runtimeResults).toHaveLength(1);
@@ -111,7 +131,7 @@ describe('Turn executor hook wire-in (S4-T3)', () => {
       const handler = vi.fn().mockResolvedValue({ action: 'continue' });
       pipeline.register({ id: 'test:TurnStart:0', event: 'TurnStart', handler });
 
-      const deps = makeDeps(llm, pipeline);
+      const deps = await makeDeps(llm, pipeline);
       // Flag is OFF
       const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
 
@@ -131,7 +151,7 @@ describe('Turn executor hook wire-in (S4-T3)', () => {
         handler: vi.fn().mockResolvedValue({ action: 'continue' }),
       });
 
-      const deps = makeDeps(llm, pipeline);
+      const deps = await makeDeps(llm, pipeline);
       const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
       expect(result.runtimeResults).toHaveLength(1);
       expect(result.abortReason).toBeUndefined();
@@ -147,7 +167,7 @@ describe('Turn executor hook wire-in (S4-T3)', () => {
         handler: vi.fn().mockResolvedValue({ action: 'abort', reason: 'access denied' }),
       });
 
-      const deps = makeDeps(llm, pipeline);
+      const deps = await makeDeps(llm, pipeline);
       const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
 
       expect(result.runtimeResults).toHaveLength(0);
@@ -168,7 +188,7 @@ describe('Turn executor hook wire-in (S4-T3)', () => {
         handler: vi.fn().mockResolvedValue({ action: 'abort', reason: 'post-hook abort' }),
       });
 
-      const deps = makeDeps(llm, pipeline);
+      const deps = await makeDeps(llm, pipeline);
       const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
 
       // Turn completed normally
@@ -233,6 +253,7 @@ describe('Turn executor hook wire-in (S4-T3)', () => {
         getConfig: () => ({}),
         toolExecutor,
         hookPipeline: pipeline,
+        store: await createMainLoopStore('sess-hook-wire'),
       };
 
       const result = await executeTurn(makeTurnInput(), [manifest], deps);
@@ -275,7 +296,7 @@ describe('Turn executor hook wire-in (S4-T3)', () => {
         })),
       });
 
-      const deps = makeDeps(llm, pipeline);
+      const deps = await makeDeps(llm, pipeline);
       const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
 
       expect(result.runtimeResults[0].output).toMatchObject({ _hookModified: true });
@@ -332,6 +353,7 @@ describe('Turn executor hook wire-in (S4-T3)', () => {
         getConfig: () => ({}),
         toolExecutor,
         hookPipeline: pipeline,
+        store: await createMainLoopStore('sess-hook-wire'),
       };
 
       const result = await executeTurn(makeTurnInput(), [manifest], deps);

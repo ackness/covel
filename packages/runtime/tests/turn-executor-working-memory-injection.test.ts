@@ -82,6 +82,21 @@ function makeCapturingLLM(): CapturingLLM {
   return { generate, captured };
 }
 
+async function primeMainLoop(store: DataStore, sessionId: string): Promise<void> {
+  // Prime one prior player message so turnNumber >= 1 and main-loop
+  // priority runtimes survive the Pre-Game band filter.
+  await store.appendTurnMessage({
+    id: `prior-player-${sessionId}`,
+    sessionId,
+    turnId: 'prior-turn',
+    sourceType: 'player',
+    role: 'user',
+    content: 'prior turn',
+    order: 0,
+    createdAt: '2024-01-01T00:00:00Z',
+  });
+}
+
 async function seedWorkingMemory(store: DataStore, sessionId: string): Promise<void> {
   await store.upsertWorkingMemory({
     id: crypto.randomUUID(),
@@ -124,6 +139,7 @@ describe('turn-executor → working memory injection', () => {
 
     const store = createMemoryStore();
     const sessionId = 'sess-wm-on';
+    await primeMainLoop(store, sessionId);
     await seedWorkingMemory(store, sessionId);
 
     const llm = makeCapturingLLM();
@@ -156,6 +172,7 @@ describe('turn-executor → working memory injection', () => {
 
     const store = createMemoryStore();
     const sessionId = 'sess-wm-off';
+    await primeMainLoop(store, sessionId);
     await seedWorkingMemory(store, sessionId);
 
     const llm = makeCapturingLLM();
@@ -183,7 +200,8 @@ describe('turn-executor → working memory injection', () => {
 
     const store = createMemoryStore();
     const sessionId = 'sess-wm-empty';
-    // No seeding — store is empty for this session.
+    await primeMainLoop(store, sessionId);
+    // No WM seeding — store has no working-memory entries for this session.
 
     const llm = makeCapturingLLM();
     const manifest = makeManifest();
