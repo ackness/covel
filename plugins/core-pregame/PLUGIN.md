@@ -1,6 +1,6 @@
 ---
 name: core-pregame
-description: 游戏初始化插件。仅在 session 首轮触发，初始化世界状态、设置 phase、欢迎玩家。纯函数执行，不调用 LLM。
+description: 游戏初始化插件。仅在 session 首轮触发，读取世界信息、欢迎玩家、上报 preGameDone。纯函数执行，不调用 LLM。
 pluginType: core-plugin
 priority: 10
 runtimeType: function
@@ -18,21 +18,21 @@ trigger:
 
 ## 执行时机
 
-Priority 0，属于 Pre-Game 阶段（0-100），仅在 session 第一个 Turn 执行。
+Priority 10，属于 Pre-Game band (0-99)，仅在 session 首轮（turnCount=0）执行。maxTriggerCount: 1 保证一次性运行。完成后内核把该 runtime 加入 session.preGameCompleted。
 
 ## 职责
 
-1. 初始化世界状态（从 world manifest 读取维度信息）
-2. 设置 session phase → `playing`（或 `character_creation`，取决于是否有 char-creator 插件）
-3. 返回欢迎通知和世界观摘要供后续插件引用
+1. 读取世界信息构建欢迎通知
+2. 返回 narrativeOutput 给后续插件作为上下文
+3. 报告 preGameDone: true 以允许内核推进 turnCount 到 1
 
 ## 输出
 
 ```json
 {
   "narrativeOutput": "世界观摘要文本...",
-  "phase": "character_creation",
   "notifications": [{ "level": "info", "title": "...", "message": "..." }],
-  "initialized": true
+  "initialized": true,
+  "preGameDone": true
 }
 ```

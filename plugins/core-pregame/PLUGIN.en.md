@@ -1,6 +1,6 @@
 ---
 name: core-pregame
-description: Game initialization plugin. Triggers only on the first turn of a session to initialize world state, set phase, and welcome the player. Pure function execution, no LLM calls.
+description: Game initialization plugin. Triggers only on the first turn of a session to read world info, welcome the player, and report preGameDone. Pure function execution, no LLM calls.
 pluginType: core-plugin
 priority: 10
 runtimeType: function
@@ -17,21 +17,21 @@ This plugin uses `runtimeType: function`, meaning it does not call an LLM but di
 
 ## Execution Timing
 
-Priority 0, belongs to the Pre-Game phase (0-100), executes only on the first Turn of a session.
+Priority 10, belongs to the Pre-Game band (0-99), executes only on the first Turn of a session (turnCount=0). maxTriggerCount: 1 guarantees a one-shot run. When it completes, the kernel records this runtime in `session.preGameCompleted`.
 
 ## Responsibilities
 
-1. Initialize world state (read dimension information from world manifest)
-2. Set session phase to `playing` (or `character_creation`, depending on whether the char-creator plugin is present)
-3. Return a welcome notification and world lore summary for subsequent plugins to reference
+1. Read world info and build a welcome notification
+2. Return `narrativeOutput` as context for downstream plugins
+3. Report `preGameDone: true` to let the kernel advance `turnCount` to 1
 
 ## Output
 
 ```json
 {
   "narrativeOutput": "World lore summary text...",
-  "phase": "character_creation",
   "notifications": [{ "level": "info", "title": "...", "message": "..." }],
-  "initialized": true
+  "initialized": true,
+  "preGameDone": true
 }
 ```

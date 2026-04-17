@@ -1,9 +1,9 @@
 /**
  * Pre-Game handler — pure function runtime, no LLM.
  *
- * Initializes the game session: reads world info from store,
- * sets up initial state, and returns a welcome context for
- * downstream plugins (narrator, codex, char-creator).
+ * Reads world info and builds a welcome notification. Reports preGameDone=true
+ * so the kernel records completion in session.preGameCompleted. Session
+ * status is not touched — turn advancement is the kernel's job.
  *
  * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
  * @returns {Promise<Record<string, unknown>>}
@@ -11,7 +11,6 @@
 export default async function pregameHandler(ctx) {
   const { sessionId, store } = ctx;
 
-  // 1. Read session and world info from store
   let worldName = '未知世界';
   let worldSummary = '';
 
@@ -27,19 +26,10 @@ export default async function pregameHandler(ctx) {
         }
       }
     } catch {
-      // Store may not have world data (e.g., MemoryStore without seed)
+      // Store may lack world data (e.g. MemoryStore without seed)
     }
   }
 
-  // 2. Persist phase transition to store
-  if (store && typeof store === 'object') {
-    const s = /** @type {any} */ (store);
-    try {
-      await s.updateSession(sessionId, { phase: 'character_creation' });
-    } catch { /* non-critical if store doesn't support updateSession */ }
-  }
-
-  // 3. Build welcome notification
   const notifications = [
     {
       level: 'info',
@@ -48,13 +38,12 @@ export default async function pregameHandler(ctx) {
     },
   ];
 
-  // 4. Return output — narrativeOutput is picked up by downstream plugins as context
   return {
     narrativeOutput: worldSummary
       ? `【${worldName}】${worldSummary}`
       : `游戏初始化完成，欢迎来到${worldName}。`,
-    phase: 'character_creation',
     notifications,
     initialized: true,
+    preGameDone: true,
   };
 }
