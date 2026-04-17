@@ -1,8 +1,8 @@
-import type { Session, SessionPhase } from "@covel/shared";
+import type { Session, SessionStatus } from "@covel/shared";
 
 import type { Transport } from "../transport/transport.js";
 
-export type { Session, SessionPhase };
+export type { Session, SessionStatus };
 
 interface SessionsListResponse {
   items: Session[];
@@ -68,7 +68,7 @@ export class SessionsResource {
 
   async update(
     id: string,
-    patch: Partial<Pick<Session, "phase" | "activePlugins">>,
+    patch: Partial<Pick<Session, "status" | "activePlugins">>,
   ): Promise<Session> {
     return this.transport.request<Session>({
       method: "PATCH",

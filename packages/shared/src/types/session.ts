@@ -33,8 +33,32 @@ export interface Session {
   readonly locale: string;
   readonly createdAt: string;
   readonly updatedAt: string;
+  /**
+   * FK to vector_models.id; null/undefined = RAG disabled for this session.
+   * Set once at session creation, immutable for the session's lifetime.
+   */
   readonly embeddingModelId?: number | null;
+  /**
+   * ISO 8601 timestamp marking when the embedding model was locked.
+   * Null/undefined when no model is locked.
+   */
   readonly embeddingLockedAt?: string | null;
+  /**
+   * Resolved embedding model identity (decorated by the API layer when
+   * the session is locked). Absent when RAG is disabled for this session.
+   */
   readonly embedding?: SessionEmbeddingInfo | null;
+  /**
+   * Per-runtime model slot overrides (PR-6).
+   *
+   * `key` is a runtime ID (`pluginId` for single-runtime plugins, or
+   * `pluginId/runtimeName` for multi-runtime plugins). `value` is a slot
+   * name from `llm.toml` (e.g. `"default"`, `"fast"`, `"balance"`).
+   *
+   * The model-slot resolver consults this map first; if absent, falls back
+   * to `manifest.model`, then to `"default"`. Provider/key configuration
+   * stays in localStorage + `X-Provider-Keys` header — only slot names are
+   * persisted server-side.
+   */
   readonly runtimeModelOverrides?: Readonly<Record<string, string>>;
 }

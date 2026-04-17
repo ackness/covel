@@ -30,7 +30,7 @@ export { LorebookResource } from "./resources/lorebook.js";
 export type { World } from "./resources/worlds.js";
 export type {
   Session,
-  SessionPhase,
+  SessionStatus,
   CreateSessionInput,
   SubmitInputItem,
   SubmitInputsBatchInput,
