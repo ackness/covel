@@ -168,12 +168,21 @@ Input/Event → Trigger Router → Priority Scheduler → [For each priority gro
 
 Key stages:
 1. **Trigger Router** — event type identification, `RuntimeTriggerEvent` generation, candidate filtering by trigger rules (modes: `always`, `interval`, `manual`, `event`)
-2. **Priority Scheduler** — sort by `priority` (0-1000, default 500). 0 = highest = first. Same priority = parallel group. Priority bands: 0-99 Pre-Game (first turn only), 100-499 Pre-Turn, 500 Narrator, 501-999 After-Turn, 1000 Audit. Normal game loop runs 100-1000; Pre-Game (0-99) runs only on session first turn.
+2. **Priority Scheduler** — sort by `priority` (0-1000, default 500). 0 = highest = first. Same priority = parallel group. See **Priority Bands (kernel-enforced)** below for the turn-band filter applied before each group executes.
 3. **Context Assembly** — `TurnContextStore` accumulates turn context across 10 slices (chat, world, characters, state, record, events, runtime, runtimeSettings, narrative, archive); `PromptAssembler` builds per-runtime prompts (instructions + sections + previous outputs); `Compactor` handles long-session history compaction
 4. **Runtime Runner** — two modes: `runtimeType: 'agent'` (default) loads PLUGIN.md, binds provider/tools/hooks/budget, drives LLM tool-calling loop; `runtimeType: 'function'` directly calls a JS handler function without LLM. `maxSteps`/`timeoutMs` = hard limits, `maxTokens` = best-effort
 5. **Tool/Hook Loop** — whitelisted tools; hooks at lifecycle points: `TurnStart`, `PreToolUse`, `PostToolUse`, `PreStateCommit`, `PostStateCommit`, `TurnStop`
 6. **Proposal Collector** — normalizes to `KernelProposalEnvelope`: `narrative.append`, `state.patch`, `event.emit`, `record.upsert`, `ui.render`, `asset.generate`
 7. **Commit Chain** — `proposal → validate → commit`. All writes go through this chain. Plugins never write directly to DB.
+
+### Priority Bands (kernel-enforced)
+
+| Turn | Scheduled priority range | Phase |
+|------|-------------------------|-------|
+| 0    | 0-99                    | Pre-Game (may iterate multiple player submissions) |
+| ≥1   | 100-1000                | Main loop: Pre-Turn 100-499, Narrator 500, After-Turn 501-999, Audit 1000 |
+
+The scheduler filters runtimes by the turn-number band before executing each group. Pre-Game runtimes report `preGameDone: true` in their output to mark session-level completion; the kernel tracks these in `SessionRecord.preGameCompleted` and advances `turnCount` from 0 to 1 once all Pre-Game band runtimes report done. Runtimes that hit `maxTriggerCount` or are skipped by a guard are also marked done.
 
 ### Plugin System
 
@@ -201,16 +210,18 @@ Current plugins (PLUGIN.md-centric format):
 
 | Priority | Plugin | Role | Trigger |
 |----------|--------|------|---------|
-| 10 | core-pregame | Game initialization (function runtime, no LLM) | scheduled (first turn only, maxTriggerCount=1) |
-| 85 | core-world-init/schema-gen | World dimension schema + entries via LLM (guard skips if data exists) | scheduled (first turn only) |
-| 500 | core-narrator | Main narrative generation | auto (every turn, playing phase) |
-| 550 | core-guide | Action guidance + choice panels (analyzes narrator output) | scheduled (interval=1, cooldown=1, playing phase) |
-| 620 | core-npc-graph | NPC relationship graph + Graph-RAG memory (capabilities: `npc-graph`, `relationship-tracking`) | scheduled (interval=2, cooldown=1, playing phase) |
-| 650 | core-codex | Knowledge/lore codex with persistent plugin-data | scheduled (interval=2, cooldown=1, playing phase) |
-| 700 | core-char-creator/player-init | Player character creation via create-character builtin tool | scheduled (maxTriggerCount=2, guard skips if player exists) |
-| 750 | core-char-creator/character-tracker | NPC detection + character state tracking | scheduled (interval=1, cooldown=1, playing phase) |
+| 10 | core-pregame | Game initialization (function runtime, no LLM, Pre-Game band) | scheduled (maxTriggerCount=1) |
+| 50 | core-char-creator/player-init | Player character creation (Pre-Game band) | auto |
+| 85 | core-world-init/schema-gen | World dimension schema + entries via LLM (Pre-Game band, guard skips if data exists) | scheduled (maxTriggerCount=1) |
+| 500 | core-narrator | Main narrative generation | auto (every turn) |
+| 550 | core-guide | Action guidance + choice panels (analyzes narrator output) | scheduled (interval=1, cooldown=1) |
+| 620 | core-npc-graph | NPC relationship graph + Graph-RAG memory (capabilities: `npc-graph`, `relationship-tracking`) | scheduled (interval=2, cooldown=1) |
+| 650 | core-codex | Knowledge/lore codex with persistent plugin-data | scheduled (interval=2, cooldown=1) |
+| 750 | core-char-creator/character-tracker | NPC detection + character state tracking | scheduled (interval=1, cooldown=1) |
 
-Additional plugins planned: core-persona, core-combat, core-inventory, core-quest, core-image, core-memory, etc.
+**UI-only plugins** (no runtime scheduling): `core-memory` — contributes UI panels/blocks only, not included in the scheduler.
+
+Additional plugins planned: core-persona, core-combat, core-inventory, core-quest, core-image, etc.
 
 ### Plugin UI System (Declarative Panels)
 
@@ -330,7 +341,7 @@ Three-tier resolution for plugin UI:
 ### State & Persistence
 
 Core runtime objects (never collapse into single JSON):
-- **Run** — session root, phase: `init` → `character_creation` → `playing` → `ended`
+- **Run** — session root
 - **Branch** — world-line branch
 - **Snapshot** — restorable state point
 - **State** — current structured facts (key-value with scope)
@@ -338,6 +349,11 @@ Core runtime objects (never collapse into single JSON):
 - **Record** — searchable long-term knowledge (characters, quests, etc.)
 - **Character** — dynamic character cards (evolved through gameplay, not static templates)
 - **PluginData** — plugin-scoped persistent KV storage, isolated by `(sessionId, pluginId, namespace, key)`
+
+Session lifecycle is tracked via three fields:
+- `status: SessionStatus` = `'active' | 'paused' | 'ended'`. `paused`/`ended` halts scheduling.
+- `turnCount: number` = band selector. `0` = Pre-Game band (priority 0-99 scheduled). `>=1` = main loop (priority 100-1000 scheduled). Kernel auto-advances from 0 → 1 when all Pre-Game runtimes report `preGameDone`.
+- `preGameCompleted: string[]` = runtimeIds of Pre-Game runtimes that have finished their one-time initialization work.
 
 Store backends (`@covel/store`): MemoryStore (dev/test), IdbStore (browser IndexedDB), PgStore (production PostgreSQL via Drizzle ORM).
 
@@ -347,7 +363,7 @@ Store backends (`@covel/store`): MemoryStore (dev/test), IdbStore (browser Index
 
 All endpoints under `/api/` prefix (Vite dev server proxies `/api` → backend). RESTful convention: resources use plural nouns.
 
-- Sessions (CRUD): `GET/POST /api/sessions`, `GET/PATCH/DELETE /api/sessions/:id` (PATCH accepts `phase` + PR-6 `runtimeModelOverrides` map of runtime-id → slot)
+- Sessions (CRUD): `GET/POST /api/sessions`, `GET/PATCH/DELETE /api/sessions/:id` (PATCH accepts `status` + PR-6 `runtimeModelOverrides` map of runtime-id → slot)
 - Session Turn: `POST /api/sessions/:id/turn`, `GET /api/sessions/:id/turns`, `GET /api/sessions/:id/results`
 - Session Messages: `GET /api/sessions/:id/messages`, `POST /api/sessions/:id/messages/sync`
 - Session Plugins: `GET /api/sessions/:id/plugins`, `POST /api/sessions/:id/plugins/enable`, `POST /api/sessions/:id/plugins/disable`
@@ -384,7 +400,7 @@ Two frontend apps exist side by side:
 - pluginData drives panel data, `plugin-data.changed` SSE events for real-time updates
 - Port 5174, `@` path alias → `apps/web-v2/src/`
 
-**V2 game flow**: World Select → `createSession` → `POST /api/actions` (start_session, SSE stream) → narrative + char form → `POST /api/sessions/:id/submit-inputs` (template fill + char create + phase transition) → `POST /api/actions` (player_action) → next Turn
+**V2 game flow**: World Select → `createSession` → `POST /api/actions` (start_session, SSE stream) → narrative + char form → `POST /api/sessions/:id/submit-inputs` (template fill + char create; kernel advances `turnCount` 0 → 1 once Pre-Game runtimes report done) → `POST /api/actions` (player_action) → next Turn
 
 **Shared infrastructure**:
 - Unified SSE protocol: `ProtocolEventType` names (see `docs/reference/protocol.md`)
