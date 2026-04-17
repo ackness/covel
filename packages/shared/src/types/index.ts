@@ -63,7 +63,7 @@ export type {
 } from './approval.js';
 
 export type {
-  SessionPhase,
+  SessionStatus,
   Session,
   SessionEmbeddingInfo,
 } from './session.js';

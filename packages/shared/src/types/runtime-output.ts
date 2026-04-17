@@ -58,13 +58,9 @@ export interface RuntimeOutputPromptMessage {
 export interface RuntimeOutputMetaData {
   /** Global 0-based turnNumber (counts all player messages). */
   readonly turn: number;
-  /**
-   * Playing-phase turn counter. Set once PR-2 ships. Optional for now
-   * so pre-PR-2 writers stay valid.
-   */
-  readonly playingTurn?: number;
-  /** Session phase at the time this record was written. */
-  readonly phase: string;
+  /** Set by Pre-Game band runtimes (priority 0-99) when they have finished
+   *  their session-level work. Ignored on main-loop runtimes. */
+  readonly preGameDone?: boolean;
   /**
    * Prompt delta relative to the previous call of the same runtime in
    * the same turn. First call has delta = full prompt (or null for

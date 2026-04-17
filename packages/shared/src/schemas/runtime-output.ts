@@ -28,8 +28,7 @@ export const runtimeOutputPromptMessageSchema = z.object({
 
 export const runtimeOutputMetaDataSchema = z.object({
   turn: z.number().int().nonnegative(),
-  playingTurn: z.number().int().nonnegative().optional(),
-  phase: z.string(),
+  preGameDone: z.boolean().optional(),
   rawPromptDelta: z.array(runtimeOutputPromptMessageSchema).optional(),
   outputResponses: z.array(z.string()).optional(),
   toolCallList: z.array(runtimeOutputToolCallSchema).optional(),
