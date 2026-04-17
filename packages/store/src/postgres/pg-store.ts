@@ -109,13 +109,13 @@ export async function createPgStore(
       await db.insert(schema.sessions).values({
         id: session.id,
         worldId: session.worldId ?? null,
-        phase: session.phase,
+        status: session.status,
         turnCount: session.turnCount,
+        preGameCompleted: session.preGameCompleted as string[],
         locale: session.locale,
         activePlugins: session.activePlugins as string[],
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
-        playingTurnOffset: session.playingTurnOffset ?? null,
         runtimeModelOverrides: (session.runtimeModelOverrides ?? {}) as Record<string, string>,
       });
     },
@@ -130,16 +130,16 @@ export async function createPgStore(
 
     async updateSession(
       id: string,
-      patch: Partial<Pick<SessionRecord, 'phase' | 'turnCount' | 'activePlugins' | 'updatedAt' | 'embeddingModelId' | 'embeddingLockedAt' | 'playingTurnOffset' | 'runtimeModelOverrides'>>,
+      patch: Partial<Pick<SessionRecord, 'status' | 'turnCount' | 'preGameCompleted' | 'activePlugins' | 'updatedAt' | 'embeddingModelId' | 'embeddingLockedAt' | 'runtimeModelOverrides'>>,
     ): Promise<void> {
       const values: Record<string, unknown> = {};
-      if (patch.phase !== undefined) values.phase = patch.phase;
+      if (patch.status !== undefined) values.status = patch.status;
       if (patch.turnCount !== undefined) values.turnCount = patch.turnCount;
+      if (patch.preGameCompleted !== undefined) values.preGameCompleted = patch.preGameCompleted as string[];
       if (patch.activePlugins !== undefined) values.activePlugins = patch.activePlugins as string[];
       if (patch.updatedAt !== undefined) values.updatedAt = patch.updatedAt;
       if ('embeddingModelId' in patch) values.embeddingModelId = patch.embeddingModelId ?? null;
       if ('embeddingLockedAt' in patch) values.embeddingLockedAt = patch.embeddingLockedAt ?? null;
-      if ('playingTurnOffset' in patch) values.playingTurnOffset = patch.playingTurnOffset ?? null;
       if ('runtimeModelOverrides' in patch) {
         values.runtimeModelOverrides = (patch.runtimeModelOverrides ?? {}) as Record<string, string>;
       }

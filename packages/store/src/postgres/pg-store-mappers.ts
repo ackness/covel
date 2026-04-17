@@ -5,6 +5,7 @@
  * on DataStore method logic.
  */
 
+import type { SessionStatus } from '@covel/shared';
 import * as schema from './schema.js';
 import type {
   SessionRecord,
@@ -53,19 +54,22 @@ export const CREATE_TABLES_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
     world_id TEXT,
-    phase TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
     turn_count INTEGER NOT NULL DEFAULT 0,
+    pre_game_completed JSONB NOT NULL DEFAULT '[]'::jsonb,
     locale TEXT NOT NULL DEFAULT 'zh-CN',
     active_plugins JSONB NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     embedding_model_id INTEGER,
     embedding_locked_at TEXT,
-    playing_turn_offset INTEGER,
     runtime_model_overrides JSONB DEFAULT '{}'::jsonb
   );
-  -- PR-2: ensure the column exists on pre-existing databases.
-  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS playing_turn_offset INTEGER;
+  -- T3 (turn-band refactor): replace phase/playing_turn_offset with status/pre_game_completed.
+  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pre_game_completed JSONB NOT NULL DEFAULT '[]'::jsonb;
+  ALTER TABLE sessions DROP COLUMN IF EXISTS phase;
+  ALTER TABLE sessions DROP COLUMN IF EXISTS playing_turn_offset;
   -- PR-6: per-runtime model slot overrides.
   ALTER TABLE sessions ADD COLUMN IF NOT EXISTS runtime_model_overrides JSONB DEFAULT '{}'::jsonb;
 
@@ -414,15 +418,15 @@ export function toSessionRecord(row: typeof schema.sessions.$inferSelect): Sessi
   return {
     id: row.id,
     worldId: row.worldId ?? undefined,
-    phase: row.phase,
+    status: (row.status ?? 'active') as SessionStatus,
     turnCount: row.turnCount,
+    preGameCompleted: ((row.preGameCompleted as readonly string[] | null) ?? []) as readonly string[],
     locale: row.locale,
     activePlugins: (row.activePlugins ?? []) as string[],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     ...(row.embeddingModelId != null ? { embeddingModelId: row.embeddingModelId } : {}),
     ...(row.embeddingLockedAt != null ? { embeddingLockedAt: row.embeddingLockedAt } : {}),
-    ...(row.playingTurnOffset != null ? { playingTurnOffset: row.playingTurnOffset } : {}),
     ...(row.runtimeModelOverrides && Object.keys(row.runtimeModelOverrides as object).length > 0
       ? { runtimeModelOverrides: row.runtimeModelOverrides as Record<string, string> }
       : {}),

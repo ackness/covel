@@ -25,15 +25,15 @@ export const worlds = pgTable('worlds', {
 export const sessions = pgTable('sessions', {
   id: text('id').primaryKey(),
   worldId: text('world_id'),
-  phase: text('phase').notNull(),
+  status: text('status').notNull().default('active'),
   turnCount: integer('turn_count').notNull().default(0),
+  preGameCompleted: jsonb('pre_game_completed').notNull().default([]), // JSON string[] — runtimeIds that have finished pre-game band
   locale: text('locale').notNull().default('zh-CN'),
   activePlugins: jsonb('active_plugins').notNull().default([]), // JSON array
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
   embeddingModelId: integer('embedding_model_id'),    // FK → vector_models.id; NULL = RAG disabled
   embeddingLockedAt: text('embedding_locked_at'),     // ISO 8601 timestamp
-  playingTurnOffset: integer('playing_turn_offset'),  // PR-2: turnNumber at first playing-phase entry
   runtimeModelOverrides: jsonb('runtime_model_overrides').default({}), // PR-6: per-runtime slot overrides
 });
 
