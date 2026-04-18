@@ -8,6 +8,7 @@ directories:
 
 files:
   - dist/**/*
+  - "!dist/**/*.map"
   - package.json
 
 extraResources:
@@ -16,20 +17,46 @@ extraResources:
     to: web-dist
     filter:
       - "**/*"
+      - "!**/*.map"
+      - "!**/*.d.ts"
   # Server source + dependencies
   - from: staging/server
     to: server
     filter:
       - "**/*"
       - "!**/node_modules/.cache/**"
+      - "!**/node_modules/.bin/**"
       - "!**/.git/**"
       - "!**/tests/**"
+      - "!**/__tests__/**"
       - "!**/*.test.ts"
       - "!**/*.spec.ts"
+      - "!**/*.test.js"
+      - "!**/*.spec.js"
+      - "!**/*.md"
+      - "!**/CHANGELOG*"
+      - "!**/.gitignore"
+      - "!**/.npmrc"
+      - "!**/tsconfig*.json"
 
 asar: true
+asarUnpack:
+  # tsx and its loader must be unpacked because they are spawned as a
+  # child process that reads source files directly from disk.
+  - "**/node_modules/tsx/**"
+  - "**/node_modules/esbuild/**"
+  - "**/node_modules/@esbuild/**"
+
 compression: normal
 
+# ── macOS ─────────────────────────────────────────────────────────
+# Signing requirements (set these env vars in CI / before running `dist:mac`):
+#   CSC_LINK           — path or https URL to the .p12 certificate bundle
+#   CSC_KEY_PASSWORD   — password for the .p12 bundle
+#   APPLE_ID           — Apple Developer account email (for notarization)
+#   APPLE_APP_SPECIFIC_PASSWORD — app-specific password for notarization
+#   APPLE_TEAM_ID      — Developer Team ID (e.g. "ABCDE12345")
+# If the env vars are missing the build will produce an UNSIGNED artifact.
 mac:
   target:
     - target: dmg
@@ -39,20 +66,49 @@ mac:
   category: public.app-category.games
   darkModeSupport: true
   hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+  extendInfo:
+    NSCameraUsageDescription: "Covel does not use the camera."
+    NSMicrophoneUsageDescription: "Covel does not use the microphone."
+  # Auto-signing: electron-builder picks up CSC_LINK from env. `identity` can
+  # be set explicitly to disambiguate when multiple certs are installed:
+  # identity: "Developer ID Application: Your Name (TEAMID)"
+  notarize: false  # set to `{ teamId: "${APPLE_TEAM_ID}" }` when certs are ready
 
+dmg:
+  sign: false  # DMG signing is redundant once the app inside is signed
+
+# ── Windows ───────────────────────────────────────────────────────
+# Signing requirements:
+#   CSC_LINK           — path or https URL to the .pfx bundle
+#   CSC_KEY_PASSWORD   — password for the .pfx bundle
+#   WIN_CSC_TIMESTAMP_SERVER — optional RFC 3161 timestamp URL
 win:
   target:
     - target: nsis
       arch: [x64, arm64]
     - target: portable
       arch: [x64]
+  signingHashAlgorithms:
+    - sha256
+  # verifyUpdateCodeSignature defaults to true in electron-updater — keep it
+  # for published builds but allow unsigned locally via env.
+  # publisherName: "Your Organization"  # uncomment once cert is in place
 
 nsis:
   oneClick: false
+  perMachine: false
+  allowElevation: true
   allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
   installerIcon: resources/icon.ico
   uninstallerIcon: resources/icon.ico
+  deleteAppDataOnUninstall: false  # preserve user worlds/plugins on uninstall
 
+# ── Linux ─────────────────────────────────────────────────────────
 linux:
   target:
     - target: AppImage
@@ -61,3 +117,16 @@ linux:
       arch: [x64]
   category: Game
   maintainer: covel@example.com
+  desktop:
+    Name: Covel
+    Comment: AI-powered interactive storytelling
+    Categories: Game;RolePlaying;
+    StartupWMClass: Covel
+
+# ── Auto-update (electron-updater) ────────────────────────────────
+# Uncomment once a release channel is wired up:
+# publish:
+#   - provider: github
+#     owner: AcKnEsS
+#     repo: covel
+#     releaseType: release

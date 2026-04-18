@@ -27,13 +27,31 @@ execSync("pnpm --filter @covel/web build", {
   stdio: "inherit",
 });
 
-// Step 2: Bundle main process
-console.log("\n[2/4] Bundling main process...");
+// Step 2: Bundle main process + preload
+console.log("\n[2/4] Bundling main process and preload...");
 await build({
   entryPoints: [path.join(desktopRoot, "src/main.ts")],
   bundle: true,
   outfile: path.join(desktopRoot, "dist/main.mjs"),
   format: "esm",
+  platform: "node",
+  target: "node22",
+  sourcemap: true,
+  // electron-updater is an optional runtime dependency loaded via dynamic
+  // import. Marking it external keeps it out of the main bundle whether or
+  // not the package happens to be installed at build time.
+  external: ["electron", "electron-updater"],
+});
+
+// Preload must be CJS because Electron's contextBridge requires a
+// synchronous execution context and CJS avoids ESM loader race conditions
+// in the sandbox. Output as .mjs to keep the extension consistent, Electron
+// accepts either — the key is the commonjs format.
+await build({
+  entryPoints: [path.join(desktopRoot, "src/preload.ts")],
+  bundle: true,
+  outfile: path.join(desktopRoot, "dist/preload.mjs"),
+  format: "cjs",
   platform: "node",
   target: "node22",
   sourcemap: true,

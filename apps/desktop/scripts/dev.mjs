@@ -15,13 +15,24 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
 const projectRoot = path.resolve(desktopRoot, "../..");
 
-// Build main process
-console.log("[dev] Building main process...");
+// Build main process + preload
+console.log("[dev] Building main process and preload...");
 await build({
   entryPoints: [path.join(desktopRoot, "src/main.ts")],
   bundle: true,
   outfile: path.join(desktopRoot, "dist/main.mjs"),
   format: "esm",
+  platform: "node",
+  target: "node22",
+  sourcemap: true,
+  external: ["electron", "electron-updater"],
+});
+
+await build({
+  entryPoints: [path.join(desktopRoot, "src/preload.ts")],
+  bundle: true,
+  outfile: path.join(desktopRoot, "dist/preload.mjs"),
+  format: "cjs",
   platform: "node",
   target: "node22",
   sourcemap: true,
