@@ -66,6 +66,13 @@ export function useRuntimeBindings(
       providerTag: string;
     }> = [];
 
+    // qualifiedId is the canonical runtime id (`pluginId` for single-runtime
+    // plugins, `pluginId/runtimeName` for multi-runtime). The server's
+    // `runtimeModelOverrides` map keys MUST match this shape (regex
+    // `^[a-z][a-z0-9-]*(?:/[a-z][a-z0-9-]*)?$`). Do NOT use `pluginId:runtimeId`
+    // — the colon form is rejected by server validation and the override is
+    // silently dropped.
+
     // Detailed path: build targets from SessionPluginInfo when available
     if (packages.length === 0 && sessionPlugins && sessionPlugins.length > 0) {
       for (const sp of sessionPlugins) {
@@ -74,8 +81,8 @@ export function useRuntimeBindings(
         // Skip plugins without a model slot — they use default
         const tag = sp.model ?? "text";
         result.push({
-          qualifiedId: `${sp.id}:${sp.id}`,
-          pluginId: sp.id,
+          qualifiedId: sp.id,
+          pluginId: sp.id.includes("/") ? sp.id.slice(0, sp.id.indexOf("/")) : sp.id,
           pluginDisplayName: typeof sp.displayName === "string"
             ? sp.displayName
             : typeof sp.displayName === "object"
@@ -88,14 +95,18 @@ export function useRuntimeBindings(
       return result;
     }
 
-    // Fallback: build targets from PackageSummary runtimes
+    // Fallback: build targets from PackageSummary runtimes. Skip function
+    // runtimes (no LLM) but do NOT require providerTag — the server-side
+    // /api/packages endpoint currently omits that field, which used to hide
+    // every agent runtime from the binding UI. Default to "text" so the tag-
+    // based slot compatibility filter keeps working when the tag IS set in
+    // other code paths.
     for (const pkg of packages) {
       if (!pkg.enabled || !pkg.runtimes) continue;
       for (const rt of pkg.runtimes) {
-        // Skip runtimes without providerTag — they don't need an LLM slot
-        if (!rt.providerTag) continue;
+        if (rt.kind === "function") continue;
         result.push({
-          qualifiedId: `${pkg.name}:${rt.id}`,
+          qualifiedId: rt.id,
           pluginId: pkg.name,
           pluginDisplayName: typeof pkg.displayName === "string"
             ? pkg.displayName
@@ -103,7 +114,7 @@ export function useRuntimeBindings(
               ? Object.values(pkg.displayName)[0]
               : pkg.name,
           kind: rt.kind,
-          providerTag: rt.providerTag,
+          providerTag: rt.providerTag ?? "text",
         });
       }
     }

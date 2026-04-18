@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog.js";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs.js";
+import { DesktopSettingsTab, isDesktop } from "@/components/settings-desktop-tab.js";
+import { Monitor } from "lucide-react";
 import { Label } from "@/components/ui/label.js";
 import { Button } from "@/components/ui/button.js";
 import { Badge } from "@/components/ui/badge.js";
@@ -284,45 +286,60 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         {/* Storage mode is always "remote" (server-side SQLite). Toggle removed. */}
 
         <Tabs defaultValue={isConfigured ? "overview" : "slots"} className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className={`w-full grid ${isConfigured ? "grid-cols-3" : "grid-cols-4"}`}>
-            {isConfigured ? (
-              /* Configured mode: Overview + Keys + Advanced */
-              <>
-                <TabsTrigger value="overview" className="text-xs">
-                  <Cpu className="w-3 h-3 mr-1" />
-                  Slots
-                </TabsTrigger>
-                <TabsTrigger value="keys" className="text-xs">
-                  <KeyRound className="w-3 h-3 mr-1" />
-                  Keys
-                </TabsTrigger>
-                <TabsTrigger value="advanced" className="text-xs">
-                  <SlidersHorizontal className="w-3 h-3 mr-1" />
-                  Advanced
-                </TabsTrigger>
-              </>
-            ) : (
-              /* Legacy mode: Slots + Keys + Advanced + Presets */
-              <>
-                <TabsTrigger value="slots" className="text-xs">
-                  <Cpu className="w-3 h-3 mr-1" />
-                  Slots
-                </TabsTrigger>
-                <TabsTrigger value="keys" className="text-xs">
-                  <KeyRound className="w-3 h-3 mr-1" />
-                  Keys
-                </TabsTrigger>
-                <TabsTrigger value="advanced" className="text-xs">
-                  <SlidersHorizontal className="w-3 h-3 mr-1" />
-                  Advanced
-                </TabsTrigger>
-                <TabsTrigger value="presets" className="text-xs">
-                  <Plus className="w-3 h-3 mr-1" />
-                  Presets
-                </TabsTrigger>
-              </>
-            )}
-          </TabsList>
+          {(() => {
+            const desktop = isDesktop();
+            // Add one extra column when the Desktop tab is shown
+            const baseCols = isConfigured ? 3 : 4;
+            const gridCols = desktop ? baseCols + 1 : baseCols;
+            return (
+              <TabsList
+                className="w-full grid"
+                style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+              >
+                {isConfigured ? (
+                  <>
+                    <TabsTrigger value="overview" className="text-xs">
+                      <Cpu className="w-3 h-3 mr-1" />
+                      Slots
+                    </TabsTrigger>
+                    <TabsTrigger value="keys" className="text-xs">
+                      <KeyRound className="w-3 h-3 mr-1" />
+                      Keys
+                    </TabsTrigger>
+                    <TabsTrigger value="advanced" className="text-xs">
+                      <SlidersHorizontal className="w-3 h-3 mr-1" />
+                      Advanced
+                    </TabsTrigger>
+                  </>
+                ) : (
+                  <>
+                    <TabsTrigger value="slots" className="text-xs">
+                      <Cpu className="w-3 h-3 mr-1" />
+                      Slots
+                    </TabsTrigger>
+                    <TabsTrigger value="keys" className="text-xs">
+                      <KeyRound className="w-3 h-3 mr-1" />
+                      Keys
+                    </TabsTrigger>
+                    <TabsTrigger value="advanced" className="text-xs">
+                      <SlidersHorizontal className="w-3 h-3 mr-1" />
+                      Advanced
+                    </TabsTrigger>
+                    <TabsTrigger value="presets" className="text-xs">
+                      <Plus className="w-3 h-3 mr-1" />
+                      Presets
+                    </TabsTrigger>
+                  </>
+                )}
+                {desktop && (
+                  <TabsTrigger value="desktop" className="text-xs">
+                    <Monitor className="w-3 h-3 mr-1" />
+                    Desktop
+                  </TabsTrigger>
+                )}
+              </TabsList>
+            );
+          })()}
 
           <div className="flex-1 overflow-y-auto mt-2 pr-1">
             {/* ── Configured mode: Slot Overview (read-only from llm.toml) ── */}
@@ -840,6 +857,13 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     onChange={handleImportPresets}
                   />
                 </div>
+              </TabsContent>
+            )}
+
+            {/* ── Desktop tab (Electron only) ── */}
+            {isDesktop() && (
+              <TabsContent value="desktop" className="mt-0">
+                <DesktopSettingsTab />
               </TabsContent>
             )}
           </div>

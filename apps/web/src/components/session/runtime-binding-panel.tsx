@@ -74,7 +74,7 @@ export function RuntimeBindingPanel({ bindingState }: RuntimeBindingPanelProps) 
                   <div className="flex items-center gap-2 min-w-0">
                     <Zap className="w-3 h-3 text-muted-foreground shrink-0" />
                     <span className="text-xs font-mono truncate">
-                      {entry.qualifiedId.split(":")[1]}
+                      {entry.qualifiedId.split("/").pop()}
                     </span>
                     <Badge
                       variant="outline"

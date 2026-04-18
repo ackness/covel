@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ChevronRight, Puzzle, Wrench, Zap, Link, AlertTriangle, Lock, Cpu } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import { text } from "@/components/world/editor-helpers.js";
+import * as api from "@/services/api.js";
 import { getRuntimeBindings, setRuntimeBindings } from "@/services/api.js";
 import type { PackageSummary, PluginLoadError, SessionPluginInfo } from "@/services/api.js";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
@@ -42,10 +43,13 @@ function PluginItem({ pkg, sessionPlugin, executing, onToggle, resolvedSlots, se
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
-  // Model slot binding for agent runtimes
+  // Model slot binding for agent runtimes. Key is the runtime's canonical id
+  // (manifest `name`): single-runtime plugins use `pluginId`, multi-runtime
+  // use `pluginId/runtimeName`. Server regex rejects any other shape (e.g.
+  // `pluginId:runtimeId`), so the old colon form silently did nothing.
   const agentRuntimes = (pkg.runtimes ?? []).filter((rt) => rt.kind !== "function" && rt.providerTag);
   const primaryRuntime = agentRuntimes[0];
-  const runtimeKey = primaryRuntime ? `${pkg.name}:${primaryRuntime.id}` : "";
+  const runtimeKey = primaryRuntime?.id ?? "";
   const initialSlot = useRef(sessionId && runtimeKey ? (getRuntimeBindings(sessionId)[runtimeKey] ?? "") : "");
   const [boundSlot, setBoundSlot] = useState<string>(initialSlot.current);
 
@@ -59,6 +63,13 @@ function PluginItem({ pkg, sessionPlugin, executing, onToggle, resolvedSlots, se
       delete bindings[runtimeKey];
     }
     setRuntimeBindings(sessionId, bindings);
+    const overrides: Record<string, string> = {};
+    for (const [k, v] of Object.entries(bindings)) {
+      if (typeof v === "string" && v.length > 0) overrides[k] = v;
+    }
+    void api.updateSession(sessionId, { runtimeModelOverrides: overrides }).catch(() => {
+      // Non-fatal — localStorage still holds the intent for retry on next change.
+    });
   }, [sessionId, runtimeKey]);
 
   const displayName = text(pkg.displayName) || pkg.name;
@@ -336,7 +347,9 @@ function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, session
     );
   }
 
-  // Runtime binding: which model slot this plugin uses
+  // Runtime binding: which model slot this plugin's runtime uses. `plugin.id`
+  // is already the canonical runtime id (`pluginId` or `pluginId/runtimeName`)
+  // accepted by the server regex; no prefix needed.
   const runtimeKey = plugin.id;
   const initialSlot = useRef(sessionId ? (getRuntimeBindings(sessionId)[runtimeKey] ?? "") : "");
   const [boundSlot, setBoundSlot] = useState<string>(initialSlot.current);
@@ -351,6 +364,17 @@ function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, session
       delete bindings[runtimeKey];
     }
     setRuntimeBindings(sessionId, bindings);
+    // Push the full override map to the server so the next turn's
+    // runtime-slot-resolver picks it up. Without this PATCH the selection
+    // only lives in localStorage and is ignored by the backend — the
+    // `X-Slot-Config` header channel has been removed.
+    const overrides: Record<string, string> = {};
+    for (const [k, v] of Object.entries(bindings)) {
+      if (typeof v === "string" && v.length > 0) overrides[k] = v;
+    }
+    void api.updateSession(sessionId, { runtimeModelOverrides: overrides }).catch(() => {
+      // Non-fatal — localStorage still holds the intent for retry on next change.
+    });
   }, [sessionId, runtimeKey]);
 
   const displayName = typeof plugin.displayName === "string" ? plugin.displayName : plugin.id;
@@ -391,6 +415,44 @@ function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, session
             </span>
           )}
         </button>
+        {/* Inline model slot picker — visible without expanding. Stops click
+            propagation so selecting a slot doesn't collapse/expand the row.
+            Shows ALL resolved slots (not tag-filtered): an LLM runtime can
+            legitimately be pointed at any configured slot regardless of that
+            slot's `tag`, and filtering by tag === "text" used to hide the
+            picker entirely for repos whose llm.toml only declares story /
+            plugin / image slots. */}
+        {plugin.runtimeType !== "function" && (
+          resolvedSlots && resolvedSlots.length > 0 ? (
+            <select
+              value={boundSlot}
+              onChange={(e) => handleSlotChange(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              disabled={executing}
+              title={t("plugin.modelOverrideHint", "Override active — next turn will use this model")}
+              aria-label={t("plugin.modelBinding", "Model")}
+              className="shrink-0 mr-2 max-w-[140px] text-[9px] bg-background border border-border rounded px-1 py-0.5 disabled:opacity-50"
+            >
+              <option value="">
+                {plugin.model ? `auto · ${plugin.model}` : "auto"}
+              </option>
+              {resolvedSlots.map((slot) => (
+                <option key={slot.slotId} value={slot.slotId}>
+                  {slot.slotId}{slot.serverModel ? ` · ${slot.serverModel}` : ""}
+                </option>
+              ))}
+            </select>
+          ) : (
+            // Explicit hint when no slots are configured — previously the
+            // picker silently vanished and users couldn't tell why.
+            <span
+              className="shrink-0 mr-2 text-[9px] text-muted-foreground italic"
+              title={t("plugin.slotsMissing", "Configure model slots in llm.toml to override")}
+            >
+              no slots
+            </span>
+          )
+        )}
         {/* Toggle switch — sibling, not nested */}
         {onToggle && !isLocked && (
           <button
@@ -459,38 +521,6 @@ function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, session
                   </Badge>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Model slot binding */}
-          {plugin.runtimeType !== "function" && resolvedSlots && resolvedSlots.length > 0 && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                <Cpu className="w-3 h-3" />
-                {t("plugin.modelBinding", "Model")}
-              </div>
-              <select
-                value={boundSlot}
-                onChange={(e) => handleSlotChange(e.target.value)}
-                disabled={executing}
-                className="w-full text-[10px] bg-background border border-border rounded px-1.5 py-1 disabled:opacity-50"
-              >
-                <option value="">
-                  {plugin.model
-                    ? `${t("plugin.defaultSlot", "default")}: ${plugin.model}`
-                    : t("plugin.autoSlot", "auto (system default)")}
-                </option>
-                {resolvedSlots.filter(s => s.tag === "text").map((slot) => (
-                  <option key={slot.slotId} value={slot.slotId}>
-                    {slot.slotId.toUpperCase()} — {slot.serverModel ?? slot.presetId}
-                  </option>
-                ))}
-              </select>
-              {boundSlot && (
-                <p className="text-[9px] text-muted-foreground">
-                  {t("plugin.modelOverrideHint", "Override active — next turn will use this model")}
-                </p>
-              )}
             </div>
           )}
 

@@ -12,7 +12,15 @@ import {
 } from "@/services/api.js";
 import type { PingResult } from "@/services/api.js";
 
-const STORAGE_KEY = "covel:onboarded";
+/**
+ * Onboarding persistence uses a version number rather than a boolean so that
+ * we can re-show the wizard after a tutorial has been materially updated.
+ * Bump ONBOARDING_VERSION whenever the wizard flow changes in a way that
+ * existing users should see again.
+ */
+const STORAGE_KEY = "covel:onboardedVersion";
+const LEGACY_STORAGE_KEY = "covel:onboarded";
+const ONBOARDING_VERSION = 1;
 const CUSTOM_PROVIDER_ID = "__custom__";
 
 const PROVIDERS = [
@@ -23,11 +31,26 @@ const PROVIDERS = [
 ] as const;
 
 function isOnboarded(): boolean {
-  return localStorage.getItem(STORAGE_KEY) === "1";
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored) {
+    const parsed = Number.parseInt(stored, 10);
+    return Number.isFinite(parsed) && parsed >= ONBOARDING_VERSION;
+  }
+  // Migrate legacy boolean flag: if the user already dismissed the v0 wizard,
+  // do not force-show v1 unless the version actually bumped above 1.
+  return localStorage.getItem(LEGACY_STORAGE_KEY) === "1" && ONBOARDING_VERSION <= 1;
 }
 
 function markOnboarded(): void {
-  localStorage.setItem(STORAGE_KEY, "1");
+  localStorage.setItem(STORAGE_KEY, String(ONBOARDING_VERSION));
+  // Clean up legacy flag to keep localStorage tidy.
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
+}
+
+/** Force the onboarding wizard to appear again on next mount. Used by Settings "re-run tutorial". */
+export function resetOnboarding(): void {
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
 }
 
 export function OnboardingWizard() {

@@ -2,7 +2,7 @@
   "name": "@covel/web",
   "version": "0.0.0",
   "private": true,
-  "deprecated": "Use @covel/web-v2 instead. This package is the legacy frontend with hardcoded panels.",
+  "deprecated": false,
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,8 +13,11 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@covel/api-client": "workspace:*",
     "@covel/shared": "workspace:*",
     "@covel/store": "workspace:*",
+    "@json-render/core": "^0.17.0",
+    "@json-render/react": "^0.17.0",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-label": "^2.1.8",
@@ -38,6 +41,7 @@
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.9.0",
     "remark-gfm": "^4.0.1",
+    "react-force-graph-2d": "^1.29.1",
     "tailwind-merge": "^3.2.0"
   },
   "devDependencies": {

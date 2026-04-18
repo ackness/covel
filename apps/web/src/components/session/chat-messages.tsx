@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
@@ -8,13 +8,17 @@ import {
   ImageIcon,
   MessageSquare,
 } from "lucide-react";
+import { JSONUIProvider, Renderer } from "@json-render/react";
+import { nestedToFlat } from "@json-render/core";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Button } from "@/components/ui/button.js";
 import { Markdown } from "@/components/ui/markdown.js";
-import { getBlockRenderer } from "@/components/blocks/block-renderer.js";
-import { resolveBlockSubmission } from "@/lib/block-submission-utils.js";
+import { covelRegistry } from "@/lib/catalog.js";
+import { messageToSpec, messageToSpecDisabled } from "@/lib/message-to-spec.js";
+import { PluginPanel } from "./plugin-panel.js";
 import { ExecutionTimeline } from "./execution-timeline.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
+import { useSession } from "@/stores/session-store.js";
 import type {
   WorldRecord,
   PackageSummary,
@@ -37,17 +41,20 @@ export interface ChatMessagesProps {
   blockSelections: Record<string, string>;
   onSendMessage: (msg: string) => void;
   onSubmitBlock: (blockId: string) => void;
-  onSubmitInteraction?: (blockId: string, turnId: string, interactionId: string, type: 'form' | 'choice' | 'confirmation', values: Record<string, unknown>) => Promise<void>;
+  onSubmitInteraction?: (
+    blockId: string,
+    turnId: string,
+    interactionId: string,
+    type: 'form' | 'choice' | 'confirmation',
+    values: Record<string, unknown>,
+    submitBehavior?: { autoContinue?: boolean; echoFilledNarrative?: boolean },
+  ) => Promise<void>;
   onRetryRuntime?: (runtimeId: string | undefined) => void;
   onTriggerEvent?: (type: string, data: Record<string, unknown>) => void;
   onBlockSelect: (blockId: string, value: string) => void;
   onBeginAdventure: () => void;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
 }
-
-// ── Helpers ──────────────────────────────────────────────────────
-
-const INTERACTIVE_BLOCK_TYPES = new Set(["choice_set", "action_guide"]);
 
 // ── Component ────────────────────────────────────────────────────
 
@@ -94,15 +101,52 @@ export function ChatMessages({
     });
   }
 
+  /**
+   * Visibility rules for parsed (game) mode:
+   *   - user messages → always visible
+   *   - assistant + kind=story → narrative, visible
+   *   - assistant + kind=plugin-message → plugin inline output, visible
+   *   - assistant + block → delegated to renderBlock()
+   *   - system messages → hidden (framework context, plugin system output)
+   *   - assistant + other kind (e.g. "plugin") → hidden (debug only)
+   *
+   * Raw mode shows ALL messages as JSON for inspection.
+   */
   function renderMessage(msg: StreamMessage) {
     if (msg.block) return renderBlock(msg);
 
-    // Hide non-story assistant messages (plugin output) — same filter as live play
-    if (msg.role === "assistant" && msg.kind && msg.kind !== "story") return null;
+    // Raw mode: show everything as JSON, no filtering
+    if (viewMode === "raw") {
+      return (
+        <div
+          key={msg.id}
+          className="flex flex-col gap-1.5"
+        >
+          <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+            {msg.role}
+            {msg.kind && <span className="ml-1.5 text-[10px] font-mono opacity-60">[{msg.kind}]</span>}
+            {msg.runtimeId && <span className="ml-1.5 text-[10px] font-mono opacity-60">{msg.runtimeId}</span>}
+            {msg.turnId && <span className="ml-2 font-mono text-[10px]">{msg.turnId}</span>}
+          </span>
+          <div className="border border-border p-4 bg-muted/10 text-xs font-mono text-muted-foreground whitespace-pre-wrap break-all max-w-[90%] md:max-w-[85%]">
+            {JSON.stringify(
+              { role: msg.role, kind: msg.kind, runtimeId: msg.runtimeId, content: msg.content, turnId: msg.turnId },
+              null,
+              2,
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Parsed mode: filter out non-player-facing messages
+    // System messages are framework internals — never shown in game view
+    if (msg.role === "system") return null;
+    // Assistant messages: only show narrative (story) and plugin inline output
+    if (msg.role === "assistant" && msg.kind && msg.kind !== "story" && msg.kind !== "plugin-message") return null;
 
     const isUser = msg.role === "user";
-    const isSystem = msg.role === "system";
-    const showImageButton = !isUser && !isSystem && isImageGenActive && msg.content && onTriggerEvent;
+    const showImageButton = !isUser && isImageGenActive && msg.content && onTriggerEvent;
 
     return (
       <div
@@ -110,30 +154,20 @@ export function ChatMessages({
         className={`flex flex-col gap-1.5 ${isUser ? "items-end" : ""}`}
       >
         <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-          {isUser ? "Player" : isSystem ? "System" : "Assistant"}
+          {isUser ? "Player" : "Assistant"}
           {msg.turnId && (
             <span className="ml-2 font-mono text-[10px]">{msg.turnId}</span>
           )}
         </span>
-        {viewMode === "parsed" ? (
-          <div
-            className={`border border-border p-4 text-sm wrap-break-words max-w-[90%] md:max-w-[85%] ${
-              isUser
-                ? "bg-primary text-primary-foreground"
-                : "bg-card text-card-foreground prose prose-sm dark:prose-invert max-w-none"
-            }`}
-          >
-            <Markdown>{msg.content}</Markdown>
-          </div>
-        ) : (
-          <div className="border border-border p-4 bg-muted/10 text-xs font-mono text-muted-foreground whitespace-pre-wrap break-all max-w-[90%] md:max-w-[85%]">
-            {JSON.stringify(
-              { role: msg.role, content: msg.content, turnId: msg.turnId },
-              null,
-              2,
-            )}
-          </div>
-        )}
+        <div
+          className={`border border-border p-4 text-sm wrap-break-words max-w-[90%] md:max-w-[85%] ${
+            isUser
+              ? "bg-primary text-primary-foreground"
+              : "bg-card text-card-foreground prose prose-sm dark:prose-invert max-w-none"
+          }`}
+        >
+          <Markdown>{msg.content}</Markdown>
+        </div>
         {showImageButton && (
           <div className="flex items-center gap-1.5">
             <Button
@@ -156,79 +190,47 @@ export function ChatMessages({
   function renderBlock(msg: StreamMessage) {
     const block = msg.block;
     if (!block) return null;
-    const blockType = block.type as string;
-    const data = block.data as Record<string, unknown> | undefined;
-    const Renderer = getBlockRenderer(blockType);
 
-    const hasCustomRenderer = viewMode === "parsed" && Renderer && data;
-    const isSubmitted = submittedBlockIds.has(msg.id);
-    const blockDisabled = executing || isSubmitted;
-    const isInteractive = INTERACTIVE_BLOCK_TYPES.has(blockType);
-
-    // Route block submissions:
-    // - Interactive forms/choices with interactionId → submit-inputs API
-    // - Trigger events → onTriggerEvent
-    // - Everything else → onSendMessage (legacy)
-    const handleBlockSubmit = (value: string) => {
-      const submission = resolveBlockSubmission(blockType, value);
-
-      if (submission.kind === "trigger_event") {
-        if (onTriggerEvent) {
-          onTriggerEvent(submission.eventType, submission.eventData);
-        } else {
-          onSendMessage(value);
-        }
-        return;
-      }
-
-      // Check if this is an interactive block with submit-inputs support
-      const interactionId = (data as Record<string, unknown> | undefined)?.interactionId as string | undefined;
-      const interactionType = (data as Record<string, unknown> | undefined)?.type as string | undefined;
-      const blockMeta = block.meta as Record<string, unknown> | undefined;
-      const turnId = msg.turnId ?? (blockMeta?.turnId as string | undefined);
-
-      if (onSubmitInteraction && interactionId && turnId &&
-          (blockType === 'interactive_form' || blockType === 'interactive_choice')) {
-        // Parse form values from the submitted value string
-        let formValues: Record<string, unknown>;
-        try {
-          formValues = JSON.parse(value);
-        } catch {
-          // Fallback: treat as single-value submission
-          formValues = { value };
-        }
-        onSubmitInteraction(msg.id, turnId, interactionId, (interactionType ?? 'form') as 'form' | 'choice' | 'confirmation', formValues);
-        return;
-      }
-
-      // Fallback: legacy path
-      onSubmitBlock(msg.id);
-      onSendMessage(submission.content);
-    };
-
-    return (
-      <div key={msg.id} className="flex flex-col gap-1.5">
-        {!hasCustomRenderer && (
+    // Raw mode — show JSON for inspection.
+    if (viewMode === "raw") {
+      return (
+        <div key={msg.id} className="flex flex-col gap-1.5">
           <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-            Block: {blockType}
+            Block: {block.type as string}
           </span>
-        )}
-        {hasCustomRenderer ? (
-          <Renderer
-            data={data}
-            onSubmit={handleBlockSubmit}
-            disabled={blockDisabled}
-            {...(isInteractive && !isSubmitted
-              ? {
-                  onSelect: (value: string) => onBlockSelect(msg.id, value),
-                  selectedValue: blockSelections[msg.id] ?? null,
-                }
-              : {})}
-          />
-        ) : (
           <RawJsonBlock content={JSON.stringify(block, null, 2)} />
-        )}
-      </div>
+        </div>
+      );
+    }
+
+    const blockType = block.type as string;
+
+    // Plugin-message surface: plugins push json-render specs via ui.message
+    // and state via plugin-data namespace=message. Each spec runs through
+    // PluginPanel, which reads the live plugin-data store for reactive state.
+    if (blockType === "plugin_message") {
+      return (
+        <PluginMessageBlock
+          key={msg.id}
+          block={block}
+          locked={hasLaterUserMessage(msg, messages)}
+        />
+      );
+    }
+
+    // Every other block (interactive_form, notification, choice, …) resolves
+    // through messageToSpec and json-render.
+    return (
+      <MessageBlockRenderer
+        key={msg.id}
+        msg={msg}
+        block={block}
+        submitted={submittedBlockIds.has(msg.id) || hasLaterUserMessage(msg, messages)}
+        executing={executing}
+        onSubmitInteraction={onSubmitInteraction}
+        onSendMessage={onSendMessage}
+        onSubmitBlock={onSubmitBlock}
+      />
     );
   }
 
@@ -352,6 +354,267 @@ export function ChatMessages({
       </div>
     </ScrollArea>
   );
+}
+
+// ── Plugin-message block ────────────────────────────────────────
+//
+// When the server synthesizes a `plugin_message` block from plugin-data on
+// namespace="message", we get:
+//   block.data.pluginId  — which plugin authored the surface
+//   block.data.specs     — json-render specs from the plugin manifest (ui.message[])
+//   block.data.state     — current plugin-data snapshot (stripped of __private keys)
+//
+// Each spec is rendered by PluginPanel, which reads the live plugin-data
+// store (so subsequent changes trigger reactive re-renders without waiting
+// for another synthesized block).
+function PluginMessageBlock({
+  block,
+  locked,
+}: {
+  block: Record<string, unknown>;
+  locked: boolean;
+}) {
+  const { sendMessage, upsertInteractionDraft, setComposerText } = useSession();
+  const data = (block.data ?? {}) as Record<string, unknown>;
+  const pluginId = data.pluginId as string;
+  const specs = (data.specs ?? []) as Array<Record<string, unknown>>;
+  const state = (data.state ?? {}) as Record<string, unknown>;
+  const turnId = ((block.meta as Record<string, unknown> | undefined)?.turnId as string | undefined) ?? "";
+
+  const handlers = useMemo(() => ({
+    draftMessage: async (params: Record<string, unknown>) => {
+      if (locked) return;
+      const text = String(params.text ?? "").trim();
+      if (!text) return;
+      const selectionGroup = typeof params.selectionGroup === "string" ? params.selectionGroup : undefined;
+      upsertInteractionDraft({
+        id: selectionGroup ? `${turnId || "plugin"}:${selectionGroup}` : `plugin-draft:${text}`,
+        turnId: turnId || "plugin",
+        interactionId: selectionGroup ?? `plugin-draft:${text}`,
+        type: "suggestion",
+        label: text,
+        values: { text },
+        selectionGroup,
+      });
+    },
+    sendMessage: async (params: Record<string, unknown>) => {
+      if (locked) return;
+      const text = String(params.text ?? "").trim();
+      if (!text) return;
+      sendMessage(text);
+    },
+    setComposerText: async (params: Record<string, unknown>) => {
+      if (locked) return;
+      setComposerText(String(params.text ?? ""));
+    },
+  }), [locked, turnId, sendMessage, upsertInteractionDraft, setComposerText]);
+
+  if (!pluginId || specs.length === 0) return null;
+
+  return (
+    <div className="space-y-3">
+      {specs.map((spec, index) => (
+        <PluginPanel
+          key={`${pluginId}:${turnId}:${index}`}
+          pluginId={pluginId}
+          spec={spec}
+          stateOverride={state}
+          interactionLocked={locked}
+          handlers={handlers}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ── MessageBlockRenderer ────────────────────────────────────────
+//
+// Renders any block other than plugin_message using message-to-spec +
+// json-render. Form/choice handlers bridge into onSubmitInteraction so
+// the existing submit-inputs API + autoContinue / echoFilledNarrative
+// UX hints keep working exactly as before.
+function MessageBlockRenderer({
+  msg,
+  block,
+  submitted,
+  executing,
+  onSubmitInteraction,
+  onSendMessage,
+  onSubmitBlock,
+}: {
+  msg: StreamMessage;
+  block: Record<string, unknown>;
+  submitted: boolean;
+  executing: boolean;
+  onSubmitInteraction?: (
+    blockId: string,
+    turnId: string,
+    interactionId: string,
+    type: "form" | "choice" | "confirmation",
+    values: Record<string, unknown>,
+    submitBehavior?: { autoContinue?: boolean; echoFilledNarrative?: boolean },
+  ) => Promise<void>;
+  onSendMessage: (msg: string) => void;
+  onSubmitBlock: (blockId: string) => void;
+}) {
+  const { upsertInteractionDraft } = useSession();
+  const formStateRef = useRef<Record<string, unknown>>({});
+
+  const effectiveSubmitted = submitted;
+  const spec = useMemo(() => {
+    const nested = effectiveSubmitted
+      ? messageToSpecDisabled(msg)
+      : messageToSpec(msg);
+    if (!nested) return null;
+    try {
+      return nestedToFlat(nested);
+    } catch {
+      return null;
+    }
+  }, [msg, effectiveSubmitted]);
+
+  const handleStateChange = useCallback(
+    (changes: Array<{ path: string; value: unknown }>) => {
+      for (const { path, value } of changes) {
+        formStateRef.current[path] = value;
+      }
+    },
+    [],
+  );
+
+  const readBlockMeta = useCallback(() => {
+    const data = (block.data ?? block) as Record<string, unknown>;
+    const meta = (block.meta ?? {}) as Record<string, unknown>;
+    const interactionId =
+      ((data.interactionId as string | undefined) ?? (data.formId as string | undefined) ?? "form");
+    const turnId = ((meta.turnId as string | undefined) ?? msg.turnId ?? "");
+    const rawBehavior = data.submitBehavior as Record<string, unknown> | undefined;
+    const submitBehavior = rawBehavior
+      ? {
+          autoContinue: rawBehavior.autoContinue as boolean | undefined,
+          echoFilledNarrative: rawBehavior.echoFilledNarrative as boolean | undefined,
+        }
+      : undefined;
+    return { data, turnId, interactionId, submitBehavior };
+  }, [block, msg.turnId]);
+
+  const handlers = useMemo(() => ({
+    submitForm: async () => {
+      if (effectiveSubmitted) return;
+      const { data, turnId, interactionId, submitBehavior } = readBlockMeta();
+
+      // Extract form field values from json-render state tree (/form/<name>).
+      const formValues: Record<string, string> = {};
+      for (const [path, value] of Object.entries(formStateRef.current)) {
+        const match = path.match(/^\/form\/(.+)$/);
+        if (match && value != null) {
+          formValues[match[1]] = String(value);
+        }
+      }
+
+      const fields = (data.fields as Array<{ name?: string; required?: boolean }> | undefined) ?? [];
+      const missingRequired = fields.some((field) => {
+        if (!field?.required || !field.name) return false;
+        return !(formValues[field.name]?.trim());
+      });
+      if (missingRequired) return;
+
+      if (onSubmitInteraction && turnId) {
+        await onSubmitInteraction(
+          msg.id,
+          turnId,
+          interactionId,
+          "form",
+          formValues,
+          submitBehavior,
+        );
+      } else {
+        // Fallback: submit-inputs unavailable → legacy path with stringified payload
+        onSubmitBlock(msg.id);
+        onSendMessage(JSON.stringify(formValues));
+      }
+    },
+    selectChoice: async (params: Record<string, unknown>) => {
+      if (effectiveSubmitted) return;
+      const { turnId, interactionId, submitBehavior } = readBlockMeta();
+      const label = params.label as string;
+      if (!label) return;
+      upsertInteractionDraft({
+        id: `${turnId || "choice"}:${interactionId}`,
+        turnId: turnId || "choice",
+        interactionId,
+        type: "choice",
+        label,
+        values: {
+          selectedId: params.choiceId,
+          selectedLabel: label,
+        },
+        submitBehavior,
+      });
+    },
+    selectSuggestion: async (params: Record<string, unknown>) => {
+      const text = params.text as string;
+      if (!text) return;
+      const selectionGroup = typeof params.selectionGroup === "string" ? params.selectionGroup : undefined;
+      upsertInteractionDraft({
+        id: selectionGroup
+          ? `${msg.turnId ?? "suggestion"}:${selectionGroup}`
+          : `suggestion:${text}`,
+        turnId: msg.turnId ?? "suggestion",
+        interactionId: selectionGroup ?? `suggestion:${text}`,
+        type: "suggestion",
+        label: text,
+        values: { text },
+        selectionGroup,
+      });
+    },
+    sendCustomAction: async (params: Record<string, unknown>) => {
+      const text = String(params.text ?? "").trim();
+      if (!text) return;
+      onSendMessage(text);
+    },
+  }), [effectiveSubmitted, readBlockMeta, msg.id, msg.turnId, onSubmitInteraction, onSendMessage, onSubmitBlock, upsertInteractionDraft]);
+
+  if (!spec) {
+    return (
+      <div key={msg.id} className="flex flex-col gap-1.5">
+        <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+          Block: {block.type as string}
+        </span>
+        <RawJsonBlock content={JSON.stringify(block, null, 2)} />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      key={msg.id}
+      className={effectiveSubmitted || executing ? "opacity-80" : undefined}
+      aria-disabled={effectiveSubmitted || executing}
+    >
+      <JSONUIProvider
+        registry={covelRegistry}
+        initialState={{}}
+        handlers={handlers}
+        onStateChange={handleStateChange}
+      >
+        <Renderer spec={spec} registry={covelRegistry} />
+      </JSONUIProvider>
+    </div>
+  );
+}
+
+// Locked-after-user-message helper. Once the player sends the next message,
+// any previous interactive block is considered resolved and should render in
+// disabled state — mirrors V2's `hasLaterUserMessage` / messageToSpecDisabled
+// coupling.
+function hasLaterUserMessage(msg: StreamMessage, all: StreamMessage[]): boolean {
+  const idx = all.findIndex((m) => m.id === msg.id);
+  if (idx < 0) return false;
+  for (let i = idx + 1; i < all.length; i += 1) {
+    if (all[i].role === "user") return true;
+  }
+  return false;
 }
 
 // ── RawJsonBlock ─────────────────────────────────────────────────

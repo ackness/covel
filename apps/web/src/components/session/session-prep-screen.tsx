@@ -410,6 +410,12 @@ export function SessionPrepScreen({
                     const isCore = corePluginIds.has(pkg.name);
                     const runtimes = pkg.runtimes ?? [];
                     const tools = pkg.tools ?? [];
+                    // Primary binding entry for this package — single-runtime
+                    // plugins get exactly one; multi-runtime plugins show the
+                    // first agent runtime here and expose the rest in the
+                    // separate "Model Assignments" section below.
+                    const primaryBinding = bindingState.entries.find((e) => e.pluginId === pkg.name);
+                    const hasAgentRuntime = runtimes.some((rt) => rt.kind === "agent");
 
                     return (
                       <div
@@ -455,6 +461,27 @@ export function SessionPrepScreen({
                               <Wrench className="w-2.5 h-2.5" />{tools.length}
                             </span>
                           )}
+                          {/* Inline model slot picker for agent runtimes. Lists
+                              every resolved slot (llm.toml + user custom);
+                              picking sets localStorage bindings + (once the
+                              session is created) PATCHes runtimeModelOverrides
+                              via the startGame handler. */}
+                          {hasAgentRuntime && isSelected && primaryBinding && resolvedSlots.length > 0 && (
+                            <select
+                              value={primaryBinding.slotName}
+                              onChange={(e) => bindingState.setBinding(primaryBinding.qualifiedId, e.target.value)}
+                              className="shrink-0 text-[9px] bg-background border border-border rounded px-1 py-0.5 max-w-[140px]"
+                              aria-label={t("plugin.modelBinding", "Model")}
+                              title={primaryBinding.qualifiedId}
+                            >
+                              <option value="">auto</option>
+                              {resolvedSlots.map((slot) => (
+                                <option key={slot.slotId} value={slot.slotId}>
+                                  {slot.slotId}{slot.serverModel ? ` · ${slot.serverModel}` : ""}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         </div>
                         {description && (
                           <p className="text-[10px] text-muted-foreground mt-1 ml-9 line-clamp-1">{description}</p>
@@ -484,8 +511,14 @@ export function SessionPrepScreen({
                             </div>
                             <div className="flex flex-wrap gap-1">
                               {stepsInSeg.map((step) => {
+                                // qualifiedId is the canonical runtime id
+                                // (pluginId or pluginId/runtimeName); match on
+                                // step.runtimeId, falling back to pluginId for
+                                // single-runtime plugins where both carry the
+                                // same value.
                                 const bindingEntry = bindingState.entries.find(
-                                  (e) => e.qualifiedId === `${step.pluginId}:${step.runtimeId}`,
+                                  (e) => e.qualifiedId === step.runtimeId
+                                    || e.qualifiedId === step.pluginId,
                                 );
                                 return (
                                   <div
@@ -514,39 +547,11 @@ export function SessionPrepScreen({
                   </div>
                 )}
 
-                {/* Model binding section for selected agent runtimes */}
-                {bindingState.entries.length > 0 && resolvedSlots.length > 0 && (
-                  <div className="space-y-2 pt-2 border-t border-dashed border-border">
-                    <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                      <Cpu className="w-3 h-3" />
-                      {t("session.modelBindings", "Model Assignments")}
-                    </h4>
-                    <div className="space-y-1">
-                      {bindingState.entries
-                        .filter((e) => selectedPlugins.has(e.pluginId))
-                        .map((entry) => {
-                          const compatSlots = bindingState.compatibleSlots(entry.providerTag);
-                          return (
-                            <div key={entry.qualifiedId} className="flex items-center gap-2">
-                              <span className="text-[10px] font-mono text-muted-foreground truncate w-40 shrink-0">{entry.qualifiedId.split("/").pop()}</span>
-                              <select
-                                value={entry.slotName}
-                                onChange={(e) => bindingState.setBinding(entry.qualifiedId, e.target.value)}
-                                className="flex-1 bg-background border border-border px-2 py-1 text-[10px] outline-none focus:ring-1 focus:ring-primary"
-                              >
-                                <option value="">auto (default)</option>
-                                {compatSlots.map((slot) => (
-                                  <option key={slot.slotId} value={slot.slotId}>
-                                    {slot.slotId}{slot.serverModel ? ` — ${slot.serverModel}` : ""}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </div>
-                )}
+                {/* Model Assignments section removed — each plugin row now
+                    carries its own inline slot picker in the header above. If
+                    multi-runtime plugins ever need per-runtime binding in the
+                    prep screen, resurrect this list but gate it behind an
+                    "advanced" toggle so it doesn't duplicate the inline UI. */}
               </CardContent>
             )}
           </Card>

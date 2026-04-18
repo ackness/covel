@@ -26,6 +26,7 @@ import { SettingsDialog } from "@/components/settings-dialog.js";
 import { SessionBreadcrumb } from "./session-breadcrumb.js";
 import { ChatMessages } from "./chat-messages.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
+import { useSession } from "@/stores/session-store.js";
 import type {
   SessionRecord,
   WorldRecord,
@@ -76,7 +77,14 @@ interface GameViewProps {
   /** Mark a block as submitted (permanently locks it). */
   onSubmitBlock: (blockId: string) => void;
   /** Submit an interactive block through submit-inputs API. */
-  onSubmitInteraction?: (blockId: string, turnId: string, interactionId: string, type: 'form' | 'choice' | 'confirmation', values: Record<string, unknown>) => Promise<void>;
+  onSubmitInteraction?: (
+    blockId: string,
+    turnId: string,
+    interactionId: string,
+    type: 'form' | 'choice' | 'confirmation',
+    values: Record<string, unknown>,
+    submitBehavior?: { autoContinue?: boolean; echoFilledNarrative?: boolean },
+  ) => Promise<void>;
   /** Retry from a specific runtime (undefined = retry all). */
   onRetryRuntime?: (runtimeId?: string) => void;
   onResetSession: () => void;
@@ -135,39 +143,35 @@ export function GameView({
   const [inputValue, setInputValue] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // ── Multi-block selection state ──────────────────────────────────
-  // Collect selections from interactive blocks, submit together.
+  // Legacy blockSelections path is kept only to satisfy ChatMessages' prop
+  // contract (some older blocks still wire onSelect). The "confirm & send"
+  // bar below is driven by pendingInteractionDrafts (V2 flow) instead.
   const [blockSelections, setBlockSelections] = useState<Record<string, string>>({});
-
-  const INTERACTIVE_BLOCK_TYPES = useMemo(() => new Set(["choice_set", "action_guide"]), []);
-
-  // Find pending (unsubmitted) interactive blocks in current messages
-  const pendingInteractiveBlocks = useMemo(() => {
-    return messages.filter(
-      (m) =>
-        m.block &&
-        INTERACTIVE_BLOCK_TYPES.has(m.block.type as string) &&
-        !submittedBlockIds.has(m.id),
-    );
-  }, [messages, submittedBlockIds, INTERACTIVE_BLOCK_TYPES]);
-
-  const hasSelections = Object.keys(blockSelections).length > 0;
 
   const handleBlockSelect = useCallback((blockId: string, value: string) => {
     setBlockSelections((prev) => ({ ...prev, [blockId]: value }));
   }, []);
 
-  const handleConfirmSelections = useCallback(() => {
-    if (!hasSelections) return;
-    const values = Object.values(blockSelections);
-    const combined = values.join("\n");
-    // Mark all pending interactive blocks as submitted
-    for (const msg of pendingInteractiveBlocks) {
-      onSubmitBlock(msg.id);
+  // ── Unified draft send — pending interaction drafts ──────────────
+  // Plugin-declared buttons (guide suggestions, draftMessage actions) push
+  // drafts into the session store. The confirm bar materialises them here.
+  const { state: sessionState, clearInteractionDrafts, removeInteractionDraft } = useSession();
+  const pendingDrafts = sessionState.pendingInteractionDrafts;
+
+  const handleConfirmDrafts = useCallback(() => {
+    if (pendingDrafts.length === 0) return;
+    const combined = pendingDrafts
+      .map((d) => String(d.values?.text ?? d.label ?? "").trim())
+      .filter(Boolean)
+      .join("\n");
+    if (!combined) {
+      clearInteractionDrafts();
+      return;
     }
     onSendMessage(combined);
+    clearInteractionDrafts();
     setBlockSelections({});
-  }, [blockSelections, hasSelections, pendingInteractiveBlocks, onSubmitBlock, onSendMessage]);
+  }, [pendingDrafts, clearInteractionDrafts, onSendMessage]);
 
   // Load session-scoped plugin list whenever the session changes.
   useEffect(() => {
@@ -460,25 +464,51 @@ export function GameView({
             messagesEndRef={messagesEndRef}
           />
 
-          {/* Confirm selections bar */}
-          {pendingInteractiveBlocks.length > 0 && hasSelections && (
+          {/* Pending drafts bar — plugin-declared buttons (guide suggestions,
+              draftMessage actions) stage their text here. Confirm joins them
+              with newlines and sends as one player message. */}
+          {pendingDrafts.length > 0 && (
             <div className="px-3 md:px-4 py-2 border-t border-border bg-primary/5 shrink-0">
-              <div className="flex items-center justify-between max-w-4xl mx-auto">
-                <span className="text-xs text-muted-foreground">
-                  {t("session.selectionsReady", {
-                    count: Object.keys(blockSelections).length,
-                    defaultValue: "{{count}} selection(s) ready",
+              <div className="max-w-4xl mx-auto space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">
+                    {t("session.selectionsReady", {
+                      count: pendingDrafts.length,
+                      defaultValue: "{{count}} selection(s) ready",
+                    })}
+                  </span>
+                  <Button
+                    size="sm"
+                    className="rounded-none gap-1.5"
+                    disabled={executing}
+                    onClick={handleConfirmDrafts}
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    {t("session.confirmSelections", "Confirm")}
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {pendingDrafts.map((d) => {
+                    const label = String(d.values?.text ?? d.label ?? "").trim();
+                    if (!label) return null;
+                    return (
+                      <span
+                        key={d.id}
+                        className="group inline-flex items-center gap-1 max-w-full rounded border border-border bg-background/80 px-2 py-0.5 text-[11px] leading-tight text-foreground"
+                      >
+                        <span className="truncate max-w-[260px]" title={label}>{label}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeInteractionDraft(d.id)}
+                          className="text-muted-foreground/70 hover:text-destructive transition-colors"
+                          aria-label="remove draft"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    );
                   })}
-                </span>
-                <Button
-                  size="sm"
-                  className="rounded-none gap-1.5"
-                  disabled={executing}
-                  onClick={handleConfirmSelections}
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  {t("session.confirmSelections", "Confirm")}
-                </Button>
+                </div>
               </div>
             </div>
           )}

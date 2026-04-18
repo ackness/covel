@@ -66,46 +66,76 @@ export function useSlotConfig(
     [slotConfig, allPresets, serverPresets],
   );
 
-  /** All configured slot entries as resolved objects. */
+  /**
+   * All resolvable slot entries.
+   *
+   * Union of THREE sources, in priority order:
+   *   1. llm.toml `[covel.<slot>]` sections from the server (authoritative
+   *      config; includes model/tag/serverModel metadata)
+   *   2. localStorage `covel:slotConfig` entries that name slots NOT in (1)
+   *      — i.e. user-defined slots added through the settings UI that don't
+   *      correspond to any llm.toml section yet
+   *   3. If both (1) and (2) are empty, synthesize a single `default` slot
+   *      so the UI never renders a completely empty picker when at least one
+   *      preset exists
+   *
+   * Previously only (1) was used when llmConfig.configured was true, which
+   * meant user-added slots silently disappeared from binding dropdowns the
+   * moment llm.toml was loaded.
+   */
   const resolvedSlots = useMemo((): ResolvedSlot[] => {
-    // Prefer server-defined slots from llm.toml as the source of truth
+    const out: ResolvedSlot[] = [];
+    const seen = new Set<string>();
+
+    // Source 1: server-defined slots from llm.toml
     if (llmConfig?.configured && llmConfig.slots) {
-      const serverSlots = Object.entries(llmConfig.slots);
-      return serverSlots.map(([slotId, slotInfo]) => {
-        // Check if user has a localStorage override for this slot
+      for (const [slotId, slotInfo] of Object.entries(llmConfig.slots)) {
         const userEntry = slotConfig[slotId];
         const presetId = userEntry?.presetId ?? "";
-        const preset = presetId
-          ? allPresets.find((p) => p.id === presetId) ?? null
-          : null;
-
-        return {
+        const preset = presetId ? allPresets.find((p) => p.id === presetId) ?? null : null;
+        out.push({
           slotId,
           presetId,
           preset,
           label: slotId,
           tag: slotInfo.tag ?? "text",
           serverModel: slotInfo.model,
-        };
-      });
+        });
+        seen.add(slotId);
+      }
     }
 
-    // Fallback: use localStorage slotConfig entries
-    const entries = Object.entries(slotConfig);
-    if (entries.length === 0) {
-      // No user config — synthesize a default slot
-      const defaultPreset = serverPresets.find((p) => p.isDefault) ?? serverPresets[0] ?? null;
-      return defaultPreset
-        ? [{ slotId: "default", presetId: defaultPreset.id, preset: defaultPreset, label: "default", tag: "text" }]
-        : [];
+    // Source 2: localStorage-only slots the user defined client-side
+    for (const [slotId, entry] of Object.entries(slotConfig)) {
+      if (seen.has(slotId)) continue;
+      const preset = entry.presetId ? allPresets.find((p) => p.id === entry.presetId) ?? null : null;
+      out.push({
+        slotId,
+        presetId: entry.presetId,
+        preset,
+        label: slotId,
+        tag: "text",
+        serverModel: preset?.model,
+      });
+      seen.add(slotId);
     }
-    return entries.map(([slotId, entry]) => ({
-      slotId,
-      presetId: entry.presetId,
-      preset: allPresets.find((p) => p.id === entry.presetId) ?? null,
-      label: slotId,
-      tag: "text",
-    }));
+
+    // Source 3: synthesize default when nothing is configured
+    if (out.length === 0) {
+      const defaultPreset = serverPresets.find((p) => p.isDefault) ?? serverPresets[0] ?? null;
+      if (defaultPreset) {
+        out.push({
+          slotId: "default",
+          presetId: defaultPreset.id,
+          preset: defaultPreset,
+          label: "default",
+          tag: "text",
+          serverModel: defaultPreset.model,
+        });
+      }
+    }
+
+    return out;
   }, [slotConfig, allPresets, serverPresets, llmConfig]);
 
   return { slotConfig, resolvedSlots, allPresets, resolveSlot, refresh };
