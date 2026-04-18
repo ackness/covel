@@ -47,6 +47,11 @@ export default function ({ tool, z, shortIdBatch, store }) {
       // Persist all entries to plugin-data store. The persisted `value`
       // self-describes its category via `categoryMeta` so the UI doesn't
       // need a framework-side category lookup table.
+      //
+      // `isNew: true` flags a fresh unlock so the UI can decorate the card
+      // (generic EntryCard prop). This panel keeps the NEW badge on
+      // indefinitely — there is no session-scoped "clear NEW" mechanism
+      // yet; downstream plugins can extend this if needed.
       const records = results.map((entry) => ({
         id: crypto.randomUUID(),
         sessionId: context.sessionId,
@@ -62,6 +67,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
           rarity: entry.rarity,
           imageHint: entry.imageHint,
           unlockedAt: entry.unlockedAt,
+          isNew: true,
         },
         createdAt: now,
         updatedAt: now,

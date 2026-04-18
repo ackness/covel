@@ -21,6 +21,7 @@
       },
       "searchFields": ["value/title", "value/content", "value/tags"],
       "filterField": "value/category",
+      "showCounts": true,
       "filterTabs": [
         { "value": "all",       "label": { "zh": "全部",   "en": "All" } },
         { "value": "monster",   "label": { "zh": "怪物",   "en": "Monsters" },   "icon": "skull",        "color": "red" },
@@ -39,7 +40,16 @@
         "tags": "value/tags",
         "rarity": "value/rarity",
         "icon": "value/categoryMeta/icon",
-        "color": "value/categoryMeta/color"
+        "color": "value/categoryMeta/color",
+        "isNew": "value/isNew"
+      },
+      "itemLiteralProps": {
+        "collapsible": true,
+        "defaultExpanded": false
+      },
+      "footer": {
+        "zh": "共 {{count}} 条记录",
+        "en": "{{count}} entries collected"
       },
       "emptyMessage": {
         "zh": "没有匹配的条目",

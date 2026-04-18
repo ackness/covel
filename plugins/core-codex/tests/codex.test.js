@@ -109,6 +109,9 @@ describe('core-codex tools', () => {
       expect(stored).not.toBeNull();
       expect(stored.value.title).toBe('青萍山');
       expect(stored.value.category).toBe('location');
+      // Freshly unlocked entries carry the generic `isNew` flag so the UI
+      // can decorate the card without a codex-specific side-channel.
+      expect(stored.value.isNew).toBe(true);
       // Each persisted value self-describes its category for the UI.
       expect(stored.value.categoryMeta).toEqual({
         displayName: { zh: '地点', en: 'Locations' },
