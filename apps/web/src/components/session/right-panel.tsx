@@ -5,7 +5,6 @@ import {
   PanelRightClose,
   BookOpen,
   MapIcon,
-  Gamepad2,
   Library,
   User,
   Loader2,
@@ -25,7 +24,6 @@ import { Card, CardContent } from "@/components/ui/card.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { Markdown } from "@/components/ui/markdown.js";
-import { GameStatusPanel } from "./game-status-panel.js";
 import { CharacterPanel } from "./character-panel.js";
 import { WorldDimensionsPanel } from "./world-dimensions-panel.js";
 import { LorebookPanel } from "./lorebook-panel.js";
@@ -219,16 +217,6 @@ export function RightPanel({
       <div className="flex flex-col border-r border-border bg-background shrink-0 w-12 items-center py-2 gap-1">
         <TabsList className="flex flex-col rounded-none gap-1 bg-transparent h-auto p-0">
           <TabsTrigger
-            value="game"
-            className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title={t("session.game", "Game")}
-          >
-            <Gamepad2 className="w-4 h-4" />
-            <span className="text-[9px] leading-none">
-              {t("session.game", "Game")}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger
             value="character"
             className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
             title={t("session.character", "Character")}
@@ -296,13 +284,6 @@ export function RightPanel({
         </div>
       </div>
       <ScrollArea className="flex-1 min-h-0 min-w-0">
-        <TabsContent value="game" className="p-4 m-0">
-          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <Gamepad2 className="w-4 h-4 shrink-0" />{" "}
-            {t("session.game", "Game")}
-          </h3>
-          <GameStatusPanel gameState={gameState} />
-        </TabsContent>
         <TabsContent value="character" className="p-4 m-0">
           <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
             <User className="w-4 h-4 shrink-0" />{" "}
