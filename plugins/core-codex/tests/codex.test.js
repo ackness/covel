@@ -22,6 +22,7 @@ import { discoverPlugins, loadPluginManifest, loadRuntime } from '@covel/plugin-
 import { tool, z, shortIdBatch } from '@covel/tools';
 import createUnlockCodexEntries from '../tools/unlock-codex-entries.js';
 import createUpdateCodexEntry from '../tools/update-codex-entry.js';
+import { CODEX_CATEGORY_METADATA, getCategoryMetadata } from '../category-metadata.js';
 
 // In-memory mock store for plugin-data operations
 function createMockPluginDataStore() {
@@ -108,6 +109,33 @@ describe('core-codex tools', () => {
       expect(stored).not.toBeNull();
       expect(stored.value.title).toBe('青萍山');
       expect(stored.value.category).toBe('location');
+      // Each persisted value self-describes its category for the UI.
+      expect(stored.value.categoryMeta).toEqual({
+        displayName: { zh: '地点', en: 'Locations' },
+        icon: 'MapPin',
+        color: 'blue',
+      });
+    });
+
+    it('should attach categoryMeta for every known category', async () => {
+      const categories = Object.keys(CODEX_CATEGORY_METADATA);
+      const result = await unlockCodexEntriesTool.execute({
+        entries: categories.map((category) => ({
+          category,
+          title: `测试-${category}`,
+          content: `这是一个 ${category} 类目的测试条目，用于验证 categoryMeta 注入逻辑。`,
+          tags: [category],
+          rarity: 'common',
+        })),
+      }, ctx);
+
+      for (let i = 0; i < categories.length; i++) {
+        const category = categories[i];
+        const stored = await mockStore.getPluginData(
+          'sess-1', 'core-codex', 'entries', result.entries[i].entryId,
+        );
+        expect(stored.value.categoryMeta).toEqual(CODEX_CATEGORY_METADATA[category]);
+      }
     });
 
     it('should batch unlock multiple entries', async () => {
@@ -175,6 +203,35 @@ describe('core-codex tools', () => {
       expect(stored.value.content).toContain('衰退迹象');
     });
 
+    it('should backfill categoryMeta when updating a pre-B2 entry', async () => {
+      // Simulate an entry written before B2 (no categoryMeta on the value).
+      const legacyId = 'codex-legacy-entry';
+      await mockStore.setPluginData({
+        id: 'legacy-record-id',
+        sessionId: 'sess-1',
+        pluginId: 'core-codex',
+        namespace: 'entries',
+        key: legacyId,
+        value: {
+          category: 'lore',
+          title: '上古传说',
+          content: '一段在 B2 之前已经写入的旧条目。',
+          tags: ['legacy'],
+          rarity: 'common',
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      await updateCodexEntryTool.execute({
+        entryId: legacyId,
+        appendContent: '新增补充信息。',
+      }, ctx);
+
+      const stored = await mockStore.getPluginData('sess-1', 'core-codex', 'entries', legacyId);
+      expect(stored.value.categoryMeta).toEqual(getCategoryMetadata('lore'));
+    });
+
     it('should return error for non-existent entry', async () => {
       const result = await updateCodexEntryTool.execute({
         entryId: 'codex-nonexistent',
@@ -208,6 +265,26 @@ describe('core-codex tools', () => {
 
       const stored = await mockStore.getPluginData('sess-1', 'core-codex', 'entries', entryId);
       expect(stored.value.rarity).toBe('legendary');
+    });
+  });
+});
+
+// ── Category metadata helper tests ───────────────────────────────
+
+describe('getCategoryMetadata', () => {
+  it('returns the canonical entry for known categories', () => {
+    expect(getCategoryMetadata('monster')).toEqual(CODEX_CATEGORY_METADATA.monster);
+    expect(getCategoryMetadata('skill')).toEqual(CODEX_CATEGORY_METADATA.skill);
+  });
+
+  it('returns a safe fallback for unknown categories', () => {
+    const meta = getCategoryMetadata('mystery-future-category');
+    expect(meta.icon).toBe('BookOpen');
+    expect(meta.color).toBe('gray');
+    // displayName echoes the raw category so the UI still has *something*.
+    expect(meta.displayName).toEqual({
+      zh: 'mystery-future-category',
+      en: 'mystery-future-category',
     });
   });
 });

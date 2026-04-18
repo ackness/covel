@@ -5,7 +5,13 @@
  * Reads from plugin-data store, merges new info, and writes back.
  * The entryId should be a short semantic ID returned by unlock-codex-entries
  * (e.g. 'codex-fire-magic', 'codex-3').
+ *
+ * Also (re-)attaches `categoryMeta` to the persisted `value`. New entries get
+ * it via `unlock-codex-entries`; this update path acts as a backfill so
+ * pre-existing entries written before B2 also gain the metadata.
  */
+
+import { getCategoryMetadata } from '../category-metadata.js';
 
 export default function ({ tool, z, store }) {
   return tool({
@@ -33,10 +39,13 @@ export default function ({ tool, z, store }) {
         return { updated: false, error: `Entry ${params.entryId} not found` };
       }
 
-      // Merge updates into existing entry
+      // Merge updates into existing entry. Preserve any prior `categoryMeta`
+      // (no category change happens on update) but backfill it from the
+      // plugin-local metadata table when the existing entry pre-dates B2.
       const oldValue = existing.value;
       const updatedValue = {
         ...oldValue,
+        categoryMeta: oldValue.categoryMeta ?? getCategoryMetadata(oldValue.category),
         content: `${oldValue.content}\n\n${params.appendContent}`,
         tags: mergeTags(oldValue.tags, params.newTags),
         rarity: params.rarityUpgrade ?? oldValue.rarity,

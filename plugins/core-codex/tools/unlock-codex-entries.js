@@ -6,7 +6,14 @@
  *
  * Uses shortIdBatch() to generate LLM-friendly IDs like 'codex-fire-magic'
  * instead of UUID-based IDs. LLM can reference these IDs in update-codex-entry.
+ *
+ * Each persisted entry's `value` is enriched with a `categoryMeta` field
+ * (icon / color / displayName) sourced from the plugin-local
+ * `category-metadata.js`. This lets the UI (json-render spec) render
+ * category badges without any framework-side lookup table.
  */
+
+import { getCategoryMetadata } from '../category-metadata.js';
 
 export default function ({ tool, z, shortIdBatch, store }) {
   const codexEntrySchema = z.object({
@@ -37,7 +44,9 @@ export default function ({ tool, z, shortIdBatch, store }) {
         unlockedAt: now,
       }));
 
-      // Persist all entries to plugin-data store
+      // Persist all entries to plugin-data store. The persisted `value`
+      // self-describes its category via `categoryMeta` so the UI doesn't
+      // need a framework-side category lookup table.
       const records = results.map((entry) => ({
         id: crypto.randomUUID(),
         sessionId: context.sessionId,
@@ -46,6 +55,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
         key: entry.entryId,
         value: {
           category: entry.category,
+          categoryMeta: getCategoryMetadata(entry.category),
           title: entry.title,
           content: entry.content,
           tags: entry.tags,
