@@ -689,12 +689,21 @@ export default function ({ tool, z, shortIdBatch }) {
       return {
         unlocked: results.length,
         entries: results,
+        // 框架对 `block.type === 'ui-spec'` 做统一解包：直接拿到
+        // `data.spec` 传给 json-render。插件可以用目录里注册的任意组件
+        // （如 EntryCard、Stack、Alert），无需框架 side 注册新的 block type。
         ui: results.map((entry) => ({
-          type: 'codex-discovery',
+          type: 'ui-spec',
           entryId: entry.entryId,
-          category: entry.category,
-          title: entry.title,
-          rarity: entry.rarity,
+          spec: {
+            type: 'EntryCard',
+            props: {
+              title: entry.title,
+              category: entry.category,
+              rarity: entry.rarity,
+              isNew: true,
+            },
+          },
         })),
       };
     },

@@ -620,7 +620,7 @@ turn_messages (追加式，永不删除):
                        ◄── action-guide block ┤   │   └── tool: generate-guide
                                               │   └── P650: codex ────────► LLM 分析
                                               │       └── tool: unlock-codex-entries
-                       ◄── codex-discovery ───┤           └── plugin-data-set ──► SSE
+                       ◄── ui-spec(EntryCard) ─┤           └── plugin-data-set ──► SSE
                        ◄── execution.completed┘
 
                        渲染叙事 + 引导卡片(Button) + 图鉴面板更新

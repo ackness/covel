@@ -82,6 +82,12 @@ export function messageToSpec(msg: StreamMessage): NestedSpec | null {
 
 /**
  * Convert an interaction block to a json-render nested spec.
+ *
+ * Framework-owned block types (form, choice, notification, ui-spec) are
+ * handled here. Anything else falls through to `null` and renders as raw
+ * JSON. Plugins that want a custom inline UI should emit a `ui-spec` block
+ * carrying a nested json-render spec tree — this keeps the framework
+ * agnostic to plugin-specific block type strings.
  */
 function blockToSpec(block: Record<string, unknown>): NestedSpec | null {
   const type = block.type as string;
@@ -110,31 +116,16 @@ function blockToSpec(block: Record<string, unknown>): NestedSpec | null {
     return choiceToSpec(data);
   }
 
-  // Discovery cards emitted by plugins (e.g. core-codex `unlock-codex-entries`
-  // returns { type: "codex-discovery", title, category, content, tags, rarity }).
-  // Generic shape: rarity-badged card with category metadata. Map to the
-  // EntryCard component the right-panel already uses for the codex view.
-  //
-  // Phase B note: this special-case will be removed once plugin manifests
-  // can declare the message-block renderer themselves.
-  const normalizedType = (type ?? "").toLowerCase();
-  const normalizedInner = (innerType ?? "").toLowerCase();
-  const looksLikeDiscovery =
-    normalizedType.endsWith("-discovery") ||
-    normalizedInner.endsWith("-discovery") ||
-    (typeof data.title === "string" && typeof data.category === "string" && typeof data.content === "string");
-
-  if (looksLikeDiscovery) {
-    return {
-      type: "EntryCard",
-      props: {
-        title: data.title ?? "",
-        category: data.category ?? "lore",
-        content: data.content ?? "",
-        tags: data.tags,
-        rarity: data.rarity ?? "common",
-      },
-    };
+  // Plugin-authored inline UI. Convention: `block.type === "ui-spec"` (or
+  // `data.type === "ui-spec"`), with a `spec` field carrying the nested
+  // json-render tree. The spec's root component must be registered in the
+  // catalog — unregistered components just render as nothing.
+  if (type === "ui-spec" || innerType === "ui-spec") {
+    const spec = data.spec as NestedSpec | undefined;
+    if (spec && typeof spec === "object" && typeof spec.type === "string") {
+      return spec;
+    }
+    return null;
   }
 
   // Unknown block — raw display

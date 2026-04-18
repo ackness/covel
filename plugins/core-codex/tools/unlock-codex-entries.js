@@ -11,6 +11,11 @@
  * (icon / color / displayName) sourced from the plugin-local
  * `category-metadata.js`. This lets the UI (json-render spec) render
  * category badges without any framework-side lookup table.
+ *
+ * UI output: each unlocked entry emits a `ui-spec` block whose `spec` is a
+ * self-contained json-render nested tree rendering an EntryCard. The
+ * framework/web renderer stays plugin-agnostic — it only needs to know the
+ * generic `ui-spec` convention, not anything about codex semantics.
  */
 
 import { getCategoryMetadata } from '../category-metadata.js';
@@ -75,18 +80,27 @@ export default function ({ tool, z, shortIdBatch, store }) {
       await store.setPluginDataBatch(records);
 
       const ui = results.map((entry) => ({
-        type: 'codex-discovery',
+        type: 'ui-spec',
         entryId: entry.entryId,
-        category: entry.category,
-        title: entry.title,
-        content: entry.content,
-        tags: entry.tags,
-        rarity: entry.rarity,
-        imageHint: entry.imageHint,
-        style: {
-          borderColor: rarityColor(entry.rarity),
-          icon: categoryIcon(entry.category),
-          animation: entry.rarity === 'legendary' ? 'glow' : entry.rarity === 'rare' ? 'shimmer' : 'fade-in',
+        spec: {
+          type: 'EntryCard',
+          props: {
+            title: entry.title,
+            category: entry.category,
+            content: entry.content,
+            tags: entry.tags,
+            rarity: entry.rarity,
+            isNew: true,
+          },
+        },
+        // Keep raw payload alongside the spec so downstream debug tooling
+        // (raw JSON view, trace exports) can still see the source data.
+        meta: {
+          entryId: entry.entryId,
+          category: entry.category,
+          title: entry.title,
+          rarity: entry.rarity,
+          imageHint: entry.imageHint,
         },
       }));
 
@@ -97,25 +111,4 @@ export default function ({ tool, z, shortIdBatch, store }) {
       };
     },
   });
-}
-
-function rarityColor(rarity) {
-  switch (rarity) {
-    case 'legendary': return '#ff8c00';
-    case 'rare': return '#a855f7';
-    case 'uncommon': return '#3b82f6';
-    default: return '#6b7280';
-  }
-}
-
-function categoryIcon(category) {
-  switch (category) {
-    case 'monster': return '🐉';
-    case 'item': return '⚔️';
-    case 'location': return '🗺️';
-    case 'lore': return '📜';
-    case 'character': return '👤';
-    case 'skill': return '✨';
-    default: return '📖';
-  }
 }

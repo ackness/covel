@@ -68,12 +68,21 @@ export default function ({ tool, z, store }) {
         entryId: params.entryId,
         appendedContent: params.appendContent,
         ui: [{
-          type: 'codex-update',
+          type: 'ui-spec',
           entryId: params.entryId,
-          appendedContent: params.appendContent,
-          rarityUpgrade: params.rarityUpgrade,
-          style: {
-            animation: params.rarityUpgrade ? 'upgrade-pulse' : 'subtle-glow',
+          spec: {
+            type: 'EntryCard',
+            props: {
+              title: updatedValue.title,
+              category: updatedValue.category,
+              content: params.appendContent,
+              tags: params.newTags ?? [],
+              rarity: updatedValue.rarity,
+            },
+          },
+          meta: {
+            entryId: params.entryId,
+            rarityUpgrade: params.rarityUpgrade,
           },
         }],
       };

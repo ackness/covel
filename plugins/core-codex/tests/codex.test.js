@@ -89,8 +89,13 @@ describe('core-codex tools', () => {
       expect(result.unlocked).toBe(1);
       expect(result.entries[0].title).toBe('青萍山');
       expect(result.entries[0].entryId).toBeDefined();
-      expect(result.ui[0].type).toBe('codex-discovery');
-      expect(result.ui[0].style.icon).toBe('🗺️');
+      // UI blocks use the generic `ui-spec` convention: the block carries a
+      // self-contained json-render spec tree instead of a codex-specific type.
+      expect(result.ui[0].type).toBe('ui-spec');
+      expect(result.ui[0].spec.type).toBe('EntryCard');
+      expect(result.ui[0].spec.props.title).toBe('青萍山');
+      expect(result.ui[0].spec.props.category).toBe('location');
+      expect(result.ui[0].spec.props.isNew).toBe(true);
     });
 
     it('should persist entries to plugin-data store', async () => {
@@ -152,10 +157,12 @@ describe('core-codex tools', () => {
 
       expect(result.unlocked).toBe(3);
       expect(result.ui).toHaveLength(3);
-      expect(result.ui[0].style.borderColor).toBe('#3b82f6');
-      expect(result.ui[1].style.borderColor).toBe('#a855f7');
-      expect(result.ui[1].style.animation).toBe('shimmer');
-      expect(result.ui[2].style.borderColor).toBe('#6b7280');
+      // Each block is a generic ui-spec carrying an EntryCard spec.
+      // Rarity is reflected in spec.props.rarity; the renderer handles
+      // rarity → border/animation mapping (no plugin-side style tokens).
+      expect(result.ui[0].spec.props.rarity).toBe('uncommon');
+      expect(result.ui[1].spec.props.rarity).toBe('rare');
+      expect(result.ui[2].spec.props.rarity).toBe('common');
 
       const stored = await mockStore.listPluginData('sess-1', 'core-codex', 'entries');
       expect(stored).toHaveLength(3);
@@ -173,9 +180,10 @@ describe('core-codex tools', () => {
         }],
       }, ctx);
 
-      expect(result.ui[0].style.animation).toBe('glow');
-      expect(result.ui[0].style.borderColor).toBe('#ff8c00');
-      expect(result.ui[0].imageHint).toBe('远古天空裂开，金色灵气如瀑布倾泻而下');
+      expect(result.ui[0].spec.props.rarity).toBe('legendary');
+      // imageHint is kept in block `meta` so tools/traces can still see it,
+      // without pushing codex-specific styling into the spec tree.
+      expect(result.ui[0].meta.imageHint).toBe('远古天空裂开，金色灵气如瀑布倾泻而下');
     });
   });
 
@@ -200,7 +208,9 @@ describe('core-codex tools', () => {
 
       expect(result.updated).toBe(true);
       expect(result.entryId).toBe(entryId);
-      expect(result.ui[0].type).toBe('codex-update');
+      // Updates use the same generic ui-spec convention as unlocks.
+      expect(result.ui[0].type).toBe('ui-spec');
+      expect(result.ui[0].spec.type).toBe('EntryCard');
 
       const stored = await mockStore.getPluginData('sess-1', 'core-codex', 'entries', entryId);
       expect(stored.value.content).toContain('衰退迹象');
@@ -263,8 +273,11 @@ describe('core-codex tools', () => {
         rarityUpgrade: 'legendary',
       }, ctx);
 
-      expect(result.ui[0].rarityUpgrade).toBe('legendary');
-      expect(result.ui[0].style.animation).toBe('upgrade-pulse');
+      // rarityUpgrade lives in block meta (observability only). The spec
+      // props surface the new rarity via `rarity`; the renderer handles the
+      // visual treatment without any upgrade-specific plugin tokens.
+      expect(result.ui[0].meta.rarityUpgrade).toBe('legendary');
+      expect(result.ui[0].spec.props.rarity).toBe('legendary');
 
       const stored = await mockStore.getPluginData('sess-1', 'core-codex', 'entries', entryId);
       expect(stored.value.rarity).toBe('legendary');
