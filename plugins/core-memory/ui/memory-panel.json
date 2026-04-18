@@ -32,16 +32,44 @@
           {
             "component": "Section",
             "props": {
-              "title": { "$item": "key" },
+              "title": { "$item": "value/displayName" },
+              "icon": { "$item": "value/icon" },
               "defaultOpen": true
             },
             "children": [
               {
-                "component": "Text",
-                "props": {
-                  "content": { "$item": "value" },
-                  "size": "sm"
-                }
+                "component": "Stack",
+                "props": { "gap": "xs" },
+                "children": [
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "$item": "value/content" },
+                      "size": "sm"
+                    }
+                  },
+                  {
+                    "component": "Row",
+                    "props": { "justify": "between", "align": "center", "gap": "sm" },
+                    "children": [
+                      {
+                        "component": "Badge",
+                        "props": {
+                          "label": { "$item": "value/charCount" },
+                          "color": "blue"
+                        }
+                      },
+                      {
+                        "component": "Text",
+                        "props": {
+                          "content": { "$item": "value/updatedAt" },
+                          "size": "xs",
+                          "variant": "muted"
+                        }
+                      }
+                    ]
+                  }
+                ]
               }
             ]
           }

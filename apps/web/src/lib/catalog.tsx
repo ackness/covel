@@ -55,9 +55,13 @@ const Stack: ComponentRenderer = ({ element, children }) => {
 const Row: ComponentRenderer = ({ element, children }) => {
   const gap = element.props?.gap as string ?? "sm";
   const align = element.props?.align as string ?? "center";
+  const justify = element.props?.justify as string | undefined;
   const gapClass = { xs: "gap-1", sm: "gap-2", md: "gap-3", lg: "gap-4" }[gap] ?? "gap-2";
   const alignClass = { start: "items-start", center: "items-center", end: "items-end" }[align] ?? "items-center";
-  return <div className={clsx("flex flex-row", gapClass, alignClass)}>{children}</div>;
+  const justifyClass = justify
+    ? ({ start: "justify-start", center: "justify-center", end: "justify-end", between: "justify-between", around: "justify-around" }[justify] ?? "")
+    : "";
+  return <div className={clsx("flex flex-row", gapClass, alignClass, justifyClass)}>{children}</div>;
 };
 
 const Grid: ComponentRenderer = ({ element, children }) => {
