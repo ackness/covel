@@ -441,9 +441,13 @@ export function toSessionRecord(row: typeof schema.sessions.$inferSelect): Sessi
     updatedAt: row.updatedAt,
     ...(row.embeddingModelId != null ? { embeddingModelId: row.embeddingModelId } : {}),
     ...(row.embeddingLockedAt != null ? { embeddingLockedAt: row.embeddingLockedAt } : {}),
-    ...(row.runtimeModelOverrides
-      ? { runtimeModelOverrides: JSON.parse(row.runtimeModelOverrides) as Readonly<Record<string, string>> }
-      : {}),
+    ...(() => {
+      if (!row.runtimeModelOverrides) return {};
+      const parsed = JSON.parse(row.runtimeModelOverrides) as Record<string, string>;
+      return Object.keys(parsed).length > 0
+        ? { runtimeModelOverrides: parsed as Readonly<Record<string, string>> }
+        : {};
+    })(),
   };
 }
 
