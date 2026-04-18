@@ -181,6 +181,14 @@ const EntryCard: ComponentRenderer = ({ element }) => {
   // sensibly via the fallback so pre-enrichment entries keep working.
   const externalIcon = element.props?.icon as string | undefined;
   const externalColor = element.props?.color as string | undefined;
+  // Generic feature flags — any plugin can set these via itemLiteralProps
+  // or itemPropMap. collapsible toggles a chevron that hides body/tags;
+  // isNew renders a purple "NEW" sparkle next to the title.
+  const collapsible = element.props?.collapsible as boolean ?? false;
+  const defaultExpanded = element.props?.defaultExpanded as boolean ?? true;
+  const isNew = element.props?.isNew as boolean ?? false;
+
+  const [expanded, setExpanded] = useState(defaultExpanded);
 
   const categoryIcons: Record<string, string> = {
     monster: "skull", item: "gem", location: "map-pin",
@@ -207,18 +215,50 @@ const EntryCard: ComponentRenderer = ({ element }) => {
 
   const CategoryIcon = resolveIcon(externalIcon ?? categoryIcons[category] ?? "book-open");
   const iconColorClass = externalColor ? categoryIconColors[externalColor] ?? "text-zinc-500" : "text-zinc-500";
+  const Chevron = expanded ? Icons.ChevronDown : Icons.ChevronRight;
+  const SparkleIcon = Icons.Sparkles;
+
+  const showBody = !collapsible || expanded;
+  const titleRowClass = clsx(
+    "flex items-center gap-2",
+    collapsible && "cursor-pointer select-none",
+  );
 
   return (
     <div className={clsx("border border-zinc-200 dark:border-zinc-700 rounded-md p-2.5 border-l-2 space-y-1.5", rarityColors[rarity])}>
-      <div className="flex items-center gap-2">
+      <div
+        className={titleRowClass}
+        onClick={collapsible ? () => setExpanded((v) => !v) : undefined}
+        role={collapsible ? "button" : undefined}
+        tabIndex={collapsible ? 0 : undefined}
+        aria-expanded={collapsible ? expanded : undefined}
+        onKeyDown={collapsible ? (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setExpanded((v) => !v);
+          }
+        } : undefined}
+      >
+        {collapsible && (
+          <Chevron className="w-3 h-3 shrink-0 text-zinc-500" aria-hidden="true" />
+        )}
         {CategoryIcon && <CategoryIcon className={clsx("w-3.5 h-3.5 shrink-0", iconColorClass)} />}
         <span className="text-xs font-medium flex-1 truncate">{title}</span>
+        {isNew && (
+          <span
+            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-semibold tracking-wider uppercase text-purple-600 dark:text-purple-300 bg-purple-500/10 border border-purple-500/30 rounded-sm"
+            aria-label="new"
+          >
+            <SparkleIcon className="w-2.5 h-2.5" />
+            NEW
+          </span>
+        )}
         <span className={clsx("inline-flex items-center px-1.5 py-0.5 text-[10px] border rounded-sm", rarityBadgeColors[rarity])}>
           {category}
         </span>
       </div>
-      {content && <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">{content}</p>}
-      {tags && tags.length > 0 && (
+      {showBody && content && <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">{content}</p>}
+      {showBody && tags && tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {tags.map((tag) => (
             <span key={tag} className="text-[9px] px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-sm">
@@ -690,10 +730,15 @@ function filterItems(
  * Tabs — visual tab strip with optional icon + color accent.
  * Standalone usage binds the active value via `$bindState`; FilterContainer
  * uses it as a controlled child driven by local React state.
+ *
+ * Optional `counts: Record<string, number>` suffixes each tab label with
+ * `(N)` where N is `counts[tab.value] ?? 0`. Zero values still render,
+ * which gives an honest "empty tab" signal instead of hiding it.
  */
 const Tabs: ComponentRenderer = ({ element, bindings }) => {
   const tabs = (element.props?.tabs as FilterTab[]) ?? [];
   const value = element.props?.value as string ?? tabs[0]?.value ?? "";
+  const counts = element.props?.counts as Record<string, number> | undefined;
   const { set } = useStateStore();
   const bindPath = bindings?.value;
   const onChange = element.props?.__onChange as ((next: string) => void) | undefined;
@@ -713,6 +758,7 @@ const Tabs: ComponentRenderer = ({ element, bindings }) => {
         const active = value === tab.value;
         const TabIcon = resolveIcon(tab.icon);
         const accent = active && tab.color ? colorAccents[tab.color] : "";
+        const count = counts ? counts[tab.value] ?? 0 : undefined;
         return (
           <button
             key={tab.value}
@@ -732,6 +778,9 @@ const Tabs: ComponentRenderer = ({ element, bindings }) => {
           >
             {TabIcon && <TabIcon className="w-3 h-3" />}
             {resolveI18n(tab.label)}
+            {count !== undefined && (
+              <span className="text-[10px] text-zinc-400 dark:text-zinc-500 ml-0.5">({count})</span>
+            )}
           </button>
         );
       })}
@@ -757,19 +806,46 @@ const FilterContainer: ComponentRenderer = ({ element }) => {
   const filterTabs = (element.props?.filterTabs as FilterTab[]) ?? [];
   const itemComponent = element.props?.itemComponent as string | undefined;
   const itemPropMap = (element.props?.itemPropMap as Record<string, string>) ?? {};
+  // itemLiteralProps — flat literal values forwarded verbatim to every item
+  // instance. Useful for "apply this to all items" switches like `collapsible`.
+  // Path-based `itemPropMap` wins on collisions.
+  const itemLiteralProps = (element.props?.itemLiteralProps as Record<string, unknown>) ?? {};
   const itemKeyField = element.props?.itemKeyField as string | undefined;
   const emptyMessage = resolveI18n(element.props?.emptyMessage);
   const showSearch = element.props?.showSearch !== false && searchFields.length > 0;
   const showTabs = element.props?.showTabs !== false && filterTabs.length > 0;
+  const showCounts = element.props?.showCounts as boolean ?? false;
+  const footerRaw = element.props?.footer;
 
   const initialFilter = filterTabs[0]?.value ?? "all";
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState(initialFilter);
 
+  const itemsArray = Array.isArray(items) ? items : [];
+
   const filtered = useMemo(
-    () => filterItems(Array.isArray(items) ? items : [], searchQuery, searchFields, filterField, activeFilter),
-    [items, searchQuery, searchFields, filterField, activeFilter],
+    () => filterItems(itemsArray, searchQuery, searchFields, filterField, activeFilter),
+    [itemsArray, searchQuery, searchFields, filterField, activeFilter],
   );
+
+  // Per-tab counts are computed from the raw (unfiltered) items so that the
+  // number next to each tab always reflects "how many items belong to this
+  // category in total", independent of the current search query.
+  const tabCounts = useMemo(() => {
+    if (!showCounts) return undefined;
+    const counts: Record<string, number> = {};
+    for (const tab of filterTabs) counts[tab.value] = 0;
+    for (const item of itemsArray) {
+      const fieldValue = filterField ? resolvePath(item, filterField) : undefined;
+      const key = String(fieldValue ?? "");
+      for (const tab of filterTabs) {
+        if (tab.value === "all" || tab.value === key) {
+          counts[tab.value] = (counts[tab.value] ?? 0) + 1;
+        }
+      }
+    }
+    return counts;
+  }, [showCounts, itemsArray, filterField, filterTabs]);
 
   const ItemComponent = itemComponent ? covelRegistry[itemComponent] : undefined;
   const SearchIcon = Icons.Search;
@@ -801,6 +877,7 @@ const FilterContainer: ComponentRenderer = ({ element }) => {
               tabs: filterTabs,
               value: activeFilter,
               __onChange: setActiveFilter,
+              counts: tabCounts,
             },
           }}
           emit={() => {}}
@@ -814,7 +891,7 @@ const FilterContainer: ComponentRenderer = ({ element }) => {
           </p>
         )}
         {filtered.length > 0 && ItemComponent && filtered.map((item, index) => {
-          const itemProps: Record<string, unknown> = {};
+          const itemProps: Record<string, unknown> = { ...itemLiteralProps };
           for (const [propName, itemPath] of Object.entries(itemPropMap)) {
             itemProps[propName] = resolvePath(item, itemPath);
           }
@@ -837,9 +914,62 @@ const FilterContainer: ComponentRenderer = ({ element }) => {
           </p>
         )}
       </div>
+      {footerRaw !== undefined && footerRaw !== null && (
+        <FilterContainerFooter
+          footer={footerRaw}
+          totalCount={itemsArray.length}
+        />
+      )}
     </div>
   );
 };
+
+/**
+ * FilterContainerFooter — renders either an i18n string footer (with
+ * optional `{{count}}` substitution using the total item count) or a
+ * structured `{component, props}` spec resolved against the catalog
+ * registry. Kept local so the container stays declarative.
+ */
+function FilterContainerFooter({
+  footer,
+  totalCount,
+}: {
+  footer: unknown;
+  totalCount: number;
+}) {
+  if (typeof footer === "object" && footer !== null && !Array.isArray(footer)) {
+    const obj = footer as Record<string, unknown>;
+    const componentName = obj.component as string | undefined;
+    if (componentName) {
+      const Component = covelRegistry[componentName];
+      if (!Component) {
+        return (
+          <p className="text-xs text-red-500 italic">
+            FilterContainer footer: component &quot;{componentName}&quot; not found
+          </p>
+        );
+      }
+      const props = (obj.props as Record<string, unknown>) ?? {};
+      return (
+        <Component
+          element={{ type: componentName, props }}
+          emit={() => {}}
+          on={() => ({ emit: () => {}, shouldPreventDefault: false, bound: false })}
+        />
+      );
+    }
+  }
+  // Treat as i18n string (string or {zh, en} map). Substitute `{{count}}`
+  // with the total item count as a convenience for spec authors.
+  const raw = resolveI18n(footer);
+  const rendered = raw.replace(/\{\{\s*count\s*\}\}/g, String(totalCount));
+  if (!rendered) return null;
+  return (
+    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 text-center pt-1 border-t border-zinc-200/60 dark:border-zinc-800/60">
+      {rendered}
+    </p>
+  );
+}
 
 /**
  * Test-only export of internal pure helpers. Not part of the public catalog.

@@ -279,6 +279,65 @@ describe("FilterContainer component", () => {
     renderFilterContainer({ itemComponent: "DefinitelyNotRegistered" });
     expect(screen.getByText(/not found in registry/)).toBeDefined();
   });
+
+  it("renders per-tab count suffixes when showCounts is true", () => {
+    renderFilterContainer({ showCounts: true });
+    const tablist = screen.getByRole("tablist");
+    // 4 total items → All (4); 2 monsters; 1 item; 1 location
+    expect(within(tablist).getByRole("tab", { name: /全部.*\(4\)/ })).toBeDefined();
+    expect(within(tablist).getByRole("tab", { name: /怪物.*\(2\)/ })).toBeDefined();
+    expect(within(tablist).getByRole("tab", { name: /物品.*\(1\)/ })).toBeDefined();
+    expect(within(tablist).getByRole("tab", { name: /地点.*\(1\)/ })).toBeDefined();
+  });
+
+  it("tab counts reflect raw items, not current search query", () => {
+    renderFilterContainer({ showCounts: true });
+    const searchInput = screen.getByPlaceholderText("搜索…") as HTMLInputElement;
+    // Narrow to a single match, but counts should still be 4 / 2 / 1 / 1.
+    fireEvent.change(searchInput, { target: { value: "crystal" } });
+    const tablist = screen.getByRole("tablist");
+    expect(within(tablist).getByRole("tab", { name: /全部.*\(4\)/ })).toBeDefined();
+    expect(within(tablist).getByRole("tab", { name: /怪物.*\(2\)/ })).toBeDefined();
+  });
+
+  it("does not render count suffixes when showCounts is omitted", () => {
+    renderFilterContainer();
+    const tablist = screen.getByRole("tablist");
+    // No "(N)" appended.
+    expect(within(tablist).queryByText(/\(\d+\)/)).toBeNull();
+  });
+
+  it("renders a string footer below the list", () => {
+    renderFilterContainer({ footer: { zh: "共 4 条", en: "total 4" } });
+    expect(screen.getByText("共 4 条")).toBeDefined();
+  });
+
+  it("substitutes {{count}} in the footer with total item count", () => {
+    renderFilterContainer({
+      footer: { zh: "共 {{count}} 条记录", en: "{{count}} entries" },
+    });
+    expect(screen.getByText("共 4 条记录")).toBeDefined();
+  });
+
+  it("footer count reflects total items, not filtered subset", () => {
+    renderFilterContainer({
+      footer: { zh: "{{count}} 条", en: "{{count}} entries" },
+    });
+    const searchInput = screen.getByPlaceholderText("搜索…") as HTMLInputElement;
+    fireEvent.change(searchInput, { target: { value: "crystal" } });
+    // Only 1 row renders, but footer still says 4.
+    expect(screen.getByText("4 条")).toBeDefined();
+  });
+
+  it("forwards itemLiteralProps to every rendered item", () => {
+    renderFilterContainer({
+      itemLiteralProps: { collapsible: true, defaultExpanded: false },
+    });
+    // When collapsible+!defaultExpanded, content is hidden — so we should NOT
+    // see any of the body content text. The titles are still visible.
+    expect(screen.queryByText("A scrawny goblin armed with a rusty dagger.")).toBeNull();
+    expect(screen.getByText("Goblin Scout")).toBeDefined();
+  });
 });
 
 describe("Tabs standalone", () => {
