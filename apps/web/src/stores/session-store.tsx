@@ -1493,6 +1493,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // plugin that exposes an `ui.message[]` spec contributes one entry; the
   // frontend synthesises a `plugin_message` block whenever the plugin writes
   // to its `namespace: "message"` plugin-data.
+  //
+  // After fetching specs, also hydrate each contributing plugin's
+  // `message` namespace into the session store. Without this, a page
+  // reload would leave `state.pluginData` empty — the message surface
+  // only materialises on new SSE events, so previously-written guide /
+  // codex blocks would be invisible until the next tool write happens.
   useEffect(() => {
     const sid = state.session?.id;
     if (!sid) {
@@ -1503,7 +1509,31 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     api.fetchUiSpecs(sid)
       .then((res) => {
         if (cancelled) return;
-        dispatch({ type: "LOAD_MESSAGE_UI_SPECS", specs: res.message ?? [] });
+        const specs = res.message ?? [];
+        dispatch({ type: "LOAD_MESSAGE_UI_SPECS", specs });
+
+        // Seed session-store pluginData[pid].message with server state
+        // so applyPluginMessageSurface has a non-empty __turnId on first
+        // render after reload. plugin-data-store (used by right-panel)
+        // is a separate cache — we intentionally hydrate both paths.
+        const pluginIds = new Set(specs.map((e) => e.pluginId));
+        for (const pid of pluginIds) {
+          api.listPluginData(sid, pid, "message")
+            .then((items) => {
+              if (cancelled || items.length === 0) return;
+              dispatch({
+                type: "PLUGIN_DATA_CHANGED",
+                pluginId: pid,
+                changes: items.map((i) => ({
+                  namespace: i.namespace,
+                  key: i.key,
+                  value: i.value,
+                  operation: "set",
+                })),
+              });
+            })
+            .catch(() => {});
+        }
       })
       .catch(() => {
         if (cancelled) return;
@@ -1542,8 +1572,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       subscriptionRef.current.close();
     }
 
+    // plugin-data.changed arrives on topic="plugin" with _subType="plugin-data.changed"
+    // (see apps/server/src/routes/api/bootstrap.ts:emitPluginDataChangedEvent).
+    // Do NOT add "plugin-data" as a topic — the server whitelist rejects it (400).
     const sub = createSessionSubscription(sid, {
-      topics: ["plugin", "system", "plugin-data"],
+      topics: ["plugin", "system"],
     });
     subscriptionRef.current = sub;
 
