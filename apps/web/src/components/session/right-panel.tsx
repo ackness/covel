@@ -6,7 +6,6 @@ import {
   BookOpen,
   MapIcon,
   Gamepad2,
-  Flame,
   Library,
   User,
   Loader2,
@@ -28,7 +27,6 @@ import { Button } from "@/components/ui/button.js";
 import { Markdown } from "@/components/ui/markdown.js";
 import { GameStatusPanel } from "./game-status-panel.js";
 import { CharacterPanel } from "./character-panel.js";
-import { EventPanel } from "./event-panel.js";
 import { WorldDimensionsPanel } from "./world-dimensions-panel.js";
 import { LorebookPanel } from "./lorebook-panel.js";
 import { PluginPanel } from "./plugin-panel.js";
@@ -241,16 +239,6 @@ export function RightPanel({
             </span>
           </TabsTrigger>
           <TabsTrigger
-            value="events"
-            className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title={t("session.events", "Events")}
-          >
-            <Flame className="w-4 h-4" />
-            <span className="text-[9px] leading-none">
-              {t("session.events", "Events")}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger
             value="state"
             className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
             title={t("session.state", "State")}
@@ -324,13 +312,6 @@ export function RightPanel({
             characters={characters}
             schema={charAttrSchema}
           />
-        </TabsContent>
-        <TabsContent value="events" className="p-4 m-0">
-          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <Flame className="w-4 h-4 shrink-0" />{" "}
-            {t("session.eventsTitle", "Events")}
-          </h3>
-          <EventPanel gameState={gameState} />
         </TabsContent>
         <TabsContent value="state" className="p-4 m-0 space-y-4">
           <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
