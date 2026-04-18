@@ -1,4 +1,4 @@
-import { Loader2, CheckCircle2, XCircle, Zap, Wrench, ChevronDown, ChevronUp, RotateCw } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Zap, Wrench, ChevronDown, ChevronUp, RotateCw, SkipForward } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ExecutionStep } from "@/stores/session-store.js";
@@ -8,7 +8,7 @@ interface RuntimeStatus {
   runtimeId: string;
   pluginId: string;
   label: string;
-  status: "running" | "llm" | "tool" | "completed" | "failed";
+  status: "running" | "llm" | "tool" | "completed" | "failed" | "skipped";
   detail?: string;
   /** Qualified tool name when status is "tool" (e.g. "core-init-wizard:emit-character-form"). */
   toolName?: string;
@@ -20,65 +20,37 @@ function deriveStatuses(
   steps: ExecutionStep[],
   runtimeLabels: Record<string, string>,
 ): RuntimeStatus[] {
-  const map = new Map<string, RuntimeStatus>();
-  const startTimes = new Map<string, number>();
-
+  // ExecutionStep is now a status-aggregation row (one per runtime per turn),
+  // so derive is mostly a projection. The old event-stream logic (llm.calling
+  // / tool.calling transient states) is gone — the server doesn't emit those
+  // through /api/actions today, and if it ever does they'll arrive as
+  // separate UPSERT_EXECUTION_STEP patches carrying status:"llm"|"tool".
+  // Label resolution. Multi-runtime plugins (e.g. `core-npc-graph/rag-retriever`
+  // and `core-npc-graph/extractor`) must render distinct chips, so we show the
+  // runtime suffix after the plugin display name when runtimeId !== pluginId.
+  // Prefer an exact runtime-id override, then pluginDisplayName + "/" + suffix,
+  // then the raw fallback.
   const runtimeLabel = (step: ExecutionStep): string => {
     if (runtimeLabels[step.runtimeId]) return runtimeLabels[step.runtimeId];
-    if (runtimeLabels[step.pluginId]) return runtimeLabels[step.pluginId];
-    return step.label ?? step.pluginId ?? step.runtimeId;
+    const pluginLabel = runtimeLabels[step.pluginId] ?? step.pluginId;
+    if (step.runtimeId && step.runtimeId !== step.pluginId) {
+      const suffix = step.runtimeId.startsWith(`${step.pluginId}/`)
+        ? step.runtimeId.slice(step.pluginId.length + 1)
+        : step.runtimeId;
+      return `${pluginLabel} / ${suffix}`;
+    }
+    return step.label ?? pluginLabel ?? step.runtimeId;
   };
 
-  for (const step of steps) {
-    const existing = map.get(step.runtimeId);
-
-    switch (step.type) {
-      case "runtime.started":
-        map.set(step.runtimeId, {
-          runtimeId: step.runtimeId,
-          pluginId: step.pluginId,
-          label: runtimeLabel(step),
-          status: "running",
-          durationMs: undefined,
-        });
-        startTimes.set(step.runtimeId, new Date(step.timestamp).getTime());
-        break;
-      case "llm.calling":
-        if (existing) {
-          map.set(step.runtimeId, { ...existing, status: "llm", detail: step.detail });
-        }
-        break;
-      case "tool.calling":
-        if (existing) {
-          // step.label is the qualified tool ID (e.g. "core-init-wizard:emit-character-form")
-          map.set(step.runtimeId, { ...existing, status: "tool", toolName: step.label, detail: step.detail });
-        }
-        break;
-      case "tool.completed":
-        if (existing) {
-          map.set(step.runtimeId, { ...existing, status: "running", toolName: undefined, detail: undefined });
-        }
-        break;
-      case "runtime.completed": {
-        if (existing) {
-          const start = startTimes.get(step.runtimeId);
-          const dur = start ? new Date(step.timestamp).getTime() - start : undefined;
-          map.set(step.runtimeId, { ...existing, status: "completed", detail: undefined, durationMs: dur });
-        }
-        break;
-      }
-      case "runtime.failed": {
-        if (existing) {
-          const start = startTimes.get(step.runtimeId);
-          const dur = start ? new Date(step.timestamp).getTime() - start : undefined;
-          map.set(step.runtimeId, { ...existing, status: "failed", detail: step.detail, durationMs: dur });
-        }
-        break;
-      }
-    }
-  }
-
-  return Array.from(map.values());
+  return steps.map((step) => ({
+    runtimeId: step.runtimeId,
+    pluginId: step.pluginId,
+    label: runtimeLabel(step),
+    status: step.status,
+    detail: step.detail,
+    toolName: step.toolName,
+    durationMs: step.durationMs,
+  }));
 }
 
 function StatusIcon({ status }: { status: RuntimeStatus["status"] }) {
@@ -93,6 +65,8 @@ function StatusIcon({ status }: { status: RuntimeStatus["status"] }) {
       return <CheckCircle2 className="w-3 h-3 text-green-500" />;
     case "failed":
       return <XCircle className="w-3 h-3 text-destructive" />;
+    case "skipped":
+      return <SkipForward className="w-3 h-3 text-muted-foreground" />;
   }
 }
 
@@ -122,7 +96,9 @@ function RuntimeChip({
           ? "border-primary/30 bg-primary/5 text-foreground"
           : rt.status === "failed"
             ? "border-destructive/30 bg-destructive/5 text-destructive"
-            : "border-border/50 bg-muted/30 text-muted-foreground"
+            : rt.status === "skipped"
+              ? "border-border/40 bg-muted/20 text-muted-foreground/70 italic"
+              : "border-border/50 bg-muted/30 text-muted-foreground"
       }`}
     >
       <StatusIcon status={rt.status} />
@@ -138,6 +114,14 @@ function RuntimeChip({
       {rt.durationMs != null && (
         <span className="text-[10px] text-muted-foreground/70 tabular-nums">
           {formatDuration(rt.durationMs)}
+        </span>
+      )}
+      {rt.status === "failed" && rt.detail && (
+        <span
+          className="text-[10px] text-destructive/90 truncate max-w-[260px]"
+          title={rt.detail}
+        >
+          {rt.detail}
         </span>
       )}
       {canRetry && onRetry && (

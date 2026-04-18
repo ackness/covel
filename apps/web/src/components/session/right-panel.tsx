@@ -426,12 +426,12 @@ export function RightPanel({
         <Badge
           variant="outline"
           className={`text-[9px] rounded-none ${
-            storeBackend === "pg"
+            storeBackend === "pg" || storeBackend === "sqlite"
               ? "border-green-500/40 text-green-600 dark:text-green-400"
               : "border-amber-500/40 text-amber-600 dark:text-amber-400"
           }`}
         >
-          {storeBackend === "pg" ? "PostgreSQL" : "Memory"}
+          {storeBackend === "pg" ? "PostgreSQL" : storeBackend === "sqlite" ? "SQLite" : "Memory"}
         </Badge>
         {storeBackend === "memory" && (
           <span className="text-amber-600 dark:text-amber-400">{t("session.memoryStoreWarning", "Data lost on restart")}</span>

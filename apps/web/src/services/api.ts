@@ -1373,7 +1373,7 @@ export interface ServerHealth {
   status: string;
   timestamp: string;
   version: string;
-  storeBackend: "pg" | "memory";
+  storeBackend: "pg" | "sqlite" | "memory";
   bootId?: string;
 }
 

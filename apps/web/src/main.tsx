@@ -4,6 +4,7 @@ import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SessionProvider } from "@/stores/session-store";
 import { setStorageMode } from "@/services/data-service";
+import { loadProviderKeysFromStorage } from "@/services/api";
 import "@/i18n";
 import "@/index.css";
 import { routeTree } from "./routeTree.gen";
@@ -26,7 +27,10 @@ async function syncStorageMode(): Promise<void> {
     const res = await fetch("/api/health");
     if (!res.ok) return;
     const health = await res.json() as { storeBackend?: string };
-    if (health.storeBackend === "pg") {
+    // Any server-side persistent backend → use remote DataService so reads
+    // hit the server's authoritative store. Only the ephemeral in-memory
+    // backend falls back to the browser's IDB (no server persistence).
+    if (health.storeBackend === "pg" || health.storeBackend === "sqlite") {
       setStorageMode("remote");
     }
   } catch {
@@ -34,7 +38,7 @@ async function syncStorageMode(): Promise<void> {
   }
 }
 
-syncStorageMode().then(() => {
+Promise.all([syncStorageMode(), loadProviderKeysFromStorage()]).then(() => {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <ThemeProvider defaultTheme="dark" attribute="class">
