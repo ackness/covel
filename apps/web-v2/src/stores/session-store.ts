@@ -58,16 +58,19 @@ function openSse(sessionId: string): void {
 // different sessions by having different ?sid params in the URL.
 
 function getSidFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
   return new URLSearchParams(window.location.search).get("sid");
 }
 
 function setSidInUrl(sid: string): void {
+  if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
   url.searchParams.set("sid", sid);
   history.replaceState(null, "", url.toString());
 }
 
 function clearSidFromUrl(): void {
+  if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
   url.searchParams.delete("sid");
   history.replaceState(null, "", url.toString());
@@ -79,16 +82,19 @@ const LS_SESSION_ID = "covel:sessionId";
 const LS_WORLD_ID = "covel:worldId";
 
 function saveSessionToStorage(sessionId: string, worldId: string): void {
+  if (typeof localStorage === "undefined") return;
   localStorage.setItem(LS_SESSION_ID, sessionId);
   localStorage.setItem(LS_WORLD_ID, worldId);
 }
 
 function clearSessionStorage(): void {
+  if (typeof localStorage === "undefined") return;
   localStorage.removeItem(LS_SESSION_ID);
   localStorage.removeItem(LS_WORLD_ID);
 }
 
 export function getSavedSession(): { sessionId: string; worldId: string } | null {
+  if (typeof localStorage === "undefined") return null;
   const sessionId = localStorage.getItem(LS_SESSION_ID);
   const worldId = localStorage.getItem(LS_WORLD_ID);
   if (sessionId && worldId) return { sessionId, worldId };
