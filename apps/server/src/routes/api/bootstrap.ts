@@ -524,6 +524,24 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     const resolvedMemoryPreset = 'slot-plugin';
     console.log(`[bootstrap] Memory system using preset: ${resolvedMemoryPreset}`);
 
+    // Discover the memory-panel host plugin by capability tag instead of
+    // hardcoding a specific plugin ID. Framework stays plugin-agnostic:
+    // any plugin declaring `capabilities: [memory-panel]` becomes the
+    // mirror target. When no such plugin is installed, mirroring is
+    // skipped and core memory still works (panel updates via polling).
+    let memoryPanelPluginId: string | undefined;
+    for (const [pluginId, manifests] of manifestCache) {
+      if (manifests.some((m) => m.manifest.capabilities?.includes('memory-panel'))) {
+        memoryPanelPluginId = pluginId;
+        break;
+      }
+    }
+    if (memoryPanelPluginId) {
+      console.log(`[bootstrap] Memory panel host plugin: ${memoryPanelPluginId}`);
+    } else {
+      console.log('[bootstrap] No plugin declares capability "memory-panel" — mirror disabled');
+    }
+
     const memoryLlm = {
       async complete(params: { systemPrompt: string; messages: readonly { role: string; content: string }[]; model?: string }) {
         const response = await config.llmAdapter.generate({
@@ -539,7 +557,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     memorySystem = createMemorySystem(
       { store, llm: memoryLlm, resolveSlot: (slot: string) => resolveModel({ name: slot, model: slot } as RuntimeManifest) },
       {
-        coreMemory: { pluginId: 'core-memory' },
+        coreMemory: memoryPanelPluginId ? { pluginId: memoryPanelPluginId } : undefined,
         updater: { modelSlot: resolvedMemoryPreset },
       },
     );

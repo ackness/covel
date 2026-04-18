@@ -383,6 +383,7 @@ outputKind: story
 | `narrative` | 主叙事生成器 | 标识主叙事输出源 |
 | `world-data-provider` | 世界数据提供者 | 加载世界 schema/entries 到 turn context |
 | `image-generation` | 图像生成 | 前端展示「生成配图」按钮 |
+| `memory-panel` | 核心记忆面板宿主 | 记忆系统将核心记忆块镜像到该插件的 plugin-data，用于实时 UI 面板更新 |
 
 插件可以声明任意自定义能力标签。框架仅依赖上述已定义标签。
 
