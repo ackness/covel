@@ -560,6 +560,282 @@ const FilterBar: ComponentRenderer = ({ element, bindings }) => {
   );
 };
 
+// ── Filter Primitives (stateful container + supporting widgets) ──
+//
+// FilterContainer manages internal search + tab state and renders a
+// preconfigured per-item component for each filtered entry. This avoids
+// json-render's "children pre-resolved by parent renderer" limitation
+// (which would prevent a child template from re-resolving against per-item
+// scope) by having the catalog component itself iterate. Tabs is used
+// internally by FilterContainer and also exposed standalone for spec authors
+// who want a tab strip bound to global state via `$bindState`.
+//
+// Spec example:
+// ```json
+// {
+//   "component": "FilterContainer",
+//   "props": {
+//     "items": { "$state": "/entries" },
+//     "searchPlaceholder": { "zh": "搜索…", "en": "Search…" },
+//     "searchFields": ["value/title", "value/content", "value/tags"],
+//     "filterField": "value/category",
+//     "filterTabs": [
+//       { "value": "all", "label": { "zh": "全部" } },
+//       { "value": "monster", "label": { "zh": "怪物" }, "icon": "skull", "color": "red" }
+//     ],
+//     "itemComponent": "EntryCard",
+//     "itemPropMap": {
+//       "title": "value/title",
+//       "content": "value/content",
+//       "category": "value/category",
+//       "tags": "value/tags",
+//       "rarity": "value/rarity"
+//     }
+//   }
+// }
+// ```
+
+/**
+ * Resolve a slash- or dot-delimited path against an object/array.
+ * Returns undefined for missing segments. Numeric segments index arrays.
+ */
+function resolvePath(value: unknown, path: string): unknown {
+  if (!path) return value;
+  const segments = path.split(/[/.]/).filter((s) => s.length > 0);
+  let current: unknown = value;
+  for (const segment of segments) {
+    if (current === null || current === undefined) return undefined;
+    if (Array.isArray(current)) {
+      const index = Number(segment);
+      current = Number.isNaN(index) ? undefined : current[index];
+      continue;
+    }
+    if (typeof current === "object") {
+      current = (current as Record<string, unknown>)[segment];
+      continue;
+    }
+    return undefined;
+  }
+  return current;
+}
+
+/**
+ * Flatten a value to a single string used for substring matching.
+ * Strings stay as-is; arrays join their primitive members; objects are
+ * stringified with their entry values (keys ignored).
+ */
+function valueToHaystack(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(valueToHaystack).join(" ");
+  if (typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).map(valueToHaystack).join(" ");
+  }
+  return "";
+}
+
+interface FilterTab {
+  value: string;
+  label?: unknown;
+  icon?: string;
+  color?: string;
+}
+
+/**
+ * Filter an items array against a search query and an active tab value.
+ * Exported in test-only form via __testables (see bottom of file) so the
+ * filter logic can be unit-tested without driving React.
+ */
+function filterItems(
+  items: unknown[],
+  searchQuery: string,
+  searchFields: string[],
+  filterField: string | undefined,
+  activeFilter: string,
+): unknown[] {
+  const query = searchQuery.trim().toLowerCase();
+  return items.filter((item) => {
+    if (filterField && activeFilter && activeFilter !== "all") {
+      const fieldValue = resolvePath(item, filterField);
+      if (String(fieldValue ?? "") !== activeFilter) return false;
+    }
+    if (query.length > 0) {
+      const haystack = searchFields
+        .map((field) => valueToHaystack(resolvePath(item, field)))
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Tabs — visual tab strip with optional icon + color accent.
+ * Standalone usage binds the active value via `$bindState`; FilterContainer
+ * uses it as a controlled child driven by local React state.
+ */
+const Tabs: ComponentRenderer = ({ element, bindings }) => {
+  const tabs = (element.props?.tabs as FilterTab[]) ?? [];
+  const value = element.props?.value as string ?? tabs[0]?.value ?? "";
+  const { set } = useStateStore();
+  const bindPath = bindings?.value;
+  const onChange = element.props?.__onChange as ((next: string) => void) | undefined;
+
+  const colorAccents: Record<string, string> = {
+    red: "border-red-500 text-red-600 dark:text-red-400",
+    amber: "border-amber-500 text-amber-600 dark:text-amber-400",
+    blue: "border-blue-500 text-blue-600 dark:text-blue-400",
+    green: "border-green-500 text-green-600 dark:text-green-400",
+    purple: "border-purple-500 text-purple-600 dark:text-purple-400",
+    cyan: "border-cyan-500 text-cyan-600 dark:text-cyan-400",
+  };
+
+  return (
+    <div role="tablist" className="flex flex-wrap gap-1 border-b border-zinc-200 dark:border-zinc-800 pb-1">
+      {tabs.map((tab) => {
+        const active = value === tab.value;
+        const TabIcon = resolveIcon(tab.icon);
+        const accent = active && tab.color ? colorAccents[tab.color] : "";
+        return (
+          <button
+            key={tab.value}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => {
+              if (onChange) onChange(tab.value);
+              else if (bindPath) set(bindPath, tab.value);
+            }}
+            className={clsx(
+              "inline-flex items-center gap-1 px-2 py-1 text-[11px] border-b-2 -mb-[5px] transition-colors",
+              active
+                ? clsx("font-semibold", accent || "border-zinc-900 dark:border-zinc-100 text-zinc-900 dark:text-zinc-100")
+                : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200",
+            )}
+          >
+            {TabIcon && <TabIcon className="w-3 h-3" />}
+            {resolveI18n(tab.label)}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+/**
+ * FilterContainer — stateful catalog primitive that owns search + tab state
+ * and renders a per-item child component for each filtered entry.
+ *
+ * Why not a child template? json-render resolves a parent's children before
+ * passing them in, so a generic template can't re-resolve `$item` per filtered
+ * row without reaching into renderer internals. Pinning to a registered
+ * component name + a flat propName→itemPath map keeps the contract declarative
+ * and the implementation framework-agnostic.
+ */
+const FilterContainer: ComponentRenderer = ({ element }) => {
+  const items = (element.props?.items as unknown[]) ?? [];
+  const searchPlaceholder = resolveI18n(element.props?.searchPlaceholder);
+  const searchFields = (element.props?.searchFields as string[]) ?? [];
+  const filterField = element.props?.filterField as string | undefined;
+  const filterTabs = (element.props?.filterTabs as FilterTab[]) ?? [];
+  const itemComponent = element.props?.itemComponent as string | undefined;
+  const itemPropMap = (element.props?.itemPropMap as Record<string, string>) ?? {};
+  const itemKeyField = element.props?.itemKeyField as string | undefined;
+  const emptyMessage = resolveI18n(element.props?.emptyMessage);
+  const showSearch = element.props?.showSearch !== false && searchFields.length > 0;
+  const showTabs = element.props?.showTabs !== false && filterTabs.length > 0;
+
+  const initialFilter = filterTabs[0]?.value ?? "all";
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeFilter, setActiveFilter] = useState(initialFilter);
+
+  const filtered = useMemo(
+    () => filterItems(Array.isArray(items) ? items : [], searchQuery, searchFields, filterField, activeFilter),
+    [items, searchQuery, searchFields, filterField, activeFilter],
+  );
+
+  const ItemComponent = itemComponent ? covelRegistry[itemComponent] : undefined;
+  const SearchIcon = Icons.Search;
+
+  const fallbackEmpty = filterField || searchQuery
+    ? "没有匹配的条目"
+    : "暂无数据";
+
+  return (
+    <div className="flex flex-col gap-2">
+      {showSearch && (
+        <div className="relative">
+          <SearchIcon className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder || "search"}
+            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 pl-7 pr-3 py-1.5 text-xs rounded-md outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+      )}
+      {showTabs && (
+        <Tabs
+          element={{
+            type: "Tabs",
+            props: {
+              tabs: filterTabs,
+              value: activeFilter,
+              __onChange: setActiveFilter,
+            },
+          }}
+          emit={() => {}}
+          on={() => ({ emit: () => {}, shouldPreventDefault: false, bound: false })}
+        />
+      )}
+      <div className="flex flex-col gap-2">
+        {filtered.length === 0 && (
+          <p className="text-xs text-zinc-400 italic text-center py-4">
+            {emptyMessage || fallbackEmpty}
+          </p>
+        )}
+        {filtered.length > 0 && ItemComponent && filtered.map((item, index) => {
+          const itemProps: Record<string, unknown> = {};
+          for (const [propName, itemPath] of Object.entries(itemPropMap)) {
+            itemProps[propName] = resolvePath(item, itemPath);
+          }
+          const keyValue = itemKeyField ? resolvePath(item, itemKeyField) : undefined;
+          const reactKey = keyValue !== undefined && keyValue !== null
+            ? String(keyValue)
+            : String(index);
+          return (
+            <ItemComponent
+              key={reactKey}
+              element={{ type: itemComponent ?? "EntryCard", props: itemProps }}
+              emit={() => {}}
+              on={() => ({ emit: () => {}, shouldPreventDefault: false, bound: false })}
+            />
+          );
+        })}
+        {filtered.length > 0 && !ItemComponent && (
+          <p className="text-xs text-red-500 italic">
+            FilterContainer: itemComponent &quot;{itemComponent}&quot; not found in registry
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Test-only export of internal pure helpers. Not part of the public catalog.
+ * Exposed so unit tests can exercise filter logic without driving React.
+ */
+export const __filterContainerInternals = {
+  resolvePath,
+  valueToHaystack,
+  filterItems,
+};
+
 // ── Message Components (for chat area rendering) ─────────────────
 
 /** Prose — renders narrative text as styled paragraphs. */
@@ -737,6 +1013,8 @@ export const covelRegistry: Record<string, ComponentRenderer> = {
   Select,
   Switch,
   FilterBar,
+  Tabs,
+  FilterContainer,
   // Form
   Form,
   FormHeader,
