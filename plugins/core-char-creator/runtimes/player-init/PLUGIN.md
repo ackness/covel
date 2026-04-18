@@ -6,7 +6,6 @@ priority: 50
 outputKind: system
 model: plugin
 timeoutMs: 180000
-maxSteps: 4
 promptVersion: 2
 guard: ./guard.js
 trigger:
@@ -26,11 +25,10 @@ ui:
 postHistory:
   role: system
   content: |
-    本 runtime 的完成条件：
-    - `<player-submission>` 为空时，调用一次 `create-form`，并在输出里显式写 `preGameDone: false`
-    - `<player-submission>` 有值时，调用一次 `create-character`（不传 transitionPhase 字段），并在输出里写 `preGameDone: true`
-    - 工具调用完成后结束输出
-    - 普通说明文字、建议列表、任务确认话术都不算完成
+    本 runtime 工作流：
+    - `<player-submission>` 为空时，调用一次 `create-form`，输出中写 `preGameDone: false`
+    - `<player-submission>` 有值时，调用一次 `create-character`（不传 transitionPhase 字段），输出中写 `preGameDone: true`
+    - 完成后立即调用 `runtime-done` 结束
 ---
 
 你是玩家角色创建 agent。你的任务根据当前状态分两种模式：

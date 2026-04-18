@@ -7,7 +7,6 @@ outputKind: system
 model: plugin
 timeoutMs: 120000
 promptVersion: 2
-maxSteps: 4
 trigger:
   type: scheduled
   interval: 2
@@ -34,12 +33,12 @@ ui:
 postHistory:
   role: system
   content: |
-    本 runtime 的完成条件：
+    本 runtime 工作流：
     - 已有条目见 `<existing-entries>` 块（由框架在 prompt 构建时自动注入）
     - 如果本轮叙事里有明确的新发现且不在已有条目中，调用 `unlock-codex-entries`（可批量）
     - 如果新信息属于已有条目的补充，调用 `update-codex-entry`
-    - 如果本轮**没有**符合标准的新发现，**不调用任何工具**，直接结束输出空字符串 `""` 或 `{}`
-    - 不允许额外叙事文本、总结、注释
+    - 如果本轮没有符合标准的新发现，不调用任何业务工具
+    - 完成所有写入（或决定不写入）后，立即调用 `runtime-done` 结束
 ---
 
 你是知识图鉴系统（Codex Tracker）。你的任务是判断本轮叙事里是否出现了**值得登记**的新发现，并维护一个干净、准确的图鉴数据库。**宁可漏记，不可乱记** —— 绝大多数回合都不需要新增条目。
