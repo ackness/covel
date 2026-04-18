@@ -1335,22 +1335,6 @@ export async function fetchPluginDocs(pluginId: string): Promise<PluginDocsRespo
   );
 }
 
-// ── Core Memory (Letta-style) ───────────────────────────────────
-
-export interface CoreMemoryBlock {
-  label: string;
-  content: string;
-  updatedAt: string;
-}
-
-export async function fetchCoreMemory(
-  sessionId: string,
-): Promise<{ blocks: CoreMemoryBlock[] }> {
-  return request<{ blocks: CoreMemoryBlock[] }>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/core-memory`,
-  );
-}
-
 // ── Trace API ────────────────────────────────────────────────────
 
 export interface TraceEvent {
