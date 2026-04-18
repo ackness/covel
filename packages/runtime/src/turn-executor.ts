@@ -15,7 +15,7 @@ import type {
   SuspensionRecord,
   RuntimeOutputRecord,
 } from '@covel/store';
-import { isSuspendSentinel } from '@covel/tools';
+import { isSuspendSentinel, isRuntimeDoneSentinel } from '@covel/tools';
 import type { EventBus } from '@covel/events';
 import { shouldTrigger } from './trigger.js';
 import { scheduleByPriority } from './scheduler.js';
@@ -1873,6 +1873,28 @@ async function executeOneRuntime(
               toolCallId: tc.id,
             });
           }
+        }
+
+        // Runtime-done early exit. If any tool call in this round was the
+        // builtin `runtime-done` tool, the LLM has declared completion —
+        // break immediately instead of burning another round-trip for a
+        // terminator message. Business tool outputs from this round are
+        // already in collectedToolCalls and become the runtime's output.
+        // See packages/tools/src/builtin/runtime-done.ts for the sentinel
+        // and buildFrameworkPreamble for the prompt contract.
+        const doneCall = executedToolCalls.find((c) => isRuntimeDoneSentinel(c.result));
+        if (doneCall) {
+          // The runtime-done tool itself should not appear as a business
+          // output — drop it from collected calls so downstream consumers
+          // (proposal collector, trace) see only the real work.
+          const businessCalls = collectedToolCalls.filter((c) => c.toolName !== 'runtime-done');
+          collectedToolCalls.length = 0;
+          collectedToolCalls.push(...businessCalls);
+          finalContent = businessCalls.length > 0
+            ? JSON.stringify({ toolCalls: businessCalls.map((c) => ({ name: c.toolName, output: c.output })) })
+            : '';
+          stoppedWithResponse = true;
+          break;
         }
 
         // Continue loop — LLM sees tool results and decides next action

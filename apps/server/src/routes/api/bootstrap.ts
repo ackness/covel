@@ -44,6 +44,7 @@ import {
   createWorldDimensionTools,
   createMemoryTools,
   suspendTool,
+  runtimeDoneTool,
   tool,
   shortId,
   shortIdBatch,
@@ -241,6 +242,13 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   // as the sentinel just becomes a normal tool result returned to the LLM.
   toolMap.set(suspendTool.name, suspendTool);
   builtinToolNames.add(suspendTool.name);
+
+  // Register runtime-done tool. Framework contract: agent runtimes call this
+  // immediately after completing their business tool calls to exit without
+  // burning an extra LLM round-trip on a terminator message. The completion
+  // preamble in buildFrameworkPreamble instructs every runtime how to use it.
+  toolMap.set(runtimeDoneTool.name, runtimeDoneTool);
+  builtinToolNames.add(runtimeDoneTool.name);
 
   // Register plugin-data tools (store-bound via closure; events emitted by store proxy)
   for (const t of createPluginDataTools(store)) {

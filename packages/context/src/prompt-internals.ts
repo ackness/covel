@@ -419,6 +419,13 @@ export function buildFrameworkPreamble(locale?: string): string {
     '[RUNTIME] Follow the runtime instructions and world data below as the complete task context.',
     '[RUNTIME] Produce only in-world narrative, structured runtime output, and required tool calls.',
     `[LANGUAGE] You MUST respond in ${languageName}. All narrative output, tool parameters, and descriptions must be in ${languageName}.`,
+    // Framework completion contract — see packages/tools/src/builtin/runtime-done.ts
+    // and the tool_calls early-exit branch in turn-executor.ts. Without this
+    // preamble, agent runtimes waste a round-trip on a terminator message after
+    // every successful tool call.
+    '[COMPLETION] 本 runtime 完成所有业务工具调用后，必须立即调用 `runtime-done` 工具结束。不要输出额外终止文本——调用 `runtime-done` 就是结束信号。',
+    '[COMPLETION] 如果判断本回合无需任何工具调用，直接调用 `runtime-done` 结束（优先）或返回空字符串。不要反复调用同一个业务工具。',
+    '[COMPLETION] When you have finished all tool work for this runtime, call the `runtime-done` tool IMMEDIATELY. Do not emit terminator text.',
   ].join('\n');
 }
 

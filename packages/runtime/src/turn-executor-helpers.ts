@@ -21,6 +21,15 @@ export function buildToolDefinitions(
     names.push(p.split('/').pop()?.replace(/\.[^.]+$/, '') ?? p);
   }
 
+  // Framework-contracted tool: `runtime-done` is auto-available to every
+  // agent runtime so the LLM can exit immediately after completing its
+  // business tool calls. See packages/tools/src/builtin/runtime-done.ts
+  // and the early-exit branch in turn-executor.ts. This is intentionally
+  // NOT declared in PLUGIN.md — it's a framework-level capability.
+  if (!names.includes('runtime-done')) {
+    names.push('runtime-done');
+  }
+
   if (names.length === 0) {
     return undefined;
   }
