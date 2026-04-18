@@ -11,6 +11,7 @@
 // ── Types ────────────────────────────────────────────────────────
 export type {
   CoreMemoryLabel,
+  CoreMemoryLabelInfo,
   CoreMemoryBlock,
   CoreMemoryConfig,
   MemoryManager,
@@ -28,7 +29,7 @@ export type {
   MemorySystem,
 } from './types.js';
 
-export { CORE_MEMORY_LABELS, DEFAULT_MAX_BLOCK_CHARS } from './types.js';
+export { CORE_MEMORY_LABELS, CORE_MEMORY_LABEL_INFO, DEFAULT_MAX_BLOCK_CHARS } from './types.js';
 
 // ── Factories ────────────────────────────────────────────────────
 export { createMemoryManager } from './core-memory.js';

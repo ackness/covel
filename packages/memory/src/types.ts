@@ -36,6 +36,38 @@ export const CORE_MEMORY_LABELS: readonly CoreMemoryLabel[] = [
   'player_profile',
 ] as const;
 
+/**
+ * Display metadata for each core memory label. Owned by the memory
+ * framework (same level as CORE_MEMORY_LABELS) — not by any specific
+ * plugin. UI panels (whether json-render specs or React) consume this
+ * to render friendly labels and icons.
+ *
+ * Icons use Lucide icon names. UI layers map them to actual components.
+ */
+export interface CoreMemoryLabelInfo {
+  readonly displayName: { readonly zh: string; readonly en: string };
+  readonly icon: string;
+}
+
+export const CORE_MEMORY_LABEL_INFO: Readonly<Record<CoreMemoryLabel, CoreMemoryLabelInfo>> = {
+  story_state: {
+    displayName: { zh: '剧情状态', en: 'Story State' },
+    icon: 'BookOpen',
+  },
+  scene: {
+    displayName: { zh: '当前场景', en: 'Current Scene' },
+    icon: 'MapPin',
+  },
+  character_relationships: {
+    displayName: { zh: '角色关系', en: 'Character Relationships' },
+    icon: 'Users',
+  },
+  player_profile: {
+    displayName: { zh: '玩家状态', en: 'Player Profile' },
+    icon: 'User',
+  },
+};
+
 /** Default max characters per block (not tokens — char count is cheaper to check). */
 export const DEFAULT_MAX_BLOCK_CHARS = 2000;
 
@@ -50,6 +82,12 @@ export interface CoreMemoryConfig {
   readonly maxBlockChars?: number;
   /** Subset of labels to manage. Default: all. */
   readonly labels?: readonly CoreMemoryLabel[];
+  /**
+   * Plugin ID used when mirroring core memory blocks to plugin_data for
+   * real-time UI panel updates. Injected by the bootstrap layer so the
+   * memory package never hardcodes a specific plugin name.
+   */
+  readonly pluginId?: string;
 }
 
 // ── Memory Manager ──────────────────────────────────────────────

@@ -15,7 +15,11 @@ import type {
   CoreMemoryLabel,
   MemoryManager,
 } from './types.js';
-import { CORE_MEMORY_LABELS, DEFAULT_MAX_BLOCK_CHARS } from './types.js';
+import {
+  CORE_MEMORY_LABELS,
+  CORE_MEMORY_LABEL_INFO,
+  DEFAULT_MAX_BLOCK_CHARS,
+} from './types.js';
 
 const SCOPE = 'story' as const;
 
@@ -25,6 +29,7 @@ export function createMemoryManager(
 ): MemoryManager {
   const labels = config?.labels ?? CORE_MEMORY_LABELS;
   const maxChars = config?.maxBlockChars ?? DEFAULT_MAX_BLOCK_CHARS;
+  const mirrorPluginId = config?.pluginId;
 
   function toBlock(record: { key: string; value: unknown; updatedAt: string }): CoreMemoryBlock {
     const raw = record.value as { text?: string } | string | null;
@@ -67,7 +72,7 @@ export function createMemoryManager(
       const now = new Date().toISOString();
 
       await store.upsertWorkingMemory({
-        id: `core-memory:${sessionId}:${label}`,
+        id: `memory:${sessionId}:${label}`,
         sessionId,
         key: label,
         scope: SCOPE,
@@ -75,10 +80,13 @@ export function createMemoryManager(
         updatedAt: now,
       });
 
-      // Mirror to plugin-data so the core-memory UI panel (json-render) can
+      // Mirror to plugin-data so the memory UI panel (json-render) can
       // read it via dataSource.namespace = 'blocks'. This triggers
       // plugin-data.changed SSE events for real-time panel updates.
-      await mirrorToPluginData(store, sessionId, label, truncated, now);
+      // Only mirrors when a pluginId is configured (injected by bootstrap).
+      if (mirrorPluginId) {
+        await mirrorToPluginData(store, sessionId, mirrorPluginId, label, truncated, now);
+      }
     },
 
     async updateBlocks(sessionId: string, updates: ReadonlyMap<CoreMemoryLabel, string>): Promise<void> {
@@ -89,7 +97,7 @@ export function createMemoryManager(
         const truncated = content.length > maxChars ? content.slice(0, maxChars) : content;
         promises.push(
           store.upsertWorkingMemory({
-            id: `core-memory:${sessionId}:${label}`,
+            id: `memory:${sessionId}:${label}`,
             sessionId,
             key: label,
             scope: SCOPE,
@@ -97,7 +105,9 @@ export function createMemoryManager(
             updatedAt: now,
           }),
         );
-        promises.push(mirrorToPluginData(store, sessionId, label, truncated, now));
+        if (mirrorPluginId) {
+          promises.push(mirrorToPluginData(store, sessionId, mirrorPluginId, label, truncated, now));
+        }
       }
       await Promise.all(promises);
     },
@@ -117,7 +127,7 @@ export function createMemoryManager(
         if (!existingKeys.has(label)) {
           promises.push(
             store.upsertWorkingMemory({
-              id: `core-memory:${sessionId}:${label}`,
+              id: `memory:${sessionId}:${label}`,
               sessionId,
               key: label,
               scope: SCOPE,
@@ -133,7 +143,6 @@ export function createMemoryManager(
   };
 }
 
-const PLUGIN_ID = 'core-memory';
 const PLUGIN_DATA_NS = 'blocks';
 
 /**
@@ -143,22 +152,33 @@ const PLUGIN_DATA_NS = 'blocks';
  * This triggers `plugin-data.changed` SSE events when the store is
  * wrapped with the event proxy (see bootstrap.ts), enabling real-time
  * panel updates without polling.
+ *
+ * The pluginId is injected by the caller — the memory package never
+ * hardcodes a specific plugin name.
  */
 async function mirrorToPluginData(
   store: DataStore,
   sessionId: string,
+  pluginId: string,
   label: string,
   content: string,
   now: string,
 ): Promise<void> {
   try {
+    const labelInfo = CORE_MEMORY_LABEL_INFO[label as CoreMemoryLabel];
     await store.setPluginData({
-      id: `core-memory-pd:${sessionId}:${label}`,
+      id: `memory-pd:${sessionId}:${label}`,
       sessionId,
-      pluginId: PLUGIN_ID,
+      pluginId,
       namespace: PLUGIN_DATA_NS,
       key: label,
-      value: content,
+      value: {
+        content,
+        displayName: labelInfo?.displayName ?? { zh: label, en: label },
+        icon: labelInfo?.icon ?? 'Info',
+        charCount: content.length,
+        updatedAt: now,
+      },
       createdAt: now,
       updatedAt: now,
     });
