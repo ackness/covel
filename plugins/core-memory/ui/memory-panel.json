@@ -11,21 +11,39 @@
     }
   },
   "view": {
-    "component": "Accordion",
-    "repeat": { "statePath": "/entries", "key": "key" },
+    "component": "Stack",
+    "props": { "gap": "sm" },
     "children": [
       {
-        "component": "Section",
+        "component": "Text",
         "props": {
-          "title": { "$item": "key" }
-        },
+          "content": {
+            "zh": "Letta 式记忆管理。每轮结束后自动更新，保存关键剧情、场景和角色信息。",
+            "en": "Letta-style memory management. Auto-updates after each turn to capture key story, scene, and character information."
+          },
+          "size": "xs",
+          "variant": "muted"
+        }
+      },
+      {
+        "component": "Accordion",
+        "repeat": { "statePath": "/entries", "key": "key" },
         "children": [
           {
-            "component": "Text",
+            "component": "Section",
             "props": {
-              "content": { "$item": "value" },
-              "size": "sm"
-            }
+              "title": { "$item": "key" },
+              "defaultOpen": true
+            },
+            "children": [
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "$item": "value" },
+                  "size": "sm"
+                }
+              }
+            ]
           }
         ]
       }

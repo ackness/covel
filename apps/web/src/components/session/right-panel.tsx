@@ -12,7 +12,9 @@ import {
   Loader2,
   Download,
   RefreshCw,
+  Layout,
 } from "lucide-react";
+import * as Icons from "lucide-react";
 import {
   Tabs,
   TabsContent,
@@ -29,14 +31,81 @@ import { CharacterPanel } from "./character-panel.js";
 import { EventPanel } from "./event-panel.js";
 import { CodexPanel } from "./codex-panel.js";
 import { WorldDimensionsPanel } from "./world-dimensions-panel.js";
+import { LorebookPanel } from "./lorebook-panel.js";
+import { PluginPanel } from "./plugin-panel.js";
 import { text } from "@/components/world/editor-helpers.js";
 import {
   fetchServerHealth,
   exportDimensionsUrl,
   syncSessionDimensions,
+  fetchUiSpecs,
+  listPluginData,
 } from "@/services/api.js";
-import type { WorldRecord } from "@/services/api.js";
+import type { WorldRecord, UISlotEntry } from "@/services/api.js";
 import { useSession } from "@/stores/session-store.js";
+import { resolveI18n } from "@/lib/catalog.js";
+import { loadPluginData } from "@/stores/plugin-data-store.js";
+
+// ── Plugin tab aggregation ───────────────────────────────────────
+
+interface SubPanel {
+  id: string;
+  pluginId: string;
+  label: string;
+  icon: string;
+  spec: Record<string, unknown>;
+}
+
+interface PluginTabGroup {
+  id: string;
+  label: string;
+  icon: string;
+  order: number;
+  subPanels: SubPanel[];
+}
+
+function resolvePluginIcon(name: string): Icons.LucideIcon {
+  const pascal = name
+    .split("-")
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .join("");
+  return (Icons as Record<string, unknown>)[pascal] as Icons.LucideIcon ?? Layout;
+}
+
+function aggregateSpecsIntoGroups(slotEntries: readonly UISlotEntry[]): PluginTabGroup[] {
+  const groupMap = new Map<string, PluginTabGroup>();
+  let counter = 0;
+
+  for (const entry of slotEntries) {
+    for (const spec of entry.specs) {
+      const specId = spec.id ?? `${entry.pluginId}-${counter++}`;
+      const groupKey = spec.group ?? `${entry.pluginId}::${specId}`;
+
+      const sub: SubPanel = {
+        id: specId,
+        pluginId: entry.pluginId,
+        label: resolveI18n(spec.label),
+        icon: spec.icon ?? "layout",
+        spec: spec as unknown as Record<string, unknown>,
+      };
+
+      const existing = groupMap.get(groupKey);
+      if (existing) {
+        existing.subPanels.push(sub);
+      } else {
+        groupMap.set(groupKey, {
+          id: groupKey,
+          label: resolveI18n(spec.groupLabel) || sub.label,
+          icon: sub.icon,
+          order: spec.groupOrder ?? 500,
+          subPanels: [sub],
+        });
+      }
+    }
+  }
+
+  return Array.from(groupMap.values()).sort((a, b) => a.order - b.order);
+}
 
 export interface RightPanelProps {
   sessionId: string;
@@ -64,6 +133,8 @@ export function RightPanel({
   const { state } = useSession();
   const [storeBackend, setStoreBackend] = useState<string | null>(null);
   const [characters, setCharacters] = useState<Array<Record<string, unknown>>>([]);
+  const [pluginTabGroups, setPluginTabGroups] = useState<PluginTabGroup[]>([]);
+  const [activePluginSubTab, setActivePluginSubTab] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetchServerHealth()
@@ -106,6 +177,41 @@ export function RightPanel({
     if (arr.length > 0) setCharacters(arr);
   }, [gameState.characters]);
 
+  // Load plugin panel specs from /api/ui-specs and seed plugin-data-store
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    fetchUiSpecs(sessionId)
+      .then((specs) => {
+        if (cancelled) return;
+        const groups = aggregateSpecsIntoGroups(specs.right);
+        setPluginTabGroups(groups);
+
+        // Seed plugin-data-store with current data for each plugin panel.
+        // This ensures panels render immediately even if SSE events were missed.
+        const pluginIds = new Set(groups.flatMap((g) => g.subPanels.map((s) => s.pluginId)));
+        for (const pid of pluginIds) {
+          listPluginData(sessionId, pid)
+            .then((items) => {
+              if (cancelled) return;
+              // Group items by namespace then bulk-load
+              const byNs = new Map<string, { key: string; value: unknown }[]>();
+              for (const item of items) {
+                const arr = byNs.get(item.namespace) ?? [];
+                arr.push({ key: item.key, value: item.value });
+                byNs.set(item.namespace, arr);
+              }
+              for (const [ns, entries] of byNs) {
+                loadPluginData(pid, ns, entries);
+              }
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [sessionId]);
+
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
     <Tabs
@@ -146,16 +252,6 @@ export function RightPanel({
             </span>
           </TabsTrigger>
           <TabsTrigger
-            value="codex"
-            className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title={t("session.codex", "Codex")}
-          >
-            <Library className="w-4 h-4" />
-            <span className="text-[9px] leading-none">
-              {t("session.codex", "Codex")}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger
             value="state"
             className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
             title={t("session.state", "State")}
@@ -176,15 +272,30 @@ export function RightPanel({
             </span>
           </TabsTrigger>
           <TabsTrigger
-            value="records"
+            value="lorebook"
             className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title={t("session.lore", "Lore")}
+            title="Lorebook"
           >
             <BookOpen className="w-4 h-4" />
-            <span className="text-[9px] leading-none">
-              {t("session.lore", "Lore")}
-            </span>
+            <span className="text-[9px] leading-none">Lore</span>
           </TabsTrigger>
+          {/* Dynamic plugin tabs from /api/ui-specs (memory, codex, npc-graph, etc.) */}
+          {pluginTabGroups.map((group) => {
+            const GroupIcon = resolvePluginIcon(group.icon);
+            return (
+              <TabsTrigger
+                key={`plugin-${group.id}`}
+                value={`plugin-${group.id}`}
+                className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
+                title={group.label}
+              >
+                <GroupIcon className="w-4 h-4" />
+                <span className="text-[9px] leading-none truncate max-w-[36px]">
+                  {group.label.slice(0, 4)}
+                </span>
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
         <div className="mt-auto">
           <Button
@@ -221,13 +332,6 @@ export function RightPanel({
             {t("session.eventsTitle", "Events")}
           </h3>
           <EventPanel gameState={gameState} />
-        </TabsContent>
-        <TabsContent value="codex" className="p-4 m-0">
-          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <Library className="w-4 h-4 shrink-0" />{" "}
-            {t("session.codexTitle", "Codex")}
-          </h3>
-          <CodexPanel gameState={gameState} pluginData={pluginData} />
         </TabsContent>
         <TabsContent value="state" className="p-4 m-0 space-y-4">
           <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
@@ -304,18 +408,54 @@ export function RightPanel({
             </p>
           )}
         </TabsContent>
-        <TabsContent value="records" className="p-4 m-0">
-          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <BookOpen className="w-4 h-4 shrink-0" />{" "}
-            {t("session.recordsTitle", "Records")}
-          </h3>
-          <p className="text-xs text-muted-foreground italic">
-            {t(
-              "session.noRecords",
-              "Long-term records will appear here as the story progresses.",
-            )}
-          </p>
+        <TabsContent value="lorebook" className="p-4 m-0">
+          <LorebookPanel sessionId={sessionId} />
         </TabsContent>
+        {/* Dynamic plugin panel content (memory, codex, npc-graph, etc.) */}
+        {pluginTabGroups.map((group) => {
+          const subIdx = activePluginSubTab[group.id] ?? 0;
+          const currentSub = group.subPanels[subIdx];
+          return (
+            <TabsContent key={`plugin-content-${group.id}`} value={`plugin-${group.id}`} className="p-4 m-0">
+              <h3 className="font-display font-semibold flex items-center gap-2 mb-3 text-sm uppercase tracking-widest whitespace-nowrap">
+                {group.label}
+              </h3>
+              {/* Sub-tabs when group has multiple panels */}
+              {group.subPanels.length > 1 && (
+                <div className="flex items-center gap-1 mb-3 border-b border-border pb-2">
+                  {group.subPanels.map((sub, idx) => {
+                    const SubIcon = resolvePluginIcon(sub.icon);
+                    const isActive = idx === subIdx;
+                    return (
+                      <button
+                        key={sub.id}
+                        type="button"
+                        onClick={() =>
+                          setActivePluginSubTab((prev) => ({ ...prev, [group.id]: idx }))
+                        }
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium border-b-2 -mb-px transition-colors ${
+                          isActive
+                            ? "border-primary text-primary"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <SubIcon className="w-3 h-3" />
+                        {sub.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {currentSub && (
+                <PluginPanel
+                  key={currentSub.id}
+                  pluginId={currentSub.pluginId}
+                  spec={currentSub.spec}
+                />
+              )}
+            </TabsContent>
+          );
+        })}
       </ScrollArea>
     </Tabs>
     {storeBackend && (
