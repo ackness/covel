@@ -29,7 +29,6 @@ import { Markdown } from "@/components/ui/markdown.js";
 import { GameStatusPanel } from "./game-status-panel.js";
 import { CharacterPanel } from "./character-panel.js";
 import { EventPanel } from "./event-panel.js";
-import { CodexPanel } from "./codex-panel.js";
 import { WorldDimensionsPanel } from "./world-dimensions-panel.js";
 import { LorebookPanel } from "./lorebook-panel.js";
 import { PluginPanel } from "./plugin-panel.js";

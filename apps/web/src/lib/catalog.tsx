@@ -175,6 +175,12 @@ const EntryCard: ComponentRenderer = ({ element }) => {
   const content = resolveI18n(element.props?.content);
   const tags = element.props?.tags as string[] | undefined;
   const rarity = element.props?.rarity as string ?? "common";
+  // Optional plugin-supplied per-category icon + color (e.g. from a
+  // plugin's categoryMeta payload). When provided they override the
+  // built-in fallback map below; when missing the card still renders
+  // sensibly via the fallback so pre-enrichment entries keep working.
+  const externalIcon = element.props?.icon as string | undefined;
+  const externalColor = element.props?.color as string | undefined;
 
   const categoryIcons: Record<string, string> = {
     monster: "skull", item: "gem", location: "map-pin",
@@ -190,13 +196,22 @@ const EntryCard: ComponentRenderer = ({ element }) => {
     uncommon: "bg-blue-500/10 text-blue-600 border-blue-500/30",
     common: "bg-zinc-500/10 text-zinc-600 border-zinc-500/30",
   };
+  const categoryIconColors: Record<string, string> = {
+    red: "text-red-500 dark:text-red-400",
+    amber: "text-amber-500 dark:text-amber-400",
+    blue: "text-blue-500 dark:text-blue-400",
+    green: "text-green-500 dark:text-green-400",
+    purple: "text-purple-500 dark:text-purple-400",
+    cyan: "text-cyan-500 dark:text-cyan-400",
+  };
 
-  const CategoryIcon = resolveIcon(categoryIcons[category] ?? "book-open");
+  const CategoryIcon = resolveIcon(externalIcon ?? categoryIcons[category] ?? "book-open");
+  const iconColorClass = externalColor ? categoryIconColors[externalColor] ?? "text-zinc-500" : "text-zinc-500";
 
   return (
     <div className={clsx("border border-zinc-200 dark:border-zinc-700 rounded-md p-2.5 border-l-2 space-y-1.5", rarityColors[rarity])}>
       <div className="flex items-center gap-2">
-        {CategoryIcon && <CategoryIcon className="w-3.5 h-3.5 shrink-0 text-zinc-500" />}
+        {CategoryIcon && <CategoryIcon className={clsx("w-3.5 h-3.5 shrink-0", iconColorClass)} />}
         <span className="text-xs font-medium flex-1 truncate">{title}</span>
         <span className={clsx("inline-flex items-center px-1.5 py-0.5 text-[10px] border rounded-sm", rarityBadgeColors[rarity])}>
           {category}
