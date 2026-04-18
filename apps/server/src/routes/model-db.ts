@@ -3,6 +3,8 @@
  */
 
 import { Hono } from 'hono';
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
 import { rateLimiter, singleFlight } from '../middleware/rate-limit.js';
 import type { AiStack } from '../ai-setup.js';
 
@@ -64,7 +66,22 @@ export function createModelDbRoutes(ai: AiStack): Hono {
       const { fetchLiteLlmModels } = await import('@covel/ai-provider');
       const freshData = await fetchLiteLlmModels();
       ai.modelDb.replaceAll(freshData);
-      return c.json({ ok: true, count: ai.modelDb.count });
+
+      // Persist to the user config dir so the refresh survives restarts.
+      // Non-fatal if the disk write fails — the in-memory DB is still updated.
+      const userConfigDir = process.env.COVEL_USER_CONFIG_DIR;
+      let persisted = false;
+      if (userConfigDir) {
+        try {
+          const target = resolve(userConfigDir, 'model-db.json');
+          mkdirSync(dirname(target), { recursive: true });
+          writeFileSync(target, JSON.stringify(freshData, null, 2), 'utf-8');
+          persisted = true;
+        } catch (err) {
+          console.warn('[model-db] persist failed:', err);
+        }
+      }
+      return c.json({ ok: true, count: ai.modelDb.count, persisted });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return c.json({ ok: false, error: message });

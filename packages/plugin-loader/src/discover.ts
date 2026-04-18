@@ -104,3 +104,39 @@ export async function discoverPlugins(pluginsDir: string): Promise<readonly Plug
 
   return results;
 }
+
+/**
+ * Discover plugins across multiple directories.
+ *
+ * Semantics:
+ *   - Directories are scanned in the order provided (typically bundled first,
+ *     then user-provided). The FIRST occurrence of a given plugin id wins —
+ *     so bundled plugins cannot be shadowed by a user plugin with the same id.
+ *   - Plugins from index 0 keep their default trust classification (builtin
+ *     prefix / official whitelist apply). Plugins from index >= 1 are tagged
+ *     `source: 'community'` so a user-dropped `core-evil` cannot auto-load.
+ *   - Collisions are reported via `onCollision` so the caller can warn.
+ *   - Missing directories are silently skipped (user dirs may not exist yet).
+ */
+export async function discoverPluginsMulti(
+  pluginsDirs: readonly string[],
+  onCollision?: (id: string, kept: string, skipped: string) => void,
+): Promise<readonly PluginDiscoveryResult[]> {
+  const seen = new Map<string, PluginDiscoveryResult>();
+  for (let i = 0; i < pluginsDirs.length; i += 1) {
+    const dir = pluginsDirs[i];
+    if (!(await isDirectory(dir))) continue;
+    const results = await discoverPlugins(dir);
+    for (const result of results) {
+      const existing = seen.get(result.id);
+      if (existing) {
+        onCollision?.(result.id, existing.rootPath, result.rootPath);
+        continue;
+      }
+      // Tag non-bundled dirs as community so prefix-based trust cannot be
+      // spoofed by a user-dropped plugin whose folder name starts with core-.
+      seen.set(result.id, i === 0 ? result : { ...result, source: 'community' });
+    }
+  }
+  return Array.from(seen.values());
+}

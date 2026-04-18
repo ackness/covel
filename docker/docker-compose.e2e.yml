@@ -14,7 +14,6 @@
 ##
 services:
   postgres:
-    # pgvector image: ADR-002 requires the `vector` extension in PG backend.
     image: pgvector/pgvector:pg17
     container_name: covel-e2e-postgres
     environment:
@@ -42,6 +41,8 @@ services:
       SERVE_STATIC: "true"
       STATIC_DIR: ./web-dist
       DEPLOYMENT_TIER: self
+      COVEL_MEMORY_V1: "1"
+      COVEL_WORLDS_DIR: /app/worlds
     env_file:
       - path: ../.env.llm
         required: false

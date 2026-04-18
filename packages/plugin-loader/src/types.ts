@@ -39,6 +39,13 @@ export interface PluginDiscoveryResult {
   readonly isMultiRuntime: boolean;
   /** Discovered PLUGIN.md file paths. */
   readonly pluginMdPaths: readonly string[];
+  /**
+   * Optional pre-classified trust source. When set this overrides
+   * prefix-based detection in `getPluginTrustInfo`. `discoverPluginsMulti`
+   * tags plugins outside the first (bundled) directory as `'community'`
+   * regardless of id, so a user-supplied `core-evil` cannot auto-load.
+   */
+  readonly source?: PluginSource;
 }
 
 // ── Progressive loading results ──────────────────────────────────

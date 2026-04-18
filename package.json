@@ -31,17 +31,14 @@
     "desktop:dev": "pnpm --filter @covel/desktop dev",
     "desktop:build": "pnpm --filter @covel/desktop build",
     "desktop:dist": "pnpm --filter @covel/desktop dist",
-    "stress:budget": "tsx scripts/long-session-50turns.ts",
-    "e2e:mock": "bash scripts/e2e-mock.sh",
-    "e2e:mock:replay": "bash scripts/e2e-mock.sh --replay",
-    "llmock": "npx llmock -p 4012 --record --provider-openai https://codex-api.packycode.com"
+    "e2e:verify": "tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts",
+    "create-plugin": "node scripts/create-plugin.js"
   },
   "packageManager": "pnpm@10.7.0",
   "engines": {
     "node": ">=20.19.0"
   },
   "devDependencies": {
-    "@copilotkit/aimock": "^1.13.0",
     "@ai-sdk/openai-compatible": "^1.0.0",
     "@ai-sdk/provider-utils": "^3.0.12",
     "@playwright/test": "^1.59.1",

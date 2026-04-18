@@ -36,12 +36,39 @@ app.onError((err, c) => {
 app.use("*", logger());
 app.use("*", secureHeaders());
 app.use("*", bodyLimit({ maxSize: 1 * 1024 * 1024 }));
+
+// Guard any /api/debug/* or /api/internal/* route in production so that an
+// accidentally-mounted diagnostic endpoint can never leak in a released
+// build. ENABLE_DEBUG_PAGE=1 opts in (e.g. for self-hosted tiers).
+const allowDebugRoutes =
+  isDev || process.env.ENABLE_DEBUG_PAGE === "1" || process.env.ENABLE_DEBUG_PAGE === "true";
+if (!allowDebugRoutes) {
+  app.all("/api/debug/*", (c) => c.json({ error: "Not available" }, 403));
+  app.all("/api/internal/*", (c) => c.json({ error: "Not available" }, 403));
+}
+// CORS — default whitelist covers:
+//   - dev Vite server at localhost:5173 / 127.0.0.1:5173
+//   - Electron desktop shell (file:// renders) and arbitrary loopback ports
+//     used by the sidecar server. The Electron preload pins 127.0.0.1, so we
+//     allow any 127.0.0.1:port for loopback navigation.
+const defaultAllowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+];
+const isLoopbackOrigin = (origin: string): boolean =>
+  /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
 app.use(
   "*",
   cors({
-    origin: process.env.CORS_ORIGIN
-      ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim())
-      : ["http://localhost:5173"],
+    origin: (origin) => {
+      if (!origin) return origin;
+      const configured = process.env.CORS_ORIGIN
+        ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim())
+        : defaultAllowedOrigins;
+      if (configured.includes(origin)) return origin;
+      if (isLoopbackOrigin(origin)) return origin;
+      return null;
+    },
     allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   }),
 );
@@ -63,12 +90,22 @@ for (const [key, value] of Object.entries(process.env)) {
 const llmAdapter = createGatewayAdapter(ai.gateway, { apiKeys });
 
 // ── Bootstrap API ───────────────────────────────────────────────
-const pluginsDir =
+// Bundled plugins ship inside the repo / packaged app. The desktop shell
+// can additionally mount a user plugins directory via COVEL_USER_PLUGINS_DIR
+// (typically `<userData>/plugins`). Bundled wins on id collision so user
+// plugins can augment but not shadow core functionality.
+const bundledPluginsDir =
   process.env.COVEL_PLUGINS_DIR ??
   resolve(import.meta.dirname, "../../../plugins");
+const userPluginsDir = process.env.COVEL_USER_PLUGINS_DIR;
+const pluginsDirs = [bundledPluginsDir];
+if (userPluginsDir && userPluginsDir !== bundledPluginsDir) {
+  pluginsDirs.push(userPluginsDir);
+}
 const ensureEmbeddingLock = createEmbeddingLockHelper({ store, ai, apiKeys });
 const api = await bootstrapApi({
-  pluginsDir,
+  pluginsDir: bundledPluginsDir,
+  pluginsDirs,
   llmAdapter,
   store,
   storeBackend,
@@ -76,16 +113,36 @@ const api = await bootstrapApi({
 });
 
 // ── Seed worlds ──────────────────────────────────────────────────
-const worldsDir =
+// Bundled worlds are always seeded. When COVEL_USER_WORLDS_DIR is set
+// (desktop app points it at userData/worlds), user-created worlds are
+// merged on top and hot-reloaded alongside.
+const bundledWorldsDir =
   process.env.COVEL_WORLDS_DIR ??
   resolve(import.meta.dirname, "../../../worlds");
-await seedWorlds(store, worldsDir);
+const userWorldsDir = process.env.COVEL_USER_WORLDS_DIR;
+const worldsDirs = [bundledWorldsDir];
+if (userWorldsDir && userWorldsDir !== bundledWorldsDir) {
+  worldsDirs.push(userWorldsDir);
+}
+
+for (const dir of worldsDirs) {
+  try {
+    await seedWorlds(store, dir);
+  } catch (err) {
+    console.warn(`[server] Could not seed worlds from ${dir}:`, err);
+  }
+}
 
 // ── World file watcher (hot-reload) ─────────────────────────────
-const worldWatcher = createWorldFileWatcher(worldsDir, store, api.eventBus);
-worldWatcher.start();
-process.on("SIGTERM", () => worldWatcher.stop());
-process.on("SIGINT", () => worldWatcher.stop());
+const worldWatchers = worldsDirs.map((dir) =>
+  createWorldFileWatcher(dir, store, api.eventBus),
+);
+for (const watcher of worldWatchers) watcher.start();
+const stopWatchers = () => {
+  for (const watcher of worldWatchers) watcher.stop();
+};
+process.on("SIGTERM", stopWatchers);
+process.on("SIGINT", stopWatchers);
 
 // ── Mount routes ─────────────────────────────────────────────────
 app.route("/", api.app);

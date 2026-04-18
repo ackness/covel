@@ -7,6 +7,8 @@
 
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { eq, and, asc, desc, gte, type SQL } from 'drizzle-orm';
 import * as schema from './schema.js';
 import type {
@@ -77,6 +79,20 @@ import { createSqliteVectorCapability } from './sqlite-vector.js';
 // ── Factory ─────────────────────────────────────────────────────
 
 export function createSqliteStore(dbPath: string): DataStore & Partial<VectorStoreCapability & VectorModelOps> {
+  // Ensure the parent directory exists. Without this, a fresh checkout that
+  // points STORE_BACKEND=sqlite at the default `./data/covel.db` path will
+  // crash on boot because better-sqlite3 refuses to open a file in a
+  // non-existent directory. This is cheap and idempotent.
+  const dir = dirname(dbPath);
+  if (dir && dir !== '.' && dir !== ':memory:') {
+    try {
+      mkdirSync(dir, { recursive: true });
+    } catch {
+      // Fall through — better-sqlite3 will produce a clearer error if the
+      // path is truly invalid.
+    }
+  }
+
   const sqlite = new Database(dbPath);
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
@@ -106,13 +122,13 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
         .values({
           id: session.id,
           worldId: session.worldId ?? null,
-          phase: session.phase,
+          status: session.status,
           turnCount: session.turnCount,
+          preGameCompleted: JSON.stringify(session.preGameCompleted ?? []),
           locale: session.locale,
           activePlugins: JSON.stringify(session.activePlugins),
           createdAt: session.createdAt,
           updatedAt: session.updatedAt,
-          playingTurnOffset: session.playingTurnOffset ?? null,
           runtimeModelOverrides: JSON.stringify(session.runtimeModelOverrides ?? {}),
         })
         .run();
@@ -129,16 +145,16 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
 
     async updateSession(
       id: string,
-      patch: Partial<Pick<SessionRecord, 'phase' | 'turnCount' | 'activePlugins' | 'updatedAt' | 'embeddingModelId' | 'embeddingLockedAt' | 'playingTurnOffset' | 'runtimeModelOverrides'>>,
+      patch: Partial<Pick<SessionRecord, 'status' | 'turnCount' | 'preGameCompleted' | 'activePlugins' | 'updatedAt' | 'embeddingModelId' | 'embeddingLockedAt' | 'runtimeModelOverrides'>>,
     ): Promise<void> {
       const values: Record<string, unknown> = {};
-      if (patch.phase !== undefined) values.phase = patch.phase;
+      if (patch.status !== undefined) values.status = patch.status;
       if (patch.turnCount !== undefined) values.turnCount = patch.turnCount;
+      if (patch.preGameCompleted !== undefined) values.preGameCompleted = JSON.stringify(patch.preGameCompleted);
       if (patch.activePlugins !== undefined) values.activePlugins = JSON.stringify(patch.activePlugins);
       if (patch.updatedAt !== undefined) values.updatedAt = patch.updatedAt;
       if ('embeddingModelId' in patch) values.embeddingModelId = patch.embeddingModelId ?? null;
       if ('embeddingLockedAt' in patch) values.embeddingLockedAt = patch.embeddingLockedAt ?? null;
-      if ('playingTurnOffset' in patch) values.playingTurnOffset = patch.playingTurnOffset ?? null;
       if ('runtimeModelOverrides' in patch) {
         values.runtimeModelOverrides = JSON.stringify(patch.runtimeModelOverrides ?? {});
       }

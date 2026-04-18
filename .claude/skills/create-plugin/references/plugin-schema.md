@@ -88,11 +88,12 @@ config:
 
 | 区间 | 阶段 | 说明 |
 |------|------|------|
-| 0-99 | Pre-Game | 仅首轮，游戏初始化 |
-| 100-499 | Pre-Turn | 每轮，叙事前处理 |
-| 500 | Narrator | 主叙事输出（已被 core-narrator 占用） |
-| 501-999 | After-Turn | 叙事后处理 |
-| 1000 | Audit | 审计（保留） |
+| 0 | Start-Game | 点击开始游戏（保留），Turn 0 |
+| 1-99 | Pre-Game | 仅首轮，游戏初始化 ，Turn 0 |
+| 100-499 | Pre-Turn | 每轮，叙事前处理，主要处理只读数据，Turn 1->N |
+| 500 | Narrator | 主叙事输出（已被 core-narrator 占用），Turn 1->N ｜
+| 501-999 | After-Turn | 叙事后处理，主要处理写数据，Turn 1->N |
+| 1000 | Audit | 审计（保留），Turn 1->N |
 
 ## 可用 builtin 工具
 

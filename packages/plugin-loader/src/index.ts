@@ -3,7 +3,7 @@ export { parsePluginMd } from './parse-plugin-md.js';
 export { parseReference, shouldInjectReference } from './parse-reference.js';
 
 // ── Discovery & Loading ──────────────────────────────────────────
-export { discoverPlugins } from './discover.js';
+export { discoverPlugins, discoverPluginsMulti } from './discover.js';
 export { loadPluginSummary, loadPluginManifest, loadRuntime } from './load.js';
 
 // ── Registry ─────────────────────────────────────────────────────

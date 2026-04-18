@@ -34,13 +34,18 @@ export function createAiStack(): AiStack {
     console.log(`[ai-setup] Model database loaded: ${modelDb.count} models`);
   }
 
-  // Try llm.toml first (slot-centric config)
-  const llmResult = loadLlmConfig(resolve(projectRoot, "llm.toml"));
+  // Try llm.toml first (slot-centric config).
+  // COVEL_LLM_TOML can point to a user-editable override (typically under
+  // Electron userData). When set, we prefer it over the bundled copy.
+  const llmTomlPath = process.env.COVEL_LLM_TOML
+    ? resolve(process.env.COVEL_LLM_TOML)
+    : resolve(projectRoot, "llm.toml");
+  const llmResult = loadLlmConfig(llmTomlPath);
   if (llmResult) {
     config = llmResult.aiConfig;
     llmConfig = llmResult.llmConfig;
     console.log(
-      `[ai-setup] Loaded llm.toml with slots:`,
+      `[ai-setup] Loaded llm.toml (${llmTomlPath}) with slots:`,
       Object.keys(llmResult.llmConfig.covel).join(", "),
     );
   } else {
@@ -95,32 +100,54 @@ export function createAiStack(): AiStack {
   };
 }
 
-/** Load the bundled model-db.json from the ai-provider package. */
+/**
+ * Load the model database.
+ *
+ * Resolution order:
+ *   1. `COVEL_MODEL_DB_PATH` explicit override
+ *   2. `COVEL_USER_CONFIG_DIR/model-db.json` — user cache populated via the
+ *      "Refresh model DB" action in Settings
+ *   3. Bundled `packages/ai-provider/data/model-db.json`
+ *
+ * The first file that parses into a valid `ModelDbFile` is used. This lets
+ * the desktop app ship with a baseline database but still receive updates
+ * without re-releasing the app.
+ */
 function loadBundledModelDb(projectRoot: string): ModelDatabase | null {
-  const dbPath = resolve(projectRoot, "packages/ai-provider/data/model-db.json");
-  try {
-    const raw = readFileSync(dbPath, "utf-8");
-    const data: unknown = JSON.parse(raw);
-    // Basic runtime validation of ModelDbFile shape
-    if (
-      !data ||
-      typeof data !== "object" ||
-      !("updatedAt" in data) ||
-      typeof (data as Record<string, unknown>).updatedAt !== "string" ||
-      !("count" in data) ||
-      typeof (data as Record<string, unknown>).count !== "number" ||
-      !("models" in data) ||
-      typeof (data as Record<string, unknown>).models !== "object" ||
-      (data as Record<string, unknown>).models === null
-    ) {
-      console.warn("[ai-setup] model-db.json has invalid structure (missing updatedAt/count/models)");
-      return null;
+  const candidates = [
+    process.env.COVEL_MODEL_DB_PATH,
+    process.env.COVEL_USER_CONFIG_DIR
+      ? resolve(process.env.COVEL_USER_CONFIG_DIR, "model-db.json")
+      : undefined,
+    resolve(projectRoot, "packages/ai-provider/data/model-db.json"),
+  ].filter((p): p is string => typeof p === "string" && p.length > 0);
+
+  for (const dbPath of candidates) {
+    try {
+      const raw = readFileSync(dbPath, "utf-8");
+      const data: unknown = JSON.parse(raw);
+      if (
+        !data ||
+        typeof data !== "object" ||
+        !("updatedAt" in data) ||
+        typeof (data as Record<string, unknown>).updatedAt !== "string" ||
+        !("count" in data) ||
+        typeof (data as Record<string, unknown>).count !== "number" ||
+        !("models" in data) ||
+        typeof (data as Record<string, unknown>).models !== "object" ||
+        (data as Record<string, unknown>).models === null
+      ) {
+        console.warn(`[ai-setup] model-db.json invalid structure at ${dbPath}`);
+        continue;
+      }
+      console.log(`[ai-setup] Loaded model-db from ${dbPath}`);
+      return createModelDatabase(data as ModelDbFile);
+    } catch {
+      // try next candidate
     }
-    return createModelDatabase(data as ModelDbFile);
-  } catch {
-    console.warn("[ai-setup] Could not load bundled model-db.json");
-    return null;
   }
+  console.warn("[ai-setup] Could not load any model-db.json");
+  return null;
 }
 
 export interface AiStack {

@@ -1,9 +1,24 @@
+##
+# Covel — one-command production stack
+#
+# Usage:
+#   pnpm docker:build     # Build + start (first time or after code changes)
+#   pnpm docker:up        # Start existing containers
+#   pnpm docker:down      # Stop (keep volumes)
+#   pnpm docker:down-all  # Stop + delete volumes (fresh start)
+#   pnpm docker:logs      # Tail logs
+#
+# Prerequisites:
+#   1. cp .env.example .env          (edit POSTGRES_PASSWORD for non-local)
+#   2. cp llm.toml.example llm.toml  (configure LLM provider slots)
+#   3. cp .env.llm.example .env.llm  (add LLM API keys, optional)
+##
+
 services:
   postgres:
     # pgvector/pgvector ships PostgreSQL with the `vector` extension
-    # pre-installed. ADR-002 makes pgvector mandatory in the PG backend,
-    # so the app container will refuse to start if the extension is
-    # missing — bundling it here keeps `docker compose up` zero-config.
+    # pre-installed (required by ADR-002). The app container will refuse
+    # to start if the extension is missing.
     image: pgvector/pgvector:pg17
     container_name: covel-postgres
     restart: unless-stopped
@@ -11,7 +26,7 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-covel}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-covel}
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -30,27 +45,43 @@ services:
     ports:
       - "${APP_PORT:-3001}:3001"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-covel}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-covel}
+      # ── Database ────────────────────────────────────────────────
+      DATABASE_URL: postgresql://${POSTGRES_USER:-covel}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-covel}
       STORE_BACKEND: pg
+
+      # ── Server ─────────────────────────────────────────────────
       SERVER_PORT: "3001"
       NODE_ENV: production
       SERVE_STATIC: "true"
       STATIC_DIR: ./web-dist
+
+      # ── Features ───────────────────────────────────────────────
+      # Enable Letta-style core memory system (post-turn LLM summarizer)
+      COVEL_MEMORY_V1: "1"
+
+      # World package seed directory (inside container)
+      COVEL_WORLDS_DIR: /app/worlds
     env_file:
       - ../.env
       # .env.llm is optional — only needed for server-side LLM key injection.
-      # In production, API keys are passed per-request from the browser.
-      # Create .env.llm from .env.llm.example: cp .env.llm.example .env.llm
+      # In browser-key mode (default), API keys are passed per-request via
+      # X-Provider-Keys header from the frontend localStorage.
       - path: ../.env.llm
         required: false
     volumes:
       # Model slot configuration (required — copy llm.toml.example to llm.toml)
       - ../llm.toml:/app/llm.toml:ro
-      # Optional: mount custom world packages
+      # Optional: mount custom world packages from host
       # - ../worlds:/app/worlds:ro
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 15s
 
 volumes:
   pgdata:

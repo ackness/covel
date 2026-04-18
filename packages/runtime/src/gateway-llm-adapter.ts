@@ -29,7 +29,7 @@ export interface GatewayLike {
       }>;
       providerRequestMetadata?: Record<string, unknown>;
     },
-    options?: { apiKeys?: Record<string, string>; traceId?: string },
+    options?: { apiKeys?: Record<string, string>; traceId?: string; signal?: AbortSignal },
   ): Promise<{
     text: string;
     finishReason: string;
@@ -52,7 +52,7 @@ export interface GatewayLike {
       }>;
       providerRequestMetadata?: Record<string, unknown>;
     },
-    options?: { apiKeys?: Record<string, string>; traceId?: string },
+    options?: { apiKeys?: Record<string, string>; traceId?: string; signal?: AbortSignal },
   ): AsyncIterable<{
     type: string;
     textDelta?: string;
@@ -98,6 +98,7 @@ export function createGatewayAdapter(
         {
           apiKeys: config?.apiKeys,
           traceId: config?.traceId,
+          ...(params.signal ? { signal: params.signal } : {}),
         },
       );
 
@@ -137,6 +138,7 @@ export function createGatewayAdapter(
         {
           apiKeys: config?.apiKeys,
           traceId: config?.traceId,
+          ...(params.signal ? { signal: params.signal } : {}),
         },
       )) {
         if (event.type === 'text-delta' && event.textDelta !== undefined) {

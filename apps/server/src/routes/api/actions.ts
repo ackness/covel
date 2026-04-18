@@ -282,11 +282,17 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
           },
           onRuntimeComplete: async (info) => {
             await trace.runtimeCompleted({ runtimeId: info.runtimeId, pluginId: info.pluginId, status: info.status, durationMs: info.durationMs });
+            const eventType =
+              info.status === 'failed'  ? 'runtime.failed'  :
+              info.status === 'skipped' ? 'runtime.skipped' :
+                                          'runtime.completed';
             await stream.writeSSE({
-              data: JSON.stringify(makeEnvelope('runtime.completed', {
+              data: JSON.stringify(makeEnvelope(eventType, {
                 runtimeId: info.runtimeId,
                 pluginId: info.pluginId,
                 durationMs: info.durationMs,
+                status: info.status,
+                ...(info.status === 'failed' && info.error ? { error: info.error } : {}),
               })),
             });
           },
@@ -333,6 +339,7 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
           durationMs: result.durationMs,
         })),
       });
+
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await stream.writeSSE({

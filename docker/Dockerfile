@@ -12,10 +12,13 @@ COPY apps/web/package.json apps/web/
 
 # Packages (alphabetical — keep in sync with packages/ directory)
 COPY packages/ai-provider/package.json packages/ai-provider/
+COPY packages/api-client/package.json packages/api-client/
 COPY packages/approval/package.json packages/approval/
 COPY packages/context/package.json packages/context/
 COPY packages/create/package.json packages/create/
 COPY packages/events/package.json packages/events/
+COPY packages/lorebook/package.json packages/lorebook/
+COPY packages/memory/package.json packages/memory/
 COPY packages/plugin-loader/package.json packages/plugin-loader/
 COPY packages/plugin-test-utils/package.json packages/plugin-test-utils/
 COPY packages/runtime/package.json packages/runtime/
@@ -27,7 +30,9 @@ COPY packages/tools/package.json packages/tools/
 # Plugins (workspace members, need manifests for pnpm install)
 COPY plugins/core-char-creator/package.json plugins/core-char-creator/
 COPY plugins/core-codex/package.json plugins/core-codex/
+COPY plugins/core-guide/package.json plugins/core-guide/
 COPY plugins/core-narrator/package.json plugins/core-narrator/
+COPY plugins/core-npc-graph/package.json plugins/core-npc-graph/
 COPY plugins/core-pregame/package.json plugins/core-pregame/
 COPY plugins/core-world-init/package.json plugins/core-world-init/
 

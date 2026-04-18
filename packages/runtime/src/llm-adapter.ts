@@ -51,6 +51,12 @@ export interface LLMAdapter {
       readonly type: 'json_schema';
       readonly schema: Readonly<Record<string, unknown>>;
     };
+    /**
+     * Abort the HTTP call when the signal fires. Required for timeouts —
+     * turn-executor's `timeoutMs` is a loop guard; without this signal a
+     * hung HTTP request will never unblock.
+     */
+    readonly signal?: AbortSignal;
   }): Promise<LLMResponse>;
 
   /**
@@ -61,5 +67,7 @@ export interface LLMAdapter {
     readonly model?: string;
     readonly messages: readonly LLMMessage[];
     readonly tools?: readonly LLMToolDefinition[];
+    /** @see generate.signal */
+    readonly signal?: AbortSignal;
   }): AsyncIterable<LLMStreamEvent>;
 }
