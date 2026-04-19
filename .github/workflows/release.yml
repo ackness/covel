@@ -104,6 +104,21 @@ jobs:
           echo "---"
           find release -type f | sort
 
+      - name: Remove stale releases for this tag
+        # 如果之前某次 build 失败过，softprops 可能留下一个 draft；同一 tag
+        # 上同时存在 draft + published 会让本次 finalize 报
+        # "already_exists: tag_name"。所以 publish 前清空所有同 tag 的
+        # release 记录（不删 tag 本身，tag 仍指向当前 commit）。
+        run: |
+          gh api /repos/${{ github.repository }}/releases \
+            --jq '.[] | select(.tag_name == "${{ github.ref_name }}") | .id' |
+          while read -r id; do
+            echo "Deleting stale release $id for tag ${{ github.ref_name }}"
+            gh api -X DELETE "/repos/${{ github.repository }}/releases/$id"
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
