@@ -1,6 +1,8 @@
 # Covel
 
-插件驱动的 AI 交互式叙事引擎。Kernel 提供执行原语，Plugin 承载所有玩法逻辑。
+一个基于大模型的文字冒险游戏平台，玩法通过插件扩展。
+
+每个插件是一个 Agent Runtime：自己决定什么时候触发、读取哪些上下文、调用哪些工具、写入什么状态。叙事、NPC 关系、知识、角色、战斗、图像生成都是独立插件，可以装、可以卸、可以热切换，也可以自己写。
 
 > 🇬🇧 [English version](./docs/README.en.md)
 
@@ -10,13 +12,13 @@
 [![pnpm](https://img.shields.io/badge/pnpm-10.7-f69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-![Covel demo](./.assets/demo.gif)
+![Covel demo](./.assets/images/demo.gif)
 
 ---
 
-Covel 是一个为 AI RPG 设计的插件平台。每个回合走固定的优先级管线（触发 → 调度 → 上下文组装 → LLM 推理 → 提案提交），游戏机制完全由插件实现，可以在运行时增减或热切换。
+内置叙事、动作引导、NPC 关系图、知识典籍、角色创建等插件，开箱即玩，也可直接作为二次开发的样板。
 
-支持 DeepSeek · Qwen (DashScope) · OpenAI · Anthropic，通过 `llm.toml` 配置 Slot，不改代码切换模型。
+支持 DeepSeek · Qwen (DashScope) · OpenAI · Anthropic，通过 `llm.toml` 按 Slot 配置模型，不改代码切换。
 
 ## 下载
 

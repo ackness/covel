@@ -91,8 +91,11 @@ win:
       arch: [x64, arm64]
     - target: portable
       arch: [x64]
-  signingHashAlgorithms:
-    - sha256
+  # electron-builder 26.x 起签名相关字段改到 signtoolOptions 下。
+  # 未配置 CSC_LINK 时会直接输出 unsigned 产物。
+  signtoolOptions:
+    signingHashAlgorithms:
+      - sha256
   # verifyUpdateCodeSignature defaults to true in electron-updater — keep it
   # for published builds but allow unsigned locally via env.
   # publisherName: "Your Organization"  # uncomment once cert is in place

@@ -108,4 +108,3 @@ docker/docker-compose.mock.replay.yml
 .assets/*.mp4
 .assets/*.mov
 .assets/*.gif
-!.assets/demo.gif

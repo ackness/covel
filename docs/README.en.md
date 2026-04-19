@@ -1,6 +1,8 @@
 # Covel
 
-Plugin-driven AI interactive storytelling engine. The kernel provides execution primitives; plugins carry all gameplay logic.
+An LLM-powered text adventure platform, extended through plugins.
+
+Each plugin is an Agent Runtime: it decides when to trigger, what context to read, which tools to call, and what state to write. Narration, NPC relationships, lore, characters, combat, image generation — each one is a separate plugin you can install, remove, hot-swap, or write yourself.
 
 > 🇨🇳 [中文版本](../README.md) · 📖 [Docs index / 中文文档索引](./README.md)
 
@@ -12,7 +14,7 @@ Plugin-driven AI interactive storytelling engine. The kernel provides execution 
 
 ---
 
-Covel is a plugin platform designed for AI RPGs. Every turn follows a fixed priority pipeline (trigger → schedule → context assembly → LLM inference → proposal commit). All gameplay mechanics live in plugins that can be hot-swapped at runtime.
+Ships with first-party plugins — narrator, action guide, NPC relation graph, codex, character creator — playable out of the box, and useful as a starting point for your own.
 
 Supports DeepSeek · Qwen (DashScope) · OpenAI · Anthropic. Model routing is configured through `llm.toml` slots — no code changes required to switch models.
 
