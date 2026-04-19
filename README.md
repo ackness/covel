@@ -10,6 +10,8 @@
 [![pnpm](https://img.shields.io/badge/pnpm-10.7-f69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
+![Covel demo](./.assets/demo.gif)
+
 ---
 
 Covel 是一个为 AI RPG 设计的插件平台。每个回合走固定的优先级管线（触发 → 调度 → 上下文组装 → LLM 推理 → 提案提交），游戏机制完全由插件实现，可以在运行时增减或热切换。

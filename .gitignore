@@ -102,3 +102,10 @@ tmp/
 # ── aimock fixtures (recorded LLM responses, do not commit) ──
 fixtures/aimock/
 docker/docker-compose.mock.replay.yml
+
+# ── Local screen recordings / temp captures (don't push to repo) ──
+.assets/tmp/
+.assets/*.mp4
+.assets/*.mov
+.assets/*.gif
+!.assets/demo.gif

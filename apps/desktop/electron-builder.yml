@@ -118,10 +118,11 @@ linux:
   category: Game
   maintainer: covel@example.com
   desktop:
-    Name: Covel
-    Comment: AI-powered interactive storytelling
-    Categories: Game;RolePlaying;
-    StartupWMClass: Covel
+    entry:
+      Name: Covel
+      Comment: AI-powered interactive storytelling
+      Categories: Game;RolePlaying;
+      StartupWMClass: Covel
 
 # ── Auto-update (electron-updater) ────────────────────────────────
 # Uncomment once a release channel is wired up:
