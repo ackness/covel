@@ -48,10 +48,18 @@ export function resolveProjectRoot(): string {
   return path.join(process.resourcesPath!, "server");
 }
 
-/** Absolute path to the server entry file. */
+/**
+ * Absolute path to the server entry file.
+ *
+ * Dev layout（仓库源码）：root/apps/server/src/index.ts
+ * Prod layout（pnpm deploy 打包后的独立目录）：root/src/index.ts
+ */
 export function resolveServerEntry(): string {
   const root = resolveProjectRoot();
-  return path.join(root, "apps/server/src/index.ts");
+  if (isDev) {
+    return path.join(root, "apps/server/src/index.ts");
+  }
+  return path.join(root, "src/index.ts");
 }
 
 /** Default bundled worlds directory (read-only in prod). */

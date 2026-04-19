@@ -58,8 +58,16 @@ await build({
   external: ["electron"],
 });
 
-// Step 3: Stage server resources
-console.log("\n[3/4] Staging server resources...");
+// Step 3: Stage server resources via `pnpm deploy`.
+//
+// 背景：electron-builder 对 pnpm 的 isolated node_modules（软链 + .pnpm/）
+// 支持非常差——打 asar 时会 stat 断链的 symlink 报 ENOENT。hoisted 模式
+// 也不行，因为 apps/server/node_modules 下仍只有 @covel/* 的包内软链。
+//
+// 方案：`pnpm deploy` 生成一个完全独立、扁平的可部署目录，把 workspace
+// 包和 npm 包一起拷贝进去（所有 @covel/* 变成真实文件夹而非软链），
+// electron-builder 打包时不再触碰 workspace 体系。
+console.log("\n[3/4] Staging server resources (pnpm deploy)...");
 const stagingDir = path.join(desktopRoot, "staging");
 
 // Clean previous staging
@@ -79,36 +87,30 @@ if (!fs.existsSync(webDistSrc)) {
 fs.cpSync(webDistSrc, webDistStaging, { recursive: true });
 console.log("  ✓ web-dist copied");
 
-// Copy server essentials (source code, no node_modules)
-const serverDirs = [
-  "apps/server/src",
-  "apps/server/package.json",
-  "apps/server/tsconfig.json",
-  "packages",
-  "plugins",
-  "prompts",
-  "worlds",
-  "tsconfig.json",
-  "package.json",
-  "pnpm-workspace.yaml",
-  "pnpm-lock.yaml",
-];
+// `pnpm deploy` 创建 standalone 部署目录。--legacy 走复制语义（默认 2026+ 版
+// 已支持），--prod 剔除 devDeps，--filter 锁定目标 workspace 包。
+// 目录是独立的（无 pnpm-workspace.yaml），node_modules 扁平放置。
+execSync(
+  `pnpm --filter @covel/server deploy --prod --legacy "${serverStaging}"`,
+  {
+    cwd: projectRoot,
+    stdio: "inherit",
+  },
+);
+console.log("  ✓ pnpm deploy → staging/server/");
 
-for (const entry of serverDirs) {
+// 拷贝 server 运行所需的仓库级资源（这些不在 @covel/server 依赖图里）
+const sideCarResources = ["plugins", "prompts", "worlds"];
+for (const entry of sideCarResources) {
   const src = path.join(projectRoot, entry);
   const dest = path.join(serverStaging, entry);
   if (!fs.existsSync(src)) {
     console.log(`  ⚠ Skipping ${entry} (not found)`);
     continue;
   }
-  const stat = fs.statSync(src);
-  if (stat.isDirectory()) {
-    fs.cpSync(src, dest, { recursive: true });
-  } else {
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.copyFileSync(src, dest);
-  }
+  fs.cpSync(src, dest, { recursive: true });
 }
+console.log("  ✓ plugins/prompts/worlds copied");
 
 // Copy llm.toml if present
 const llmToml = path.join(projectRoot, "llm.toml");
@@ -116,13 +118,6 @@ if (fs.existsSync(llmToml)) {
   fs.copyFileSync(llmToml, path.join(serverStaging, "llm.toml"));
   console.log("  ✓ llm.toml copied");
 }
-
-// Install production dependencies in staging
-console.log("  Installing server dependencies...");
-execSync("pnpm install --frozen-lockfile --prod", {
-  cwd: serverStaging,
-  stdio: "inherit",
-});
 console.log("  ✓ server resources staged");
 
 // Step 4: electron-builder
