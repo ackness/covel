@@ -31,10 +31,8 @@ jobs:
         include:
           - os: macos-14            # Apple Silicon runner
             platform: mac
-            dist_script: dist:mac
           - os: windows-latest
             platform: win
-            dist_script: dist:win
 
     steps:
       - name: Checkout
@@ -63,17 +61,15 @@ jobs:
         run: pnpm --filter @covel/desktop build
 
       - name: Package Electron (${{ matrix.platform }})
-        # 加 --publish=never 让 electron-builder 不自己去建 GitHub release，
-        # 我们用下游的 softprops/action-gh-release 统一创建，避免两个 job
-        # 各自 race 着发 release。
-        run: pnpm --filter @covel/desktop ${{ matrix.dist_script }} -- --publish=never
+        # 直接调 electron-builder CLI 避免 pnpm script + `--` 吞参数；
+        # --publish=never 让 electron-builder 不自己创建 release，交给下游
+        # softprops/action-gh-release job 统一处理。
+        # 签名 secret 在未设置时会变成空串，空的 CSC_LINK 会被 electron-builder
+        # 当成 cert 路径误读，因此只在确实存在时才注入。
+        working-directory: apps/desktop
+        run: pnpm exec electron-builder --${{ matrix.platform }} --publish=never
         env:
-          # electron-builder 自动从 env 读取签名材料；未设置则产出 unsigned artifact
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
