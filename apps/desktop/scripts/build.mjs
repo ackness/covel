@@ -87,17 +87,22 @@ if (!fs.existsSync(webDistSrc)) {
 fs.cpSync(webDistSrc, webDistStaging, { recursive: true });
 console.log("  ✓ web-dist copied");
 
-// `pnpm deploy` 创建 standalone 部署目录。--legacy 走复制语义（默认 2026+ 版
-// 已支持），--prod 剔除 devDeps，--filter 锁定目标 workspace 包。
-// 目录是独立的（无 pnpm-workspace.yaml），node_modules 扁平放置。
+// `pnpm deploy` 创建 standalone 部署目录。
+// - --filter 锁定目标 workspace 包
+// - --prod 剔除 devDeps
+// - --legacy 走复制语义（2026+ 默认开启 dedicated-lockfile，用 --legacy 关掉）
+// - --config.node-linker=hoisted 让 node_modules 里全是真实文件夹而非
+//   .pnpm/ 软链（默认 isolated 模式下 node_modules/tsx → .pnpm/tsx@X.Y/...
+//   这种软链 macOS 可用，Windows 上 electron-builder 复制 extraResources
+//   时会断链，导致打包后 resources/server/node_modules/tsx 不存在）。
 execSync(
-  `pnpm --filter @covel/server deploy --prod --legacy "${serverStaging}"`,
+  `pnpm --filter @covel/server deploy --prod --legacy --config.node-linker=hoisted "${serverStaging}"`,
   {
     cwd: projectRoot,
     stdio: "inherit",
   },
 );
-console.log("  ✓ pnpm deploy → staging/server/");
+console.log("  ✓ pnpm deploy → staging/server/ (hoisted)");
 
 // 拷贝 server 运行所需的仓库级资源（这些不在 @covel/server 依赖图里）。
 // 注意：plugins/*/node_modules 来自 pnpm workspace 安装，内部是层层嵌套的
