@@ -6,9 +6,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsr generate && tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "tsc --noEmit",
+    "generate:routes": "tsr generate",
+    "lint": "tsr generate && tsc --noEmit",
     "check:i18n": "node ./scripts/check-no-chinese-literal.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -38,16 +39,17 @@
     "radix-ui": "^1.4.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-force-graph-2d": "^1.29.1",
     "react-i18next": "^17.0.2",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.9.0",
     "remark-gfm": "^4.0.1",
-    "react-force-graph-2d": "^1.29.1",
     "tailwind-merge": "^3.2.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.0",
     "@tanstack/react-router-devtools": "^1.120.0",
+    "@tanstack/router-cli": "^1.166.33",
     "@tanstack/router-plugin": "^1.167.12",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",

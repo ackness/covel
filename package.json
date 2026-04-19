@@ -11,6 +11,7 @@
     "stop": "node ./scripts/stop-dev.mjs",
     "build": "turbo build",
     "lint": "turbo lint",
+    "lint:ci": "pnpm clean && rm -f apps/web/src/routeTree.gen.ts && pnpm install --frozen-lockfile && pnpm lint",
     "clean": "turbo clean",
     "db:up": "docker compose -f docker/docker-compose.yml --env-file .env up -d postgres",
     "db:down": "docker compose -f docker/docker-compose.yml --env-file .env down",
