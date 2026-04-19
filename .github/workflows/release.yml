@@ -1,6 +1,7 @@
 name: Release Desktop
 
-# 在推送 v* tag 时触发（例如 v0.0.1-beta / v0.1.0 / v1.0.0）。
+# 只在推送 v* tag 时触发（例如 v0.0.1-beta / v0.1.0 / v1.0.0）。
+# push 到 main 不会触发；CI 由 PR 上的其他 workflow 覆盖（本 repo 暂无）。
 # 也允许手动从 Actions UI 触发，便于测试构建流程。
 on:
   push:
@@ -109,7 +110,8 @@ jobs:
         with:
           name: Covel ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
-          draft: true
+          draft: false
+          # tag 带 -（如 -beta / -rc.1）视为 pre-release
           prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
           fail_on_unmatched_files: true
