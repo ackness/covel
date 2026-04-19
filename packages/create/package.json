@@ -13,7 +13,7 @@
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "lint": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "node ../../scripts/remove-paths.mjs dist"
   },
   "dependencies": {
     "@covel/shared": "workspace:*",

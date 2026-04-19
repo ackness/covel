@@ -3,14 +3,26 @@
   "version": "0.0.1-beta",
   "private": true,
   "type": "module",
+  "files": [
+    "dist",
+    "drizzle",
+    "drizzle.config.ts",
+    "package.json",
+    "src",
+    "tsconfig.json"
+  ],
   "scripts": {
     "dev": "tsx watch --env-file=../../.env --env-file=../../.env.llm src/index.ts",
+    "dev:pg": "node ../../scripts/run-with-env.mjs STORE_BACKEND=pg pnpm exec tsx watch --env-file=../../.env --env-file=../../.env.llm src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "tsc -b",
     "start": "node dist/index.js",
+    "db:migrate": "pnpm exec drizzle-kit migrate --config=drizzle.config.ts",
+    "db:generate": "pnpm exec drizzle-kit generate --config=drizzle.config.ts",
+    "db:studio": "pnpm exec drizzle-kit studio --config=drizzle.config.ts",
     "lint": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "node ../../scripts/remove-paths.mjs dist"
   },
   "dependencies": {
     "@covel/ai-provider": "workspace:*",
@@ -32,6 +44,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "drizzle-kit": "^0.31.10",
     "typescript": "^6.0.2",
     "vitest": "^4.1.2"
   }

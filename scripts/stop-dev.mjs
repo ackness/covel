@@ -7,9 +7,9 @@ import { terminateProcessTree } from "./dev-supervisor.mjs";
 export const DEV_PORTS = [3001, 5174];
 
 const DEV_COMMAND_PATTERNS = [
-  /pnpm(?:\s+run)?\s+dev(?::web|:server)?(?:\s|$)/,
-  /scripts\/dev-supervisor\.mjs\s+turbo\s+dev(?:\s|$)/,
-  /(?:^|\s)turbo\s+dev(?:\s|$)/,
+  /pnpm(?:\s+run)?\s+dev(?::web|:server|:pg)?(?:\s|$)/,
+  /scripts\/dev-supervisor\.mjs\s+turbo\s+dev(?::web|:server|:pg)?(?:\s|$)/,
+  /(?:^|\s)turbo\s+dev(?::web|:server|:pg)?(?:\s|$)/,
   /tsx\/dist\/cli\.mjs\s+watch(?:\s|$)/,
   /vite\/bin\/vite\.js(?:\s|$)/,
 ];
@@ -92,20 +92,76 @@ const runAndCollect = async (command, args, { allowEmpty = false, spawnImpl = sp
     });
   });
 
+const runPowerShellAndCollect = async (script, { allowEmpty = false, spawnImpl = spawn } = {}) =>
+  runAndCollect(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-Command", script],
+    { allowEmpty, spawnImpl },
+  );
+
+const parseWindowsProcessJson = (stdout) => {
+  const trimmed = stdout.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const records = JSON.parse(trimmed);
+  const list = Array.isArray(records) ? records : [records];
+
+  return list
+    .map((record) => ({
+      pid: Number(record.ProcessId),
+      ppid: Number(record.ParentProcessId),
+      command: String(record.CommandLine ?? ""),
+    }))
+    .filter(
+      ({ pid, ppid }) => Number.isInteger(pid) && Number.isInteger(ppid),
+    );
+};
+
 export const listProcesses = async ({ spawnImpl = spawn } = {}) =>
-  parseProcessTable(await runAndCollect("ps", ["-Ao", "pid=,ppid=,command="], { spawnImpl }));
+  process.platform === "win32"
+    ? parseWindowsProcessJson(
+        await runPowerShellAndCollect(
+          "$ErrorActionPreference='Stop'; Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, CommandLine | ConvertTo-Json -Compress",
+          { spawnImpl },
+        ),
+      )
+    : parseProcessTable(
+        await runAndCollect("ps", ["-Ao", "pid=,ppid=,command="], {
+          spawnImpl,
+        }),
+      );
 
 export const listRepoPids = async (repoDir, { spawnImpl = spawn } = {}) =>
-  parsePidList(await runAndCollect("lsof", ["-t", "+D", repoDir], { allowEmpty: true, spawnImpl }));
+  process.platform === "win32"
+    ? new Set(
+        (await listProcesses({ spawnImpl }))
+          .filter(({ command }) => command.includes(repoDir))
+          .map(({ pid }) => pid),
+      )
+    : parsePidList(
+        await runAndCollect("lsof", ["-t", "+D", repoDir], {
+          allowEmpty: true,
+          spawnImpl,
+        }),
+      );
 
 export const listListeningPids = async (ports = DEV_PORTS, { spawnImpl = spawn } = {}) =>
-  parsePidList(
-    await runAndCollect(
-      "lsof",
-      ["-nP", "-t", "-sTCP:LISTEN", ...ports.map((port) => `-iTCP:${port}`)],
-      { allowEmpty: true, spawnImpl },
-    ),
-  );
+  process.platform === "win32"
+    ? parsePidList(
+        await runPowerShellAndCollect(
+          `$ports = @(${ports.join(", ")}); Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $ports -contains $_.LocalPort } | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { $_ }`,
+          { allowEmpty: true, spawnImpl },
+        ),
+      )
+    : parsePidList(
+        await runAndCollect(
+          "lsof",
+          ["-nP", "-t", "-sTCP:LISTEN", ...ports.map((port) => `-iTCP:${port}`)],
+          { allowEmpty: true, spawnImpl },
+        ),
+      );
 
 export const collectCandidatePids = (processes, repoPids, listeningPids = new Set(), repoDir = "") => {
   const processesByPid = new Map(processes.map((processInfo) => [processInfo.pid, processInfo]));

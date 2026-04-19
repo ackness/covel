@@ -99,6 +99,38 @@ export const delay = (timeoutMs) =>
     setTimeout(resolve, timeoutMs);
   });
 
+export const terminateProcessTreeWindows = async (
+  rootPid,
+  { spawnImpl = spawn, log = () => {} } = {},
+) =>
+  new Promise((resolve, reject) => {
+    if (!rootPid) {
+      resolve(true);
+      return;
+    }
+
+    log(`Stopping Windows process tree rooted at ${rootPid}...`);
+    const child = spawnImpl("taskkill", ["/PID", String(rootPid), "/T", "/F"], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stderr = "";
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      if (code === 0 || stderr.includes("not found") || stderr.includes("There is no running instance")) {
+        resolve(true);
+        return;
+      }
+
+      reject(new Error(`taskkill exited with code ${code}: ${stderr.trim()}`));
+    });
+  });
+
 export const terminateProcessTree = async (
   rootPid,
   {
@@ -106,6 +138,7 @@ export const terminateProcessTree = async (
     signalProcess: signalProcessImpl = signalProcess,
     isProcessAlive: isProcessAliveImpl = isProcessAlive,
     delay: delayImpl = delay,
+    terminateProcessTreeWindows: terminateProcessTreeWindowsImpl = terminateProcessTreeWindows,
     gracefulSignal = "SIGTERM",
     gracefulWaitMs = 3_000,
     forceWaitMs = 1_000,
@@ -115,6 +148,10 @@ export const terminateProcessTree = async (
 ) => {
   if (!rootPid) {
     return true;
+  }
+
+  if (process.platform === "win32") {
+    return terminateProcessTreeWindowsImpl(rootPid, { log });
   }
 
   const signalTree = async (signal) => {

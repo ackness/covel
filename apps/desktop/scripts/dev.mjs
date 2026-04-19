@@ -6,8 +6,8 @@
  *    (assumes `pnpm dev` is running: web on 5173, server on 3001)
  */
 
-import { execSync, spawn } from "node:child_process";
-import { build, context } from "esbuild";
+import { spawn } from "node:child_process";
+import { build } from "esbuild";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -43,9 +43,8 @@ await build({
 console.log("[dev] Launching Electron...");
 console.log("[dev] Make sure 'pnpm dev' is running (web:5173 + server:3001)");
 
-const electronBin = path.join(desktopRoot, "node_modules/.bin/electron");
-
-const electron = spawn(electronBin, [path.join(desktopRoot, "dist/main.mjs")], {
+const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const electron = spawn(pnpmCommand, ["exec", "electron", path.join(desktopRoot, "dist/main.mjs")], {
   cwd: desktopRoot,
   stdio: "inherit",
   env: {
