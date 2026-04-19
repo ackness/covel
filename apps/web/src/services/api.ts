@@ -509,6 +509,37 @@ export async function loadStateSnapshot(sessionId: string): Promise<Record<strin
   return request<Record<string, unknown> | null>(`/api/sessions/${encodeURIComponent(sessionId)}/state-snapshot`);
 }
 
+export interface StateTableEntry {
+  name: string;
+  fields: Array<{ name: string; type?: string; description?: string }>;
+  data: Record<string, unknown>;
+}
+
+/**
+ * Fetch every state table (schema + current values) for the session.
+ * Used by the 数据库 panel to render a live DB view instead of just a
+ * patch history log.
+ */
+export async function listStateTables(sessionId: string): Promise<StateTableEntry[]> {
+  type ApiShape = {
+    tables: Record<
+      string,
+      {
+        schema: { name: string; fields: Array<{ name: string; type?: string; description?: string }> };
+        data: Record<string, unknown>;
+      }
+    >;
+  };
+  const res = await request<ApiShape>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/state`,
+  );
+  return Object.entries(res.tables).map(([name, row]) => ({
+    name,
+    fields: row.schema?.fields ?? [],
+    data: row.data ?? {},
+  }));
+}
+
 export async function saveStateSnapshot(sessionId: string, snapshot: Record<string, unknown>): Promise<void> {
   await request<{ ok: boolean }>(`/api/sessions/${encodeURIComponent(sessionId)}/state-snapshot`, {
     method: "PUT",

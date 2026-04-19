@@ -1,15 +1,9 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Database,
   PanelRightClose,
   BookOpen,
-  MapIcon,
-  Library,
-  User,
-  Loader2,
-  Download,
-  RefreshCw,
   Layout,
 } from "lucide-react";
 import * as Icons from "lucide-react";
@@ -20,24 +14,17 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs.js";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
-import { Card, CardContent } from "@/components/ui/card.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
-import { Markdown } from "@/components/ui/markdown.js";
-import { CharacterPanel } from "./character-panel.js";
-import { WorldDimensionsPanel } from "./world-dimensions-panel.js";
 import { LorebookPanel } from "./lorebook-panel.js";
 import { PluginPanel } from "./plugin-panel.js";
-import { text } from "@/components/world/editor-helpers.js";
+import { DatabasePanel } from "./database-panel.js";
 import {
   fetchServerHealth,
-  exportDimensionsUrl,
-  syncSessionDimensions,
   fetchUiSpecs,
   listPluginData,
 } from "@/services/api.js";
-import type { WorldRecord, UISlotEntry } from "@/services/api.js";
-import { useSession } from "@/stores/session-store.js";
+import type { UISlotEntry } from "@/services/api.js";
 import { resolveI18n } from "@/lib/catalog.js";
 import { loadPluginData } from "@/stores/plugin-data-store.js";
 
@@ -104,30 +91,32 @@ function aggregateSpecsIntoGroups(slotEntries: readonly UISlotEntry[]): PluginTa
 
 export interface RightPanelProps {
   sessionId: string;
-  world: WorldRecord | null;
-  gameState: Record<string, unknown>;
-  pluginData: Record<string, Record<string, Record<string, unknown>>>;
-  statePatches: Array<{
-    id: string;
-    summary: string;
-    packageName: string;
-    data?: unknown;
-  }>;
+  /**
+   * State change patches — only used as a freshness signal for the DB
+   * tab. We pass the length as `refreshKey` so the panel re-fetches
+   * whenever a new patch lands.
+   */
+  statePatches: Array<{ id: string }>;
   onToggleRightPanel: () => void;
 }
 
+/**
+ * Right panel — split into two sections in the activity bar:
+ *   1. Framework-owned tabs (世界 / 数据库) — always present while a session is loaded.
+ *   2. Plugin-driven tabs (from /api/ui-specs) — rendered below a thin divider.
+ *
+ * The hardcoded 角色 and 世界观 tabs were removed because they duplicated
+ * plugin contributions (core-char-creator "角色" and core-world-init
+ * "世界维度"); the pretty world-dimensions rendering moved into the
+ * plugin tab via the `WorldDimensions` covelRegistry component.
+ */
 export function RightPanel({
   sessionId,
-  world,
-  gameState,
-  pluginData,
   statePatches,
   onToggleRightPanel,
 }: RightPanelProps) {
   const { t } = useTranslation();
-  const { state } = useSession();
   const [storeBackend, setStoreBackend] = useState<string | null>(null);
-  const [characters, setCharacters] = useState<Array<Record<string, unknown>>>([]);
   const [pluginTabGroups, setPluginTabGroups] = useState<PluginTabGroup[]>([]);
   const [activePluginSubTab, setActivePluginSubTab] = useState<Record<string, number>>({});
 
@@ -137,42 +126,7 @@ export function RightPanel({
       .catch(() => {});
   }, []);
 
-  // Character attribute schema from snapshot restore (gameState.characterSchema)
-  const charAttrSchema = useMemo(() => {
-    const gs = gameState.characterSchema;
-    if (gs && typeof gs === "object") {
-      return gs as Record<string, unknown>;
-    }
-    return null;
-  }, [gameState.characterSchema]);
-
-  // Load characters from API and merge with SSE gameState updates
-  useEffect(() => {
-    if (!sessionId) return;
-    fetch(`/api/sessions/${sessionId}/characters`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        if (data?.items) setCharacters(data.items);
-      })
-      .catch(() => {});
-  }, [sessionId]);
-
-  // Sync characters from gameState (SSE updates)
-  useEffect(() => {
-    const gsChars = gameState.characters;
-    if (!gsChars) return;
-    const arr = Array.isArray(gsChars)
-      ? gsChars as Array<Record<string, unknown>>
-      : typeof gsChars === 'object'
-        ? Object.entries(gsChars as Record<string, unknown>).map(([key, val]) => {
-            const obj = (typeof val === 'object' && val !== null ? val : {}) as Record<string, unknown>;
-            return obj.name ? obj : { ...obj, name: key };
-          })
-        : [];
-    if (arr.length > 0) setCharacters(arr);
-  }, [gameState.characters]);
-
-  // Load plugin panel specs from /api/ui-specs and seed plugin-data-store
+  // Load plugin panel specs from /api/ui-specs and seed plugin-data-store.
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
@@ -182,14 +136,11 @@ export function RightPanel({
         const groups = aggregateSpecsIntoGroups(specs.right);
         setPluginTabGroups(groups);
 
-        // Seed plugin-data-store with current data for each plugin panel.
-        // This ensures panels render immediately even if SSE events were missed.
         const pluginIds = new Set(groups.flatMap((g) => g.subPanels.map((s) => s.pluginId)));
         for (const pid of pluginIds) {
           listPluginData(sessionId, pid)
             .then((items) => {
               if (cancelled) return;
-              // Group items by namespace then bulk-load
               const byNs = new Map<string, { key: string; value: unknown }[]>();
               for (const item of items) {
                 const arr = byNs.get(item.namespace) ?? [];
@@ -210,51 +161,43 @@ export function RightPanel({
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
     <Tabs
-      defaultValue="character"
+      defaultValue="world"
       className="flex-1 flex min-h-0 min-w-0"
       orientation="vertical"
     >
       <div className="flex flex-col border-r border-border bg-background shrink-0 w-12 items-center py-2 gap-1">
         <TabsList className="flex flex-col rounded-none gap-1 bg-transparent h-auto p-0">
-          <TabsTrigger
-            value="character"
-            className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title={t("session.character", "Character")}
-          >
-            <User className="w-4 h-4" />
-            <span className="text-[9px] leading-none">
-              {t("session.character", "角色")}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="state"
-            className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title={t("session.state", "State")}
-          >
-            <Database className="w-4 h-4" />
-            <span className="text-[9px] leading-none">
-              {t("session.state", "State")}
-            </span>
-          </TabsTrigger>
+          {/* Section 1 — framework tabs */}
           <TabsTrigger
             value="world"
             className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title={t("session.world", "World")}
+            title={t("session.worldLore", "世界")}
           >
-            <MapIcon className="w-4 h-4" />
+            <BookOpen className="w-4 h-4" />
             <span className="text-[9px] leading-none">
-              {t("session.world", "World")}
+              {t("session.worldTab", "世界")}
             </span>
           </TabsTrigger>
           <TabsTrigger
-            value="lorebook"
+            value="database"
             className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title="Lorebook"
+            title={t("session.database", "数据库")}
           >
-            <BookOpen className="w-4 h-4" />
-            <span className="text-[9px] leading-none">Lore</span>
+            <Database className="w-4 h-4" />
+            <span className="text-[9px] leading-none">
+              {t("session.database", "数据库")}
+            </span>
           </TabsTrigger>
-          {/* Dynamic plugin tabs from /api/ui-specs (memory, codex, npc-graph, etc.) */}
+
+          {/* Divider — only render when plugin tabs exist */}
+          {pluginTabGroups.length > 0 && (
+            <div
+              aria-hidden
+              className="w-6 h-px bg-border my-1.5"
+            />
+          )}
+
+          {/* Section 2 — dynamic plugin tabs from /api/ui-specs */}
           {pluginTabGroups.map((group) => {
             const GroupIcon = resolvePluginIcon(group.icon);
             return (
@@ -284,94 +227,24 @@ export function RightPanel({
         </div>
       </div>
       <ScrollArea className="flex-1 min-h-0 min-w-0">
-        <TabsContent value="character" className="p-4 m-0">
-          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <User className="w-4 h-4 shrink-0" />{" "}
-            {t("session.characterTitle", "角色状态")}
-          </h3>
-          <CharacterPanel
-            characters={characters}
-            schema={charAttrSchema}
-          />
-        </TabsContent>
-        <TabsContent value="state" className="p-4 m-0 space-y-4">
-          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <Database className="w-4 h-4 shrink-0" />{" "}
-            {t("session.statePatchesTitle", "State Patches")}
-          </h3>
-          {statePatches.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">
-              {t("session.noStatePatches", "No state changes yet.")}
-            </p>
-          ) : (
-            statePatches.map((patch) => (
-              <Card key={patch.id}>
-                <CardContent className="p-4 text-xs space-y-1">
-                  <span className="font-medium">{patch.summary}</span>
-                  <Badge variant="outline" className="text-[10px] ml-2">
-                    {patch.packageName}
-                  </Badge>
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </TabsContent>
         <TabsContent value="world" className="p-4 m-0">
           <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <MapIcon className="w-4 h-4 shrink-0" />{" "}
-            {t("session.world", "世界观")}
-            {world?.dimensions && (
-              <a
-                href={exportDimensionsUrl(world.id)}
-                download
-                className="ml-auto"
-                title={t("session.exportDimensions", "导出维度")}
-              >
-                <Button variant="ghost" size="icon" className="h-6 w-6">
-                  <Download className="w-3 h-3" />
-                </Button>
-              </a>
-            )}
+            <BookOpen className="w-4 h-4 shrink-0" />{" "}
+            {t("session.worldTab", "世界")}
           </h3>
-          {world ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="font-bold text-sm">{text(world.name)}</span>
-                <span className="text-[10px] text-muted-foreground font-mono">{world.id}</span>
-              </div>
-              {/* Re-sync button — lets player pull latest world dimensions into this session */}
-              {world.dimensions && sessionId && (
-                <WorldSyncBanner
-                  worldId={world.id}
-                  sessionId={sessionId}
-                />
-              )}
-              <p className="text-xs text-muted-foreground">
-                {text(world.description)}
-              </p>
-              {world.dimensions && (
-                <WorldDimensionsPanel dimensions={world.dimensions} />
-              )}
-              {world.lore && (
-                <details className="group">
-                  <summary className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                    {t("session.worldLore", "Lore")}
-                  </summary>
-                  <div className="prose prose-sm dark:prose-invert max-w-none text-xs leading-relaxed mt-2">
-                    <Markdown>{text(world.lore)}</Markdown>
-                  </div>
-                </details>
-              )}
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground italic">
-              {t("session.noWorldLoaded", "No world loaded.")}
-            </p>
-          )}
-        </TabsContent>
-        <TabsContent value="lorebook" className="p-4 m-0">
           <LorebookPanel sessionId={sessionId} />
         </TabsContent>
+        <TabsContent value="database" className="p-4 m-0">
+          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
+            <Database className="w-4 h-4 shrink-0" />{" "}
+            {t("session.database", "数据库")}
+          </h3>
+          <DatabasePanel
+            sessionId={sessionId}
+            refreshKey={statePatches.length}
+          />
+        </TabsContent>
+
         {/* Dynamic plugin panel content (memory, codex, npc-graph, etc.) */}
         {pluginTabGroups.map((group) => {
           const subIdx = activePluginSubTab[group.id] ?? 0;
@@ -381,7 +254,6 @@ export function RightPanel({
               <h3 className="font-display font-semibold flex items-center gap-2 mb-3 text-sm uppercase tracking-widest whitespace-nowrap">
                 {group.label}
               </h3>
-              {/* Sub-tabs when group has multiple panels */}
               {group.subPanels.length > 1 && (
                 <div className="flex items-center gap-1 mb-3 border-b border-border pb-2">
                   {group.subPanels.map((sub, idx) => {
@@ -438,51 +310,6 @@ export function RightPanel({
         )}
       </div>
     )}
-    </div>
-  );
-}
-
-// ── World Sync Banner ─────────────────────────────────────────────
-
-function WorldSyncBanner({ worldId, sessionId }: { worldId: string; sessionId: string }) {
-  const { t } = useTranslation();
-  const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<string | null>(null);
-
-  const handleSync = async () => {
-    setSyncing(true);
-    setSyncResult(null);
-    try {
-      const result = await syncSessionDimensions(worldId, sessionId);
-      setSyncResult(
-        t("session.dimensionsSynced", "已同步 {{count}} 个维度", { count: result.entryCount }),
-      );
-    } catch {
-      setSyncResult(t("session.dimensionsSyncFailed", "同步失败"));
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-6 text-[10px] gap-1"
-        onClick={handleSync}
-        disabled={syncing}
-      >
-        {syncing ? (
-          <Loader2 className="w-3 h-3 animate-spin" />
-        ) : (
-          <RefreshCw className="w-3 h-3" />
-        )}
-        {t("session.resyncDimensions", "重载维度")}
-      </Button>
-      {syncResult && (
-        <span className="text-[10px] text-muted-foreground">{syncResult}</span>
-      )}
     </div>
   );
 }

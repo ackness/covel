@@ -21,6 +21,7 @@ import {
   matchesPendingDraft,
 } from "./interaction-selection.js";
 import { useSession } from "@/stores/session-store.js";
+import { WorldDimensionsPanel } from "@/components/session/world-dimensions-panel.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -1108,6 +1109,28 @@ const Source: ComponentRenderer = ({ element }) => {
   return <span className="text-[9px] text-zinc-400 block mt-1">{label}</span>;
 };
 
+/**
+ * WorldDimensions — renders the current world's structured dimensions
+ * (geography, factions, powerSystem, history, economy, tone, mechanics)
+ * via the reusable WorldDimensionsPanel. Reads directly from session
+ * context; no data bindings required from the plugin spec.
+ *
+ * Falls back to a muted empty-state message when the world has no
+ * dimensions attached (e.g. pre-generation).
+ */
+const WorldDimensions: ComponentRenderer = () => {
+  const { state } = useSession();
+  const dims = state.world?.dimensions;
+  if (!dims) {
+    return (
+      <p className="text-xs text-muted-foreground italic">
+        尚未生成世界维度数据。
+      </p>
+    );
+  }
+  return <WorldDimensionsPanel dimensions={dims} />;
+};
+
 // ── Form Components ──────────────────────────────────────────────
 
 const Form: ComponentRenderer = ({ children }) => {
@@ -1171,4 +1194,5 @@ export const covelRegistry: Record<string, ComponentRenderer> = {
   Alert,
   // Visualization
   GraphCanvas,
+  WorldDimensions,
 };

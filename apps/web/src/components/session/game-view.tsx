@@ -323,9 +323,6 @@ export function GameView({
             >
               <RightPanel
                 sessionId={session.id}
-                world={world}
-                gameState={gameState}
-                pluginData={pluginData}
                 statePatches={statePatches}
                 onToggleRightPanel={toggleRightPanel}
               />
@@ -575,9 +572,6 @@ export function GameView({
             >
               <RightPanel
                 sessionId={session.id}
-                world={world}
-                gameState={gameState}
-                pluginData={pluginData}
                 statePatches={statePatches}
                 onToggleRightPanel={toggleRightPanel}
               />

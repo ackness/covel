@@ -1,0 +1,12 @@
+{
+  "id": "world-overview",
+  "group": "world-data",
+  "groupLabel": { "zh": "世界维度", "en": "World Data" },
+  "groupOrder": 300,
+  "label": { "zh": "总览", "en": "Overview" },
+  "icon": "map",
+  "alwaysRender": true,
+  "view": {
+    "component": "WorldDimensions"
+  }
+}

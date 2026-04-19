@@ -107,8 +107,12 @@ export function PluginPanel({
     return <p className="text-xs text-muted-foreground italic">Invalid panel spec</p>;
   }
 
-  // Empty state: namespace has no data yet
-  const isEmpty = Object.keys(data).length === 0;
+  // Empty state: namespace has no data yet.
+  // Specs can opt out by setting `alwaysRender: true` when they render content
+  // sourced from elsewhere (e.g. a framework-registered component reading from
+  // session context instead of plugin_data).
+  const alwaysRender = spec.alwaysRender === true;
+  const isEmpty = !alwaysRender && Object.keys(data).length === 0;
   if (isEmpty) {
     const emptySpec = spec.emptyState as Record<string, unknown> | undefined;
     const customMsg = resolveEmptyMessage(emptySpec?.message);

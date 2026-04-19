@@ -21,6 +21,7 @@ tools:
     - plugin-data-list
 ui:
   right:
+    - ./ui/world-overview.json
     - ./ui/world-entries.json
     - ./ui/world-schema.json
 ---

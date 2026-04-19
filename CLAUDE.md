@@ -391,7 +391,7 @@ All endpoints under `/api/` prefix (Vite dev server proxies `/api` → backend).
 
 Two frontend apps exist side by side:
 
-**`apps/web/` (V1, legacy)** — React 19 + TanStack Router, hardcoded 7-tab right panel, direct gameState reads. Routes: `/` (landing), `/session` (workbench), `/debug`. Port 5173.
+**`apps/web/` (V1, legacy)** — React 19 + TanStack Router. Right panel is split into two sections separated by a thin divider: **framework tabs** (世界 = Lorebook, 数据库 = live state-table browser) followed by **plugin tabs** (dynamic from `/api/ui-specs`). The previously hardcoded 角色 and 世界观 tabs were removed because they duplicated core-char-creator and core-world-init plugin contributions; the pretty `WorldDimensionsPanel` rendering moved into core-world-init's 世界维度 tab (新增 `总览` subtab) via the `WorldDimensions` component in `covelRegistry`. Routes: `/` (landing), `/session` (workbench), `/debug`. Port 5173.
 
 **`apps/web-v2/` (V2, active development)** — Plugin-driven UI architecture (see `docs/reference/ui-panels.md`):
 - All rendering through [json-render](https://github.com/vercel-labs/json-render) with ~25 component catalog
