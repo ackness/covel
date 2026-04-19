@@ -397,6 +397,38 @@ outputKind: story
 capabilities: [narrative, world-data-provider]
 ```
 
+### 超时与智能重试
+
+Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用时长**（`callTimeoutMs` / `firstTokenTimeoutMs`）和**运行总时长**（`timeoutMs`）。框架会自动在 transient 错误、call-timeout、first-token-timeout、tool-call 循环四种情形下重试，并在每次重试时向 prompt 追加一条短 system 提示打破 KV-cache 命中。
+
+| 字段 | 类型 | 默认 | 含义 |
+|------|------|------|------|
+| `timeoutMs` | `number` | 60000 | 运行总时长硬上限。任何情况下都不会超过此值 |
+| `maxRetries` | `number` | `1` | transient 错误/超时/循环时的重试次数（不含首次尝试）。`0` 禁用重试。上限 5 |
+| `callTimeoutMs` | `number` | `min(60000, floor(timeoutMs / (maxRetries + 1)))` | 单次 LLM 调用的总时长。防止一个挂死请求吃掉整轮预算 |
+| `firstTokenTimeoutMs` | `number` | `30000` | 流式 runtime 的首 token（TTFB）上限；非流式忽略 |
+| `loopDetectionThreshold` | `number` | `3` | 连续重复相同 `(tool name + JSON arguments)` 的次数；命中则注入扰动继续。`0` 关闭 |
+
+**四类重试触发条件：**
+
+- `transient-error`：AbortError / network / 5xx / `RATE_LIMITED` / `PROVIDER_ERROR`
+- `call-timeout`：单次调用超过 `callTimeoutMs`
+- `first-token-timeout`（仅流式）：超过 `firstTokenTimeoutMs` 仍无任何 text/tool event
+- `tool-loop-detected`：外层 tool loop 连续命中相同调用 `loopDetectionThreshold` 次
+
+**扰动策略**：重试时框架在 messages 末尾追加一条 `[retry N] ...` system 消息，并随 `N` 递增加入空格 padding，确保 prompt 字节串不同，避免 provider 端 KV-cache 复读同一回应。
+
+**与 gateway fallback 的关系**：`llm.toml` 中 `fallback = "story"` 依然生效。本层的同 preset 重试先跑完后，失败才沿 gateway 的 preset fallback chain 继续尝试下一条。总时长硬上限仍是 `timeoutMs`。
+
+示例 frontmatter：
+```yaml
+timeoutMs: 120000
+maxRetries: 2              # 更保守，最多 3 次尝试
+callTimeoutMs: 40000       # 每次调用 40s，足够 qwen-flash 但留重试余量
+firstTokenTimeoutMs: 20000 # 20s 无首 token 即判定卡死
+loopDetectionThreshold: 3  # 默认即可
+```
+
 ### promptVersion（S2-T4，V2 opt-in 闸门）
 
 声明本 runtime 使用哪个版本的 prompt assembler：

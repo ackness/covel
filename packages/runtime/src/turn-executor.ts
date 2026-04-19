@@ -28,6 +28,15 @@ import type { ToolExecutor } from './tool-executor.js';
 import type { HookPipeline } from './hooks/pipeline.js';
 import { buildToolDefinitions, makeFailedResult } from './turn-executor-helpers.js';
 import {
+  buildRetryPolicy,
+  callLLMWithRetry,
+  streamLLMWithRetry,
+  detectToolLoop,
+  perturbMessages,
+  LLMRetryError,
+  type RetryInfo,
+} from './llm-retry.js';
+import {
   runTurnStartHook,
   runTurnStopHook,
   runPreRuntimeHook,
@@ -1564,6 +1573,29 @@ async function executeOneRuntime(
     // the LLM from running the same tool in a loop after it already succeeds.
     const effectiveMaxSteps = manifest.maxSteps ?? maxSteps;
 
+    // Smart retry policy derived from manifest (maxRetries / callTimeoutMs /
+    // firstTokenTimeoutMs / loopDetectionThreshold). A hung provider call now
+    // fails fast inside the helper's per-attempt budget and retries with a
+    // perturbation instead of burning the whole runtime timeout.
+    const retryPolicy = buildRetryPolicy({
+      maxRetries: manifest.maxRetries,
+      callTimeoutMs: manifest.callTimeoutMs,
+      firstTokenTimeoutMs: manifest.firstTokenTimeoutMs,
+      loopDetectionThreshold: manifest.loopDetectionThreshold,
+      runtimeTimeoutMs: timeoutMs,
+    });
+    const reportRetry = (info: RetryInfo): void => {
+      const cause = info.error instanceof Error ? info.error.message : String(info.error);
+      console.warn(
+        `[runtime-retry] ${manifest.name} attempt=${info.attempt} reason=${info.reason} cause=${cause.slice(0, 200)}`,
+      );
+    };
+
+    // Count how many times we injected a perturbation into `messages` due to
+    // tool-loop detection. Once a loop has been perturbed and reappears, we
+    // give up — another perturbation would not help.
+    let loopPerturbations = 0;
+
     while (steps < effectiveMaxSteps && Date.now() < deadline) {
       steps++;
 
@@ -1577,125 +1609,102 @@ async function executeOneRuntime(
 
       let response: import('./llm-adapter.js').LLMResponse;
 
-      // Per-LLM-call abort budget. Matches the outer deadline so a hung
-      // provider request is torn down instead of blocking the whole turn.
-      const callSignal = AbortSignal.timeout(Math.max(1000, deadline - Date.now()));
-
       if (useStreaming) {
-        // Streaming path: accumulate text + tool-call deltas, forward text to caller.
-        let streamedContent = '';
-        let streamFinishReason = 'stop';
-        const streamedToolCalls: Array<{ id: string; name: string; arguments: string }> = [];
-        // S1-T3: When the stream throws with no content we fall back to a
-        // non-stream generate() call. Holding the fallback response here
-        // (vs assigning `response` directly) keeps TypeScript's definite-
-        // assignment analysis happy — `response` is set exactly once, below.
-        let fallbackResponse: import('./llm-adapter.js').LLMResponse | null = null;
-
-        // S1-T3: Wrap the stream loop. On exception mid-stream, either salvage
-        // the accumulated content (if any) or fall back to a single non-stream
-        // generate() call. Do not attempt prefix-continuation — no provider
-        // offers a reliable cross-vendor protocol for it.
+        // Streaming path: helper enforces per-attempt call-timeout + first-
+        // token (TTFB) guard, retries on transient failures, and forwards
+        // text deltas to the caller on the first attempt (avoids duplicate
+        // text in the chat stream when a retry happens). If streaming
+        // exhausts its retries with a transient failure (e.g. provider SSE
+        // never recovered), fall back to a single non-stream call — matches
+        // the pre-helper behaviour for providers whose streaming path is
+        // more fragile than their JSON completion endpoint.
         try {
-          for await (const event of deps.llm.stream!({
+          const streamed = await streamLLMWithRetry({
+            llm: deps.llm,
             model: effectiveModel,
             messages,
             tools: toolDefs,
-            signal: callSignal,
-          })) {
-            if (event.type === 'text-delta') {
-              streamedContent += event.textDelta;
-              // M1: Wrap onDelta — client disconnect should not kill the runtime
+            policy: retryPolicy,
+            deadline,
+            onDelta: async (textDelta) => {
               try {
                 await deps.onDelta!({
                   runtimeId: manifest.name,
                   pluginId: manifest.pluginId,
-                  textDelta: event.textDelta,
+                  textDelta,
                 });
               } catch {
-                // Client disconnected — continue streaming to collect full content
+                // Client disconnected — keep streaming to capture full content.
               }
-            } else if (event.type === 'tool-call') {
-              streamedToolCalls.push({
-                id: event.id,
-                name: event.name,
-                arguments: event.arguments,
-              });
-            } else if (event.type === 'done') {
-              streamFinishReason = event.finishReason;
-            }
-          }
-        } catch (streamError: unknown) {
-          const errMsg = streamError instanceof Error ? streamError.message : String(streamError);
-
-          if (streamedContent.length > 0 || streamedToolCalls.length > 0) {
-            // Salvage: keep what we have and mark the finishReason as 'error'.
-            streamFinishReason = 'error';
+            },
+            onRetry: reportRetry,
+          });
+          response = streamed.response;
+        } catch (streamError) {
+          if (streamError instanceof LLMRetryError && Date.now() < deadline) {
             console.warn(
-              `[stream-recovery] runtime ${manifest.name} stream failed after partial content; salvaging ${streamedContent.length} chars, ${streamedToolCalls.length} tool calls. error=${errMsg}`,
+              `[stream-recovery] ${manifest.name} streaming exhausted (reason=${streamError.reason}); falling back to non-stream generate()`,
             );
-          } else {
-            // Nothing to salvage — fall back to a single non-stream call.
-            // If THIS also throws, let it bubble up to the outer executeOneRuntime catch.
-            console.warn(
-              `[stream-recovery] runtime ${manifest.name} stream failed before any content; falling back to generate(). error=${errMsg}`,
-            );
-            fallbackResponse = await deps.llm.generate({
+            response = await callLLMWithRetry({
+              llm: deps.llm,
               model: effectiveModel,
               messages,
               tools: toolDefs,
-              signal: callSignal,
+              policy: retryPolicy,
+              deadline,
+              onRetry: reportRetry,
             });
+          } else {
+            throw streamError;
           }
         }
 
-        // If the stream finished with tool_calls but our adapter couldn't parse
-        // them from the SSE chunks (some providers don't deliver tool_calls
-        // inside delta), fall back to generate() to get the structured call.
+        // If the stream finished with tool_calls but our adapter could not
+        // parse structured calls out of delta chunks (some providers don't
+        // deliver them on SSE), fall back to a non-stream call to get the
+        // structured tool_calls payload.
         if (
-          fallbackResponse === null &&
-          streamFinishReason === 'tool_calls' &&
-          streamedToolCalls.length === 0 &&
+          response.finishReason === 'tool_calls' &&
+          response.toolCalls.length === 0 &&
           toolDefs
         ) {
-          fallbackResponse = await deps.llm.generate({
+          response = await callLLMWithRetry({
+            llm: deps.llm,
             model: effectiveModel,
             messages,
             tools: toolDefs,
-            signal: callSignal,
+            policy: retryPolicy,
+            deadline,
+            onRetry: reportRetry,
           });
-        }
-
-        if (fallbackResponse !== null) {
-          response = fallbackResponse;
-        } else {
-          response = {
-            content: streamedContent || null,
-            toolCalls: streamedToolCalls,
-            finishReason: streamFinishReason as 'stop' | 'tool_calls' | 'length' | 'error',
-            // M5: Streaming responses don't carry token usage from most providers.
-            // The LLMStreamEvent 'done' type only has finishReason, not usage.
-            usage: { inputTokens: 0, outputTokens: 0 },
-          };
         }
       } else {
-        // Non-streaming path: standard generate()
+        // Non-streaming path: helper handles transient-error + call-timeout
+        // retry. A narrow secondary retry covers the DeepSeek-specific
+        // "function.arguments JSON format" error which isTransientError does
+        // not classify as retriable on its own.
         try {
-          response = await deps.llm.generate({
+          response = await callLLMWithRetry({
+            llm: deps.llm,
             model: effectiveModel,
             messages,
             tools: toolDefs,
-            signal: callSignal,
+            policy: retryPolicy,
+            deadline,
+            onRetry: reportRetry,
           });
         } catch (error) {
-          if (!toolDefs || !shouldRetryMalformedToolArguments(error)) {
+          const cause = error instanceof LLMRetryError ? error.cause : error;
+          if (!toolDefs || !shouldRetryMalformedToolArguments(cause)) {
             throw error;
           }
           response = await deps.llm.generate({
             model: effectiveModel,
             messages,
             tools: toolDefs,
-            signal: callSignal,
+            signal: AbortSignal.timeout(
+              Math.max(1000, Math.min(retryPolicy.callTimeoutMs, deadline - Date.now())),
+            ),
           });
         }
       }
@@ -1890,11 +1899,46 @@ async function executeOneRuntime(
           const businessCalls = collectedToolCalls.filter((c) => c.toolName !== 'runtime-done');
           collectedToolCalls.length = 0;
           collectedToolCalls.push(...businessCalls);
-          finalContent = businessCalls.length > 0
-            ? JSON.stringify({ toolCalls: businessCalls.map((c) => ({ name: c.toolName, output: c.output })) })
-            : '';
+          // Preserve streamed / captured prose from earlier steps or this
+          // step's response.content. Without this guard a story runtime that
+          // interleaves narrative prose + tool calls + runtime-done would lose
+          // every token of narrative to the JSON envelope below. Only fall
+          // back to the envelope when the runtime produced NO prose at all
+          // (plugin/system runtimes that call a tool and exit silently).
+          if (!finalContent) {
+            finalContent = businessCalls.length > 0
+              ? JSON.stringify({ toolCalls: businessCalls.map((c) => ({ name: c.toolName, output: c.output })) })
+              : '';
+          }
           stoppedWithResponse = true;
           break;
+        }
+
+        // Tool-loop detection: when the LLM keeps emitting the exact same
+        // tool call (name + JSON args) `threshold` times in a row it's
+        // almost certainly stuck in a KV-cache echo. Inject a perturbation
+        // system message to nudge it onto a different path; on the second
+        // detection give up so the loop cannot wedge the runtime forever.
+        if (retryPolicy.loopDetectionThreshold > 0) {
+          const identityCalls = collectedToolCalls.map((c) => ({
+            name: c.toolName,
+            arguments: typeof c.input === 'string' ? c.input : JSON.stringify(c.input ?? {}),
+          }));
+          if (detectToolLoop(identityCalls, retryPolicy.loopDetectionThreshold)) {
+            if (loopPerturbations >= 1) {
+              throw new Error(
+                `tool-loop detected for ${manifest.name}: same tool "${identityCalls[identityCalls.length - 1]?.name}" called ${retryPolicy.loopDetectionThreshold}+ times with identical arguments even after perturbation`,
+              );
+            }
+            loopPerturbations++;
+            const [hint] = perturbMessages([], 1, 'tool-loop-detected');
+            if (hint) {
+              messages.push(hint);
+              console.warn(
+                `[runtime-loop] ${manifest.name} detected repeated tool call; injected perturbation (attempt ${loopPerturbations})`,
+              );
+            }
+          }
         }
 
         // Continue loop — LLM sees tool results and decides next action
@@ -1971,13 +2015,29 @@ async function executeOneRuntime(
       output = presentableToolOutput ?? { narrativeOutput: '' };
     }
 
-    // Extract interactions from all tool call results (generic interaction protocol)
+    // Extract interactions from all tool call results (generic interaction protocol).
+    // Dedupe by `interactionId` — the LLM sometimes calls the same UI tool twice
+    // (e.g. `create-form` with identical formId) in a single agent loop. Keeping
+    // both would render two identical forms/choices in the chat, confusing the
+    // player. We keep the first occurrence so the earliest presented UI wins.
+    // Different interactionIds in the same turn stay independent.
     const interactions: Array<Record<string, unknown>> = [];
+    const seenInteractionIds = new Set<string>();
     for (const tc of executedToolCalls) {
       if (tc.success && tc.result && typeof tc.result === 'object') {
         const r = tc.result as Record<string, unknown>;
         if (r.interaction && typeof r.interaction === 'object') {
-          interactions.push(r.interaction as Record<string, unknown>);
+          const inter = r.interaction as Record<string, unknown>;
+          const id = typeof inter.interactionId === 'string' ? inter.interactionId : '';
+          // No id → pass through (UI tools should always set one; belt-and-suspenders).
+          if (id && seenInteractionIds.has(id)) {
+            console.warn(
+              `[runtime] ${manifest.name} produced duplicate interactionId="${id}" via tool "${tc.name}"; keeping the first occurrence`,
+            );
+            continue;
+          }
+          if (id) seenInteractionIds.add(id);
+          interactions.push(inter);
         }
       }
     }

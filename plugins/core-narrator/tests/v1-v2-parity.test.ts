@@ -117,6 +117,9 @@ function normalizeSystemPrompt(prompt: string): string {
     .replace(/\[RUNTIME\][^\n]*\n?/g, '')
     // Remove the [LANGUAGE] constraint line/segment wherever it lives.
     .replace(/\[LANGUAGE\][^\n]*\.?/g, '')
+    // Remove the [COMPLETION] runtime-done contract lines (V2 segment 1 tail).
+    // Added by the runtime-done early-exit framework — not present in V1.
+    .replace(/\[COMPLETION\][^\n]*\n?/g, '')
     // Collapse multiple blank lines → one blank line.
     .replace(/\n{3,}/g, '\n\n')
     // Trim trailing / leading whitespace on every line.

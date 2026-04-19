@@ -77,7 +77,7 @@ const api = {
   platform: process.platform,
 
   /** Short app version string. Set at preload time via env var injection. */
-  appVersion: process.env.COVEL_APP_VERSION ?? "0.0.0",
+  appVersion: process.env.COVEL_APP_VERSION ?? "0.0.1-beta",
 
   /**
    * Fire-and-forget send. Returns true if the channel was allowed.

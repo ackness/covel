@@ -94,6 +94,8 @@ function normalizeSystemPrompt(prompt: string): string {
   return prompt
     .replace(/\[RUNTIME\][^\n]*\n?/g, '')
     .replace(/\[LANGUAGE\][^\n]*\.?/g, '')
+    // Strip the [COMPLETION] runtime-done contract (V2-only, not in V1).
+    .replace(/\[COMPLETION\][^\n]*\n?/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .split('\n')
     .map(line => line.trimEnd())

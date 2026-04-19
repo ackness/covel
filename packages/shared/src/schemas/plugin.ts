@@ -308,6 +308,14 @@ export const runtimeManifestSchema = z
      * single-shot plugins that should call one tool and stop.
      */
     maxSteps: z.number().int().positive().optional(),
+    /** Smart retry count on transient LLM failures. Default 1. Set 0 to disable. */
+    maxRetries: z.number().int().min(0).max(5).optional(),
+    /** Per-LLM-call total timeout (ms). Caps a single provider call. */
+    callTimeoutMs: z.number().int().positive().optional(),
+    /** Streaming first-token (TTFB) timeout (ms). Default 30000. */
+    firstTokenTimeoutMs: z.number().int().positive().optional(),
+    /** Tool-call loop detection threshold. Default 3. Set 0 to disable. */
+    loopDetectionThreshold: z.number().int().min(0).max(20).optional(),
     pluginType: z.enum(['core-plugin', 'plugin']).optional(),
     outputKind: outputKindSchema.optional(),
     capabilities: z.array(z.string().min(1)).optional(),

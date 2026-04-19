@@ -1,6 +1,6 @@
 {
   "name": "@covel/plugin-core-world-init",
-  "version": "0.0.1",
+  "version": "0.0.1-beta",
   "private": true,
   "type": "module"
 }

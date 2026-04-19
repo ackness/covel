@@ -303,8 +303,22 @@ function reducer(state: SessionState, action: Action): SessionState {
         gameState: newGameState,
       };
     }
-    case "LOAD_MESSAGES":
-      return { ...state, messages: action.messages };
+    case "LOAD_MESSAGES": {
+      // LOAD_MESSAGES overwrites `messages` with the server snapshot, so any
+      // plugin-message entries previously synthesised from plugin-data hydration
+      // would be wiped. Re-apply the surface for every plugin that declared a
+      // `ui.message` spec AND already has populated namespace state. Without
+      // this, plugins whose only chat output is the json-render surface (e.g.
+      // core-guide) never show up on page refresh after hydration+snapshot
+      // race to completion in the unfavourable order.
+      let nextState: SessionState = { ...state, messages: action.messages };
+      for (const entry of nextState.messageUiSpecs) {
+        if (nextState.pluginData[entry.pluginId]?.message) {
+          nextState = applyPluginMessageSurface(nextState, entry.pluginId);
+        }
+      }
+      return nextState;
+    }
     case "LOAD_STATE_PATCHES": {
       let rebuiltGameState: Record<string, unknown> = {};
       for (const patch of action.patches) {

@@ -6,9 +6,13 @@ WORKDIR /app
 FROM base AS deps
 COPY pnpm-lock.yaml package.json pnpm-workspace.yaml ./
 
-# Apps
+# Apps (every workspace importer declared in pnpm-lock.yaml must have its
+# manifest present for --frozen-lockfile to succeed, even if we don't
+# actually use the app in the final image)
+COPY apps/desktop/package.json apps/desktop/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
+COPY apps/web-v2/package.json apps/web-v2/
 
 # Packages (alphabetical — keep in sync with packages/ directory)
 COPY packages/ai-provider/package.json packages/ai-provider/

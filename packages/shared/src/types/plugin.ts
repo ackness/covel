@@ -265,6 +265,35 @@ export interface RuntimeManifest {
    * plugins that should call one tool and stop.
    */
   readonly maxSteps?: number;
+  /**
+   * How many times to retry on transient LLM failures (first-token timeout,
+   * total call timeout, network / 5xx / rate-limit, tool-call loop). Default 1
+   * (at most one retry, so up to 2 attempts total). Each retry injects a
+   * small perturbation into the messages to break deterministic KV-cache hits
+   * that can otherwise reproduce the same hang. Set to 0 to disable retry.
+   */
+  readonly maxRetries?: number;
+  /**
+   * Per-LLM-call total timeout in ms. Caps a single provider call so a hung
+   * request cannot consume the whole `timeoutMs` budget. Defaults to
+   * `min(60000, floor(timeoutMs / (maxRetries + 1)))` so every retry attempt
+   * fits inside the runtime deadline.
+   */
+  readonly callTimeoutMs?: number;
+  /**
+   * Streaming first-token (TTFB) timeout in ms. Fires when a streaming LLM
+   * call is established but emits no text/tool-call event before the
+   * threshold — typical symptom of a hung provider with a live TCP socket.
+   * Default 30000. Ignored for non-streaming calls.
+   */
+  readonly firstTokenTimeoutMs?: number;
+  /**
+   * Tool-call loop detection threshold. When the LLM emits `N` consecutive
+   * tool calls with identical `{name, arguments}`, the executor aborts the
+   * current attempt and retries (with perturbation) to break the loop.
+   * Default 3. Set to 0 to disable loop detection.
+   */
+  readonly loopDetectionThreshold?: number;
   readonly pluginType?: PluginType;
   /**
    * How the framework treats this runtime's output in the UI.

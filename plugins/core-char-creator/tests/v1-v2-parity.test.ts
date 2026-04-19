@@ -166,6 +166,8 @@ function normalizeSystemPrompt(prompt: string): string {
   return prompt
     .replace(/\[RUNTIME\][^\n]*\n?/g, '')
     .replace(/\[LANGUAGE\][^\n]*\.?/g, '')
+    // Strip the [COMPLETION] runtime-done contract (V2-only, not in V1).
+    .replace(/\[COMPLETION\][^\n]*\n?/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .split('\n')
     .map(line => line.trimEnd())
@@ -234,9 +236,12 @@ describe('core-char-creator/player-init V1/V2 prompt parity', () => {
     expect(v1.systemPrompt).toContain('character-attributes');
     expect(v2.systemPrompt).toContain('character-attributes');
 
-    // Two-step mode discriminator.
-    expect(v1.systemPrompt).toContain('<player-submission>');
-    expect(v2.systemPrompt).toContain('<player-submission>');
+    // The runtime is now single-purpose: emit the opening form. Character
+    // creation is handled deterministically by guard.js when the player
+    // submits, so the prompt no longer references `<player-submission>` or
+    // branches on it.
+    expect(v1.systemPrompt).toContain('create-form');
+    expect(v2.systemPrompt).toContain('create-form');
 
     // Language constraint content present on both paths.
     expect(v1.systemPrompt).toContain('中文');

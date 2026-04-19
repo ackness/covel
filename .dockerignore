@@ -1,22 +1,57 @@
+# ── Node / pnpm ────────────────────────────────────────────────
 node_modules
+.pnpm-store
 .turbo
+node-compile-cache
+
+# ── Build output ───────────────────────────────────────────────
 dist
 coverage
+htmlcov
+
+# ── Electron (not needed in server image) ──────────────────────
+apps/desktop/release
+apps/desktop/staging
+apps/desktop/dist
+release
+
+# ── Git / AI tooling / local state ─────────────────────────────
 .git
 .claude
 .codex
 .windsurf
+.omx
+.cursor
+.gsd
+skills-lock.json
+
+# ── E2E / Playwright artifacts ─────────────────────────────────
+.playwright-mcp
+playwright-report
+test-results
+tests/e2e/artifacts
+tests/e2e/report
+
+# ── Env / Secrets ──────────────────────────────────────────────
 .env
 .env.*
 !.env.example
+!.env.llm.example
+
+# ── Logs / Debug ───────────────────────────────────────────────
 *.log
-docker
-.omx
-node-compile-cache
-playwright-report
-test-results
-apps/server/drizzle
-apps/web/src/routeTree.gen.ts
 audits
 debugs
 plans
+fixtures
+output
+.backup
+
+# ── Docker itself (context is repo root; Dockerfile is read out-of-band) ──
+docker
+
+# ── Server-only image doesn't need migrations snapshots ─────────
+apps/server/drizzle
+
+# ── TanStack Router generated route tree (regenerated on build) ─
+apps/web/src/routeTree.gen.ts

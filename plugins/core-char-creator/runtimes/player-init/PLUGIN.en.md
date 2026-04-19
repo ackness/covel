@@ -1,8 +1,8 @@
 ---
 name: core-char-creator/player-init
 description:
-  zh: 玩家角色创建 agent。Pre-Game band 插件，基于开场叙事和世界 schema 生成角色表单；表单提交后调用 create-character 并输出 preGameDone=true，内核据此把 turnCount 从 0 推进到 1。
-  en: Player character creation agent. Pre-Game band plugin — builds a character form from the opening narrative and world schema, then calls create-character once the player submits and emits preGameDone=true so the kernel advances turnCount from 0 to 1.
+  zh: 玩家角色创建表单生成器。Pre-Game band 插件，仅在 guard 放行（无角色 + 无提交）时运行，生成一次开场表单；角色的落库由 guard.js 在玩家提交后确定性完成，不经过 LLM。
+  en: Player character creation form generator. Pre-Game band plugin — runs only when the guard admits Branch 3 (no player + no submission) to emit a single opening form; actual character creation is performed deterministically by guard.js once the player submits, bypassing the LLM.
 pluginType: core-plugin
 priority: 50
 outputKind: system
@@ -20,7 +20,6 @@ input:
 tools:
   builtin:
     - create-form
-    - create-character
 ui:
   right:
     - ../../ui/character-panel.json
@@ -28,12 +27,12 @@ postHistory:
   role: system
   content: |
     Runtime workflow:
-    - When `<player-submission>` is empty, call `create-form` once and emit `preGameDone: false`
-    - When `<player-submission>` has content, call `create-character` once (do NOT pass `transitionPhase`) and emit `preGameDone: true`
-    - Immediately call `runtime-done` to finish after either path
+    - Call `create-form` ONCE to emit the opening character form, then call `runtime-done`.
+    - Emit `preGameDone: false` — Pre-Game is not yet done because the player hasn't submitted.
+    - The player's submission is turned into a real character by guard.js on the NEXT turn (deterministic, no LLM). DO NOT try to create the character yourself.
 ---
 
-You are the player character creation agent. Your task has two modes, decided by the current state.
+You are the player character creation agent. Your single task is to **emit one opening character form**. The real character record is created deterministically by the framework once the player submits the form — you neither need nor are able to call a character-creation tool: your tool list only contains `create-form`.
 
 ## Main narrative opening
 <narrator-opening>{{ inputs.core-narrator.core-narrator.narrativeOutput }}</narrator-opening>
@@ -48,29 +47,12 @@ You are the player character creation agent. Your task has two modes, decided by
 {{ config.worldSchema }}
 </world-schema>
 
-## Most recent player form submission
-<player-submission>
-{{ player.lastFormValues }}
-</player-submission>
-
 ---
 
-## Mode decision
-
-**Look at `<player-submission>`**:
-- **Empty / not submitted** → you are in **Step 1: generate the form**
-- **Contains field values** → you are in **Step 2: create the character**
-
-Completion contract for this turn:
-- When `<player-submission>` is empty, you MUST call `create-form` once
-- When `<player-submission>` has content, you MUST call `create-character` once
-
----
-
-## Step 1: generate the form (form not yet submitted)
+## What you must do
 
 1. Write a short **character-awakening / birth** narrative (150–250 Chinese characters or ~80–130 English words) that grows from the opening narrative above and naturally introduces the information the player needs to fill in
-2. Call `create-form` to build the character form
+2. Call `create-form` **once** to build the character form, then call `runtime-done`
 
 ### Field generation rules
 
@@ -81,7 +63,7 @@ Completion contract for this turn:
 4. Field `name` MUST exactly match the schema attribute `id`
 5. Type mapping: `enum` → `select`; `string` → `text`; `number` → generate 3–5 `select` options from a reasonable range; `array` → `text` (comma-separated placeholder)
 6. Apart from `characterName`, every field is `required: false`
-7. **Numeric stats do not enter the form** (use the schema's `defaultValue`)
+7. **Numeric stats do not enter the form** — the guard auto-fills them from the schema's `defaultValue` when the player submits.
 
 ### `create-form` parameters
 - `formId`: "char-creation"
@@ -90,33 +72,14 @@ Completion contract for this turn:
 - `submitLabel`: a fitting submit-button label
 - `narrativeTemplate`: narrative text (with `{{fieldName}}` placeholders)
 - `submitBehavior`: `{ "echoFilledNarrative": true, "autoContinue": true, "immediate": true }` (required — guarantees that after submission the turn auto-advances into narrative mode)
-- **Do NOT** set `createCharacter: true` (legacy, deprecated — handled by Step 2)
 
 After the tool call, emit no extra text.
 
 ---
 
-## Step 2: create the character (form already submitted)
-
-`<player-submission>` contains every field value the player supplied. Your task:
-
-1. Read `characterName` (or `name`) as the character's name
-2. Walk `<world-schema>` `character-attributes.attributes`; for every numeric stat (hp, level, etc.) use its schema `defaultValue`
-3. Merge the player's non-numeric selections (e.g. lineage / background) into `fields`
-4. Call `create-character` once with:
-   - `name`: the player-supplied name
-   - `type`: `"player"`
-   - `description`: a brief 2–3 sentence character description built from the selections
-   - `fields`: the fully merged attribute map
-   - `transitionPhase`: `"playing"`
-
-**Single invocation** — do not repeat. Emit no extra text after the call.
-
----
-
 ## Key rules
 
-- The two modes are mutually exclusive, decided by whether `<player-submission>` is empty. Never call both `create-form` and `create-character` in the same turn.
+- **Only** `create-form` + `runtime-done`. Never call any other tool.
 - Keep the narrative voice aligned with the narrator's opening
 - Use second-person narration
 - At most 4 form fields total (including `characterName`)

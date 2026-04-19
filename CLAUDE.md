@@ -480,6 +480,7 @@ describe("ComponentName", () => {
 - Plugin minimum: `PLUGIN.md` + `package.json`
 - Declare `outputKind` in frontmatter: `story` (main narrative), `plugin` (default), `system` (hidden)
 - Declare `capabilities` in frontmatter for framework discovery (e.g. `[narrative]`, `[world-data-provider]`, `[image-generation]`)
+- Smart retry / timeout fields (all optional; sensible defaults): `timeoutMs` (runtime hard cap), `maxRetries` (default 1), `callTimeoutMs` (per-call cap, derived by default), `firstTokenTimeoutMs` (streaming TTFB, default 30s), `loopDetectionThreshold` (tool-call loop detection, default 3). See `docs/reference/plugins.md#超时与智能重试`.
 
 ### Framework–Plugin Isolation Rule (CRITICAL)
 

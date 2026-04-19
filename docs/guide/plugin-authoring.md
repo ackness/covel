@@ -75,6 +75,22 @@ trigger:
 | `tools` | 否 | object | 工具声明（见第二部分） |
 | `input` | 否 | object | 输入注入声明（见第二部分） |
 | `config` | 否 | object | 配置字段定义（见 1.7 节） |
+| `timeoutMs` | 否 | number | Runtime 总时长硬上限，默认 60000 |
+| `maxSteps` | 否 | number | 单次 attempt 内的 tool-call 步数上限，默认 10 |
+| `maxRetries` | 否 | number | LLM 调用失败/超时/工具循环时的重试次数，默认 1 |
+| `callTimeoutMs` | 否 | number | 单次 LLM 调用时长（ms），默认从 `timeoutMs` + `maxRetries` 推算 |
+| `firstTokenTimeoutMs` | 否 | number | 流式首 token 超时（ms），默认 30000 |
+| `loopDetectionThreshold` | 否 | number | 连续相同 tool call 的判定阈值，默认 3；0 关闭 |
+
+**智能重试说明（默认已启用）：**
+
+- Runtime 会在以下四种情况自动重试一次并向 prompt 追加 `[retry N]` 扰动消息：
+  1. provider 返回 transient 错误（5xx / 网络错误 / rate limit）
+  2. 单次调用超过 `callTimeoutMs`（默认 `min(60s, timeoutMs / 2)`)
+  3. 流式调用 `firstTokenTimeoutMs` 内未收到任何 token
+  4. 外层连续 3 次相同 `(tool name + args)` 调用
+- 重试总数不会让整个 runtime 超过 `timeoutMs`。
+- `llm.toml` 中的 `fallback = "story"` 仍然生效：同 preset 重试完再沿 gateway fallback chain 尝试。
 
 **优先级参考区间：**
 

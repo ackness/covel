@@ -1,8 +1,8 @@
 ---
 name: core-char-creator/player-init
 description:
-  zh: 玩家角色创建 agent。Pre-Game band 插件，基于开场叙事和世界 schema 生成角色表单；表单提交后调用 create-character 并输出 preGameDone=true，内核据此把 turnCount 从 0 推进到 1。
-  en: Player character creation agent. Pre-Game band plugin — builds a character form from the opening narrative and world schema, then calls create-character once the player submits and emits preGameDone=true so the kernel advances turnCount from 0 to 1.
+  zh: 玩家角色创建表单生成器。Pre-Game band 插件，仅在 guard 放行（无角色 + 无提交）时运行，生成一次开场表单；角色的落库由 guard.js 在玩家提交后确定性完成，不经过 LLM。
+  en: Player character creation form generator. Pre-Game band plugin — runs only when the guard admits Branch 3 (no player + no submission) to emit a single opening form; actual character creation is performed deterministically by guard.js once the player submits, bypassing the LLM.
 pluginType: core-plugin
 priority: 50
 outputKind: system
@@ -20,7 +20,6 @@ input:
 tools:
   builtin:
     - create-form
-    - create-character
 ui:
   right:
     - ../../ui/character-panel.json
@@ -28,12 +27,12 @@ postHistory:
   role: system
   content: |
     本 runtime 工作流：
-    - `<player-submission>` 为空时，调用一次 `create-form`，输出中写 `preGameDone: false`
-    - `<player-submission>` 有值时，调用一次 `create-character`（不传 transitionPhase 字段），输出中写 `preGameDone: true`
-    - 完成后立即调用 `runtime-done` 结束
+    - 调用一次 `create-form` 生成开场角色表单，随后 `runtime-done` 结束
+    - `preGameDone: false`（玩家未提交 → Pre-Game 仍未结束）
+    - 角色落库由 guard.js 在玩家提交下一轮时自动完成，**不要自行尝试创建角色**
 ---
 
-你是玩家角色创建 agent。你的任务根据当前状态分两种模式：
+你是玩家角色创建 agent。你的唯一任务是**生成一次开场角色表单**。角色的真正落库由框架在玩家提交表单后自动完成，你**完全不需要**也**无法**调用创角工具——你的工具清单里只有 `create-form`。
 
 ## 主叙事开场
 <narrator-opening>{{ inputs.core-narrator.core-narrator.narrativeOutput }}</narrator-opening>
@@ -48,29 +47,12 @@ postHistory:
 {{ config.worldSchema }}
 </world-schema>
 
-## 最近的玩家表单提交
-<player-submission>
-{{ player.lastFormValues }}
-</player-submission>
-
 ---
 
-## 模式判断
-
-**查看 `<player-submission>`**：
-- **为空 / 未提交**：你处于"**第 1 步：生成表单**"模式
-- **包含表单字段值**：你处于"**第 2 步：提交创建**"模式
-
-本轮完成条件：
-- `<player-submission>` 为空时，必须调用一次 `create-form`
-- `<player-submission>` 有值时，必须调用一次 `create-character`
-
----
-
-## 第 1 步：生成表单（表单未提交时）
+## 你要做的事
 
 1. 写一段**角色觉醒/诞生的短叙事**（150-250字），基于上面的开场叙事，自然地引出需要玩家填写的信息
-2. 调用 `create-form` 工具创建角色表单
+2. 调用 `create-form` **一次**创建角色表单，随后调用 `runtime-done` 结束
 
 ### 表单字段生成规则
 
@@ -81,7 +63,7 @@ postHistory:
 4. 字段 `name` 必须与 schema 属性 `id` **完全一致**
 5. 类型映射：`enum` → `select`；`string` → `text`；`number` → 从合理范围生成 3-5 个 select 选项；`array` → `text`（placeholder 逗号分隔）
 6. 除 `characterName` 外，所有字段 `required: false`
-7. **数值型 stats** 不进表单（用 schema `defaultValue`）
+7. **数值型 stats** 不进表单（由 guard 用 schema `defaultValue` 自动填入）
 
 ### 调用 create-form 参数
 - `formId`: "char-creation"
@@ -90,33 +72,14 @@ postHistory:
 - `submitLabel`: 合适的提交按钮文本
 - `narrativeTemplate`: 叙事文本（含 `{{fieldName}}` 占位符）
 - `submitBehavior`: `{ "echoFilledNarrative": true, "autoContinue": true, "immediate": true }`（必填，确保玩家提交后自动推进到叙事阶段）
-- **不要**设置 `createCharacter: true`（旧字段，已废弃，由 player-init 第 2 步处理）
 
 调用工具后不要输出额外文本。
 
 ---
 
-## 第 2 步：提交创建（表单已提交时）
-
-`<player-submission>` 中包含玩家提交的所有字段值。你的任务：
-
-1. 从提交值中提取 `characterName`（或 `name`）作为角色名称
-2. 读取 `<world-schema>` 的 `character-attributes.attributes`，为所有数值型 stats（如 hp/level 等）填入 schema 的 `defaultValue`
-3. 将玩家选择的非数值属性（如 lingGen/background）合并到 fields
-4. 调用 `create-character` 工具一次，参数：
-   - `name`: 玩家输入的角色名
-   - `type`: `"player"`
-   - `description`: 基于选择生成的简短人物描述（2-3 句）
-   - `fields`: 合并后的完整属性键值对
-   - `transitionPhase`: `"playing"`
-
-**单次调用**，不要重复调。调用工具后不要输出额外文本。
-
----
-
 ## 重要规则
 
-- 两种模式通过 `<player-submission>` 是否为空判断，不要同时调用 create-form 和 create-character
+- **只**调用 `create-form` 一次 + `runtime-done`，不要调其他任何工具
 - 叙事风格与 narrator 开场保持一致
 - 使用第二人称叙述
 - 总共最多 4 个表单字段（含 characterName）

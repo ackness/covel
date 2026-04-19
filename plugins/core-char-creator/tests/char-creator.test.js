@@ -2,7 +2,9 @@
  * core-char-creator plugin discovery tests (multi-runtime).
  *
  * This plugin now hosts two runtimes:
- *   - player-init       — LLM agent, creates player via create-character tool
+ *   - player-init       — LLM agent, emits the opening char-creation form;
+ *                         the real character record is written deterministically
+ *                         by guard.js once the player submits, bypassing the LLM.
  *   - character-tracker — LLM agent, detects NPCs and state changes every turn
  *
  * Full execution behavior is covered by E2E tests in apps/server and
@@ -58,10 +60,8 @@ describe('core-char-creator plugin', () => {
       expect(manifest.pluginType).toBe('core-plugin');
     });
 
-    it('declares create-character and create-form builtin tools', () => {
-      expect(manifest.tools?.builtin).toEqual(
-        expect.arrayContaining(['create-form', 'create-character']),
-      );
+    it('declares only create-form — character creation is performed by guard.js, not by the LLM', () => {
+      expect(manifest.tools?.builtin).toEqual(['create-form']);
     });
 
     it('injects narrator.narrativeOutput as <narrator-opening>', () => {
