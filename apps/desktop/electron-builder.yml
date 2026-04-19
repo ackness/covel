@@ -107,8 +107,11 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  installerIcon: resources/icon.ico
-  uninstallerIcon: resources/icon.ico
+  # installerIcon / uninstallerIcon 需要 256x256 的 .ico 文件。
+  # 暂未提供图标资源，先用 electron-builder 默认图标；等有品牌图标时
+  # 放到 resources/icon.ico 并把这两行取消注释。
+  # installerIcon: resources/icon.ico
+  # uninstallerIcon: resources/icon.ico
   deleteAppDataOnUninstall: false  # preserve user worlds/plugins on uninstall
 
 # ── Linux ─────────────────────────────────────────────────────────
