@@ -99,7 +99,19 @@ execSync(
 );
 console.log("  ✓ pnpm deploy → staging/server/");
 
-// 拷贝 server 运行所需的仓库级资源（这些不在 @covel/server 依赖图里）
+// 拷贝 server 运行所需的仓库级资源（这些不在 @covel/server 依赖图里）。
+// 注意：plugins/*/node_modules 来自 pnpm workspace 安装，内部是层层嵌套的
+// 软链（含 typescript lib 等大量文件），electron-builder 扫描时会撑爆
+// macOS 的 fd 上限（EMFILE）。一律剔除以下噪声目录。
+const EXCLUDE_DIRS = new Set([
+  "node_modules",
+  ".turbo",
+  "dist",
+  "coverage",
+  ".cache",
+  "tests",
+  "__tests__",
+]);
 const sideCarResources = ["plugins", "prompts", "worlds"];
 for (const entry of sideCarResources) {
   const src = path.join(projectRoot, entry);
@@ -108,9 +120,12 @@ for (const entry of sideCarResources) {
     console.log(`  ⚠ Skipping ${entry} (not found)`);
     continue;
   }
-  fs.cpSync(src, dest, { recursive: true });
+  fs.cpSync(src, dest, {
+    recursive: true,
+    filter: (source) => !EXCLUDE_DIRS.has(path.basename(source)),
+  });
 }
-console.log("  ✓ plugins/prompts/worlds copied");
+console.log("  ✓ plugins/prompts/worlds copied (node_modules/dist excluded)");
 
 // Copy llm.toml if present
 const llmToml = path.join(projectRoot, "llm.toml");
