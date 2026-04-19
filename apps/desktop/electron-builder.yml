@@ -19,11 +19,15 @@ extraResources:
       - "**/*"
       - "!**/*.map"
       - "!**/*.d.ts"
-  # Server source + dependencies
+  # Server source + dependencies.
+  # ⚠️ electron-builder 的 extraResources 默认排除 node_modules —— 即使
+  # filter 里写了 "**/*" 也一样，它内部有独立的忽略规则。必须显式加
+  # "node_modules/**" 才会把 pnpm deploy 产出的依赖包进 Resources/。
   - from: staging/server
     to: server
     filter:
       - "**/*"
+      - "node_modules/**"
       - "!**/node_modules/.cache/**"
       - "!**/node_modules/.bin/**"
       - "!**/.git/**"
