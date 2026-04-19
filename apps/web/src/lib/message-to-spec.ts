@@ -7,9 +7,12 @@
  * `nestedToFlat` and hands to `@json-render/react` Renderer.
  */
 
+import i18n from "@/i18n";
 import type { StreamMessage } from "@/stores/session-store.js";
 
 type NestedSpec = Record<string, unknown>;
+
+const tr = (key: string, vars?: Record<string, unknown>): string => i18n.t(key, vars) as string;
 
 /**
  * Convert a StreamMessage to a disabled spec (post-submission state).
@@ -36,7 +39,7 @@ export function messageToSpecDisabled(msg: StreamMessage): NestedSpec | null {
       props: { gap: "sm" },
       children: [
         { type: "Text", props: { content: data.prompt ?? "", variant: "muted" } },
-        { type: "Text", props: { content: "已选择", variant: "muted", size: "xs" } },
+        { type: "Text", props: { content: tr("form.submittedHint"), variant: "muted", size: "xs" } },
       ],
     };
   }
@@ -136,7 +139,7 @@ function blockToSpec(block: Record<string, unknown>): NestedSpec | null {
  * Convert a form block to a json-render nested spec.
  */
 function formToSpec(data: Record<string, unknown>): NestedSpec {
-  const title = (data.title as string) ?? "表单";
+  const title = (data.title as string) ?? tr("form.defaultTitle");
   const fields = (data.fields ?? []) as Array<{
     name: string;
     label?: string;
@@ -145,7 +148,7 @@ function formToSpec(data: Record<string, unknown>): NestedSpec {
     placeholder?: string;
     options?: string[] | Array<{ value: string; label: string }>;
   }>;
-  const submitLabel = (data.submitLabel as string) ?? "提交";
+  const submitLabel = (data.submitLabel as string) ?? tr("form.submit");
   const narrativeTemplate = data.narrativeTemplate as string | undefined;
 
   const children: NestedSpec[] = [
@@ -202,7 +205,7 @@ function formToSpec(data: Record<string, unknown>): NestedSpec {
  * Convert a form block to a disabled json-render spec (post-submission).
  */
 function formToSpecDisabled(data: Record<string, unknown>): NestedSpec {
-  const title = (data.title as string) ?? "表单";
+  const title = (data.title as string) ?? tr("form.defaultTitle");
   const submitBehavior = data.submitBehavior as Record<string, unknown> | undefined;
   if (submitBehavior?.autoContinue === true) {
     return {
@@ -210,7 +213,7 @@ function formToSpecDisabled(data: Record<string, unknown>): NestedSpec {
       props: { gap: "xs" },
       children: [
         { type: "FormHeader", props: { title } },
-        { type: "Text", props: { content: "已提交，故事继续推进。", variant: "muted", size: "sm" } },
+        { type: "Text", props: { content: tr("form.submittedAutoContinue"), variant: "muted", size: "sm" } },
       ],
     };
   }
@@ -244,7 +247,7 @@ function formToSpecDisabled(data: Record<string, unknown>): NestedSpec {
 
   children.push({
     type: "SubmitButton",
-    props: { label: "已提交", disabled: true },
+    props: { label: tr("form.submitted"), disabled: true },
   });
 
   return {

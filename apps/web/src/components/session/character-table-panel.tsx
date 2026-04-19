@@ -36,14 +36,6 @@ interface CharacterTablePanelProps {
 
 const CATEGORY_ORDER: readonly string[] = ["stats", "bio", "equipment", "social", "custom"];
 
-const CATEGORY_LABELS: Record<string, { zh: string; en: string }> = {
-  stats:     { zh: "属性", en: "Stats" },
-  bio:       { zh: "背景", en: "Bio" },
-  equipment: { zh: "装备", en: "Equipment" },
-  social:    { zh: "社交", en: "Social" },
-  custom:    { zh: "其他", en: "Other" },
-};
-
 const TYPE_BADGE_STYLES: Record<string, string> = {
   player:    "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30",
   companion: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30",
@@ -136,12 +128,11 @@ function FieldValue({ def, value }: { def: FieldDefinition; value: unknown }) {
 function SchemaCharacterCard({
   char,
   fieldGroups,
-  isZh,
 }: {
   char: Record<string, unknown>;
   fieldGroups: Map<string, FieldDefinition[]>;
-  isZh: boolean;
 }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   const name = String(char.name ?? "???");
@@ -200,11 +191,10 @@ function SchemaCharacterCard({
           {CATEGORY_ORDER.map((cat) => {
             const defs = fieldGroups.get(cat);
             if (!defs || defs.length === 0) return null;
-            const catLabel = CATEGORY_LABELS[cat];
             return (
               <div key={cat} className="space-y-1.5">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {isZh ? catLabel?.zh : catLabel?.en}
+                  {t(`character.categories.${cat}`)}
                 </div>
                 <div className="space-y-1">
                   {defs.map((def) => {
@@ -247,13 +237,12 @@ function SchemaCharacterCard({
 // ── Main Component ───────────────────────────────────────────────
 
 export function CharacterTablePanel({ schema, characters }: CharacterTablePanelProps) {
-  const { t, i18n } = useTranslation();
-  const isZh = i18n.language.startsWith("zh");
+  const { t } = useTranslation();
 
   if (characters.length === 0) {
     return (
       <p className="text-xs text-muted-foreground italic">
-        {t("session.noCharacters")}
+        {t("character.noCharacters")}
       </p>
     );
   }
@@ -273,7 +262,6 @@ export function CharacterTablePanel({ schema, characters }: CharacterTablePanelP
               key={String(char.id ?? char.name ?? i)}
               char={char}
               fieldGroups={fieldGroups}
-              isZh={isZh}
             />
           ))}
         </div>

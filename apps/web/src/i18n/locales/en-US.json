@@ -31,7 +31,7 @@
     "state": "State",
     "world": "World",
     "lore": "Lore",
-    "activeModels": "Models",
+    "activeModels": "Active Models",
     "noGameState": "No game state yet. State will appear as the story progresses.",
     "worldState": "World State",
     "characters": "Characters",
@@ -39,7 +39,7 @@
     "inventory": "Inventory",
     "combat": "Combat",
     "memoryArchive": "Memory Archive",
-    "noCharacters": "No characters discovered yet.",
+    "noCharacters": "Characters will appear here once created.",
     "noQuests": "No quests yet.",
     "statePatchesTitle": "State Patches",
     "noStatePatches": "No state changes yet.",
@@ -59,6 +59,12 @@
     "preparation": "Session Setup",
     "history": "Previous Sessions",
     "worldLore": "World Document",
+    "worldTab": "World",
+    "database": "Database",
+    "dbTables": "table(s)",
+    "dbLoadError": "Load failed",
+    "dbEmpty": "No state tables yet. Data will appear here once plugins produce it.",
+    "refresh": "Refresh",
     "resetLore": "Reset to original",
     "configureKeys": "Configure API Keys & Presets",
     "beginAdventure": "Begin Adventure",
@@ -103,8 +109,6 @@
     "noCompatibleSlot": "No compatible slot",
     "selectSlot": "-- Select slot --",
     "autoAssign": "Auto Assign",
-    "activeModels": "Active Models",
-    "plugins": "Plugins & Runtimes",
     "deleteConfirmTitle": "Delete Session",
     "deleteConfirmDesc": "This will permanently delete the session and all its data (messages, game state, etc.). This action cannot be undone.",
     "slotsConfigured": "{{count}} slot(s) configured",
@@ -113,7 +117,11 @@
     "bindingsPartial": "Some unbound",
     "historySummary": "{{count}} session(s)",
     "loreSummary": "{{count}} chars",
-    "pluginsSummary": "{{pluginCount}} plugins, {{runtimeCount}} runtimes"
+    "pluginsSummary": "{{pluginCount}} plugins, {{runtimeCount}} runtimes",
+    "exportDimensions": "Export Dimensions",
+    "importDimensions": "Import Dimensions",
+    "dimensionsImported": "Imported successfully",
+    "reasonConnectionClosed": "Connection closed but backend did not report completion"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -126,6 +134,7 @@
     "backToList": "Back to List",
     "noData": "No data available",
     "noStructuredData": "No structured data available",
+    "dimensionsEmpty": "No world dimension data generated yet.",
     "geography": "Geography",
     "geographyOverview": "Overview",
     "regions": "Regions",
@@ -226,6 +235,13 @@
     "aiCreateDesc": "Describe your world concept and AI will generate a complete worldlore document.",
     "aiPromptLabel": "World Concept",
     "aiPromptPlaceholder": "Describe your world, e.g.: A steampunk sky city with floating islands...",
+    "aiPromptPlaceholderFull": "Describe your world, e.g.: A steampunk sky city whose inhabitants trade between islands in the clouds using airships...",
+    "aiPromptExamples": [
+      "A steampunk sky city whose inhabitants trade between cloud-borne islands using airships",
+      "A cyberpunk post-apocalypse where humans and AIs coexist in neon-lit underground cities filled with hacker culture",
+      "An eastern xianxia world where cultivators train among floating mountains while demons prowl the lands",
+      "A post-apocalyptic wasteland where survivors form tribes across the radioactive plains"
+    ],
     "aiExamples": "Try these for inspiration:",
     "aiGenerate": "Generate World",
     "aiRetry": "Retry",
@@ -242,6 +258,9 @@
     "configuredDesc": "llm.toml configured. Manage API keys and advanced parameters.",
     "unconfiguredDesc": "Configure model slots, API keys, and advanced parameters. All data is stored locally in your browser.",
     "configuredByToml": "Configured via llm.toml. Edit the server-side file to make changes.",
+    "language": "Interface Language",
+    "langZh": "简体中文",
+    "langEn": "English",
     "modelDefault": "Default Model",
     "modelFast": "Fast Model",
     "modelBalance": "Balance Model",
@@ -310,7 +329,8 @@
     "triggerEvent": "Event",
     "locked": "Core plugin — cannot be disabled",
     "enable": "Enable plugin",
-    "disable": "Disable plugin"
+    "disable": "Disable plugin",
+    "emptyPlaceholder": "{{label}} has no data yet. Waiting for the story to progress…"
   },
   "coreImage": {
     "generateButton": "Generate Illustration",
@@ -355,6 +375,51 @@
     "step2Desc": "The AI narrator will build a story around you.",
     "enter": "Enter Covel"
   },
+  "character": {
+    "noCharacters": "Characters will appear here once created.",
+    "noAttributes": "No attribute data",
+    "defaultName": "Character {{index}}",
+    "categories": {
+      "stats": "Stats",
+      "bio": "Bio",
+      "abilities": "Abilities",
+      "equipment": "Equipment",
+      "social": "Social",
+      "custom": "Other"
+    },
+    "type": {
+      "player": "Player",
+      "npc": "NPC",
+      "companion": "Companion",
+      "ally": "Ally",
+      "enemy": "Enemy"
+    }
+  },
+  "lorebook": {
+    "title": "Lorebook",
+    "refresh": "Refresh",
+    "deleteConfirm": "Delete entry \"{{id}}\"? This cannot be undone.",
+    "noEntries": "No session lorebook entries yet",
+    "enable": "Enable",
+    "disable": "Disable",
+    "delete": "Delete",
+    "expand": "Expand",
+    "collapse": "Collapse"
+  },
+  "graph": {
+    "empty": "Graph is currently empty — waiting for NPCs to appear.",
+    "clearSelection": "Clear selection",
+    "loading": "Loading graph…",
+    "stats": "{{nodes}} nodes · {{links}} relations"
+  },
+  "form": {
+    "defaultTitle": "Form",
+    "submit": "Submit",
+    "submitted": "Submitted",
+    "submittedAutoContinue": "Submitted. The story will continue.",
+    "submittedHint": "Selected",
+    "selectPrefix": "Select {{label}}"
+  },
   "common": {
     "loading": "Loading...",
     "error": "Something went wrong",
@@ -366,6 +431,16 @@
     "create": "Create",
     "search": "Search",
     "execute": "Execute",
-    "newSession": "New Session"
+    "newSession": "New Session",
+    "refresh": "Refresh",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "enable": "Enable",
+    "disable": "Disable",
+    "confirmDelete": "Confirm delete",
+    "noData": "No data",
+    "noMatch": "No matching entries",
+    "yes": "Yes",
+    "no": "No"
   }
 }

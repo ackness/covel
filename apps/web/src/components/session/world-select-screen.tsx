@@ -131,7 +131,7 @@ export function WorldSelectScreen({
                 onClick={() => setGeneratorOpen(true)}
               >
                 <Wand2 className="w-3.5 h-3.5 mr-1.5" />
-                {t("world.aiCreate", "AI 创建世界")}
+                {t("world.aiCreate")}
               </Button>
             </div>
           </div>

@@ -77,7 +77,7 @@ export function DatabasePanel({ sessionId, refreshKey = 0 }: DatabasePanelProps)
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className="text-[10px] rounded-none">
-            {tables.length} {t("session.dbTables", "张表")}
+            {tables.length} {t("session.dbTables")}
           </Badge>
         </div>
         <Button
@@ -86,7 +86,7 @@ export function DatabasePanel({ sessionId, refreshKey = 0 }: DatabasePanelProps)
           className="h-6 w-6"
           onClick={handleRefresh}
           disabled={loading}
-          title={t("session.refresh", "刷新")}
+          title={t("session.refresh")}
         >
           {loading
             ? <Loader2 className="w-3 h-3 animate-spin" />
@@ -96,13 +96,13 @@ export function DatabasePanel({ sessionId, refreshKey = 0 }: DatabasePanelProps)
 
       {error && (
         <p className="text-[11px] text-red-500 italic">
-          {t("session.dbLoadError", "加载失败")}: {error}
+          {t("session.dbLoadError")}: {error}
         </p>
       )}
 
       {!loading && !error && tables.length === 0 && (
         <p className="text-xs text-muted-foreground italic">
-          {t("session.dbEmpty", "尚无任何状态表。插件产生数据后会在这里显示。")}
+          {t("session.dbEmpty")}
         </p>
       )}
 

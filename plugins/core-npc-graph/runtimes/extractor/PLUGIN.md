@@ -1,6 +1,8 @@
 ---
 name: core-npc-graph/extractor
-description: NPC 关系图抽取器 — 分析叙事文本抽取人物、群体、势力及其关系事实，维护一张可检索的知识图谱。
+description:
+  zh: NPC 关系图抽取器 — 分析叙事文本抽取人物、群体、势力及其关系事实，维护一张可检索的知识图谱。
+  en: NPC relationship graph extractor — parses the narrative to extract characters, groups, factions, and their relationship facts, maintaining a queryable knowledge graph.
 pluginType: plugin
 priority: 620
 model: plugin

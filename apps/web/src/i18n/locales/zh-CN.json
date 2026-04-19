@@ -31,7 +31,7 @@
     "state": "状态",
     "world": "世界观",
     "lore": "知识库",
-    "activeModels": "模型",
+    "activeModels": "活跃模型",
     "noGameState": "暂无游戏状态，故事推进后将在此显示。",
     "worldState": "世界状态",
     "characters": "角色",
@@ -39,7 +39,7 @@
     "inventory": "背包",
     "combat": "战斗",
     "memoryArchive": "记忆档案",
-    "noCharacters": "尚未发现角色。",
+    "noCharacters": "角色信息将在创建角色后显示。",
     "noQuests": "暂无任务。",
     "statePatchesTitle": "状态变更",
     "noStatePatches": "暂无状态变更。",
@@ -61,6 +61,12 @@
     "preparation": "会话配置",
     "history": "历史会话",
     "worldLore": "世界文档",
+    "worldTab": "世界",
+    "database": "数据库",
+    "dbTables": "张表",
+    "dbLoadError": "加载失败",
+    "dbEmpty": "尚无任何状态表。插件产生数据后会在这里显示。",
+    "refresh": "刷新",
     "resetLore": "重置为原始",
     "configureKeys": "配置 API 密钥和预设",
     "startGame": "开始游戏",
@@ -103,8 +109,6 @@
     "noCompatibleSlot": "无兼容插槽",
     "selectSlot": "-- 选择插槽 --",
     "autoAssign": "自动分配",
-    "activeModels": "活跃模型",
-    "plugins": "插件与运行时",
     "deleteConfirmTitle": "删除会话",
     "deleteConfirmDesc": "此操作将永久删除该会话及其所有数据（消息、游戏状态等），无法撤销。",
     "slotsConfigured": "{{count}} 个插槽已配置",
@@ -113,7 +117,11 @@
     "bindingsPartial": "部分未绑定",
     "historySummary": "{{count}} 个历史存档",
     "loreSummary": "{{count}} 字符",
-    "pluginsSummary": "{{pluginCount}} 个插件，共 {{runtimeCount}} 个 runtime"
+    "pluginsSummary": "{{pluginCount}} 个插件，共 {{runtimeCount}} 个 runtime",
+    "exportDimensions": "导出维度",
+    "importDimensions": "导入维度",
+    "dimensionsImported": "导入成功",
+    "reasonConnectionClosed": "连接结束但后端未上报结束"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -126,6 +134,7 @@
     "backToList": "返回列表",
     "noData": "暂无数据",
     "noStructuredData": "暂无结构化数据",
+    "dimensionsEmpty": "尚未生成世界维度数据。",
     "geography": "地理",
     "geographyOverview": "地理概述",
     "regions": "区域",
@@ -226,6 +235,13 @@
     "aiCreateDesc": "描述你想要的世界概念，AI 将自动生成完整的世界观文档。",
     "aiPromptLabel": "世界概念",
     "aiPromptPlaceholder": "描述你想要的世界，例如：一个蒸汽朋克风格的空中城市...",
+    "aiPromptPlaceholderFull": "描述你想要的世界，例如：一个蒸汽朋克风格的空中城市，居民依靠飞艇在云层间的岛屿间贸易...",
+    "aiPromptExamples": [
+      "一个蒸汽朋克风格的空中城市，居民依靠飞艇在云层间的岛屿间贸易",
+      "赛博朋克末世，人类与AI共存的地下城市，充满霓虹灯和黑客文化",
+      "东方仙侠世界，修仙者在浮空山脉间修炼，妖魔横行",
+      "后启示录废土，幸存者在辐射荒原中建立部落"
+    ],
     "aiExamples": "试试这些灵感：",
     "aiGenerate": "生成世界",
     "aiRetry": "重试",
@@ -242,6 +258,9 @@
     "configuredDesc": "llm.toml 已配置。管理 API 密钥和高级参数。",
     "unconfiguredDesc": "配置模型插槽、API 密钥和高级参数。所有数据仅存储在浏览器本地。",
     "configuredByToml": "由 llm.toml 配置。修改需编辑服务器端文件。",
+    "language": "界面语言",
+    "langZh": "简体中文",
+    "langEn": "English",
     "modelDefault": "默认模型",
     "modelFast": "快速模型",
     "modelBalance": "均衡模型",
@@ -310,7 +329,8 @@
     "triggerEvent": "事件触发",
     "locked": "核心插件 — 不可关闭",
     "enable": "开启插件",
-    "disable": "关闭插件"
+    "disable": "关闭插件",
+    "emptyPlaceholder": "{{label}} 暂无数据，等待游戏推进……"
   },
   "coreImage": {
     "generateButton": "生成插画",
@@ -355,6 +375,51 @@
     "step2Desc": "AI \u53D9\u4E8B\u5458\u5C06\u56F4\u7ED5\u4F60\u6784\u5EFA\u6545\u4E8B\u3002",
     "enter": "\u8FDB\u5165 Covel"
   },
+  "character": {
+    "noCharacters": "角色信息将在创建角色后显示。",
+    "noAttributes": "无属性数据",
+    "defaultName": "角色 {{index}}",
+    "categories": {
+      "stats": "数值",
+      "bio": "基本",
+      "abilities": "能力",
+      "equipment": "装备",
+      "social": "社交",
+      "custom": "其他"
+    },
+    "type": {
+      "player": "玩家",
+      "npc": "NPC",
+      "companion": "同伴",
+      "ally": "盟友",
+      "enemy": "敌人"
+    }
+  },
+  "lorebook": {
+    "title": "知识库",
+    "refresh": "刷新",
+    "deleteConfirm": "删除词条 \"{{id}}\"？此操作无法撤销。",
+    "noEntries": "尚无 session lorebook 词条",
+    "enable": "启用",
+    "disable": "禁用",
+    "delete": "删除",
+    "expand": "展开",
+    "collapse": "收起"
+  },
+  "graph": {
+    "empty": "关系图当前为空——等待 NPC 出现。",
+    "clearSelection": "清除选中",
+    "loading": "加载关系图……",
+    "stats": "{{nodes}} 个节点 · {{links}} 条关系"
+  },
+  "form": {
+    "defaultTitle": "表单",
+    "submit": "提交",
+    "submitted": "已提交",
+    "submittedAutoContinue": "已提交，故事继续推进。",
+    "submittedHint": "已选择",
+    "selectPrefix": "选择{{label}}"
+  },
   "common": {
     "loading": "加载中...",
     "error": "出错了",
@@ -366,6 +431,16 @@
     "create": "创建",
     "search": "搜索",
     "execute": "执行",
-    "newSession": "新建会话"
+    "newSession": "新建会话",
+    "refresh": "刷新",
+    "expand": "展开",
+    "collapse": "收起",
+    "enable": "启用",
+    "disable": "禁用",
+    "confirmDelete": "确认删除",
+    "noData": "暂无数据",
+    "noMatch": "没有匹配的条目",
+    "yes": "是",
+    "no": "否"
   }
 }

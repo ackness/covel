@@ -547,10 +547,22 @@ export async function saveStateSnapshot(sessionId: string, snapshot: Record<stri
   });
 }
 
-export async function createSession(worldId: string, presetId?: string, id?: string, plugins?: string[]): Promise<SessionRecord> {
+export async function createSession(
+  worldId: string,
+  presetId?: string,
+  id?: string,
+  plugins?: string[],
+  locale?: string,
+): Promise<SessionRecord> {
   return request<SessionRecord>("/api/sessions", {
     method: "POST",
-    body: JSON.stringify({ id, worldId, presetId, ...(plugins ? { plugins } : {}) }),
+    body: JSON.stringify({
+      id,
+      worldId,
+      presetId,
+      ...(plugins ? { plugins } : {}),
+      ...(locale ? { locale } : {}),
+    }),
   });
 }
 

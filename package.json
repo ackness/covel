@@ -21,6 +21,8 @@
     "db:migrate": "turbo db:migrate --filter=@covel/server",
     "db:generate": "turbo db:generate --filter=@covel/server",
     "db:studio": "turbo db:studio --filter=@covel/server",
+    "check:i18n": "pnpm --filter @covel/web check:i18n && node ./scripts/check-plugin-i18n.mjs",
+    "check:i18n:plugins": "node ./scripts/check-plugin-i18n.mjs",
     "test": "turbo test",
     "test:coverage": "turbo test -- --coverage",
     "e2e": "playwright test",

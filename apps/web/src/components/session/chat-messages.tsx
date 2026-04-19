@@ -176,10 +176,10 @@ export function ChatMessages({
               className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1"
               disabled={executing}
               onClick={() => handleGenerateImage(msg.content)}
-              title={t("coreImage.generateButton", "生成插画")}
+              title={t("coreImage.generateButton")}
             >
               <ImageIcon className="h-3 w-3" />
-              {t("coreImage.generateButton", "生成插画")}
+              {t("coreImage.generateButton")}
             </Button>
           </div>
         )}
@@ -244,7 +244,7 @@ export function ChatMessages({
                 <div className="space-y-2">
                   <p className="text-base font-semibold">{world ? (typeof world.name === "string" ? world.name : (world.name as Record<string, string>)["zh-CN"] ?? "") : ""}</p>
                   <p className="text-sm text-muted-foreground max-w-xs">
-                    {t("session.beginAdventureHint", "准备好了吗？点击下方按钮，让故事开始。")}
+                    {t("session.beginAdventureHint")}
                   </p>
                 </div>
                 <Button
@@ -253,7 +253,7 @@ export function ChatMessages({
                   onClick={onBeginAdventure}
                 >
                   <Flame className="w-4 h-4 mr-2" />
-                  {t("session.beginAdventure", "开始冒险")}
+                  {t("session.beginAdventure")}
                 </Button>
               </>
             ) : (

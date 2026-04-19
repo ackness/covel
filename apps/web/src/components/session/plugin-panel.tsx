@@ -6,6 +6,7 @@
  */
 
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import { nestedToFlat } from "@json-render/core";
 import type { Spec } from "@json-render/core";
@@ -83,6 +84,7 @@ export function PluginPanel({
   stateOverride,
   interactionLocked = false,
 }: PluginPanelProps) {
+  const { t } = useTranslation();
   const namespace = (spec.dataSource as Record<string, string> | undefined)?.namespace ?? "default";
   const liveData = usePluginNamespace(pluginId, namespace);
   const data = stateOverride ?? liveData;
@@ -117,7 +119,7 @@ export function PluginPanel({
     const emptySpec = spec.emptyState as Record<string, unknown> | undefined;
     const customMsg = resolveEmptyMessage(emptySpec?.message);
     const label = resolveEmptyMessage(spec.label) || pluginId;
-    const emptyMsg = customMsg || `${label} 暂无数据，等待游戏推进……`;
+    const emptyMsg = customMsg || t("plugin.emptyPlaceholder", { label });
     return (
       <p className="text-xs text-muted-foreground italic text-center leading-relaxed px-4 pt-6">
         {emptyMsg}

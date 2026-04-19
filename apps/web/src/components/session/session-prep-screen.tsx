@@ -357,7 +357,7 @@ export function SessionPrepScreen({
               <a href={api.exportDimensionsUrl(world.id)} download>
                 <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
                   <Download className="w-3 h-3" />
-                  {t("session.exportDimensions", "导出维度")}
+                  {t("session.exportDimensions")}
                 </Button>
               </a>
               <DimensionImportButton worldId={world.id} />
@@ -617,7 +617,7 @@ function DimensionImportButton({ worldId }: { worldId: string }) {
 
       await api.importDimensions(worldId, dimensions);
       setStatus("success");
-      setMessage(t("session.dimensionsImported", "导入成功"));
+      setMessage(t("session.dimensionsImported"));
     } catch (err) {
       setStatus("error");
       setMessage(err instanceof Error ? err.message : String(err));
@@ -638,7 +638,7 @@ function DimensionImportButton({ worldId }: { worldId: string }) {
       >
         <label>
           <Upload className="w-3 h-3" />
-          {t("session.importDimensions", "导入维度")}
+          {t("session.importDimensions")}
           <input
             type="file"
             accept=".yaml,.yml,.json"

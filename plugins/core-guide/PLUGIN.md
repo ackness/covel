@@ -1,6 +1,8 @@
 ---
 name: core-guide
-description: 行动引导插件。分析叙事结果，为玩家生成分风格的选择建议（稳妥/激进/创意/疯狂），让 narrator 专注叙事。
+description:
+  zh: 行动引导插件。分析叙事结果，为玩家生成分风格的选择建议（稳妥/激进/创意/疯狂），让 narrator 专注叙事。
+  en: Action guide. Reads the latest narrative and offers the player categorised suggestions (safe / bold / creative / wild) so the narrator can focus on prose.
 pluginType: plugin
 priority: 550
 model: plugin

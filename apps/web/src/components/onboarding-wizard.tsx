@@ -11,6 +11,7 @@ import {
   addCustomPreset, uid,
 } from "@/services/api.js";
 import type { PingResult } from "@/services/api.js";
+import { useLocalePreference } from "@/hooks/useLocalePreference";
 
 /**
  * Onboarding persistence uses a version number rather than a boolean so that
@@ -55,7 +56,8 @@ export function resetOnboarding(): void {
 
 export function OnboardingWizard() {
   const [visible, setVisible] = useState(() => !isOnboarded());
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const { locale, setLocale } = useLocalePreference();
   const [step, setStep] = useState(0);
 
   // Provider key state
@@ -140,11 +142,6 @@ export function OnboardingWizard() {
     }
   }, []);
 
-  const toggleLocale = useCallback(() => {
-    const next = i18n.language === "zh-CN" ? "en-US" : "zh-CN";
-    i18n.changeLanguage(next);
-  }, [i18n]);
-
   if (!visible) return null;
 
   const provider = PROVIDERS.find((p) => p.id === selectedProvider) ?? PROVIDERS[0];
@@ -206,9 +203,9 @@ export function OnboardingWizard() {
                 </Label>
                 <div className="flex items-center justify-center gap-2">
                   <button
-                    onClick={() => i18n.changeLanguage("zh-CN")}
+                    onClick={() => setLocale("zh-CN")}
                     className={`px-4 py-2 text-xs font-medium border transition-colors ${
-                      i18n.language === "zh-CN"
+                      locale === "zh-CN"
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-zinc-700 text-zinc-400 hover:border-zinc-500"
                     }`}
@@ -216,9 +213,9 @@ export function OnboardingWizard() {
                     {"\u4E2D\u6587"}
                   </button>
                   <button
-                    onClick={() => i18n.changeLanguage("en-US")}
+                    onClick={() => setLocale("en-US")}
                     className={`px-4 py-2 text-xs font-medium border transition-colors ${
-                      i18n.language === "en-US"
+                      locale === "en-US"
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-zinc-700 text-zinc-400 hover:border-zinc-500"
                     }`}

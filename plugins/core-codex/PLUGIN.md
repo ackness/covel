@@ -1,6 +1,8 @@
 ---
 name: core-codex
-description: 知识图鉴系统。读取叙事文本与已有条目，用 LLM 判断本轮是否出现了值得登记的新发现（地点/人物/势力/物品/技能/传闻），通过 unlock-codex-entries / update-codex-entry 写入图鉴。对"没有新发现"的回合直接结束。
+description:
+  zh: 知识图鉴系统。读取叙事文本与已有条目，用 LLM 判断本轮是否出现了值得登记的新发现（地点/人物/势力/物品/技能/传闻），通过 unlock-codex-entries / update-codex-entry 写入图鉴。对"没有新发现"的回合直接结束。
+  en: Knowledge codex. Inspects narrative text and existing entries, asks the LLM whether this turn introduced anything worth cataloguing (locations, characters, factions, items, skills, lore), then writes via unlock-codex-entries / update-codex-entry. Skips turns with no new discoveries.
 pluginType: plugin
 priority: 650
 outputKind: system

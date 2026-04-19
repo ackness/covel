@@ -1,6 +1,8 @@
 ---
 name: core-narrator
-description: 主叙事生成器，负责根据玩家输入和世界观设定生成故事内容。每个 Turn 自动执行。
+description:
+  zh: 主叙事生成器，负责根据玩家输入和世界观设定生成故事内容。每个 Turn 自动执行。
+  en: Primary narrative generator. Produces story prose each turn based on player input and the world lore. Runs automatically every turn.
 pluginType: core-plugin
 priority: 500
 model: story

@@ -21,13 +21,6 @@ interface AiWorldGeneratorProps {
 
 type Phase = "idle" | "generating" | "validating" | "saving" | "done" | "error";
 
-const EXAMPLE_PROMPTS = [
-  "一个蒸汽朋克风格的空中城市，居民依靠飞艇在云层间的岛屿间贸易",
-  "赛博朋克末世，人类与AI共存的地下城市，充满霓虹灯和黑客文化",
-  "东方仙侠世界，修仙者在浮空山脉间修炼，妖魔横行",
-  "后启示录废土，幸存者在辐射荒原中建立部落",
-];
-
 export function AiWorldGenerator({
   open,
   onOpenChange,
@@ -107,12 +100,17 @@ export function AiWorldGenerator({
 
   const phaseLabel: Record<Phase, string> = {
     idle: "",
-    generating: t("world.aiGenerating", "AI 正在构建世界..."),
-    validating: t("world.aiValidating", "验证世界数据..."),
-    saving: t("world.aiSaving", "保存世界..."),
-    done: t("world.aiDone", "世界创建完成！"),
+    generating: t("world.aiGenerating"),
+    validating: t("world.aiValidating"),
+    saving: t("world.aiSaving"),
+    done: t("world.aiDone"),
     error: "",
   };
+
+  const examplesRaw = t("world.aiPromptExamples", { returnObjects: true }) as unknown;
+  const examplePrompts: string[] = Array.isArray(examplesRaw)
+    ? (examplesRaw as unknown[]).filter((s): s is string => typeof s === "string")
+    : [];
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -120,13 +118,10 @@ export function AiWorldGenerator({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />
-            {t("world.aiCreate", "AI 创建世界")}
+            {t("world.aiCreate")}
           </DialogTitle>
           <DialogDescription>
-            {t(
-              "world.aiCreateDesc",
-              "描述你想要的世界概念，AI 将自动生成完整的世界观文档。",
-            )}
+            {t("world.aiCreateDesc")}
           </DialogDescription>
         </DialogHeader>
 
@@ -134,15 +129,12 @@ export function AiWorldGenerator({
           {/* Prompt input */}
           <div className="space-y-2">
             <Label htmlFor="world-prompt">
-              {t("world.aiPromptLabel", "世界概念")}
+              {t("world.aiPromptLabel")}
             </Label>
             <textarea
               id="world-prompt"
               className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-              placeholder={t(
-                "world.aiPromptPlaceholder",
-                "描述你想要的世界，例如：一个蒸汽朋克风格的空中城市...",
-              )}
+              placeholder={t("world.aiPromptPlaceholderFull")}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               disabled={isWorking || phase === "done"}
@@ -154,13 +146,13 @@ export function AiWorldGenerator({
           </div>
 
           {/* Example prompts */}
-          {phase === "idle" && !prompt && (
+          {phase === "idle" && !prompt && examplePrompts.length > 0 && (
             <div className="space-y-2">
               <span className="text-xs text-muted-foreground">
-                {t("world.aiExamples", "试试这些灵感：")}
+                {t("world.aiExamples")}
               </span>
               <div className="flex flex-wrap gap-2">
-                {EXAMPLE_PROMPTS.map((example, i) => (
+                {examplePrompts.map((example, i) => (
                   <button
                     key={i}
                     type="button"
@@ -219,7 +211,7 @@ export function AiWorldGenerator({
               <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-destructive">
-                  {t("world.aiError", "生成失败")}
+                  {t("world.aiError")}
                 </p>
                 <p className="text-xs text-destructive/80 mt-1 break-words">
                   {error}
@@ -245,7 +237,7 @@ export function AiWorldGenerator({
                       setError(null);
                     }}
                   >
-                    {t("world.aiRetry", "重试")}
+                    {t("world.aiRetry")}
                   </Button>
                 )}
                 <Button
@@ -254,7 +246,7 @@ export function AiWorldGenerator({
                   disabled={!prompt.trim() || phase === "done"}
                 >
                   <Globe className="h-4 w-4 mr-1.5" />
-                  {t("world.aiGenerate", "生成世界")}
+                  {t("world.aiGenerate")}
                 </Button>
               </>
             )}

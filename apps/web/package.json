@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
+    "check:i18n": "node ./scripts/check-no-chinese-literal.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

@@ -1,6 +1,8 @@
 ---
 name: core-npc-graph/rag-retriever
-description: NPC 关系图检索器 — 在每个叙事回合开始前，从玩家当前输入中提取被提及的人物，并沿关系图 2-hop 扩展，把相关事实注入 narrator 上下文。无 LLM 调用。
+description:
+  zh: NPC 关系图检索器 — 在每个叙事回合开始前，从玩家当前输入中提取被提及的人物，并沿关系图 2-hop 扩展，把相关事实注入 narrator 上下文。无 LLM 调用。
+  en: NPC graph retriever — before each narrative turn, extracts mentioned characters from the player's input, expands along the graph up to 2 hops, and injects relevant facts into the narrator context. No LLM calls.
 pluginType: plugin
 priority: 490
 capabilities: [npc-graph, graph-rag]

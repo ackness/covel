@@ -5,19 +5,20 @@ import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { OnboardingWizard } from "@/components/onboarding-wizard";
+import { useLocalePreference } from "@/hooks/useLocalePreference";
 
 export const Route = createRootRoute({
   component: RootLayout,
 });
 
 function RootLayout() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const { locale, setLocale } = useLocalePreference();
   const location = useLocation();
   const isSession = location.pathname.startsWith('/session') || location.pathname.startsWith('/debug');
 
   const toggleLocale = () => {
-    const next = i18n.language === "zh-CN" ? "en-US" : "zh-CN";
-    i18n.changeLanguage(next);
+    setLocale(locale === "zh-CN" ? "en-US" : "zh-CN");
   };
 
   return (
@@ -54,7 +55,7 @@ function RootLayout() {
                 onClick={toggleLocale}
                 className="hidden md:flex items-center justify-center h-9 px-3 text-xs font-semibold uppercase tracking-widest border border-border hover:bg-primary hover:text-primary-foreground transition-colors"
               >
-                {i18n.language === "zh-CN" ? "EN" : "中"}
+                {locale === "zh-CN" ? "EN" : "中"} {/* i18n-allow: toggle shows the *other* language */}
               </button>
               {!isSession && (
                 <Button variant="default" asChild className="hidden md:flex h-9 rounded-none text-xs font-semibold uppercase tracking-widest">

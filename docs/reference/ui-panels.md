@@ -133,17 +133,11 @@ ui:
 
 **优先级**：`emptyState.message`（spec 声明）> 自动回退（`${panelLabel} 暂无数据，等待游戏推进……`）
 
-**消息格式**：支持 i18n 对象或纯字符串：
+**消息格式**：必须使用 I18nText 对象（至少包含 `zh` + `en` 两种 locale）；见下方「插件 UI 文本 I18nText 规范」：
 
 ```json
-// i18n 对象（推荐）
 "emptyState": {
   "message": { "zh": "尚未创建角色，完成角色创建流程后将在此显示……", "en": "No characters yet…" }
-}
-
-// 纯字符串
-"emptyState": {
-  "message": "暂无数据，等待游戏推进……"
 }
 ```
 
@@ -157,6 +151,35 @@ ui:
 | `world-entries.json` | 世界维度词条尚未生成，等待初始化完成…… |
 
 **实现位置**：`apps/web-v2/src/components/panels/plugin-panel.tsx` 的 `PluginPanel` 组件（`isEmpty` 分支）。
+
+### 插件 UI 文本 I18nText 规范
+
+**所有**面向用户的 UI 字符串（`label` / `groupLabel` / `emptyState.message` / `searchPlaceholder` / `emptyMessage` / `footer` 以及 json-render spec 内 `Text/Button/Badge/FormField/Alert/...` 的 `content` / `label` / `placeholder` / `title` / `message`）必须使用 `I18nText` 对象：
+
+```ts
+type I18nText = string | Record<LocaleTag, string>;
+```
+
+- 合法 locale key：`zh`、`zh-CN`、`zh-TW`、`en`、`en-US`、`en-GB`。框架匹配顺序：当前 locale → 前缀匹配（`zh-CN` → `zh`）→ `en-US` → `en` → 对象中任一值。
+- **必须同时提供中文与英文**：只有英文 key（`en` 或 `en-US`）存在时，中文回退才能切回；反之亦然。
+- 单一纯字符串**仅限**以下场景：value 不是自然语言（ID / 图标名 / 路径 / URL / 状态值），或者已经是翻译后的英文短语且被所有 locale 共用（如 `"NEW"`、`"Ping"`）。
+- 禁止出现孤立的纯中文字符串。CI 脚本 `scripts/check-plugin-i18n.mjs` 会拒绝任何未被 I18nText 对象包裹的 CJK 字面量。
+
+```json
+// ✓ 合法
+{ "label": { "zh": "世界维度", "en": "World Dimensions" } }
+{ "content": { "zh-CN": "……", "en-US": "…" } }
+{ "icon": "book-open" }                 // 非自然语言
+{ "label": "Ping" }                     // 共用英文短语
+
+// ✗ 非法（脚本阻断）
+{ "content": "已收录到右侧图鉴" }         // 裸中文
+{ "label": { "zh": "世界" } }            // 缺少英文 locale
+```
+
+**框架端解析器**：`apps/web/src/lib/catalog.tsx` 导出 `resolveI18n(value, locale?)` 与 `useI18nResolver()`。所有内置 ComponentRenderer 已调用 hook 订阅 locale 变更；切语言时 json-render 子树会自动重渲染。
+
+**验证**：`pnpm check:i18n` 会同时跑 `check-no-chinese-literal`（应用代码）与 `check-plugin-i18n`（插件 JSON）两套扫描。
 
 ### json-render 绑定速查
 

@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Loader2, RefreshCw, Trash2, BookOpen } from "lucide-react";
 import { clsx } from "clsx";
 import {
@@ -20,6 +21,7 @@ interface LorebookPanelProps {
 }
 
 export function LorebookPanel({ sessionId }: LorebookPanelProps) {
+  const { t } = useTranslation();
   const [entries, setEntries] = useState<LorebookEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +86,7 @@ export function LorebookPanel({ sessionId }: LorebookPanelProps) {
   }
 
   async function onDelete(entry: LorebookEntry) {
-    if (!window.confirm(`删除词条 "${entry.id}"？此操作无法撤销。`)) return;
+    if (!window.confirm(t("lorebook.deleteConfirm", { id: entry.id }))) return;
     setPending((prev) => ({ ...prev, [entry.id]: true }));
     const previous = entries;
     setEntries((prev) => prev.filter((e) => e.id !== entry.id));
@@ -110,13 +112,13 @@ export function LorebookPanel({ sessionId }: LorebookPanelProps) {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="font-display font-semibold flex items-center gap-2 text-sm uppercase tracking-widest">
-          <BookOpen className="w-4 h-4 shrink-0" /> Lorebook
+          <BookOpen className="w-4 h-4 shrink-0" /> {t("lorebook.title")}
         </h3>
         <button
           type="button"
           onClick={load}
           disabled={loading}
-          title="刷新"
+          title={t("lorebook.refresh")}
           className="p-1 rounded hover:bg-muted text-muted-foreground disabled:opacity-50"
         >
           <RefreshCw className={clsx("w-3.5 h-3.5", loading && "animate-spin")} />
@@ -135,7 +137,7 @@ export function LorebookPanel({ sessionId }: LorebookPanelProps) {
         </div>
       ) : entries.length === 0 ? (
         <div className="flex items-center justify-center h-20 text-muted-foreground text-xs">
-          尚无 session lorebook 词条
+          {t("lorebook.noEntries")}
         </div>
       ) : (
         entries.map((entry) => (
@@ -171,6 +173,7 @@ function LorebookEntryCard({
   onToggleEnabled,
   onDelete,
 }: LorebookEntryCardProps) {
+  const { t } = useTranslation();
   const preview = entry.content.length > 120
     ? entry.content.slice(0, 120) + "…"
     : entry.content;
@@ -226,7 +229,7 @@ function LorebookEntryCard({
             type="button"
             disabled={pending}
             onClick={onToggleEnabled}
-            title={entry.enabled ? "禁用" : "启用"}
+            title={entry.enabled ? t("lorebook.disable") : t("lorebook.enable")}
             className={clsx(
               "w-8 h-4 rounded-full relative transition-colors disabled:opacity-50",
               entry.enabled ? "bg-emerald-500" : "bg-muted-foreground/30",
@@ -243,7 +246,7 @@ function LorebookEntryCard({
             type="button"
             disabled={pending}
             onClick={onDelete}
-            title="删除"
+            title={t("lorebook.delete")}
             className="p-1 text-muted-foreground hover:text-destructive disabled:opacity-50"
           >
             <Trash2 className="w-3 h-3" />
@@ -265,7 +268,7 @@ function LorebookEntryCard({
             onClick={onToggleExpanded}
             className="mt-1 text-[10px] text-primary hover:underline"
           >
-            {expanded ? "收起" : "展开"}
+            {expanded ? t("lorebook.collapse") : t("lorebook.expand")}
           </button>
         )}
       </div>

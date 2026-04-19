@@ -69,6 +69,32 @@ export function parsePluginMd(content: string, filePath: string): ParsedPluginMd
     // on unknown event names instead of throwing. All other fields remain
     // strictly validated. Non-hook fields are validated by runtimeManifestSchema.
     let dataToValidate = data;
+
+    // Normalize I18nText `description` for schema validation.
+    // The public manifest schema requires `description: string` (it is used
+    // inline in LLM traces/tool registries and doesn't need locale routing).
+    // The user-facing UI reads I18nText from `PluginSummary.description`
+    // which is loaded separately via `loadPluginSummary` from the raw YAML.
+    // Authors can declare description as either:
+    //   description: single string               (legacy, single-locale)
+    //   description: { zh: "...", en: "..." }    (I18nText, preferred)
+    // When an object is given, collapse to a single string for the manifest
+    // (prefer English so runtime traces stay ASCII-friendly, fall back to
+    // Chinese or any other available locale).
+    if (dataToValidate && typeof dataToValidate === 'object' && 'description' in dataToValidate) {
+      const raw = (dataToValidate as Record<string, unknown>).description;
+      if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+        const entries = raw as Record<string, unknown>;
+        const fallback =
+          (typeof entries['en'] === 'string' && entries['en']) ||
+          (typeof entries['en-US'] === 'string' && entries['en-US']) ||
+          (typeof entries['zh'] === 'string' && entries['zh']) ||
+          (typeof entries['zh-CN'] === 'string' && entries['zh-CN']) ||
+          Object.values(entries).find((v) => typeof v === 'string') ||
+          '';
+        dataToValidate = { ...(dataToValidate as Record<string, unknown>), description: fallback };
+      }
+    }
     const rawHooks: Array<{ event: string; handler: string; [k: string]: unknown }> = [];
 
     if (Array.isArray(data.hooks)) {

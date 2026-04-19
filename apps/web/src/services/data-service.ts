@@ -36,7 +36,7 @@ export interface DataService {
   // Sessions
   listSessions(worldId: string): Promise<SessionRecord[]>;
   getSession(sessionId: string): Promise<SessionRecord | null>;
-  createSession(worldId: string, presetId?: string, id?: string, plugins?: string[]): Promise<SessionRecord>;
+  createSession(worldId: string, presetId?: string, id?: string, plugins?: string[], locale?: string): Promise<SessionRecord>;
   updateSession(
     sessionId: string,
     updates: Partial<Pick<SessionRecord, "status" | "presetId">>,
@@ -139,8 +139,8 @@ class RemoteDataService implements DataService {
       return null;
     }
   }
-  async createSession(worldId: string, presetId?: string, id?: string, plugins?: string[]) {
-    return api.createSession(worldId, presetId, id, plugins);
+  async createSession(worldId: string, presetId?: string, id?: string, plugins?: string[], locale?: string) {
+    return api.createSession(worldId, presetId, id, plugins, locale);
   }
   async updateSession(
     sessionId: string,
@@ -358,7 +358,7 @@ class LocalDataService implements DataService {
     return { id: s.id, worldId: s.worldId ?? '', status: (s.status ?? 'active') as SessionStatus, turnCount: s.turnCount ?? 0, preGameCompleted: s.preGameCompleted ?? [], presetId: s.presetId, createdAt: s.createdAt } as SessionRecord;
   }
 
-  async createSession(worldId: string, presetId?: string, _id?: string, _plugins?: string[]): Promise<SessionRecord> {
+  async createSession(worldId: string, presetId?: string, _id?: string, _plugins?: string[], locale?: string): Promise<SessionRecord> {
     const store = await this.getStore();
     const nowIso = new Date().toISOString();
     const session: SessionRecord = {
@@ -376,7 +376,7 @@ class LocalDataService implements DataService {
       status: "active",
       turnCount: 0,
       preGameCompleted: [],
-      locale: 'zh-CN',
+      locale: locale ?? 'zh-CN',
       activePlugins: _plugins ?? [],
       createdAt: nowIso,
       updatedAt: nowIso,

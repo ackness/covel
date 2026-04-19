@@ -1,6 +1,8 @@
 ---
 name: core-char-creator/player-init
-description: 玩家角色创建 agent。Pre-Game band 插件，基于开场叙事和世界 schema 生成角色表单；表单提交后调用 create-character 并输出 preGameDone=true，内核据此把 turnCount 从 0 推进到 1。
+description:
+  zh: 玩家角色创建 agent。Pre-Game band 插件，基于开场叙事和世界 schema 生成角色表单；表单提交后调用 create-character 并输出 preGameDone=true，内核据此把 turnCount 从 0 推进到 1。
+  en: Player character creation agent. Pre-Game band plugin — builds a character form from the opening narrative and world schema, then calls create-character once the player submits and emits preGameDone=true so the kernel advances turnCount from 0 to 1.
 pluginType: core-plugin
 priority: 50
 outputKind: system

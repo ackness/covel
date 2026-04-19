@@ -9,6 +9,7 @@
  */
 
 import { Suspense, lazy, useMemo, useState, useRef, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { usePluginNamespace } from "@/stores/plugin-data-store.js";
 
@@ -197,6 +198,7 @@ function drawNodeLabel(
 }
 
 const Inner = ({ pluginId, nodesNamespace, edgesNamespace, height = 480 }: GraphCanvasProps) => {
+  const { t } = useTranslation();
   const nodes = usePluginNamespace(pluginId, nodesNamespace);
   const edges = usePluginNamespace(pluginId, edgesNamespace);
   const graphRef = useRef<any>(null);
@@ -388,7 +390,7 @@ const Inner = ({ pluginId, nodesNamespace, edgesNamespace, height = 480 }: Graph
     return (
       <div ref={containerCallbackRef} className="w-full">
         <div className="text-xs text-zinc-400 italic px-3 py-6 text-center">
-          关系图当前为空，等待新的图谱数据……
+          {t("graph.empty")}
         </div>
       </div>
     );
@@ -397,15 +399,15 @@ const Inner = ({ pluginId, nodesNamespace, edgesNamespace, height = 480 }: Graph
   return (
     <div className="space-y-2 w-full" ref={containerCallbackRef}>
       <div className="text-[10px] text-zinc-500 px-1 flex justify-between">
-        <span>{graphData.nodes.length} 个节点 · {graphData.links.length} 条关系</span>
+        <span>{t("graph.stats", { nodes: graphData.nodes.length, links: graphData.links.length })}</span>
         {selected && (
           <button type="button" onClick={() => setSelected(null)} className="text-blue-500 hover:underline">
-            清除选中
+            {t("graph.clearSelection")}
           </button>
         )}
       </div>
       <div className="border border-zinc-200 dark:border-zinc-800 rounded-md overflow-hidden bg-zinc-50 dark:bg-zinc-900/40">
-        <Suspense fallback={<div className="flex items-center justify-center text-xs text-zinc-400" style={{ height }}>加载关系图……</div>}>
+        <Suspense fallback={<div className="flex items-center justify-center text-xs text-zinc-400" style={{ height }}>{t("graph.loading")}</div>}>
           <ForceGraph2D
             ref={graphRef}
             graphData={graphData}

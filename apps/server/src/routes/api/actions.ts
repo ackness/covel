@@ -106,8 +106,11 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
     : (payload.content as string) ?? (payload.command as string) ?? '';
   const turnId = crypto.randomUUID();
 
-  // Locale: prefer session's stored locale (fixed at creation), fallback to request locale
-  const effectiveLocale = session.locale ?? locale ?? 'zh-CN';
+  // Locale: an explicit request.locale (sent by the client on every turn
+  // based on the live UI language) wins over the session's stored locale so
+  // users who toggle language mid-session see matching LLM output. The
+  // session.locale still acts as the fallback when the client omits it.
+  const effectiveLocale = locale ?? session.locale ?? 'zh-CN';
 
   // Ensure session's plugins are activated in the registry (idempotent, needed after server restart).
   // On start_session with no plugins yet, auto-activate all registered plugins and persist.

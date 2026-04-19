@@ -25,6 +25,7 @@ import {
   type InputModality, type OutputModality, type ModelFeature,
 } from "@/services/api.js";
 import { useSession } from "@/stores/session-store.js";
+import { useLocalePreference, type SupportedLocale } from "@/hooks/useLocalePreference";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -36,6 +37,7 @@ const LEGACY_SLOTS = ["default", "fast", "balance", "image"];
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const { t } = useTranslation();
+  const { locale, setLocale } = useLocalePreference();
   const { state } = useSession();
   const [saved, setSaved] = useState(false);
 
@@ -273,7 +275,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-sm uppercase tracking-widest">
             <Settings2 className="w-4 h-4" />
-            {t("nav.settings", "Settings")}
+            {t("nav.settings")}
           </DialogTitle>
           <DialogDescription>
             {isConfigured
@@ -282,6 +284,21 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             }
           </DialogDescription>
         </DialogHeader>
+
+        <div className="flex items-center justify-between gap-3 px-0.5 py-1 border-b border-border">
+          <Label htmlFor="locale-select" className="text-xs uppercase tracking-widest text-muted-foreground">
+            {t("settings.language")}
+          </Label>
+          <select
+            id="locale-select"
+            value={locale}
+            onChange={(e) => setLocale(e.target.value as SupportedLocale)}
+            className="bg-background border border-border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
+          >
+            <option value="zh-CN">{t("settings.langZh")}</option>
+            <option value="en-US">{t("settings.langEn")}</option>
+          </select>
+        </div>
 
         {/* Storage mode is always "remote" (server-side SQLite). Toggle removed. */}
 
@@ -873,7 +890,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           {saved ? (
             <span className="flex items-center gap-2"><Check className="w-3.5 h-3.5" /> Saved</span>
           ) : (
-            t("common.save", "Save")
+            t("common.save")
           )}
         </Button>
       </DialogContent>

@@ -20,7 +20,10 @@
           {
             "component": "Text",
             "props": {
-              "content": "从下列策略里选择一个切入点继续推进。",
+              "content": {
+                "zh": "从下列策略里选择一个切入点继续推进。",
+                "en": "Pick one of the strategies below as your next move."
+              },
               "variant": "muted",
               "size": "xs"
             }
@@ -94,13 +97,16 @@
                 "props": { "gap": "sm", "align": "center" },
                 "children": [
                   { "component": "Icon", "props": { "name": "pen-line", "size": "xs" } },
-                  { "component": "Text", "props": { "content": "自定义行动", "weight": "bold", "size": "sm" } }
+                  { "component": "Text", "props": { "content": { "zh": "自定义行动", "en": "Custom action" }, "weight": "bold", "size": "sm" } }
                 ]
               },
               {
                 "component": "Text",
                 "props": {
-                  "content": "在这里补充你自己的行动描述，也可以只点上面的建议后到底部统一发送。",
+                  "content": {
+                    "zh": "在这里补充你自己的行动描述，也可以只点上面的建议后到底部统一发送。",
+                    "en": "Draft your own action here, or just pick a suggestion above and send everything from the composer below."
+                  },
                   "variant": "muted",
                   "size": "xs"
                 }
@@ -108,14 +114,17 @@
               {
                 "component": "Input",
                 "props": {
-                  "placeholder": "例如：先让苏婉展示地下结构的灵识影像，再决定是否动身",
+                  "placeholder": {
+                    "zh": "例如：先让苏婉展示地下结构的灵识影像，再决定是否动身",
+                    "en": "e.g. Ask Su Wan to project a spiritual image of the underground before deciding whether to move."
+                  },
                   "value": { "$bindState": "/customText" }
                 }
               },
               {
                 "component": "Button",
                 "props": {
-                  "label": "加入待发送区",
+                  "label": { "zh": "加入待发送区", "en": "Queue for sending" },
                   "variant": "primary",
                   "size": "compact"
                 },

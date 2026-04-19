@@ -51,16 +51,15 @@ export interface CharacterPanelProps {
 
 // ── Category config ─────────────────────────────────────────
 
-const CATEGORY_CONFIG: Record<AttributeCategory, {
+const CATEGORY_META: Record<AttributeCategory, {
   icon: typeof Heart;
-  label: string;
   color: string;
 }> = {
-  stats:     { icon: Heart,    label: "数值",   color: "text-red-500 dark:text-red-400" },
-  bio:       { icon: BookUser, label: "基本",   color: "text-blue-500 dark:text-blue-400" },
-  abilities: { icon: Swords,   label: "能力",   color: "text-amber-500 dark:text-amber-400" },
-  equipment: { icon: Backpack, label: "装备",   color: "text-green-500 dark:text-green-400" },
-  social:    { icon: Users,    label: "社交",   color: "text-purple-500 dark:text-purple-400" },
+  stats:     { icon: Heart,    color: "text-red-500 dark:text-red-400" },
+  bio:       { icon: BookUser, color: "text-blue-500 dark:text-blue-400" },
+  abilities: { icon: Swords,   color: "text-amber-500 dark:text-amber-400" },
+  equipment: { icon: Backpack, color: "text-green-500 dark:text-green-400" },
+  social:    { icon: Users,    color: "text-purple-500 dark:text-purple-400" },
 };
 
 const CATEGORY_ORDER: AttributeCategory[] = ["bio", "stats", "abilities", "equipment", "social"];
@@ -73,7 +72,7 @@ export function CharacterPanel({ characters, schema }: CharacterPanelProps) {
   if (characters.length === 0) {
     return (
       <p className="text-xs text-muted-foreground italic">
-        {t("session.noCharacters", "角色信息将在创建角色后显示。")}
+        {t("character.noCharacters")}
       </p>
     );
   }
@@ -83,7 +82,7 @@ export function CharacterPanel({ characters, schema }: CharacterPanelProps) {
       {characters.map((raw, idx) => {
         const char: CharacterData = {
           id: raw.id as string | undefined,
-          name: (raw.name as string) ?? `角色 ${idx + 1}`,
+          name: (raw.name as string) ?? t("character.defaultName", { index: idx + 1 }),
           type: raw.type as string | undefined,
           description: raw.description as string | undefined,
           fields: raw.fields as Record<string, unknown> | undefined,
@@ -109,6 +108,7 @@ function CharacterCard({
   character: CharacterData;
   schema: SchemaData | Record<string, unknown> | null;
 }) {
+  const { t } = useTranslation();
   const attrs = (schema as SchemaData | null)?.attributes;
   const fields = character.fields ?? {};
 
@@ -127,7 +127,11 @@ function CharacterCard({
     return groups;
   }, [attrs, fields]);
 
-  const typeBadge = character.type === "player" ? "玩家" : character.type === "npc" ? "NPC" : character.type;
+  const typeBadge = character.type === "player"
+    ? t("character.type.player")
+    : character.type === "npc"
+      ? t("character.type.npc")
+      : character.type;
 
   return (
     <Card>
@@ -172,17 +176,22 @@ function AttributeGroup({
   category: string;
   attributes: Array<AttrDef & { value: unknown }>;
 }) {
-  const config = CATEGORY_CONFIG[category as AttributeCategory] ?? {
-    icon: Shield, label: category, color: "text-muted-foreground",
+  const { t } = useTranslation();
+  const meta = CATEGORY_META[category as AttributeCategory] ?? {
+    icon: Shield,
+    color: "text-muted-foreground",
   };
-  const Icon = config.icon;
+  const Icon = meta.icon;
+  const label = CATEGORY_META[category as AttributeCategory]
+    ? t(`character.categories.${category}`)
+    : category;
 
   return (
     <div>
-      <div className={`flex items-center gap-1.5 mb-1.5 ${config.color}`}>
+      <div className={`flex items-center gap-1.5 mb-1.5 ${meta.color}`}>
         <Icon className="h-3 w-3" />
         <span className="text-[10px] uppercase tracking-widest font-semibold">
-          {config.label}
+          {label}
         </span>
       </div>
       <div className="space-y-1.5">
@@ -291,6 +300,7 @@ function FallbackFields({
   fields: Readonly<Record<string, unknown>>;
   description?: string;
 }) {
+  const { t } = useTranslation();
   const entries = Object.entries(fields).filter(
     ([k]) => k !== "_createCharacter" && k !== "characterName" && k !== "name",
   );
@@ -300,7 +310,7 @@ function FallbackFields({
   }
 
   if (entries.length === 0) {
-    return <p className="text-xs text-muted-foreground italic">无属性数据</p>;
+    return <p className="text-xs text-muted-foreground italic">{t("character.noAttributes")}</p>;
   }
 
   return (

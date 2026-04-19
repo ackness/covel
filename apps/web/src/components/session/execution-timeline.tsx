@@ -76,6 +76,22 @@ function formatDuration(ms: number): string {
   return s < 60 ? `${s.toFixed(1)}s` : `${Math.floor(s / 60)}m${Math.round(s % 60)}s`;
 }
 
+const I18N_SENTINEL_PREFIX = "__i18n:";
+const I18N_SENTINEL_SUFFIX = "__";
+
+function resolveI18nSentinel(
+  value: string | undefined,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string | undefined {
+  if (!value) return value;
+  if (!value.startsWith(I18N_SENTINEL_PREFIX)) return value;
+  const body = value.slice(I18N_SENTINEL_PREFIX.length);
+  const key = body.endsWith(I18N_SENTINEL_SUFFIX)
+    ? body.slice(0, -I18N_SENTINEL_SUFFIX.length)
+    : body;
+  return t(key) as string;
+}
+
 function RuntimeChip({
   rt,
   canRetry,
@@ -87,7 +103,9 @@ function RuntimeChip({
   onRetry?: (runtimeId: string) => void;
   retryFromLabel: string;
 }) {
+  const { t } = useTranslation();
   const isActive = rt.status === "running" || rt.status === "llm" || rt.status === "tool";
+  const resolvedDetail = resolveI18nSentinel(rt.detail, t);
 
   return (
     <span
@@ -116,12 +134,12 @@ function RuntimeChip({
           {formatDuration(rt.durationMs)}
         </span>
       )}
-      {rt.status === "failed" && rt.detail && (
+      {rt.status === "failed" && resolvedDetail && (
         <span
           className="text-[10px] text-destructive/90 truncate max-w-[260px]"
-          title={rt.detail}
+          title={resolvedDetail}
         >
-          {rt.detail}
+          {resolvedDetail}
         </span>
       )}
       {canRetry && onRetry && (

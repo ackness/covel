@@ -10,7 +10,9 @@
  * a visual selection marker when the user picks a choice.
  */
 
-import { useState, useMemo, type ReactNode } from "react";
+import { useState, useMemo, useCallback, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import i18nInstance from "@/i18n";
 import type { ComponentRenderer } from "@json-render/react";
 import { useStateStore } from "@json-render/react";
 import { clsx } from "clsx";
@@ -35,14 +37,42 @@ export function resolveIcon(name: string | undefined): Icons.LucideIcon | null {
   return (Icons as Record<string, unknown>)[pascal] as Icons.LucideIcon | undefined ?? null;
 }
 
-export function resolveI18n(value: unknown): string {
+/**
+ * Resolve an `I18nText`-shaped value (`string | Record<locale, string>`) to a
+ * plain string, honoring the current i18n locale.
+ *
+ * Match order: exact locale (`zh-CN`) → prefix match (`zh-CN` → `zh`) →
+ * English fallbacks (`en-US`/`en`) → any available value → empty string.
+ *
+ * When no locale is passed, the current `i18next` language is read at call
+ * time. Components that render `resolveI18n(...)` output should also call
+ * `useI18nResolver()` to subscribe to language changes and re-render.
+ */
+export function resolveI18n(value: unknown, locale?: string): string {
   if (typeof value === "string") return value;
   if (typeof value === "object" && value !== null) {
     const obj = value as Record<string, string>;
-    // Try zh first (default locale), then en, then first value
-    return obj["zh"] ?? obj["zh-CN"] ?? obj["en"] ?? obj["en-US"] ?? Object.values(obj)[0] ?? "";
+    const lang = locale ?? i18nInstance.language ?? "";
+    if (lang && obj[lang]) return obj[lang];
+    const prefix = lang.split("-")[0];
+    if (prefix) {
+      const prefixMatch = Object.keys(obj).find((k) => k === prefix || k.startsWith(`${prefix}-`));
+      if (prefixMatch && obj[prefixMatch]) return obj[prefixMatch];
+    }
+    return obj["en-US"] ?? obj["en"] ?? Object.values(obj)[0] ?? "";
   }
   return String(value ?? "");
+}
+
+/**
+ * React hook returning a memoised resolver bound to the current i18n locale.
+ * Using this inside a `ComponentRenderer` ensures the component re-renders
+ * when the user toggles language, because `useTranslation()` subscribes to
+ * language-change events through the react-i18next provider.
+ */
+export function useI18nResolver(): (value: unknown) => string {
+  const { i18n } = useTranslation();
+  return useCallback((value: unknown) => resolveI18n(value, i18n.language), [i18n.language]);
 }
 
 // ── Layout Components ────────────────────────────────────────────
@@ -86,7 +116,8 @@ const Separator: ComponentRenderer = () => (
 // ── Display Components ───────────────────────────────────────────
 
 const Text: ComponentRenderer = ({ element, children }) => {
-  const content = resolveI18n(element.props?.content) || (typeof children === "string" ? children : "");
+  const resolve = useI18nResolver();
+  const content = resolve(element.props?.content) || (typeof children === "string" ? children : "");
   const variant = element.props?.variant as string;
   const weight = element.props?.weight as string;
   const size = element.props?.size as string;
@@ -108,7 +139,8 @@ const Text: ComponentRenderer = ({ element, children }) => {
 };
 
 const Badge: ComponentRenderer = ({ element }) => {
-  const label = resolveI18n(element.props?.label);
+  const resolve = useI18nResolver();
+  const label = resolve(element.props?.label);
   const color = element.props?.color as string;
   const colorMap: Record<string, string> = {
     red: "bg-red-500/10 text-red-600 border-red-500/30",
@@ -171,9 +203,10 @@ const CardList: ComponentRenderer = ({ children }) => {
 };
 
 const EntryCard: ComponentRenderer = ({ element }) => {
-  const title = resolveI18n(element.props?.title);
+  const resolve = useI18nResolver();
+  const title = resolve(element.props?.title);
   const category = element.props?.category as string ?? "";
-  const content = resolveI18n(element.props?.content);
+  const content = resolve(element.props?.content);
   const tags = element.props?.tags as string[] | undefined;
   const rarity = element.props?.rarity as string ?? "common";
   // Optional plugin-supplied per-category icon + color (e.g. from a
@@ -273,7 +306,8 @@ const EntryCard: ComponentRenderer = ({ element }) => {
 };
 
 const StatBar: ComponentRenderer = ({ element }) => {
-  const label = resolveI18n(element.props?.label);
+  const resolve = useI18nResolver();
+  const label = resolve(element.props?.label);
   const value = element.props?.value as number ?? 0;
   const max = element.props?.max as number ?? 100;
   const pct = Math.min(100, Math.max(0, (value / max) * 100));
@@ -292,9 +326,10 @@ const StatBar: ComponentRenderer = ({ element }) => {
 };
 
 const Progress: ComponentRenderer = ({ element }) => {
+  const resolve = useI18nResolver();
   const value = element.props?.value as number ?? 0;
   const max = element.props?.max as number ?? 100;
-  const label = resolveI18n(element.props?.label);
+  const label = resolve(element.props?.label);
   const pct = Math.min(100, Math.max(0, (value / max) * 100));
 
   return (
@@ -322,7 +357,8 @@ const Accordion: ComponentRenderer = ({ children }) => (
  * Self-contained open state; receives title/icon via props, body via children.
  */
 const Section: ComponentRenderer = ({ element, children }) => {
-  const title = resolveI18n(element.props?.title);
+  const resolve = useI18nResolver();
+  const title = resolve(element.props?.title);
   const iconName = element.props?.icon as string | undefined;
   const defaultOpen = element.props?.defaultOpen as boolean ?? false;
   const [open, setOpen] = useState(defaultOpen);
@@ -432,7 +468,8 @@ const JsonView: ComponentRenderer = ({ element }) => {
 // ── Interactive Components ───────────────────────────────────────
 
 const Button: ComponentRenderer = ({ element, emit }) => {
-  const label = resolveI18n(element.props?.label);
+  const resolve = useI18nResolver();
+  const label = resolve(element.props?.label);
   const variant = element.props?.variant as string ?? "default";
   const size = element.props?.size as string ?? "md";
 
@@ -493,8 +530,9 @@ const Button: ComponentRenderer = ({ element, emit }) => {
 };
 
 const Input: ComponentRenderer = ({ element, bindings }) => {
-  const placeholder = resolveI18n(element.props?.placeholder);
-  const label = resolveI18n(element.props?.label);
+  const resolve = useI18nResolver();
+  const placeholder = resolve(element.props?.placeholder);
+  const label = resolve(element.props?.label);
   const value = element.props?.value as string ?? "";
   const { set } = useStateStore();
   const bindPath = bindings?.value;
@@ -514,7 +552,8 @@ const Input: ComponentRenderer = ({ element, bindings }) => {
 };
 
 const SearchInput: ComponentRenderer = ({ element, bindings }) => {
-  const placeholder = resolveI18n(element.props?.placeholder);
+  const resolve = useI18nResolver();
+  const placeholder = resolve(element.props?.placeholder);
   const value = element.props?.value as string ?? "";
   const { set } = useStateStore();
   const bindPath = bindings?.value;
@@ -535,7 +574,8 @@ const SearchInput: ComponentRenderer = ({ element, bindings }) => {
 };
 
 const Select: ComponentRenderer = ({ element, bindings }) => {
-  const label = resolveI18n(element.props?.label);
+  const resolve = useI18nResolver();
+  const label = resolve(element.props?.label);
   const value = element.props?.value as string ?? "";
   const options = element.props?.options as Array<{ value: string; label: unknown }> ?? [];
   const { set } = useStateStore();
@@ -550,7 +590,7 @@ const Select: ComponentRenderer = ({ element, bindings }) => {
         className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-2.5 py-1.5 text-xs rounded-md outline-none focus:ring-1 focus:ring-blue-500"
       >
         {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>{resolveI18n(opt.label)}</option>
+          <option key={opt.value} value={opt.value}>{resolve(opt.label)}</option>
         ))}
       </select>
     </div>
@@ -558,7 +598,8 @@ const Select: ComponentRenderer = ({ element, bindings }) => {
 };
 
 const Switch: ComponentRenderer = ({ element, bindings }) => {
-  const label = resolveI18n(element.props?.label);
+  const resolve = useI18nResolver();
+  const label = resolve(element.props?.label);
   const checked = element.props?.checked as boolean ?? false;
   const { set } = useStateStore();
   const bindPath = bindings?.checked;
@@ -585,6 +626,7 @@ const Switch: ComponentRenderer = ({ element, bindings }) => {
 };
 
 const FilterBar: ComponentRenderer = ({ element, bindings }) => {
+  const resolve = useI18nResolver();
   const options = element.props?.options as Array<{ value: string; label: unknown; icon?: string }> ?? [];
   const value = element.props?.value as string ?? "all";
   const { set } = useStateStore();
@@ -608,7 +650,7 @@ const FilterBar: ComponentRenderer = ({ element, bindings }) => {
             )}
           >
             {OptIcon && <OptIcon className="w-3 h-3" />}
-            {resolveI18n(opt.label)}
+            {resolve(opt.label)}
           </button>
         );
       })}
@@ -737,6 +779,7 @@ function filterItems(
  * which gives an honest "empty tab" signal instead of hiding it.
  */
 const Tabs: ComponentRenderer = ({ element, bindings }) => {
+  const resolve = useI18nResolver();
   const tabs = (element.props?.tabs as FilterTab[]) ?? [];
   const value = element.props?.value as string ?? tabs[0]?.value ?? "";
   const counts = element.props?.counts as Record<string, number> | undefined;
@@ -778,7 +821,7 @@ const Tabs: ComponentRenderer = ({ element, bindings }) => {
             )}
           >
             {TabIcon && <TabIcon className="w-3 h-3" />}
-            {resolveI18n(tab.label)}
+            {resolve(tab.label)}
             {count !== undefined && (
               <span className="text-[10px] text-zinc-400 dark:text-zinc-500 ml-0.5">({count})</span>
             )}
@@ -800,8 +843,10 @@ const Tabs: ComponentRenderer = ({ element, bindings }) => {
  * and the implementation framework-agnostic.
  */
 const FilterContainer: ComponentRenderer = ({ element }) => {
+  const { t } = useTranslation();
+  const resolve = useI18nResolver();
   const items = (element.props?.items as unknown[]) ?? [];
-  const searchPlaceholder = resolveI18n(element.props?.searchPlaceholder);
+  const searchPlaceholder = resolve(element.props?.searchPlaceholder);
   const searchFields = (element.props?.searchFields as string[]) ?? [];
   const filterField = element.props?.filterField as string | undefined;
   const filterTabs = (element.props?.filterTabs as FilterTab[]) ?? [];
@@ -812,7 +857,7 @@ const FilterContainer: ComponentRenderer = ({ element }) => {
   // Path-based `itemPropMap` wins on collisions.
   const itemLiteralProps = (element.props?.itemLiteralProps as Record<string, unknown>) ?? {};
   const itemKeyField = element.props?.itemKeyField as string | undefined;
-  const emptyMessage = resolveI18n(element.props?.emptyMessage);
+  const emptyMessage = resolve(element.props?.emptyMessage);
   const showSearch = element.props?.showSearch !== false && searchFields.length > 0;
   const showTabs = element.props?.showTabs !== false && filterTabs.length > 0;
   const showCounts = element.props?.showCounts as boolean ?? false;
@@ -852,8 +897,8 @@ const FilterContainer: ComponentRenderer = ({ element }) => {
   const SearchIcon = Icons.Search;
 
   const fallbackEmpty = filterField || searchQuery
-    ? "没有匹配的条目"
-    : "暂无数据";
+    ? t("common.noMatch")
+    : t("common.noData");
 
   return (
     <div className="flex flex-col gap-2">
@@ -938,6 +983,7 @@ function FilterContainerFooter({
   footer: unknown;
   totalCount: number;
 }) {
+  const resolve = useI18nResolver();
   if (typeof footer === "object" && footer !== null && !Array.isArray(footer)) {
     const obj = footer as Record<string, unknown>;
     const componentName = obj.component as string | undefined;
@@ -962,7 +1008,7 @@ function FilterContainerFooter({
   }
   // Treat as i18n string (string or {zh, en} map). Substitute `{{count}}`
   // with the total item count as a convenience for spec authors.
-  const raw = resolveI18n(footer);
+  const raw = resolve(footer);
   const rendered = raw.replace(/\{\{\s*count\s*\}\}/g, String(totalCount));
   if (!rendered) return null;
   return (
@@ -1018,9 +1064,10 @@ const PlayerMessage: ComponentRenderer = ({ element }) => {
 
 /** Alert — renders notifications (info, success, warning, error). */
 const Alert: ComponentRenderer = ({ element }) => {
+  const resolve = useI18nResolver();
   const level = element.props?.level as string ?? "info";
-  const title = resolveI18n(element.props?.title);
-  const message = resolveI18n(element.props?.message);
+  const title = resolve(element.props?.title);
+  const message = resolve(element.props?.message);
 
   const colors: Record<string, string> = {
     success: "border-emerald-500/30 bg-emerald-50 dark:bg-emerald-900/10 text-emerald-700 dark:text-emerald-400",
@@ -1039,9 +1086,11 @@ const Alert: ComponentRenderer = ({ element }) => {
 
 /** FormField — a single form field (text input or select). */
 const FormField: ComponentRenderer = ({ element, bindings }) => {
+  const { t } = useTranslation();
+  const resolve = useI18nResolver();
   const fieldType = element.props?.fieldType as string ?? "text";
-  const label = resolveI18n(element.props?.label);
-  const placeholder = resolveI18n(element.props?.placeholder);
+  const label = resolve(element.props?.label);
+  const placeholder = resolve(element.props?.placeholder);
   const required = element.props?.required as boolean;
   const options = element.props?.options as Array<{ value: string; label: string }> | undefined;
   const value = element.props?.value as string ?? "";
@@ -1062,7 +1111,7 @@ const FormField: ComponentRenderer = ({ element, bindings }) => {
           disabled={disabled}
           className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-sm rounded-md outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
         >
-          <option value="">{placeholder ?? `选择${label}`}</option>
+          <option value="">{placeholder ?? t("form.selectPrefix", { label })}</option>
           {options.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
@@ -1083,7 +1132,8 @@ const FormField: ComponentRenderer = ({ element, bindings }) => {
 
 /** SubmitButton — styled form submit button with disabled state. */
 const SubmitButton: ComponentRenderer = ({ element, emit }) => {
-  const label = resolveI18n(element.props?.label);
+  const resolve = useI18nResolver();
+  const label = resolve(element.props?.label);
   const disabled = element.props?.disabled as boolean;
 
   return (
@@ -1119,12 +1169,13 @@ const Source: ComponentRenderer = ({ element }) => {
  * dimensions attached (e.g. pre-generation).
  */
 const WorldDimensions: ComponentRenderer = () => {
+  const { t } = useTranslation();
   const { state } = useSession();
   const dims = state.world?.dimensions;
   if (!dims) {
     return (
       <p className="text-xs text-muted-foreground italic">
-        尚未生成世界维度数据。
+        {t("world.dimensionsEmpty")}
       </p>
     );
   }
@@ -1143,7 +1194,8 @@ const Form: ComponentRenderer = ({ children }) => {
 
 /** FormHeader — form title bar. */
 const FormHeader: ComponentRenderer = ({ element }) => {
-  const title = resolveI18n(element.props?.title);
+  const resolve = useI18nResolver();
+  const title = resolve(element.props?.title);
   return (
     <div className="bg-zinc-50 dark:bg-zinc-800/50 px-4 py-2 -mx-4 -mt-4 mb-3 border-b border-zinc-200 dark:border-zinc-700">
       <span className="text-xs font-medium">{title}</span>

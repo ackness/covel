@@ -14,4 +14,4 @@ ui:
     - ./ui/memory-panel.json
 ---
 
-纯 UI 插件。核心记忆的读写由框架 Memory System（@covel/memory）在每轮结束后自动完成，本插件仅声明右侧面板。
+Pure UI plugin. Core-memory reads and writes are handled automatically by the framework's Memory System (@covel/memory) at the end of every turn. This plugin only declares the right-hand panel.

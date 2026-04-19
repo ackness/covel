@@ -892,7 +892,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
       case "execution.completed": {
         dispatch({ type: "SET_EXECUTING", value: false });
-          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
         break;
       }
       case "event.emitted": {
@@ -928,7 +928,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       case "error.occurred": {
         dispatch({ type: "SET_EXECUTION_ERROR", error: (payload.message as string) ?? "Execution failed" });
         dispatch({ type: "SET_EXECUTING", value: false });
-        dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
+        dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
         break;
       }
     }
@@ -962,7 +962,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         ?? defaultPresetId
         ?? state.presets.find((p) => p.isDefault)?.id
         ?? state.presets[0]?.id;
-      const session = await ds.createSession(state.world.id, presetId, undefined, plugins);
+      const session = await ds.createSession(state.world.id, presetId, undefined, plugins, i18n.language);
       dispatch({ type: "SET_SESSION", session });
       // Copy prep-phase runtime bindings to the real session and PATCH them
       // onto the server record. The per-runtime slot resolver reads
@@ -1006,11 +1006,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           // we only surface the error rather than tear anything down.
           dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
           dispatch({ type: "SET_EXECUTING", value: false });
-          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
         },
         () => {
           dispatch({ type: "SET_EXECUTING", value: false });
-          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
         },
       );
     };
@@ -1297,7 +1297,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     runSingleAction(content, { echoUserMessage: true }).finally(() => {
       dispatch({ type: "SET_EXECUTING", value: false });
-          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
     });
   }, [state.session, state.executing, runSingleAction]);
 
@@ -1379,7 +1379,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
       } finally {
         dispatch({ type: "SET_EXECUTING", value: false });
-          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
       }
     } catch (err) {
       console.error('[submitInteraction] Failed:', err);
@@ -1410,11 +1410,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         (err) => {
           dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
           dispatch({ type: "SET_EXECUTING", value: false });
-          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
         },
         () => {
           dispatch({ type: "SET_EXECUTING", value: false });
-          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
         },
       );
     };
@@ -1461,11 +1461,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         (err) => {
           dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
           dispatch({ type: "SET_EXECUTING", value: false });
-          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
         },
         () => {
           dispatch({ type: "SET_EXECUTING", value: false });
-          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
         },
       );
     };
@@ -1691,11 +1691,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         (err) => {
           dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
           dispatch({ type: "SET_EXECUTING", value: false });
-          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
         },
         () => {
           dispatch({ type: "SET_EXECUTING", value: false });
-          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "连接结束但后端未上报结束" });
+          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
         },
       );
     };

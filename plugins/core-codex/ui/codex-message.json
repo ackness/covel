@@ -16,7 +16,10 @@
       {
         "component": "Text",
         "props": {
-          "content": "已收录到右侧图鉴。这里只展示本轮新增关键词，详细说明请在右侧查看。",
+          "content": {
+            "zh": "已收录到右侧图鉴。这里只展示本轮新增关键词，详细说明请在右侧查看。",
+            "en": "Recorded in the right-hand codex. Only new keywords for this turn are shown here; see the codex for details."
+          },
           "variant": "muted",
           "size": "xs"
         }

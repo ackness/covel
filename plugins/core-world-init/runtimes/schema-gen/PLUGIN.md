@@ -1,6 +1,8 @@
 ---
 name: core-world-init/schema-gen
-description: 世界维度 Schema 生成器。读取世界观文档，通过专用工具批量创建角色属性维度和世界词条。
+description:
+  zh: 世界维度 Schema 生成器。读取世界观文档，通过专用工具批量创建角色属性维度和世界词条。
+  en: World dimension schema generator. Reads the worldlore document and uses dedicated tools to bulk-create character attribute dimensions and world entries.
 pluginType: core-plugin
 priority: 85
 model: plugin

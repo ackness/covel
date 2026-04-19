@@ -1260,6 +1260,42 @@ my-plugin/
 - 前端组件（UI 通过 blockSchema 或交互协议集成）
 - 直接 SDK 调用（LLM 调用通过 model slot 绑定）
 
+### 3.6 插件国际化（i18n）
+
+**所有面向玩家的 UI 字符串必须用 `I18nText` 对象（至少 `zh` + `en`）。** 详情见 [docs/reference/ui-panels.md 的「插件 UI 文本 I18nText 规范」](../reference/ui-panels.md#插件-ui-文本-i18ntext-规范)。
+
+适用范围：
+
+| 位置 | 必须 I18nText 的字段 | 示例 |
+|------|---------------------|------|
+| `plugins/<id>/ui/*.json` | `label` / `groupLabel` / `emptyState.message` / `searchPlaceholder` / `emptyMessage` / `footer` | `{ "label": { "zh": "角色", "en": "Characters" } }` |
+| json-render spec 叶节点 | `Text.content` / `Button.label` / `Badge.label` / `Input.placeholder` / `FormField.label` / `Alert.title` / `Alert.message` | `{ "content": { "zh": "…", "en": "…" } }` |
+| `world.yaml` / `WORLD.*.md` | `name` / `description` / dimension 描述字段 | 世界包通过 `WORLD.zh.md` / `WORLD.en.md` 提供正文 |
+
+无需 i18n 的情形：纯标识符（`icon` 名称、`iconColor`、状态字符串、图像 URL）、多 locale 共用的短词（`"Ping"`、`"NEW"`）、数值或布尔常量。
+
+**回退逻辑**：`resolveI18n(value, locale)` 优先匹配当前 locale，其次语言前缀（`zh-CN` → `zh`），再退到 `en-US` / `en`，最后取对象中任一字符串。切换语言时，json-render 子树会通过 `useI18nResolver()` 自动重渲染。
+
+**合规脚本**：
+- `node scripts/check-plugin-i18n.mjs` 扫描 `plugins/**/ui/*.json`，禁止出现没有 `en` 兄弟 key 的裸中文字符串
+- `pnpm check:i18n` 会同时跑应用代码（`apps/web`）与插件 JSON 两套扫描；CI 里应作为必选 gate
+
+**常见错误**：
+
+```json
+// ✗ 裸中文会被扫描拒绝
+{ "content": "已收录到图鉴" }
+
+// ✗ 只有中文 locale，切到 en 时不会回退到 zh
+{ "label": { "zh": "世界" } }
+
+// ✓ zh + en 双 key
+{ "label": { "zh": "世界", "en": "World" } }
+
+// ✓ 纯标识符（非自然语言），允许单字符串
+{ "icon": "book-open" }
+```
+
 ---
 
 ## 附录

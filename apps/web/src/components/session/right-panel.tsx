@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Database,
@@ -54,7 +54,10 @@ function resolvePluginIcon(name: string): Icons.LucideIcon {
   return (Icons as Record<string, unknown>)[pascal] as Icons.LucideIcon ?? Layout;
 }
 
-function aggregateSpecsIntoGroups(slotEntries: readonly UISlotEntry[]): PluginTabGroup[] {
+function aggregateSpecsIntoGroups(
+  slotEntries: readonly UISlotEntry[],
+  locale: string,
+): PluginTabGroup[] {
   const groupMap = new Map<string, PluginTabGroup>();
   let counter = 0;
 
@@ -66,7 +69,7 @@ function aggregateSpecsIntoGroups(slotEntries: readonly UISlotEntry[]): PluginTa
       const sub: SubPanel = {
         id: specId,
         pluginId: entry.pluginId,
-        label: resolveI18n(spec.label),
+        label: resolveI18n(spec.label, locale),
         icon: spec.icon ?? "layout",
         spec: spec as unknown as Record<string, unknown>,
       };
@@ -77,7 +80,7 @@ function aggregateSpecsIntoGroups(slotEntries: readonly UISlotEntry[]): PluginTa
       } else {
         groupMap.set(groupKey, {
           id: groupKey,
-          label: resolveI18n(spec.groupLabel) || sub.label,
+          label: resolveI18n(spec.groupLabel, locale) || sub.label,
           icon: sub.icon,
           order: spec.groupOrder ?? 500,
           subPanels: [sub],
@@ -115,10 +118,15 @@ export function RightPanel({
   statePatches,
   onToggleRightPanel,
 }: RightPanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [storeBackend, setStoreBackend] = useState<string | null>(null);
-  const [pluginTabGroups, setPluginTabGroups] = useState<PluginTabGroup[]>([]);
+  const [rawSlotEntries, setRawSlotEntries] = useState<UISlotEntry[]>([]);
   const [activePluginSubTab, setActivePluginSubTab] = useState<Record<string, number>>({});
+
+  const pluginTabGroups = useMemo(
+    () => aggregateSpecsIntoGroups(rawSlotEntries, i18n.language),
+    [rawSlotEntries, i18n.language],
+  );
 
   useEffect(() => {
     fetchServerHealth()
@@ -133,10 +141,9 @@ export function RightPanel({
     fetchUiSpecs(sessionId)
       .then((specs) => {
         if (cancelled) return;
-        const groups = aggregateSpecsIntoGroups(specs.right);
-        setPluginTabGroups(groups);
+        setRawSlotEntries([...specs.right]);
 
-        const pluginIds = new Set(groups.flatMap((g) => g.subPanels.map((s) => s.pluginId)));
+        const pluginIds = new Set(specs.right.map((entry) => entry.pluginId));
         for (const pid of pluginIds) {
           listPluginData(sessionId, pid)
             .then((items) => {
@@ -171,21 +178,21 @@ export function RightPanel({
           <TabsTrigger
             value="world"
             className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title={t("session.worldLore", "世界")}
+            title={t("session.worldTab")}
           >
             <BookOpen className="w-4 h-4" />
             <span className="text-[9px] leading-none">
-              {t("session.worldTab", "世界")}
+              {t("session.worldTab")}
             </span>
           </TabsTrigger>
           <TabsTrigger
             value="database"
             className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title={t("session.database", "数据库")}
+            title={t("session.database")}
           >
             <Database className="w-4 h-4" />
             <span className="text-[9px] leading-none">
-              {t("session.database", "数据库")}
+              {t("session.database")}
             </span>
           </TabsTrigger>
 
@@ -230,14 +237,14 @@ export function RightPanel({
         <TabsContent value="world" className="p-4 m-0">
           <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
             <BookOpen className="w-4 h-4 shrink-0" />{" "}
-            {t("session.worldTab", "世界")}
+            {t("session.worldTab")}
           </h3>
           <LorebookPanel sessionId={sessionId} />
         </TabsContent>
         <TabsContent value="database" className="p-4 m-0">
           <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
             <Database className="w-4 h-4 shrink-0" />{" "}
-            {t("session.database", "数据库")}
+            {t("session.database")}
           </h3>
           <DatabasePanel
             sessionId={sessionId}
