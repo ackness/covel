@@ -63,7 +63,10 @@ jobs:
         run: pnpm --filter @covel/desktop build
 
       - name: Package Electron (${{ matrix.platform }})
-        run: pnpm --filter @covel/desktop ${{ matrix.dist_script }}
+        # 加 --publish=never 让 electron-builder 不自己去建 GitHub release，
+        # 我们用下游的 softprops/action-gh-release 统一创建，避免两个 job
+        # 各自 race 着发 release。
+        run: pnpm --filter @covel/desktop ${{ matrix.dist_script }} -- --publish=never
         env:
           # electron-builder 自动从 env 读取签名材料；未设置则产出 unsigned artifact
           CSC_LINK: ${{ secrets.CSC_LINK }}
