@@ -72,6 +72,9 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify unpacked release resources (${{ matrix.platform }})
+        run: node apps/desktop/scripts/verify-release.mjs ${{ matrix.platform }}
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:

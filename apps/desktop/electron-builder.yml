@@ -19,18 +19,16 @@ extraResources:
       - "**/*"
       - "!**/*.map"
       - "!**/*.d.ts"
-  # Server source + dependencies.
-  # ⚠️ electron-builder 的 extraResources 默认排除 node_modules —— 即使
-  # filter 里写了 "**/*" 也一样，它内部有独立的忽略规则。必须显式加
-  # "node_modules/**" 才会把 pnpm deploy 产出的依赖包进 Resources/。
+  # Server 源码 + pnpm deploy 产出的扁平 node_modules。
+  # 注意：electron-builder 的 extraResources 把 node_modules 单独列出才会
+  # 完整复制（见 electron-builder #867、#6289），放进包含 node_modules
+  # 的父目录时内部 fileMatcher 会按 "不打包源码的 deps" 规则跳过它。
+  # 因此拆成两条：先拉源码 + 配置，再单独把 node_modules 打进同一目标。
   - from: staging/server
     to: server
     filter:
       - "**/*"
-      - "node_modules/**"
-      - "!**/node_modules/.cache/**"
-      - "!**/node_modules/.bin/**"
-      - "!**/.git/**"
+      - "!**/node_modules/**"
       - "!**/tests/**"
       - "!**/__tests__/**"
       - "!**/*.test.ts"
@@ -41,7 +39,13 @@ extraResources:
       - "!**/CHANGELOG*"
       - "!**/.gitignore"
       - "!**/.npmrc"
-      - "!**/tsconfig*.json"
+      - "!**/tsconfig.tsbuildinfo"
+  - from: staging/server/node_modules
+    to: server/node_modules
+    filter:
+      - "**/*"
+      - "!**/.cache/**"
+      - "!**/*.map"
 
 asar: true
 asarUnpack:

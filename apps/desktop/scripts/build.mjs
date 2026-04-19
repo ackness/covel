@@ -78,6 +78,75 @@ if (fs.existsSync(stagingDir)) {
 const serverStaging = path.join(stagingDir, "server");
 const webDistStaging = path.join(stagingDir, "web-dist");
 
+function copyIfMissing(source, target) {
+  if (fs.existsSync(target) || !fs.existsSync(source)) {
+    return;
+  }
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.cpSync(fs.realpathSync(source), target, { recursive: true });
+}
+
+function resolveInstalledPackagePath(packageName) {
+  const segments = packageName.split("/");
+  const candidates = [
+    path.join(projectRoot, "apps/server/node_modules", ...segments),
+    path.join(projectRoot, "node_modules", ...segments),
+    path.join(projectRoot, "apps/desktop/node_modules", ...segments),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return fs.realpathSync(candidate);
+    }
+  }
+  return null;
+}
+
+function ensureRuntimePackages() {
+  const nodeModulesDir = path.join(serverStaging, "node_modules");
+  const requiredPackages = ["tsx", "esbuild"];
+
+  for (const packageName of requiredPackages) {
+    const target = path.join(nodeModulesDir, ...packageName.split("/"));
+    if (fs.existsSync(target)) continue;
+
+    const source = resolveInstalledPackagePath(packageName);
+    if (!source) {
+      throw new Error(`Required runtime package not installed: ${packageName}`);
+    }
+    copyIfMissing(source, target);
+    console.log(`  ✓ restored missing runtime package: ${packageName}`);
+  }
+
+  const esbuildScopeSource = resolveInstalledPackagePath("@esbuild");
+  const esbuildScopeTarget = path.join(nodeModulesDir, "@esbuild");
+  if (!fs.existsSync(esbuildScopeTarget) && esbuildScopeSource) {
+    copyIfMissing(esbuildScopeSource, esbuildScopeTarget);
+    console.log("  ✓ restored missing runtime package scope: @esbuild");
+  }
+}
+
+function verifyStagedServerRuntime() {
+  const checks = [
+    path.join(serverStaging, "src/index.ts"),
+    path.join(serverStaging, "node_modules/tsx/dist/cli.mjs"),
+    path.join(serverStaging, "node_modules/esbuild/package.json"),
+  ];
+  const missing = checks.filter((target) => !fs.existsSync(target));
+  if (missing.length > 0) {
+    throw new Error(
+      `Desktop server staging is incomplete:\n${missing.map((p) => `- ${p}`).join("\n")}`,
+    );
+  }
+
+  const esbuildScopeDir = path.join(serverStaging, "node_modules/@esbuild");
+  const hasPlatformBinary =
+    fs.existsSync(esbuildScopeDir) &&
+    fs.readdirSync(esbuildScopeDir).some((name) => name.startsWith("darwin-") || name.startsWith("win32-") || name.startsWith("linux-"));
+  if (!hasPlatformBinary) {
+    throw new Error(`Desktop server staging is missing @esbuild platform packages in ${esbuildScopeDir}`);
+  }
+}
+
 // Copy web dist
 const webDistSrc = path.join(projectRoot, "dist/web");
 if (!fs.existsSync(webDistSrc)) {
@@ -103,6 +172,11 @@ execSync(
   },
 );
 console.log("  ✓ pnpm deploy → staging/server/ (hoisted)");
+
+// pnpm deploy on workspaces still shows cross-platform gaps around hoisted
+// runtime packages. Restore the critical tsx/esbuild tree explicitly so the
+// packaged app always has a bootable server sidecar.
+ensureRuntimePackages();
 
 // 拷贝 server 运行所需的仓库级资源（这些不在 @covel/server 依赖图里）。
 // 注意：plugins/*/node_modules 来自 pnpm workspace 安装，内部是层层嵌套的
@@ -138,6 +212,8 @@ if (fs.existsSync(llmToml)) {
   fs.copyFileSync(llmToml, path.join(serverStaging, "llm.toml"));
   console.log("  ✓ llm.toml copied");
 }
+verifyStagedServerRuntime();
+console.log("  ✓ server runtime verified");
 console.log("  ✓ server resources staged");
 
 // Step 4: electron-builder

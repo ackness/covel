@@ -407,14 +407,17 @@ async function startServer(paths: ReturnType<typeof ensureUserPaths>): Promise<n
   writeLog("info", `db: ${paths.dbPath}`);
   writeLog("info", `llm.toml: ${paths.effectiveLlmToml}`);
 
-  // System Node (not Electron's Node) is required because Electron's Node has
-  // modifications that break tsx's ESM loader registration.
-  const nodeBin = isDev ? "node" : path.join(process.resourcesPath!, "node");
+  const spawnEnv: Record<string, string> = { ...env };
+  const nodeBin = isDev ? "node" : process.execPath;
+  if (!isDev) {
+    spawnEnv.ELECTRON_RUN_AS_NODE = "1";
+  }
+  writeLog("info", `node: ${nodeBin}`);
 
   manualStop = false;
   serverProcess = spawn(nodeBin, [tsxPath, serverEntry], {
     cwd: projectRoot,
-    env,
+    env: spawnEnv,
     stdio: ["ignore", "pipe", "pipe"],
   });
   serverStartedAt = Date.now();
