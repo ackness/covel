@@ -37,9 +37,9 @@
     "e2e:verify": "tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts",
     "create-plugin": "node scripts/create-plugin.js"
   },
-  "packageManager": "pnpm@10.7.0",
+  "packageManager": "pnpm@10.33.0",
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=22.0.0"
   },
   "devDependencies": {
     "@ai-sdk/openai-compatible": "^1.0.0",

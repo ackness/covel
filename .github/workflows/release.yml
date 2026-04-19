@@ -42,9 +42,9 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Setup pnpm
+        # 不指定 version，v6 会从 package.json packageManager 字段读取，
+        # 确保本地与 CI 用同一个 pnpm 版本
         uses: pnpm/action-setup@v6
-        with:
-          version: 10.7.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v6

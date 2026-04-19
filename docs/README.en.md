@@ -6,7 +6,7 @@ Plugin-driven AI interactive storytelling engine. The kernel provides execution 
 
 [![Version](https://img.shields.io/badge/version-v0.0.1--beta-8b5cf6)](https://github.com/AcKnEsS/covel/releases)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-≥20.19-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-≥22-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-10.7-f69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE)
 
@@ -31,7 +31,7 @@ Pre-built desktop binaries are available on the [Releases](https://github.com/Ac
 
 ## Getting started (from source)
 
-**Prerequisites:** Node.js ≥ 20.19, pnpm 10.7+
+**Prerequisites:** Node.js ≥ 22, pnpm 10.7+
 
 ```bash
 # Install dependencies
