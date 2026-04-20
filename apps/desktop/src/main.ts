@@ -394,6 +394,7 @@ async function startServer(paths: ReturnType<typeof ensureUserPaths>): Promise<n
     SQLITE_PATH: paths.dbPath,
     NODE_ENV: isDev ? "development" : "production",
     ...(isDev ? {} : { SERVE_STATIC: "true" }),
+    COVEL_PLUGINS_DIR: paths.pluginsDirs[0] ?? "",
     COVEL_WORLDS_DIR: paths.worldsDirs[0] ?? "",
     COVEL_USER_WORLDS_DIR: paths.userWorldsDir,
     COVEL_USER_PLUGINS_DIR: paths.userPluginsDir,
