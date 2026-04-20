@@ -63,7 +63,9 @@ let logFilePath: string | null = null;
 function initPersistentLog(logsDir: string): void {
   try {
     const day = new Date().toISOString().slice(0, 10);
-    logFilePath = path.join(logsDir, `app-${day}.log`);
+    // Prefix with shell name so both Electron and Tauri can coexist in
+    // the shared com.covel.app/logs/ directory without overwriting.
+    logFilePath = path.join(logsDir, `electron-${day}.log`);
     logStream = fs.createWriteStream(logFilePath, { flags: "a" });
     writeLog("info", `--- Covel desktop start (v${app.getVersion()}) ---`);
   } catch (err) {

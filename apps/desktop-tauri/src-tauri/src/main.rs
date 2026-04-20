@@ -205,6 +205,23 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result
     Ok(())
 }
 
+/// Resolve the shared `<os-data>/com.covel.app/logs/` directory at process
+/// start, before any AppHandle is available. Kept in sync with Electron's
+/// log location so both shells write to the same folder.
+fn shared_logs_dir() -> Option<PathBuf> {
+    let base = if cfg!(target_os = "macos") {
+        std::env::var_os("HOME")
+            .map(|h| PathBuf::from(h).join("Library/Application Support"))
+    } else if cfg!(target_os = "windows") {
+        std::env::var_os("APPDATA").map(PathBuf::from)
+    } else {
+        std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
+    }?;
+    Some(base.join(SHARED_APP_DIR).join("logs"))
+}
+
 async fn boot(app: AppHandle) -> Result<u16, String> {
     let window = app
         .get_webview_window("main")
@@ -233,11 +250,31 @@ async fn boot(app: AppHandle) -> Result<u16, String> {
 }
 
 fn main() {
-    let _ = env_logger::Builder::from_default_env()
-        .filter_level(log::LevelFilter::Info)
-        .try_init();
+    // Tauri-plugin-log wires up `log::info!` etc. into both stdout and a
+    // rolling file under the shared data dir. Resolving the directory
+    // before Builder::default() lets us share `<com.covel.app>/logs/`
+    // with the Electron shell.
+    let logs_dir = shared_logs_dir();
+    if let Some(dir) = &logs_dir {
+        let _ = fs::create_dir_all(dir);
+    }
+
+    let mut log_builder = tauri_plugin_log::Builder::default()
+        .level(log::LevelFilter::Info)
+        .target(tauri_plugin_log::Target::new(
+            tauri_plugin_log::TargetKind::Stdout,
+        ));
+    if let Some(dir) = logs_dir {
+        log_builder = log_builder.target(tauri_plugin_log::Target::new(
+            tauri_plugin_log::TargetKind::Folder {
+                path: dir,
+                file_name: Some("tauri-main".to_string()),
+            },
+        ));
+    }
 
     tauri::Builder::default()
+        .plugin(log_builder.build())
         .manage(SidecarState::default())
         .setup(|app| {
             let handle = app.handle().clone();
