@@ -22,8 +22,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build ${{ matrix.os }}
+  # ── Electron shell ──────────────────────────────────────────────
+  build-electron:
+    name: Electron ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -64,8 +65,6 @@ jobs:
         # 直接调 electron-builder CLI 避免 pnpm script + `--` 吞参数；
         # --publish=never 让 electron-builder 不自己创建 release，交给下游
         # softprops/action-gh-release job 统一处理。
-        # 签名 secret 在未设置时会变成空串，空的 CSC_LINK 会被 electron-builder
-        # 当成 cert 路径误读，因此只在确实存在时才注入。
         working-directory: apps/desktop
         run: pnpm exec electron-builder --${{ matrix.platform }} --publish=never
         env:
@@ -75,36 +74,126 @@ jobs:
       - name: Verify unpacked release resources (${{ matrix.platform }})
         run: node apps/desktop/scripts/verify-release.mjs ${{ matrix.platform }}
 
-      - name: Upload artifacts
+      - name: Upload Electron artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: covel-${{ matrix.platform }}
+          name: covel-electron-${{ matrix.platform }}
           path: |
-            release/*.dmg
-            release/*.zip
-            release/*.exe
-            release/*.blockmap
-            release/latest*.yml
+            release/electron/*.dmg
+            release/electron/*.zip
+            release/electron/*.exe
+            release/electron/*.blockmap
+            release/electron/latest*.yml
           if-no-files-found: error
           retention-days: 7
 
+  # ── Tauri shell (experimental, ~50% smaller bundle) ────────────
+  build-tauri:
+    name: Tauri ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: mac-arm64
+            os: macos-14
+            target: aarch64-apple-darwin
+          - name: mac-x64
+            os: macos-14
+            target: x86_64-apple-darwin
+          - name: win-x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop-tauri/src-tauri -> target
+          key: ${{ matrix.target }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Stage Electron desktop (shared staging for Tauri sidecar)
+        # Tauri's prepare-sidecar mirrors apps/desktop/staging into its own
+        # resources dir. We build @covel/desktop here to guarantee that
+        # mirror source exists before prepare-sidecar runs.
+        run: pnpm --filter @covel/desktop build
+
+      - name: Prepare Tauri sidecar (download node + rebuild native deps)
+        run: node apps/desktop-tauri/scripts/prepare-sidecar.mjs --target ${{ matrix.target }}
+
+      - name: Build Tauri bundle (${{ matrix.target }})
+        working-directory: apps/desktop-tauri
+        run: pnpm tauri build --target ${{ matrix.target }}
+        env:
+          # Mirror the Electron job's unsigned posture — signing comes later.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Stage release artefacts
+        run: node apps/desktop-tauri/scripts/stage-release.mjs ${{ matrix.target }}
+
+      - name: Upload Tauri artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: covel-tauri-${{ matrix.name }}
+          path: |
+            release/tauri/${{ matrix.target }}/*.dmg
+            release/tauri/${{ matrix.target }}/*.msi
+            release/tauri/${{ matrix.target }}/*.exe
+            release/tauri/${{ matrix.target }}/*.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  # ── Publish GitHub Release (combines both shells) ──────────────
   release:
     name: Publish GitHub Release
-    needs: build
+    needs: [build-electron, build-tauri]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
-      - name: Download all artifacts
+      - name: Download Electron artifacts
         uses: actions/download-artifact@v4
         with:
-          path: release
+          path: release/electron
+          pattern: covel-electron-*
+          merge-multiple: true
+
+      - name: Download Tauri artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release/tauri
+          pattern: covel-tauri-*
           merge-multiple: true
 
       - name: Inspect artifacts
         run: |
-          ls -lh release/
-          echo "---"
+          echo "=== release/electron ==="
+          ls -lh release/electron/ || true
+          echo "=== release/tauri ==="
+          ls -lh release/tauri/ || true
+          echo "--- all files ---"
           find release -type f | sort
 
       - name: Remove stale releases for this tag
@@ -133,8 +222,12 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
-            release/*.dmg
-            release/*.zip
-            release/*.exe
-            release/*.blockmap
-            release/latest*.yml
+            release/electron/*.dmg
+            release/electron/*.zip
+            release/electron/*.exe
+            release/electron/*.blockmap
+            release/electron/latest*.yml
+            release/tauri/*.dmg
+            release/tauri/*.msi
+            release/tauri/*.exe
+            release/tauri/*.zip

@@ -1,0 +1,19 @@
+{
+  "name": "@covel/desktop-tauri",
+  "version": "0.0.1-beta",
+  "private": true,
+  "type": "module",
+  "description": "Tauri-based desktop shell for Covel (experimental, sits next to @covel/desktop).",
+  "scripts": {
+    "prepare:sidecar": "node scripts/prepare-sidecar.mjs",
+    "stage:release": "node scripts/stage-release.mjs",
+    "tauri": "tauri",
+    "dev": "pnpm prepare:sidecar && tauri dev",
+    "build": "pnpm prepare:sidecar && tauri build",
+    "build:mac:arm64": "pnpm prepare:sidecar --target aarch64-apple-darwin && tauri build --target aarch64-apple-darwin && node scripts/stage-release.mjs aarch64-apple-darwin",
+    "build:mac:x64": "pnpm prepare:sidecar --target x86_64-apple-darwin && tauri build --target x86_64-apple-darwin && node scripts/stage-release.mjs x86_64-apple-darwin"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}

@@ -1,0 +1,4 @@
+# Bundle icons are build-required assets. The repo-level .gitignore
+# excludes *.png by default (to keep debug screenshots out of history);
+# this override keeps the Tauri icon set tracked.
+!*.png
