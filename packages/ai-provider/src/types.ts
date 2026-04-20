@@ -138,6 +138,40 @@ export interface ProviderDefaults {
   headers?: Record<string, string>;
 }
 
+// ── Per-Request Slot Overrides ─────────────────────────────────────
+
+/**
+ * Minimal preset definition accepted from untrusted request contexts
+ * (browser `X-Slot-Config` header, ping body, etc.). Mirrors the shape
+ * the frontend stores in `covel:customPresets`.
+ */
+export interface CustomPresetInput {
+  id: string;
+  name: string;
+  provider: string;
+  baseUrl?: string;
+  model: string;
+  protocol?: ProviderProtocol;
+}
+
+/**
+ * Per-call overlay that transiently extends the gateway's view of slot
+ * and preset configuration. Applied with reference counting so concurrent
+ * requests can safely share the overlay ids without racing.
+ *
+ * Consumed by the gateway (see `applySlotOverlay`). Server-side request
+ * middleware populates this from the `X-Slot-Config` header so custom
+ * presets/slots that only live in the browser's localStorage propagate
+ * into actual LLM calls rather than silently falling back to the first
+ * text slot.
+ */
+export interface SlotOverridesInput {
+  /** Slot-name → preset-id. Consulted before the server slotRegistry. */
+  slotPresetOverrides?: Record<string, string>;
+  /** Preset definitions added for the duration of the call. */
+  customPresets?: CustomPresetInput[];
+}
+
 // ── Model Profile ──────────────────────────────────────────────────
 
 export interface ModelProfile {

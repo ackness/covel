@@ -543,19 +543,211 @@ export function createMiscApiRoutes(
     return c.json({ keys: {}, providers });
   });
 
-  // POST /api/ai/ping — test LLM provider connectivity
+  // POST /api/ai/ping — real provider latency probe.
+  //
+  // Streams a minimal "hi" completion and records time-to-first-token
+  // (TTFB) against the first non-empty `text-delta` or `reasoning-delta`
+  // event (so "thinking" models are measured on their first reasoning
+  // character, not the first visible text token).
+  //
+  // The stream is aborted shortly after the first content arrives to keep
+  // the probe cheap — we only care about connectivity + latency, not the
+  // full reply.
   app.post('/api/ai/ping', async (c) => {
-    const body = await c.req.json<{ presetId?: string }>();
-    const presetId = body.presetId ?? 'default';
-    const preset = ai.presetRegistry.listPresets().find((p) => p.id === presetId);
-    if (!preset) {
-      return c.json({ ok: false, latencyMs: 0, error: `Preset "${presetId}" not found` });
+    const body = await c.req
+      .json<{ presetId?: string; slot?: string }>()
+      .catch((): { presetId?: string; slot?: string } => ({}));
+    const requested = body.presetId ?? (body.slot ? `slot-${body.slot}` : 'slot-default');
+
+    // Decode per-request API keys (base64 JSON). Keys are never persisted server-side.
+    let apiKeys: Record<string, string> | undefined;
+    const keysHeader = c.req.header('X-Provider-Keys');
+    if (keysHeader) {
+      try {
+        const decoded = Buffer.from(keysHeader, 'base64').toString('utf8');
+        const parsed = JSON.parse(decoded);
+        if (parsed && typeof parsed === 'object') apiKeys = parsed as Record<string, string>;
+      } catch {
+        // Fall through — let gateway raise a clearer error if the key is actually needed.
+      }
     }
-    // Return basic info — actual LLM ping requires provider keys from frontend
+
+    // Decode the client slot config header (base64 JSON). The turn pipeline
+    // consumes this in its own codepath; the ping endpoint needs it so that
+    // custom presets defined in the browser (Settings / onboarding) can be
+    // probed before they're ever committed to llm.toml.
+    type SlotConfigHeader = {
+      slotPresetOverrides?: Record<string, string>;
+      customPresets?: Array<{
+        id: string;
+        name: string;
+        provider: string;
+        baseUrl: string;
+        model: string;
+        protocol?: string;
+      }>;
+    };
+    let slotConfig: SlotConfigHeader = {};
+    const slotHeader = c.req.header('X-Slot-Config');
+    if (slotHeader) {
+      try {
+        const decoded = Buffer.from(slotHeader, 'base64').toString('utf8');
+        const parsed = JSON.parse(decoded);
+        if (parsed && typeof parsed === 'object') slotConfig = parsed as SlotConfigHeader;
+      } catch {
+        // Malformed header — behave as if no overrides were supplied.
+      }
+    }
+
+    // Register client-defined custom presets + providers transiently so the
+    // gateway's resolveTextTarget can find them. We clean everything up in
+    // the finally block below, regardless of whether the ping succeeds.
+    const transientPresetIds: string[] = [];
+    const transientProviderNames: string[] = [];
+    for (const cp of slotConfig.customPresets ?? []) {
+      if (!cp.id || !cp.provider) continue;
+      if (!ai.providerRegistry.hasProvider(cp.provider)) {
+        ai.providerRegistry.addProvider(cp.provider, {
+          ...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
+          ...(cp.protocol ? { protocol: cp.protocol as never } : {}),
+        });
+        transientProviderNames.push(cp.provider);
+      }
+      const alreadyRegistered = ai.presetRegistry
+        .listPresets()
+        .some((p) => p.id === cp.id);
+      if (!alreadyRegistered) {
+        ai.presetRegistry.addPreset({
+          id: cp.id,
+          name: cp.name || cp.id,
+          provider: cp.provider,
+          model: cp.model || 'default',
+          ...(cp.protocol ? { protocol: cp.protocol as never } : {}),
+          ...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
+          tier: 'medium',
+          supportedModes: ['text', 'stream'],
+          enabled: true,
+          tag: 'text',
+        });
+        transientPresetIds.push(cp.id);
+      }
+    }
+
+    const allPresets = ai.presetRegistry.listPresets().filter((p) => p.enabled);
+
+    // Resolution chain:
+    //   1. Direct preset id match (includes transiently registered ones)
+    //   2. `slot-<name>` → client slotPresetOverrides → slotRegistry
+    //   3. Text-tag fallback (mirrors gateway.streamText behaviour)
+    //   4. Any enabled preset
+    let preset = allPresets.find((p) => p.id === requested);
+    if (!preset && requested.startsWith('slot-')) {
+      const slotName = requested.slice('slot-'.length);
+      const overrideId = slotConfig.slotPresetOverrides?.[slotName];
+      if (overrideId) {
+        preset = allPresets.find((p) => p.id === overrideId);
+      }
+      if (!preset) {
+        const presetIdFromSlot = ai.slotRegistry.resolveSlot(slotName);
+        if (presetIdFromSlot) {
+          preset = allPresets.find((p) => p.id === presetIdFromSlot);
+        }
+      }
+    }
+    if (!preset) {
+      const textSlots = ai.slotRegistry.listSlotsByTag('text');
+      if (textSlots.length > 0) {
+        preset = allPresets.find((p) => p.id === textSlots[0].presetId);
+      }
+    }
+    if (!preset) preset = allPresets[0];
+
+    const cleanupTransient = () => {
+      for (const id of transientPresetIds) ai.presetRegistry.removePreset(id);
+      for (const name of transientProviderNames) ai.providerRegistry.removeProvider(name);
+    };
+
+    if (!preset) {
+      cleanupTransient();
+      return c.json({
+        ok: false,
+        latencyMs: 0,
+        error: 'No LLM provider configured. Add a slot to llm.toml or via Settings.',
+      });
+    }
+
+    const startedAt = Date.now();
+    let ttfbMs: number | null = null;
+    let firstText = '';
+    let finalUsage: { inputTokens: number; outputTokens: number } | null = null;
+    const abort = new AbortController();
+    let aborted = false;
+    let timedOut = false;
+
+    // Safety timeout — a ping that can't even start streaming within 30s is
+    // effectively broken. Without this the endpoint would hang indefinitely
+    // on misconfigured providers (wrong baseUrl, unreachable host, ...).
+    const timeout = setTimeout(() => {
+      if (!aborted) {
+        timedOut = true;
+        aborted = true;
+        abort.abort();
+      }
+    }, 30_000);
+
+    try {
+      for await (const event of ai.gateway.streamText(
+        { presetId: preset.id, messages: [{ role: 'user', content: 'hi' }] },
+        { apiKeys, signal: abort.signal },
+      )) {
+        if (event.type === 'text-delta' && event.textDelta.length > 0) {
+          if (ttfbMs === null) ttfbMs = Date.now() - startedAt;
+          firstText += event.textDelta;
+          // Stop once we have proof-of-life; keeps probe cheap (~1 token).
+          if (firstText.length >= 8 && !aborted) {
+            aborted = true;
+            abort.abort();
+          }
+        } else if (event.type === 'reasoning-delta' && event.reasoningDelta.length > 0) {
+          if (ttfbMs === null) ttfbMs = Date.now() - startedAt;
+        } else if (event.type === 'done') {
+          finalUsage = event.usage;
+        }
+      }
+    } catch (err) {
+      if (!aborted) {
+        const message = err instanceof Error ? err.message : String(err);
+        clearTimeout(timeout);
+        cleanupTransient();
+        return c.json({
+          ok: false,
+          latencyMs: Date.now() - startedAt,
+          ...(ttfbMs !== null ? { ttfbMs } : {}),
+          error: message,
+        });
+      }
+      // Deliberate abort — either a post-TTFB early-stop or our 30s timeout.
+    }
+
+    clearTimeout(timeout);
+    cleanupTransient();
+    const latencyMs = Date.now() - startedAt;
+    if (ttfbMs === null) {
+      return c.json({
+        ok: false,
+        latencyMs,
+        error: timedOut
+          ? 'Provider did not return any content within 30s'
+          : 'Provider returned no content',
+      });
+    }
+
     return c.json({
       ok: true,
-      latencyMs: 0,
-      text: `Preset ${preset.name} (${preset.provider}/${preset.model}) configured`,
+      latencyMs,
+      ttfbMs,
+      text: `${preset.name} (${preset.provider}/${preset.model})`,
+      ...(finalUsage ? { usage: finalUsage } : {}),
     });
   });
 

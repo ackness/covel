@@ -1,8 +1,10 @@
 import type { ZodType } from "zod";
 
 import { AiProviderError } from "./errors.js";
+import type { ProviderDefaults } from "./types.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import type { SlotRegistry } from "./slot-registry.js";
+import { applySlotOverlay, resolveSlotOverride } from "./slot-overlay.js";
 import type {
   EmbeddingResult,
   ImageGenerationResult,
@@ -13,6 +15,7 @@ import type {
   ProviderLifecycleHook,
   ProviderProtocol,
   ResolvedTarget,
+  SlotOverridesInput,
   SpeechSynthesisResult,
   StreamEvent,
   TextMessage,
@@ -32,11 +35,20 @@ interface GatewayDependencies {
       apiKeys: Record<string, string>,
       providerName: string
     ): ProviderResolution;
+    // Overlay-capable methods — populated by the real createProviderRegistry.
+    // Optional so structural test mocks don't need to implement them; when
+    // absent, slotOverrides simply silently degrade to no-op.
+    hasProvider?(name: string): boolean;
+    addProvider?(name: string, defaults: ProviderDefaults): void;
+    removeProvider?(name: string): void;
   };
   presetRegistry: {
     resolveTextTarget(input: { presetId?: string }): ResolvedTarget;
     resolveEmbeddingTarget(input?: { presetId?: string }): ResolvedTarget;
     resolveTextTargetChain(input: { presetId?: string }): ResolvedTarget[];
+    hasPreset?(id: string): boolean;
+    addPreset?(preset: PresetConfig): void;
+    removePreset?(id: string): void;
   };
   slotRegistry?: SlotRegistry;
 }
@@ -50,6 +62,13 @@ export interface GatewayOptions {
   parameterOverrides?: ModelParameterOverrides;
   /** Abort signal for cancellation (e.g. budget timeout). */
   signal?: AbortSignal;
+  /**
+   * Per-request overlay that transiently extends the gateway's preset /
+   * provider / slot view. Populated by server middleware from the
+   * `X-Slot-Config` header so browser-only custom slots propagate into
+   * real LLM calls. See {@link SlotOverridesInput}.
+   */
+  slotOverrides?: SlotOverridesInput;
 }
 
 /**
@@ -84,8 +103,20 @@ export function createGateway(deps: GatewayDependencies) {
   function resolveSlotOrPassthrough(
     presetId: string | undefined,
     fallbackTag: string = "text",
+    options?: GatewayOptions,
   ): string | undefined {
-    if (!presetId || !deps.slotRegistry) return presetId;
+    if (!presetId) return presetId;
+
+    // Per-request client override takes highest precedence. When the slot
+    // name matches a key in `slotPresetOverrides` we treat the result as
+    // an already-resolved preset id and short-circuit — skipping the
+    // slot-registry lookup prevents the tag-based fallback from silently
+    // routing a browser-only slot name (e.g. "fast") to the first
+    // llm.toml slot (e.g. "story").
+    const clientOverride = resolveSlotOverride(presetId, options?.slotOverrides);
+    if (clientOverride !== presetId) return clientOverride;
+
+    if (!deps.slotRegistry) return presetId;
 
     const direct = deps.slotRegistry.resolveSlot(presetId);
     if (direct) return direct;
@@ -176,8 +207,25 @@ export function createGateway(deps: GatewayDependencies) {
     },
     options?: GatewayOptions
   ): AsyncIterable<StreamEvent> {
+    const cleanup = applySlotOverlay(deps, options?.slotOverrides);
+    try {
+      yield* streamTextInner(input, options);
+    } finally {
+      cleanup();
+    }
+  }
+
+  async function* streamTextInner(
+    input: {
+      presetId?: string;
+      messages: TextMessage[];
+      tools?: ToolDefinition[];
+      providerRequestMetadata?: Record<string, unknown>;
+    },
+    options?: GatewayOptions,
+  ): AsyncIterable<StreamEvent> {
     const targets = deps.presetRegistry.resolveTextTargetChain({
-      presetId: resolveSlotOrPassthrough(input.presetId, "text"),
+      presetId: resolveSlotOrPassthrough(input.presetId, "text", options),
     });
     let lastError: AiProviderError | null = null;
 
@@ -259,8 +307,24 @@ export function createGateway(deps: GatewayDependencies) {
       });
     }
 
+    const cleanup = applySlotOverlay(deps, options?.slotOverrides);
+    try {
+      return await embedInner(input, options);
+    } finally {
+      cleanup();
+    }
+  }
+
+  async function embedInner(
+    input: {
+      presetId?: string;
+      values: string[];
+      providerRequestMetadata?: Record<string, unknown>;
+    },
+    options?: GatewayOptions,
+  ): Promise<EmbeddingResult> {
     const target = deps.presetRegistry.resolveEmbeddingTarget({
-      presetId: resolveSlotOrPassthrough(input.presetId, "embedding"),
+      presetId: resolveSlotOrPassthrough(input.presetId, "embedding", options),
     });
 
     // Route via the preset (carries baseUrl/protocol) when available, else
@@ -437,8 +501,26 @@ export function createGateway(deps: GatewayDependencies) {
     ) => Promise<TResult>,
     resolveUsage: (result: TResult) => UsageSummary | null
   ): Promise<TResult> {
+    const cleanup = applySlotOverlay(deps, options?.slotOverrides);
+    try {
+      return await runWithFallbackInner(input, mode, options, execute, resolveUsage);
+    } finally {
+      cleanup();
+    }
+  }
+
+  async function runWithFallbackInner<TResult>(
+    input: { presetId?: string },
+    mode: "text" | "object",
+    options: GatewayOptions | undefined,
+    execute: (
+      target: ResolvedTarget,
+      resolved: ProviderResolution
+    ) => Promise<TResult>,
+    resolveUsage: (result: TResult) => UsageSummary | null,
+  ): Promise<TResult> {
     const targets = deps.presetRegistry.resolveTextTargetChain({
-      presetId: resolveSlotOrPassthrough(input.presetId, "text"),
+      presetId: resolveSlotOrPassthrough(input.presetId, "text", options),
     });
     let lastError: AiProviderError | null = null;
 
@@ -495,33 +577,38 @@ export function createGateway(deps: GatewayDependencies) {
     ) => Promise<TResult>,
     fallbackTag?: string,
   ): Promise<TResult> {
-    // Map mode → default fallback tag when the caller didn't pick one.
-    // image/audio/speech operations must NOT silently fall back to text.
-    const tag =
-      fallbackTag ??
-      (mode === "image"
-        ? "image"
-        : mode === "speech" || mode === "transcription"
-          ? mode
-          : "text");
-    const target = deps.presetRegistry.resolveTextTarget({
-      presetId: resolveSlotOrPassthrough(presetId, tag),
-    });
-    let resolved = deps.providerRegistry.resolve(
-      target.preset ?? target.profile,
-      { mode }
-    );
-    if (options?.apiKeys) {
-      resolved = deps.providerRegistry.withApiKeys(
-        resolved,
-        options.apiKeys,
-        targetProvider(target)
+    const cleanup = applySlotOverlay(deps, options?.slotOverrides);
+    try {
+      // Map mode → default fallback tag when the caller didn't pick one.
+      // image/audio/speech operations must NOT silently fall back to text.
+      const tag =
+        fallbackTag ??
+        (mode === "image"
+          ? "image"
+          : mode === "speech" || mode === "transcription"
+            ? mode
+            : "text");
+      const target = deps.presetRegistry.resolveTextTarget({
+        presetId: resolveSlotOrPassthrough(presetId, tag, options),
+      });
+      let resolved = deps.providerRegistry.resolve(
+        target.preset ?? target.profile,
+        { mode },
       );
-    }
+      if (options?.apiKeys) {
+        resolved = deps.providerRegistry.withApiKeys(
+          resolved,
+          options.apiKeys,
+          targetProvider(target),
+        );
+      }
 
-    return runSingle(target, mode, resolved, options, () =>
-      execute(target, resolved)
-    );
+      return await runSingle(target, mode, resolved, options, () =>
+        execute(target, resolved),
+      );
+    } finally {
+      cleanup();
+    }
   }
 
   async function runSingle<TResult>(

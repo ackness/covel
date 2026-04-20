@@ -149,7 +149,31 @@ export function createProviderRegistry(options?: {
     };
   }
 
-  return { resolve, withApiKeys };
+  /**
+   * Register (or overwrite) a provider at runtime. Used by transient
+   * flows such as the provider-ping endpoint that accepts custom
+   * providers from the client on a per-request basis.
+   */
+  function addProvider(name: string, defaults: ProviderDefaults): void {
+    const existing = providers.get(name);
+    if (existing) {
+      providers.set(name, { ...existing, defaults: { ...defaults, ...existing.defaults } });
+    } else {
+      providers.set(name, { defaults });
+    }
+  }
+
+  /** Remove a provider by name. */
+  function removeProvider(name: string): void {
+    providers.delete(name);
+  }
+
+  /** Check whether a provider is registered. */
+  function hasProvider(name: string): boolean {
+    return providers.has(name);
+  }
+
+  return { resolve, withApiKeys, addProvider, removeProvider, hasProvider };
 }
 
 function resolveProtocol(

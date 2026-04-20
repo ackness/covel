@@ -1,14 +1,15 @@
 import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  X, ChevronRight, Sparkles, KeyRound, Rocket,
+  X, ChevronRight, Sparkles, KeyRound, Rocket, Package,
   Eye, EyeOff, CheckCircle2, XCircle, Loader2, Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
 import {
   getProviderKeys, setProviderKeys, pingPreset,
-  addCustomPreset, uid,
+  addCustomPreset, uid, listPresets,
+  getSlotConfig, setSlotConfig,
 } from "@/services/api.js";
 import type { PingResult } from "@/services/api.js";
 import { useLocalePreference } from "@/hooks/useLocalePreference";
@@ -21,7 +22,7 @@ import { useLocalePreference } from "@/hooks/useLocalePreference";
  */
 const STORAGE_KEY = "covel:onboardedVersion";
 const LEGACY_STORAGE_KEY = "covel:onboarded";
-const ONBOARDING_VERSION = 1;
+const ONBOARDING_VERSION = 2;
 const CUSTOM_PROVIDER_ID = "__custom__";
 
 const PROVIDERS = [
@@ -30,6 +31,8 @@ const PROVIDERS = [
   { id: "anthropic", name: "Anthropic", placeholder: "sk-ant-...", keyEnv: "ANTHROPIC_API_KEY" },
   { id: "dashscope", name: "DashScope", placeholder: "sk-...", keyEnv: "DASHSCOPE_API_KEY" },
 ] as const;
+
+const TOTAL_STEPS = 4;
 
 function isOnboarded(): boolean {
   const stored = localStorage.getItem(STORAGE_KEY);
@@ -44,7 +47,6 @@ function isOnboarded(): boolean {
 
 function markOnboarded(): void {
   localStorage.setItem(STORAGE_KEY, String(ONBOARDING_VERSION));
-  // Clean up legacy flag to keep localStorage tidy.
   localStorage.removeItem(LEGACY_STORAGE_KEY);
 }
 
@@ -54,24 +56,273 @@ export function resetOnboarding(): void {
   localStorage.removeItem(LEGACY_STORAGE_KEY);
 }
 
+interface ProviderFormState {
+  selected: string;
+  apiKey: string;
+  keyVisible: boolean;
+  customBaseUrl: string;
+  customModel: string;
+  customProviderName: string;
+  pingResult: (PingResult & { testing?: boolean }) | null;
+}
+
+function emptyFormState(initialProvider = "deepseek"): ProviderFormState {
+  return {
+    selected: initialProvider,
+    apiKey: "",
+    keyVisible: false,
+    customBaseUrl: "",
+    customModel: "",
+    customProviderName: "",
+    pingResult: null,
+  };
+}
+
+/**
+ * Provider picker + API key form. Reused for both the story slot (narrator)
+ * and the plugin slot. Parent owns the state so tests / ping results stay
+ * independent per slot.
+ */
+function ProviderForm({
+  state,
+  onChange,
+  onPing,
+}: {
+  state: ProviderFormState;
+  onChange: (next: ProviderFormState) => void;
+  onPing: () => void;
+}) {
+  const { t } = useTranslation();
+  const isCustom = state.selected === CUSTOM_PROVIDER_ID;
+  const provider = PROVIDERS.find((p) => p.id === state.selected) ?? PROVIDERS[0];
+
+  const handleProviderSelect = (providerId: string) => {
+    const existing = getProviderKeys();
+    onChange({
+      selected: providerId,
+      apiKey: providerId === CUSTOM_PROVIDER_ID ? "" : (existing[providerId] ?? ""),
+      keyVisible: false,
+      pingResult: null,
+      customBaseUrl: providerId === CUSTOM_PROVIDER_ID ? state.customBaseUrl : "",
+      customModel: providerId === CUSTOM_PROVIDER_ID ? state.customModel : "",
+      customProviderName: providerId === CUSTOM_PROVIDER_ID ? state.customProviderName : "",
+    });
+  };
+
+  const latencyDisplay = state.pingResult?.ttfbMs ?? state.pingResult?.latencyMs;
+
+  return (
+    <div className="space-y-4">
+      {/* Provider quick-select */}
+      <div className="space-y-2">
+        <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
+          {t("onboarding.selectProvider", "Provider")}
+        </Label>
+        <div className="grid grid-cols-2 gap-2">
+          {PROVIDERS.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => handleProviderSelect(p.id)}
+              className={`px-3 py-2 text-xs font-medium border text-left transition-colors ${
+                state.selected === p.id
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-zinc-700 text-zinc-400 hover:border-zinc-500"
+              }`}
+            >
+              {p.name}
+            </button>
+          ))}
+          <button
+            onClick={() => handleProviderSelect(CUSTOM_PROVIDER_ID)}
+            className={`col-span-2 px-3 py-2 text-xs font-medium border text-left transition-colors ${
+              isCustom
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-zinc-700 text-zinc-400 hover:border-zinc-500"
+            }`}
+          >
+            {t("onboarding.customProvider", "Custom (OpenAI Compatible)")}
+          </button>
+        </div>
+      </div>
+
+      {isCustom && (
+        <div className="space-y-2">
+          <div className="space-y-1.5">
+            <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
+              Base URL
+            </Label>
+            <input
+              type="text"
+              placeholder="https://api.example.com/v1"
+              value={state.customBaseUrl}
+              onChange={(e) => onChange({ ...state, customBaseUrl: e.target.value, pingResult: null })}
+              className="w-full bg-zinc-900 border border-zinc-700 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
+                {t("onboarding.providerName", "Provider Name")}
+              </Label>
+              <input
+                type="text"
+                placeholder="my-provider"
+                value={state.customProviderName}
+                onChange={(e) => onChange({ ...state, customProviderName: e.target.value, pingResult: null })}
+                className="w-full bg-zinc-900 border border-zinc-700 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
+                {t("onboarding.modelId", "Model ID")}
+              </Label>
+              <input
+                type="text"
+                placeholder="gpt-4o / deepseek-chat"
+                value={state.customModel}
+                onChange={(e) => onChange({ ...state, customModel: e.target.value, pingResult: null })}
+                className="w-full bg-zinc-900 border border-zinc-700 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
+          {t("onboarding.apiKey", "API Key")}
+        </Label>
+        <div className="flex gap-1">
+          <input
+            type={state.keyVisible ? "text" : "password"}
+            placeholder={isCustom ? "sk-..." : provider.placeholder}
+            value={state.apiKey}
+            onChange={(e) => onChange({ ...state, apiKey: e.target.value, pingResult: null })}
+            className="flex-1 bg-zinc-900 border border-zinc-700 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
+          />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => onChange({ ...state, keyVisible: !state.keyVisible })}
+            className="shrink-0 rounded-none"
+          >
+            {state.keyVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+          </Button>
+        </div>
+        {!isCustom && (
+          <div className="text-[10px] text-zinc-500 font-mono">
+            {provider.keyEnv}
+          </div>
+        )}
+      </div>
+
+      {state.apiKey.trim() && (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-none text-[11px]"
+            disabled={state.pingResult?.testing}
+            onClick={onPing}
+          >
+            {state.pingResult?.testing ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Sparkles className="w-3 h-3" />
+            )}
+            {t("onboarding.testConnection", "Test Connection")}
+          </Button>
+          {state.pingResult && !state.pingResult.testing && (
+            <span className="flex items-center gap-1 text-xs">
+              {state.pingResult.ok ? (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                  <span className="text-green-500 font-mono">
+                    {latencyDisplay ?? 0}ms
+                    <span className="ml-1 text-[10px] text-green-500/70">TTFB</span>
+                  </span>
+                </>
+              ) : (
+                <>
+                  <XCircle className="w-3.5 h-3.5 text-red-400" />
+                  <span className="text-red-400 text-[11px] truncate max-w-[180px]">
+                    {state.pingResult.error?.slice(0, 60) ?? "Failed"}
+                  </span>
+                </>
+              )}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Persist an API key + slot binding.
+ *
+ * For built-in providers we look up the first enabled preset whose
+ * `provider` field matches the user's pick and point the slot at it.
+ * For custom providers we register a local custom preset and point the
+ * slot at that. Returns the resolved preset ID, or undefined if no match
+ * could be found (e.g. built-in provider with no server-side preset yet).
+ */
+async function persistSlot(
+  form: ProviderFormState,
+  slotName: "story" | "plugin",
+): Promise<string | undefined> {
+  const key = form.apiKey.trim();
+  if (!key) return undefined;
+
+  const isCustom = form.selected === CUSTOM_PROVIDER_ID;
+
+  if (isCustom) {
+    const provName = form.customProviderName.trim() || "custom";
+    const existingKeys = getProviderKeys();
+    setProviderKeys({ ...existingKeys, [provName]: key });
+
+    const presetId = `custom_${uid()}`;
+    addCustomPreset({
+      id: presetId,
+      name: `${provName} — ${form.customModel || "default"}`,
+      provider: provName,
+      baseUrl: form.customBaseUrl.trim(),
+      model: form.customModel.trim() || "default",
+      protocol: "openai-chat-v1",
+      apiKey: key,
+    });
+    const slots = getSlotConfig();
+    setSlotConfig({ ...slots, [slotName]: { presetId } });
+    return presetId;
+  }
+
+  const existingKeys = getProviderKeys();
+  setProviderKeys({ ...existingKeys, [form.selected]: key });
+
+  try {
+    const presets = await listPresets();
+    const match = presets.find((p) => p.provider === form.selected && p.enabled);
+    if (match) {
+      const slots = getSlotConfig();
+      setSlotConfig({ ...slots, [slotName]: { presetId: match.id } });
+      return match.id;
+    }
+  } catch {
+    // Network hiccup — leave slot config untouched so the ping probe
+    // surfaces the real problem to the user.
+  }
+  return undefined;
+}
+
 export function OnboardingWizard() {
   const [visible, setVisible] = useState(() => !isOnboarded());
   const { t } = useTranslation();
   const { locale, setLocale } = useLocalePreference();
   const [step, setStep] = useState(0);
 
-  // Provider key state
-  const [selectedProvider, setSelectedProvider] = useState<string>("deepseek");
-  const [apiKey, setApiKey] = useState("");
-  const [keyVisible, setKeyVisible] = useState(false);
-  const [pingResult, setPingResult] = useState<(PingResult & { testing?: boolean }) | null>(null);
-
-  // Custom provider fields
-  const [customBaseUrl, setCustomBaseUrl] = useState("");
-  const [customModel, setCustomModel] = useState("");
-  const [customProviderName, setCustomProviderName] = useState("");
-
-  const isCustom = selectedProvider === CUSTOM_PROVIDER_ID;
+  const [storyForm, setStoryForm] = useState<ProviderFormState>(() => emptyFormState());
+  const [pluginMode, setPluginMode] = useState<"same" | "different">("same");
+  const [pluginForm, setPluginForm] = useState<ProviderFormState>(() => emptyFormState());
 
   const dismiss = useCallback(() => {
     markOnboarded();
@@ -79,76 +330,98 @@ export function OnboardingWizard() {
   }, []);
 
   const handleNext = useCallback(() => {
-    if (step < 2) {
+    if (step < TOTAL_STEPS - 1) {
       setStep((s) => s + 1);
     } else {
       dismiss();
     }
   }, [step, dismiss]);
 
-  const handleSaveKey = useCallback(() => {
-    if (!apiKey.trim()) return;
+  const handleBack = useCallback(() => {
+    if (step > 0) setStep((s) => s - 1);
+  }, [step]);
 
-    if (isCustom) {
-      // Register as a custom preset so the server knows about it
-      const provName = customProviderName.trim() || "custom";
-      const existing = getProviderKeys();
-      setProviderKeys({ ...existing, [provName]: apiKey.trim() });
-      addCustomPreset({
-        id: `custom_${uid()}`,
-        name: `${provName} — ${customModel || "default"}`,
-        provider: provName,
-        baseUrl: customBaseUrl.trim(),
-        model: customModel.trim() || "default",
-        protocol: "openai-chat-v1",
-        apiKey: apiKey.trim(),
-      });
-    } else {
-      const existing = getProviderKeys();
-      setProviderKeys({ ...existing, [selectedProvider]: apiKey.trim() });
-    }
-  }, [selectedProvider, apiKey, isCustom, customBaseUrl, customModel, customProviderName]);
-
-  const handlePing = useCallback(async () => {
-    handleSaveKey();
-    setPingResult({ ok: false, latencyMs: 0, testing: true });
+  const handlePingStory = useCallback(async () => {
+    await persistSlot(storyForm, "story");
+    setStoryForm((s) => ({ ...s, pingResult: { ok: false, latencyMs: 0, testing: true } }));
     try {
-      const result = await pingPreset(`slot-default`);
-      setPingResult(result);
+      const result = await pingPreset("slot-story");
+      setStoryForm((s) => ({ ...s, pingResult: result }));
     } catch (err) {
-      setPingResult({
-        ok: false,
-        latencyMs: 0,
-        error: err instanceof Error ? err.message : "Network error",
-      });
+      setStoryForm((s) => ({
+        ...s,
+        pingResult: {
+          ok: false,
+          latencyMs: 0,
+          error: err instanceof Error ? err.message : "Network error",
+        },
+      }));
     }
-  }, [handleSaveKey]);
+  }, [storyForm]);
 
-  const handleProviderSelect = useCallback((providerId: string) => {
-    setSelectedProvider(providerId);
-    setApiKey("");
-    setPingResult(null);
-    setKeyVisible(false);
-    if (providerId === CUSTOM_PROVIDER_ID) {
-      setCustomBaseUrl("");
-      setCustomModel("");
-      setCustomProviderName("");
+  const handlePingPlugin = useCallback(async () => {
+    await persistSlot(pluginForm, "plugin");
+    setPluginForm((p) => ({ ...p, pingResult: { ok: false, latencyMs: 0, testing: true } }));
+    try {
+      const result = await pingPreset("slot-plugin");
+      setPluginForm((p) => ({ ...p, pingResult: result }));
+    } catch (err) {
+      setPluginForm((p) => ({
+        ...p,
+        pingResult: {
+          ok: false,
+          latencyMs: 0,
+          error: err instanceof Error ? err.message : "Network error",
+        },
+      }));
+    }
+  }, [pluginForm]);
+
+  const handleContinueFromStory = useCallback(async () => {
+    await persistSlot(storyForm, "story");
+    // Default plugin slot to story when entering step 2 for the first time
+    // so the "use same" radio reflects a real binding.
+    const slots = getSlotConfig();
+    if (!slots.plugin && slots.story) {
+      setSlotConfig({ ...slots, plugin: slots.story });
+    }
+    setStep((s) => s + 1);
+  }, [storyForm]);
+
+  const handleContinueFromPlugin = useCallback(async () => {
+    if (pluginMode === "different" && pluginForm.apiKey.trim()) {
+      await persistSlot(pluginForm, "plugin");
     } else {
-      // Pre-fill if key already stored
-      const existing = getProviderKeys();
-      if (existing[providerId]) {
-        setApiKey(existing[providerId]);
+      const slots = getSlotConfig();
+      if (slots.story) {
+        setSlotConfig({ ...slots, plugin: slots.story });
+      } else {
+        const { plugin: _drop, ...rest } = slots;
+        setSlotConfig(rest);
       }
     }
-  }, []);
+    setStep((s) => s + 1);
+  }, [pluginForm, pluginMode]);
 
   if (!visible) return null;
 
-  const provider = PROVIDERS.find((p) => p.id === selectedProvider) ?? PROVIDERS[0];
+  const storyCustom = storyForm.selected === CUSTOM_PROVIDER_ID;
+  const storyProvider = PROVIDERS.find((p) => p.id === storyForm.selected) ?? PROVIDERS[0];
+  const storyContinueDisabled =
+    !storyForm.apiKey.trim() || (storyCustom && !storyForm.customBaseUrl.trim());
+
+  const pluginCustom = pluginForm.selected === CUSTOM_PROVIDER_ID;
+  const pluginContinueDisabled =
+    pluginMode === "different" &&
+    (!pluginForm.apiKey.trim() || (pluginCustom && !pluginForm.customBaseUrl.trim()));
+
+  const storySummary = storyCustom
+    ? (storyForm.customProviderName.trim() || "custom") +
+      (storyForm.customModel.trim() ? ` — ${storyForm.customModel.trim()}` : "")
+    : storyProvider.name;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      {/* Dismiss button */}
       <button
         onClick={dismiss}
         className="absolute top-6 right-6 text-zinc-500 hover:text-zinc-300 transition-colors"
@@ -157,11 +430,10 @@ export function OnboardingWizard() {
         <X className="w-5 h-5" />
       </button>
 
-      {/* Card */}
       <div className="relative w-full max-w-md mx-4">
         {/* Step indicator */}
         <div className="flex items-center justify-center gap-2 mb-6">
-          {[0, 1, 2].map((i) => (
+          {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
             <div
               key={i}
               className={`h-1 transition-all duration-300 ${
@@ -196,7 +468,6 @@ export function OnboardingWizard() {
                 </p>
               </div>
 
-              {/* Language selector */}
               <div className="space-y-2">
                 <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
                   {t("onboarding.language", "Language")}
@@ -235,172 +506,27 @@ export function OnboardingWizard() {
             </div>
           )}
 
-          {/* Step 1: Configure LLM Provider */}
+          {/* Step 1: Narrator Model (covel.story) */}
           {step === 1 && (
             <div className="space-y-6">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <KeyRound className="w-4 h-4 text-primary" />
                   <h2 className="text-sm font-semibold uppercase tracking-widest">
-                    {t("onboarding.configureProvider", "Configure AI Provider")}
+                    {t("onboarding.narratorModel", "Narrator Model")}
                   </h2>
+                  <code className="text-[10px] text-zinc-500 font-mono">covel.story</code>
                 </div>
                 <p className="text-xs text-zinc-400 leading-relaxed">
                   {t(
-                    "onboarding.providerDesc",
-                    "Covel needs an LLM API key to generate stories. Pick a provider and paste your key.",
+                    "onboarding.narratorModelDesc",
+                    "The core model that drives the main story. Pick a provider and paste your key.",
                   )}
                 </p>
               </div>
 
-              {/* Provider quick-select */}
-              <div className="space-y-2">
-                <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
-                  {t("onboarding.selectProvider", "Provider")}
-                </Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {PROVIDERS.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => handleProviderSelect(p.id)}
-                      className={`px-3 py-2 text-xs font-medium border text-left transition-colors ${
-                        selectedProvider === p.id
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-zinc-700 text-zinc-400 hover:border-zinc-500"
-                      }`}
-                    >
-                      {p.name}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => handleProviderSelect(CUSTOM_PROVIDER_ID)}
-                    className={`col-span-2 px-3 py-2 text-xs font-medium border text-left transition-colors ${
-                      isCustom
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-zinc-700 text-zinc-400 hover:border-zinc-500"
-                    }`}
-                  >
-                    {t("onboarding.customProvider", "Custom (OpenAI Compatible)")}
-                  </button>
-                </div>
-              </div>
+              <ProviderForm state={storyForm} onChange={setStoryForm} onPing={handlePingStory} />
 
-              {/* Custom provider fields */}
-              {isCustom && (
-                <div className="space-y-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
-                      Base URL
-                    </Label>
-                    <input
-                      type="text"
-                      placeholder="https://api.example.com/v1"
-                      value={customBaseUrl}
-                      onChange={(e) => setCustomBaseUrl(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-700 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1.5">
-                      <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
-                        {t("onboarding.providerName", "Provider Name")}
-                      </Label>
-                      <input
-                        type="text"
-                        placeholder="my-provider"
-                        value={customProviderName}
-                        onChange={(e) => setCustomProviderName(e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-700 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
-                        {t("onboarding.modelId", "Model ID")}
-                      </Label>
-                      <input
-                        type="text"
-                        placeholder="gpt-4o / deepseek-chat"
-                        value={customModel}
-                        onChange={(e) => setCustomModel(e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-700 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* API Key input */}
-              <div className="space-y-2">
-                <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
-                  {t("onboarding.apiKey", "API Key")}
-                </Label>
-                <div className="flex gap-1">
-                  <input
-                    type={keyVisible ? "text" : "password"}
-                    placeholder={isCustom ? "sk-..." : provider.placeholder}
-                    value={apiKey}
-                    onChange={(e) => {
-                      setApiKey(e.target.value);
-                      setPingResult(null);
-                    }}
-                    className="flex-1 bg-zinc-900 border border-zinc-700 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setKeyVisible((v) => !v)}
-                    className="shrink-0 rounded-none"
-                  >
-                    {keyVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </Button>
-                </div>
-                {!isCustom && (
-                  <div className="text-[10px] text-zinc-500 font-mono">
-                    {provider.keyEnv}
-                  </div>
-                )}
-              </div>
-
-              {/* Test connection */}
-              {apiKey.trim() && (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-none text-[11px]"
-                    disabled={pingResult?.testing}
-                    onClick={handlePing}
-                  >
-                    {pingResult?.testing ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <Sparkles className="w-3 h-3" />
-                    )}
-                    {t("onboarding.testConnection", "Test Connection")}
-                  </Button>
-                  {pingResult && !pingResult.testing && (
-                    <span className="flex items-center gap-1 text-xs">
-                      {pingResult.ok ? (
-                        <>
-                          <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-                          <span className="text-green-500 font-mono">
-                            {pingResult.ttfbMs ?? pingResult.latencyMs}ms
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="w-3.5 h-3.5 text-red-400" />
-                          <span className="text-red-400 text-[11px] truncate max-w-[180px]">
-                            {pingResult.error?.slice(0, 40) ?? "Failed"}
-                          </span>
-                        </>
-                      )}
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {/* Actions */}
               <div className="flex items-center gap-2 pt-2">
                 <Button
                   variant="ghost"
@@ -412,12 +538,9 @@ export function OnboardingWizard() {
                 </Button>
                 <div className="flex-1" />
                 <Button
-                  onClick={() => {
-                    handleSaveKey();
-                    handleNext();
-                  }}
+                  onClick={handleContinueFromStory}
                   className="rounded-none text-xs uppercase tracking-widest"
-                  disabled={!apiKey.trim() || (isCustom && !customBaseUrl.trim())}
+                  disabled={storyContinueDisabled}
                 >
                   {t("onboarding.continue", "Continue")}
                   <ChevronRight className="w-3.5 h-3.5" />
@@ -426,8 +549,111 @@ export function OnboardingWizard() {
             </div>
           )}
 
-          {/* Step 2: Ready */}
+          {/* Step 2: Plugin Model (covel.plugin) */}
           {step === 2 && (
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Package className="w-4 h-4 text-primary" />
+                  <h2 className="text-sm font-semibold uppercase tracking-widest">
+                    {t("onboarding.pluginModel", "Plugin Model")}
+                  </h2>
+                  <code className="text-[10px] text-zinc-500 font-mono">covel.plugin</code>
+                </div>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  {t(
+                    "onboarding.pluginModelDesc",
+                    "Plugins (character tracker, world generator, codex, …) can share the narrator model or use a cheaper one.",
+                  )}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  onClick={() => setPluginMode("same")}
+                  className={`w-full flex items-start gap-3 p-3 border text-left transition-colors ${
+                    pluginMode === "same"
+                      ? "border-primary bg-primary/10"
+                      : "border-zinc-700 hover:border-zinc-500"
+                  }`}
+                >
+                  <div
+                    className={`mt-0.5 h-3.5 w-3.5 rounded-full border shrink-0 ${
+                      pluginMode === "same"
+                        ? "border-primary bg-primary"
+                        : "border-zinc-600"
+                    }`}
+                  />
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium">
+                      {t("onboarding.pluginSame", "Use same as narrator")}
+                    </div>
+                    <div className="text-[11px] text-zinc-500 font-mono truncate">
+                      {storySummary}
+                    </div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setPluginMode("different")}
+                  className={`w-full flex items-start gap-3 p-3 border text-left transition-colors ${
+                    pluginMode === "different"
+                      ? "border-primary bg-primary/10"
+                      : "border-zinc-700 hover:border-zinc-500"
+                  }`}
+                >
+                  <div
+                    className={`mt-0.5 h-3.5 w-3.5 rounded-full border shrink-0 ${
+                      pluginMode === "different"
+                        ? "border-primary bg-primary"
+                        : "border-zinc-600"
+                    }`}
+                  />
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium">
+                      {t("onboarding.pluginDifferent", "Use a different model")}
+                    </div>
+                    <div className="text-[11px] text-zinc-500">
+                      {t(
+                        "onboarding.pluginDifferentHint",
+                        "Route plugins to a faster/cheaper provider.",
+                      )}
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              {pluginMode === "different" && (
+                <ProviderForm
+                  state={pluginForm}
+                  onChange={setPluginForm}
+                  onPing={handlePingPlugin}
+                />
+              )}
+
+              <div className="flex items-center gap-2 pt-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-none text-xs text-zinc-500"
+                  onClick={handleBack}
+                >
+                  {t("onboarding.back", "Back")}
+                </Button>
+                <div className="flex-1" />
+                <Button
+                  onClick={handleContinueFromPlugin}
+                  className="rounded-none text-xs uppercase tracking-widest"
+                  disabled={pluginContinueDisabled}
+                >
+                  {t("onboarding.continue", "Continue")}
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Ready */}
+          {step === 3 && (
             <div className="space-y-8 text-center">
               <div className="space-y-4">
                 <div className="flex items-center justify-center">

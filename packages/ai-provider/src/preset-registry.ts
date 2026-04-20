@@ -225,6 +225,11 @@ export function createPresetRegistry(options: {
     presets.delete(id);
   }
 
+  /** Check whether a preset id is registered (enabled or not). */
+  function hasPreset(id: string): boolean {
+    return presets.has(id);
+  }
+
   return {
     listProfiles,
     listPresets,
@@ -234,5 +239,6 @@ export function createPresetRegistry(options: {
     resolveTextTargetChain,
     addPreset,
     removePreset,
+    hasPreset,
   };
 }

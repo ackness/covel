@@ -38,6 +38,8 @@ export type {
   ModelParameterOverrides,
   ModelSlotMap,
   CacheStrategy,
+  SlotOverridesInput,
+  CustomPresetInput,
 } from "./types.js";
 
 // Errors
@@ -68,6 +70,13 @@ export { createSlotRegistry, type SlotRegistry } from "./slot-registry.js";
 
 // Gateway
 export { createGateway, type GatewayOptions } from "./gateway.js";
+
+// Slot overlay (per-request preset/provider injection)
+export {
+  applySlotOverlay,
+  resolveSlotOverride,
+  type OverlayDeps,
+} from "./slot-overlay.js";
 
 // Capability
 export {
