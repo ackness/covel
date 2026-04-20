@@ -31,6 +31,68 @@ Pre-built desktop binaries are available on the [Releases](https://github.com/Ac
 
 > On first launch you need to configure an LLM provider (enter an API key from the in-app settings page).
 
+## Config & data layout
+
+On first launch the desktop app creates `~/.covel/` for config and `~/.covel/data/` for runtime data. The two are decoupled through `config.toml` — redirect the data root (SQLite, worlds, logs) to an external drive without touching the rest.
+
+### Directory structure
+
+```
+~/.covel/                    ← config root (small, version-stable)
+  config.toml                ← data_root pointer + log rotation params
+  llm.toml                   ← LLM slot config (provider / model / baseUrl)
+  keys.env                   ← provider API keys, plain KEY=VALUE lines
+  plugins/                   ← user plugins (merged on top of bundled cores)
+
+<data_root>/                 ← default ~/.covel/data; redirectable
+  covel.db                   ← SQLite database
+  worlds/                    ← user-created worlds
+  logs/                      ← app logs (auto-rotated)
+    tauri-main*.log          ← Tauri main process
+    electron-*.log           ← Electron main process
+    server-*.log             ← Node backend (pino-roll)
+  server.port                ← last boot port (diagnostics)
+```
+
+### `~/.covel/config.toml`
+
+Seeded with a commented template on first launch. Fields:
+
+```toml
+[paths]
+# Data directory. Relative paths resolve against this file's directory;
+# absolute paths are used as-is. Default: ~/.covel/data
+# data_root = "/Volumes/External/covel-data"
+
+[logging]
+# Single log file cap (MB). Rolls over once exceeded.
+max_size_mb = 10
+# Retained rotated files. Oldest is dropped past this cap.
+# Total disk usage ≈ max_size_mb × max_files.
+max_files   = 10
+```
+
+Restart Covel after edits. **Changing `data_root` does NOT move old data** — the new location is empty; the old path is left intact for you to migrate manually (or ignore).
+
+### `~/.covel/keys.env`
+
+```env
+# One KEY=VALUE per line; # lines are comments.
+DEEPSEEK_API_KEY=sk-xxxxxxxxxxxx
+OPENAI_API_KEY=sk-xxxxxxxxxxxx
+ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
+```
+
+The server scans every `*_API_KEY` entry and injects it into the matching provider runtime. Key naming = provider name uppercase + `_API_KEY`. Saved by the app with mode `0600`; if you edit manually, don't loosen the permissions.
+
+### `~/.covel/llm.toml`
+
+See `llm.toml.example` at repo root. Each slot pairs a provider + model. The app ships a fallback `story` slot pointing at DeepSeek, so filling `DEEPSEEK_API_KEY` in `keys.env` is enough to boot.
+
+### Frontend entry point
+
+Settings → Desktop tab surfaces all the paths, opens folders in one click, and lets you change `data_root` with a picker — no need to hand-edit files unless you want to.
+
 ## Getting started (from source)
 
 **Prerequisites:** Node.js ≥ 22, pnpm 10.7+
@@ -71,9 +133,18 @@ Once running, open `http://localhost:3001`.
 
 ### Build desktop locally
 
+Two shells ship side by side: Electron (battle-tested) and Tauri (smaller/lighter).
+
 ```bash
-pnpm desktop:build   # build web + stage server resources
-pnpm desktop:dist    # produce installer for current platform (release/)
+# Dev (hot reload, launches the actual shell against the real sidecar)
+pnpm dev:electron
+pnpm dev:tauri
+pnpm dev:web          # browser only, no shell
+
+# Produce an installer in release/ for the current platform
+pnpm build:electron
+pnpm build:tauri
+pnpm build:desktop    # both, back to back
 ```
 
 See [`apps/desktop/PACKAGING.md`](../apps/desktop/PACKAGING.md) for signing and notarization details.
@@ -112,7 +183,10 @@ pnpm build                 # build all packages
 pnpm lint                  # type check
 pnpm test                  # run all tests
 pnpm e2e                   # Playwright E2E tests
-pnpm desktop:dev           # desktop dev mode
+pnpm dev:electron          # Electron shell (dev)
+pnpm dev:tauri             # Tauri shell (dev)
+pnpm build:electron        # produce Electron installer (release/)
+pnpm build:tauri           # produce Tauri installer (release/)
 ```
 
 ## Documentation

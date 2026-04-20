@@ -20,20 +20,29 @@ use tokio::time::Instant;
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub struct SidecarPaths {
-    /// Directory containing `src/index.ts`, `node_modules/tsx`, `llm.toml`, ...
+    /// Directory containing `src/index.ts`, `node_modules/tsx`, bundled worlds/plugins.
     pub server_dir: PathBuf,
     /// Absolute path to the bundled node executable.
     pub node_bin: PathBuf,
     /// Static web dist for SERVE_STATIC=true (served by the Hono server).
     pub static_dir: Option<PathBuf>,
-    /// User-writable SQLite database path.
+    /// SQLite database under <data_root>/covel.db.
     pub db_path: PathBuf,
-    /// User-editable llm.toml (may not exist — server falls back gracefully).
+    /// User-editable ~/.covel/llm.toml.
     pub llm_toml: PathBuf,
-    /// User plugins / worlds dirs (optional; forwarded to server).
+    /// Plain-text KEY=VALUE env file at ~/.covel/keys.env. Contents are
+    /// read at spawn time and merged into the sidecar environment.
+    pub keys_env: PathBuf,
+    /// <data_root>/logs — shared with tauri-plugin-log.
+    pub logs_dir: PathBuf,
+    pub log_max_size_mb: u64,
+    pub log_max_files: u32,
+    /// ~/.covel/plugins — user plugins merged on top of bundled.
     pub user_plugins_dir: PathBuf,
+    /// <data_root>/worlds — user-created worlds.
     pub user_worlds_dir: PathBuf,
-    pub user_config_dir: PathBuf,
+    /// ~/.covel — passed through as COVEL_HOME + COVEL_USER_CONFIG_DIR.
+    pub covel_home: PathBuf,
 }
 
 pub struct StartedSidecar {
@@ -80,16 +89,27 @@ pub async fn spawn_sidecar(paths: &SidecarPaths) -> Result<StartedSidecar, Strin
         .env("SQLITE_PATH", &paths.db_path)
         .env("NODE_ENV", "production")
         .env("SERVE_STATIC", "true")
+        .env("COVEL_HOME", &paths.covel_home)
         .env("COVEL_LLM_TOML", &paths.llm_toml)
         .env("COVEL_PLUGINS_DIR", &bundled_plugins)
         .env("COVEL_WORLDS_DIR", &bundled_worlds)
         .env("COVEL_USER_PLUGINS_DIR", &paths.user_plugins_dir)
         .env("COVEL_USER_WORLDS_DIR", &paths.user_worlds_dir)
-        .env("COVEL_USER_CONFIG_DIR", &paths.user_config_dir)
+        .env("COVEL_USER_CONFIG_DIR", &paths.covel_home)
+        .env("COVEL_LOGS_DIR", &paths.logs_dir)
+        .env("COVEL_LOG_MAX_SIZE_MB", paths.log_max_size_mb.to_string())
+        .env("COVEL_LOG_MAX_FILES", paths.log_max_files.to_string())
         .env("COVEL_MEMORY_V1", "1")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
+
+    // Merge ~/.covel/keys.env (plain KEY=VALUE lines) into the child env
+    // so the server's dynamic `*_API_KEY` scan finds provider credentials
+    // without the user having to touch shell env / dotfiles.
+    for (k, v) in read_env_file(&paths.keys_env) {
+        cmd.env(k, v);
+    }
 
     if let Some(static_dir) = &paths.static_dir {
         cmd.env("STATIC_DIR", static_dir);
@@ -180,4 +200,33 @@ fn check_exists(p: &Path, label: &str) -> Result<(), String> {
         return Err(format!("{} missing at {}", label, p.display()));
     }
     Ok(())
+}
+
+/// Parse a `.env`-style file into an iterable. Missing file → empty.
+/// Strips matching single/double quotes around values, skips blanks and
+/// comment lines. Keeps implementation minimal — no interpolation support.
+fn read_env_file(path: &Path) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let Ok(contents) = std::fs::read_to_string(path) else {
+        return out;
+    };
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some(eq) = trimmed.find('=') {
+            let key = trimmed[..eq].trim().to_string();
+            let mut val = trimmed[eq + 1..].trim().to_string();
+            if (val.starts_with('"') && val.ends_with('"'))
+                || (val.starts_with('\'') && val.ends_with('\''))
+            {
+                val = val[1..val.len() - 1].to_string();
+            }
+            if !key.is_empty() {
+                out.push((key, val));
+            }
+        }
+    }
+    out
 }

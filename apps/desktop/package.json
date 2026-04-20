@@ -18,6 +18,7 @@
     "dist:linux": "pnpm build && electron-builder --linux"
   },
   "dependencies": {
+    "smol-toml": "^1.6.1",
     "tsx": "^4.21.0"
   },
   "devDependencies": {

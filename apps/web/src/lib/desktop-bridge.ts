@@ -56,8 +56,40 @@ export function getCovelIpc(): CovelIpcApi | null {
   return window.covelIpc ?? null;
 }
 
-/** True if running inside Electron. */
+// REST-mode desktop capability — set by probeDesktopMode() at app boot.
+// Distinguishes "Tauri webview / self-host with ~/.covel present" from pure
+// web-tier deployments where file-manager / config.toml mutation are
+// meaningless.
+let restDesktopCapable = false;
+
+/**
+ * Detect whether the server thinks we're running as a desktop deployment
+ * (i.e. it has access to `~/.covel/`). Call once at boot; cheap to re-call
+ * (it skips the network probe after the first success).
+ */
+export async function probeDesktopMode(): Promise<void> {
+  if (getCovelIpc() || restDesktopCapable) return;
+  try {
+    const res = await fetch("/api/config/info");
+    if (res.ok) {
+      const info = (await res.json()) as { isDesktop?: boolean };
+      restDesktopCapable = !!info.isDesktop;
+    }
+  } catch {
+    // Non-fatal. Leave restDesktopCapable at false.
+  }
+}
+
+/**
+ * True when desktop-only features (folder pickers, data_root editing) are
+ * available — either via Electron IPC or the server's desktop-REST surface.
+ */
 export function isDesktopApp(): boolean {
+  return getCovelIpc() !== null || restDesktopCapable;
+}
+
+/** True specifically for the IPC branch (Electron). */
+export function hasElectronIpc(): boolean {
   return getCovelIpc() !== null;
 }
 
@@ -148,18 +180,87 @@ export function initDesktopBridge(handlers: DesktopBridgeHandlers): CleanupFn {
   };
 }
 
-/** Convenience helper: ask the main process to open the logs folder. */
-export async function openLogsDir(): Promise<void> {
-  const ipc = getCovelIpc();
-  if (!ipc) return;
-  await ipc.invoke("covel:open-logs-dir");
+async function postOpenFolder(target: "config" | "data" | "logs"): Promise<void> {
+  const res = await fetch("/api/config/open-folder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
 }
 
-/** Convenience helper: ask the main process to open the user data folder. */
-export async function openUserDataDir(): Promise<void> {
+export async function openLogsDir(): Promise<void> {
   const ipc = getCovelIpc();
-  if (!ipc) return;
-  await ipc.invoke("covel:open-user-data-dir");
+  if (ipc) return void ipc.invoke("covel:open-logs-dir");
+  return postOpenFolder("logs");
+}
+
+export async function openConfigDir(): Promise<void> {
+  const ipc = getCovelIpc();
+  if (ipc) return void ipc.invoke("covel:open-config-dir");
+  return postOpenFolder("config");
+}
+
+export async function openDataDir(): Promise<void> {
+  const ipc = getCovelIpc();
+  if (ipc) return void ipc.invoke("covel:open-data-dir");
+  return postOpenFolder("data");
+}
+
+/** Open `~/.covel/llm.toml` in the platform default editor. */
+export async function openLlmToml(): Promise<void> {
+  const res = await fetch("/api/config/open-folder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target: "llm.toml" }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+}
+
+/** Open `~/.covel/keys.env` in the platform default editor. */
+export async function openKeysEnv(): Promise<void> {
+  const res = await fetch("/api/config/open-folder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target: "keys.env" }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+}
+
+/**
+ * Set the data_root path in `~/.covel/config.toml`.
+ *
+ * - Electron: native folder picker via IPC (returns picked path or null if cancelled).
+ * - REST desktop (Tauri, self-host with ~/.covel): caller must supply an
+ *   absolute path argument; the browser has no native folder picker and the
+ *   UI must present a text input + example path.
+ */
+export async function pickDataDir(manualPath?: string): Promise<string | null> {
+  const ipc = getCovelIpc();
+  if (ipc) {
+    const result = await ipc.invoke<{ path: string | null }>("covel:pick-data-dir");
+    return result?.path ?? null;
+  }
+  if (!manualPath) return null;
+  const res = await fetch("/api/config/data-root", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: manualPath }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+  return manualPath;
 }
 
 /** Convenience helper: restart the backend server. */
@@ -169,19 +270,58 @@ export async function restartServer(): Promise<{ port: number } | null> {
   return ipc.invoke<{ port: number }>("covel:restart-server");
 }
 
-/** Retrieve runtime info (app version, platform, paths). */
+/**
+ * Retrieve runtime info. Electron returns the full set via IPC; REST-mode
+ * desktop falls back to `/api/config/info` which returns the paths but not
+ * the Electron-only fields (version, platform, serverPort).
+ */
 export async function getDesktopInfo(): Promise<{
   version: string;
   platform: string;
   isDev: boolean;
-  userData: string;
+  covelHome: string;
+  dataRoot: string;
   logsDir: string;
   dbPath: string;
+  configTomlPath: string;
+  llmTomlPath: string;
+  keysEnvPath: string;
   serverPort: number;
 } | null> {
   const ipc = getCovelIpc();
-  if (!ipc) return null;
-  return ipc.invoke("covel:get-info");
+  if (ipc) return ipc.invoke("covel:get-info");
+
+  // REST fallback — populate unknowns with placeholders so consumers can
+  // render without null-checks for each field.
+  try {
+    const res = await fetch("/api/config/info");
+    if (!res.ok) return null;
+    const info = (await res.json()) as {
+      isDesktop?: boolean;
+      covelHome?: string | null;
+      dataRoot?: string | null;
+      dbPath?: string | null;
+      logsDir?: string | null;
+      llmTomlPath?: string | null;
+      keysEnvPath?: string | null;
+    };
+    if (!info.isDesktop) return null;
+    return {
+      version: "—",
+      platform: "web",
+      isDev: false,
+      covelHome: info.covelHome ?? "",
+      dataRoot: info.dataRoot ?? "",
+      logsDir: info.logsDir ?? "",
+      dbPath: info.dbPath ?? "",
+      configTomlPath: info.covelHome ? `${info.covelHome}/config.toml` : "",
+      llmTomlPath: info.llmTomlPath ?? "",
+      keysEnvPath: info.keysEnvPath ?? "",
+      serverPort: 0,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ── Asset import ──────────────────────────────────────────────────

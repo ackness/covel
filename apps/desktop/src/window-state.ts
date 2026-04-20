@@ -15,7 +15,7 @@
 import { BrowserWindow, screen } from "electron";
 import fs from "node:fs";
 import path from "node:path";
-import { userDataRoot } from "./paths.js";
+import { covelHome } from "./paths.js";
 
 interface WindowState {
   x?: number;
@@ -42,7 +42,7 @@ interface Persisted {
 }
 
 function stateFile(): string {
-  return path.join(userDataRoot(), "window-state.json");
+  return path.join(covelHome(), "window-state.json");
 }
 
 function readPersisted(): WindowState {

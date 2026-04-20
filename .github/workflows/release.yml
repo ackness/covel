@@ -1,7 +1,7 @@
 name: Build Desktop (macOS)
 
 # Manual-only to keep GitHub Actions usage low. Primary distribution path
-# is local builds (`pnpm dist:mac:electron` / `pnpm dist:mac:tauri`).
+# is local builds (`pnpm build:electron` / `pnpm build:tauri`).
 # This workflow just produces the same artefacts on a clean macOS runner
 # when you want an independent reproduction, or to publish a signed
 # release with the `publish_release` input set.

@@ -920,19 +920,23 @@ export function triggerEvent(
 
 // ── Provider Keys ──────────────────────────────────────────────────
 //
-// Storage strategy:
-//   - Desktop (Electron): encrypted via safeStorage through `covel:keys:*` IPC.
-//     Keys never touch localStorage; ciphertext lives under `<userData>/config/keys.enc`.
-//   - Browser (web tier): localStorage fallback keyed as `covel:providerKeys`.
+// Storage strategy (priority order):
+//   1. Electron IPC (`covel:keys:*`) when `window.covelIpc` is present —
+//      reads/writes `~/.covel/keys.env` directly via the main process.
+//   2. Server REST (`/api/config/keys`) when the server reports
+//      `isDesktop: true` (Tauri shell, or a self-deploy that created
+//      `~/.covel/`). Values live in the same `keys.env` file.
+//   3. Browser `localStorage` fallback for pure web tiers (T2/T3).
 //
-// The functions are kept synchronous because they are called inside the
-// request-building fast path. A process-local cache (`providerKeysCache`) is
-// hydrated on boot via `loadProviderKeysFromStorage()` which the app entry
-// MUST await before making any AI-backed request.
+// All three modes maintain `providerKeysCache`, which is a sync snapshot
+// read on the hot path of every request. The cache is hydrated once at
+// boot via `loadProviderKeysFromStorage()` — callers MUST await it before
+// the first AI-backed request.
 
 const LEGACY_KEYS_STORAGE = "covel:providerKeys";
 
 let providerKeysCache: Record<string, string> = {};
+let desktopRestMode = false; // true when IPC is absent AND server says isDesktop
 
 interface CovelIpcApiShape {
   invoke<T = unknown>(channel: string, payload?: unknown): Promise<T>;
@@ -964,39 +968,75 @@ function writeLocalKeys(keys: Record<string, string>): void {
   localStorage.setItem(LEGACY_KEYS_STORAGE, JSON.stringify(keys));
 }
 
+async function pushKeysToServer(keys: Record<string, string>): Promise<void> {
+  const res = await fetch("/api/config/keys", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(keys),
+  });
+  if (!res.ok) {
+    throw new Error(`PUT /api/config/keys failed: ${res.status}`);
+  }
+}
+
 /**
  * Hydrate the in-memory provider key cache from disk. Must be awaited once
  * during app bootstrap, before any AI-backed request is issued.
  *
- * On desktop we additionally migrate any legacy localStorage keys into
- * encrypted storage and then clear them from localStorage.
+ * Strategy:
+ *   - Electron: read via IPC (keys.env round-trip goes through main)
+ *   - Other: probe /api/config/info; when isDesktop === true, mirror any
+ *     legacy localStorage keys to server once, then trust server as source
+ *     of truth. Server doesn't echo values back (security), so the local
+ *     cache only carries what the user actively sets this session.
+ *   - Pure web: localStorage only
  */
 export async function loadProviderKeysFromStorage(): Promise<void> {
   const ipc = getIpc();
   if (ipc) {
     try {
-      const fromSecure = await ipc.invoke<Record<string, string>>("covel:keys:load");
+      const fromFile = await ipc.invoke<Record<string, string>>("covel:keys:load");
       const legacy = readLocalKeys();
-      if (Object.keys(legacy).length > 0 && Object.keys(fromSecure ?? {}).length === 0) {
-        // Migrate legacy localStorage keys into safeStorage, then clear them.
+      if (Object.keys(legacy).length > 0 && Object.keys(fromFile ?? {}).length === 0) {
         await ipc.invoke("covel:keys:save", legacy);
         providerKeysCache = { ...legacy };
         try { localStorage.removeItem(LEGACY_KEYS_STORAGE); } catch { /* ignore */ }
       } else {
-        providerKeysCache = { ...(fromSecure ?? {}), ...legacy };
+        providerKeysCache = { ...(fromFile ?? {}), ...legacy };
         if (Object.keys(legacy).length > 0) {
-          // Merge ran — persist the union so future boots only need safeStorage.
           await ipc.invoke("covel:keys:save", providerKeysCache);
           try { localStorage.removeItem(LEGACY_KEYS_STORAGE); } catch { /* ignore */ }
         }
       }
     } catch (err) {
-      console.warn("[api] loadProviderKeysFromStorage (desktop) failed:", err);
+      console.warn("[api] loadProviderKeysFromStorage (ipc) failed:", err);
       providerKeysCache = readLocalKeys();
     }
-  } else {
-    providerKeysCache = readLocalKeys();
+    return;
   }
+
+  // No IPC: probe the server to see if we should use REST vs pure localStorage.
+  try {
+    const res = await fetch("/api/config/info");
+    if (res.ok) {
+      const info = (await res.json()) as { isDesktop?: boolean };
+      if (info.isDesktop) {
+        desktopRestMode = true;
+        const legacy = readLocalKeys();
+        if (Object.keys(legacy).length > 0) {
+          // One-shot migration: push localStorage keys to server, then clear.
+          await pushKeysToServer(legacy);
+          try { localStorage.removeItem(LEGACY_KEYS_STORAGE); } catch { /* ignore */ }
+        }
+        providerKeysCache = legacy; // server doesn't return values; trust user session
+        return;
+      }
+    }
+  } catch {
+    // Fall through to pure-web path.
+  }
+
+  providerKeysCache = readLocalKeys();
 }
 
 export function getProviderKeys(): Record<string, string> {
@@ -1004,14 +1044,15 @@ export function getProviderKeys(): Record<string, string> {
 }
 
 export function setProviderKeys(keys: Record<string, string>): void {
-  // Update the sync cache immediately so the next API call sees the new value.
   providerKeysCache = { ...keys };
   const ipc = getIpc();
   if (ipc) {
-    // Fire-and-forget persist; callers that need confirmation should use
-    // setProviderKeysAsync below.
     void ipc.invoke("covel:keys:save", keys).catch((err) => {
-      console.warn("[api] setProviderKeys (desktop) failed:", err);
+      console.warn("[api] setProviderKeys (ipc) failed:", err);
+    });
+  } else if (desktopRestMode) {
+    void pushKeysToServer(keys).catch((err) => {
+      console.warn("[api] setProviderKeys (rest) failed:", err);
     });
   } else {
     writeLocalKeys(keys);
@@ -1029,7 +1070,16 @@ export async function setProviderKeysAsync(
       const result = await ipc.invoke<{ ok: boolean }>("covel:keys:save", keys);
       return result ?? { ok: false };
     } catch (err) {
-      console.warn("[api] setProviderKeysAsync (desktop) failed:", err);
+      console.warn("[api] setProviderKeysAsync (ipc) failed:", err);
+      return { ok: false };
+    }
+  }
+  if (desktopRestMode) {
+    try {
+      await pushKeysToServer(keys);
+      return { ok: true };
+    } catch (err) {
+      console.warn("[api] setProviderKeysAsync (rest) failed:", err);
       return { ok: false };
     }
   }

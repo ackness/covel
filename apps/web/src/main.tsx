@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { SessionProvider } from "@/stores/session-store";
 import { setStorageMode } from "@/services/data-service";
 import { loadProviderKeysFromStorage } from "@/services/api";
+import { probeDesktopMode } from "@/lib/desktop-bridge";
 import "@/i18n";
 import "@/index.css";
 import { routeTree } from "./routeTree.gen";
@@ -38,7 +39,11 @@ async function syncStorageMode(): Promise<void> {
   }
 }
 
-Promise.all([syncStorageMode(), loadProviderKeysFromStorage()]).then(() => {
+Promise.all([
+  syncStorageMode(),
+  probeDesktopMode(),
+  loadProviderKeysFromStorage(),
+]).then(() => {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <ThemeProvider defaultTheme="dark" attribute="class">

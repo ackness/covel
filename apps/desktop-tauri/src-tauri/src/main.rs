@@ -12,7 +12,7 @@
 mod sidecar;
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -54,16 +54,11 @@ fn emit_error(window: &WebviewWindow, err: &str) {
 /// a packaged app bundle (paths are under the app's `resources/`).
 fn resolve_sidecar_paths(app: &AppHandle) -> Result<SidecarPaths, String> {
     let (server_dir, node_bin) = if cfg!(debug_assertions) {
-        // `tauri dev`: paths live inside the src-tauri/ directory that
-        // prepare-sidecar.mjs has just populated. CARGO_MANIFEST_DIR points
-        // at src-tauri/ at build time, so everything is relative to it.
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let server = manifest_dir.join("resources").join("server");
         let bin = manifest_dir.join("binaries").join(node_file_name());
         (server, bin)
     } else {
-        // Packaged bundle: tauri.conf.json copies staging → resources/server
-        // and binaries/node → resources/bin/node.
         let resource_dir = app
             .path()
             .resource_dir()
@@ -73,31 +68,37 @@ fn resolve_sidecar_paths(app: &AppHandle) -> Result<SidecarPaths, String> {
         (server, bin)
     };
 
-    // Shared data dir: both shells read/write `<os-data>/com.covel.app/`.
-    // We avoid app_data_dir() (which would bake in our Tauri-specific
-    // bundle identifier) and resolve the OS data_dir ourselves, then tack
-    // on the shared name. Bundle identifiers stay distinct (so macOS
-    // LaunchServices doesn't get confused when both shells are installed),
-    // but the state they read is the same.
-    let data_root = shared_data_root(app)?;
-    migrate_legacy_data_dirs(app, &data_root);
+    // New layout: all config under ~/.covel/, data under <data_root> (default
+    // ~/.covel/data, user can redirect via [paths] data_root in config.toml).
+    // See apps/desktop/src/paths.ts for the canonical contract; this mirror
+    // must stay in sync.
+    let home = covel_home();
+    let user_config = UserConfig::load(&home);
+    let data_root = user_config.resolved_data_root(&home);
 
-    let data_dir = data_root.join("data");
-    let config_dir = data_root.join("config");
-    let plugins_dir = data_root.join("plugins");
-    let worlds_dir = data_root.join("worlds");
-
-    for dir in [&data_dir, &config_dir, &plugins_dir, &worlds_dir] {
+    for dir in [
+        &home,
+        &home.join("plugins"),
+        &data_root,
+        &data_root.join("worlds"),
+        &data_root.join("logs"),
+    ] {
         fs::create_dir_all(dir).map_err(|e| format!("mkdir {}: {}", dir.display(), e))?;
     }
 
-    let db_path = data_dir.join("covel.db");
-    let llm_toml = config_dir.join("llm.toml");
+    // Seed a commented config.toml on first launch so users can discover the
+    // [paths] data_root and [logging] options.
+    let cfg_path = home.join("config.toml");
+    if !cfg_path.exists() {
+        let _ = fs::write(&cfg_path, DEFAULT_CONFIG_TOML);
+    }
 
-    // STATIC_DIR: prefer web-dist staged next to server (apps/desktop build
-    // also copies it, and server looks it up via SERVE_STATIC). If the
-    // server_dir contains a sibling `web-dist`, use it; otherwise rely on
-    // server's own fallback.
+    let db_path = data_root.join("covel.db");
+    let llm_toml = home.join("llm.toml");
+    let keys_env = home.join("keys.env");
+    let logs_dir = data_root.join("logs");
+
+    // STATIC_DIR: the staging build places web-dist as a sibling of server/.
     let static_dir = {
         let candidate = server_dir
             .parent()
@@ -112,10 +113,99 @@ fn resolve_sidecar_paths(app: &AppHandle) -> Result<SidecarPaths, String> {
         static_dir,
         db_path,
         llm_toml,
-        user_plugins_dir: plugins_dir,
-        user_worlds_dir: worlds_dir,
-        user_config_dir: config_dir,
+        keys_env,
+        logs_dir,
+        log_max_size_mb: user_config.log_max_size_mb(),
+        log_max_files: user_config.log_max_files(),
+        user_plugins_dir: home.join("plugins"),
+        user_worlds_dir: data_root.join("worlds"),
+        covel_home: home,
     })
+}
+
+const DEFAULT_CONFIG_TOML: &str = r#"# Covel user config.
+# Edit [paths] data_root to move user data (SQLite db, worlds, logs) to
+# another drive. Relative paths are resolved against this file's directory.
+
+[paths]
+# data_root = "/Volumes/External/covel-data"
+
+[logging]
+# Rolling log files under <data_root>/logs/. Each file caps at max_size_mb;
+# max_files determines how many rotated files are kept before oldest is dropped.
+max_size_mb = 10
+max_files   = 10
+"#;
+
+#[derive(serde::Deserialize, Default)]
+struct UserConfig {
+    paths: Option<PathsSection>,
+    logging: Option<LoggingSection>,
+}
+
+#[derive(serde::Deserialize)]
+struct PathsSection {
+    data_root: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct LoggingSection {
+    max_size_mb: Option<u64>,
+    max_files: Option<u32>,
+}
+
+impl UserConfig {
+    fn load(home: &Path) -> Self {
+        let cfg_path = home.join("config.toml");
+        let Ok(text) = fs::read_to_string(&cfg_path) else {
+            return UserConfig::default();
+        };
+        match toml::from_str(&text) {
+            Ok(cfg) => cfg,
+            Err(err) => {
+                log::warn!("config.toml parse failed ({}): using defaults", err);
+                UserConfig::default()
+            }
+        }
+    }
+
+    fn resolved_data_root(&self, home: &Path) -> PathBuf {
+        if let Some(p) = self
+            .paths
+            .as_ref()
+            .and_then(|p| p.data_root.as_deref())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            let pb = PathBuf::from(p);
+            if pb.is_absolute() {
+                return pb;
+            }
+            return home.join(pb);
+        }
+        home.join("data")
+    }
+
+    fn log_max_size_mb(&self) -> u64 {
+        self.logging.as_ref().and_then(|l| l.max_size_mb).unwrap_or(10)
+    }
+
+    fn log_max_files(&self) -> u32 {
+        self.logging.as_ref().and_then(|l| l.max_files).unwrap_or(10)
+    }
+}
+
+/// `~/.covel` — cross-platform config root, overridable via COVEL_HOME.
+fn covel_home() -> PathBuf {
+    if let Ok(custom) = std::env::var("COVEL_HOME") {
+        if !custom.is_empty() {
+            return PathBuf::from(custom);
+        }
+    }
+    dirs::home_dir()
+        .map(|h| h.join(".covel"))
+        // Fallback to CWD if home_dir fails — extremely rare on modern OSes.
+        .unwrap_or_else(|| PathBuf::from(".covel"))
 }
 
 fn node_file_name() -> &'static str {
@@ -126,100 +216,13 @@ fn node_file_name() -> &'static str {
     }
 }
 
-/// Shared data directory name used by both Electron and Tauri shells.
-/// Reverse-DNS form matches platform conventions:
-///   macOS   → ~/Library/Application Support/com.covel.app/
-///   Windows → %APPDATA%\com.covel.app\
-///   Linux   → $XDG_DATA_HOME/com.covel.app/ (default ~/.local/share)
-const SHARED_APP_DIR: &str = "com.covel.app";
-
-fn shared_data_root(app: &AppHandle) -> Result<PathBuf, String> {
-    // On macOS / Windows Tauri's data_dir() and Electron's appData
-    // resolve to the same base (Application Support / %APPDATA%). On
-    // Linux they diverge (data_dir → ~/.local/share, Electron default
-    // → ~/.config); we accept that and still end up under com.covel.app
-    // on both so neither shell pollutes a legacy directory.
-    let base = app
-        .path()
-        .data_dir()
-        .map_err(|e| format!("data_dir: {}", e))?;
-    Ok(base.join(SHARED_APP_DIR))
-}
-
-/// Best-effort one-shot migration from legacy directory names into the
-/// shared com.covel.app root. Runs once; subsequent launches see the db
-/// already present and skip.
-fn migrate_legacy_data_dirs(app: &AppHandle, new_root: &std::path::Path) {
-    let new_db = new_root.join("data").join("covel.db");
-    if new_db.exists() {
-        return;
-    }
-    let data_dir = match app.path().data_dir() {
-        Ok(p) => p,
-        Err(_) => return,
-    };
-    let candidates = [
-        data_dir.join("com.covel.app.tauri"), // previous Tauri identifier
-    ];
-    for legacy in &candidates {
-        if !legacy.join("data").join("covel.db").exists() {
-            continue;
-        }
-        if let Err(err) = fs::create_dir_all(new_root) {
-            log::warn!("migration: mkdir {} failed: {}", new_root.display(), err);
-            return;
-        }
-        // Copy file-by-file to preserve permissions; crash-safe enough for a
-        // one-time migration since a partial copy still leaves the legacy
-        // dir intact.
-        if let Err(err) = copy_dir_all(legacy, new_root) {
-            log::warn!(
-                "migration: failed to copy {} → {}: {}",
-                legacy.display(),
-                new_root.display(),
-                err,
-            );
-            return;
-        }
-        log::info!(
-            "migration: copied {} → {}",
-            legacy.display(),
-            new_root.display(),
-        );
-        return;
-    }
-}
-
-fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
-    fs::create_dir_all(dst)?;
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let src_path = entry.path();
-        let dst_path = dst.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
-            copy_dir_all(&src_path, &dst_path)?;
-        } else {
-            fs::copy(&src_path, &dst_path)?;
-        }
-    }
-    Ok(())
-}
-
-/// Resolve the shared `<os-data>/com.covel.app/logs/` directory at process
-/// start, before any AppHandle is available. Kept in sync with Electron's
-/// log location so both shells write to the same folder.
-fn shared_logs_dir() -> Option<PathBuf> {
-    let base = if cfg!(target_os = "macos") {
-        std::env::var_os("HOME")
-            .map(|h| PathBuf::from(h).join("Library/Application Support"))
-    } else if cfg!(target_os = "windows") {
-        std::env::var_os("APPDATA").map(PathBuf::from)
-    } else {
-        std::env::var_os("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
-    }?;
-    Some(base.join(SHARED_APP_DIR).join("logs"))
+/// Resolve the tauri-plugin-log target folder before AppHandle is available.
+/// Reads config.toml if present so the log dir follows a redirected data_root;
+/// otherwise defaults to `<covel_home>/data/logs`.
+fn shared_logs_dir() -> PathBuf {
+    let home = covel_home();
+    let cfg = UserConfig::load(&home);
+    cfg.resolved_data_root(&home).join("logs")
 }
 
 async fn boot(app: AppHandle) -> Result<u16, String> {
@@ -250,28 +253,28 @@ async fn boot(app: AppHandle) -> Result<u16, String> {
 }
 
 fn main() {
-    // Tauri-plugin-log wires up `log::info!` etc. into both stdout and a
-    // rolling file under the shared data dir. Resolving the directory
-    // before Builder::default() lets us share `<com.covel.app>/logs/`
-    // with the Electron shell.
+    // Resolve the log directory before Builder::default() so tauri-plugin-log
+    // can attach its Folder target. config.toml is optional — if absent we
+    // fall back to <covel_home>/data/logs.
     let logs_dir = shared_logs_dir();
-    if let Some(dir) = &logs_dir {
-        let _ = fs::create_dir_all(dir);
-    }
+    let _ = fs::create_dir_all(&logs_dir);
+    let cfg = UserConfig::load(&covel_home());
+    let max_bytes = u128::from(cfg.log_max_size_mb()) * 1024 * 1024;
+    let keep_files = cfg.log_max_files().max(1) as usize;
 
-    let mut log_builder = tauri_plugin_log::Builder::default()
+    let log_builder = tauri_plugin_log::Builder::default()
         .level(log::LevelFilter::Info)
+        .max_file_size(max_bytes)
+        .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(keep_files))
         .target(tauri_plugin_log::Target::new(
             tauri_plugin_log::TargetKind::Stdout,
-        ));
-    if let Some(dir) = logs_dir {
-        log_builder = log_builder.target(tauri_plugin_log::Target::new(
+        ))
+        .target(tauri_plugin_log::Target::new(
             tauri_plugin_log::TargetKind::Folder {
-                path: dir,
+                path: logs_dir,
                 file_name: Some("tauri-main".to_string()),
             },
         ));
-    }
 
     tauri::Builder::default()
         .plugin(log_builder.build())

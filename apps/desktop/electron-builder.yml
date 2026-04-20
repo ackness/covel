@@ -16,6 +16,10 @@ files:
   - package.json
 
 extraResources:
+  - from: resources/icon.png
+    to: icon.png
+  - from: resources/icon.ico
+    to: icon.ico
   # Built web frontend (static files)
   - from: staging/web-dist
     to: web-dist
@@ -70,6 +74,7 @@ compression: normal
 #   APPLE_TEAM_ID      — Developer Team ID (e.g. "ABCDE12345")
 # If the env vars are missing the build will produce an UNSIGNED artifact.
 mac:
+  icon: resources/icon.icns
   target:
     - target: dmg
       arch: [arm64]
@@ -98,6 +103,7 @@ dmg:
 #   CSC_KEY_PASSWORD   — password for the .pfx bundle
 #   WIN_CSC_TIMESTAMP_SERVER — optional RFC 3161 timestamp URL
 win:
+  icon: resources/icon.ico
   target:
     - target: nsis
       arch: [x64, arm64]
@@ -119,15 +125,13 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  # installerIcon / uninstallerIcon 需要 256x256 的 .ico 文件。
-  # 暂未提供图标资源，先用 electron-builder 默认图标；等有品牌图标时
-  # 放到 resources/icon.ico 并把这两行取消注释。
-  # installerIcon: resources/icon.ico
-  # uninstallerIcon: resources/icon.ico
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
   deleteAppDataOnUninstall: false  # preserve user worlds/plugins on uninstall
 
 # ── Linux ─────────────────────────────────────────────────────────
 linux:
+  icon: resources/icon.png
   target:
     - target: AppImage
       arch: [x64, arm64]

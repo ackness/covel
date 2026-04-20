@@ -27,29 +27,26 @@ import path from "node:path";
 import fs from "node:fs";
 
 import {
-  applySharedUserDataPath,
+  covelHome,
   ensureUserPaths,
   isDev,
   resolvePreloadScript,
   resolveProjectRoot,
   resolveServerEntry,
   resolveTsx,
+  resolveWindowIconPath,
   userServerPortFile,
+  writeDataRoot,
 } from "./paths.js";
 
-// Must run before any other Electron API that materialises userData
-// (session cookies, logs, app cache). Puts state under the shared
-// `com.covel.app/` directory so the Tauri shell can read the same data.
-applySharedUserDataPath();
+// Name matters on macOS (app menu "About …") and Windows (DPAPI service
+// label if we ever re-introduce secure-storage). Derived default would be
+// "@covel/desktop" from package.json — override to the friendly product name.
+app.setName("Covel");
 import {
   attachWindowStateTracking,
   resolveInitialWindowOptions,
 } from "./window-state.js";
-import {
-  keysEncryptionAvailable,
-  loadKeys,
-  saveKeys,
-} from "./secure-keys.js";
 import { importAsset, type ImportKind, type ImportResult } from "./import-assets.js";
 import { initAutoUpdater } from "./auto-updater.js";
 
@@ -59,13 +56,25 @@ type LogLevel = "info" | "warn" | "error";
 
 let logStream: fs.WriteStream | null = null;
 let logFilePath: string | null = null;
+let logMaxBytes = 10 * 1024 * 1024; // default 10MB per file
+let logMaxFiles = 10;
+let logBytesWritten = 0;
 
-function initPersistentLog(logsDir: string): void {
+function initPersistentLog(
+  logsDir: string,
+  rotation: { maxSizeMb: number; maxFiles: number },
+): void {
   try {
-    const day = new Date().toISOString().slice(0, 10);
-    // Prefix with shell name so both Electron and Tauri can coexist in
-    // the shared com.covel.app/logs/ directory without overwriting.
-    logFilePath = path.join(logsDir, `electron-${day}.log`);
+    logMaxBytes = Math.max(1, rotation.maxSizeMb) * 1024 * 1024;
+    logMaxFiles = Math.max(1, rotation.maxFiles);
+    // Single rolling file: electron.log → electron.log.1 → …electron.log.N
+    // (newest is unsuffixed, older ones carry numeric suffixes; oldest is dropped)
+    logFilePath = path.join(logsDir, "electron.log");
+    try {
+      logBytesWritten = fs.statSync(logFilePath).size;
+    } catch {
+      logBytesWritten = 0;
+    }
     logStream = fs.createWriteStream(logFilePath, { flags: "a" });
     writeLog("info", `--- Covel desktop start (v${app.getVersion()}) ---`);
   } catch (err) {
@@ -87,7 +96,40 @@ function writeLog(level: LogLevel, ...parts: unknown[]): void {
     default:
       console.log(line);
   }
-  logStream?.write(line + "\n");
+  const buf = line + "\n";
+  if (!logStream || !logFilePath) return;
+  const byteLen = Buffer.byteLength(buf, "utf8");
+  if (logBytesWritten + byteLen > logMaxBytes) {
+    rotateLogFile();
+  }
+  logStream.write(buf);
+  logBytesWritten += byteLen;
+}
+
+function rotateLogFile(): void {
+  if (!logFilePath || !logStream) return;
+  try {
+    // Close current stream, rotate suffixed files, open a fresh one.
+    logStream.end();
+    for (let i = logMaxFiles - 1; i >= 1; i--) {
+      const older = `${logFilePath}.${i}`;
+      const newer = i === 1 ? logFilePath : `${logFilePath}.${i - 1}`;
+      if (fs.existsSync(newer)) {
+        if (i === logMaxFiles - 1 && fs.existsSync(older)) {
+          fs.unlinkSync(older);
+        }
+        try {
+          fs.renameSync(newer, older);
+        } catch {
+          // rename across directories shouldn't happen here; ignore
+        }
+      }
+    }
+    logStream = fs.createWriteStream(logFilePath, { flags: "a" });
+    logBytesWritten = 0;
+  } catch (err) {
+    console.error("[desktop] log rotation failed:", err);
+  }
 }
 
 // ── Startup error classification ───────────────────────────────
@@ -296,7 +338,7 @@ function buildSplashHtml(): string {
       document.getElementById('log-viewer').classList.toggle('visible');
     });
     document.getElementById('btn-open-logs').addEventListener('click', () => ipc.invoke('covel:open-logs-dir'));
-    document.getElementById('btn-open-data').addEventListener('click', () => ipc.invoke('covel:open-user-data-dir'));
+    document.getElementById('btn-open-data').addEventListener('click', () => ipc.invoke('covel:open-data-dir'));
 
     ipc.on('covel:startup:progress', (payload) => {
       document.getElementById('status').textContent = payload && payload.label ? payload.label : 'Loading\u2026';
@@ -324,24 +366,54 @@ function loadEnvFiles(baseDir: string): Record<string, string> {
   for (const name of [".env", ".env.llm"]) {
     const filePath = path.join(baseDir, name);
     if (!fs.existsSync(filePath)) continue;
-    const content = fs.readFileSync(filePath, "utf-8");
-    for (const line of content.split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith("#")) continue;
-      const eqIdx = trimmed.indexOf("=");
-      if (eqIdx < 0) continue;
-      const key = trimmed.slice(0, eqIdx).trim();
-      let val = trimmed.slice(eqIdx + 1).trim();
-      if (
-        (val.startsWith('"') && val.endsWith('"')) ||
-        (val.startsWith("'") && val.endsWith("'"))
-      ) {
-        val = val.slice(1, -1);
-      }
-      result[key] = val;
-    }
+    parseEnvFileInto(filePath, result);
   }
   return result;
+}
+
+/**
+ * Read `~/.covel/keys.env` — KEY=VALUE lines, same syntax as .env. Missing
+ * file is fine (fresh install). Returned record is injected into the server
+ * sidecar's environment; the server pulls `*_API_KEY` entries for provider
+ * resolution.
+ */
+function loadKeysEnv(keysFile: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!fs.existsSync(keysFile)) return result;
+  parseEnvFileInto(keysFile, result);
+  return result;
+}
+
+function saveKeysEnv(keysFile: string, keys: Record<string, string>): void {
+  const body =
+    `# Covel provider API keys. One KEY=VALUE per line.\n` +
+    `# Example:\n#   DEEPSEEK_API_KEY=sk-xxx\n#   OPENAI_API_KEY=sk-xxx\n\n` +
+    Object.entries(keys)
+      .filter(([k, v]) => k && typeof v === "string" && v.trim())
+      .map(([k, v]) => `${k}=${v.trim()}`)
+      .join("\n") +
+    "\n";
+  fs.mkdirSync(path.dirname(keysFile), { recursive: true });
+  fs.writeFileSync(keysFile, body, { mode: 0o600 });
+}
+
+function parseEnvFileInto(filePath: string, into: Record<string, string>): void {
+  const content = fs.readFileSync(filePath, "utf-8");
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx < 0) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    let val = trimmed.slice(eqIdx + 1).trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    into[key] = val;
+  }
 }
 
 // ── Server lifecycle ────────────────────────────────────────────
@@ -384,24 +456,30 @@ async function startServer(paths: ReturnType<typeof ensureUserPaths>): Promise<n
   const tsxPath = resolveTsx();
 
   const envOverrides = loadEnvFiles(projectRoot);
+  const keysEnv = loadKeysEnv(paths.userKeysEnvPath);
 
-  // Always use userData for the SQLite db (dev and prod alike)
+  // Data dir lives at <dataRoot>/; ensure the db's parent (and logs dir) exist.
   fs.mkdirSync(path.dirname(paths.dbPath), { recursive: true });
 
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     ...envOverrides,
+    ...keysEnv,
     SERVER_PORT: String(port),
     STORE_BACKEND: envOverrides.STORE_BACKEND ?? "sqlite",
     SQLITE_PATH: paths.dbPath,
     NODE_ENV: isDev ? "development" : "production",
     ...(isDev ? {} : { SERVE_STATIC: "true" }),
+    COVEL_HOME: paths.covelHome,
     COVEL_PLUGINS_DIR: paths.pluginsDirs[0] ?? "",
     COVEL_WORLDS_DIR: paths.worldsDirs[0] ?? "",
     COVEL_USER_WORLDS_DIR: paths.userWorldsDir,
     COVEL_USER_PLUGINS_DIR: paths.userPluginsDir,
-    COVEL_USER_CONFIG_DIR: paths.userConfigDir,
+    COVEL_USER_CONFIG_DIR: paths.covelHome,
     COVEL_LLM_TOML: paths.effectiveLlmToml,
+    COVEL_LOGS_DIR: paths.logsDir,
+    COVEL_LOG_MAX_SIZE_MB: String(paths.logRotation.maxSizeMb),
+    COVEL_LOG_MAX_FILES: String(paths.logRotation.maxFiles),
     COVEL_MEMORY_V1: "1",
   };
 
@@ -601,9 +679,13 @@ function registerIpcHandlers(paths: ReturnType<typeof ensureUserPaths>): void {
     version: app.getVersion(),
     platform: process.platform,
     isDev,
-    userData: paths.userData,
+    covelHome: paths.covelHome,
+    dataRoot: paths.dataRoot,
     logsDir: paths.logsDir,
     dbPath: paths.dbPath,
+    configTomlPath: paths.configTomlPath,
+    llmTomlPath: paths.userLlmTomlPath,
+    keysEnvPath: paths.userKeysEnvPath,
     serverPort,
   }));
 
@@ -619,8 +701,12 @@ function registerIpcHandlers(paths: ReturnType<typeof ensureUserPaths>): void {
     await shell.openPath(paths.logsDir);
   });
 
-  ipcMain.handle("covel:open-user-data-dir", async () => {
-    await shell.openPath(paths.userData);
+  ipcMain.handle("covel:open-config-dir", async () => {
+    await shell.openPath(paths.covelHome);
+  });
+
+  ipcMain.handle("covel:open-data-dir", async () => {
+    await shell.openPath(paths.dataRoot);
   });
 
   ipcMain.handle("covel:restart-server", async (_event: IpcMainInvokeEvent) => {
@@ -631,17 +717,38 @@ function registerIpcHandlers(paths: ReturnType<typeof ensureUserPaths>): void {
     return { port: serverPort };
   });
 
-  // Provider API keys — encrypted at rest via Electron safeStorage.
-  ipcMain.handle("covel:keys:available", () => keysEncryptionAvailable());
-  ipcMain.handle("covel:keys:load", () => loadKeys());
+  // Pick a directory for the next data_root. Does NOT move data — that's
+  // deliberate per the "drop-old-data" UX contract; app restart starts fresh
+  // in the new location.
+  ipcMain.handle("covel:pick-data-dir", async () => {
+    const result = await dialog.showOpenDialog({
+      title: "Choose Covel data directory",
+      properties: ["openDirectory", "createDirectory"],
+      defaultPath: paths.dataRoot,
+    });
+    if (result.canceled || !result.filePaths[0]) return { path: null };
+    writeDataRoot(result.filePaths[0]);
+    return { path: result.filePaths[0] };
+  });
+
+  // API keys — plain `KEY=VALUE` lines at ~/.covel/keys.env. No encryption;
+  // the primary store (browser localStorage) is plain text anyway, so
+  // safeStorage only bought us a macOS Keychain prompt with no real security
+  // uplift on an unsigned build.
+  ipcMain.handle("covel:keys:load", () => loadKeysEnv(paths.userKeysEnvPath));
   ipcMain.handle("covel:keys:save", (_event, payload: unknown) => {
     if (!payload || typeof payload !== "object") return { ok: false };
     const keys: Record<string, string> = {};
     for (const [k, v] of Object.entries(payload as Record<string, unknown>)) {
       if (typeof v === "string") keys[k] = v;
     }
-    const ok = saveKeys(keys);
-    return { ok };
+    try {
+      saveKeysEnv(paths.userKeysEnvPath, keys);
+      return { ok: true };
+    } catch (err) {
+      writeLog("error", "keys:save failed:", err);
+      return { ok: false };
+    }
   });
 
   // Asset import — called with { sourcePath } from the web tier or from the
@@ -871,6 +978,7 @@ function sharedWebPreferences(): Electron.WebPreferences {
 
 function createMainWindow(titleSuffix?: string): BrowserWindow {
   const restored = resolveInitialWindowOptions();
+  const icon = resolveWindowIconPath();
 
   const win = new BrowserWindow({
     x: restored.x,
@@ -882,6 +990,7 @@ function createMainWindow(titleSuffix?: string): BrowserWindow {
     title: titleSuffix ? `Covel ${titleSuffix}` : "Covel",
     backgroundColor: "#09090b",
     show: false,
+    icon: icon && fs.existsSync(icon) ? icon : undefined,
     webPreferences: sharedWebPreferences(),
   });
 
@@ -995,7 +1104,7 @@ app.on("before-quit", () => {
 
 app.whenReady().then(async () => {
   const paths = ensureUserPaths();
-  initPersistentLog(paths.logsDir);
+  initPersistentLog(paths.logsDir, paths.logRotation);
   registerIpcHandlers(paths);
   Menu.setApplicationMenu(buildAppMenu());
 

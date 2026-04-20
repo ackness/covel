@@ -1,40 +1,119 @@
 /**
  * Centralized path resolution for the Covel desktop app.
  *
- * Design goals:
- *   1. `dev` and `prod` should behave identically where possible.
- *      All mutable data lives under `app.getPath('userData')` in both modes.
- *   2. Bundled/read-only assets (server source, default worlds, default llm.toml)
- *      live next to the app bundle. They are NEVER written to at runtime.
- *   3. User-writable resources (db, logs, custom plugins, custom worlds, user llm.toml)
- *      live under userData and are created on first launch.
+ * New layout (2026-04):
  *
- * Directory layout (userData):
- *   <userData>/
- *     data/
- *       covel.db           -- SQLite database
+ *   ~/.covel/                     ← config root (small, stable)
+ *     config.toml                 ← [paths] data_root pointer + [logging] params
+ *     llm.toml                    ← user-editable LLM slot config
+ *     keys.env                    ← API keys (KEY=VALUE plain text)
+ *     plugins/                    ← user-installed plugins
+ *
+ *   <data_root>/                  ← default ~/.covel/data; user can redirect via config.toml
+ *     covel.db                    ← SQLite
+ *     worlds/                     ← user-created worlds
  *     logs/
- *       app-YYYY-MM-DD.log -- Rolling app logs (main + server)
- *       startup-<ts>.log   -- Per-startup diagnostics
- *     plugins/             -- User-installed plugins (merged with bundled plugins)
- *     worlds/              -- User-created / imported worlds
- *     config/
- *       llm.toml           -- User-editable LLM config (overrides bundled)
- *       settings.json      -- UI preferences backup
- *     server.port          -- Last known server port (for restart / diagnostics)
+ *       server-*.log              ← pino-roll output (10MB × 10 by default)
+ *       electron-*.log            ← main-process log
+ *     server.port
+ *
+ * Bundled (read-only) paths still live next to the app bundle.
  */
 
 import { app } from "electron";
 import path from "node:path";
 import fs from "node:fs";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
+import { parse as parseToml } from "smol-toml";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 /** True when running via `electron .` or similar unpackaged launch. */
 export const isDev = !app.isPackaged;
 
-// ── Immutable install paths ──────────────────────────────────────
+// ── Config root (~/.covel) ──────────────────────────────────────
+
+/**
+ * Root of the user's Covel config. Stable across platforms — no reliance on
+ * Electron's `app.getPath("userData")`. Overridable via COVEL_HOME env for
+ * tests or unusual setups.
+ */
+export function covelHome(): string {
+  return process.env.COVEL_HOME ?? path.join(os.homedir(), ".covel");
+}
+
+export function configTomlPath(): string {
+  return path.join(covelHome(), "config.toml");
+}
+
+export function userLlmTomlPath(): string {
+  return path.join(covelHome(), "llm.toml");
+}
+
+export function userKeysEnvPath(): string {
+  return path.join(covelHome(), "keys.env");
+}
+
+export function userPluginsDir(): string {
+  return path.join(covelHome(), "plugins");
+}
+
+interface CovelConfig {
+  paths?: { data_root?: string };
+  logging?: { max_size_mb?: number; max_files?: number };
+}
+
+function readConfig(): CovelConfig {
+  const file = configTomlPath();
+  if (!fs.existsSync(file)) return {};
+  try {
+    return parseToml(fs.readFileSync(file, "utf-8")) as CovelConfig;
+  } catch (err) {
+    console.warn(`[paths] config.toml parse failed:`, err);
+    return {};
+  }
+}
+
+/**
+ * Where user data lives. Defaults to `<covelHome>/data` but can be
+ * redirected via `[paths] data_root` in `config.toml` — useful when the
+ * SQLite file grows large and the user wants it on an external drive.
+ */
+export function dataRoot(): string {
+  const cfg = readConfig();
+  const custom = cfg.paths?.data_root;
+  if (custom && custom.trim()) {
+    return path.isAbsolute(custom) ? custom : path.resolve(covelHome(), custom);
+  }
+  return path.join(covelHome(), "data");
+}
+
+export function userDbPath(): string {
+  return path.join(dataRoot(), "covel.db");
+}
+
+export function userWorldsDir(): string {
+  return path.join(dataRoot(), "worlds");
+}
+
+export function userLogsDir(): string {
+  return path.join(dataRoot(), "logs");
+}
+
+export function userServerPortFile(): string {
+  return path.join(dataRoot(), "server.port");
+}
+
+export function logRotationConfig(): { maxSizeMb: number; maxFiles: number } {
+  const cfg = readConfig();
+  return {
+    maxSizeMb: cfg.logging?.max_size_mb ?? 10,
+    maxFiles: cfg.logging?.max_files ?? 10,
+  };
+}
+
+// ── Bundled (app-resource) paths ────────────────────────────────
 
 /**
  * Root of the repository when running in dev, or `resourcesPath/server`
@@ -48,12 +127,6 @@ export function resolveProjectRoot(): string {
   return path.join(process.resourcesPath!, "server");
 }
 
-/**
- * Absolute path to the server entry file.
- *
- * Dev layout（仓库源码）：root/apps/server/src/index.ts
- * Prod layout（pnpm deploy 打包后的独立目录）：root/src/index.ts
- */
 export function resolveServerEntry(): string {
   const root = resolveProjectRoot();
   if (isDev) {
@@ -62,24 +135,21 @@ export function resolveServerEntry(): string {
   return path.join(root, "src/index.ts");
 }
 
-/** Default bundled worlds directory (read-only in prod). */
 export function resolveBundledWorldsDir(): string {
   return path.join(resolveProjectRoot(), "worlds");
 }
 
-/** Default bundled plugins directory (read-only in prod). */
 export function resolveBundledPluginsDir(): string {
   return path.join(resolveProjectRoot(), "plugins");
 }
 
-/** Default bundled llm.toml (read-only in prod, used as initial seed). */
 export function resolveBundledLlmToml(): string {
   return path.join(resolveProjectRoot(), "llm.toml");
 }
 
 /**
- * Find tsx CLI entry point by scanning node_modules/.pnpm for tsx.
- * Packaged apps include node_modules under `resources/server`.
+ * Find tsx CLI entry point. Packaged apps include node_modules under
+ * `resources/server`.
  */
 export function resolveTsx(): string {
   const baseDir = resolveProjectRoot();
@@ -104,156 +174,88 @@ export function resolveTsx(): string {
   throw new Error(`tsx not found in ${baseDir}`);
 }
 
-/** Location of the preload script produced by esbuild. */
 export function resolvePreloadScript(): string {
   return path.resolve(__dirname, "./preload.mjs");
 }
 
-// ── Mutable user paths ───────────────────────────────────────────
+export function resolveWindowIconPath(): string | null {
+  if (process.platform === "darwin") return null;
 
-/**
- * Shared reverse-DNS data directory name used by both Electron and Tauri
- * shells. Bundle identifiers stay distinct (so macOS LaunchServices keeps
- * the two apps apart), but user state lives in one place.
- */
-const SHARED_APP_DIR = "com.covel.app";
-
-/**
- * Override `userData` to the shared reverse-DNS directory before Electron
- * resolves any path. Must run before `app.whenReady()` (and before any
- * call that materialises userData — session cookies, logs, etc).
- *
- * By default Electron picks `<appData>/<name>` where name = package.json
- * `name` field (→ "@covel/desktop"). We replace it with
- * `<appData>/com.covel.app/` so the Tauri shell sees the same data.
- */
-export function applySharedUserDataPath(): void {
-  const shared = path.join(app.getPath("appData"), SHARED_APP_DIR);
-  app.setPath("userData", shared);
-
-  // One-shot migration from the legacy name-based directory. We only
-  // copy when the shared location has no db yet, so a user who has
-  // already moved to com.covel.app won't get their state clobbered.
-  migrateLegacyUserData(shared);
-}
-
-function migrateLegacyUserData(newRoot: string): void {
-  const newDb = path.join(newRoot, "data", "covel.db");
-  if (fs.existsSync(newDb)) return;
-
-  const appDataRoot = app.getPath("appData");
-  const candidates = [
-    // Electron's historical default for this project
-    path.join(appDataRoot, "@covel", "desktop"),
-  ];
-
-  for (const legacy of candidates) {
-    const legacyDb = path.join(legacy, "data", "covel.db");
-    if (!fs.existsSync(legacyDb)) continue;
-
-    try {
-      fs.mkdirSync(newRoot, { recursive: true });
-      copyDirRecursive(legacy, newRoot);
-      console.log(`[paths] migrated ${legacy} → ${newRoot}`);
-    } catch (err) {
-      console.warn(`[paths] legacy data migration failed:`, err);
-    }
-    return;
+  const filename = process.platform === "win32" ? "icon.ico" : "icon.png";
+  if (isDev) {
+    return path.resolve(__dirname, `../resources/${filename}`);
   }
-}
-
-function copyDirRecursive(src: string, dest: string): void {
-  fs.mkdirSync(dest, { recursive: true });
-  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
-      copyDirRecursive(srcPath, destPath);
-    } else if (entry.isFile()) {
-      fs.copyFileSync(srcPath, destPath);
-    }
-  }
-}
-
-/** Root of user-writable state. */
-export function userDataRoot(): string {
-  return app.getPath("userData");
-}
-
-export function userDbPath(): string {
-  return path.join(userDataRoot(), "data", "covel.db");
-}
-
-export function userLogsDir(): string {
-  return path.join(userDataRoot(), "logs");
-}
-
-export function userPluginsDir(): string {
-  return path.join(userDataRoot(), "plugins");
-}
-
-export function userWorldsDir(): string {
-  return path.join(userDataRoot(), "worlds");
-}
-
-export function userConfigDir(): string {
-  return path.join(userDataRoot(), "config");
-}
-
-export function userLlmToml(): string {
-  return path.join(userConfigDir(), "llm.toml");
-}
-
-export function userSettingsJson(): string {
-  return path.join(userConfigDir(), "settings.json");
-}
-
-export function userServerPortFile(): string {
-  return path.join(userDataRoot(), "server.port");
+  return path.join(process.resourcesPath, filename);
 }
 
 // ── Composite helpers ───────────────────────────────────────────
 
 export interface ResolvedPaths {
-  readonly userData: string;
+  readonly covelHome: string;
+  readonly configTomlPath: string;
+  readonly dataRoot: string;
   readonly dbPath: string;
   readonly logsDir: string;
   readonly userPluginsDir: string;
   readonly userWorldsDir: string;
-  readonly userConfigDir: string;
-  readonly userLlmToml: string;
+  readonly userLlmTomlPath: string;
+  readonly userKeysEnvPath: string;
+  /** llm.toml the server actually reads — user override wins. */
   readonly effectiveLlmToml: string;
+  /** Bundled worlds first, then user worlds. Filtered by existence. */
   readonly worldsDirs: readonly string[];
+  /** Bundled plugins first, then user plugins. Filtered by existence. */
   readonly pluginsDirs: readonly string[];
+  readonly logRotation: { maxSizeMb: number; maxFiles: number };
 }
 
+const DEFAULT_CONFIG_TOML = `# Covel user config.
+# Edit [paths] data_root to move user data (SQLite db, worlds, logs) to
+# another drive. Relative paths are resolved against this file's directory.
+
+[paths]
+# data_root = "/Volumes/External/covel-data"
+
+[logging]
+# Rolling log files under <data_root>/logs/. Each file caps at max_size_mb;
+# max_files determines how many rotated files are kept before oldest is dropped.
+max_size_mb = 10
+max_files   = 10
+`;
+
 /**
- * Resolve all user paths, ensure directories exist, and pick the effective
- * llm.toml (user override wins over bundled default).
- *
- * This is safe to call many times. Missing directories are created.
+ * Ensure `~/.covel/` and the resolved `<data_root>/` exist, seed a default
+ * `config.toml` on first launch, and return every path the rest of the app
+ * needs. Safe to call many times.
  */
 export function ensureUserPaths(): ResolvedPaths {
-  const dirs = [
-    path.dirname(userDbPath()),
-    userLogsDir(),
-    userPluginsDir(),
-    userWorldsDir(),
-    userConfigDir(),
-  ];
+  const home = covelHome();
+  fs.mkdirSync(home, { recursive: true });
 
+  // Seed a commented config.toml so users can discover the data_root option.
+  const cfgFile = configTomlPath();
+  if (!fs.existsSync(cfgFile)) {
+    try {
+      fs.writeFileSync(cfgFile, DEFAULT_CONFIG_TOML);
+    } catch (err) {
+      console.warn("[paths] Could not seed config.toml:", err);
+    }
+  }
+
+  const data = dataRoot();
+  const dirs = [userPluginsDir(), data, userWorldsDir(), userLogsDir()];
   for (const dir of dirs) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  // Seed user llm.toml from bundle on first launch (so users have something to edit)
-  const userLlm = userLlmToml();
+  // Seed user llm.toml from bundle on first launch so the Settings UI has
+  // something visible to edit.
+  const userLlm = userLlmTomlPath();
   const bundledLlm = resolveBundledLlmToml();
   if (!fs.existsSync(userLlm) && fs.existsSync(bundledLlm)) {
     try {
       fs.copyFileSync(bundledLlm, userLlm);
     } catch (err) {
-      // Non-fatal: server will fall back to bundled path
       console.warn("[paths] Could not seed user llm.toml:", err);
     }
   }
@@ -268,15 +270,52 @@ export function ensureUserPaths(): ResolvedPaths {
   );
 
   return {
-    userData: userDataRoot(),
+    covelHome: home,
+    configTomlPath: cfgFile,
+    dataRoot: data,
     dbPath: userDbPath(),
     logsDir: userLogsDir(),
     userPluginsDir: userPluginsDir(),
     userWorldsDir: userWorldsDir(),
-    userConfigDir: userConfigDir(),
-    userLlmToml: userLlm,
+    userLlmTomlPath: userLlm,
+    userKeysEnvPath: userKeysEnvPath(),
     effectiveLlmToml,
     worldsDirs,
     pluginsDirs,
+    logRotation: logRotationConfig(),
   };
+}
+
+/**
+ * Update `[paths] data_root` in `config.toml`. Preserves other fields via a
+ * read-modify-write, but uses a simple rewrite strategy — not a full TOML
+ * round-trip. Good enough because we own the schema.
+ */
+export function writeDataRoot(newRoot: string): void {
+  const cfgFile = configTomlPath();
+  let current = "";
+  try {
+    current = fs.readFileSync(cfgFile, "utf-8");
+  } catch {
+    current = DEFAULT_CONFIG_TOML;
+  }
+
+  const normalized = newRoot.trim();
+  const replacement = normalized
+    ? `data_root = ${JSON.stringify(normalized)}`
+    : `# data_root = "/Volumes/External/covel-data"`;
+
+  // Replace an existing (possibly commented) data_root line under [paths],
+  // else append a new one.
+  const pattern = /^(\s*)(#\s*)?data_root\s*=.*$/m;
+  let next: string;
+  if (pattern.test(current)) {
+    next = current.replace(pattern, (_m, indent: string) => `${indent}${replacement}`);
+  } else if (/^\[paths]/m.test(current)) {
+    next = current.replace(/^\[paths]\s*$/m, `[paths]\n${replacement}`);
+  } else {
+    next = `${current.trimEnd()}\n\n[paths]\n${replacement}\n`;
+  }
+
+  fs.writeFileSync(cfgFile, next);
 }

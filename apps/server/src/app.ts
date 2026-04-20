@@ -5,7 +5,9 @@
  * Route logic lives in routes/ modules.
  */
 
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { bodyLimit } from "hono/body-limit";
@@ -21,6 +23,39 @@ import { seedWorlds } from "./world-seed-loader.js";
 import { createWorldFileWatcher } from "./world-file-watcher.js";
 import { createModelDbRoutes } from "./routes/model-db.js";
 import { createMiscApiRoutes } from "./routes/misc-api.js";
+import { createConfigApiRoutes } from "./routes/config-api.js";
+
+/**
+ * Merge `~/.covel/keys.env` (or `$COVEL_HOME/keys.env` when overridden)
+ * into `target`. Existing entries are NOT overwritten — process.env and
+ * shell-injected env take precedence over the static file, so a user can
+ * still override a persisted key via `DEEPSEEK_API_KEY=... pnpm dev`.
+ * Missing file is fine.
+ */
+function loadKeysEnvInto(target: NodeJS.ProcessEnv): void {
+  const home = process.env.COVEL_HOME ?? join(homedir(), ".covel");
+  const file = join(home, "keys.env");
+  if (!existsSync(file)) return;
+  try {
+    for (const raw of readFileSync(file, "utf-8").split("\n")) {
+      const trimmed = raw.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq < 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      let val = trimmed.slice(eq + 1).trim();
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
+        val = val.slice(1, -1);
+      }
+      if (key && target[key] === undefined) target[key] = val;
+    }
+  } catch (err) {
+    console.warn(`[server] Could not read ${file}:`, err);
+  }
+}
 
 const app = new Hono();
 
@@ -77,6 +112,12 @@ app.use(
 const ai = createAiStack();
 const storeBackend = resolveBackendFromEnv();
 const store = await createStoreFromEnv();
+
+// Merge ~/.covel/keys.env (plain KEY=VALUE lines) into process.env. The
+// desktop shells already pre-merge this into the child env, but running
+// the server directly (pnpm dev:server, CI) benefits from the same source
+// of truth without having to juggle .env.llm separately.
+loadKeysEnvInto(process.env);
 
 // Collect all *_API_KEY env vars dynamically so any provider can be added
 // to llm.toml without requiring code changes here.
@@ -148,6 +189,7 @@ process.on("SIGINT", stopWatchers);
 app.route("/", api.app);
 app.route("/", createModelDbRoutes(ai));
 app.route("/", createMiscApiRoutes(ai, api.registry, store));
+app.route("/", createConfigApiRoutes({ apiKeys }));
 
 // ── Static file serving (production) ─────────────────────────────
 if (process.env.SERVE_STATIC === "true") {

@@ -33,6 +33,67 @@
 
 > 首次运行需要配置 LLM provider（进入应用后在设置页填写 API Key）。
 
+## 配置与数据
+
+桌面版首次启动会自动创建 `~/.covel/`，里面放配置，数据和日志默认放 `~/.covel/data/`。两者可通过 `config.toml` 解耦 —— 想把庞大的 SQLite 搬到外置硬盘，改一行即可。
+
+### 目录结构
+
+```
+~/.covel/                    ← 配置根（小文件，随应用版本稳定）
+  config.toml                ← 数据位置指针 + 日志轮转参数（见下文）
+  llm.toml                   ← LLM slot 配置（provider / model / baseUrl）
+  keys.env                   ← provider API key，KEY=VALUE 纯文本
+  plugins/                   ← 用户插件（和 app bundle 内的核心插件合并）
+
+<data_root>/                 ← 默认 ~/.covel/data；可改到任意路径
+  covel.db                   ← SQLite 数据库
+  worlds/                    ← 用户创建的世界
+  logs/                      ← 应用日志（自动轮转）
+    tauri-main*.log          ← Tauri 主进程
+    electron-*.log           ← Electron 主进程
+    server-*.log             ← Node 后端（pino-roll）
+  server.port                ← 最近一次启动的端口（诊断用）
+```
+
+### `~/.covel/config.toml`
+
+首次启动自带注释模板。字段：
+
+```toml
+[paths]
+# 数据目录。相对路径相对于本文件所在目录；绝对路径直接使用。
+# 默认：~/.covel/data
+# data_root = "/Volumes/External/covel-data"
+
+[logging]
+# 单个日志文件上限（MB），超过后轮转
+max_size_mb = 10
+# 保留的轮转文件数，超出后丢弃最旧一份。总磁盘占用 ≈ max_size_mb × max_files
+max_files   = 10
+```
+
+改完要重启 Covel 生效。**改 `data_root` 不会搬旧数据** —— 新位置是空的，老数据留在原处你自己处理。
+
+### `~/.covel/keys.env`
+
+```env
+# 一行一个 KEY=VALUE，# 开头是注释
+DEEPSEEK_API_KEY=sk-xxxxxxxxxxxx
+OPENAI_API_KEY=sk-xxxxxxxxxxxx
+ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
+```
+
+server 会按 `*_API_KEY` 扫描所有条目注入 provider 运行时。Key 名 = provider 名全大写 + `_API_KEY`。文件权限默认 `0600`，app 保存时会重置；手动编辑后注意别改得太宽。
+
+### `~/.covel/llm.toml`
+
+见仓库根 `llm.toml.example` 示例；每个 slot 对应一个 provider / 模型组合。app 自带兜底 `story` slot 指向 DeepSeek —— 填好 `keys.env` 的 `DEEPSEEK_API_KEY` 就能跑。
+
+### 前端入口
+
+Settings → Desktop tab 暴露所有路径、一键打开目录、切换 `data_root`。不想改文件就在 UI 里点。
+
 ## 快速开始（源码）
 
 **前提**：Node.js ≥ 22，pnpm 10.7+
@@ -73,9 +134,18 @@ pnpm docker:build   # 构建并启动（前端 + 后端 + PostgreSQL）
 
 ### 桌面版本地构建
 
+项目同时维护 Electron 和 Tauri 两个桌面壳，命令对称：
+
 ```bash
-pnpm desktop:build   # 构建 web + 后端资源打包
-pnpm desktop:dist    # 生成当前平台 installer (release/)
+# Dev（热重载，真正启动桌面壳 + sidecar）
+pnpm dev:electron
+pnpm dev:tauri
+pnpm dev:web          # 只跑浏览器，不启桌面壳
+
+# 当前平台的安装包 → release/
+pnpm build:electron
+pnpm build:tauri
+pnpm build:desktop    # 两个一起打
 ```
 
 更多签名/公证细节见 [`apps/desktop/PACKAGING.md`](apps/desktop/PACKAGING.md)。
@@ -114,7 +184,10 @@ pnpm build                 # 构建所有包
 pnpm lint                  # 类型检查
 pnpm test                  # 全部测试
 pnpm e2e                   # Playwright E2E 测试
-pnpm desktop:dev           # 桌面版开发模式
+pnpm dev:electron          # Electron 壳（dev）
+pnpm dev:tauri             # Tauri 壳（dev）
+pnpm build:electron        # 打 Electron 安装包（release/）
+pnpm build:tauri           # 打 Tauri 安装包（release/）
 ```
 
 ## 文档
