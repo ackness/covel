@@ -62,7 +62,6 @@ import { turnRoutes } from './turn.js';
 import { pluginRoutes } from './plugins.js';
 import { stateRoutes } from './state.js';
 import { eventRoutes } from './events.js';
-import { runtimeRoutes } from './runtime.js';
 import { createHealthRoutes } from './health.js';
 import { submitInputsRoutes } from './submit-inputs.js';
 import { worldRoutes } from './worlds.js';
@@ -662,7 +661,6 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   app.route('/api/plugins', pluginRoutes);
   app.route('/api/events', eventRoutes);
   app.route('/api/events', subscribeRoutes);
-  app.route('/api/runtime', runtimeRoutes);
   app.route('/api/worlds', worldRoutes);
   app.route('/api/health', createHealthRoutes(store, config.storeBackend));
   app.route('/api/create', createRoutes);

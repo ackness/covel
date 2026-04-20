@@ -12,16 +12,13 @@ COPY pnpm-lock.yaml package.json pnpm-workspace.yaml ./
 COPY apps/desktop/package.json apps/desktop/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
-COPY apps/web-v2/package.json apps/web-v2/
 
 # Packages (alphabetical — keep in sync with packages/ directory)
 COPY packages/ai-provider/package.json packages/ai-provider/
-COPY packages/api-client/package.json packages/api-client/
 COPY packages/approval/package.json packages/approval/
 COPY packages/context/package.json packages/context/
 COPY packages/create/package.json packages/create/
 COPY packages/events/package.json packages/events/
-COPY packages/lorebook/package.json packages/lorebook/
 COPY packages/memory/package.json packages/memory/
 COPY packages/plugin-loader/package.json packages/plugin-loader/
 COPY packages/plugin-test-utils/package.json packages/plugin-test-utils/

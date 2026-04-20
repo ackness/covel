@@ -2,7 +2,7 @@
 
 > Single-page reference for the `core-npc-graph` plugin and its
 > supporting infrastructure across `@covel/ai-provider`, `@covel/store`,
-> `@covel/shared`, and `@covel/web-v2`. For implementation history see
+> `@covel/shared`, and `@covel/web`. For implementation history see
 > the Phase 0–4 commits on this branch.
 
 ## Why
@@ -57,7 +57,7 @@ self-contained **session-scoped knowledge graph** that:
         │
         ▼ plugin-data.changed SSE
 ┌──────────────────────────────────────────────────────────────────────┐
-│  apps/web-v2 right panel: GraphCanvas (lazy)                         │
+│  apps/web right panel: GraphCanvas (lazy)                            │
 │                                                                      │
 │  • react-force-graph-2d, lazy-loaded chunk                           │
 │  • reads pluginData[core-npc-graph][nodes/edges] live                │
@@ -168,7 +168,7 @@ Phase 3.5 once the function-runtime context can access the gateway.
 
 ## Visualization
 
-`apps/web-v2/src/lib/graph-canvas.tsx` registers a `GraphCanvas`
+`apps/web/src/lib/graph-canvas.tsx` registers a `GraphCanvas`
 component into the shared json-render catalog. The component is
 lazy-loaded so the d3-force/canvas bundle (~60KB gzipped) only ships
 when the user opens the panel. It reads from the live pluginData
@@ -253,5 +253,5 @@ deployments keep working.
 - `docs/reference/tools.md` — upsert-npc-graph and list-npc-graph
 - `packages/shared/src/types/npc-graph.ts` — type source of truth
 - `plugins/core-npc-graph/` — the plugin itself
-- `apps/web-v2/src/lib/graph-canvas.tsx` — visualization component
+- `apps/web/src/lib/graph-canvas.tsx` — visualization component
 - `scripts/embedding-bench/` — Phase 0 validation harness

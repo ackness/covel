@@ -193,10 +193,9 @@ export interface WorkingMemoryRecord {
 /**
  * Session-scoped lorebook entry persisted to the store (S3-T2).
  *
- * Mirrors the `LorebookEntry` shape from `@covel/lorebook` but stays as a
- * plain record so the store package does not have to take a runtime
- * dependency on lorebook itself. The runtime/loader bridges between the
- * two by mapping fields one-to-one.
+ * Plain record shape carrying all lorebook entry fields. The framework
+ * routes and runtime/loader handle field-level semantics; the store layer
+ * just persists and retrieves these records by (sessionId, id).
  *
  * Only session-source entries land here. World/plugin layer entries are
  * loaded from disk by the lorebook loaders and never persisted via this

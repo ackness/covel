@@ -56,8 +56,8 @@ export interface CharacterAttributeSchema {
 /**
  * Wire-format `Character` — the contract returned by
  * `/api/sessions/:id/characters`. Mirrors the server's `CharacterRecord`
- * but lives in `@covel/shared` so it can be consumed by API clients
- * (web-v2, future Electron, CLI) without importing `@covel/store`.
+ * but lives in `@covel/shared` so it can be consumed by the web frontend
+ * (and any future API client) without importing `@covel/store`.
  */
 export interface Character {
   readonly id: string;

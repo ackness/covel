@@ -108,7 +108,7 @@
 | `POST /api/sessions/:id/snapshot` | `state.snapshot.created` (kind=manual) | `apps/server/src/routes/api/snapshots.ts` |
 | `POST /api/sessions/:id/fork` | `state.snapshot.created` (kind=fork) → `session.forked` | `apps/server/src/routes/api/snapshots.ts` |
 
-> 前端若要接收上述事件，需在 `apps/web-v2/src/services/sse.ts` 里为 `state.snapshot.created` / `session.forked` 显式 `addEventListener`。当前 sse.ts 尚未挂载这两个监听；在 fork / save UI 真正落地前，服务端已经在 SSE 通道上发送，前端订阅即生效。
+> 前端若要接收上述事件，需在 `apps/web/src/services/subscription.ts` 的 topic 路由里为 `state.snapshot.created` / `session.forked` 显式分发。当前尚未挂载这两个监听；在 fork / save UI 真正落地前，服务端已经在 SSE 通道上发送，前端订阅即生效。
 
 ### Working Memory / 上下文压缩事件（kernel-only by design）
 
@@ -121,7 +121,7 @@
 
 ### SSE 命名事件订阅注意事项
 
-所有 ProtocolEventType 在 SSE 流上都以**命名事件**（`event: <type>\ndata: ...`）形式发送，**不会**触发 `EventSource.onmessage` 默认 handler。前端必须为每个关心的事件类型显式注册 `addEventListener('<type>', handler)`，否则事件会被静默丢弃。`apps/web-v2/src/services/sse.ts` 已为 `narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等关键事件挂载监听。新增事件类型时**必须同步更新该文件**。
+所有 ProtocolEventType 在 SSE 流上都以**命名事件**（`event: <type>\ndata: ...`）形式发送，**不会**触发 `EventSource.onmessage` 默认 handler。前端必须为每个关心的事件类型显式注册 `addEventListener('<type>', handler)`，否则事件会被静默丢弃。`apps/web/src/services/subscription.ts` 已为 `narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等关键事件挂载监听。新增事件类型时**必须同步更新该文件**。
 
 > S4-T5 注意：`state.snapshot.created` / `session.forked` 服务端已经发出但前端尚未挂载 listener（FU-6 / 等 fork & save UI 落地）。此 follow-up 是已知的，与 framework 实现无关。
 

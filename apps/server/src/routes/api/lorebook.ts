@@ -7,7 +7,7 @@
  * delete) so players can mute or remove individual entries.
  *
  * Framework-owned: not tied to any specific plugin. The Lorebook right-panel
- * tab in web-v2 consumes this endpoint.
+ * tab in apps/web consumes this endpoint.
  */
 
 import { Hono } from 'hono';

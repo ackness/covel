@@ -13,7 +13,7 @@
 │                                                                             │
 │  ┌──────────────┐    SSE/HTTP     ┌──────────────────────────────────────┐  │
 │  │   Frontend    │ ◄─────────────► │            Server (Hono)             │  │
-│  │  (web-v2)     │                │                                      │  │
+│  │  (apps/web)   │                │                                      │  │
 │  │              │                │  ┌────────────────────────────────┐   │  │
 │  │ json-render  │                │  │       Turn Executor            │   │  │
 │  │ catalog      │                │  │  ┌──────────────────────────┐  │   │  │
@@ -556,7 +556,7 @@ turn_messages (追加式，永不删除):
 ## 七、完整游戏流程时序图
 
 ```
-  玩家                  前端(web-v2)              服务端                     LLM / 工具
+  玩家                  前端(apps/web)            服务端                     LLM / 工具
   ────                 ──────────              ──────                    ──────────
 
   打开页面 ──────────► boot()
@@ -716,7 +716,7 @@ Turn 执行                    @covel/runtime                   核心执行引�
             @covel/server          (Hono HTTP 层，SSE 流，路由)
                  │
                  ▼
-            @covel/web-v2          (前端：json-render + pluginData)
+            @covel/web             (前端：json-render + pluginData)
 ```
 
 ### 8.3 各包核心接口

@@ -301,7 +301,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 - `PATCH` → `{ success: true, entryId, enabled }`
 - `DELETE` → `{ success: true }`
 
-404 场景：session 不存在、entryId 不存在。无 feature-flag 开关，始终启用。消费方：`apps/web-v2/` 右侧面板的 "Lorebook" 框架自持 Tab。
+404 场景：session 不存在、entryId 不存在。无 feature-flag 开关，始终启用。消费方：`apps/web/src/components/session/lorebook-panel.tsx` 右侧面板的 "Lorebook" 框架自持 Tab。
 
 ### Suspend / Resume（S4-T4）
 

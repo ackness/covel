@@ -767,7 +767,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               runtimeId: runtimeId !== "unknown" ? runtimeId : undefined,
               kind: completedKind,
               createdAt: envelope.timestamp,
-            }).catch(() => {});
+            }).catch(() => { });
           }
         }
         break;
@@ -800,7 +800,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               runtimeId: (blockMeta?.runtimeId as string) || undefined,
               block,
               createdAt: envelope.timestamp,
-            }).catch(() => {});
+            }).catch(() => { });
           }
         }
         break;
@@ -827,7 +827,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             ...patch,
             sessionId: sid,
             createdAt: new Date().toISOString(),
-          }).catch(() => {});
+          }).catch(() => { });
         }
         break;
       }
@@ -906,7 +906,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
       case "execution.completed": {
         dispatch({ type: "SET_EXECUTING", value: false });
-          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
+        dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
         break;
       }
       case "event.emitted": {
@@ -1096,9 +1096,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           const prev = byKey.get(key);
           const status: ExecutionStep["status"] =
             evt.type === 'runtime.completed' ? 'completed' :
-            evt.type === 'runtime.failed'    ? 'failed'    :
-            evt.type === 'runtime.skipped'   ? 'skipped'   :
-                                               'running';
+              evt.type === 'runtime.failed' ? 'failed' :
+                evt.type === 'runtime.skipped' ? 'skipped' :
+                  'running';
           byKey.set(key, {
             runtimeId,
             pluginId: (p.pluginId as string) ?? prev?.pluginId ?? '',
@@ -1172,9 +1172,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const legacyType = r.type as string | undefined;
         const legacyStatus: ExecutionStep["status"] =
           legacyType === "runtime.completed" ? "completed" :
-          legacyType === "runtime.failed"    ? "failed"    :
-          legacyType === "runtime.skipped"   ? "skipped"   :
-          (r.status as ExecutionStep["status"] | undefined) ?? "completed";
+            legacyType === "runtime.failed" ? "failed" :
+              legacyType === "runtime.skipped" ? "skipped" :
+                (r.status as ExecutionStep["status"] | undefined) ?? "completed";
         return {
           runtimeId: (r.runtimeId as string) ?? "unknown",
           pluginId: (r.pluginId as string) ?? "",
@@ -1197,7 +1197,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (sessionIdRef.current === targetSessionId) {
         dispatch({ type: "LOAD_SESSION_PLUGINS", plugins: res.available });
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     // Sync session context to server so subsequent turns can be processed
     ds.syncToServer(session.id).then(() => {
@@ -1270,7 +1270,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           role: "user",
           content,
           createdAt: userTimestamp,
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       return new Promise<void>((resolve) => {
@@ -1311,7 +1311,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     runSingleAction(content, { echoUserMessage: true }).finally(() => {
       dispatch({ type: "SET_EXECUTING", value: false });
-          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
+      dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
     });
   }, [state.session, state.executing, runSingleAction]);
 
@@ -1322,9 +1322,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (sid) {
       ds.loadSubmittedBlocks(sid).then((existing) => {
         if (!existing.includes(blockId)) {
-          ds.saveSubmittedBlocks(sid, [...existing, blockId]).catch(() => {});
+          ds.saveSubmittedBlocks(sid, [...existing, blockId]).catch(() => { });
         }
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }, []);
 
@@ -1376,8 +1376,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // 4. Trigger the next turn with the filled narrative, then optionally
       //    chain a follow-up empty-message turn so runtimes that only unlock
       //    after phase transition (narrator, guide, …) get their first run.
-      //    This mirrors the V2 frontend's autoContinue semantics — see
-      //    apps/web-v2/src/stores/session-store.ts `submitInputsBatch`.
       const filled = result.results?.[0]?.filledNarrative ?? '';
       const firstContent = echo ? filled : '';
 
@@ -1393,7 +1391,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
       } finally {
         dispatch({ type: "SET_EXECUTING", value: false });
-          dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
+        dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
       }
     } catch (err) {
       console.error('[submitInteraction] Failed:', err);
@@ -1500,7 +1498,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const sid = state.session?.id;
     if (!sid || state.executionSteps.length === 0) return;
-    ds.saveExecutionSteps(sid, state.executionSteps).catch(() => {});
+    ds.saveExecutionSteps(sid, state.executionSteps).catch(() => { });
   }, [state.executionSteps, state.session?.id, ds]);
 
   // Load plugin-declared message-slot UI specs from /api/ui-specs. Each
@@ -1546,7 +1544,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
                 })),
               });
             })
-            .catch(() => {});
+            .catch(() => { });
         }
       })
       .catch(() => {
@@ -1603,7 +1601,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           if (currentSid) {
             api.listSessionPlugins(currentSid)
               .then((res) => dispatch({ type: "LOAD_SESSION_PLUGINS", plugins: res.available }))
-              .catch(() => {});
+              .catch(() => { });
           }
           break;
         }
@@ -1613,7 +1611,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           if (worldId) {
             api.getWorld(worldId)
               .then((world) => dispatch({ type: "UPDATE_WORLD", world }))
-              .catch(() => {});
+              .catch(() => { });
           }
           break;
         }

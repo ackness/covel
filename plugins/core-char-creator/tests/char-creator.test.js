@@ -8,7 +8,7 @@
  *   - character-tracker — LLM agent, detects NPCs and state changes every turn
  *
  * Full execution behavior is covered by E2E tests in apps/server and
- * Playwright tests in apps/web-v2. This file only verifies the manifest
+ * Playwright tests in apps/web. This file only verifies the manifest
  * structure and discovery so that refactors of the plugin layout fail fast.
  *
  * Run: npx vitest run plugins/core-char-creator/tests/

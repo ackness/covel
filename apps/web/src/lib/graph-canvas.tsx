@@ -4,8 +4,6 @@
  * Renders a force-directed relationship graph from the live pluginData
  * store. Lazy-loaded so the force-graph + d3 bundle is only pulled in
  * when the user actually opens the NPC tab.
- *
- * Migrated from web-v2.
  */
 
 import { Suspense, lazy, useMemo, useState, useRef, useEffect, useCallback } from "react";

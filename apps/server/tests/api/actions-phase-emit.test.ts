@@ -3,7 +3,7 @@
  *
  * Followup for 2026-04-12 audit Finding 4 / Task 5: actions.ts no longer
  * unconditionally emits `phase.changed { phase: 'playing' }` for every
- * action. The reducer in web-v2 used to overwrite the real session phase
+ * action. The frontend reducer used to overwrite the real session phase
  * with the spurious 'playing' value, breaking sessions still in pre-game
  * (turnCount: 0).
  *

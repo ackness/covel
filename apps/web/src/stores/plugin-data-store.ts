@@ -7,7 +7,7 @@
  * 1. Initial load from /api/sessions/:id/plugin-data/:pluginId
  * 2. Real-time SSE events (plugin-data.changed)
  *
- * Migrated from web-v2 — standalone external store using useSyncExternalStore.
+ * Standalone external store using useSyncExternalStore.
  */
 
 import { useSyncExternalStore } from "react";

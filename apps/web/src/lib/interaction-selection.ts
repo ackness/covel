@@ -2,8 +2,8 @@
  * Interaction selection — framework-neutral visual-selection tracking for
  * plugin-declared interactive elements rendered via json-render.
  *
- * Migrated from web-v2. In V1, PendingInteractionDraft is defined locally
- * since V1's session store uses a different architecture.
+ * PendingInteractionDraft is defined locally rather than imported so this
+ * module stays decoupled from the session store.
  */
 
 /** Shape of a pending interaction draft for selection matching. */

@@ -1,9 +1,10 @@
 /**
  * IndexedDB DataStore implementation using the `idb` library.
- * Used for browser-side storage (T1/T2 deployment tiers).
  *
- * @deprecated IdbStore is frozen. Use ApiClient + SQLite/PG backend instead.
- * web-v2 should not import this module.
+ * Used by the web frontend's `local` storage mode (offline / no-server
+ * scenarios). The default mode is `remote` (server-side SQLite/PG via the
+ * HTTP API); IDB only kicks in when the user explicitly opts into local
+ * mode from the frontend's data-service layer.
  */
 
 import { openDB, type IDBPDatabase } from 'idb';

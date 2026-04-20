@@ -262,7 +262,7 @@
 | **fake/unit** | 编排、状态机、schema、pipeline、prompt 组装 | `MockLLM` via `@covel/plugin-test-utils` | `pnpm test` | 各包 `tests/` |
 | **replay**（新增） | provider HTTP 序列化、`cache_control` 注入、流式分片、fallback | 本地 record/replay fixture | `pnpm test:replay` | `packages/ai-provider/tests/replay/` |
 | **live opt-in** | 供应商漂移、真实响应格式、pricing 校准 | 真 LLM | `LIVE_LLM_ENABLED=1` | `packages/ai-provider/tests/live/` |
-| **e2e-fake** | 全栈用户流（web-v2 + server + store） | Docker + 注入 `COVEL_FAKE_LLM=1` | `pnpm e2e` | `tests/e2e/` |
+| **e2e-fake** | 全栈用户流（web + server + store） | Docker + 注入 `COVEL_FAKE_LLM=1` | `pnpm e2e` | `tests/e2e/` |
 | **e2e-live** | 冒烟（release gate） | Docker + 真 LLM | `pnpm e2e:docker` + `.env.llm` | `tests/e2e/` |
 
 ### 7.3 关于 aimock 的明确判断
@@ -393,9 +393,9 @@
 | FU-1 | **`working_memory.changed` / `context.compacted` → SSE 提升**？当前只是 KernelEvent / trace。若要前端实时反应 WM 与压缩事件，需把这 2 个字符串加入 `packages/shared/src/types/protocol.ts` 的 `ProtocolEventType` union 并接入 SSE forwarder。**决策点**：前端是否真的需要实时感知？如果是——在 Wave A 的 S4-T2 或 S3-T4 顺手做（+5 行）。如果否——更新 §七文档标注为 "kernel-internal by design" 即可 |
 | FU-2 | **Compactor locale 管道**：I4 修复把 locale 参数留在 `maybeCompact()` 签名上，但 `CompactorRunner.run()` 还没 plumbing session locale。需扩展 runner 签名从 session context 提取 locale。半天工作量，可顺手并入 Wave A 的 S2-T3（反正 S2-T3 要动 compactor）|
 | FU-3 | **loadPrompt 推广**：`apps/server/src/routes/api/ai.ts`（generate-world / extract-dimensions）仍然内联 TS template literal。Wave 0-D 创建的 `loadPrompt` 第一次真正可用，这些 server 路由 prompt 都可以迁移。非阻塞，可作为 Sprint 5 清理票 |
-| FU-4 | **Lorebook list API**：S4-T2 fork 需要 `listLorebookEntries(sessionId, { source: 'session' })` 但 `@covel/lorebook` 的 store 接口还没加。当前 snapshot.lorebookEntries 是空数组 TODO。需要在 `@covel/store` / `@covel/lorebook` 加 `listSessionLorebookEntries`，然后回填 `snapshot-payload-builder.ts`。Wave B 顺手（<30 行），或在 S3-T2 world-init 迁移时一起做 |
+| FU-4 | **Lorebook list API**：S4-T2 fork 需要 `listSessionLorebookEntries(sessionId)` —— 当前 `snapshot.lorebookEntries` 是空数组 TODO。需要在 `@covel/store` 加 `listSessionLorebookEntries`，然后回填 `snapshot-payload-builder.ts`。Wave B 顺手（<30 行），或在 S3-T2 world-init 迁移时一起做 |
 | FU-5 | **S2-T3 第 4 个 Anthropic breakpoint**：`§A15` 规定 4 个 breakpoint，其中 "段 7 中部"（messages 中段）需要 turn-executor 改动。A-1 留作 follow-up，因为 S2-T3 scope 不碰 runtime。Wave B / Wave C 顺手 |
-| FU-6 | **Wave A-3 session.forked SSE 前端消费**：后端已发 SSE 事件，但 `apps/web-v2/src/services/sse.ts` 未 `addEventListener('session.forked', ...)`，等 fork UI（Sprint 5 或 S3-T6）实装时再接。S4-T5 把 `state.snapshot.created` 加进同一组，前端挂载时一次性接 2 条 |
+| FU-6 | **Wave A-3 session.forked SSE 前端消费**：后端已发 SSE 事件，但 `apps/web/src/services/subscription.ts` 未在 topic 路由里处理 `session.forked`，等 fork UI（Sprint 5 或 S3-T6）实装时再接。S4-T5 把 `state.snapshot.created` 加进同一组，前端挂载时一次性接 2 条 |
 | FU-7 | **流式重试事件未接 SSE**：`packages/ai-provider/src/adapters/http.ts:postJson` 的 S1-T3 retry 路径是**静默** fallback，没有 callback / event hook。S4-T5 调研后确认无法在不改 ai-provider gateway 的前提下接出 `stream.interrupted` / `stream.resumed`。需在 `gateway.ts` / `context-builder` 层插一个 EventBus 注入点（或回调），让 retry 触发时通过 turn-executor 的 `eventBus` 广播。Wave B 或 Sprint 5 单独处理。本 ticket **未** 把这两个 type 加入 `ProtocolEventType`，等真有发射点再加 |
 | FU-8 | **`core-world-init` 插件迁移到 `lorebook.upsert`**：Wave B-1 agent rate limit 在 store 层完成后中断；runtime commit handler + snapshot FU-4 wiring 由主干补齐。还缺最后一步：`plugins/core-world-init/server/*.ts` 的 schema-gen runtime 改为 emit `lorebook.upsert` proposal（而非写 plugin_data），`packages/context/src/context-builder.ts` 把 `{{ config.worldEntries }}` 的值源从 plugin_data 改为 `listSessionLorebookEntries`。单文件级别的插件改动，Wave C 顺手或 Sprint 5 清理即可 |
 
@@ -446,7 +446,7 @@ Wave 0 全绿后再启动 Wave A。
 | 票号 | 依赖 | 说明 |
 |---|---|---|
 | S3-T5a core-codex + core-char-creator 迁 V2 | Wave B 完 | 不碰 world-init（已在 S3-T2 完成） |
-| S3-T6 Lorebook 玩家 UI (`web-v2`) | Wave B 完 | 依赖 `/api/ui-specs` |
+| S3-T6 Lorebook 玩家 UI (`apps/web`) | Wave B 完 | 依赖 `/api/ui-specs` |
 | S2-T5 `prompt-structure.md` 文档 | Wave A+B 完 | 模式已稳定 |
 
 ### 9.5 冲突守卫（critical）
@@ -970,7 +970,7 @@ observability: "新增 trace 字段 context.budgetUsed / budgetRemaining / prune
 | S3-T3 | Working Memory 表 + 段 2 注入（A9） | S2-T1 | 新表 `working_memory`，`packages/store/` + contract，新 Proposal `working_memory.set` | `COVEL_WORKING_MEMORY_V1` |
 | S3-T4 | Author's Note 段 9 + Post-History 段 10（A2 的剩余段） | S2-T1 | `prompt-assembler.ts` 补全段 8/9/10 | — |
 | S3-T5 | 其余 core 插件的 V2 迁移（core-codex, core-char-creator, core-world-init） | S3-T1..T4 | 各 PLUGIN.md | — |
-| S3-T6 | Lorebook 玩家 UI（panel 编辑 session-level entries） | S3-T1 | `apps/web-v2/src/components/lorebook/*` | — |
+| S3-T6 | Lorebook 玩家 UI（panel 编辑 session-level entries） | S3-T1 | `apps/web/src/components/session/lorebook-panel.tsx` | — |
 
 **Acceptance：**
 - 全部 core 插件跑在 V2 路径

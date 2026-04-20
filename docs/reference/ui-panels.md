@@ -1,12 +1,12 @@
-# 前端面板架构（V2）
+# 前端面板架构
 
-> V2 前端（`apps/web-v2/`）采用插件驱动的 UI 架构。右侧面板与聊天内插件消息面都由插件通过 json-render spec 声明，框架负责发现、装配与渲染。
+> 前端（`apps/web/`）采用插件驱动的 UI 架构，右侧面板与聊天内插件消息面都由插件通过 json-render spec 声明，框架负责发现、装配与渲染。
 
 ## 架构总览
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         COVEL v2                                │
+┌──────────────────────────────────────────────────────────────┐
+│                         COVEL                                   │
 ├──────────────────────────┬──────────────────┬───────────────────┤
 │  Center: Message Area    │                  │  Right: Plugin    │
 │  ────────────────────    │                  │  Panels           │
@@ -74,7 +74,7 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
   - 启用/禁用开关 → `PATCH /api/sessions/:id/lorebook/:entryId { enabled }`
   - 删除 → `DELETE /api/sessions/:id/lorebook/:entryId`
 - **刷新策略（MVP）**：首次挂载 fetch + 顶部手动刷新按钮。没有专用 SSE 事件；lorebook 通过回合 commit 路径写入，接受回合间最终一致。
-- **实现**：`apps/web-v2/src/components/panels/lorebook-panel.tsx`，在 `right-panel.tsx` 中以独立的 activity-bar 按钮挂载（`FRAMEWORK_TAB_LOREBOOK` 常量），仅在 session 存在时显示。
+- **实现**：`apps/web/src/components/session/lorebook-panel.tsx`，在 `right-panel.tsx` 中以独立的 activity-bar 按钮挂载（`FRAMEWORK_TAB_LOREBOOK` 常量），仅在 session 存在时显示。
 - **隔离规则**：Tab 代码属于框架，但不硬编码任何具体插件 ID —— 每条 entry 的 `pluginId` 字段由数据自身携带，仅作显示用途。
 
 ### 声明方式
@@ -150,7 +150,7 @@ ui:
 | `world-schema.json` | 角色属性定义尚未生成，等待世界初始化…… |
 | `world-entries.json` | 世界维度词条尚未生成，等待初始化完成…… |
 
-**实现位置**：`apps/web-v2/src/components/panels/plugin-panel.tsx` 的 `PluginPanel` 组件（`isEmpty` 分支）。
+**实现位置**：`apps/web/src/components/session/plugin-panel.tsx` 的 `PluginPanel` 组件（`isEmpty` 分支）。
 
 ### 插件 UI 文本 I18nText 规范
 
@@ -225,7 +225,7 @@ type I18nText = string | Record<LocaleTag, string>;
 
 **命名空间约定**：跨插件 group key 与 CSS class name 同理 —— 作者自觉使用命名空间前缀（`core.character`、`myorg.combat`）避免冲突，框架不做 magic 前缀。
 
-**实现位置**：`apps/web-v2/src/components/panels/right-panel.tsx` 的 `aggregateSpecsIntoGroups()` 纯函数。该函数可独立测试（见 Playwright smoke test）。
+**实现位置**：`apps/web/src/components/session/right-panel.tsx` 的 `aggregateSpecsIntoGroups()` 纯函数。该函数可独立测试（见 Playwright smoke test）。
 
 ### 排序
 
@@ -237,15 +237,15 @@ type I18nText = string | Record<LocaleTag, string>;
 
 当前消息区有两条并行链路：
 
-1. **Turn message 链路**：`MessageList` 读取 `turn_messages` / SSE 事件，经 `messageToSpec()` 转成 json-render spec
-2. **Plugin message 链路**：`MessagePluginSurface` 通过 `/api/ui-specs?sessionId=` 发现 `ui.message`，再用 `PluginPanel` + `plugin_data` 渲染插件消息面
+1. **Turn message 链路**：`chat-messages.tsx` 读取 `turn_messages` / SSE 事件，经 `messageToSpec()` 转成 json-render spec，由 `MessageBlockRenderer` 渲染
+2. **Plugin message 链路**：同一文件在 `block.type === "plugin_message"` 分支里，通过 `/api/ui-specs?sessionId=` 发现 `ui.message`，再用 `PluginPanel` + `plugin_data` 渲染插件消息面
 
 两条链路都使用同一套 json-render catalog。
 
 | 链路 | 当前承载内容 | 实现位置 |
 |------|-------------|---------|
-| Turn message | 叙事文本、玩家输入、`interaction.requested` 表单/选择、通知 | `apps/web-v2/src/components/chat/message-list.tsx` |
-| Plugin message | guide 建议卡、codex 本轮摘要、其他插件自定义消息面 | `apps/web-v2/src/components/chat/message-plugin-surface.tsx` |
+| Turn message | 叙事文本、玩家输入、`interaction.requested` 表单/选择、通知 | `apps/web/src/components/session/chat-messages.tsx` |
+| Plugin message | guide 建议卡、codex 本轮摘要、其他插件自定义消息面 | `apps/web/src/components/session/chat-messages.tsx`（`plugin_message` 分支） |
 
 ### 消息 Block 声明
 
@@ -363,20 +363,9 @@ Turn 执行 → 各 Runtime 按优先级运行
     interaction.requested → 交互 block（表单/选择）
     execution.started/completed → 执行步骤状态
     plugin-data.changed → 插件数据更新
-  → MessageList 渲染 turn messages
-  → MessagePluginSurface 渲染 `ui.message`
+  → chat-messages 渲染 turn messages
+  → 同组件 `plugin_message` 分支渲染 `ui.message`
 ```
-
-## 迁移说明（V1 → V2）
-
-| V1（`apps/web/`） | V2（`apps/web-v2/`） |
-|--------------------|----------------------|
-| 7 个硬编码 Tab | 1 个固定 Tab (Lorebook) + 插件动态注册 |
-| React 组件直接渲染 | json-render 声明式渲染 |
-| gameState 字段驱动 | pluginData namespace 驱动 |
-| CodexPanel/EventPanel 等框架组件 | 插件 `ui/*.json` spec |
-| State Tab 在右侧 | 移到 `/debug` 页面 |
-| 框架代码引用插件数据格式 | 框架不知道任何插件数据结构 |
 
 ## 扩展指南（第三方插件）
 
@@ -392,10 +381,10 @@ Turn 执行 → 各 Runtime 按优先级运行
 1. 在 `PLUGIN.md` frontmatter 添加 `ui.message: [./ui/my-block.json]`
 2. 创建 `ui/my-block.json`
 3. 在 runtime / tool 中写入 `plugin_data[pluginId][message]`
-4. `MessagePluginSurface` 自动发现 spec 并渲染
+4. `chat-messages.tsx` 的 `plugin_message` 分支自动发现 spec 并渲染
 
 添加新的 turn-bound 交互块：
 
 1. 在 runtime 输出或 tool 返回值里写 `interaction`
 2. 由 session-kernel 归一化为 `interaction.request`
-3. `MessageList` 经 `messageToSpec()` 渲染表单、选择或确认 UI
+3. `chat-messages.tsx` 经 `messageToSpec()` 渲染表单、选择或确认 UI

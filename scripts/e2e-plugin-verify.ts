@@ -23,7 +23,7 @@
  *
  *   4. Auto form handling. Character creation (or any plugin-produced form)
  *      is detected from runtimeResults and auto-submitted with user-supplied
- *      or default values, mirroring what the web-v2 frontend would do.
+ *      or default values, mirroring what the web frontend would do.
  *
  *   5. Focus mode. `--runtime <id>` / `--plugin <id>` filter output and
  *      assertions to a single runtime without disabling the rest — runtime
@@ -420,7 +420,7 @@ async function httpPostSse(
             outcome.eventCount++;
             if (type === 'execution.completed') {
               outcome.executionCompleted = true;
-              reader.cancel().catch(() => {});
+              reader.cancel().catch(() => { });
               return outcome;
             }
             if (type === 'error.occurred') {
@@ -891,7 +891,7 @@ async function runTurn(
   if (outcome.terminated) {
     console.log(
       `  WARNING: SSE stream terminated prematurely (${outcome.terminatedReason ?? 'unknown'}) — `
-        + `collected ${outcome.eventCount} events; reading turn record from store`,
+      + `collected ${outcome.eventCount} events; reading turn record from store`,
     );
   }
 

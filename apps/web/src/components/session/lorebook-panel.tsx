@@ -1,8 +1,6 @@
 /**
  * LorebookPanel — framework-owned right-panel tab for session-level lorebook
  * entries. Lets the player view, toggle, or delete entries.
- *
- * Migrated from web-v2, adapted to V1 styling conventions.
  */
 
 import { useCallback, useEffect, useState } from "react";

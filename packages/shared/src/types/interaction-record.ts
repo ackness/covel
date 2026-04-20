@@ -19,7 +19,7 @@ export type InteractionSource =
 
 /** Which transport carried the interaction. */
 export type InteractionChannel =
-  | 'web'       // Browser (web-v2 or legacy web)
+  | 'web'       // Browser frontend
   | 'cli'       // Terminal clients
   | 'api'       // Raw HTTP API consumer
   | 'external'; // Third-party agent (Codex, Claude Code, etc.)

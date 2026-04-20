@@ -93,16 +93,14 @@ API keys live in browser localStorage in the running app and are passed per-requ
 
 ```
 apps/
-  web/              V1 UI (React 19 + Vite + TanStack Router, port 5173)
-  web-v2/           V2 UI (json-render + plugin-driven panels, port 5174)
+  web/              Web UI (React 19 + Vite + TanStack Router, json-render + plugin-driven panels)
   server/           Hono API + Drizzle ORM
   desktop/          Electron shell (sidecar)
   desktop-tauri/    Tauri shell (same sidecar contract)
 
-packages/           15 internal packages: shared, api-client, context,
-                    ai-provider, plugin-loader, runtime, store, state,
-                    events, tools, approval, lorebook, memory, create,
-                    plugin-test-utils
+packages/           13 internal packages: shared, context, ai-provider,
+                    plugin-loader, runtime, store, state, events, tools,
+                    approval, memory, create, plugin-test-utils
 
 plugins/            8 core plugins (see docs/reference/plugins.md)
 prompts/            Externalised prompt templates (locale-aware markdown)
@@ -113,7 +111,7 @@ Dependency flow (rough):
 
 ```
 shared ← context ← runtime ← server (composes all)
-shared ← api-client ← web / web-v2
+shared ← web
 ```
 
 All feature packages (`ai-provider`, `plugin-loader`, `store`, `state`, `events`, `tools`, `approval`, `memory`, `create`) are composed by `@covel/server`. See any package's own `package.json` for exact edges.

@@ -99,9 +99,8 @@ export interface WorkingMemorySetPayload {
  * plugin's `pluginId` automatically — callers do not need to repeat them
  * inside each entry.
  *
- * Fields here mirror the relevant subset of `LorebookEntry` from
- * `@covel/lorebook` so the kernel does not need a runtime dependency on
- * the lorebook package itself.
+ * Fields here mirror the store-layer `LorebookEntryRecord` shape so the
+ * kernel can emit lorebook upserts without reaching into store internals.
  */
 export interface LorebookUpsertPayload {
   readonly entries: readonly LorebookUpsertEntry[];
