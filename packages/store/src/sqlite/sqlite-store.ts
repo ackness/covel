@@ -682,6 +682,19 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
       return query.all().map(toPluginDataRecord);
     },
 
+    async listPluginDataSessionScope(
+      sessionId: string,
+    ): Promise<readonly PluginDataRecord[]> {
+      // Uses the existing `plugin_data_session_id_idx` index for O(n) scan
+      // scoped to one session (audit 2026-04-20 finding 7.2).
+      const rows = db
+        .select()
+        .from(schema.pluginData)
+        .where(eq(schema.pluginData.sessionId, sessionId))
+        .all();
+      return rows.map(toPluginDataRecord);
+    },
+
     async deletePluginData(
       sessionId: string,
       pluginId: string,
@@ -1208,6 +1221,18 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
         new Date().toISOString(),
         id,
       );
+    },
+
+    async claimSuspension(id: string): Promise<boolean> {
+      // Atomic compare-and-swap: SQLite executes a single UPDATE as a
+      // serialized write, so two concurrent claims cannot both succeed. The
+      // WHERE clause only matches unresolved rows; `result.changes` is 1 iff
+      // this caller actually transitioned the row. Use a sentinel
+      // `claimed:<iso>` so a later `markSuspensionResolved` overwrites it.
+      const result = sqlite.prepare(
+        'UPDATE suspensions SET resolved_at = ? WHERE id = ? AND resolved_at IS NULL',
+      ).run(`claimed:${new Date().toISOString()}`, id);
+      return result.changes === 1;
     },
 
     async listSuspensions(sessionId: string): Promise<readonly SuspensionRecord[]> {

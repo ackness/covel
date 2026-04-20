@@ -188,30 +188,52 @@ const OBJECT_STORES = [
   'interaction_records',
 ] as const;
 
+type StoreName = (typeof OBJECT_STORES)[number];
+
 export async function createIdbStore(dbName?: string): Promise<DataStore> {
   const db = await initDb(dbName ?? 'covel-store');
 
-  // ── Transaction snapshot state (S4-T1) ──
+  // ── Transaction snapshot state (S4-T1, Finding 3 fix) ──
   //
   // IndexedDB object-store-level transactions are scoped to the stores named at
   // tx creation, which does not fit the "one transaction per commit pipeline"
-  // model. IdbStore is dev/test only (T1/T2), so we use the same eager snapshot
-  // strategy as MemoryStore: on beginTx we read every object store, on
-  // rollbackTx we clear and refill. Performance is fine at test-suite volumes.
+  // model. Rather than eagerly snapshotting every object store on beginTx (which
+  // would clobber concurrent out-of-band writes from other tabs / SSE / interval
+  // jobs on rollback), we track only the stores actually mutated during the tx
+  // and snapshot them lazily on first touch. Rollback clears + refills only the
+  // touched stores, leaving everything else untouched.
   let idbSnapshot: Map<string, unknown[]> | null = null;
+  let touchedStores: Set<string> | null = null;
 
-  async function captureIdbSnapshot(): Promise<Map<string, unknown[]>> {
-    const snap = new Map<string, unknown[]>();
-    for (const name of OBJECT_STORES) {
-      const rows = await db.getAll(name);
-      snap.set(name, structuredClone(rows));
-    }
-    return snap;
+  /**
+   * First-touch snapshot: records a store's current rows the first time it is
+   * mutated inside an active tx. Subsequent mutations to the same store hit the
+   * membership check and return fast.
+   */
+  async function ensureStoreSnapshot(name: StoreName): Promise<void> {
+    if (!touchedStores || !idbSnapshot) return; // no tx active
+    if (touchedStores.has(name)) return; // already snapshotted
+    touchedStores.add(name);
+    const rows = await db.getAll(name);
+    idbSnapshot.set(name, structuredClone(rows));
   }
 
-  async function restoreIdbSnapshot(snap: Map<string, unknown[]>): Promise<void> {
-    for (const name of OBJECT_STORES) {
-      const tx = db.transaction(name, 'readwrite');
+  async function putAndTrack(name: StoreName, value: unknown): Promise<void> {
+    await ensureStoreSnapshot(name);
+    await db.put(name, value as Record<string, unknown>);
+  }
+
+  async function deleteAndTrack(name: StoreName, key: unknown): Promise<void> {
+    await ensureStoreSnapshot(name);
+    await db.delete(name, key as IDBValidKey);
+  }
+
+  async function restoreTouchedStores(
+    names: Set<string>,
+    snap: Map<string, unknown[]>,
+  ): Promise<void> {
+    for (const name of names) {
+      const tx = db.transaction(name as StoreName, 'readwrite');
       await tx.store.clear();
       const rows = snap.get(name) ?? [];
       for (const row of rows) {
@@ -225,7 +247,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     // ── Session ──
 
     async createSession(session: SessionRecord): Promise<void> {
-      await db.put('sessions', structuredClone(session));
+      await putAndTrack('sessions', structuredClone(session));
     },
 
     async getSession(id: string): Promise<SessionRecord | null> {
@@ -235,7 +257,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     async updateSession(id, patch): Promise<void> {
       const existing = await db.get('sessions', id);
       if (!existing) return;
-      await db.put('sessions', { ...existing, ...patch });
+      await putAndTrack('sessions', { ...existing, ...patch });
     },
 
     async listSessions(): Promise<SessionRecord[]> {
@@ -243,13 +265,62 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     },
 
     async deleteSession(id: string): Promise<void> {
-      await db.delete('sessions', id);
+      // Cascade delete all session-scoped child rows. IndexedDB does not
+      // provide schema-level ON DELETE CASCADE, so we must do this manually —
+      // mirrors the SQLite / PG backends. Use deleteAndTrack so an active tx
+      // can still roll back the cascade.
+      //
+      // For stores with a single-column `sessionId` index, fetch matching
+      // rows via the index. For stores that only expose composite indexes
+      // whose first field is sessionId (runtimeResults → `sessionId_turnId`,
+      // pluginConfigs → `lookup`, plugin_data → `lookup`), a full getAll +
+      // filter is simpler than a cursor range query and has the same
+      // asymptotic cost at T1/T2 volumes. Adding a plain `sessionId` index
+      // to those stores would require a schema-version bump and a migration.
+      const cascadeByIndex = async (storeName: StoreName): Promise<void> => {
+        const rows = (await db.getAllFromIndex(storeName, 'sessionId', id)) as Array<{
+          id: string;
+        }>;
+        for (const row of rows) {
+          await deleteAndTrack(storeName, row.id);
+        }
+      };
+      const cascadeByFilter = async (storeName: StoreName): Promise<void> => {
+        const all = (await db.getAll(storeName)) as Array<{ id: string; sessionId: string }>;
+        for (const row of all) {
+          if (row.sessionId === id) await deleteAndTrack(storeName, row.id);
+        }
+      };
+      await cascadeByIndex('turnResults');
+      await cascadeByFilter('runtimeResults');
+      await cascadeByIndex('toolCalls');
+      await cascadeByIndex('stateSchemas');
+      await cascadeByIndex('stateEntries');
+      await cascadeByIndex('stateChanges');
+      await cascadeByIndex('events');
+      await cascadeByIndex('approvals');
+      await cascadeByIndex('messages');
+      await cascadeByIndex('characters');
+      await cascadeByIndex('traceEvents');
+      await cascadeByIndex('turnMessages');
+      await cascadeByIndex('playerInputs');
+      await cascadeByIndex('working_memory');
+      await cascadeByIndex('sessionSummaries');
+      await cascadeByIndex('suspensions');
+      await cascadeByIndex('state_snapshots');
+      await cascadeByIndex('lorebook_entries');
+      await cascadeByIndex('runtime_outputs');
+      await cascadeByIndex('interaction_records');
+      // pluginConfigs and plugin_data have composite indexes; full-scan filter.
+      await cascadeByFilter('pluginConfigs');
+      await cascadeByFilter('plugin_data');
+      await deleteAndTrack('sessions', id);
     },
 
     // ── Turn Results ──
 
     async saveTurnResult(record: TurnResultRecord): Promise<void> {
-      await db.put('turnResults', structuredClone(record));
+      await putAndTrack('turnResults', structuredClone(record));
     },
 
     async getTurnResult(sessionId: string, turnId: string): Promise<TurnResultRecord | null> {
@@ -266,7 +337,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     // ── Runtime Results ──
 
     async saveRuntimeResult(record: RuntimeResultRecord): Promise<void> {
-      await db.put('runtimeResults', structuredClone(record));
+      await putAndTrack('runtimeResults', structuredClone(record));
     },
 
     async listRuntimeResults(sessionId: string, turnId: string): Promise<RuntimeResultRecord[]> {
@@ -276,7 +347,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     // ── Tool Calls ──
 
     async saveToolCall(record: ToolCallRecordRow): Promise<void> {
-      await db.put('toolCalls', structuredClone(record));
+      await putAndTrack('toolCalls', structuredClone(record));
     },
 
     async listToolCalls(sessionId: string, turnId?: string): Promise<ToolCallRecordRow[]> {
@@ -289,7 +360,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     // ── State Schemas ──
 
     async saveStateSchema(record: StateSchemaRecord): Promise<void> {
-      await db.put('stateSchemas', structuredClone(record));
+      await putAndTrack('stateSchemas', structuredClone(record));
     },
 
     async listStateSchemas(sessionId: string): Promise<StateSchemaRecord[]> {
@@ -300,7 +371,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
       const all = await db.getAllFromIndex('stateSchemas', 'sessionId', sessionId);
       const target = all.find((r) => r.tableName === tableName);
       if (target) {
-        await db.delete('stateSchemas', target.id);
+        await deleteAndTrack('stateSchemas', target.id);
       }
     },
 
@@ -314,6 +385,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     async upsertStateEntry(record: StateEntryRecord): Promise<void> {
       // Delete existing entry with same composite key, then insert the new one
       const existing = await db.getAllFromIndex('stateEntries', 'lookup', [record.sessionId, record.tableName, record.fieldName]);
+      await ensureStoreSnapshot('stateEntries');
       const tx = db.transaction('stateEntries', 'readwrite');
       for (const old of existing) {
         await tx.store.delete(old.id);
@@ -330,7 +402,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     // ── State Changes ──
 
     async addStateChange(record: StateChangeRecord): Promise<void> {
-      await db.put('stateChanges', structuredClone(record));
+      await putAndTrack('stateChanges', structuredClone(record));
     },
 
     async listStateChanges(sessionId: string, tableName: string, fieldName: string): Promise<StateChangeRecord[]> {
@@ -343,7 +415,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     // ── Events ──
 
     async saveEvent(record: EventRecord): Promise<void> {
-      await db.put('events', structuredClone(record));
+      await putAndTrack('events', structuredClone(record));
     },
 
     async listEvents(sessionId: string, options?: { topic?: string; limit?: number }): Promise<EventRecord[]> {
@@ -360,7 +432,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     // ── Approvals ──
 
     async saveApproval(record: ApprovalRecord): Promise<void> {
-      await db.put('approvals', structuredClone(record));
+      await putAndTrack('approvals', structuredClone(record));
     },
 
     async listApprovals(sessionId: string): Promise<ApprovalRecord[]> {
@@ -370,7 +442,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     // ── Messages ──
 
     async addMessage(record: MessageRecord): Promise<void> {
-      await db.put('messages', structuredClone(record));
+      await putAndTrack('messages', structuredClone(record));
     },
 
     async listMessages(sessionId: string, pagination?: PaginationOpts): Promise<MessageRecord[]> {
@@ -382,7 +454,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     // ── Characters ──
 
     async upsertCharacter(record: CharacterRecord): Promise<void> {
-      await db.put('characters', structuredClone(record));
+      await putAndTrack('characters', structuredClone(record));
     },
 
     async listCharacters(sessionId: string): Promise<CharacterRecord[]> {
@@ -393,6 +465,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
 
     async setPluginData(record: PluginDataRecord): Promise<void> {
       // Delete any existing record with the same composite key, then insert the new one
+      await ensureStoreSnapshot('plugin_data');
       const tx = db.transaction('plugin_data', 'readwrite');
       const existing = await tx.store.index('lookup').get([record.sessionId, record.pluginId, record.namespace, record.key]);
       if (existing) {
@@ -404,6 +477,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
 
     async setPluginDataBatch(records: readonly PluginDataRecord[]): Promise<void> {
       if (records.length === 0) return;
+      await ensureStoreSnapshot('plugin_data');
       const tx = db.transaction('plugin_data', 'readwrite');
       for (const record of records) {
         const existing = await tx.store.index('lookup').get([record.sessionId, record.pluginId, record.namespace, record.key]);
@@ -426,10 +500,18 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
       return applyPagination(filtered, pagination);
     },
 
+    async listPluginDataSessionScope(sessionId: string): Promise<readonly PluginDataRecord[]> {
+      // IDB is dev/test-only and its `plugin_data` store has no (sessionId)-only
+      // composite index. Full scan + in-memory filter is acceptable at this
+      // scale (per audit 2026-04-20 finding 7.2).
+      const all = (await db.getAll('plugin_data')) as PluginDataRecord[];
+      return all.filter((r) => r.sessionId === sessionId);
+    },
+
     async deletePluginData(sessionId: string, pluginId: string, namespace: string, key: string): Promise<void> {
       const existing = await db.getAllFromIndex('plugin_data', 'lookup', [sessionId, pluginId, namespace, key]);
       for (const record of existing) {
-        await db.delete('plugin_data', record.id);
+        await deleteAndTrack('plugin_data', record.id);
       }
     },
 
@@ -438,6 +520,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     async savePluginConfig(record: PluginConfigRecord): Promise<void> {
       // Delete existing config with same composite key, then insert
       const existing = await db.getAllFromIndex('pluginConfigs', 'lookup', [record.sessionId, record.pluginId]);
+      await ensureStoreSnapshot('pluginConfigs');
       const tx = db.transaction('pluginConfigs', 'readwrite');
       for (const old of existing) {
         await tx.store.delete(old.id);
@@ -462,13 +545,13 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     },
 
     async upsertWorld(record: WorldRecord): Promise<void> {
-      await db.put('worlds', structuredClone(record));
+      await putAndTrack('worlds', structuredClone(record));
     },
 
     // ── Trace ──
 
     async addTraceEvent(record: TraceEventRecord): Promise<void> {
-      await db.put('traceEvents', structuredClone(record));
+      await putAndTrack('traceEvents', structuredClone(record));
     },
 
     async listTraceEvents(sessionId: string, pagination?: PaginationOpts): Promise<TraceEventRecord[]> {
@@ -479,7 +562,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     // ── Runtime Outputs (PR-1) ──
 
     async saveRuntimeOutput(record: RuntimeOutputRecord): Promise<void> {
-      await db.put('runtime_outputs', structuredClone(record));
+      await putAndTrack('runtime_outputs', structuredClone(record));
     },
 
     async getRuntimeOutput(sessionId: string, id: string): Promise<RuntimeOutputRecord | null> {
@@ -516,7 +599,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     // ── Interaction Records (PR-1) ──
 
     async saveInteractionRecord(record: InteractionRecordRow): Promise<void> {
-      await db.put('interaction_records', structuredClone(record));
+      await putAndTrack('interaction_records', structuredClone(record));
     },
 
     async listInteractionRecords(
@@ -547,7 +630,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     // ── Turn Messages ──
 
     async appendTurnMessage(record: TurnMessageRecord): Promise<void> {
-      await db.put('turnMessages', structuredClone(record));
+      await putAndTrack('turnMessages', structuredClone(record));
     },
 
     async listTurnMessages(sessionId: string, pagination?: PaginationOpts): Promise<TurnMessageRecord[]> {
@@ -559,7 +642,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     // ── Player Inputs ──
 
     async savePlayerInput(record: PlayerInputRecord): Promise<void> {
-      await db.put('playerInputs', structuredClone(record));
+      await putAndTrack('playerInputs', structuredClone(record));
     },
 
     async getPlayerInput(sessionId: string, formId: string): Promise<PlayerInputRecord | null> {
@@ -582,9 +665,9 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
       ]);
       if (existing) {
         // Replace the record keeping the new id (spec: each upsert gets new UUID)
-        await db.delete('working_memory', existing.id);
+        await deleteAndTrack('working_memory', existing.id);
       }
-      await db.put('working_memory', structuredClone(record));
+      await putAndTrack('working_memory', structuredClone(record));
     },
 
     async getWorkingMemory(
@@ -623,7 +706,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
         key,
       ]);
       if (existing) {
-        await db.delete('working_memory', existing.id);
+        await deleteAndTrack('working_memory', existing.id);
       }
     },
 
@@ -631,6 +714,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
 
     async upsertLorebookEntries(records: readonly LorebookEntryRecord[]): Promise<void> {
       if (records.length === 0) return;
+      await ensureStoreSnapshot('lorebook_entries');
       const tx = db.transaction('lorebook_entries', 'readwrite');
       for (const record of records) {
         await tx.store.put(structuredClone(record));
@@ -659,14 +743,14 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
         | LorebookEntryRecord
         | undefined;
       if (existing && existing.sessionId === sessionId) {
-        await db.delete('lorebook_entries', id);
+        await deleteAndTrack('lorebook_entries', id);
       }
     },
 
     // ── Session Summaries (S2-T2 Compactor) ──
 
     async saveSessionSummary(record: SessionSummaryRecord): Promise<void> {
-      await db.put('sessionSummaries', structuredClone(record));
+      await putAndTrack('sessionSummaries', structuredClone(record));
     },
 
     async listSessionSummaries(sessionId: string): Promise<readonly SessionSummaryRecord[]> {
@@ -676,7 +760,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     async deleteSessionSummaries(sessionId: string): Promise<void> {
       const all = await db.getAllFromIndex('sessionSummaries', 'sessionId', sessionId);
       for (const r of all) {
-        await db.delete('sessionSummaries', (r as SessionSummaryRecord).id);
+        await deleteAndTrack('sessionSummaries', (r as SessionSummaryRecord).id);
       }
     },
 
@@ -689,7 +773,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
       const all = await db.getAllFromIndex('turnMessages', 'sessionId', sessionId);
       for (const msg of all as TurnMessageRecord[]) {
         if (idSet.has(msg.id)) {
-          await db.put('turnMessages', structuredClone({ ...msg, compactedAtTurnId: summaryId }));
+          await putAndTrack('turnMessages', structuredClone({ ...msg, compactedAtTurnId: summaryId }));
         }
       }
     },
@@ -697,7 +781,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     // ── Suspensions (S4-T4) ──
 
     async saveSuspension(record: SuspensionRecord): Promise<void> {
-      await db.put('suspensions', structuredClone(record));
+      await putAndTrack('suspensions', structuredClone(record));
     },
 
     async getSuspension(id: string): Promise<SuspensionRecord | null> {
@@ -707,7 +791,27 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     async markSuspensionResolved(id: string): Promise<void> {
       const existing = await db.get('suspensions', id) as SuspensionRecord | undefined;
       if (!existing) return;
-      await db.put('suspensions', { ...existing, resolvedAt: new Date().toISOString() });
+      await putAndTrack('suspensions', { ...existing, resolvedAt: new Date().toISOString() });
+    },
+
+    async claimSuspension(id: string): Promise<boolean> {
+      // Atomic compare-and-swap: perform the get/check/put inside a single
+      // IDB readwrite transaction so no concurrent call can observe an
+      // unresolved row and both "win". Snapshot the store BEFORE the tx so a
+      // surrounding beginTx/rollbackTx can still revert the claim.
+      await ensureStoreSnapshot('suspensions');
+      const tx = db.transaction('suspensions', 'readwrite');
+      const existing = (await tx.store.get(id)) as SuspensionRecord | undefined;
+      if (!existing || existing.resolvedAt) {
+        await tx.done;
+        return false;
+      }
+      await tx.store.put(structuredClone({
+        ...existing,
+        resolvedAt: `claimed:${new Date().toISOString()}`,
+      }));
+      await tx.done;
+      return true;
     },
 
     async listSuspensions(sessionId: string): Promise<readonly SuspensionRecord[]> {
@@ -716,13 +820,13 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     },
 
     async deleteSuspension(id: string): Promise<void> {
-      await db.delete('suspensions', id);
+      await deleteAndTrack('suspensions', id);
     },
 
     // ── Snapshots (S4-T2) ──
 
     async saveSnapshot(record: SnapshotRecord): Promise<void> {
-      await db.put('state_snapshots', structuredClone(record));
+      await putAndTrack('state_snapshots', structuredClone(record));
     },
 
     async getSnapshot(id: string): Promise<SnapshotRecord | null> {
@@ -735,38 +839,43 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     },
 
     async deleteSnapshot(id: string): Promise<void> {
-      await db.delete('state_snapshots', id);
+      await deleteAndTrack('state_snapshots', id);
     },
 
     // ── Transactions (S4-T1) ──
 
     async beginTx(): Promise<void> {
-      if (idbSnapshot !== null) {
+      if (touchedStores !== null || idbSnapshot !== null) {
         throw new Error('IdbStore: nested transactions are not supported (beginTx called while another tx is active)');
       }
-      idbSnapshot = await captureIdbSnapshot();
+      // Lazy per-store snapshot: `touchedStores` tracks which object stores have
+      // been mutated; `ensureStoreSnapshot` captures the original rows on first
+      // touch so rollback can refill only those stores. Out-of-band writes to
+      // other stores (from other tabs / SSE / interval jobs) survive rollback.
+      touchedStores = new Set();
+      idbSnapshot = new Map();
     },
 
     async commitTx(): Promise<void> {
-      if (idbSnapshot === null) {
+      if (touchedStores === null || idbSnapshot === null) {
         throw new Error('IdbStore: commitTx called without an active transaction');
       }
+      touchedStores = null;
       idbSnapshot = null;
     },
 
     async rollbackTx(): Promise<void> {
-      if (idbSnapshot === null) {
+      if (touchedStores === null || idbSnapshot === null) {
         throw new Error('IdbStore: rollbackTx called without an active transaction');
       }
-      // Clear the snapshot reference in finally: if restoreIdbSnapshot throws
-      // mid-refill the store is in a half-restored state, but the next beginTx
-      // must still be able to recover rather than see a stale "tx active" flag.
+      // Clear the tx state in finally: if restoreTouchedStores throws mid-refill
+      // the store is in a half-restored state, but the next beginTx must still
+      // be able to proceed rather than see a stale "tx active" flag.
+      const touched = touchedStores;
       const snapshot = idbSnapshot;
-      try {
-        await restoreIdbSnapshot(snapshot);
-      } finally {
-        idbSnapshot = null;
-      }
+      touchedStores = null;
+      idbSnapshot = null;
+      await restoreTouchedStores(touched, snapshot);
     },
 
     // ── Lifecycle ──

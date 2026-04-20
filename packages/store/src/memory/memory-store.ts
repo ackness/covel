@@ -320,11 +320,18 @@ export function createMemoryStore(): DataStore & VectorStoreCapability & VectorM
       filterArr(turnMessages);
       filterArr(playerInputs);
       filterArr(sessionSummaries);
+      filterArr(runtimeOutputs);
+      filterArr(interactionRecords);
       for (const [k, v] of stateEntries) { if (v.sessionId === id) stateEntries.delete(k); }
       for (const [k, v] of characters) { if (v.sessionId === id) characters.delete(k); }
       for (const [k, v] of pluginData) { if (v.sessionId === id) pluginData.delete(k); }
       for (const [k, v] of pluginConfigs) { if (v.sessionId === id) pluginConfigs.delete(k); }
       for (const [k, v] of snapshots) { if (v.sessionId === id) snapshots.delete(k); }
+      for (const [k, v] of suspensions) { if (v.sessionId === id) suspensions.delete(k); }
+      for (const [k, v] of workingMemoryEntries) { if (v.sessionId === id) workingMemoryEntries.delete(k); }
+      for (const [k, v] of lorebookEntries) { if (v.sessionId === id) lorebookEntries.delete(k); }
+      for (const [k, v] of vectorRows) { if (v.sessionId === id) vectorRows.delete(k); }
+      sessionVectorTargets.delete(id);
     },
 
     // ── Turn Results ──
@@ -554,6 +561,10 @@ export function createMemoryStore(): DataStore & VectorStoreCapability & VectorM
       return applyPagination(filtered, pagination);
     },
 
+    async listPluginDataSessionScope(sessionId) {
+      return [...pluginData.values()].filter((r) => r.sessionId === sessionId);
+    },
+
     async deletePluginData(sessionId, pluginId, namespace, key) {
       pluginData.delete(pluginDataKey(sessionId, pluginId, namespace, key));
     },
@@ -734,6 +745,22 @@ export function createMemoryStore(): DataStore & VectorStoreCapability & VectorM
       const existing = suspensions.get(id);
       if (!existing) return;
       suspensions.set(id, { ...existing, resolvedAt: new Date().toISOString() });
+    },
+
+    async claimSuspension(id) {
+      // Atomic compare-and-swap: JS is single-threaded so the get/check/set
+      // sequence below cannot be interleaved with another claim in the same
+      // process. Writes a sentinel `claimed:<iso>` into `resolvedAt` — the
+      // caller subsequently calls `markSuspensionResolved` which overwrites
+      // this sentinel with the final timestamp.
+      const existing = suspensions.get(id);
+      if (!existing) return false;
+      if (existing.resolvedAt) return false;
+      suspensions.set(id, {
+        ...existing,
+        resolvedAt: `claimed:${new Date().toISOString()}`,
+      });
+      return true;
     },
 
     async listSuspensions(sessionId) {

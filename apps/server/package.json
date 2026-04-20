@@ -38,6 +38,7 @@
     "@covel/store": "workspace:*",
     "@covel/tools": "workspace:*",
     "@hono/node-server": "^1.19.14",
+    "ajv": "^8.18.0",
     "hono": "^4.12.14",
     "tsx": "^4.21.0",
     "yaml": "^2.8.3",

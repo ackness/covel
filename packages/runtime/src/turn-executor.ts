@@ -890,6 +890,60 @@ export async function resumeSuspendedRuntime(
 
   const { pendingContinuation } = suspension;
 
+  const hookPipeline = deps.hookPipeline;
+
+  // ── PreRuntime hook (audit 2026-04-20 finding 6) ───────────────
+  // Mirror the main pipeline's PreRuntime/PostRuntime pair so hook-driven
+  // plugins (audit logs, metrics, cache warmers) see a symmetric resume.
+  // `TurnStart` / `TurnStop` are intentionally NOT re-emitted: resume is a
+  // continuation of an existing turn, not a new one.
+  //
+  // We build a synthetic TurnInput from the suspension so PreRuntime hooks
+  // that inspect sessionId/turnId/manifest still function. `playerMessage`
+  // is empty because resume data is delivered as a tool result below, not
+  // as a new user message.
+  const resumeTurnInput = {
+    sessionId: suspension.sessionId,
+    turnId: suspension.turnId,
+    playerMessage: '',
+  };
+  if (hookPipeline) {
+    const preRtResult = await runPreRuntimeHook(
+      {
+        pipeline: hookPipeline,
+        sessionId: suspension.sessionId,
+        turnId: suspension.turnId,
+        manifest,
+        input: resumeTurnInput as unknown as TurnInput,
+        eventBus: deps.eventBus,
+      },
+    );
+    if (preRtResult.action === 'abort') {
+      const abortedResult: RuntimeResult = {
+        pluginId: manifest.pluginId,
+        runtimeId: manifest.name,
+        runId,
+        turnId: suspension.turnId,
+        status: 'skipped',
+        output: null,
+        toolCalls: [],
+        durationMs: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      };
+      return runPostRuntimeHook(
+        {
+          pipeline: hookPipeline,
+          sessionId: suspension.sessionId,
+          turnId: suspension.turnId,
+          pluginId: manifest.pluginId,
+          runtimeId: manifest.name,
+          eventBus: deps.eventBus,
+        },
+        abortedResult,
+      );
+    }
+  }
+
   // Reconstruct message array from stored continuation
   const messages: LLMMessage[] = [...(pendingContinuation.messages as LLMMessage[])];
 
@@ -911,10 +965,26 @@ export async function resumeSuspendedRuntime(
     });
   }
 
+  // Shared PostRuntime wrapper for every exit point (audit finding 6).
+  const finalizeWithPostRuntime = (result: RuntimeResult): RuntimeResult | Promise<RuntimeResult> =>
+    hookPipeline
+      ? runPostRuntimeHook(
+          {
+            pipeline: hookPipeline,
+            sessionId: suspension.sessionId,
+            turnId: suspension.turnId,
+            pluginId: manifest.pluginId,
+            runtimeId: manifest.name,
+            eventBus: deps.eventBus,
+          },
+          result,
+        )
+      : result;
+
   // Load the runtime to get toolDefs etc.
   const loaded = await deps.loadRuntime(manifest, undefined);
   if (!loaded) {
-    return {
+    return finalizeWithPostRuntime({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
       runId,
@@ -925,7 +995,7 @@ export async function resumeSuspendedRuntime(
       durationMs: Date.now() - startTime,
       error: 'Runtime not found on resume',
       timestamp: new Date().toISOString(),
-    };
+    });
   }
 
   const collectedToolCalls: ToolCallRecord[] = [...(pendingContinuation.toolCallsSoFar as ToolCallRecord[])];
@@ -967,14 +1037,49 @@ export async function resumeSuspendedRuntime(
       for (const tc of response.toolCalls) {
         if (deps.toolExecutor) {
           const tcStart = Date.now();
-          const result = await deps.toolExecutor.execute(
-            { toolCallId: tc.id, name: tc.name, arguments: tc.arguments },
+
+          // ── PreToolUse hook (audit 2026-04-20 finding 6) ────────
+          // Without this, pre-tool-use hooks that gate destructive tools
+          // (e.g. "ask for approval") are NOT consulted on resume — which
+          // would let a tool that was blocked pre-suspend run unchecked
+          // after the suspend boundary.
+          const preToolOpts = {
+            pipeline: hookPipeline,
+            sessionId: suspension.sessionId,
+            turnId: suspension.turnId,
+            pluginId: manifest.pluginId,
+            runtimeId: manifest.name,
+            eventBus: deps.eventBus,
+          };
+          const preToolOutcome = await runPreToolUseHook(
+            preToolOpts,
+            { id: tc.id, name: tc.name, arguments: tc.arguments },
+          );
+          if (preToolOutcome.skipped) {
+            messages.push({
+              role: 'tool',
+              content: JSON.stringify({ error: `pre-tool-use hook aborted: ${preToolOutcome.reason}` }),
+              toolCallId: tc.id,
+            });
+            continue;
+          }
+          const effectiveTc = preToolOutcome.toolCall;
+
+          const rawResult = await deps.toolExecutor.execute(
+            { toolCallId: effectiveTc.id, name: effectiveTc.name, arguments: effectiveTc.arguments },
             { sessionId: suspension.sessionId, turnId: suspension.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name },
+          );
+
+          // PostToolUse hook
+          const result = await runPostToolUseHook(
+            preToolOpts,
+            { id: effectiveTc.id, name: effectiveTc.name, arguments: effectiveTc.arguments },
+            rawResult,
           );
 
           if (!result.success) {
             failedToolCalls.push({
-              toolName: tc.name,
+              toolName: effectiveTc.name,
               message: extractToolFailureMessage(result.result),
             });
           }
@@ -984,37 +1089,37 @@ export async function resumeSuspendedRuntime(
             messages.push({
               role: 'tool',
               content: JSON.stringify({ error: 'Nested suspend is not supported' }),
-              toolCallId: tc.id,
+              toolCallId: effectiveTc.id,
             });
             continue;
           }
 
           executedToolCalls.push({
-            name: tc.name,
-            arguments: tc.arguments,
+            name: effectiveTc.name,
+            arguments: effectiveTc.arguments,
             result: result.parsedResult,
             success: result.success,
           });
 
           let parsedInput: Record<string, unknown> = {};
-          try { parsedInput = JSON.parse(tc.arguments) as Record<string, unknown>; } catch { /* keep empty */ }
+          try { parsedInput = JSON.parse(effectiveTc.arguments) as Record<string, unknown>; } catch { /* keep empty */ }
           collectedToolCalls.push({
-            toolCallId: tc.id,
-            toolName: tc.name,
+            toolCallId: effectiveTc.id,
+            toolName: effectiveTc.name,
             pluginId: manifest.pluginId,
             runtimeId: manifest.name,
             turnId: suspension.turnId,
             input: parsedInput,
             output: result.parsedResult,
             durationMs: Date.now() - tcStart,
-            approvalStatus: 'auto-allowed',
+            approvalStatus: result.approvalStatus ?? 'auto-allowed',
             timestamp: new Date().toISOString(),
           });
 
           messages.push({
             role: 'tool',
             content: result.result,
-            toolCallId: tc.id,
+            toolCallId: effectiveTc.id,
           });
         } else {
           messages.push({
@@ -1033,7 +1138,7 @@ export async function resumeSuspendedRuntime(
   }
 
   if (!stoppedWithResponse && !finalContent) {
-    return {
+    return finalizeWithPostRuntime({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
       runId,
@@ -1049,7 +1154,7 @@ export async function resumeSuspendedRuntime(
         failedToolCalls,
       }),
       timestamp: new Date().toISOString(),
-    };
+    });
   }
 
   // Parse final output
@@ -1066,7 +1171,7 @@ export async function resumeSuspendedRuntime(
       ? (structuredToolOutput ?? presentableToolOutput ?? { narrativeOutput: '' })
       : parsed.output;
   } else if (failedToolCalls.length > 0) {
-    return {
+    return finalizeWithPostRuntime({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
       runId,
@@ -1081,7 +1186,7 @@ export async function resumeSuspendedRuntime(
         failedToolCalls,
       }),
       timestamp: new Date().toISOString(),
-    };
+    });
   } else {
     output = presentableToolOutput ?? { narrativeOutput: '' };
   }
@@ -1127,7 +1232,7 @@ export async function resumeSuspendedRuntime(
     suspensionId: suspension.id,
   });
 
-  return {
+  return finalizeWithPostRuntime({
     pluginId: manifest.pluginId,
     runtimeId: manifest.name,
     runId,
@@ -1137,7 +1242,7 @@ export async function resumeSuspendedRuntime(
     toolCalls: collectedToolCalls,
     durationMs: Date.now() - startTime,
     timestamp: new Date().toISOString(),
-  };
+  });
 }
 
 /**
@@ -1218,6 +1323,10 @@ async function executeOneRuntime(
         deps.store
       ) {
         const suspensionId = crypto.randomUUID();
+        // INVARIANT (audit 2026-04-20 finding 9b): function runtimes have no
+        // tool loop and therefore produce no mid-turn proposals. `pendingProposals`
+        // MUST stay empty here. Function runtime suspends also carry no partial
+        // content (no streaming output).
         const suspension: SuspensionRecord = {
           id: suspensionId,
           sessionId: input.sessionId,
@@ -1230,7 +1339,6 @@ async function executeOneRuntime(
             messages: [],
             toolCallsSoFar: [],
             pendingProposals: [],
-            // TODO(S4-T4.b): function runtime suspend carries no partial content
           },
           createdAt: new Date().toISOString(),
         };
@@ -1776,6 +1884,13 @@ async function executeOneRuntime(
               // Messages array currently has the assistant message (with tool_calls)
               // but NOT the tool result for the suspend call. We capture the full
               // message array up to this point (including the assistant message).
+              //
+              // INVARIANT (audit 2026-04-20 finding 9b): `pendingProposals` is
+              // empty at suspend time. The agent tool loop emits proposals only
+              // via committed tool outputs, which all complete before the suspend
+              // sentinel fires. If that contract ever changes, capture the
+              // buffered proposals here and replay them in `resume-executor`
+              // before re-entering the loop.
               const pendingContinuation: SuspensionRecord['pendingContinuation'] = {
                 messages: [...messages],
                 partialContent: finalContent ?? undefined,

@@ -14,6 +14,7 @@ import {
 import {
   applyChanges as applyPluginDataStoreChanges,
   resetPluginData,
+  setActiveSession as setActivePluginDataSession,
   type PluginDataChange,
 } from "@/stores/plugin-data-store.js";
 
@@ -620,11 +621,28 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const sessionIdRef = useRef<string | null>(null);
   // Track runtime kind (story vs plugin) so we can filter non-story text from main chat
   const runtimeKindRef = useRef<Map<string, string>>(new Map());
-  // Batch streaming deltas: accumulate per-runtime and flush once per animation frame
-  const deltaBufferRef = useRef<Map<string, { turnId: string; runtimeId: string; pluginId: string; text: string }>>(new Map());
+  // Batch streaming deltas: accumulate per-runtime and flush once per animation frame.
+  // `flushSessionId` is captured at push time so a session switch mid-stream causes
+  // the RAF to drop stale entries instead of bleeding them into the new session.
+  const deltaBufferRef = useRef<Map<string, { turnId: string; runtimeId: string; pluginId: string; text: string; flushSessionId: string | null }>>(new Map());
   const deltaRafRef = useRef<number | null>(null);
   useEffect(() => {
-    sessionIdRef.current = state.session?.id ?? null;
+    const nextId = state.session?.id ?? null;
+    if (sessionIdRef.current === nextId) return;
+    sessionIdRef.current = nextId;
+
+    // Bind plugin-data-store to the new active session slot so hooks like
+    // usePluginNamespace auto-isolate across session switches. Without this
+    // a stale resume path would leak session-1 plugin-data into session 2.
+    setActivePluginDataSession(nextId);
+
+    // Cancel any pending delta flush and clear the buffer so tokens from the
+    // outgoing session never land in the new session's messages array.
+    if (deltaRafRef.current !== null) {
+      cancelAnimationFrame(deltaRafRef.current);
+      deltaRafRef.current = null;
+    }
+    deltaBufferRef.current.clear();
   }, [state.session]);
 
   const boot = useCallback(async () => {
@@ -711,17 +729,28 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // Only show story-kind runtime text in main chat; plugin text goes to debug only
         const deltaKind = (payload.kind as string) ?? runtimeKindRef.current.get(runtimeId);
         if (delta && deltaKind === "story") {
-          // Buffer deltas and flush once per animation frame to avoid per-token array copies
+          // Buffer deltas and flush once per animation frame to avoid per-token array copies.
+          // Capture the current sessionId on each push so the RAF can drop stale entries
+          // if the user switches sessions mid-stream — otherwise the pending flush would
+          // dispatch APPEND_DELTA into the NEW session's messages array.
           const bufKey = `${turnId ?? "unknown"}_${runtimeId}`;
           const existing = deltaBufferRef.current.get(bufKey);
           if (existing) {
             existing.text += delta;
           } else {
-            deltaBufferRef.current.set(bufKey, { turnId: turnId ?? "unknown", runtimeId, pluginId, text: delta });
+            deltaBufferRef.current.set(bufKey, {
+              turnId: turnId ?? "unknown",
+              runtimeId,
+              pluginId,
+              text: delta,
+              flushSessionId: sessionIdRef.current,
+            });
           }
           if (deltaRafRef.current === null) {
             deltaRafRef.current = requestAnimationFrame(() => {
+              const currentSid = sessionIdRef.current;
               for (const entry of deltaBufferRef.current.values()) {
+                if (entry.flushSessionId !== currentSid) continue; // session changed — drop
                 dispatch({ type: "APPEND_DELTA", turnId: entry.turnId, runtimeId: entry.runtimeId, pluginId: entry.pluginId, delta: entry.text });
               }
               deltaBufferRef.current.clear();
@@ -1051,6 +1080,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // Guard: track intended session ID so stale async results are discarded
     const targetSessionId = session.id;
     sessionIdRef.current = targetSessionId;
+    // Rebind plugin-data-store synchronously so any plugin-data.changed
+    // events that arrive before the sessionIdRef effect commits write to
+    // the new session's slot. The effect will call this again with the
+    // same sessionId (no-op) once React commits the SET_SESSION dispatch.
+    setActivePluginDataSession(targetSessionId);
 
     // Server snapshot is the authoritative source of messages, gameState,
     // characters, characterSchema and execution trace. IDB (T1/T2 self-deploy)
@@ -1640,12 +1674,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const resetSession = useCallback(() => {
     dispatch({ type: "RESET_SESSION" });
+    // Wipes the active session's plugin-data slot. The slot binding is
+    // updated on the next SET_SESSION via the sessionIdRef effect.
     resetPluginData();
   }, []);
 
   const backToWorldSelect = useCallback(() => {
     dispatch({ type: "RESET_TO_WORLD_SELECT" });
-    resetPluginData();
+    // Detach plugin-data-store from any session so hooks return an empty
+    // snapshot while the user is back on the world-select screen.
+    setActivePluginDataSession(null);
   }, []);
 
   const updateWorldLocal = useCallback((world: api.WorldRecord) => {

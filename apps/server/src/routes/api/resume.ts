@@ -9,17 +9,31 @@
  * API keys are NEVER stored server-side; they must be supplied again via
  * the `X-Provider-Keys` header on this request (same as any turn call).
  *
+ * Concurrency (audit 2026-04-20 findings 1 + 2):
+ *   - The suspension is atomically claimed via `store.claimSuspension(id)`
+ *     before entering the LLM tool loop. Concurrent requests with the same
+ *     suspensionId lose the race and receive 409. This guarantees
+ *     exactly-once execution of a suspended runtime.
+ *   - The pipeline also runs under `withSessionLock(sessionId)` so sequential
+ *     resumes for the same session do not interleave with turn execution.
+ *
  * TODO(S4-T4.c): Suspension expiration / TTL cleanup is not implemented.
  * Open suspensions remain until explicitly resumed or deleted. A future
  * ticket should add a background job to expire stale suspensions.
  */
 
 import { Hono } from 'hono';
+// Ajv 8 ships as CJS with both `module.exports = Ajv` and `exports.default = Ajv`.
+// Under NodeNext + esModuleInterop, TS sees the default-import as the module's
+// namespace rather than the class constructor. The named export works cleanly.
+import { Ajv, type ErrorObject } from 'ajv';
 import type { DataStore } from '@covel/store';
 import type { PluginRegistry, LoadedRuntime } from '@covel/plugin-loader';
-import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
+import type { LLMAdapter, ToolExecutor, HookPipeline } from '@covel/runtime';
 import { resumeSuspendedRuntime } from '@covel/runtime';
 import type { RuntimeManifest } from '@covel/shared';
+import type { EventBus } from '@covel/events';
+import { withSessionLock } from '../../lib/session-lock.js';
 
 type Env = {
   Variables: {
@@ -30,56 +44,55 @@ type Env = {
     toolExecutor: ToolExecutor;
     getConfigFn: (pluginId: string, runtimeId: string) => Readonly<Record<string, unknown>>;
     resolveModel: (manifest: RuntimeManifest, apiOverride?: string) => string | undefined;
+    hookPipeline?: HookPipeline;
+    eventBus?: EventBus;
   };
 };
 
 export const resumeRoutes = new Hono<Env>();
 
-// ── Minimal JSON Schema validator (no new deps) ──────────────────
+// ── JSON Schema validator (Ajv, audit 2026-04-20 finding 5) ──────
 //
-// Validates `data` against a plain JSON Schema { type, properties, required }.
-// Returns null on success, error string on failure.
+// Previous hand-rolled validator handled type + top-level required + shallow
+// property type-checks only. It silently accepted enum violations, nested
+// objects, min/max, minLength/maxLength, pattern, array items, oneOf/anyOf.
+// Plugins that declare a rich resumeSchema expected full JSON Schema
+// semantics, so we now compile with Ajv.
+//
+// Compiled validators are cached per-suspension via their schema's structural
+// key to avoid compile cost on retries. Strict mode is off so plugins can use
+// convenience keywords like `minimum` on string-coerced numeric inputs.
+const ajv = new Ajv({ allErrors: false, strict: false });
+const compiledCache = new WeakMap<object, ReturnType<typeof ajv.compile>>();
+
 function validateAgainstJsonSchema(data: unknown, schema: unknown): string | null {
   if (!schema || typeof schema !== 'object') return null; // no schema = no validation
 
-  const s = schema as Record<string, unknown>;
-
-  // type check
-  if (s['type'] !== undefined) {
-    const expectedType = s['type'] as string;
-    const actualType = data === null ? 'null' : Array.isArray(data) ? 'array' : typeof data;
-    if (actualType !== expectedType) {
-      return `Expected type "${expectedType}", got "${actualType}"`;
+  const schemaObj = schema as object;
+  let validate = compiledCache.get(schemaObj);
+  if (!validate) {
+    try {
+      validate = ajv.compile(schemaObj as Record<string, unknown>);
+      compiledCache.set(schemaObj, validate);
+    } catch (err) {
+      // Bad schema — log a warning and skip validation (fail open is safer
+      // than blocking resume on malformed plugin metadata, but the plugin
+      // author should fix this).
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[resume] resumeSchema failed to compile:',
+        err instanceof Error ? err.message : String(err),
+      );
+      return null;
     }
   }
 
-  // required fields
-  if (Array.isArray(s['required']) && typeof data === 'object' && data !== null && !Array.isArray(data)) {
-    const obj = data as Record<string, unknown>;
-    for (const field of s['required'] as string[]) {
-      if (!(field in obj)) {
-        return `Missing required field: "${field}"`;
-      }
-    }
-  }
+  if (validate(data)) return null;
 
-  // properties type-check (shallow — one level deep is sufficient for resume schemas)
-  if (s['properties'] && typeof s['properties'] === 'object' && typeof data === 'object' && data !== null && !Array.isArray(data)) {
-    const obj = data as Record<string, unknown>;
-    const props = s['properties'] as Record<string, Record<string, unknown>>;
-    for (const [key, propSchema] of Object.entries(props)) {
-      if (key in obj && propSchema['type'] !== undefined) {
-        const val = obj[key];
-        const expectedType = propSchema['type'] as string;
-        const actualType = val === null ? 'null' : Array.isArray(val) ? 'array' : typeof val;
-        if (actualType !== expectedType) {
-          return `Field "${key}": expected type "${expectedType}", got "${actualType}"`;
-        }
-      }
-    }
-  }
-
-  return null;
+  const errors = validate.errors ?? [];
+  return errors
+    .map((e: ErrorObject) => `${e.instancePath || '$'} ${e.message ?? 'invalid'}`)
+    .join('; ');
 }
 
 // ── Route ────────────────────────────────────────────────────────
@@ -123,7 +136,9 @@ resumeRoutes.post('/:id/resume', async (c) => {
     return c.json({ error: 'Session not found' }, 404);
   }
 
-  // Load suspension
+  // Load suspension — first pass is a cheap sanity read; the real claim
+  // happens atomically below via `claimSuspension` to prevent double-resume
+  // under concurrent requests (audit 2026-04-20 finding 2).
   const suspension = await store.getSuspension(suspensionId);
   if (!suspension) {
     return c.json({ error: 'Suspension not found' }, 404);
@@ -132,10 +147,11 @@ resumeRoutes.post('/:id/resume', async (c) => {
     return c.json({ error: 'Suspension not found' }, 404);
   }
   if (suspension.resolvedAt) {
-    return c.json({ error: 'Suspension already resolved' }, 404);
+    // Already resolved OR claimed by a concurrent request.
+    return c.json({ error: 'Suspension already resolved' }, 409);
   }
 
-  // Validate resume data against stored resumeSchema
+  // Validate resume data against stored resumeSchema (Ajv — finding 5)
   const validationError = validateAgainstJsonSchema(data, suspension.resumeSchema);
   if (validationError !== null) {
     return c.json({ error: `Resume data validation failed: ${validationError}` }, 400);
@@ -163,11 +179,22 @@ resumeRoutes.post('/:id/resume', async (c) => {
     return c.json({ error: `Runtime "${suspension.runtimeId}" not found in registry` }, 404);
   }
 
+  // Atomic compare-and-swap: only the winner proceeds. Losers receive 409.
+  // This must happen AFTER the cheap rejections above so that e.g. a
+  // validation-failed request doesn't consume the claim slot.
+  const claimed = await store.claimSuspension(suspensionId);
+  if (!claimed) {
+    return c.json({ error: 'Suspension already resolved' }, 409);
+  }
+
+  const hookPipeline = c.get('hookPipeline');
+  const eventBus = c.get('eventBus');
+
   try {
-    const result = await resumeSuspendedRuntime(
+    const result = await withSessionLock(sessionId, () => resumeSuspendedRuntime(
       suspension,
       data,
-      effectiveManifest,
+      effectiveManifest!,
       {
         loadRuntime: loadRuntimeFn,
         llm: llmAdapter,
@@ -175,11 +202,26 @@ resumeRoutes.post('/:id/resume', async (c) => {
         store,
         toolExecutor,
         resolveModel,
+        ...(hookPipeline ? { hookPipeline } : {}),
+        ...(eventBus ? { eventBus } : {}),
       },
-    );
+    ));
 
     return c.json({ result });
   } catch (err: unknown) {
+    // Release the claim so legitimate retries can attempt again. The
+    // runtime error propagates to the caller; the suspension is back to
+    // `unresolved` and appears in subsequent `listSuspensions`.
+    try {
+      await store.saveSuspension({ ...suspension, resolvedAt: undefined });
+    } catch (releaseErr) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[resume] failed to release suspension claim after error:',
+        releaseErr instanceof Error ? releaseErr.message : String(releaseErr),
+      );
+    }
+
     const message = err instanceof Error ? err.message : String(err);
     return c.json({ error: `Resume failed: ${message}` }, 500);
   }

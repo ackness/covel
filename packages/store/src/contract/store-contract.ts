@@ -359,6 +359,7 @@ function makeSnapshotPayload(overrides?: Partial<SnapshotPayload>): SnapshotPayl
     pluginData: [],
     workingMemory: [],
     lorebookEntries: [],
+    suspensions: [],
     messagesCursor: '',
     ...overrides,
   };
@@ -921,6 +922,51 @@ export function runStoreContractTests(
         const b = await store.getPluginData('sess-X', 'plugin-b', 'ns', 'k');
         expect(a!.value).toBe('from-a');
         expect(b!.value).toBe('from-b');
+      });
+
+      // Audit 2026-04-20 finding 7.2 — snapshot payload builder relies on
+      // listPluginDataSessionScope to pick up plugins that wrote plugin_data
+      // without producing a runtime result.
+      it('listPluginDataSessionScope returns all pluginIds and namespaces for a session', async () => {
+        const now = new Date().toISOString();
+        // Three plugins, multiple namespaces, some multi-key.
+        await store.setPluginDataBatch([
+          { id: 'pd-scope-1a', sessionId: 'sess-scope', pluginId: 'plugin-a', namespace: 'ns1', key: 'k', value: 1, createdAt: now, updatedAt: now },
+          { id: 'pd-scope-1b', sessionId: 'sess-scope', pluginId: 'plugin-a', namespace: 'ns2', key: 'k', value: 2, createdAt: now, updatedAt: now },
+          { id: 'pd-scope-2',  sessionId: 'sess-scope', pluginId: 'plugin-b', namespace: 'ns1', key: 'k', value: 3, createdAt: now, updatedAt: now },
+          { id: 'pd-scope-3',  sessionId: 'sess-scope', pluginId: 'plugin-c', namespace: 'ns1', key: 'k1', value: 4, createdAt: now, updatedAt: now },
+          { id: 'pd-scope-3b', sessionId: 'sess-scope', pluginId: 'plugin-c', namespace: 'ns1', key: 'k2', value: 5, createdAt: now, updatedAt: now },
+        ]);
+
+        // Parallel session — must NOT appear in our scope query.
+        await store.setPluginData({
+          id: 'pd-scope-other', sessionId: 'sess-other', pluginId: 'plugin-a',
+          namespace: 'ns1', key: 'k', value: 99, createdAt: now, updatedAt: now,
+        });
+
+        const rows = await store.listPluginDataSessionScope('sess-scope');
+        expect(rows).toHaveLength(5);
+        for (const r of rows) {
+          expect(r.sessionId).toBe('sess-scope');
+        }
+
+        // All three pluginIds are represented.
+        const pluginIds = new Set(rows.map((r) => r.pluginId));
+        expect(pluginIds).toEqual(new Set(['plugin-a', 'plugin-b', 'plugin-c']));
+
+        // Both namespaces from plugin-a survived.
+        const pluginA = rows.filter((r) => r.pluginId === 'plugin-a');
+        expect(new Set(pluginA.map((r) => r.namespace))).toEqual(new Set(['ns1', 'ns2']));
+
+        // Session isolation: cross-session row is not returned.
+        const otherRows = await store.listPluginDataSessionScope('sess-other');
+        expect(otherRows).toHaveLength(1);
+        expect(otherRows[0]!.pluginId).toBe('plugin-a');
+      });
+
+      it('listPluginDataSessionScope returns an empty array for a session with no plugin_data', async () => {
+        const rows = await store.listPluginDataSessionScope('sess-no-data');
+        expect(rows).toEqual([]);
       });
     });
 
@@ -1752,6 +1798,145 @@ export function runStoreContractTests(
         const result = await store.getSnapshot(snap.id);
         expect(result).not.toBeNull();
         expect(result!.id).toBe(snap.id);
+      });
+    });
+
+    // ── claimSuspension (exactly-once claim) ─────────────────
+
+    describe('claimSuspension', () => {
+      it('returns true on first claim and atomically sets resolvedAt', async () => {
+        const suspension = makeSuspension({ sessionId: 'sess-claim-ok' });
+        await store.saveSuspension(suspension);
+
+        const firstClaim = await store.claimSuspension(suspension.id);
+        expect(firstClaim).toBe(true);
+
+        const afterClaim = await store.getSuspension(suspension.id);
+        expect(afterClaim).not.toBeNull();
+        expect(afterClaim!.resolvedAt).toBeTruthy();
+      });
+
+      it('returns false on a subsequent claim (already claimed)', async () => {
+        const suspension = makeSuspension({ sessionId: 'sess-claim-conflict' });
+        await store.saveSuspension(suspension);
+
+        const firstClaim = await store.claimSuspension(suspension.id);
+        expect(firstClaim).toBe(true);
+
+        const secondClaim = await store.claimSuspension(suspension.id);
+        expect(secondClaim).toBe(false);
+      });
+
+      it('returns false for a non-existent suspension id', async () => {
+        const result = await store.claimSuspension('claim-nonexistent-id');
+        expect(result).toBe(false);
+      });
+
+      it('returns false when the suspension was already resolved via markSuspensionResolved', async () => {
+        const suspension = makeSuspension({ sessionId: 'sess-claim-resolved' });
+        await store.saveSuspension(suspension);
+        await store.markSuspensionResolved(suspension.id);
+
+        const claimed = await store.claimSuspension(suspension.id);
+        expect(claimed).toBe(false);
+      });
+    });
+
+    // ── deleteSession cascade (Finding 4) ────────────────────
+
+    describe('deleteSession cascade', () => {
+      it('removes all session-scoped rows across every collection', async () => {
+        const sessionId = 'sess-cascade';
+        const otherId = 'sess-cascade-keep';
+
+        // Seed target session across every known child collection.
+        await store.createSession(makeSession({ id: sessionId }));
+        await store.createSession(makeSession({ id: otherId }));
+
+        await store.saveTurnResult(makeTurnResult({ sessionId }));
+        await store.saveRuntimeResult(makeRuntimeResult({ sessionId }));
+        await store.saveToolCall(makeToolCall({ sessionId }));
+        await store.saveStateSchema(makeStateSchema({ sessionId }));
+        await store.upsertStateEntry(makeStateEntry({ sessionId }));
+        await store.addStateChange(makeStateChange({ sessionId }));
+        await store.saveEvent(makeEvent({ sessionId }));
+        await store.saveApproval(makeApproval({ sessionId }));
+        await store.addMessage(makeMessage({ sessionId }));
+        await store.upsertCharacter(makeCharacter({ sessionId }));
+        await store.savePluginConfig(makePluginConfig({ sessionId }));
+        await store.addTraceEvent(makeTraceEvent({ sessionId }));
+        await store.saveRuntimeOutput(makeRuntimeOutput({ sessionId }));
+        await store.saveInteractionRecord(makeInteractionRecord({ sessionId }));
+        await store.appendTurnMessage(makeTurnMessage({ sessionId }));
+        await store.savePlayerInput(makePlayerInput({ sessionId }));
+        await store.upsertWorkingMemory(makeWorkingMemory({ sessionId }));
+        await store.upsertLorebookEntries([makeLorebookEntry({ sessionId })]);
+        await store.saveSessionSummary(makeSessionSummary({ sessionId }));
+        await store.saveSuspension(makeSuspension({ sessionId }));
+        await store.saveSnapshot(makeSnapshot({ sessionId }));
+        await store.setPluginData({
+          id: id(),
+          sessionId,
+          pluginId: 'plugin-1',
+          namespace: 'ns',
+          key: 'k',
+          value: { v: 1 },
+          createdAt: ts(),
+          updatedAt: ts(),
+        });
+
+        // Seed a parallel session to prove the cascade is scoped.
+        await store.saveTurnResult(makeTurnResult({ sessionId: otherId }));
+        await store.saveSuspension(makeSuspension({ sessionId: otherId }));
+        await store.upsertWorkingMemory(makeWorkingMemory({ sessionId: otherId }));
+        await store.upsertLorebookEntries([makeLorebookEntry({ sessionId: otherId })]);
+
+        // Cascade.
+        await store.deleteSession(sessionId);
+
+        // Target session: every collection empty.
+        expect(await store.getSession(sessionId)).toBeNull();
+        expect(await store.listTurnResults(sessionId)).toHaveLength(0);
+        expect(
+          await store.listRuntimeResults(sessionId, 'turn-1'),
+        ).toHaveLength(0);
+        expect(await store.listToolCalls(sessionId)).toHaveLength(0);
+        expect(await store.listStateSchemas(sessionId)).toHaveLength(0);
+        expect(await store.listStateEntries(sessionId, 'stats')).toHaveLength(0);
+        expect(
+          await store.listStateChanges(sessionId, 'stats', 'hp'),
+        ).toHaveLength(0);
+        expect(await store.listEvents(sessionId)).toHaveLength(0);
+        expect(await store.listApprovals(sessionId)).toHaveLength(0);
+        expect(await store.listMessages(sessionId)).toHaveLength(0);
+        expect(await store.listCharacters(sessionId)).toHaveLength(0);
+        expect(
+          await store.getPluginConfig(sessionId, 'core-narrator'),
+        ).toBeNull();
+        expect(await store.listTraceEvents(sessionId)).toHaveLength(0);
+        expect(await store.listRuntimeOutputs(sessionId)).toHaveLength(0);
+        expect(await store.listInteractionRecords(sessionId)).toHaveLength(0);
+        expect(await store.listTurnMessages(sessionId)).toHaveLength(0);
+        expect(await store.listPlayerInputs(sessionId)).toHaveLength(0);
+        expect(await store.listWorkingMemory(sessionId)).toHaveLength(0);
+        expect(
+          await store.listSessionLorebookEntries(sessionId),
+        ).toHaveLength(0);
+        expect(await store.listSessionSummaries(sessionId)).toHaveLength(0);
+        expect(await store.listSuspensions(sessionId)).toHaveLength(0);
+        expect(await store.listSnapshots(sessionId)).toHaveLength(0);
+        expect(
+          await store.listPluginData(sessionId, 'plugin-1'),
+        ).toHaveLength(0);
+
+        // Parallel session untouched.
+        expect(await store.getSession(otherId)).not.toBeNull();
+        expect(await store.listTurnResults(otherId)).toHaveLength(1);
+        expect(await store.listSuspensions(otherId)).toHaveLength(1);
+        expect(await store.listWorkingMemory(otherId)).toHaveLength(1);
+        expect(
+          await store.listSessionLorebookEntries(otherId),
+        ).toHaveLength(1);
       });
     });
 

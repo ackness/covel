@@ -23,6 +23,7 @@ import type {
   PluginDataRecord,
   WorkingMemoryRecord,
   LorebookEntryRecord,
+  SuspensionRecord,
 } from '@covel/store';
 
 /**
@@ -49,15 +50,12 @@ export async function buildSnapshotPayload(
     stateEntries.push(...rows);
   }
 
-  // Plugin data — there is no "list all plugin data for a session" method;
-  // the store API is intentionally plugin-scoped. We collect distinct
-  // pluginIds that appeared in state changes / runtime results (via the
-  // session's own derivatives) and walk each. For snapshots this is best
-  // effort: if a plugin has no records yet it's correctly omitted.
-  //
-  // For the v1 payload, we walk all known plugin namespaces by asking the
-  // store's listPluginData with every distinct pluginId we've seen. Stores
-  // that don't want to implement a session-wide list stay clean.
+  // Plugin data — union two sources:
+  //  1. pluginIds appearing in any runtime_result for the session.
+  //  2. pluginIds that actually wrote plugin_data (via the session-scope
+  //     list — audit 2026-04-20 finding 7.2). Source #1 alone misses
+  //     plugins that wrote during install hooks, data-only providers, and
+  //     plugins that suspended before producing any runtime result.
   const pluginIds = await discoverPluginIds(store, sessionId);
   const pluginData: PluginDataRecord[] = [];
   for (const pid of pluginIds) {
@@ -80,6 +78,17 @@ export async function buildSnapshotPayload(
       ? await store.listSessionLorebookEntries(sessionId)
       : [];
 
+  // Suspensions — capture only unresolved records (audit 2026-04-20
+  // finding 7.3). Resolved / claimed (`resolvedAt` set) suspensions are
+  // either already finished or in-flight; the child session has no way to
+  // take over a mid-flight resume, so they are excluded. Each record's
+  // `pendingContinuation` travels with the snapshot so a forked session can
+  // POST /resume with the copy.
+  const allSuspensions: readonly SuspensionRecord[] = await store.listSuspensions(sessionId);
+  const suspensions: readonly SuspensionRecord[] = allSuspensions.filter(
+    (s) => s.resolvedAt === undefined,
+  );
+
   return {
     schemaVersion: 1,
     turnId,
@@ -88,6 +97,7 @@ export async function buildSnapshotPayload(
     pluginData,
     workingMemory,
     lorebookEntries,
+    suspensions,
     messagesCursor,
   };
 }
@@ -95,14 +105,20 @@ export async function buildSnapshotPayload(
 /**
  * Discover plugin ids that have any data for the given session.
  *
- * Uses runtime results as the source of truth: any plugin that has ever run
- * in the session has at least one runtime_result row. This is sufficient
- * because plugin data is always produced by a plugin runtime.
+ * Union of two sources (audit 2026-04-20 finding 7.2):
+ *  - Runtime results — any plugin that ever ran in the session.
+ *  - Plugin data — any plugin that ever wrote to `plugin_data`, even if it
+ *    never produced a runtime result (install hooks, data-only providers,
+ *    plugins that suspended before completing their first turn).
+ *
+ * Previously only the runtime-result source was walked, which silently
+ * dropped plugins of the second shape from the snapshot payload.
  */
 async function discoverPluginIds(store: DataStore, sessionId: string): Promise<string[]> {
-  // listRuntimeResults requires a turnId; we need everything. Walk turn
-  // results (which already aggregate runtime results) instead.
-  const turnResults = await store.listTurnResults(sessionId);
+  const [turnResults, pluginDataRows] = await Promise.all([
+    store.listTurnResults(sessionId),
+    store.listPluginDataSessionScope(sessionId),
+  ]);
   const seen = new Set<string>();
   for (const tr of turnResults) {
     const runtimeResults = Array.isArray(tr.runtimeResults)
@@ -112,6 +128,9 @@ async function discoverPluginIds(store: DataStore, sessionId: string): Promise<s
       const pid = typeof rr['pluginId'] === 'string' ? (rr['pluginId'] as string) : undefined;
       if (pid) seen.add(pid);
     }
+  }
+  for (const row of pluginDataRows) {
+    if (row.pluginId) seen.add(row.pluginId);
   }
   return [...seen];
 }

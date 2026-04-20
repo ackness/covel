@@ -28,6 +28,7 @@ import type {
   CharacterRecord,
   StateEntryRecord,
   PluginDataRecord,
+  SuspensionRecord,
   WorkingMemoryRecord,
   TurnMessageRecord,
 } from '@covel/store';
@@ -247,19 +248,51 @@ snapshotRoutes.post('/:id/fork', async (c) => {
       await store.upsertWorkingMemory(record);
     }
 
+    // Copy unresolved suspensions (audit 2026-04-20 finding 7.3). Each
+    // record is rebound to the child session with a fresh id so the parent
+    // copy remains untouched. `pendingContinuation` is preserved verbatim —
+    // POST /resume on the child uses the new id to re-enter the tool loop.
+    for (const susp of snapshot.payload.suspensions) {
+      const record: SuspensionRecord = {
+        ...susp,
+        id: randomUUID(),
+        sessionId: childSessionId,
+      };
+      await store.saveSuspension(record);
+    }
+
     // Copy turn messages up to and including the snapshot's cursor.
-    // Strategy: read all parent messages in order, copy each with a fresh
-    // id to the child, stop after the cursor. Empty cursor = no messages.
+    // Strategy: read all parent messages in order, verify the cursor still
+    // exists (was not compacted away / deleted), then copy 0..cursorIdx
+    // inclusive with fresh ids to the child. Empty cursor = no messages.
+    //
+    // Audit 2026-04-20 finding 7.1: previously the loop copied ALL parent
+    // messages silently when the cursor id could not be found. Now the
+    // missing cursor surfaces as a 409 so callers can decide how to recover
+    // rather than inheriting an unbounded prefix.
     if (snapshot.payload.messagesCursor !== '') {
       const parentMessages = await store.listTurnMessages(parentSessionId);
-      for (const m of parentMessages) {
+      const cursorIdx = parentMessages.findIndex(
+        (m) => m.id === snapshot.payload.messagesCursor,
+      );
+      if (cursorIdx === -1) {
+        await store.rollbackTx?.();
+        return c.json(
+          {
+            error: 'Snapshot cursor no longer exists in parent session',
+            code: 'cursor_missing',
+          },
+          409,
+        );
+      }
+      for (let i = 0; i <= cursorIdx; i++) {
+        const m = parentMessages[i]!;
         const copy: TurnMessageRecord = {
           ...m,
           id: randomUUID(),
           sessionId: childSessionId,
         };
         await store.appendTurnMessage(copy);
-        if (m.id === snapshot.payload.messagesCursor) break;
       }
     }
 

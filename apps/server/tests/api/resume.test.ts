@@ -280,7 +280,7 @@ describe('Resume Routes — flag on (COVEL_SUSPEND_V1=1)', () => {
       expect(res.status).toBe(404);
     });
 
-    it('returns 404 when suspension is already resolved', async () => {
+    it('returns 409 when suspension is already resolved (audit finding 2: idempotency)', async () => {
       await createSuspension(store, { resolvedAt: new Date().toISOString() });
       const app = createTestApp(makeDefaultDeps(store));
 
@@ -293,7 +293,10 @@ describe('Resume Routes — flag on (COVEL_SUSPEND_V1=1)', () => {
         body: JSON.stringify({ suspensionId: 'susp-1', data: { name: 'Alice' } }),
       });
 
-      expect(res.status).toBe(404);
+      // 409 Conflict: the resolved-already check and the atomic claim both
+      // reject with "already resolved" — 409 distinguishes this from the
+      // other 404 "not found" paths that cover missing sessions/suspensions.
+      expect(res.status).toBe(409);
       const body = await res.json() as Record<string, unknown>;
       expect(body.error).toMatch(/already resolved/i);
     });

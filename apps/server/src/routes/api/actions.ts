@@ -15,6 +15,7 @@ import { executeTurn, processRuntimeResult, createTraceRecorder } from '@covel/r
 import type { RuntimeManifest } from '@covel/shared';
 import type { CompactorRunner } from '@covel/context';
 import { rateLimiter } from '../../middleware/rate-limit.js';
+import { withSessionLock } from '../../lib/session-lock.js';
 import { loadSessionConfig } from './load-session-config.js';
 
 // SSE uses ProtocolEventType names directly — no legacy mapping.
@@ -238,8 +239,14 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
         })),
       });
 
-      // Execute turn through the API pipeline
-      const result = await executeTurn(
+      // Execute turn through the API pipeline.
+      //
+      // `withSessionLock` serializes `executeTurn` per sessionId so two
+      // concurrent POST /api/actions requests cannot interleave their
+      // turnNumber computation, state patches, or auto-snapshots
+      // (audit 2026-04-20 finding 1). For multi-process deployments this
+      // must be upgraded to a distributed lock — see session-lock.ts.
+      const result = await withSessionLock(sessionId, () => executeTurn(
         {
           sessionId,
           turnId,
@@ -302,7 +309,7 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
           compactor: compactorRunner,
           memorySystem: _memorySystem,
         },
-      );
+      ));
 
       // Update session turn count — derive from actual turn results to avoid
       // concurrent read-modify-write races (two parallel turns reading the same

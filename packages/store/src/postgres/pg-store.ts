@@ -7,7 +7,7 @@
 
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { eq, and, asc, desc, gte, type SQL } from 'drizzle-orm';
+import { eq, and, asc, desc, gte, isNull, type SQL } from 'drizzle-orm';
 import * as schema from './schema.js';
 import type {
   DataStore,
@@ -646,6 +646,19 @@ export async function createPgStore(
       return rows.map(toPluginDataRecord);
     },
 
+    async listPluginDataSessionScope(
+      sessionId: string,
+    ): Promise<readonly PluginDataRecord[]> {
+      // Full session scope — used by the snapshot payload builder to avoid
+      // missing plugins that never produced a runtime result (audit
+      // 2026-04-20 finding 7.2).
+      const rows = await db
+        .select()
+        .from(schema.pluginData)
+        .where(eq(schema.pluginData.sessionId, sessionId));
+      return rows.map(toPluginDataRecord);
+    },
+
     async deletePluginData(
       sessionId: string,
       pluginId: string,
@@ -1156,6 +1169,21 @@ export async function createPgStore(
         .update(schema.suspensions)
         .set({ resolvedAt: new Date().toISOString() })
         .where(eq(schema.suspensions.id, id));
+    },
+
+    async claimSuspension(id: string): Promise<boolean> {
+      // Atomic compare-and-swap: Postgres evaluates the WHERE predicate and
+      // writes the new value in a single statement. Concurrent claims race
+      // on row-level locks — exactly one sees `resolvedAt IS NULL` and
+      // receives a non-empty RETURNING set. The sentinel `claimed:<iso>` is
+      // later overwritten by `markSuspensionResolved` with the final
+      // timestamp.
+      const rows = await db
+        .update(schema.suspensions)
+        .set({ resolvedAt: `claimed:${new Date().toISOString()}` })
+        .where(and(eq(schema.suspensions.id, id), isNull(schema.suspensions.resolvedAt)))
+        .returning({ id: schema.suspensions.id });
+      return rows.length === 1;
     },
 
     async listSuspensions(sessionId: string): Promise<readonly SuspensionRecord[]> {

@@ -1758,7 +1758,7 @@ rpc:
 
 #### `POST /api/sessions/:id/snapshot`
 
-从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 characters、stateEntries、pluginData、workingMemory、messagesCursor（最后一条 `turn_message.id`）。`lorebookEntries` 当前总是空数组，待 Lorebook store API 就绪后填充。
+从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 characters、stateEntries、pluginData、workingMemory、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。
 
 **响应:**
 
@@ -1777,6 +1777,7 @@ rpc:
       "pluginData": [ /* ... */ ],
       "workingMemory": [ /* ... */ ],
       "lorebookEntries": [],
+      "suspensions": [ /* 未解决的 SuspensionRecord[] */ ],
       "messagesCursor": "tm_abc"
     },
     "createdAt": "2026-04-13T00:00:00.000Z"
@@ -1807,8 +1808,8 @@ session 不存在时返回 `404`。
 服务端会：
 1. 创建新 sessionId（`{worldId}-{uuid8}`）；
 2. 复用父 session 的 locale / activePlugins / status / turnCount / preGameCompleted；
-3. **拷贝** characters / state entries / plugin data / working memory / state schemas 到新 session；
-4. 从 `turn_messages` 中按顺序拷贝消息直到 `payload.messagesCursor`（含），超过 cursor 的消息不拷贝；
+3. **拷贝** characters / state entries / plugin data / working memory / state schemas / unresolved suspensions 到新 session；
+4. 从 `turn_messages` 中按顺序拷贝消息直到 `payload.messagesCursor`（含），超过 cursor 的消息不拷贝。cursor 在父 session 中已丢失（compact / 删除等）时返回 `409 { code: 'cursor_missing' }`；
 5. 写入一个 `kind="fork"` 的快照到子 session，`parentId` 指向源 snapshot，供 provenance 追踪；
 6. 在 eventBus 上广播 `session.forked`（SSE topic=`session`）。
 
@@ -1823,7 +1824,7 @@ session 不存在时返回 `404`。
 }
 ```
 
-返回 `201 Created`；快照不属于该 session、快照不存在、或父 session 不存在均返回 `404`；`fromSnapshotId` 缺失返回 `400`；内部写入失败返回 `500`。
+返回 `201 Created`；快照不属于该 session、快照不存在、或父 session 不存在均返回 `404`；`fromSnapshotId` 缺失返回 `400`；`payload.messagesCursor` 指向的消息已不在父 session 中返回 `409 { code: 'cursor_missing' }`；内部写入失败返回 `500`。
 
 整个 fork 在 `beginTx` / `commitTx` 下写入，中途任何失败都会 rollback，不会留下半成品子 session。
 

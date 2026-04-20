@@ -373,6 +373,19 @@ export interface DataStore {
   setPluginDataBatch(records: readonly PluginDataRecord[]): Promise<void>;
   getPluginData(sessionId: string, pluginId: string, namespace: string, key: string): Promise<PluginDataRecord | null>;
   listPluginData(sessionId: string, pluginId: string, namespace?: string, pagination?: PaginationOpts): Promise<PluginDataRecord[]>;
+  /**
+   * List every plugin_data row for a session across ALL pluginIds and
+   * namespaces. Used by the snapshot payload builder (audit 2026-04-20
+   * finding 7.2) so that plugins which wrote plugin_data without ever
+   * producing a runtime result (install hooks, data-only providers,
+   * plugins that suspended before completing) are not silently dropped
+   * from the snapshot.
+   *
+   * Implementations should key off the `(sessionId)` index; the shape is
+   * the same as `listPluginData`, just without the pluginId filter. The
+   * plugin-scoped `listPluginData` remains the narrower, high-traffic API.
+   */
+  listPluginDataSessionScope(sessionId: string): Promise<readonly PluginDataRecord[]>;
   deletePluginData(sessionId: string, pluginId: string, namespace: string, key: string): Promise<void>;
 
   // ── Plugin Configs ──
@@ -440,6 +453,25 @@ export interface DataStore {
   markSuspensionResolved(id: string): Promise<void>;
   listSuspensions(sessionId: string): Promise<readonly SuspensionRecord[]>;
   deleteSuspension(id: string): Promise<void>;
+  /**
+   * Atomically claim an unresolved suspension.
+   *
+   * Returns `true` iff the suspension existed, was previously unresolved, and
+   * is now marked as in-progress (`resolvedAt` set to a sentinel such as
+   * `"claimed:<iso>"`). Returns `false` if the suspension does not exist or
+   * was already claimed/resolved.
+   *
+   * Used by the resume route to guarantee exactly-once execution of a
+   * suspended runtime even under concurrent POST /api/sessions/:id/resume
+   * (audit 2026-04-20 finding 2). Callers should treat a `false` return as
+   * "409 Conflict" and abandon the request.
+   *
+   * On successful completion of the resume pipeline, the caller overwrites
+   * the claim sentinel via `markSuspensionResolved(id)`. On failure, the
+   * caller should release the claim (re-issue `saveSuspension` with
+   * `resolvedAt` unset) — see resume route for the policy.
+   */
+  claimSuspension(id: string): Promise<boolean>;
 
   // ── Snapshots (S4-T2) ──
   /**
@@ -564,6 +596,21 @@ export interface SnapshotPayload {
    */
   readonly lorebookEntries: readonly LorebookEntryRecord[];
   /**
+   * Unresolved suspensions at snapshot time (audit 2026-04-20 finding 7.3).
+   *
+   * Only suspensions whose `resolvedAt` is unset are captured — resolved or
+   * claimed-but-still-executing records are excluded because the target
+   * runtime is either done or in-flight and the child session has no way to
+   * take over mid-flight. Each suspension travels with its full
+   * `pendingContinuation` so the forked session can POST /resume using the
+   * copied id.
+   *
+   * The fork route regenerates each suspension's id and rebinds
+   * `sessionId = childSessionId` before persisting, so the original parent
+   * record is preserved.
+   */
+  readonly suspensions: readonly SuspensionRecord[];
+  /**
    * Last `turn_messages.id` persisted for this session at snapshot time.
    * Used by fork to bound how many messages are copied.
    * Empty string when there are no messages yet.
@@ -614,10 +661,18 @@ export interface SuspensionRecord {
     /** ToolCallRecord[] accumulated before the suspend point. */
     readonly toolCallsSoFar: readonly unknown[];
     /**
-     * TODO(S4-T4.b): pendingProposals are not yet populated — the suspend
-     * point is currently always before any proposal-generating runtime output,
-     * so this is safe for now. When mid-turn proposal collection lands, capture
-     * accumulated proposals here so they are committed on resume completion.
+     * Proposals buffered mid-turn at the suspend point.
+     *
+     * INVARIANT (audit 2026-04-20 finding 9b): MUST be empty at suspend time.
+     * The suspend sentinel currently fires before any proposal-generating
+     * runtime output, so the write site in `turn-executor` seeds this with
+     * `[]` and the resume path assumes the tool loop can re-enter cleanly.
+     *
+     * If this array ever becomes non-empty, `resume-executor` MUST replay /
+     * commit the proposals before re-entering the tool loop — otherwise the
+     * mid-turn writes are silently dropped. The suspend write site in
+     * `turn-executor.ts` asserts this invariant; keep the two in sync if
+     * mid-turn proposal collection lands.
      */
     readonly pendingProposals: readonly unknown[];
     /** tool_call_id of the suspend tool call (agent runtime only). Used to append synthetic tool result. */

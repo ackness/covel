@@ -467,6 +467,123 @@ describe('Snapshot routes — flag on', () => {
       expect(childSnapshots[0]!.kind).toBe('fork');
       expect(childSnapshots[0]!.parentId).toBe(snapId);
     });
+
+    // Audit 2026-04-20 finding 7.1 — cursor-miss must surface as 409.
+    it('returns 409 cursor_missing when payload.messagesCursor no longer exists in parent', async () => {
+      const app = createTestApp(store);
+      const snapId = await createParentSnapshot(store, app);
+
+      // Corrupt the stored snapshot: rewrite its cursor to a phantom id that
+      // is not present in the parent's turn_messages. Simulates compactor /
+      // GC removing the cursor row after the snapshot was taken.
+      const stored = await store.getSnapshot(snapId);
+      expect(stored).not.toBeNull();
+      await store.saveSnapshot({
+        ...stored!,
+        payload: {
+          ...stored!.payload,
+          messagesCursor: 'phantom-tm-id-not-in-parent',
+        },
+      });
+
+      const res = await app.request('/api/sessions/sess-1/fork', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      expect(res.status).toBe(409);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.code).toBe('cursor_missing');
+
+      // Transaction must have rolled back — no child session created.
+      const sessions = await store.listSessions();
+      const childSessions = sessions.filter((s) => s.id !== 'sess-1');
+      expect(childSessions).toHaveLength(0);
+    });
+
+    // Audit 2026-04-20 finding 7.3 — unresolved suspensions must travel with fork.
+    it('copies unresolved suspensions to the child session with a fresh id', async () => {
+      const now = new Date().toISOString();
+      await store.saveSuspension({
+        id: 'susp-orig',
+        sessionId: 'sess-1',
+        turnId: 'turn-1',
+        runtimeId: 'test-plugin',
+        pluginId: 'test-plugin',
+        reason: 'Need more info',
+        resumeSchema: { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'] },
+        pendingContinuation: {
+          messages: [{ role: 'system', content: 'sys' }],
+          toolCallsSoFar: [],
+          pendingProposals: [],
+          suspendToolCallId: 'tc-1',
+        },
+        createdAt: now,
+      });
+
+      const app = createTestApp(store);
+      const snapId = await createParentSnapshot(store, app);
+
+      const res = await app.request('/api/sessions/sess-1/fork', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as Record<string, unknown>;
+      const childId = body.sessionId as string;
+
+      // Parent suspension is unchanged.
+      const parentSuspensions = await store.listSuspensions('sess-1');
+      expect(parentSuspensions).toHaveLength(1);
+      expect(parentSuspensions[0]!.id).toBe('susp-orig');
+
+      // Child has a copy with a new id and the rebound sessionId.
+      const childSuspensions = await store.listSuspensions(childId);
+      expect(childSuspensions).toHaveLength(1);
+      expect(childSuspensions[0]!.id).not.toBe('susp-orig');
+      expect(childSuspensions[0]!.sessionId).toBe(childId);
+      expect(childSuspensions[0]!.reason).toBe('Need more info');
+      expect(childSuspensions[0]!.resolvedAt).toBeUndefined();
+    });
+
+    // Audit 2026-04-20 finding 7.3 — resolved suspensions must NOT travel.
+    it('excludes already-resolved suspensions from the fork', async () => {
+      const now = new Date().toISOString();
+      await store.saveSuspension({
+        id: 'susp-resolved',
+        sessionId: 'sess-1',
+        turnId: 'turn-1',
+        runtimeId: 'test-plugin',
+        pluginId: 'test-plugin',
+        reason: 'Already handled',
+        resumeSchema: {},
+        pendingContinuation: {
+          messages: [],
+          toolCallsSoFar: [],
+          pendingProposals: [],
+        },
+        createdAt: now,
+      });
+      await store.markSuspensionResolved('susp-resolved');
+
+      const app = createTestApp(store);
+      const snapId = await createParentSnapshot(store, app);
+
+      const res = await app.request('/api/sessions/sess-1/fork', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as Record<string, unknown>;
+      const childId = body.sessionId as string;
+
+      // Snapshot's payload.suspensions excluded the resolved one, so the
+      // child session starts with zero.
+      const childSuspensions = await store.listSuspensions(childId);
+      expect(childSuspensions).toHaveLength(0);
+    });
   });
 });
 
