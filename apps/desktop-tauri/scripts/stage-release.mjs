@@ -63,6 +63,18 @@ const isDistFile = (name) => {
 };
 const isAppBundle = (name) => name.endsWith(".app");
 
+// Insert "-tauri-" after the product name in each staged filename so
+// Tauri outputs never collide with Electron outputs in release/. The
+// productName itself stays "Covel" (visible to users).
+//
+//   Covel_0.0.1-beta_aarch64.dmg         →  Covel-tauri-0.0.1-beta_aarch64.dmg
+//   Covel_0.0.1-beta_x64-setup.exe       →  Covel-tauri-0.0.1-beta_x64-setup.exe
+//   Covel.app                            →  Covel-tauri.app
+function renameForTauri(name) {
+  if (name === "Covel.app") return "Covel-tauri.app";
+  return name.replace(/^Covel([_-])/, "Covel-tauri$1");
+}
+
 const kindDirs = await fs.readdir(bundleDir, { withFileTypes: true });
 const copied = [];
 for (const kind of kindDirs) {
@@ -72,7 +84,7 @@ for (const kind of kindDirs) {
     if (entry.isDirectory() && !isAppBundle(entry.name)) continue;
     if (!entry.isDirectory() && !isDistFile(entry.name)) continue;
     const src = path.join(kindPath, entry.name);
-    const dest = path.join(destDir, entry.name);
+    const dest = path.join(destDir, renameForTauri(entry.name));
     await copyAny(src, dest);
     copied.push(path.relative(repoRoot, dest));
   }

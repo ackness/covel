@@ -35,6 +35,9 @@
     "desktop:dev": "pnpm --filter @covel/desktop dev",
     "desktop:build": "pnpm --filter @covel/desktop build",
     "desktop:dist": "pnpm --filter @covel/desktop dist",
+    "dist:mac:electron": "pnpm --filter @covel/desktop dist:mac",
+    "dist:mac:tauri": "pnpm --filter @covel/desktop-tauri build:mac:arm64",
+    "dist:mac": "pnpm run dist:mac:electron && pnpm run dist:mac:tauri",
     "e2e:verify": "tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts",
     "create-plugin": "node scripts/create-plugin.js"
   },
@@ -43,19 +46,15 @@
     "node": ">=22.0.0"
   },
   "devDependencies": {
-    "@ai-sdk/openai-compatible": "^1.0.0",
-    "@ai-sdk/provider-utils": "^3.0.12",
     "@playwright/test": "^1.59.1",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^25.5.2",
-    "@vitest/coverage-v8": "^4.1.2",
-    "ai": "^5.0.0",
-    "better-sqlite3": "^11.9.1",
+    "@types/node": "^25.6.0",
+    "@vitest/coverage-v8": "^4.1.4",
+    "better-sqlite3": "^12.9.0",
     "playwright": "^1.59.1",
-    "sqlite-vec": "0.1.7-alpha.2",
-    "turbo": "^2.9.4",
-    "yaml": "^2.8.3",
-    "zod": "^3.23.8"
+    "sqlite-vec": "^0.1.9",
+    "turbo": "^2.9.6",
+    "yaml": "^2.8.3"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

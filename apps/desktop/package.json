@@ -11,16 +11,17 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder",
-    "dist:mac": "electron-builder --mac",
-    "dist:win": "electron-builder --win",
-    "dist:linux": "electron-builder --linux"
+    "pack": "pnpm build && electron-builder --dir",
+    "dist": "pnpm build && electron-builder",
+    "dist:mac": "pnpm build && electron-builder --mac",
+    "dist:win": "pnpm build && electron-builder --win",
+    "dist:linux": "pnpm build && electron-builder --linux"
   },
   "dependencies": {
     "tsx": "^4.19.0"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.1",
     "electron": "^40.0.0",
     "electron-builder": "^26.0.0",
     "esbuild": "^0.25.0"

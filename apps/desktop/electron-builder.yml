@@ -6,6 +6,10 @@ directories:
   output: ../../release/electron
   buildResources: resources
 
+# Inject `-electron-` into artefact names so Electron and Tauri outputs
+# (e.g. Covel_0.0.1-beta_aarch64.dmg) never get confused in release/.
+artifactName: ${productName}-electron-${version}-${os}-${arch}.${ext}
+
 files:
   - dist/**/*
   - "!dist/**/*.map"
@@ -68,9 +72,9 @@ compression: normal
 mac:
   target:
     - target: dmg
-      arch: [arm64, x64]
+      arch: [arm64]
     - target: zip
-      arch: [arm64, x64]
+      arch: [arm64]
   category: public.app-category.games
   darkModeSupport: true
   hardenedRuntime: true

@@ -10,6 +10,7 @@
 
 import { execSync } from "node:child_process";
 import { build } from "esbuild";
+import { rebuild as electronRebuild } from "@electron/rebuild";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
@@ -125,6 +126,29 @@ function ensureRuntimePackages() {
   }
 }
 
+async function rebuildNativeForElectron(stagingDir) {
+  const electronPkgPath = path.join(
+    desktopRoot,
+    "node_modules/electron/package.json",
+  );
+  if (!fs.existsSync(electronPkgPath)) {
+    throw new Error(
+      `Cannot locate electron package to derive ABI version: ${electronPkgPath}`,
+    );
+  }
+  const electronVersion = JSON.parse(
+    fs.readFileSync(electronPkgPath, "utf-8"),
+  ).version;
+  console.log(`  Electron ${electronVersion} ABI target`);
+
+  await electronRebuild({
+    buildPath: stagingDir,
+    electronVersion,
+    onlyModules: ["better-sqlite3"],
+    force: true,
+  });
+}
+
 function verifyStagedServerRuntime() {
   const checks = [
     path.join(serverStaging, "src/index.ts"),
@@ -219,6 +243,8 @@ console.log("  ✓ server resources staged");
 // Step 3b: smoke-test the staged server so electron-builder never wraps a
 // known-broken sidecar. We run it twice: once with the llm.toml we copied
 // (if any), and once with llm.toml hidden to exercise the built-in default.
+// Smoke runs BEFORE the Electron-ABI rebuild because it uses plain Node;
+// after the rebuild the native addon only loads inside Electron.
 console.log("\n[3b/4] Smoke-testing staged server (with llm.toml)...");
 execSync(`node "${path.join(desktopRoot, "scripts/verify-staging.mjs")}"`, {
   cwd: desktopRoot,
@@ -232,6 +258,14 @@ execSync(
     stdio: "inherit",
   },
 );
+
+// Step 3c: rebuild native addons against the Electron Node ABI so they load
+// inside the Electron main process at runtime. Electron 40 has
+// NODE_MODULE_VERSION 143; a CI-default Node 24 bakes 137 into
+// better_sqlite3.node and we get ERR_DLOPEN_FAILED on first use.
+console.log("\n[3c/4] Rebuilding native addons for Electron ABI...");
+await rebuildNativeForElectron(serverStaging);
+console.log("  ✓ native addons rebuilt for Electron");
 
 // Step 4: electron-builder
 console.log("\n[4/4] Packaging with electron-builder...");

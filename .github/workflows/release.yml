@@ -1,39 +1,38 @@
-name: Release Desktop
+name: Build Desktop (macOS)
 
-# 只在推送 v* tag 时触发（例如 v0.0.1-beta / v0.1.0 / v1.0.0）。
-# push 到 main 不会触发；CI 由 PR 上的其他 workflow 覆盖（本 repo 暂无）。
-# 也允许手动从 Actions UI 触发，便于测试构建流程。
+# Manual-only to keep GitHub Actions usage low. Primary distribution path
+# is local builds (`pnpm dist:mac:electron` / `pnpm dist:mac:tauri`).
+# This workflow just produces the same artefacts on a clean macOS runner
+# when you want an independent reproduction, or to publish a signed
+# release with the `publish_release` input set.
+#
+# macOS arm64 only. Windows/Linux are intentionally dropped — build them
+# locally on their native OS as needed.
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to build against (e.g. v0.0.1-beta). Leave empty to use current HEAD."
+        description: "Tag or ref to build against. Leave empty for current HEAD."
         required: false
         type: string
+      publish_release:
+        description: "Publish a GitHub Release with the built artefacts (requires tag)."
+        required: false
+        type: boolean
+        default: false
 
 permissions:
-  contents: write  # 需要此权限来创建 GitHub Release 并上传产物
+  contents: write
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  # ── Electron shell ──────────────────────────────────────────────
+  # ── Electron shell (macOS arm64) ────────────────────────────────
   build-electron:
-    name: Electron ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-14            # Apple Silicon runner
-            platform: mac
-          - os: windows-latest
-            platform: win
+    name: Electron mac-arm64
+    runs-on: macos-14
 
     steps:
       - name: Checkout
@@ -42,8 +41,6 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Setup pnpm
-        # 不指定 version，v6 会从 package.json packageManager 字段读取，
-        # 确保本地与 CI 用同一个 pnpm 版本
         uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
@@ -58,52 +55,35 @@ jobs:
       - name: Type check
         run: pnpm lint
 
-      - name: Build desktop (web + server staging)
+      - name: Build desktop (web + server staging + native rebuild for Electron)
         run: pnpm --filter @covel/desktop build
 
-      - name: Package Electron (${{ matrix.platform }})
-        # 直接调 electron-builder CLI 避免 pnpm script + `--` 吞参数；
-        # --publish=never 让 electron-builder 不自己创建 release，交给下游
-        # softprops/action-gh-release job 统一处理。
+      - name: Package Electron mac
         working-directory: apps/desktop
-        run: pnpm exec electron-builder --${{ matrix.platform }} --publish=never
+        run: pnpm exec electron-builder --mac --publish=never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify unpacked release resources (${{ matrix.platform }})
-        run: node apps/desktop/scripts/verify-release.mjs ${{ matrix.platform }}
+      - name: Verify unpacked release resources
+        run: node apps/desktop/scripts/verify-release.mjs mac
 
       - name: Upload Electron artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: covel-electron-${{ matrix.platform }}
+          name: covel-electron-mac-arm64
           path: |
             release/electron/*.dmg
             release/electron/*.zip
-            release/electron/*.exe
             release/electron/*.blockmap
             release/electron/latest*.yml
           if-no-files-found: error
           retention-days: 7
 
-  # ── Tauri shell (experimental, ~50% smaller bundle) ────────────
+  # ── Tauri shell (macOS arm64, ~50% smaller bundle) ─────────────
   build-tauri:
-    name: Tauri ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: mac-arm64
-            os: macos-14
-            target: aarch64-apple-darwin
-          - name: mac-x64
-            os: macos-14
-            target: x86_64-apple-darwin
-          - name: win-x64
-            os: windows-latest
-            target: x86_64-pc-windows-msvc
+    name: Tauri mac-arm64
+    runs-on: macos-14
 
     steps:
       - name: Checkout
@@ -123,54 +103,46 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: aarch64-apple-darwin
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop-tauri/src-tauri -> target
-          key: ${{ matrix.target }}
+          key: aarch64-apple-darwin
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Stage Electron desktop (shared staging for Tauri sidecar)
-        # Tauri's prepare-sidecar mirrors apps/desktop/staging into its own
-        # resources dir. We build @covel/desktop here to guarantee that
-        # mirror source exists before prepare-sidecar runs.
         run: pnpm --filter @covel/desktop build
 
       - name: Prepare Tauri sidecar (download node + rebuild native deps)
-        run: node apps/desktop-tauri/scripts/prepare-sidecar.mjs --target ${{ matrix.target }}
+        run: node apps/desktop-tauri/scripts/prepare-sidecar.mjs --target aarch64-apple-darwin
 
-      - name: Build Tauri bundle (${{ matrix.target }})
+      - name: Build Tauri bundle
         working-directory: apps/desktop-tauri
-        run: pnpm tauri build --target ${{ matrix.target }}
+        run: pnpm tauri build --target aarch64-apple-darwin
         env:
-          # Mirror the Electron job's unsigned posture — signing comes later.
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Stage release artefacts
-        run: node apps/desktop-tauri/scripts/stage-release.mjs ${{ matrix.target }}
+        run: node apps/desktop-tauri/scripts/stage-release.mjs aarch64-apple-darwin
 
       - name: Upload Tauri artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: covel-tauri-${{ matrix.name }}
-          path: |
-            release/tauri/${{ matrix.target }}/*.dmg
-            release/tauri/${{ matrix.target }}/*.msi
-            release/tauri/${{ matrix.target }}/*.exe
-            release/tauri/${{ matrix.target }}/*.zip
+          name: covel-tauri-mac-arm64
+          path: release/tauri/aarch64-apple-darwin/*.dmg
           if-no-files-found: error
           retention-days: 7
 
-  # ── Publish GitHub Release (combines both shells) ──────────────
+  # ── Publish GitHub Release (optional, gated by inputs.publish_release) ─
   release:
     name: Publish GitHub Release
     needs: [build-electron, build-tauri]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: ${{ inputs.publish_release && inputs.tag != '' }}
 
     steps:
       - name: Download Electron artifacts
@@ -193,19 +165,13 @@ jobs:
           ls -lh release/electron/ || true
           echo "=== release/tauri ==="
           ls -lh release/tauri/ || true
-          echo "--- all files ---"
-          find release -type f | sort
 
       - name: Remove stale releases for this tag
-        # 如果之前某次 build 失败过，softprops 可能留下一个 draft；同一 tag
-        # 上同时存在 draft + published 会让本次 finalize 报
-        # "already_exists: tag_name"。所以 publish 前清空所有同 tag 的
-        # release 记录（不删 tag 本身，tag 仍指向当前 commit）。
         run: |
           gh api /repos/${{ github.repository }}/releases \
-            --jq '.[] | select(.tag_name == "${{ github.ref_name }}") | .id' |
+            --jq '.[] | select(.tag_name == "${{ inputs.tag }}") | .id' |
           while read -r id; do
-            echo "Deleting stale release $id for tag ${{ github.ref_name }}"
+            echo "Deleting stale release $id for tag ${{ inputs.tag }}"
             gh api -X DELETE "/repos/${{ github.repository }}/releases/$id"
           done
         env:
@@ -214,18 +180,15 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Covel ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}
+          name: Covel ${{ inputs.tag }}
+          tag_name: ${{ inputs.tag }}
           draft: false
-          # tag 带 -（如 -beta / -rc.1）视为 pre-release
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(inputs.tag, '-') }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
             release/electron/*.dmg
             release/electron/*.zip
-            release/electron/*.exe
             release/electron/*.blockmap
             release/electron/latest*.yml
             release/tauri/*.dmg
-            release/tauri/*.exe
