@@ -237,6 +237,12 @@ export interface PersonaProfile {
   /**
    * Optional coordinate hint for how the description injects.
    * Full semantics defined in Sprint 3.
+   *
+   * Field coupling:
+   * - `depth` is only meaningful when `position === 'at_depth'`. For
+   *   `'seg3_prepend'` and `'seg3_append'`, the assembler ignores `depth`.
+   * - `order` controls ordering when multiple contributions target the same
+   *   `(position, depth)` slot — lower numbers render first.
    */
   readonly promptCoordinate?: {
     readonly position: 'seg3_prepend' | 'seg3_append' | 'at_depth';
@@ -289,7 +295,7 @@ export interface SessionContextSnapshot {
 export type ContributionKind =
   | 'static_prompt'       // plugin instructions (Seg 3)
   | 'lore_entry'          // lorebook (Seg 4/6/8)
-  | 'persona_description' // persona (Seg 1~3 之间)
+  | 'persona_description' // persona injection (between Seg 1–3)
   | 'character_overlay'   // character-level system prompt (Seg 3)
   | 'authors_note'        // Seg 9
   | 'post_history'        // Seg 10
@@ -304,6 +310,16 @@ export type ContributionKind =
  *
  * Sprint 1 only defines the type. Sprint 2 introduces the lorebook activator
  * and plumbs these through `SessionContextSnapshot.contributions`.
+ *
+ * Field coupling:
+ * - `depth` is only meaningful when `position === 'at_depth'` OR when
+ *   `kind === 'authors_note'` (Seg 9 uses depth semantics natively). For all
+ *   other `position` / `kind` combinations, the assembler ignores `depth`.
+ * - `order` is used as insertion-order within the same `(position, depth)`
+ *   slot — lower numbers render first; equal `order` keeps source order.
+ * - `triggers` lists which generation modes activate this contribution. When
+ *   `triggers` is omitted the contribution is active in all modes; when set,
+ *   only the listed modes activate it.
  */
 export interface ContextContribution {
   readonly kind: ContributionKind;
@@ -321,6 +337,12 @@ export interface ContextContribution {
   // budget hints
   readonly budgetClass?: 'sticky' | 'flexible' | 'droppable';
   readonly reservedTokens?: number;
-  // debug trace
+  /**
+   * Free-form debug trace bag. The shape is intentionally loose so producers
+   * can attach arbitrary provenance without schema churn. Sprint 2 and 3 will
+   * write at least the following keys: `activatedBy` (the matcher/keyword/rule
+   * that produced this contribution), `tokenEstimate` (pre-budget estimate),
+   * and `sourceDescription` (human-readable origin label).
+   */
   readonly debugTrace?: Readonly<Record<string, unknown>>;
 }
