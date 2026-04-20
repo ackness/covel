@@ -15,8 +15,8 @@
     "clean": "node ../../scripts/remove-paths.mjs dist"
   },
   "devDependencies": {
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.2"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.4"
   },
   "dependencies": {
     "zod": "^4.3.6"

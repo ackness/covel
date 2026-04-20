@@ -1,10 +1,16 @@
-import { describe, it, expect } from "vitest";
-import { encode } from "gpt-tokenizer";
+import { afterEach, describe, it, expect } from "vitest";
 import {
+  approximateTokenCounter,
   estimateTokens,
+  resetTokenCounter,
+  setTokenCounter,
   TOKEN_SAFETY_MULTIPLIERS,
   type ProviderFamily,
 } from "../src/tokenizer.js";
+
+afterEach(() => {
+  resetTokenCounter();
+});
 
 const ALL_FAMILIES: ProviderFamily[] = [
   "openai",
@@ -27,10 +33,10 @@ describe("estimateTokens", () => {
       expect(Number.isInteger(count)).toBe(true);
     });
 
-    it("returns raw encoder length with multiplier 1.0 (no change)", () => {
+    it("returns raw base count with multiplier 1.0 (no change)", () => {
       // Arrange
       const text = "The quick brown fox jumps over the lazy dog.";
-      const rawLength = encode(text).length;
+      const rawLength = approximateTokenCounter(text);
 
       // Act
       const count = estimateTokens(text, { family: "openai" });
@@ -138,6 +144,43 @@ describe("estimateTokens", () => {
       expect(openaiCount).toBeLessThan(anthropicCount);
       expect(anthropicCount).toBeLessThan(deepseekCount);
     });
+  });
+});
+
+describe("pluggable token counter", () => {
+  it("routes estimateTokens through the active counter", () => {
+    // Arrange
+    setTokenCounter(() => 100);
+
+    // Act
+    const count = estimateTokens("whatever", { family: "openai" });
+
+    // Assert — multiplier 1.0 passes through unchanged
+    expect(count).toBe(100);
+  });
+
+  it("combines the active counter with the family multiplier", () => {
+    // Arrange
+    setTokenCounter(() => 80);
+
+    // Act
+    const count = estimateTokens("whatever", { family: "deepseek" });
+
+    // Assert
+    expect(count).toBe(Math.ceil(80 * 1.35));
+  });
+
+  it("resetTokenCounter restores the built-in approximation", () => {
+    // Arrange
+    setTokenCounter(() => 999);
+    resetTokenCounter();
+    const text = "回退之后应当使用字符启发式 heuristic";
+
+    // Act
+    const count = estimateTokens(text, { family: "openai" });
+
+    // Assert
+    expect(count).toBe(approximateTokenCounter(text));
   });
 });
 

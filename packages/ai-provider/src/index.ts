@@ -94,7 +94,11 @@ export { createLangfuseHook } from "./trace/langfuse.js";
 // Tokenizer
 export {
   estimateTokens,
+  approximateTokenCounter,
+  setTokenCounter,
+  resetTokenCounter,
   TOKEN_SAFETY_MULTIPLIERS,
   type ProviderFamily,
   type EstimateTokensOptions,
+  type TokenCounter,
 } from "./tokenizer.js";

@@ -37,15 +37,15 @@
     "@covel/state": "workspace:*",
     "@covel/store": "workspace:*",
     "@covel/tools": "workspace:*",
-    "@hono/node-server": "^1.19.13",
-    "hono": "^4.12.12",
-    "tsx": "^4.19.0",
+    "@hono/node-server": "^1.19.14",
+    "hono": "^4.12.14",
+    "tsx": "^4.21.0",
     "yaml": "^2.8.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "drizzle-kit": "^0.31.10",
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.2"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.4"
   }
 }

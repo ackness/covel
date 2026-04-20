@@ -14,6 +14,6 @@
     "build:mac:x64": "pnpm prepare:sidecar --target x86_64-apple-darwin && tauri build --target x86_64-apple-darwin && node scripts/stage-release.mjs x86_64-apple-darwin"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.0.0"
+    "@tauri-apps/cli": "^2.10.1"
   }
 }

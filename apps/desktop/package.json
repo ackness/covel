@@ -18,12 +18,12 @@
     "dist:linux": "pnpm build && electron-builder --linux"
   },
   "dependencies": {
-    "tsx": "^4.19.0"
+    "tsx": "^4.21.0"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.0.1",
-    "electron": "^40.0.0",
-    "electron-builder": "^26.0.0",
-    "esbuild": "^0.25.0"
+    "@electron/rebuild": "^4.0.3",
+    "electron": "^41.2.1",
+    "electron-builder": "^26.8.1",
+    "esbuild": "^0.28.0"
   }
 }

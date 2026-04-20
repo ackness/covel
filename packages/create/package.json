@@ -16,12 +16,12 @@
     "clean": "node ../../scripts/remove-paths.mjs dist"
   },
   "dependencies": {
-    "@covel/shared": "workspace:*",
     "@covel/runtime": "workspace:*",
-    "yaml": "^2.7.1"
+    "@covel/shared": "workspace:*",
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.2"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.4"
   }
 }

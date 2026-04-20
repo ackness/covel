@@ -23,8 +23,8 @@
     "@covel/shared": "workspace:*",
     "better-sqlite3": "^12.9.0",
     "drizzle-orm": "^0.45.2",
-    "idb": "^8.0.2",
-    "postgres": "^3.4.0",
+    "idb": "^8.0.3",
+    "postgres": "^3.4.9",
     "sqlite-vec": "^0.1.9"
   },
   "devDependencies": {

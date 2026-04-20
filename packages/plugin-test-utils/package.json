@@ -14,14 +14,14 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@covel/shared": "workspace:*",
     "@covel/plugin-loader": "workspace:*",
     "@covel/runtime": "workspace:*",
+    "@covel/shared": "workspace:*",
     "@covel/store": "workspace:*",
     "@covel/tools": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.2"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.4"
   }
 }

@@ -11,6 +11,6 @@
     "@covel/context": "workspace:*",
     "@covel/plugin-loader": "workspace:*",
     "@covel/shared": "workspace:*",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.4"
   }
 }
