@@ -144,18 +144,15 @@ export function attachWindowStateTracking(win: BrowserWindow): void {
     }, DEBOUNCE_MS);
   };
 
-  const events: Array<Parameters<BrowserWindow["on"]>[0]> = [
-    "resize",
-    "move",
-    "maximize",
-    "unmaximize",
-    "enter-full-screen",
-    "leave-full-screen",
-  ];
-  for (const evt of events) {
-    // Electron's typed overloads are strict — cast to a union listener
-    win.on(evt as "resize", schedule);
-  }
+  // Electron 41+ typedef moved each event name onto its own BrowserWindow.on
+  // overload, so a union type loses the call signature match. Listing the
+  // events explicitly keeps TypeScript happy without casts.
+  win.on("resize", schedule);
+  win.on("move", schedule);
+  win.on("maximize", schedule);
+  win.on("unmaximize", schedule);
+  win.on("enter-full-screen", schedule);
+  win.on("leave-full-screen", schedule);
 
   win.on("close", () => {
     if (writeTimer) {

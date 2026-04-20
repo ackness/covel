@@ -40,6 +40,11 @@ export async function initAutoUpdater(opts: AutoUpdaterOptions): Promise<void> {
   // Lazy-load so electron-updater is optional at install time.
   let autoUpdater: unknown;
   try {
+    // `electron-updater` is not declared in package.json dependencies (it is
+    // an opt-in runtime extra), so TypeScript can't resolve the module at
+    // compile time — this is expected. esbuild marks it external, and the
+    // dynamic import returns null when the package is absent.
+    // @ts-expect-error -- optional runtime dependency
     const mod = await import("electron-updater").catch(() => null);
     if (!mod) {
       opts.log(

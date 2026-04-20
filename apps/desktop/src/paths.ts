@@ -111,6 +111,70 @@ export function resolvePreloadScript(): string {
 
 // ── Mutable user paths ───────────────────────────────────────────
 
+/**
+ * Shared reverse-DNS data directory name used by both Electron and Tauri
+ * shells. Bundle identifiers stay distinct (so macOS LaunchServices keeps
+ * the two apps apart), but user state lives in one place.
+ */
+const SHARED_APP_DIR = "com.covel.app";
+
+/**
+ * Override `userData` to the shared reverse-DNS directory before Electron
+ * resolves any path. Must run before `app.whenReady()` (and before any
+ * call that materialises userData — session cookies, logs, etc).
+ *
+ * By default Electron picks `<appData>/<name>` where name = package.json
+ * `name` field (→ "@covel/desktop"). We replace it with
+ * `<appData>/com.covel.app/` so the Tauri shell sees the same data.
+ */
+export function applySharedUserDataPath(): void {
+  const shared = path.join(app.getPath("appData"), SHARED_APP_DIR);
+  app.setPath("userData", shared);
+
+  // One-shot migration from the legacy name-based directory. We only
+  // copy when the shared location has no db yet, so a user who has
+  // already moved to com.covel.app won't get their state clobbered.
+  migrateLegacyUserData(shared);
+}
+
+function migrateLegacyUserData(newRoot: string): void {
+  const newDb = path.join(newRoot, "data", "covel.db");
+  if (fs.existsSync(newDb)) return;
+
+  const appDataRoot = app.getPath("appData");
+  const candidates = [
+    // Electron's historical default for this project
+    path.join(appDataRoot, "@covel", "desktop"),
+  ];
+
+  for (const legacy of candidates) {
+    const legacyDb = path.join(legacy, "data", "covel.db");
+    if (!fs.existsSync(legacyDb)) continue;
+
+    try {
+      fs.mkdirSync(newRoot, { recursive: true });
+      copyDirRecursive(legacy, newRoot);
+      console.log(`[paths] migrated ${legacy} → ${newRoot}`);
+    } catch (err) {
+      console.warn(`[paths] legacy data migration failed:`, err);
+    }
+    return;
+  }
+}
+
+function copyDirRecursive(src: string, dest: string): void {
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, destPath);
+    } else if (entry.isFile()) {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
 /** Root of user-writable state. */
 export function userDataRoot(): string {
   return app.getPath("userData");

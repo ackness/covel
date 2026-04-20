@@ -73,15 +73,19 @@ fn resolve_sidecar_paths(app: &AppHandle) -> Result<SidecarPaths, String> {
         (server, bin)
     };
 
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("app_data_dir: {}", e))?;
+    // Shared data dir: both shells read/write `<os-data>/com.covel.app/`.
+    // We avoid app_data_dir() (which would bake in our Tauri-specific
+    // bundle identifier) and resolve the OS data_dir ourselves, then tack
+    // on the shared name. Bundle identifiers stay distinct (so macOS
+    // LaunchServices doesn't get confused when both shells are installed),
+    // but the state they read is the same.
+    let data_root = shared_data_root(app)?;
+    migrate_legacy_data_dirs(app, &data_root);
 
-    let data_dir = app_data_dir.join("data");
-    let config_dir = app_data_dir.join("config");
-    let plugins_dir = app_data_dir.join("plugins");
-    let worlds_dir = app_data_dir.join("worlds");
+    let data_dir = data_root.join("data");
+    let config_dir = data_root.join("config");
+    let plugins_dir = data_root.join("plugins");
+    let worlds_dir = data_root.join("worlds");
 
     for dir in [&data_dir, &config_dir, &plugins_dir, &worlds_dir] {
         fs::create_dir_all(dir).map_err(|e| format!("mkdir {}: {}", dir.display(), e))?;
@@ -120,6 +124,85 @@ fn node_file_name() -> &'static str {
     } else {
         "node"
     }
+}
+
+/// Shared data directory name used by both Electron and Tauri shells.
+/// Reverse-DNS form matches platform conventions:
+///   macOS   → ~/Library/Application Support/com.covel.app/
+///   Windows → %APPDATA%\com.covel.app\
+///   Linux   → $XDG_DATA_HOME/com.covel.app/ (default ~/.local/share)
+const SHARED_APP_DIR: &str = "com.covel.app";
+
+fn shared_data_root(app: &AppHandle) -> Result<PathBuf, String> {
+    // On macOS / Windows Tauri's data_dir() and Electron's appData
+    // resolve to the same base (Application Support / %APPDATA%). On
+    // Linux they diverge (data_dir → ~/.local/share, Electron default
+    // → ~/.config); we accept that and still end up under com.covel.app
+    // on both so neither shell pollutes a legacy directory.
+    let base = app
+        .path()
+        .data_dir()
+        .map_err(|e| format!("data_dir: {}", e))?;
+    Ok(base.join(SHARED_APP_DIR))
+}
+
+/// Best-effort one-shot migration from legacy directory names into the
+/// shared com.covel.app root. Runs once; subsequent launches see the db
+/// already present and skip.
+fn migrate_legacy_data_dirs(app: &AppHandle, new_root: &std::path::Path) {
+    let new_db = new_root.join("data").join("covel.db");
+    if new_db.exists() {
+        return;
+    }
+    let data_dir = match app.path().data_dir() {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+    let candidates = [
+        data_dir.join("com.covel.app.tauri"), // previous Tauri identifier
+    ];
+    for legacy in &candidates {
+        if !legacy.join("data").join("covel.db").exists() {
+            continue;
+        }
+        if let Err(err) = fs::create_dir_all(new_root) {
+            log::warn!("migration: mkdir {} failed: {}", new_root.display(), err);
+            return;
+        }
+        // Copy file-by-file to preserve permissions; crash-safe enough for a
+        // one-time migration since a partial copy still leaves the legacy
+        // dir intact.
+        if let Err(err) = copy_dir_all(legacy, new_root) {
+            log::warn!(
+                "migration: failed to copy {} → {}: {}",
+                legacy.display(),
+                new_root.display(),
+                err,
+            );
+            return;
+        }
+        log::info!(
+            "migration: copied {} → {}",
+            legacy.display(),
+            new_root.display(),
+        );
+        return;
+    }
+}
+
+fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_all(&src_path, &dst_path)?;
+        } else {
+            fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
 }
 
 async fn boot(app: AppHandle) -> Result<u16, String> {

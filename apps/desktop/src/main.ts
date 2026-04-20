@@ -27,6 +27,7 @@ import path from "node:path";
 import fs from "node:fs";
 
 import {
+  applySharedUserDataPath,
   ensureUserPaths,
   isDev,
   resolvePreloadScript,
@@ -35,6 +36,11 @@ import {
   resolveTsx,
   userServerPortFile,
 } from "./paths.js";
+
+// Must run before any other Electron API that materialises userData
+// (session cookies, logs, app cache). Puts state under the shared
+// `com.covel.app/` directory so the Tauri shell can read the same data.
+applySharedUserDataPath();
 import {
   attachWindowStateTracking,
   resolveInitialWindowOptions,
