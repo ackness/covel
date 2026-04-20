@@ -40,8 +40,7 @@
     ],
     "resources": {
       "resources/server": "server",
-      "resources/web-dist": "web-dist",
-      "binaries/node": "bin/node"
+      "resources/web-dist": "web-dist"
     },
     "macOS": {
       "minimumSystemVersion": "10.15"
