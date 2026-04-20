@@ -3,7 +3,6 @@
  */
 
 import type { I18nText } from "@covel/shared";
-import { sanitizeRuntimeBindingsForHeader } from "../lib/runtime-binding-utils.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -145,27 +144,26 @@ function buildProviderKeysHeader(): Record<string, string> {
   return headers;
 }
 
-function buildAiHeaders(sessionId?: string): Record<string, string> {
+function buildAiHeaders(): Record<string, string> {
   return {
     ...buildProviderKeysHeader(),
-    ...buildSlotConfigHeaderInternal(sessionId),
+    ...buildSlotConfigHeaderInternal(),
   };
 }
 
-function buildSlotConfigHeaderInternal(sessionId?: string): Record<string, string> {
+interface SlotConfigHeaderOptions {
+  includeCustomPresetIds?: readonly string[];
+}
+
+function buildSlotConfigHeaderInternal(
+  options: SlotConfigHeaderOptions = {},
+): Record<string, string> {
   const slotConfigRaw = localStorage.getItem(SLOT_CONFIG_KEY);
-  const paramOverridesRaw = localStorage.getItem(PARAM_OVERRIDES_KEY);
   let slotConfig: Record<string, SlotConfigEntry> = {};
-  let overrides: Record<string, unknown> = {};
   try {
     slotConfig = slotConfigRaw ? JSON.parse(slotConfigRaw) : {};
   } catch {
     slotConfig = {};
-  }
-  try {
-    overrides = paramOverridesRaw ? JSON.parse(paramOverridesRaw) : {};
-  } catch {
-    overrides = {};
   }
 
   const slotPresetOverrides = Object.fromEntries(
@@ -174,39 +172,31 @@ function buildSlotConfigHeaderInternal(sessionId?: string): Record<string, strin
       .map(([slotId, entry]) => [slotId, entry.presetId]),
   );
 
-  // Include custom preset definitions for any custom presets referenced by slot overrides.
+  // Only include custom presets the current request can actually resolve.
+  // This keeps the header aligned with the fields the server middleware
+  // consumes (`slotPresetOverrides` + `customPresets`) and lets direct
+  // preset probes include an unbound custom preset by id.
   const customPresets = getCustomPresets();
-  const referencedCustomIds = new Set(
-    Object.values(slotPresetOverrides)
-      .filter((id) => id?.startsWith("custom_"))
-  );
+  const referencedCustomIds = new Set<string>();
+  for (const id of Object.values(slotPresetOverrides)) {
+    if (id?.startsWith("custom_")) referencedCustomIds.add(id);
+  }
+  for (const id of options.includeCustomPresetIds ?? []) {
+    if (id?.startsWith("custom_")) referencedCustomIds.add(id);
+  }
   const customPresetDefs = customPresets
     .filter((p) => referencedCustomIds.has(p.id))
     .map(({ id, name, provider, baseUrl, model, protocol }) => ({
       id, name, provider, baseUrl, model, protocol,
     }));
 
-  // Include runtime priority overrides (qualified "pluginId:runtimeId" → number)
-  const runtimePriority = getRuntimePriorityOverrides();
-
-  // Include per-session runtime bindings (qualifiedRuntimeId → slotName)
-  const runtimeBindings = sessionId
-    ? sanitizeRuntimeBindingsForHeader(getRuntimeBindings(sessionId))
-    : {};
-
   const hasSlotPresetOverrides = Object.keys(slotPresetOverrides).length > 0;
-  const hasOverrides = Object.keys(overrides).length > 0;
   const hasCustom = customPresetDefs.length > 0;
-  const hasPriority = Object.keys(runtimePriority).length > 0;
-  const hasBindings = Object.keys(runtimeBindings).length > 0;
-  if (!hasSlotPresetOverrides && !hasOverrides && !hasCustom && !hasPriority && !hasBindings) return {};
+  if (!hasSlotPresetOverrides && !hasCustom) return {};
   return {
     "X-Slot-Config": btoa(JSON.stringify({
       ...(hasSlotPresetOverrides ? { slotPresetOverrides } : {}),
-      ...(hasOverrides ? { paramOverrides: overrides } : {}),
       ...(hasCustom ? { customPresets: customPresetDefs } : {}),
-      ...(hasPriority ? { runtimePriority } : {}),
-      ...(hasBindings ? { runtimeBindings } : {}),
     })),
   };
 }
@@ -804,6 +794,7 @@ export async function pingPreset(presetId: string): Promise<PingResult> {
     headers: {
       "Content-Type": "application/json",
       ...buildProviderKeysHeader(),
+      ...buildSlotConfigHeaderInternal({ includeCustomPresetIds: [presetId] }),
     },
     body: JSON.stringify({ presetId }),
   });
@@ -840,7 +831,7 @@ export function sendAction(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...buildAiHeaders(req.sessionId),
+          ...buildAiHeaders(),
         },
         body: JSON.stringify(req),
         signal: controller.signal,

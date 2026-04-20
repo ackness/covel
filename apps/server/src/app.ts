@@ -58,6 +58,16 @@ function loadKeysEnvInto(target: NodeJS.ProcessEnv): void {
   }
 }
 
+function resolvePreferredMemorySlot(slotRegistry: {
+  resolveSlot(slotId: string): string | undefined;
+  listSlotsByTag(tag: string): Array<{ slotId: string }>;
+}): string {
+  for (const candidate of ["memory", "plugin", "story"] as const) {
+    if (slotRegistry.resolveSlot(candidate)) return candidate;
+  }
+  return slotRegistry.listSlotsByTag("text")[0]?.slotId ?? "plugin";
+}
+
 const app = new Hono();
 
 // ── Global error handler ────────────────────────────────────────
@@ -133,6 +143,7 @@ for (const [key, value] of Object.entries(process.env)) {
   }
 }
 const llmAdapter = createGatewayAdapter(ai.gateway, { apiKeys });
+const preferredMemorySlot = resolvePreferredMemorySlot(ai.slotRegistry);
 
 // ── Bootstrap API ───────────────────────────────────────────────
 // Bundled plugins ship inside the repo / packaged app. The desktop shell
@@ -160,6 +171,7 @@ const api = await bootstrapApi({
   store,
   storeBackend,
   ensureEmbeddingLock,
+  preferredMemorySlot,
   perRequestMiddleware: [perRequestLlm],
 });
 

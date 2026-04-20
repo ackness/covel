@@ -34,7 +34,7 @@ export interface CreateMemorySystemOptions {
  * Create a fully wired memory system.
  *
  * Model slot resolution for the updater/compactor:
- *   memory → story (no fast slot in current setup).
+ *   explicit option → memory → story.
  */
 export function createMemorySystem(
   deps: MemorySystemDeps,
@@ -42,8 +42,8 @@ export function createMemorySystem(
 ): MemorySystem {
   const { store, llm, resolveSlot } = deps;
 
-  // Resolve model slot: try "memory" first, fall back to "story"
-  const modelSlot = resolveModelSlot(resolveSlot);
+  const explicitModelSlot = options?.updater?.modelSlot ?? options?.compaction?.modelSlot;
+  const modelSlot = explicitModelSlot ?? resolveModelSlot(resolveSlot);
 
   const manager: MemoryManager = createMemoryManager(store, options?.coreMemory);
 

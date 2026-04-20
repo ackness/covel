@@ -492,11 +492,20 @@ export function createMiscApiRoutes(
     for (const [slotId, slot] of Object.entries(slots)) {
       const preset = ai.presetRegistry.listPresets().find((p) => p.id === slot.presetId);
       if (!preset) continue;
+      const fallbackPresetId = preset.fallbackPresetIds?.[0];
+      const fallbackSlotId =
+        typeof fallbackPresetId === 'string'
+          ? (fallbackPresetId.startsWith('slot-')
+              ? fallbackPresetId.slice('slot-'.length)
+              : fallbackPresetId)
+          : undefined;
       slotsInfo[slotId] = {
         provider: preset.provider,
         model: preset.model,
-        protocol: preset.protocol ?? 'openai',
+        protocol: preset.protocol ?? 'openai-chat-v1',
         tag: slot.tag,
+        ...(fallbackSlotId ? { fallback: fallbackSlotId } : {}),
+        ...(preset.capability ? { capability: preset.capability } : {}),
       };
     }
 

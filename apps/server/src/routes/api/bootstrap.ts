@@ -115,6 +115,14 @@ export interface ApiBootstrapConfig {
   readonly ensureEmbeddingLock?: (sessionId: string) => Promise<void>;
   /** Optional pre-created state manager. */
   readonly stateManager?: StateManager;
+  /**
+   * Preferred slot name for internal memory LLM work.
+   *
+   * The app composition root computes this from the server slot registry so
+   * memory uses the same slot-id contract exposed to runtime bindings and
+   * player-facing settings (`memory` → `plugin` → `story` → first text slot).
+   */
+  readonly preferredMemorySlot?: string;
   /** Optional config provider for injecting world context etc. into runtime execution. */
   readonly getConfigFn?: (pluginId: string, runtimeId: string) => Readonly<Record<string, unknown>>;
   /**
@@ -532,12 +540,11 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   let memorySystem: MemorySystem | undefined;
   console.log(`[bootstrap] COVEL_MEMORY_V1=${process.env.COVEL_MEMORY_V1 ?? '(unset)'}`);
   if (process.env.COVEL_MEMORY_V1 === '1') {
-    // Resolve which preset to use for memory LLM calls.
-    // Gateway presets use "slot-<name>" format (e.g. "slot-plugin", "slot-story").
-    // Priority: slot-memory → slot-plugin → slot-story.
-    // We use the `plugin` slot as default because it's always configured and cheap.
-    const resolvedMemoryPreset = 'slot-plugin';
-    console.log(`[bootstrap] Memory system using preset: ${resolvedMemoryPreset}`);
+    // Resolve which slot to use for memory LLM calls. Use slot ids here so
+    // memory follows the same contract as runtime bindings and player-facing
+    // settings instead of reaching into internal preset ids.
+    const resolvedMemorySlot = config.preferredMemorySlot ?? 'plugin';
+    console.log(`[bootstrap] Memory system using slot: ${resolvedMemorySlot}`);
 
     // Discover the memory-panel host plugin by capability tag instead of
     // hardcoding a specific plugin ID. Framework stays plugin-agnostic:
@@ -560,7 +567,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     const memoryLlm = {
       async complete(params: { systemPrompt: string; messages: readonly { role: string; content: string }[]; model?: string }) {
         const response = await config.llmAdapter.generate({
-          model: resolvedMemoryPreset,
+          model: resolvedMemorySlot,
           messages: [
             { role: 'system', content: params.systemPrompt },
             ...params.messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
@@ -573,7 +580,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
       { store, llm: memoryLlm, resolveSlot: (slot: string) => resolveModel({ name: slot, model: slot } as RuntimeManifest) },
       {
         coreMemory: memoryPanelPluginId ? { pluginId: memoryPanelPluginId } : undefined,
-        updater: { modelSlot: resolvedMemoryPreset },
+        updater: { modelSlot: resolvedMemorySlot },
       },
     );
 

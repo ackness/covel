@@ -33,7 +33,7 @@ interface SettingsDialogProps {
 }
 
 /** Fallback slot list when llm.toml is not configured (legacy mode). */
-const LEGACY_SLOTS = ["default", "fast", "balance", "image"];
+const LEGACY_SLOTS = ["story", "plugin", "memory", "image", "fast", "balance", "default"];
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const { t } = useTranslation();

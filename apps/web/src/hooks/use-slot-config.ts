@@ -20,6 +20,11 @@ export interface ResolvedSlot {
   serverModel?: string;
 }
 
+function inferClientSlotTag(slotId: string): string {
+  if (slotId === "image") return "image";
+  return "text";
+}
+
 
 /**
  * Hook that reads slot config + custom presets from localStorage,
@@ -109,15 +114,15 @@ export function useSlotConfig(
     for (const [slotId, entry] of Object.entries(slotConfig)) {
       if (seen.has(slotId)) continue;
       const preset = entry.presetId ? allPresets.find((p) => p.id === entry.presetId) ?? null : null;
-      out.push({
-        slotId,
-        presetId: entry.presetId,
-        preset,
-        label: slotId,
-        tag: "text",
-        serverModel: preset?.model,
-      });
-      seen.add(slotId);
+        out.push({
+          slotId,
+          presetId: entry.presetId,
+          preset,
+          label: slotId,
+          tag: inferClientSlotTag(slotId),
+          serverModel: preset?.model,
+        });
+        seen.add(slotId);
     }
 
     // Source 3: synthesize default when nothing is configured
@@ -129,7 +134,7 @@ export function useSlotConfig(
           presetId: defaultPreset.id,
           preset: defaultPreset,
           label: "default",
-          tag: "text",
+          tag: inferClientSlotTag("default"),
           serverModel: defaultPreset.model,
         });
       }
