@@ -111,6 +111,7 @@ fn resolve_sidecar_paths(app: &AppHandle) -> Result<SidecarPaths, String> {
         server_dir,
         node_bin,
         static_dir,
+        data_root: data_root.clone(),
         db_path,
         llm_toml,
         keys_env,

@@ -26,6 +26,10 @@ pub struct SidecarPaths {
     pub node_bin: PathBuf,
     /// Static web dist for SERVE_STATIC=true (served by the Hono server).
     pub static_dir: Option<PathBuf>,
+    /// Resolved user data root — <covel_home>/data unless config.toml
+    /// redirected. Forwarded explicitly as COVEL_DATA_ROOT so the server
+    /// doesn't have to reverse-engineer it from worlds_dir/..
+    pub data_root: PathBuf,
     /// SQLite database under <data_root>/covel.db.
     pub db_path: PathBuf,
     /// User-editable ~/.covel/llm.toml.
@@ -90,6 +94,8 @@ pub async fn spawn_sidecar(paths: &SidecarPaths) -> Result<StartedSidecar, Strin
         .env("NODE_ENV", "production")
         .env("SERVE_STATIC", "true")
         .env("COVEL_HOME", &paths.covel_home)
+        .env("COVEL_DATA_ROOT", &paths.data_root)
+        .env("COVEL_DESKTOP_REST", "1")
         .env("COVEL_LLM_TOML", &paths.llm_toml)
         .env("COVEL_PLUGINS_DIR", &bundled_plugins)
         .env("COVEL_WORLDS_DIR", &bundled_worlds)

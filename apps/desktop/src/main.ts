@@ -471,6 +471,8 @@ async function startServer(paths: ReturnType<typeof ensureUserPaths>): Promise<n
     NODE_ENV: isDev ? "development" : "production",
     ...(isDev ? {} : { SERVE_STATIC: "true" }),
     COVEL_HOME: paths.covelHome,
+    COVEL_DATA_ROOT: paths.dataRoot,
+    COVEL_DESKTOP_REST: "1",
     COVEL_PLUGINS_DIR: paths.pluginsDirs[0] ?? "",
     COVEL_WORLDS_DIR: paths.worldsDirs[0] ?? "",
     COVEL_USER_WORLDS_DIR: paths.userWorldsDir,

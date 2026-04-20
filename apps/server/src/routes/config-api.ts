@@ -38,9 +38,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     return c.json({
       isDesktop: inDesktopMode,
       covelHome: covelHome,
-      dataRoot: process.env.COVEL_USER_WORLDS_DIR
-        ? resolve(process.env.COVEL_USER_WORLDS_DIR, "..")
-        : null,
+      dataRoot: resolveDataRoot(),
       dbPath: process.env.SQLITE_PATH ?? null,
       logsDir: process.env.COVEL_LOGS_DIR ?? null,
       llmTomlPath: process.env.COVEL_LLM_TOML ?? null,
@@ -166,12 +164,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
         : undefined;
 
     const covelHome = resolveCovelHome();
-    const dataRoot = process.env.COVEL_USER_WORLDS_DIR
-      ? resolve(process.env.COVEL_USER_WORLDS_DIR, "..")
-      : null;
     const targetMap: Record<string, string | null | undefined> = {
       config: covelHome,
-      data: dataRoot,
+      data: resolveDataRoot(),
       logs: process.env.COVEL_LOGS_DIR,
       "llm.toml": covelHome ? join(covelHome, "llm.toml") : null,
       "keys.env": covelHome ? join(covelHome, "keys.env") : null,
@@ -251,11 +246,40 @@ function writeDataRootInConfig(covelHome: string, newPath: string): void {
   writeFileSync(cfgFile, next);
 }
 
+/**
+ * Effective data_root. Prefer the explicit `COVEL_DATA_ROOT` set by the
+ * desktop shell (which already owns the real resolved value). Fallback:
+ * derive from `COVEL_USER_WORLDS_DIR/..` so self-host deployments that
+ * only wire worlds still give a sensible answer. Returns null when
+ * nothing is configured.
+ */
+function resolveDataRoot(): string | null {
+  if (process.env.COVEL_DATA_ROOT) return process.env.COVEL_DATA_ROOT;
+  if (process.env.COVEL_USER_WORLDS_DIR) {
+    return resolve(process.env.COVEL_USER_WORLDS_DIR, "..");
+  }
+  return null;
+}
+
+/**
+ * Desktop-mode gate. Writing `keys.env`, mutating `data_root`, and
+ * firing platform `open` commands are **privileged** — we only expose
+ * them when the caller process was explicitly started as a desktop shell.
+ *
+ * Trigger conditions (explicit only — filesystem presence is NOT enough):
+ *   1. `COVEL_DESKTOP_REST=1` (opt-in flag for embedded/self-host cases)
+ *   2. `COVEL_HOME` set by Electron/Tauri (both shells do this)
+ *
+ * A shared-backend deployment that happens to have `~/.covel/` on disk
+ * (docker image bundling, admin home dir) therefore CAN'T reach these
+ * endpoints, which prevents a remote client from editing server config.
+ */
 function resolveCovelHome(): string | null {
+  const desktopFlag = process.env.COVEL_DESKTOP_REST;
+  const explicitDesktop =
+    desktopFlag === "1" || desktopFlag === "true" || !!process.env.COVEL_HOME;
+  if (!explicitDesktop) return null;
   if (process.env.COVEL_HOME) return process.env.COVEL_HOME;
-  // Fall back to ~/.covel when the shells didn't explicitly pass an env.
-  // Only surface as "desktop mode" if the directory actually exists, so pure
-  // server deployments (where no one ever wrote ~/.covel) stay in web-tier mode.
   const candidate = join(homedir(), ".covel");
   return existsSync(candidate) ? candidate : null;
 }

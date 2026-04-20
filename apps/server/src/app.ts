@@ -109,16 +109,19 @@ app.use(
   }),
 );
 
+// Merge ~/.covel/keys.env (plain KEY=VALUE lines) into process.env BEFORE
+// createAiStack(). ai-setup reads llm.toml which does `${ENV}`
+// interpolation — if keys.env loaded after, a slot spec like
+// `apiKey = "${DEEPSEEK_API_KEY}"` sees `undefined` and silently falls
+// back to the built-in default. Desktop shells already pre-merge this
+// into the child env; this keeps parity for `pnpm dev:server` / CI /
+// docker where the server is spawned directly.
+loadKeysEnvInto(process.env);
+
 // ── Initialize AI + Store ────────────────────────────────────────
 const ai = createAiStack();
 const storeBackend = resolveBackendFromEnv();
 const store = await createStoreFromEnv();
-
-// Merge ~/.covel/keys.env (plain KEY=VALUE lines) into process.env. The
-// desktop shells already pre-merge this into the child env, but running
-// the server directly (pnpm dev:server, CI) benefits from the same source
-// of truth without having to juggle .env.llm separately.
-loadKeysEnvInto(process.env);
 
 // Collect all *_API_KEY env vars dynamically so any provider can be added
 // to llm.toml without requiring code changes here.
