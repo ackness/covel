@@ -65,7 +65,12 @@ turnRoutes.post('/:id/turn', rateLimiter({ max: 30 }), async (c) => {
   const sessionConfig = await loadSessionConfig(store, sessionId, session.worldId ?? undefined, worldDataPluginId);
   const turnGetConfig = (_pluginId: string, _runtimeId: string): Readonly<Record<string, unknown>> => sessionConfig;
 
-  // Execute the turn through the full pipeline
+  // Execute the turn through the full pipeline.
+  //
+  // Sprint 1-D: pass `worldDataPluginId` into deps so `TurnExecutor` can build
+  // a unified `SessionContextSnapshot` when `COVEL_SESSION_CONTEXT=1`.
+  // When the flag is off, the field is ignored and the legacy scattered loads
+  // run unchanged.
   const result = await executeTurn(
     {
       sessionId,
@@ -83,6 +88,7 @@ turnRoutes.post('/:id/turn', rateLimiter({ max: 30 }), async (c) => {
       toolExecutor,
       resolveModel,
       compactor: compactorRunner,
+      worldDataPluginId,
     },
   );
 

@@ -19,8 +19,18 @@ import { isSuspendSentinel, isRuntimeDoneSentinel } from '@covel/tools';
 import type { EventBus } from '@covel/events';
 import { shouldTrigger } from './trigger.js';
 import { scheduleByPriority } from './scheduler.js';
-import { buildContext, buildContextAsync, needsAsyncBuild } from '@covel/context';
-import type { BudgetOptions, TokenEstimator, CompactorRunner } from '@covel/context';
+import {
+  buildContext,
+  buildContextAsync,
+  buildSessionContextSnapshot,
+  needsAsyncBuild,
+} from '@covel/context';
+import type {
+  BudgetOptions,
+  SessionContextSnapshot,
+  TokenEstimator,
+  CompactorRunner,
+} from '@covel/context';
 import { executeParallel } from './parallel-executor.js';
 import type { TriggerContext } from './types.js';
 import type { LLMAdapter, LLMMessage } from './llm-adapter.js';
@@ -143,6 +153,18 @@ export interface TurnExecutorDeps {
       }): Promise<{ updated: boolean; blocksChanged: readonly string[]; error?: string }>;
     };
   };
+
+  /**
+   * Optional world data plugin ID (Sprint 1-D). Resolved by the server via
+   * `pluginRegistry.findPluginByCapability(sessionId, 'world-data-provider')`
+   * and passed down so `buildSessionContextSnapshot` can fetch the active
+   * world's plugin_data (schema, dimensions, tone, opening scenario).
+   *
+   * Only consulted when `process.env.COVEL_SESSION_CONTEXT === '1'`. When the
+   * flag is off or this field is absent, the legacy scattered-load code path
+   * runs unchanged.
+   */
+  readonly worldDataPluginId?: string;
 }
 
 export interface TurnExecutorOptions {
@@ -597,12 +619,47 @@ export async function executeTurn(
     }
   }
 
+  // Sprint 1-D: Unified SessionContextSnapshot loader (feature-flagged).
+  //
+  // When COVEL_SESSION_CONTEXT=1, collapse all the scattered reads above into a
+  // single `buildSessionContextSnapshot` call. The snapshot carries the same
+  // data (session meta, characters, world bundle, lore entries, working memory,
+  // core blocks, summaries) plus a pre-built `legacyConfigView` that is
+  // byte-identical to `loadSessionConfig()` — so downstream prompt assembly can
+  // read from `snapshot.legacyConfigView` transparently.
+  //
+  // The flag-off path below preserves the original scattered-load behaviour
+  // (unchanged from pre-Sprint 1). We accept a minor DB read duplication on
+  // flag-on turns for Sprint 1: Sprint 2 (Lorebook) removes the duplicates by
+  // deleting the legacy reads once all consumers migrate to the snapshot.
+  let sessionContext: SessionContextSnapshot | undefined;
+  if (process.env.COVEL_SESSION_CONTEXT === '1' && deps.store) {
+    try {
+      const sessionRecord = await deps.store.getSession(input.sessionId);
+      sessionContext = await buildSessionContextSnapshot(deps.store, input.sessionId, {
+        locale: input.locale ?? 'zh-CN',
+        turnNumber,
+        worldId: sessionRecord?.worldId ?? undefined,
+        worldDataPluginId: deps.worldDataPluginId,
+        coreMemoryBlocks,
+        summaries: sessionSummaries,
+      });
+    } catch (err) {
+      // Non-critical: snapshot build failures must not abort the turn.
+      // Legacy scattered reads above still cover every downstream consumer.
+      console.warn(
+        '[turn-executor] SessionContextSnapshot build failed, falling back to legacy reads:',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
+
   // 3. Execute each group
   const completedResults = new Map<string, RuntimeResult>();
 
   for (const group of groups) {
     const results = await executeParallel(group.runtimes, async (manifest) => {
-      return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, defaultTimeoutMs, promptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory, coreMemoryBlocks);
+      return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, defaultTimeoutMs, promptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory, coreMemoryBlocks, sessionContext);
     });
 
     // Merge results
@@ -1262,6 +1319,7 @@ async function executeOneRuntime(
   sessionSummaries?: readonly import('@covel/store').SessionSummaryRecord[],
   workingMemory?: readonly import('@covel/context').WorkingMemoryEntry[],
   coreMemoryBlocks?: readonly { label: string; content: string; updatedAt: string }[],
+  sessionContext?: SessionContextSnapshot,
 ): Promise<RuntimeResult> {
   const startTime = Date.now();
   const runId = crypto.randomUUID();
@@ -1627,6 +1685,11 @@ async function executeOneRuntime(
       summaries: sessionSummaries ?? [],
       workingMemory: workingMemory ?? [],
       coreMemoryBlocks: coreMemoryBlocks ?? [],
+      // Sprint 1-D: Thread the unified snapshot into context building so
+      // `resolveVariableSources` (in prompt-internals.ts) can prefer
+      // `sessionContext.legacyConfigView` over `config.__session_config__`.
+      // Present only when COVEL_SESSION_CONTEXT=1 (flag-off path is undefined).
+      ...(sessionContext ? { sessionContext } : {}),
       ...(budgetEligible
         ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
         : {}),

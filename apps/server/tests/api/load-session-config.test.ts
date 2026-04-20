@@ -13,7 +13,7 @@
  * wins when data is present.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createMemoryStore, type DataStore } from '@covel/store';
 import { loadSessionConfig } from '../../src/routes/api/load-session-config.js';
 
@@ -217,5 +217,123 @@ describe('loadSessionConfig worldEntries resolution', () => {
     const cfg = await loadSessionConfig(store, SESSION_ID, undefined, PLUGIN_ID);
     const worldEntries = cfg.worldEntries as Record<string, unknown>;
     expect(Object.keys(worldEntries)).toEqual(['mine']);
+  });
+});
+
+// ── Sprint 1-D parity tests ─────────────────────────────────────────
+//
+// Verify that toggling COVEL_SESSION_CONTEXT=1 (which swaps the
+// implementation to `buildSessionContextSnapshot(...).legacyConfigView`)
+// produces byte-identical output for every fixture shape covered above.
+
+describe('loadSessionConfig — Sprint 1-D snapshot delegation parity', () => {
+  let originalEnv: string | undefined;
+  let store: DataStore;
+
+  beforeEach(async () => {
+    originalEnv = process.env.COVEL_SESSION_CONTEXT;
+    store = createMemoryStore();
+    await seedSession(store);
+  });
+
+  afterEach(() => {
+    if (originalEnv === undefined) {
+      delete process.env.COVEL_SESSION_CONTEXT;
+    } else {
+      process.env.COVEL_SESSION_CONTEXT = originalEnv;
+    }
+  });
+
+  async function computeBoth(
+    worldId: string | undefined,
+    pluginId: string | undefined,
+  ): Promise<{ legacy: Readonly<Record<string, unknown>>; snapshot: Readonly<Record<string, unknown>> }> {
+    delete process.env.COVEL_SESSION_CONTEXT;
+    const legacy = await loadSessionConfig(store, SESSION_ID, worldId, pluginId);
+    process.env.COVEL_SESSION_CONTEXT = '1';
+    const snapshot = await loadSessionConfig(store, SESSION_ID, worldId, pluginId);
+    return { legacy, snapshot };
+  }
+
+  it('lorebook-first path: snapshot === legacy (keys + values + order)', async () => {
+    const now = new Date().toISOString();
+    await store.upsertLorebookEntries!([
+      {
+        id: 'world-entry:geography',
+        sessionId: SESSION_ID,
+        pluginId: PLUGIN_ID,
+        keys: ['geography'],
+        content: '[geography]\nCanonical layout.',
+        strategy: 'constant',
+        position: 'after_char_defs',
+        insertionOrder: 100,
+        enabled: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'world-entry:factions',
+        sessionId: SESSION_ID,
+        pluginId: PLUGIN_ID,
+        keys: ['factions'],
+        content: '[factions]\nSkyguard, Tradewind Syndicate.',
+        strategy: 'constant',
+        position: 'after_char_defs',
+        insertionOrder: 200,
+        enabled: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    const { legacy, snapshot } = await computeBoth(undefined, PLUGIN_ID);
+    expect(snapshot).toEqual(legacy);
+    expect(Object.keys(snapshot)).toEqual(Object.keys(legacy));
+  });
+
+  it('plugin_data fallback path: snapshot === legacy', async () => {
+    const now = new Date().toISOString();
+    await store.setPluginDataBatch([
+      {
+        id: 'pd-1',
+        sessionId: SESSION_ID,
+        pluginId: PLUGIN_ID,
+        namespace: 'entries',
+        key: 'geography',
+        value: { regions: ['north'] },
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    const { legacy, snapshot } = await computeBoth(undefined, PLUGIN_ID);
+    expect(snapshot).toEqual(legacy);
+  });
+
+  it('world-only path (no plugin id): snapshot === legacy', async () => {
+    await store.upsertWorld({
+      id: 'w-parity',
+      name: 'Parity',
+      description: 'd',
+      lore: 'Lore text',
+      metadata: {
+        dimensions: {
+          tone: 'solemn',
+          startingConditions: { openingScenario: 'Night' },
+        },
+      },
+      createdAt: new Date().toISOString(),
+    });
+
+    const { legacy, snapshot } = await computeBoth('w-parity', undefined);
+    expect(snapshot).toEqual(legacy);
+    expect(snapshot.worldLore).toBe('Lore text');
+    expect(snapshot.worldTone).toBe('solemn');
+    expect(snapshot.worldOpeningScenario).toBe('Night');
+  });
+
+  it('empty inputs path: both return {}', async () => {
+    const { legacy, snapshot } = await computeBoth(undefined, undefined);
+    expect(legacy).toEqual({});
+    expect(snapshot).toEqual({});
   });
 });

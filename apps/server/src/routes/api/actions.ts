@@ -308,6 +308,10 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
           },
           compactor: compactorRunner,
           memorySystem: _memorySystem,
+          // Sprint 1-D: let the turn executor construct a unified
+          // SessionContextSnapshot when COVEL_SESSION_CONTEXT=1. Ignored
+          // otherwise — legacy scattered loads stay in control.
+          worldDataPluginId,
         },
       ));
 

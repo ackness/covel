@@ -19,8 +19,18 @@
  *
  * `{{ config.worldSchema }}` keeps its plugin_data source — world schemas are
  * structured JSON, not a natural fit for the free-form lorebook content field.
+ *
+ * ## Sprint 1-D
+ *
+ * When `COVEL_SESSION_CONTEXT=1`, this function delegates to
+ * `buildSessionContextSnapshot` and returns its `legacyConfigView`. The
+ * snapshot's legacy view is engineered to be byte-identical to this
+ * function's original output (same keys, same insertion order, same
+ * "absent when empty" rule). When the flag is off, the original scattered
+ * loads below run unchanged.
  */
 
+import { buildSessionContextSnapshot } from '@covel/context';
 import type { DataStore, LorebookEntryRecord } from '@covel/store';
 
 export async function loadSessionConfig(
@@ -29,6 +39,31 @@ export async function loadSessionConfig(
   worldId?: string,
   worldDataPluginId?: string,
 ): Promise<Readonly<Record<string, unknown>>> {
+  // Sprint 1-D: prefer the unified snapshot loader when the flag is on.
+  // `legacyConfigView` is byte-compatible with the legacy implementation, so
+  // callers see no observable change beyond fewer round-trips.
+  if (process.env.COVEL_SESSION_CONTEXT === '1') {
+    try {
+      const snapshot = await buildSessionContextSnapshot(store, sessionId, {
+        // `legacyConfigView` does not consult locale / turnNumber; pass
+        // stable placeholders so other snapshot fields stay well-formed.
+        locale: 'zh-CN',
+        turnNumber: 0,
+        worldId,
+        worldDataPluginId,
+      });
+      return snapshot.legacyConfigView;
+    } catch (err) {
+      // Non-critical: fall back to the legacy path if snapshot build fails.
+      console.warn(
+        '[loadSessionConfig] Snapshot delegation failed, falling back to legacy path:',
+        err instanceof Error ? err.message : String(err),
+      );
+      // Fall through to legacy branch below.
+    }
+  }
+
+  // Legacy path (flag-off or snapshot fallback). Preserved verbatim.
   const configData: Record<string, unknown> = {};
 
   try {
