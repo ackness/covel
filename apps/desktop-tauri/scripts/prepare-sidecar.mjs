@@ -100,6 +100,23 @@ await fs.copyFile(srcNode, destPath);
 if (!target.includes("windows")) {
   await fs.chmod(destPath, 0o755);
 }
+// Ad-hoc re-sign on macOS. The Node tarball's bundled signature is
+// issued to `Node.js Foundation`, and a file extracted from a downloaded
+// archive carries `com.apple.provenance` — a SIP-protected xattr that
+// `xattr -c` can't remove. On macOS 15+ Gatekeeper kills the child with
+// SIGKILL the moment tauri's Command tries to exec it, and there's no
+// stdout/stderr to diagnose the failure (Tauri just sees a 30s
+// /api/health timeout). `codesign --sign -` replaces the vendor
+// signature with an ad-hoc one, which the OS trusts for local use.
+if (target.includes("darwin")) {
+  try {
+    execSync(`codesign --force --sign - "${destPath}"`, { stdio: "ignore" });
+  } catch (err) {
+    console.warn(
+      `[prepare-sidecar] codesign re-sign failed — sidecar may be blocked by Gatekeeper: ${err.message}`,
+    );
+  }
+}
 console.log(`[prepare-sidecar] ✓ node binary at ${destPath}`);
 
 // ── Step 4: mirror staging → src-tauri/resources + rebuild native deps ──
