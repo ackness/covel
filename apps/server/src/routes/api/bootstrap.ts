@@ -6,7 +6,7 @@
  */
 
 import path from 'node:path';
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import type { RuntimeManifest } from '@covel/shared';
 import {
   createPluginRegistry,
@@ -117,6 +117,13 @@ export interface ApiBootstrapConfig {
   readonly stateManager?: StateManager;
   /** Optional config provider for injecting world context etc. into runtime execution. */
   readonly getConfigFn?: (pluginId: string, runtimeId: string) => Readonly<Record<string, unknown>>;
+  /**
+   * Optional per-request middleware inserted AFTER the default dependency
+   * injection middleware but BEFORE route handlers execute. Intended for
+   * request-scoped overrides (e.g. swapping `llmAdapter` based on headers
+   * that carry browser-defined custom slots or API keys).
+   */
+  readonly perRequestMiddleware?: readonly MiddlewareHandler[];
 }
 
 export interface ApiBootstrapResult {
@@ -617,6 +624,16 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     }
     await next();
   });
+
+  // Optional request-scoped middleware (e.g. per-request llmAdapter swap
+  // driven by X-Provider-Keys / X-Slot-Config headers). Runs AFTER the
+  // dependency-injection middleware above so it can override any value
+  // that was just set by reading from c.get / c.set.
+  if (config.perRequestMiddleware) {
+    for (const mw of config.perRequestMiddleware) {
+      app.use('*', mw);
+    }
+  }
 
   // 9. Mount routes — all under /api/ prefix
   // Session routes: frontend uses /api/sessions (plural) for all session operations

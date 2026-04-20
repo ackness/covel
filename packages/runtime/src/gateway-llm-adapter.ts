@@ -10,6 +10,23 @@
 import type { LLMAdapter, LLMResponse, LLMStreamEvent, LLMToolDefinition } from './llm-adapter.js';
 
 /**
+ * Minimal structural form of `@covel/ai-provider`'s `SlotOverridesInput`.
+ * Duplicated here to keep `@covel/runtime` decoupled from the ai-provider
+ * package (which already depends on `@covel/runtime`'s sibling).
+ */
+export interface SlotOverridesInput {
+  slotPresetOverrides?: Record<string, string>;
+  customPresets?: Array<{
+    id: string;
+    name: string;
+    provider: string;
+    baseUrl?: string;
+    model: string;
+    protocol?: string;
+  }>;
+}
+
+/**
  * Minimal gateway interface — only the parts we need.
  * Matches the shape returned by @covel/ai-provider's createGateway().
  */
@@ -29,7 +46,7 @@ export interface GatewayLike {
       }>;
       providerRequestMetadata?: Record<string, unknown>;
     },
-    options?: { apiKeys?: Record<string, string>; traceId?: string; signal?: AbortSignal },
+    options?: { apiKeys?: Record<string, string>; traceId?: string; signal?: AbortSignal; slotOverrides?: SlotOverridesInput },
   ): Promise<{
     text: string;
     finishReason: string;
@@ -52,7 +69,7 @@ export interface GatewayLike {
       }>;
       providerRequestMetadata?: Record<string, unknown>;
     },
-    options?: { apiKeys?: Record<string, string>; traceId?: string; signal?: AbortSignal },
+    options?: { apiKeys?: Record<string, string>; traceId?: string; signal?: AbortSignal; slotOverrides?: SlotOverridesInput },
   ): AsyncIterable<{
     type: string;
     textDelta?: string;
@@ -68,6 +85,12 @@ export interface GatewayAdapterConfig {
   readonly apiKeys?: Record<string, string>;
   /** Trace ID for observability. */
   readonly traceId?: string;
+  /**
+   * Per-request slot/preset overlay forwarded to the gateway. Lets a
+   * browser-only custom slot (e.g. `fast` → `custom_abc`) resolve to a
+   * client-declared preset without needing a server-side llm.toml entry.
+   */
+  readonly slotOverrides?: SlotOverridesInput;
 }
 
 /**
@@ -98,6 +121,7 @@ export function createGatewayAdapter(
         {
           apiKeys: config?.apiKeys,
           traceId: config?.traceId,
+          ...(config?.slotOverrides ? { slotOverrides: config.slotOverrides } : {}),
           ...(params.signal ? { signal: params.signal } : {}),
         },
       );
@@ -138,6 +162,7 @@ export function createGatewayAdapter(
         {
           apiKeys: config?.apiKeys,
           traceId: config?.traceId,
+          ...(config?.slotOverrides ? { slotOverrides: config.slotOverrides } : {}),
           ...(params.signal ? { signal: params.signal } : {}),
         },
       )) {

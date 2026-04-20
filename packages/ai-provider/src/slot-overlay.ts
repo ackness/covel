@@ -87,38 +87,44 @@ export function applySlotOverlay(
   for (const cp of customPresets) {
     if (!isUsableCustomPreset(cp)) continue;
 
-    // Provider registration — skip entirely if the base registry already
-    // knows this provider (llm.toml / process-wide defaults take precedence).
-    if (!hasProvider.call(deps.providerRegistry, cp.provider)) {
-      const currentRefs = providerRefs.get(cp.provider) ?? 0;
-      if (currentRefs === 0) {
-        addProvider.call(deps.providerRegistry, cp.provider, {
-          ...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
-          ...(cp.protocol ? { protocol: cp.protocol } : {}),
-        });
-      }
-      providerRefs.set(cp.provider, currentRefs + 1);
+    // Provider registration. Policy:
+    //   - If the module-level ref map already tracks this provider, it's
+    //     overlay-owned — bump the count and take a reference.
+    //   - Else if the base registry has it, leave it alone (never overlay
+    //     an llm.toml / process-wide provider).
+    //   - Else register it fresh and start counting.
+    const providerOverlayOwned = providerRefs.has(cp.provider);
+    if (providerOverlayOwned) {
+      providerRefs.set(cp.provider, (providerRefs.get(cp.provider) ?? 0) + 1);
+      ownedProviderNames.push(cp.provider);
+    } else if (!hasProvider.call(deps.providerRegistry, cp.provider)) {
+      addProvider.call(deps.providerRegistry, cp.provider, {
+        ...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
+        ...(cp.protocol ? { protocol: cp.protocol } : {}),
+      });
+      providerRefs.set(cp.provider, 1);
       ownedProviderNames.push(cp.provider);
     }
 
     // Preset registration — same policy as provider.
-    if (!hasPreset.call(deps.presetRegistry, cp.id)) {
-      const currentRefs = presetRefs.get(cp.id) ?? 0;
-      if (currentRefs === 0) {
-        addPreset.call(deps.presetRegistry, {
-          id: cp.id,
-          name: cp.name || cp.id,
-          provider: cp.provider,
-          model: cp.model,
-          ...(cp.protocol ? { protocol: cp.protocol } : {}),
-          ...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
-          tier: "medium",
-          supportedModes: ["text", "stream"],
-          enabled: true,
-          tag: "text",
-        });
-      }
-      presetRefs.set(cp.id, currentRefs + 1);
+    const presetOverlayOwned = presetRefs.has(cp.id);
+    if (presetOverlayOwned) {
+      presetRefs.set(cp.id, (presetRefs.get(cp.id) ?? 0) + 1);
+      ownedPresetIds.push(cp.id);
+    } else if (!hasPreset.call(deps.presetRegistry, cp.id)) {
+      addPreset.call(deps.presetRegistry, {
+        id: cp.id,
+        name: cp.name || cp.id,
+        provider: cp.provider,
+        model: cp.model,
+        ...(cp.protocol ? { protocol: cp.protocol } : {}),
+        ...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
+        tier: "medium",
+        supportedModes: ["text", "stream"],
+        enabled: true,
+        tag: "text",
+      });
+      presetRefs.set(cp.id, 1);
       ownedPresetIds.push(cp.id);
     }
   }

@@ -24,6 +24,7 @@ import { createWorldFileWatcher } from "./world-file-watcher.js";
 import { createModelDbRoutes } from "./routes/model-db.js";
 import { createMiscApiRoutes } from "./routes/misc-api.js";
 import { createConfigApiRoutes } from "./routes/config-api.js";
+import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
 
 /**
  * Merge `~/.covel/keys.env` (or `$COVEL_HOME/keys.env` when overridden)
@@ -144,6 +145,11 @@ if (userPluginsDir && userPluginsDir !== bundledPluginsDir) {
   pluginsDirs.push(userPluginsDir);
 }
 const ensureEmbeddingLock = createEmbeddingLockHelper({ store, ai, apiKeys });
+const perRequestLlm = createPerRequestLlmMiddleware({
+  ai,
+  envApiKeys: apiKeys,
+  defaultLlmAdapter: llmAdapter,
+});
 const api = await bootstrapApi({
   pluginsDir: bundledPluginsDir,
   pluginsDirs,
@@ -151,6 +157,7 @@ const api = await bootstrapApi({
   store,
   storeBackend,
   ensureEmbeddingLock,
+  perRequestMiddleware: [perRequestLlm],
 });
 
 // ── Seed worlds ──────────────────────────────────────────────────
