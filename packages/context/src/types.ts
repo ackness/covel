@@ -151,4 +151,176 @@ export interface ContextBuildParams {
     readonly label: string;
     readonly content: string;
   }[];
+  /**
+   * Pre-assembled session context (Sprint 1). When provided, prompt assembly
+   * reads session-level data from here instead of the legacy scattered
+   * `config` / `sessionMeta` / `workingMemory` / `coreMemoryBlocks` fields.
+   * Gated by the `COVEL_SESSION_CONTEXT` flag at the caller layer (Sprint 1-D).
+   *
+   * Both channels coexist through Sprint 1 and 2 as a safety net. Sprint 2 end
+   * removes the legacy channel and this field becomes required.
+   */
+  readonly sessionContext?: SessionContextSnapshot;
+}
+
+// ── Session Context Snapshot (Sprint 1) ──────────────────────────
+//
+// New shared vocabulary introduced by the SillyTavern alignment refactor.
+// Sprint 1-A only defines the types — no runtime is wired up yet.
+// Sprint 1-D gates consumption via the `COVEL_SESSION_CONTEXT` flag.
+
+/**
+ * Structured view over the world data the legacy flat `config.world*` shape
+ * carried. Derived from what `loadSessionConfig`
+ * (`apps/server/src/routes/api/load-session-config.ts`) produces today.
+ *
+ * Consumers should read via the named fields; unknown keys survive through
+ * `extra` for forward compatibility until Sprint 2 formalises the schema.
+ */
+export interface WorldContextView {
+  readonly id: string;
+  readonly lore?: string;
+  readonly tone?: string;
+  readonly openingScenario?: string;
+  readonly dimensions?: Readonly<Record<string, unknown>>;
+  readonly schema?: Readonly<Record<string, unknown>>;
+  readonly entries?: readonly Readonly<Record<string, unknown>>[];
+  /** Free-form extra fields (forward-compat; consumers may read via bracket access). */
+  readonly extra?: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * Captures the content of a Core Memory block (Letta-style in-context memory).
+ *
+ * Named counterpart to the inline anonymous shape already used on
+ * {@link ContextBuildParams.coreMemoryBlocks}. A dedicated type exists
+ * because `@covel/context` intentionally does not depend on `@covel/memory`
+ * (see `packages/context/package.json`), so we cannot reuse
+ * `@covel/memory`'s `CoreMemoryBlock` directly.
+ */
+export interface CoreMemoryBlockView {
+  readonly label: string;
+  readonly content: string;
+  readonly updatedAt?: string;
+}
+
+/**
+ * Minimal view over a lorebook entry, mirroring the store's
+ * `LorebookEntryRecord` but kept decoupled so `@covel/context` does not leak
+ * DB record types into its consumers (same pattern as {@link SummaryRecord}).
+ *
+ * Sprint 2 flesh out triggers / probability / sticky semantics via `extra`
+ * or by promoting fields up to the top level.
+ */
+export interface LorebookEntryView {
+  readonly id: string;
+  readonly pluginId: string;
+  readonly content: string;
+  readonly keys?: readonly string[];
+  readonly enabled?: boolean;
+  /** Free-form extra (triggers, probability, sticky, etc. — Sprint 2 structures this). */
+  readonly extra?: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * Player persona descriptor — *stub for Sprint 3, not wired up yet*.
+ *
+ * Sprint 3 introduces persona selection, description injection, and the
+ * lorebook-activation bridge. Fields are minimal but forward-compatible so
+ * Sprint 1-era consumers that merely plumb the snapshot through don't break
+ * when Sprint 3 adds behaviour.
+ */
+export interface PersonaProfile {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string;
+  /**
+   * Optional coordinate hint for how the description injects.
+   * Full semantics defined in Sprint 3.
+   */
+  readonly promptCoordinate?: {
+    readonly position: 'seg3_prepend' | 'seg3_append' | 'at_depth';
+    readonly depth?: number;
+    readonly order?: number;
+  };
+  /** Lorebook entry IDs this persona activates. Sprint 3 wires this. */
+  readonly loreEntryIds?: readonly string[];
+}
+
+/**
+ * The central session-level context snapshot the whole refactor hinges on.
+ *
+ * Sprint 1 introduces the type and a loader that collapses the ~6 scattered
+ * DB reads in `turn-executor.ts` into a single call. Sprint 2 adds the
+ * compiled {@link ContextContribution} stream; Sprint 3 wires
+ * {@link PersonaProfile} and character overlays.
+ *
+ * Kept strictly `readonly` — the snapshot is meant to be built once per
+ * turn and threaded through without mutation.
+ */
+export interface SessionContextSnapshot {
+  readonly sessionId: string;
+  readonly turnNumber: number;
+  readonly locale: string;
+  readonly sessionMeta: SessionMeta;
+  readonly world: WorldContextView;
+  readonly characters: readonly CharacterSummary[];
+  /** Sprint 3 introduces this; undefined until then. */
+  readonly activePersona?: PersonaProfile;
+  readonly workingMemory: readonly WorkingMemoryEntry[];
+  readonly coreMemoryBlocks: readonly CoreMemoryBlockView[];
+  readonly loreEntries: readonly LorebookEntryView[];
+  readonly summaries: readonly SummaryRecord[];
+  /**
+   * Legacy `config` object identical to what `loadSessionConfig` produces today.
+   * Kept for template-variable compatibility until all plugin PLUGIN.md templates
+   * migrate to the structured namespaces. Sprint 3 end removes this.
+   */
+  readonly legacyConfigView: Readonly<Record<string, unknown>>;
+  /** Pre-compiled contribution stream (filled in Sprint 2/3; Sprint 1 returns []). */
+  readonly contributions: readonly ContextContribution[];
+}
+
+/**
+ * Discriminator for a single {@link ContextContribution}. Each kind maps to a
+ * SillyTavern-style segment position in the assembled prompt — see the inline
+ * comments for the target slice(s).
+ */
+export type ContributionKind =
+  | 'static_prompt'       // plugin instructions (Seg 3)
+  | 'lore_entry'          // lorebook (Seg 4/6/8)
+  | 'persona_description' // persona (Seg 1~3 之间)
+  | 'character_overlay'   // character-level system prompt (Seg 3)
+  | 'authors_note'        // Seg 9
+  | 'post_history'        // Seg 10
+  | 'runtime_inject'      // Seg 5
+  | 'working_memory'      // Seg 2
+  | 'core_memory';        // Seg 2
+
+/**
+ * A single piece of prompt content with full provenance, coordinate, budget
+ * hints, and a debug trace bag. The prompt assembler consumes a stream of
+ * these to build the final layered prompt.
+ *
+ * Sprint 1 only defines the type. Sprint 2 introduces the lorebook activator
+ * and plumbs these through `SessionContextSnapshot.contributions`.
+ */
+export interface ContextContribution {
+  readonly kind: ContributionKind;
+  readonly sourceType: 'manifest' | 'character' | 'persona' | 'world' | 'session' | 'chat';
+  /** pluginId / characterId / personaId / worldId / sessionId. */
+  readonly sourceId: string;
+  readonly content: string;
+  // SillyTavern-style coordinate
+  readonly position?: 'before_plugin' | 'after_plugin' | 'at_depth' | 'seg3_prepend' | 'seg3_append';
+  readonly depth?: number;
+  /** insertionOrder synonym. */
+  readonly order?: number;
+  readonly role?: 'system' | 'user' | 'assistant';
+  readonly triggers?: readonly ('normal' | 'continue' | 'regenerate' | 'quiet')[];
+  // budget hints
+  readonly budgetClass?: 'sticky' | 'flexible' | 'droppable';
+  readonly reservedTokens?: number;
+  // debug trace
+  readonly debugTrace?: Readonly<Record<string, unknown>>;
 }

@@ -39,3 +39,14 @@ export type {
   CompactorLLMAdapter,
   CompactorRunner,
 } from './compactor.js';
+
+// ── Session Context Snapshot (Sprint 1) ──────────────────────────
+export type {
+  ContributionKind,
+  ContextContribution,
+  SessionContextSnapshot,
+  WorldContextView,
+  PersonaProfile,
+  CoreMemoryBlockView,
+  LorebookEntryView,
+} from './types.js';
