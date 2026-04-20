@@ -16,7 +16,32 @@
 
 import type { InputInjectDecl, PluginDataInjectDecl, RuntimeInjectDecl } from '@covel/shared';
 import type { PluginDataRecord } from '@covel/store';
-import type { ContextBuildParams } from './types.js';
+import type { ContextBuildParams, SessionMeta } from './types.js';
+
+/**
+ * Pick the source-of-truth for session-level data inside the prompt-variable
+ * assembler. When a `SessionContextSnapshot` is present on the params, it wins
+ * over the legacy scattered fields so callers can opt into the snapshot
+ * channel without the legacy fields having to be cleared.
+ *
+ * Kept local to this module — the dual-channel collapse is a Sprint 1 detail
+ * and Sprint 2/3 remove the legacy branch entirely.
+ */
+function resolveVariableSources(params: ContextBuildParams): {
+  readonly config: Readonly<Record<string, unknown>>;
+  readonly sessionMeta: SessionMeta | undefined;
+} {
+  if (params.sessionContext) {
+    return {
+      config: params.sessionContext.legacyConfigView,
+      sessionMeta: params.sessionContext.sessionMeta,
+    };
+  }
+  return {
+    config: params.config,
+    sessionMeta: params.sessionMeta,
+  };
+}
 
 /**
  * Resolve a dot-separated path against a nested object.
@@ -320,7 +345,8 @@ function safeStringify(value: unknown): string {
 export function assemblePromptVariables(
   params: ContextBuildParams,
 ): Record<string, unknown> {
-  const { turnInput, completedResults, config, sessionMeta } = params;
+  const { turnInput, completedResults } = params;
+  const { config, sessionMeta } = resolveVariableSources(params);
 
   // Build the `inputs` lookup map: pluginId → runtimeId → output.
   const inputsMap: Record<string, Record<string, Record<string, unknown>>> = {};
