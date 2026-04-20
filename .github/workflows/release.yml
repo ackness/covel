@@ -228,6 +228,4 @@ jobs:
             release/electron/*.blockmap
             release/electron/latest*.yml
             release/tauri/*.dmg
-            release/tauri/*.msi
             release/tauri/*.exe
-            release/tauri/*.zip
