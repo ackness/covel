@@ -2,14 +2,13 @@
 
 Covel 是一个插件驱动的 AI 交互式叙事引擎 ([根目录 README](../README.md))。本目录收纳所有开发、参考、架构与发布相关文档。
 
-> 🇬🇧 [English index](./README.en.md)
+> 🇬🇧 [English README](../README.en.md)
 
 ## 目录
 
 ```
 docs/
 ├── README.md                # 中文索引（本文件）
-├── README.en.md             # 英文 README / 项目简介
 ├── CHANGELOG.md             # 版本发布记录（Keep a Changelog）
 ├── CONTRIBUTING.md / .en.md # 贡献指南
 │
@@ -18,6 +17,7 @@ docs/
 │   ├── plugin-ui-runtime-guidelines.md
 │   ├── e2e-plugin-verify.md
 │   ├── e2e-testing.md
+│   ├── desktop-config.md / .en.md  # 桌面版配置与数据目录
 │   └── skills.md
 │
 ├── reference/               # API / 协议 / 插件 / 工具参考

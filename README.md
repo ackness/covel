@@ -1,11 +1,8 @@
 # Covel
 
-一个基于大模型的文字冒险游戏平台，玩法通过插件扩展。
+> 插件化的 AI 文字冒险平台 —— 每个玩法都是一个 Agent。
 
-每个插件是一个 Agent Runtime：自己决定什么时候触发、读取哪些上下文、调用哪些工具、写入什么状态。叙事、NPC 关系、知识、角色、战斗、图像生成都是独立插件，可以装、可以卸、可以热切换，也可以自己写。
-
-> 🇬🇧 [English version](./docs/README.en.md)
-
+[![Status](https://img.shields.io/badge/status-WIP-f59e0b)](https://github.com/AcKnEsS/covel)
 [![Version](https://img.shields.io/badge/version-v0.0.1--beta-8b5cf6)](https://github.com/AcKnEsS/covel/releases)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-≥22-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
@@ -14,213 +11,160 @@
 
 ![Covel demo](./.assets/images/demo.gif)
 
+> [English](./README.en.md) · 中文（当前）
+>
+> ⚠️ **Work in Progress** — 项目处于 `v0.0.x` 早期阶段，API、数据格式、插件 frontmatter 字段都可能随版本破坏性变化。不建议在生产环境部署。
+
 ---
 
-内置叙事、动作引导、NPC 关系图、知识典籍、角色创建等插件，开箱即玩，也可直接作为二次开发的样板。
+## 它是什么
 
-支持 DeepSeek · Qwen (DashScope) · OpenAI · Anthropic，通过 `llm.toml` 按 Slot 配置模型，不改代码切换。
+Covel 是一个基于大模型的文字冒险游戏平台，所有玩法都通过插件扩展。
 
-## 下载
+每个插件是一个**自主 Agent Runtime**：自己决定什么时候触发、读取哪些上下文、调用哪些工具、写入什么状态。叙事、行动引导、NPC 关系图、知识典籍、角色创建、世界初始化都是独立插件，**可以装、可以卸、可以热切换**，也可以自己写。
 
-预编译的桌面版本可在 [Releases](https://github.com/AcKnEsS/covel/releases) 页面下载：
+内置 8 个核心插件开箱即玩，也可直接作为二次开发的样板。
 
-| 平台 | 安装包 | 架构 |
-|---|---|---|
-| macOS | `Covel-<version>-arm64.dmg` / `Covel-<version>-x64.dmg` | Apple Silicon / Intel |
-| macOS | `Covel-<version>-arm64-mac.zip` / `Covel-<version>-x64-mac.zip` | Apple Silicon / Intel |
-| Windows | `Covel Setup <version>.exe` | x64 / arm64 |
-| Windows | `Covel-<version>-portable.exe` | x64 |
+## 特性
 
-> 首次运行需要配置 LLM provider（进入应用后在设置页填写 API Key）。
+- **插件即 Agent** — 每个插件独立声明触发规则 / 上下文注入 / 工具清单 / 写入代理，LLM 调度完全受插件驱动
+- **多 LLM Provider** — DeepSeek · Qwen (DashScope) · OpenAI · Anthropic，按 slot 配置，不改代码切换模型
+- **多存储后端** — MemoryStore (dev) · IndexedDB (浏览器) · SQLite (桌面) · PostgreSQL (生产)，统一契约
+- **三种部署形态** — Web / Electron / Tauri（后两者共享同一个 Node sidecar，Tauri bundle 更小）
+- **文件式世界包** — `world.yaml` + `WORLD.md`，维度可 LLM 自动抽取
+- **json-render 声明式 UI** — 插件用 JSON spec 声明面板与消息块，无需写 React 代码
+- **Graph-RAG 记忆** — NPC 关系图提取 + 2-hop 检索 + 三层记忆系统（Core / Recall / Archival）
+- **浏览器持 Key** — API Key 留在 localStorage，逐请求通过 `X-Provider-Keys` 传递，不落盘
 
-## 配置与数据
+## 界面一览
 
-桌面版首次启动会自动创建 `~/.covel/`，里面放配置，数据和日志默认放 `~/.covel/data/`。两者可通过 `config.toml` 解耦 —— 想把庞大的 SQLite 搬到外置硬盘，改一行即可。
+| 主叙事 + 插件消息 | 右侧插件面板 | 调试页：Turn / Prompt / Trace |
+|:-:|:-:|:-:|
+| ![](./.assets/images/Jietu20260420-150324.jpg) | ![](./.assets/images/Jietu20260420-150417.jpg) | ![](./.assets/images/debug.jpg) |
 
-### 目录结构
+## 快速开始
 
-```
-~/.covel/                    ← 配置根（小文件，随应用版本稳定）
-  config.toml                ← 数据位置指针 + 日志轮转参数（见下文）
-  llm.toml                   ← LLM slot 配置（provider / model / baseUrl）
-  keys.env                   ← provider API key，KEY=VALUE 纯文本
-  plugins/                   ← 用户插件（和 app bundle 内的核心插件合并）
+### 普通用户 · 下载桌面版
 
-<data_root>/                 ← 默认 ~/.covel/data；可改到任意路径
-  covel.db                   ← SQLite 数据库
-  worlds/                    ← 用户创建的世界
-  logs/                      ← 应用日志（自动轮转）
-    tauri-main*.log          ← Tauri 主进程
-    electron-*.log           ← Electron 主进程
-    server-*.log             ← Node 后端（pino-roll）
-  server.port                ← 最近一次启动的端口（诊断用）
-```
+> ⚠️ 项目极早期，[Releases](https://github.com/AcKnEsS/covel/releases) 里的预编译包**随时可能下架或重置**。想稳定跟进请走源码构建路径。
 
-### `~/.covel/config.toml`
+目前仅提供 **macOS arm64**（Apple Silicon）预编译包，同时提供两种桌面壳：
 
-首次启动自带注释模板。字段：
+| 壳 | 安装包 | 推荐 | 说明 |
+|------|--------|:-:|------|
+| **Electron** | `Covel-electron-<version>-mac-arm64.dmg` | ⭐ | 功能更完整，我们日常开发 & 调试都跑这个 |
+| Tauri | `Covel-tauri_<version>_aarch64.dmg` | | bundle 更小，原生 WebView，实验性质 |
 
-```toml
-[paths]
-# 数据目录。相对路径相对于本文件所在目录；绝对路径直接使用。
-# 默认：~/.covel/data
-# data_root = "/Volumes/External/covel-data"
+两者共用同一个 Node sidecar 和后端，数据互通。首次启动进 **Settings** 填 LLM API Key 即可。Windows 与 Intel Mac 版本暂不提供，需要请自行用源码构建（见下一节）。
 
-[logging]
-# 单个日志文件上限（MB），超过后轮转
-max_size_mb = 10
-# 保留的轮转文件数，超出后丢弃最旧一份。总磁盘占用 ≈ max_size_mb × max_files
-max_files   = 10
-```
+桌面版的配置目录、`config.toml`、`keys.env`、`llm.toml` 细节见 [`docs/guide/desktop-config.md`](./docs/guide/desktop-config.md)。
 
-改完要重启 Covel 生效。**改 `data_root` 不会搬旧数据** —— 新位置是空的，老数据留在原处你自己处理。
+### 开发者 · 源码运行
 
-### `~/.covel/keys.env`
-
-```env
-# 一行一个 KEY=VALUE，# 开头是注释
-DEEPSEEK_API_KEY=sk-xxxxxxxxxxxx
-OPENAI_API_KEY=sk-xxxxxxxxxxxx
-ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
-```
-
-server 会按 `*_API_KEY` 扫描所有条目注入 provider 运行时。Key 名 = provider 名全大写 + `_API_KEY`。文件权限默认 `0600`，app 保存时会重置；手动编辑后注意别改得太宽。
-
-### `~/.covel/llm.toml`
-
-见仓库根 `llm.toml.example` 示例；每个 slot 对应一个 provider / 模型组合。app 自带兜底 `story` slot 指向 DeepSeek —— 填好 `keys.env` 的 `DEEPSEEK_API_KEY` 就能跑。
-
-### 前端入口
-
-Settings → Desktop tab 暴露所有路径、一键打开目录、切换 `data_root`。不想改文件就在 UI 里点。
-
-## 快速开始（源码）
-
-**前提**：Node.js ≥ 22，pnpm 10.7+
+**前提**：Node.js ≥ 22，pnpm 10.7+。
 
 ```bash
-# 安装依赖
 pnpm install
-
-# 配置 LLM（必须）
-cp llm.toml.example llm.toml    # 填写模型 ID 和端点
-cp .env.llm.example .env.llm    # 填写对应 provider 的 API Key
-
-# 启动（内存存储，无需数据库）
-pnpm dev
+cp llm.toml.example llm.toml        # 填模型 ID 和端点
+cp .env.llm.example .env.llm        # 填 provider API Key
+pnpm dev                            # 前端 5173 + 后端 3001（默认内存存储）
 ```
 
-打开 `http://localhost:5173`，调试页在 `/debug`。
+打开 `http://localhost:5173`；调试页在 `/debug`。
 
-### 使用 PostgreSQL
+切换 PostgreSQL：`cp .env.example .env && pnpm db:up && pnpm dev:pg && pnpm dev:web`（后端另起一个终端）。
 
-```bash
-cp .env.example .env
-pnpm db:up       # 启动 PostgreSQL 容器
-pnpm dev:pg      # 后端切换到 pg 存储
-pnpm dev:web     # 另开终端启动前端
-```
-
-### Docker 一键部署
+### 自部署 · Docker 一键
 
 ```bash
 cp .env.example .env
 cp llm.toml.example llm.toml && cp .env.llm.example .env.llm
-
-pnpm docker:build   # 构建并启动（前端 + 后端 + PostgreSQL）
+pnpm docker:build   # 构建并启动 前端 + 后端 + PostgreSQL
 ```
 
-服务启动后访问 `http://localhost:3001`。
+访问 `http://localhost:3001`。
 
-### 桌面版本地构建
-
-项目同时维护 Electron 和 Tauri 两个桌面壳，命令对称：
+### 桌面壳本地构建
 
 ```bash
-# Dev（热重载，真正启动桌面壳 + sidecar）
-pnpm dev:electron
-pnpm dev:tauri
-pnpm dev:web          # 只跑浏览器，不启桌面壳
-
-# 当前平台的安装包 → release/
-pnpm build:electron
-pnpm build:tauri
-pnpm build:desktop    # 两个一起打
+pnpm dev:electron      # Electron 壳热重载（dev）
+pnpm dev:tauri         # Tauri 壳热重载（dev）
+pnpm build:electron    # 当前平台 Electron 安装包 → release/
+pnpm build:tauri       # 当前平台 Tauri 安装包   → release/
+pnpm build:desktop     # 两个一起打
 ```
 
-更多签名/公证细节见 [`apps/desktop/PACKAGING.md`](apps/desktop/PACKAGING.md)。
+签名与公证细节：[`apps/desktop/PACKAGING.md`](./apps/desktop/PACKAGING.md)。
+
+## 写一个插件
+
+最小插件 = `PLUGIN.md` + `package.json`。frontmatter 声明触发方式、上下文注入、工具清单；markdown 正文就是 LLM 的 agent skill prompt。
+
+```yaml
+---
+name: my-plugin/main
+priority: 500
+model: plugin
+trigger:
+  type: scheduled
+  interval: 1
+tools:
+  builtin: [create-form, plugin-data-set]
+---
+
+你是一个 XXX agent。本回合需要……
+```
+
+完整教程：[插件作者指南](./docs/guide/plugin-authoring.md)。
+已实现插件参考：[插件注册表](./docs/reference/plugins.md) · [工具注册表](./docs/reference/tools.md)。
 
 ## 项目结构
 
 ```
 covel/
 ├── apps/
-│   ├── web/          React 19 + Vite 8 + TanStack Router 前端（含插件驱动 UI）
-│   ├── desktop/      Electron 桌面应用（封装 web + server）
-│   └── server/       Hono API 服务器 + Drizzle ORM
-├── packages/
-│   ├── shared/            共享类型与契约
-│   ├── runtime/           执行引擎（LLM tool-calling loop + 智能重试）
-│   ├── context/           上下文构建（TurnContextStore + PromptAssembler）
-│   ├── ai-provider/       多 Provider LLM 抽象（2597 模型能力数据库）
-│   ├── plugin-loader/     插件发现与注册表
-│   ├── store/             存储抽象（Memory / SQLite / IndexedDB / PostgreSQL）
-│   ├── tools/             工具系统（注册表 + builtin 工具）
-│   ├── lorebook/          世界/会话 lorebook
-│   ├── approval/          RPC 审批管线
-│   └── state / events / memory / plugin-test-utils
-├── plugins/          核心插件（pregame / narrator / codex / npc-graph / guide / ...）
-├── worlds/           世界包（cloudmere / mistport / neonridge）
-├── prompts/          外部化 prompt 模板（本地化 markdown）
-└── docs/             参考文档与开发指南
+│   ├── web/              React 19 + Vite 8 前端（含 json-render 驱动的插件面板）
+│   ├── server/           Hono API + Drizzle ORM
+│   ├── desktop/          Electron 壳
+│   └── desktop-tauri/    Tauri 壳
+├── packages/             内部包（shared / runtime / context / ai-provider / …）
+├── plugins/              核心插件（narrator / codex / npc-graph / char-creator / …）
+├── worlds/               世界包（cloudmere / mistport / neonridge）
+├── prompts/              外部化 prompt 模板
+└── docs/                 参考文档与作者指南
 ```
 
-## 常用命令
-
-```bash
-pnpm dev                   # 前端 + 后端
-pnpm dev:pg                # 后端（PostgreSQL 模式）
-pnpm build                 # 构建所有包
-pnpm lint                  # 类型检查
-pnpm test                  # 全部测试
-pnpm e2e                   # Playwright E2E 测试
-pnpm dev:electron          # Electron 壳（dev）
-pnpm dev:tauri             # Tauri 壳（dev）
-pnpm build:electron        # 打 Electron 安装包（release/）
-pnpm build:tauri           # 打 Tauri 安装包（release/）
-```
+完整依赖关系与包说明见 [`CLAUDE.md`](./CLAUDE.md#monorepo-structure)。
 
 ## 文档
 
-| | |
-|---|---|
-| [API 参考](docs/reference/api.md) | HTTP 端点、请求格式、curl 示例 |
-| [插件注册表](docs/reference/plugins.md) | 所有插件、触发方式、frontmatter 字段说明 |
-| [工具注册表](docs/reference/tools.md) | builtin + local 工具列表 |
-| [通讯协议](docs/reference/protocol.md) | SSE 事件类型与信封格式 |
-| [前端面板](docs/reference/ui-panels.md) | 插件驱动 UI 架构（json-render）|
-| [插件作者指南](docs/guide/plugin-authoring.md) | 从零开始写插件 |
+| 角色 | 入口 |
+|------|------|
+| **想读懂项目** | [架构 flow](./docs/architecture/flow.md) · [`CLAUDE.md`](./CLAUDE.md) |
+| **写插件** | [插件作者指南](./docs/guide/plugin-authoring.md) · [插件注册表](./docs/reference/plugins.md) · [工具注册表](./docs/reference/tools.md) |
+| **接 API** | [API 参考](./docs/reference/api.md) · [通讯协议](./docs/reference/protocol.md) |
+| **做 UI** | [前端面板架构](./docs/reference/ui-panels.md) · [Prompt 结构](./docs/reference/prompt-structure.md) |
+| **跑桌面版** | [桌面版配置](./docs/guide/desktop-config.md) · [打包发布](./apps/desktop/PACKAGING.md) |
+| **发版 / 贡献** | [CONTRIBUTING](./docs/CONTRIBUTING.md) · [CHANGELOG](./docs/CHANGELOG.md) |
 
-完整文档索引：[`docs/README.md`](docs/README.md)。目录包含 [`reference/`](docs/reference/)（API/协议/工具）、[`guide/`](docs/guide/)（上手与作者指南）、[`architecture/`](docs/architecture/)（系统设计与历史）。
+完整索引：[`docs/README.md`](./docs/README.md)。
 
-## 发布
+## Roadmap
 
-版本号通过 Git tag 驱动：
+- ✅ 插件系统 + 8 个核心插件 + json-render UI 架构
+- ✅ 多 Provider / 多 Storage / 桌面双壳（Electron + Tauri）
+- 🚧 长会话上下文预算与智能截断
+- 🚧 Lorebook 关键字触发扫描与 Reserved Tokens 预算
+- 📋 Character Card V2/V3 导入导出（SillyTavern / RisuAI 互通）
+- 📋 跨会话长期记忆（embedding / vector recall）
 
-```bash
-git tag v0.0.1-beta
-git push origin v0.0.1-beta
-```
-
-推送 `v*` tag 后，[`.github/workflows/release.yml`](.github/workflows/release.yml) 将自动在 GitHub-hosted macOS 与 Windows runner 上并行构建 Electron 安装包，并生成一个 GitHub Release 草稿。详情见 [贡献指南 · Release Process](./docs/CONTRIBUTING.md#release-process)。
+详细改进评估见 [`devs/docs/insights/covel-improvement-plan.md`](./devs/docs/insights/covel-improvement-plan.md)。
 
 ## 贡献
 
-欢迎通过 Issue 与 Pull Request 参与。请先阅读 [`docs/CONTRIBUTING.md`](./docs/CONTRIBUTING.md)。
+欢迎 Issue 与 Pull Request。请先阅读 [`docs/CONTRIBUTING.md`](./docs/CONTRIBUTING.md)。
 
-## Changelog
-
-发布记录见 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)。
+发版由 Git tag 触发：推送 `v*` tag → [`.github/workflows/release.yml`](./.github/workflows/release.yml) 在 macOS runner 上并行构建 Electron + Tauri 的 arm64 dmg，生成 Release 草稿。暂不提供 Windows / Intel Mac / Linux 预编译包。
 
 ## License
 
