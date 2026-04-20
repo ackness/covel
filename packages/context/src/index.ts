@@ -50,3 +50,7 @@ export type {
   CoreMemoryBlockView,
   LorebookEntryView,
 } from './types.js';
+
+// ── Session Context Snapshot Loader (Sprint 1) ───────────────────
+export { buildSessionContextSnapshot } from './session-context.js';
+export type { BuildSessionContextSnapshotOpts } from './session-context.js';
