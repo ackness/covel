@@ -21,6 +21,7 @@ interface AdapterCall {
   model: string;
   baseUrl: string | undefined;
   apiKey: string | undefined;
+  providerRequestMetadata?: Record<string, unknown>;
 }
 
 function createRecordingAdapter(
@@ -35,6 +36,7 @@ function createRecordingAdapter(
         model: params.model,
         baseUrl: config.baseUrl,
         apiKey: config.apiKey,
+        providerRequestMetadata: params.providerRequestMetadata,
       });
       return {
         text: `reply from ${provider}/${params.model}`,
@@ -49,6 +51,7 @@ function createRecordingAdapter(
         model: params.model,
         baseUrl: config.baseUrl,
         apiKey: config.apiKey,
+        providerRequestMetadata: params.providerRequestMetadata,
       });
       yield { type: "text-delta" as const, textDelta: "hi" };
       yield {
@@ -177,6 +180,33 @@ describe("gateway + slotOverrides", () => {
     // Registry state restored after the call completes.
     expect(presetRegistry.hasPreset("custom_abc")).toBe(false);
     expect(__internals.presetRefs.has("custom_abc")).toBe(false);
+  });
+
+  it("forwards slot-level parameter overrides into providerRequestMetadata", async () => {
+    const { gateway, calls } = setup();
+    const overrides: SlotOverridesInput = {
+      parameterOverrides: {
+        story: {
+          temperature: 0.3,
+          topP: 0.8,
+          maxOutputTokens: 777,
+        },
+      },
+    };
+
+    await gateway.generateText(
+      { presetId: "story", messages: [{ role: "user", content: "hi" }] },
+      { slotOverrides: overrides },
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].providerRequestMetadata).toMatchObject({
+      parameterOverrides: {
+        temperature: 0.3,
+        topP: 0.8,
+        maxOutputTokens: 777,
+      },
+    });
   });
 
   it("streamText applies and rolls back the overlay even when the stream completes", async () => {

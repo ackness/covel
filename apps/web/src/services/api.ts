@@ -159,11 +159,18 @@ function buildSlotConfigHeaderInternal(
   options: SlotConfigHeaderOptions = {},
 ): Record<string, string> {
   const slotConfigRaw = localStorage.getItem(SLOT_CONFIG_KEY);
+  const paramOverridesRaw = localStorage.getItem(PARAM_OVERRIDES_KEY);
   let slotConfig: Record<string, SlotConfigEntry> = {};
+  let paramOverrides: Record<string, ModelParameterOverrides> = {};
   try {
     slotConfig = slotConfigRaw ? JSON.parse(slotConfigRaw) : {};
   } catch {
     slotConfig = {};
+  }
+  try {
+    paramOverrides = paramOverridesRaw ? JSON.parse(paramOverridesRaw) : {};
+  } catch {
+    paramOverrides = {};
   }
 
   const slotPresetOverrides = Object.fromEntries(
@@ -191,11 +198,13 @@ function buildSlotConfigHeaderInternal(
     }));
 
   const hasSlotPresetOverrides = Object.keys(slotPresetOverrides).length > 0;
+  const hasParamOverrides = Object.keys(paramOverrides).length > 0;
   const hasCustom = customPresetDefs.length > 0;
-  if (!hasSlotPresetOverrides && !hasCustom) return {};
+  if (!hasSlotPresetOverrides && !hasParamOverrides && !hasCustom) return {};
   return {
     "X-Slot-Config": btoa(JSON.stringify({
       ...(hasSlotPresetOverrides ? { slotPresetOverrides } : {}),
+      ...(hasParamOverrides ? { parameterOverrides: paramOverrides } : {}),
       ...(hasCustom ? { customPresets: customPresetDefs } : {}),
     })),
   };

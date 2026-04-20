@@ -11,7 +11,7 @@ import {
 import { createOpenAiChatAdapter } from "./openai-chat.js";
 
 /** Fields that providerRequestMetadata must never override. */
-const RESPONSES_PROTECTED_KEYS = new Set(["model", "input", "stream", "text"]);
+const RESPONSES_PROTECTED_KEYS = new Set(["model", "input", "stream", "text", "parameterOverrides"]);
 
 function sanitizeResponsesMetadata(
   meta: Record<string, unknown> | undefined,
@@ -22,6 +22,23 @@ function sanitizeResponsesMetadata(
     if (!RESPONSES_PROTECTED_KEYS.has(k)) sanitized[k] = v;
   }
   return sanitized;
+}
+
+function extractResponsesParameterOverrides(
+  meta: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const overrides = meta?.parameterOverrides;
+  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
+    return {};
+  }
+  const source = overrides as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+  if (typeof source.temperature === "number") result.temperature = source.temperature;
+  if (typeof source.topP === "number") result.top_p = source.topP;
+  if (typeof source.maxOutputTokens === "number") {
+    result.max_output_tokens = source.maxOutputTokens;
+  }
+  return result;
 }
 
 /**
@@ -51,6 +68,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         model: params.model,
         input: params.messages,
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
+        ...extractResponsesParameterOverrides(params.providerRequestMetadata),
       });
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-responses");
@@ -72,6 +90,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         input: params.messages,
         text: { format: { type: "json_schema" } },
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
+        ...extractResponsesParameterOverrides(params.providerRequestMetadata),
       });
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-responses");
@@ -104,6 +123,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         input: params.messages,
         stream: true,
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
+        ...extractResponsesParameterOverrides(params.providerRequestMetadata),
       });
 
       if (!response.ok) {

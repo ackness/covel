@@ -168,6 +168,8 @@ export interface CustomPresetInput {
 export interface SlotOverridesInput {
   /** Slot-name → preset-id. Consulted before the server slotRegistry. */
   slotPresetOverrides?: Record<string, string>;
+  /** Slot-name → generation parameter overrides. */
+  parameterOverrides?: Record<string, ModelParameterOverrides>;
   /** Preset definitions added for the duration of the call. */
   customPresets?: CustomPresetInput[];
 }

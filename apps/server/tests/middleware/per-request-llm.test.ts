@@ -137,6 +137,12 @@ describe('per-request LLM middleware', () => {
 
     const slotConfig = {
       slotPresetOverrides: { fast: 'custom_abc' },
+      parameterOverrides: {
+        fast: {
+          temperature: 0.2,
+          maxOutputTokens: 512,
+        },
+      },
       customPresets: [
         {
           id: 'custom_abc',
@@ -165,6 +171,12 @@ describe('per-request LLM middleware', () => {
     expect(calls[0].presetId).toBe('fast');
     expect(calls[0].slotOverrides).toMatchObject({
       slotPresetOverrides: { fast: 'custom_abc' },
+      parameterOverrides: {
+        fast: {
+          temperature: 0.2,
+          maxOutputTokens: 512,
+        },
+      },
       customPresets: [
         expect.objectContaining({
           id: 'custom_abc',

@@ -663,7 +663,18 @@ export function createMiscApiRoutes(
     try {
       for await (const event of ai.gateway.streamText(
         { presetId: preset.id, messages: [{ role: 'user', content: 'hi' }] },
-        { apiKeys, signal: abort.signal },
+        {
+          apiKeys,
+          signal: abort.signal,
+          slotOverrides: {
+            ...(slotConfig.slotPresetOverrides
+              ? { slotPresetOverrides: slotConfig.slotPresetOverrides }
+              : {}),
+            ...(slotConfig.parameterOverrides
+              ? { parameterOverrides: slotConfig.parameterOverrides }
+              : {}),
+          },
+        },
       )) {
         if (event.type === 'text-delta' && event.textDelta.length > 0) {
           if (ttfbMs === null) ttfbMs = Date.now() - startedAt;

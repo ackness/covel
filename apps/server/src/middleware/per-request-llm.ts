@@ -5,7 +5,7 @@
  * browser:
  *
  *   - `X-Provider-Keys`  base64 JSON  →  `{ [provider]: apiKey }`
- *   - `X-Slot-Config`    base64 JSON  →  `{ slotPresetOverrides?, customPresets? }`
+ *   - `X-Slot-Config`    base64 JSON  →  `{ slotPresetOverrides?, parameterOverrides?, customPresets? }`
  *
  * and, when either is present, swaps `c.get('llmAdapter')` for a
  * request-scoped adapter that forwards these through the gateway. This
@@ -52,6 +52,7 @@ export function createPerRequestLlmMiddleware(
     const hasOverrides =
       slotOverrides !== null &&
       ((slotOverrides.customPresets?.length ?? 0) > 0 ||
+        Object.keys(slotOverrides.parameterOverrides ?? {}).length > 0 ||
         Object.keys(slotOverrides.slotPresetOverrides ?? {}).length > 0);
 
     if (!hasRequestKeys && !hasOverrides) {
@@ -110,6 +111,34 @@ function parseSlotOverrides(
         }
       }
       if (Object.keys(clean).length > 0) out.slotPresetOverrides = clean;
+    }
+    const paramMap =
+      (parsed as Record<string, unknown>).parameterOverrides
+      ?? (parsed as Record<string, unknown>).paramOverrides;
+    if (paramMap && typeof paramMap === 'object' && !Array.isArray(paramMap)) {
+      const clean: NonNullable<SlotOverridesInput['parameterOverrides']> = {};
+      for (const [slotId, raw] of Object.entries(paramMap as Record<string, unknown>)) {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+        const source = raw as Record<string, unknown>;
+        const next: Record<string, number> = {};
+        for (const key of [
+          'temperature',
+          'topP',
+          'topK',
+          'maxOutputTokens',
+          'frequencyPenalty',
+          'presencePenalty',
+        ] as const) {
+          const value = source[key];
+          if (typeof value === 'number' && Number.isFinite(value)) {
+            next[key] = value;
+          }
+        }
+        if (Object.keys(next).length > 0) {
+          clean[slotId] = next as NonNullable<SlotOverridesInput['parameterOverrides']>[string];
+        }
+      }
+      if (Object.keys(clean).length > 0) out.parameterOverrides = clean;
     }
     const customPresets = (parsed as Record<string, unknown>).customPresets;
     if (Array.isArray(customPresets)) {

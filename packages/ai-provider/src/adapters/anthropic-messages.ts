@@ -32,7 +32,14 @@ const ANTHROPIC_VERSION = "2023-06-01";
 const ANTHROPIC_MAX_CACHE_BREAKPOINTS = 4;
 
 /** Fields that providerRequestMetadata must never override. */
-const ANTHROPIC_PROTECTED_KEYS = new Set(["model", "messages", "stream", "max_tokens", "system"]);
+const ANTHROPIC_PROTECTED_KEYS = new Set([
+  "model",
+  "messages",
+  "stream",
+  "max_tokens",
+  "system",
+  "parameterOverrides",
+]);
 
 /**
  * Shape of an Anthropic `system` field element when caching is enabled.
@@ -43,6 +50,21 @@ interface AnthropicSystemBlock {
   type: "text";
   text: string;
   cache_control?: { type: "ephemeral" };
+}
+
+function extractAnthropicParameterOverrides(
+  meta: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const overrides = meta?.parameterOverrides;
+  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
+    return {};
+  }
+  const source = overrides as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+  if (typeof source.temperature === "number") result.temperature = source.temperature;
+  if (typeof source.topP === "number") result.top_p = source.topP;
+  if (typeof source.maxOutputTokens === "number") result.max_tokens = source.maxOutputTokens;
+  return result;
 }
 
 /**
@@ -202,6 +224,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         ...(hasSystem(systemField) ? { system: systemField } : {}),
         messages,
         ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
+        ...extractAnthropicParameterOverrides(params.providerRequestMetadata),
       }, undefined, headers);
       const payload = await parseJson(response);
       assertSuccess(response, payload, "anthropic");
@@ -228,6 +251,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         system: systemField,
         messages,
         ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
+        ...extractAnthropicParameterOverrides(params.providerRequestMetadata),
       }, undefined, headers);
       const payload = await parseJson(response);
       assertSuccess(response, payload, "anthropic");
@@ -262,6 +286,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         ...(hasSystem(systemField) ? { system: systemField } : {}),
         messages,
         ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
+        ...extractAnthropicParameterOverrides(params.providerRequestMetadata),
       }, undefined, headers);
 
       if (!response.ok) {

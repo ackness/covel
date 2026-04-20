@@ -162,7 +162,11 @@ export function createGateway(deps: GatewayDependencies) {
             model: targetModel(target),
             messages: input.messages,
             tools: input.tools,
-            providerRequestMetadata: input.providerRequestMetadata,
+            providerRequestMetadata: withParameterOverrides(
+              input.providerRequestMetadata,
+              input.presetId,
+              options,
+            ),
           },
           { profile: target.profile, preset: target.preset, mode: "text" }
         ),
@@ -190,7 +194,11 @@ export function createGateway(deps: GatewayDependencies) {
             model: targetModel(target),
             schema: input.schema,
             messages: input.messages,
-            providerRequestMetadata: input.providerRequestMetadata,
+            providerRequestMetadata: withParameterOverrides(
+              input.providerRequestMetadata,
+              input.presetId,
+              options,
+            ),
           },
           { profile: target.profile, preset: target.preset, mode: "object" }
         );
@@ -262,7 +270,11 @@ export function createGateway(deps: GatewayDependencies) {
             model: targetModel(target),
             messages: input.messages,
             tools: input.tools,
-            providerRequestMetadata: input.providerRequestMetadata,
+            providerRequestMetadata: withParameterOverrides(
+              input.providerRequestMetadata,
+              input.presetId,
+              options,
+            ),
           },
           { profile: target.profile, preset: target.preset, mode: "stream" }
         )) {
@@ -473,6 +485,30 @@ export function createGateway(deps: GatewayDependencies) {
    */
   function getSlotParameterOverrides(slotId: string): ModelParameterOverrides | undefined {
     return deps.slotRegistry?.getParameterOverrides(slotId);
+  }
+
+  function resolveParameterOverrides(
+    presetId: string | undefined,
+    options: GatewayOptions | undefined,
+  ): ModelParameterOverrides | undefined {
+    if (options?.parameterOverrides) return options.parameterOverrides;
+    if (!presetId) return undefined;
+    const requestScoped = options?.slotOverrides?.parameterOverrides?.[presetId];
+    if (requestScoped) return requestScoped;
+    return getSlotParameterOverrides(presetId);
+  }
+
+  function withParameterOverrides(
+    metadata: Record<string, unknown> | undefined,
+    presetId: string | undefined,
+    options: GatewayOptions | undefined,
+  ): Record<string, unknown> | undefined {
+    const parameterOverrides = resolveParameterOverrides(presetId, options);
+    if (!metadata && !parameterOverrides) return metadata;
+    return {
+      ...(metadata ?? {}),
+      ...(parameterOverrides ? { parameterOverrides } : {}),
+    };
   }
 
   return {

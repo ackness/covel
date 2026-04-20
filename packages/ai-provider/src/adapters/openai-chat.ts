@@ -33,6 +33,8 @@ const OPENAI_PROTECTED_KEYS = new Set([
   "embeddingFormat",
   // Image dispatch hint — consumed by generateImage branches.
   "imageFormat",
+  // Slot-level generation params — translated by the adapter.
+  "parameterOverrides",
 ]);
 
 function sanitizeOpenAiMetadata(
@@ -44,6 +46,27 @@ function sanitizeOpenAiMetadata(
     if (!OPENAI_PROTECTED_KEYS.has(k)) sanitized[k] = v;
   }
   return sanitized;
+}
+
+function extractOpenAiParameterOverrides(
+  meta: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const overrides = meta?.parameterOverrides;
+  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
+    return {};
+  }
+  const source = overrides as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+  if (typeof source.temperature === "number") result.temperature = source.temperature;
+  if (typeof source.topP === "number") result.top_p = source.topP;
+  if (typeof source.maxOutputTokens === "number") result.max_tokens = source.maxOutputTokens;
+  if (typeof source.frequencyPenalty === "number") {
+    result.frequency_penalty = source.frequencyPenalty;
+  }
+  if (typeof source.presencePenalty === "number") {
+    result.presence_penalty = source.presencePenalty;
+  }
+  return result;
 }
 
 /**
@@ -258,6 +281,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         model: params.model,
         messages: serializeMessages(params.messages),
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
+        ...extractOpenAiParameterOverrides(params.providerRequestMetadata),
       };
       if (params.tools && params.tools.length > 0) {
         body.tools = params.tools;
@@ -283,6 +307,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         messages: serializeMessages(params.messages),
         response_format: { type: "json_object" },
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
+        ...extractOpenAiParameterOverrides(params.providerRequestMetadata),
       });
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-chat");
@@ -311,6 +336,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         messages: serializeMessages(params.messages),
         stream: true,
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
+        ...extractOpenAiParameterOverrides(params.providerRequestMetadata),
       };
       if (params.tools && params.tools.length > 0) {
         body.tools = params.tools;
