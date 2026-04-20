@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url";
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
 const projectRoot = path.resolve(desktopRoot, "../..");
-const releaseRoot = path.join(projectRoot, "release");
+// electron-builder writes to release/electron/ (see electron-builder.yml).
+// The repo-level release/ groups outputs from multiple shells.
+const releaseRoot = path.join(projectRoot, "release", "electron");
 const platform = process.argv[2];
 
 if (!platform || !["mac", "win"].includes(platform)) {

@@ -216,6 +216,23 @@ verifyStagedServerRuntime();
 console.log("  ✓ server runtime verified");
 console.log("  ✓ server resources staged");
 
+// Step 3b: smoke-test the staged server so electron-builder never wraps a
+// known-broken sidecar. We run it twice: once with the llm.toml we copied
+// (if any), and once with llm.toml hidden to exercise the built-in default.
+console.log("\n[3b/4] Smoke-testing staged server (with llm.toml)...");
+execSync(`node "${path.join(desktopRoot, "scripts/verify-staging.mjs")}"`, {
+  cwd: desktopRoot,
+  stdio: "inherit",
+});
+console.log("\n[3b/4] Smoke-testing staged server (without llm.toml)...");
+execSync(
+  `node "${path.join(desktopRoot, "scripts/verify-staging.mjs")}" --no-llm-toml`,
+  {
+    cwd: desktopRoot,
+    stdio: "inherit",
+  },
+);
+
 // Step 4: electron-builder
 console.log("\n[4/4] Packaging with electron-builder...");
 console.log("  Run: pnpm --filter @covel/desktop dist");

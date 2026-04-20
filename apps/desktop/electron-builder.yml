@@ -3,7 +3,7 @@ productName: Covel
 copyright: Copyright © 2026 Covel
 
 directories:
-  output: ../../release
+  output: ../../release/electron
   buildResources: resources
 
 files:
