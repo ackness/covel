@@ -281,7 +281,11 @@ Named slots for provider routing. The first slot defined in `llm.toml` automatic
 - `balance` — referee plugins, complex logic
 - `image` — image generation (optional)
 
-Unconfigured slots fall back to `default`. Primary config via `llm.toml` using `[covel.<slot>]` sections (see `llm.toml.example`), legacy fallback to `packages/ai-provider/presets/default.toml`. Supports OpenAI, Anthropic, DeepSeek, Qwen (Aliyun DashScope) protocols.
+Primary config via `llm.toml` using `[covel.<slot>]` sections (see `llm.toml.example`). If `llm.toml` is missing or fails to parse, the server falls back to a built-in default (single `story` slot → DeepSeek) so the app always boots — users can then configure providers through the Settings UI.
+
+**Slot fallback is tag-aware**: when a plugin requests a slot that isn't configured (e.g. `plugin` when only `story` is set), the gateway falls back to the first slot with the same tag (`text`/`image`/`embedding`/`speech`/`transcription`) and logs a one-shot warning. Cross-tag fallback is intentionally forbidden — requesting an `image` slot never silently routes to a text slot. This lets minimal configs serve every plugin (`model: plugin` → `story`, `model: fast` → `story`, etc.) without hand-defining every slot.
+
+Supports OpenAI, Anthropic, DeepSeek, Qwen (Aliyun DashScope) protocols.
 
 **API key security**: Keys in browser localStorage only, passed per-request via `X-Provider-Keys` header (base64), never persisted server-side.
 

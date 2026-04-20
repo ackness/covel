@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { createGateway } from "../src/gateway.js";
 import { createPresetRegistry } from "../src/preset-registry.js";
 import { createProviderRegistry } from "../src/provider-registry.js";
+import { createSlotRegistry } from "../src/slot-registry.js";
 import type { ModelProfile, PresetConfig, StreamEvent } from "../src/types.js";
 import type { ModelProviderAdapter } from "../src/adapters/adapter.js";
 
@@ -205,5 +206,96 @@ describe("gateway", () => {
 
     // Should not attempt fallback since CONFIG_ERROR is not in shouldFallback list
     expect(callCount).toBe(1);
+  });
+});
+
+describe("gateway slot tag fallback", () => {
+  // Minimal config that mirrors the "user hasn't written llm.toml yet"
+  // scenario in production: a single `story` slot on the default preset,
+  // no `plugin` / `fast` / etc. slot configured. Plugins that request
+  // model="plugin" must still resolve — to `story`, with a one-shot warn.
+  function setupMinimalSlots(adapterOverrides?: Partial<ModelProviderAdapter>) {
+    const stubAdapter = createStubAdapter(adapterOverrides);
+
+    const providerRegistry = createProviderRegistry({
+      providers: {
+        test: {
+          adapter: stubAdapter,
+          defaults: { baseUrl: "https://test.api" },
+        },
+      },
+    });
+
+    const presetRegistry = createPresetRegistry({ profiles, presets });
+    const slotRegistry = createSlotRegistry({ presetRegistry });
+    slotRegistry.configure({
+      slots: {
+        story: { slotId: "story", presetId: "primary", tag: "text" },
+      },
+    });
+
+    const gateway = createGateway({
+      providerRegistry,
+      presetRegistry,
+      slotRegistry,
+    });
+
+    return { gateway, stubAdapter, slotRegistry };
+  }
+
+  it("falls back to same-tag slot when requested slot is absent", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { gateway } = setupMinimalSlots();
+
+    // Plugin asks for "plugin" slot. Not configured → must not throw.
+    const result = await gateway.generateText({
+      presetId: "plugin",
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(result.text).toBe("stub response");
+    expect(warn).toHaveBeenCalledTimes(1);
+    const msg = warn.mock.calls[0][0] as string;
+    expect(msg).toContain('slot "plugin" not configured');
+    expect(msg).toContain('falling back to "story"');
+    warn.mockRestore();
+  });
+
+  it("warns at most once per unknown slot name", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { gateway } = setupMinimalSlots();
+
+    await gateway.generateText({
+      presetId: "plugin",
+      messages: [{ role: "user", content: "1" }],
+    });
+    await gateway.generateText({
+      presetId: "plugin",
+      messages: [{ role: "user", content: "2" }],
+    });
+    await gateway.generateText({
+      presetId: "plugin",
+      messages: [{ role: "user", content: "3" }],
+    });
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it("does not cross-tag fallback: image request cannot reach text slot", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { gateway } = setupMinimalSlots();
+
+    // Image generation requests an "image" slot; we only have a `text`
+    // slot. Must NOT silently route to `story` — the caller needs to know
+    // image generation is unconfigured.
+    await expect(
+      gateway.generateImage({
+        presetId: "image",
+        prompt: "a cat",
+      }),
+    ).rejects.toThrow();
+
+    warn.mockRestore();
   });
 });

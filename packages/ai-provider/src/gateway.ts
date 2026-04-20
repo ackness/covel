@@ -58,10 +58,51 @@ export interface GatewayOptions {
  * Provides 7 operations with automatic fallback routing for text operations.
  */
 export function createGateway(deps: GatewayDependencies) {
-  /** Resolve a slot name to its preset ID, or return the input unchanged. */
-  function resolveSlotOrPassthrough(presetId: string | undefined): string | undefined {
+  /**
+   * Tracks which (slot, fallbackTag) pairs we've already warned about so a
+   * misconfigured runtime doesn't spam stderr every turn. The set lives in
+   * gateway closure — reset on server restart.
+   */
+  const warnedFallbacks = new Set<string>();
+
+  /**
+   * Resolve a slot name to its preset ID.
+   *
+   * If the slot isn't configured, fall back to the first registered slot
+   * whose tag matches `fallbackTag`. This lets minimal configs (e.g. only
+   * a `story` slot defined) serve every plugin that asks for `plugin`,
+   * `fast`, `balance`, etc. — the user gets a warning once per unknown
+   * slot so they can add the missing entry when they care.
+   *
+   * Cross-tag fallback is intentionally disabled: a slot asking for `image`
+   * never silently falls through to a text slot.
+   *
+   * Returns the original slotId when no fallback is possible; callers keep
+   * their existing error paths (preset-registry will throw "preset not
+   * found" so the failure is explicit).
+   */
+  function resolveSlotOrPassthrough(
+    presetId: string | undefined,
+    fallbackTag: string = "text",
+  ): string | undefined {
     if (!presetId || !deps.slotRegistry) return presetId;
-    return deps.slotRegistry.resolveSlot(presetId) ?? presetId;
+
+    const direct = deps.slotRegistry.resolveSlot(presetId);
+    if (direct) return direct;
+
+    const candidates = deps.slotRegistry.listSlotsByTag(fallbackTag);
+    if (candidates.length === 0) return presetId;
+
+    const fallback = candidates[0];
+    const key = `${presetId}→${fallback.slotId}`;
+    if (!warnedFallbacks.has(key)) {
+      warnedFallbacks.add(key);
+      console.warn(
+        `[ai-gateway] slot "${presetId}" not configured; falling back to "${fallback.slotId}" ` +
+          `(same tag="${fallbackTag}"). Add [covel.${presetId}] to llm.toml to silence.`,
+      );
+    }
+    return fallback.presetId;
   }
 
   async function generateText(
@@ -136,7 +177,7 @@ export function createGateway(deps: GatewayDependencies) {
     options?: GatewayOptions
   ): AsyncIterable<StreamEvent> {
     const targets = deps.presetRegistry.resolveTextTargetChain({
-      presetId: resolveSlotOrPassthrough(input.presetId),
+      presetId: resolveSlotOrPassthrough(input.presetId, "text"),
     });
     let lastError: AiProviderError | null = null;
 
@@ -219,7 +260,7 @@ export function createGateway(deps: GatewayDependencies) {
     }
 
     const target = deps.presetRegistry.resolveEmbeddingTarget({
-      presetId: resolveSlotOrPassthrough(input.presetId),
+      presetId: resolveSlotOrPassthrough(input.presetId, "embedding"),
     });
 
     // Route via the preset (carries baseUrl/protocol) when available, else
@@ -396,7 +437,9 @@ export function createGateway(deps: GatewayDependencies) {
     ) => Promise<TResult>,
     resolveUsage: (result: TResult) => UsageSummary | null
   ): Promise<TResult> {
-    const targets = deps.presetRegistry.resolveTextTargetChain({ presetId: resolveSlotOrPassthrough(input.presetId) });
+    const targets = deps.presetRegistry.resolveTextTargetChain({
+      presetId: resolveSlotOrPassthrough(input.presetId, "text"),
+    });
     let lastError: AiProviderError | null = null;
 
     for (const [index, target] of targets.entries()) {
@@ -449,10 +492,20 @@ export function createGateway(deps: GatewayDependencies) {
     execute: (
       target: ResolvedTarget,
       resolved: ProviderResolution
-    ) => Promise<TResult>
+    ) => Promise<TResult>,
+    fallbackTag?: string,
   ): Promise<TResult> {
+    // Map mode → default fallback tag when the caller didn't pick one.
+    // image/audio/speech operations must NOT silently fall back to text.
+    const tag =
+      fallbackTag ??
+      (mode === "image"
+        ? "image"
+        : mode === "speech" || mode === "transcription"
+          ? mode
+          : "text");
     const target = deps.presetRegistry.resolveTextTarget({
-      presetId: resolveSlotOrPassthrough(presetId),
+      presetId: resolveSlotOrPassthrough(presetId, tag),
     });
     let resolved = deps.providerRegistry.resolve(
       target.preset ?? target.profile,

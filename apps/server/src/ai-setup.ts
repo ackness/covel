@@ -1,46 +1,79 @@
 import { resolve } from "node:path";
 import { readFileSync } from "node:fs";
 import {
-  loadAiConfig,
   loadLlmConfig,
+  parseLlmConfig,
   createProviderRegistry,
   createPresetRegistry,
   createSlotRegistry,
   createGateway,
   createModelDatabase,
   setModelDatabase,
+  BUNDLED_MODEL_DB_PATH,
 } from "@covel/ai-provider";
 import type { AiConfig, LlmConfig, SlotRegistry, ModelDatabase, ModelDbFile } from "@covel/ai-provider";
 
+/**
+ * Built-in fallback LLM config used when no llm.toml is present.
+ *
+ * The desktop app must boot even if the user has never touched Settings.
+ * This defines a single `story` slot pointing at DeepSeek, which all
+ * plugin runtimes (model: "story" and model: "plugin") will resolve to
+ * via the gateway's first-slot fallback. Users override this by writing
+ * their own llm.toml via the Settings UI.
+ *
+ * Note: no API keys live here. The user still must provide
+ * DEEPSEEK_API_KEY (via .env.llm or the Settings UI → X-Provider-Keys)
+ * before the slot can actually be called.
+ */
+const DEFAULT_LLM_TOML = `
+[covel.story]
+provider = "deepseek"
+model    = "deepseek-chat"
+baseUrl  = "https://api.deepseek.com"
+protocol = "openai-chat-v1"
+`;
 
 /**
  * Initialize AI provider stack.
  *
- * Configuration priority:
- *   1. `llm.toml` at project root  — slot-centric, user-friendly
- *   2. `packages/ai-provider/presets/default.toml` — legacy fallback
+ * Resolution order:
+ *   1. `llm.toml` (COVEL_LLM_TOML override, else ./llm.toml in cwd)
+ *   2. Built-in DEFAULT_LLM_TOML — deepseek "story" slot, always available
  *
- * Called once at server startup after dotenv is loaded.
+ * We never throw on missing config. The desktop app can boot with nothing
+ * configured; users can then add slots / keys through the Settings UI,
+ * which writes to userConfigDir/llm.toml for subsequent launches.
  */
 export function createAiStack(): AiStack {
-  const projectRoot = resolve(import.meta.dirname, "../../..");
   let config: AiConfig;
   let llmConfig: LlmConfig | null = null;
 
-  // Load bundled LiteLLM model database
-  const modelDb = loadBundledModelDb(projectRoot);
+  // Load bundled LiteLLM model database (package-relative, works in dev and prod)
+  const modelDb = loadBundledModelDb();
   if (modelDb) {
     setModelDatabase(modelDb);
     console.log(`[ai-setup] Model database loaded: ${modelDb.count} models`);
   }
 
-  // Try llm.toml first (slot-centric config).
-  // COVEL_LLM_TOML can point to a user-editable override (typically under
-  // Electron userData). When set, we prefer it over the bundled copy.
+  // Try llm.toml first. COVEL_LLM_TOML wins (desktop app passes a userData path);
+  // otherwise we try ./llm.toml relative to the server's cwd.
   const llmTomlPath = process.env.COVEL_LLM_TOML
     ? resolve(process.env.COVEL_LLM_TOML)
-    : resolve(projectRoot, "llm.toml");
-  const llmResult = loadLlmConfig(llmTomlPath);
+    : resolve(process.cwd(), "llm.toml");
+
+  // Any failure here (missing file, TOML parse error, unresolved ${ENV}
+  // interpolation, schema validation) must fall back — never kill the
+  // server, the user can fix their config through the Settings UI.
+  let llmResult: ReturnType<typeof loadLlmConfig> = null;
+  try {
+    llmResult = loadLlmConfig(llmTomlPath);
+  } catch (err) {
+    console.warn(
+      `[ai-setup] llm.toml at ${llmTomlPath} could not be parsed: ${err instanceof Error ? err.message : err}. ` +
+        `Falling back to built-in default.`,
+    );
+  }
   if (llmResult) {
     config = llmResult.aiConfig;
     llmConfig = llmResult.llmConfig;
@@ -49,13 +82,13 @@ export function createAiStack(): AiStack {
       Object.keys(llmResult.llmConfig.covel).join(", "),
     );
   } else {
-    // Fallback to legacy default.toml
-    console.log("[ai-setup] No llm.toml found, using default.toml");
-    process.env.DEEPSEEK_BASE_URL ??= "https://api.deepseek.com";
-    process.env.DASHSCOPE_BASE_URL ??= "https://dashscope.aliyuncs.com/compatible-mode/v1";
-    config = loadAiConfig(
-      resolve(projectRoot, "packages/ai-provider/presets/default.toml"),
+    console.log(
+      `[ai-setup] Using built-in default LLM config (deepseek/story). ` +
+        `Override by editing ${llmTomlPath}.`,
     );
+    const fallback = parseLlmConfig(DEFAULT_LLM_TOML);
+    config = fallback.aiConfig;
+    llmConfig = fallback.llmConfig;
   }
 
   const providerRegistry = createProviderRegistry({
@@ -107,19 +140,19 @@ export function createAiStack(): AiStack {
  *   1. `COVEL_MODEL_DB_PATH` explicit override
  *   2. `COVEL_USER_CONFIG_DIR/model-db.json` — user cache populated via the
  *      "Refresh model DB" action in Settings
- *   3. Bundled `packages/ai-provider/data/model-db.json`
+ *   3. Bundled `data/model-db.json` shipped inside @covel/ai-provider
  *
  * The first file that parses into a valid `ModelDbFile` is used. This lets
  * the desktop app ship with a baseline database but still receive updates
  * without re-releasing the app.
  */
-function loadBundledModelDb(projectRoot: string): ModelDatabase | null {
+function loadBundledModelDb(): ModelDatabase | null {
   const candidates = [
     process.env.COVEL_MODEL_DB_PATH,
     process.env.COVEL_USER_CONFIG_DIR
       ? resolve(process.env.COVEL_USER_CONFIG_DIR, "model-db.json")
       : undefined,
-    resolve(projectRoot, "packages/ai-provider/data/model-db.json"),
+    BUNDLED_MODEL_DB_PATH,
   ].filter((p): p is string => typeof p === "string" && p.length > 0);
 
   for (const dbPath of candidates) {
@@ -152,7 +185,7 @@ function loadBundledModelDb(projectRoot: string): ModelDatabase | null {
 
 export interface AiStack {
   config: AiConfig;
-  /** Parsed llm.toml config (null when using legacy default.toml). */
+  /** Parsed llm.toml config. Always populated — falls back to built-in defaults. */
   llmConfig: LlmConfig | null;
   /** Model capability database (LiteLLM-derived). */
   modelDb: ModelDatabase | null;

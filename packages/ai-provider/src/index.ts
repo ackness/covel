@@ -43,6 +43,12 @@ export type {
 // Errors
 export { AiProviderError, type AiProviderErrorCode } from "./errors.js";
 
+// Bundled resources
+export {
+  BUNDLED_DEFAULT_PRESET_PATH,
+  BUNDLED_MODEL_DB_PATH,
+} from "./bundled-resources.js";
+
 // Config
 export { loadAiConfig, parseAiConfig } from "./config/loader.js";
 export { aiConfigSchema, presetConfigSchema, modelProfileSchema } from "./config/schema.js";
