@@ -116,6 +116,12 @@ export function createGateway(deps: GatewayDependencies) {
     const clientOverride = resolveSlotOverride(presetId, options?.slotOverrides);
     if (clientOverride !== presetId) return clientOverride;
 
+    // Direct preset-id match trumps the slot lookup. Without this the
+    // tag-based fallback below would divert calls made with a raw preset
+    // id (e.g. a browser-registered `custom_abc`) into the first
+    // same-tag slot, silently swapping the target model.
+    if (deps.presetRegistry.hasPreset?.(presetId)) return presetId;
+
     if (!deps.slotRegistry) return presetId;
 
     const direct = deps.slotRegistry.resolveSlot(presetId);

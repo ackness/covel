@@ -8,6 +8,7 @@ import fs from 'node:fs/promises';
 import { resolve, relative } from 'node:path';
 import { Hono } from 'hono';
 import type { AiStack } from '../ai-setup.js';
+import { applySlotOverlay, type SlotOverridesInput } from '@covel/ai-provider';
 import {
   discoverPlugins,
   loadPluginManifest,
@@ -572,71 +573,31 @@ export function createMiscApiRoutes(
       }
     }
 
-    // Decode the client slot config header (base64 JSON). The turn pipeline
-    // consumes this in its own codepath; the ping endpoint needs it so that
-    // custom presets defined in the browser (Settings / onboarding) can be
-    // probed before they're ever committed to llm.toml.
-    type SlotConfigHeader = {
-      slotPresetOverrides?: Record<string, string>;
-      customPresets?: Array<{
-        id: string;
-        name: string;
-        provider: string;
-        baseUrl: string;
-        model: string;
-        protocol?: string;
-      }>;
-    };
-    let slotConfig: SlotConfigHeader = {};
+    // Decode the client slot config header (base64 JSON). Shared with the
+    // turn pipeline's per-request middleware — the ping endpoint needs its
+    // own decode because ping can be called before the per-request
+    // middleware runs (same request, but the resolution we do here happens
+    // against the already-mutated registries).
+    let slotConfig: SlotOverridesInput = {};
     const slotHeader = c.req.header('X-Slot-Config');
     if (slotHeader) {
       try {
         const decoded = Buffer.from(slotHeader, 'base64').toString('utf8');
         const parsed = JSON.parse(decoded);
-        if (parsed && typeof parsed === 'object') slotConfig = parsed as SlotConfigHeader;
+        if (parsed && typeof parsed === 'object') slotConfig = parsed as SlotOverridesInput;
       } catch {
         // Malformed header — behave as if no overrides were supplied.
       }
     }
 
-    // Register client-defined custom presets + providers transiently so the
-    // gateway's resolveTextTarget can find them. We clean everything up in
-    // the finally block below, regardless of whether the ping succeeds.
-    const transientPresetIds: string[] = [];
-    const transientProviderNames: string[] = [];
-    for (const cp of slotConfig.customPresets ?? []) {
-      if (!cp.id || !cp.provider) continue;
-      if (!ai.providerRegistry.hasProvider(cp.provider)) {
-        ai.providerRegistry.addProvider(cp.provider, {
-          ...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
-          ...(cp.protocol ? { protocol: cp.protocol as never } : {}),
-        });
-        transientProviderNames.push(cp.provider);
-      }
-      const alreadyRegistered = ai.presetRegistry
-        .listPresets()
-        .some((p) => p.id === cp.id);
-      if (!alreadyRegistered) {
-        ai.presetRegistry.addPreset({
-          id: cp.id,
-          name: cp.name || cp.id,
-          provider: cp.provider,
-          model: cp.model || 'default',
-          ...(cp.protocol ? { protocol: cp.protocol as never } : {}),
-          ...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
-          tier: 'medium',
-          supportedModes: ['text', 'stream'],
-          enabled: true,
-          tag: 'text',
-        });
-        transientPresetIds.push(cp.id);
-      }
-    }
+    // Register client-declared custom presets + providers via the shared
+    // overlay helper (ref-counted, base-registry-safe).
+    const cleanupTransient = applySlotOverlay(ai, slotConfig);
 
     const allPresets = ai.presetRegistry.listPresets().filter((p) => p.enabled);
 
     // Resolution chain:
-    //   1. Direct preset id match (includes transiently registered ones)
+    //   1. Direct preset id match (includes overlay-registered ones)
     //   2. `slot-<name>` → client slotPresetOverrides → slotRegistry
     //   3. Text-tag fallback (mirrors gateway.streamText behaviour)
     //   4. Any enabled preset
@@ -661,11 +622,6 @@ export function createMiscApiRoutes(
       }
     }
     if (!preset) preset = allPresets[0];
-
-    const cleanupTransient = () => {
-      for (const id of transientPresetIds) ai.presetRegistry.removePreset(id);
-      for (const name of transientProviderNames) ai.providerRegistry.removeProvider(name);
-    };
 
     if (!preset) {
       cleanupTransient();
