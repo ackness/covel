@@ -5,8 +5,9 @@
 import { Hono } from 'hono';
 import type { RuntimeManifest } from '@covel/shared';
 import type { PluginRegistry, LoadedRuntime } from '@covel/plugin-loader';
-import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
+import type { LLMAdapter, ToolExecutor, HookPipeline } from '@covel/runtime';
 import { executeTurn, processRuntimeResult } from '@covel/runtime';
+import type { EventBus } from '@covel/events';
 import { rateLimiter } from '../../middleware/rate-limit.js';
 import { loadSessionConfig } from './load-session-config.js';
 import type { DataStore } from '@covel/store';
@@ -22,6 +23,8 @@ type Env = {
     resolveModel?: (manifest: RuntimeManifest, apiOverride?: string) => string | undefined;
     getConfigFn?: (pluginId: string, runtimeId: string) => Readonly<Record<string, unknown>>;
     compactorRunner?: CompactorRunner;
+    hookPipeline?: HookPipeline;
+    eventBus?: EventBus;
   };
 };
 
@@ -104,13 +107,21 @@ turnRoutes.post('/:id/turn', rateLimiter({ max: 30 }), async (c) => {
   // Process runtime results through the same commit pipeline as /api/actions.
   // Without this, turn.ts would write runtime_results but not messages/state/events,
   // leaving snapshot restore desynced from LLM history. Audit Finding 3.
+  //
+  // Forward hookPipeline + eventBus so PreStateCommit / PostStateCommit hooks
+  // registered by plugins fire on this route too, matching /api/actions.
+  const hookPipeline = c.get('hookPipeline');
+  const eventBus = c.get('eventBus');
   const outputKindMap = new Map<string, string>();
   for (const rt of activeRuntimes) {
     outputKindMap.set(rt.name, rt.outputKind ?? 'plugin');
   }
   for (const rr of result.runtimeResults) {
     const kind = outputKindMap.get(rr.runtimeId) ?? 'plugin';
-    await processRuntimeResult(rr, store, sessionId, kind);
+    await processRuntimeResult(rr, store, sessionId, kind, {
+      ...(hookPipeline ? { hookPipeline } : {}),
+      ...(eventBus ? { eventBus } : {}),
+    });
   }
 
   return c.json(result);

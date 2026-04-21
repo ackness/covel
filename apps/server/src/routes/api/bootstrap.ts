@@ -25,13 +25,15 @@ import {
 import { createStateManager, type StateManager } from '@covel/state';
 import { createEventBus, type EventBus } from '@covel/events';
 import type { DataStore, StoreBackend } from '@covel/store';
-import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
+import type { LLMAdapter, ToolExecutor, HookPipeline, PluginHookSource } from '@covel/runtime';
 import {
   createToolExecutor,
   createModelResolver,
   createPluginRpcRegistry,
   createRpcExecutor,
   submitFormHandler,
+  createHookPipeline,
+  registerPluginHooks,
   type PluginRpcRegistry,
   type RpcExecutor,
   type RpcHandler,
@@ -502,6 +504,36 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   // are not tied to any specific store backend.
   const rpcApprovalGate: RpcApprovalGate = createRpcApprovalGate();
 
+  // 7d. Hook pipeline — singleton per bootstrapApi() call.
+  //
+  //   Each plugin's PLUGIN.md may declare `hooks: [{ event, handler }]` entries
+  //   pointing at a module relative to the plugin root. Delegation to
+  //   `registerPluginHooks` keeps the handler-resolution / lazy-import / path
+  //   traversal logic co-located with the pipeline itself (see
+  //   `packages/runtime/src/hooks/register-plugin-hooks.ts`). Plugins with
+  //   no hooks leave the pipeline empty.
+  const hookPipeline: HookPipeline = createHookPipeline();
+  const hookSources: PluginHookSource[] = [];
+  for (const [pluginId, manifests] of manifestCache) {
+    const discovery = discoveryMap.get(pluginId);
+    if (!discovery) continue;
+    for (const parsed of manifests) {
+      const hooks = parsed.manifest.hooks ?? [];
+      if (hooks.length === 0) continue;
+      hookSources.push({
+        pluginId,
+        rootPath: discovery.rootPath,
+        hooks,
+      });
+    }
+  }
+  const registeredHookCount = registerPluginHooks(hookPipeline, hookSources);
+  if (registeredHookCount > 0) {
+    console.log(
+      `[bootstrap] registered ${registeredHookCount} plugin hook handler(s) across ${hookSources.length} source(s)`,
+    );
+  }
+
   // 7b. CompactorRunner (S2-T2) — wraps maybeCompact with server-level deps.
   //     Feature-gated by COVEL_COMPACTOR_V1=1 at call site (turn-executor.ts).
   //     Collects summaryFocus from ALL registered manifests (deduplicated).
@@ -638,6 +670,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     c.set('getConfigFn', getConfigFn);
     c.set('resolveModel', resolveModel);
     c.set('compactorRunner', compactorRunner);
+    c.set('hookPipeline', hookPipeline);
     // memorySystem injected via module-level setter, not Hono context
     c.set('rpcExecutor', rpcExecutor);
     c.set('rpcRegistry', rpcRegistry);
@@ -730,7 +763,7 @@ function emitPluginDataChangedEvent(
  *   used by `codex/tools/unlock-codex-entries.js`, `guide/tools/generate-guide.js`,
  *   `builtin/character-tools.ts`, etc.
  * - Because these writes skip the commit pipeline, `PreStateCommit` hooks
- *   registered via `COVEL_HOOKS_V1=1` cannot currently intercept them.
+ *   cannot currently intercept them.
  *   Plugins that require PreStateCommit governance on their persistent data
  *   MUST use the proposal pipeline (emit `state.patch` / `event.emit` /
  *   future `plugin-data.set` proposal types) instead of direct store writes.

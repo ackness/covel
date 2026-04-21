@@ -723,7 +723,7 @@ tools:
 
 ## Proposal 类型
 
-Runtime 输出最终都被规范化为 `Proposal[]`（定义见 `packages/shared/src/types/proposal.ts`），由 commit chain 顺序提交、写入 store、再以 SessionEvent 形式广播。已注册的 `ProposalType` 包括：`narrative.append`、`narrative.template`、`state.patch`、`event.emit`、`record.upsert`、`interaction.request`、`ui.render`、`asset.generate`、`phase.transition`、`plugin.data`、`working_memory.set`。
+Runtime 输出最终都被规范化为 `Proposal[]`（定义见 `packages/shared/src/types/proposal.ts`），由 commit chain 顺序提交、写入 store、再以 SessionEvent 形式广播。已注册的 `ProposalType` 包括：`narrative.append`、`narrative.template`、`state.patch`、`event.emit`、`record.upsert`、`interaction.request`、`ui.render`、`asset.generate`、`plugin.data`、`working_memory.set`、`lorebook.upsert`。（历史上的 `phase.transition` 已随 turn-band 迁移移除；状态机改由 `status + turnCount + preGameCompleted` 描述。）
 
 ### `working_memory.set`（S3-T3）
 

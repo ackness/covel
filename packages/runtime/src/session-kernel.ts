@@ -89,12 +89,11 @@ export function normalizeOutput(
     }
   }
 
-  // phase.transition — from phase field
-  if (typeof output.phase === 'string') {
-    proposals.push(makeProposal('phase.transition', source, turnId, sessionId, {
-      phase: output.phase,
-    }));
-  }
+  // Legacy `phase` field from runtime output is ignored. The session state
+  // model is now `status + turnCount + preGameCompleted` — there is no
+  // persistent `phase` column and no `phase.changed` event is forwarded.
+  // Runtimes that still include `phase` in their output are silently
+  // accepted (no error) so plugins can upgrade on their own schedule.
 
   // event.emit — from events[]
   const events = output.events as Array<Record<string, unknown>> | undefined;
@@ -190,7 +189,6 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
   const handlers: Record<string, (p: Proposal) => Promise<CommitResult>> = {
     'narrative.append': commitNarrative,
     'interaction.request': commitInteraction,
-    'phase.transition': commitPhaseTransition,
     'state.patch': commitStatePatch,
     'event.emit': commitEvent,
     'working_memory.set': commitWorkingMemory,
@@ -203,9 +201,12 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
       return { committed: false, error: `unknown proposal type: ${proposal.type}` };
     }
 
-    // ── PreStateCommit hook (S4-T3) ──────────────────────────────
+    // ── PreStateCommit hook ──────────────────────────────────────
+    // Pipeline presence is the gate. Callers that don't want hooks
+    // pass `hookPipeline: undefined` (e.g. dev/tests that exercise the
+    // bare commit path).
     let effectiveProposal = proposal;
-    if (process.env.COVEL_HOOKS_V1 === '1' && hookPipeline) {
+    if (hookPipeline) {
       const hookCtx: HookContext = {
         event: 'PreStateCommit',
         sessionId: proposal.sessionId,
@@ -213,6 +214,23 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
       };
       const preResult = await hookPipeline.run('PreStateCommit', hookCtx, { proposal }, { eventBus });
       if (preResult.action === 'abort') {
+        // Surface the blocked commit on the turn timeline so plugin
+        // authors can tell from /debug that their hook intervened.
+        await store.addTraceEvent({
+          id: crypto.randomUUID(),
+          sessionId: proposal.sessionId,
+          type: 'hook.aborted',
+          traceId: proposal.turnId,
+          turnId: proposal.turnId,
+          payload: {
+            event: 'PreStateCommit',
+            proposalType: proposal.type,
+            proposalId: proposal.id,
+            source: proposal.source,
+            reason: preResult.reason,
+          },
+          createdAt: new Date().toISOString(),
+        }).catch(() => { /* best-effort — never block commit on trace write */ });
         return { committed: false, error: `pre-state-commit hook aborted: ${preResult.reason}` };
       }
       if (preResult.action === 'continue' && 'replace' in preResult && preResult.replace?.proposal) {
@@ -235,8 +253,8 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
       });
     }
 
-    // ── PostStateCommit hook (S4-T3) — Post* cannot abort ────────
-    if (process.env.COVEL_HOOKS_V1 === '1' && hookPipeline && result.committed) {
+    // ── PostStateCommit hook — Post* cannot abort ────────────────
+    if (hookPipeline && result.committed) {
       const hookCtx: HookContext = {
         event: 'PostStateCommit',
         sessionId: effectiveProposal.sessionId,
@@ -341,15 +359,6 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
     return {
       committed: true,
       event: makeEvent('interaction.requested', proposal, { ...payload, block }),
-    };
-  }
-
-  async function commitPhaseTransition(proposal: Proposal): Promise<CommitResult> {
-    const { phase } = proposal.payload as { phase: string };
-    await store.updateSession(proposal.sessionId, { phase });
-    return {
-      committed: true,
-      event: makeEvent('phase.changed', proposal, { phase }),
     };
   }
 
@@ -547,6 +556,10 @@ export async function processRuntimeResult(
   store: KernelStore,
   sessionId: string,
   outputKind?: string,
+  opts?: {
+    readonly hookPipeline?: HookPipeline;
+    readonly eventBus?: EventBus;
+  },
 ): Promise<ProcessRuntimeResultOutput> {
   const empty: ProcessRuntimeResultOutput = { events: [], failedProposals: [] };
 
@@ -569,7 +582,10 @@ export async function processRuntimeResult(
     return empty;
   }
 
-  const pipeline = createCommitPipeline(store);
+  // Thread the hook pipeline + eventBus through so PreStateCommit /
+  // PostStateCommit actually run on real turn commits (previously these
+  // hooks only fired in tests because callers didn't pass them).
+  const pipeline = createCommitPipeline(store, opts?.hookPipeline, opts?.eventBus);
   const commitResults = await pipeline.commitAll(proposals);
 
   const events: SessionEvent[] = [];

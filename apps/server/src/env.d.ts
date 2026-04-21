@@ -2,7 +2,7 @@ import type { DataStore } from '@covel/store';
 import type { PluginRegistry, LoadedRuntime } from '@covel/plugin-loader';
 import type { StateManager } from '@covel/state';
 import type { EventBus } from '@covel/events';
-import type { LLMAdapter, ToolExecutor, RpcExecutor, PluginRpcRegistry } from '@covel/runtime';
+import type { LLMAdapter, ToolExecutor, RpcExecutor, PluginRpcRegistry, HookPipeline } from '@covel/runtime';
 import type { RpcApprovalGate } from '@covel/approval';
 import type { RuntimeManifest } from '@covel/shared';
 import type { CompactorRunner } from '@covel/context';
@@ -30,5 +30,6 @@ declare module 'hono' {
     rpcRegistry: PluginRpcRegistry;
     rpcApprovalGate: RpcApprovalGate;
     ensureEmbeddingLock?: EnsureEmbeddingLockFn;
+    hookPipeline?: HookPipeline;
   }
 }

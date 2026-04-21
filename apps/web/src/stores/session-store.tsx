@@ -749,7 +749,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   //   State:      state.changed → gameState deep-merge
   //   Events:     event.emitted → gameState.events
   //   Records:    record.updated → gameState.records
-  //   Phase:      phase.changed → session phase
   //   Execution:  execution.started → runtime.started → runtime.completed → execution.completed
   //   Error:      error.occurred
   //
@@ -903,9 +902,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
         break;
       }
-      // phase.changed is delivered exclusively through the persistent
-      // /events/stream subscription below — both channels share the same
-      // eventBus, so handling it here too would dispatch twice per event.
       // ── Execution lifecycle events ───────────────────────────
       case "execution.started": {
         // Turn-level execution started — tracked by `executing` flag, no fake runtime step needed
@@ -1636,13 +1632,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   //
   // Channel 1 — /actions SSE (per-turn, handleSseEvent):
   //   Primary path for ALL in-turn data. Handles: message streaming,
-  //   blocks, state patches, events, records, phase changes, execution steps.
+  //   blocks, state patches, events, records, execution steps.
   //   Active only during turn execution; closes when turn completes.
   //
   // Channel 2 — /events/stream (persistent, handleSubscriptionEvent):
   //   Handles ONLY out-of-band events that happen outside of turn execution:
   //   plugin enable/disable, external state changes from other clients.
-  //   Does NOT duplicate in-turn events (no runtime.*, no state.*, no phase.*).
+  //   Does NOT duplicate in-turn events (no runtime.*, no state.*).
   //
   const subscriptionRef = useRef<SessionSubscription | null>(null);
 

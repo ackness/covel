@@ -67,10 +67,12 @@ Covel 是一个基于大模型的文字冒险游戏平台，所有玩法都通�
 pnpm install
 cp llm.toml.example llm.toml        # 填模型 ID 和端点
 cp .env.llm.example .env.llm        # 填 provider API Key
-pnpm dev                            # 前端 5173 + 后端 3001（默认内存存储）
+pnpm dev                            # 前端 5173 + 后端 3001（默认 SQLite，数据库落在 ./data/covel.db）
 ```
 
 打开 `http://localhost:5173`；调试页在 `/debug`。
+
+需要内存存储（跳过落盘、进程退出即清空）：在 `.env` 中设置 `STORE_BACKEND=memory` 后再运行 `pnpm dev`。
 
 切换 PostgreSQL：`cp .env.example .env && pnpm db:up && pnpm dev:pg && pnpm dev:web`（后端另起一个终端）。
 

@@ -52,26 +52,10 @@ function makeProposal(type: Proposal['type'], payload: Record<string, unknown>, 
   };
 }
 
-// ── Feature flag management ───────────────────────────────────────
-
-const originalFlag = process.env.COVEL_HOOKS_V1;
-
-beforeEach(() => {
-  delete process.env.COVEL_HOOKS_V1;
-});
-
-afterEach(() => {
-  if (originalFlag === undefined) {
-    delete process.env.COVEL_HOOKS_V1;
-  } else {
-    process.env.COVEL_HOOKS_V1 = originalFlag;
-  }
-});
-
 // ── Tests ─────────────────────────────────────────────────────────
 
-describe('session-kernel hook wire-in (S4-T3)', () => {
-  describe('Flag-off path', () => {
+describe('session-kernel hook wire-in', () => {
+  describe('No-pipeline path', () => {
     it('commits normally without hookPipeline — no side effects', async () => {
       const store = createRecordingStore();
       const pipeline = createCommitPipeline(store);
@@ -85,24 +69,10 @@ describe('session-kernel hook wire-in (S4-T3)', () => {
       expect(store.messages).toHaveLength(1);
       expect(store.stateChanges).toHaveLength(1);
     });
-
-    it('flag OFF with hookPipeline present — hooks not called', async () => {
-      const store = createRecordingStore();
-      const hookPipeline = createHookPipeline();
-      const handler = vi.fn().mockResolvedValue({ action: 'continue' });
-      hookPipeline.register({ id: 'test:PreStateCommit:0', event: 'PreStateCommit', handler });
-
-      const pipeline = createCommitPipeline(store, hookPipeline);
-      await pipeline.commit(makeProposal('narrative.append', { content: 'test', kind: 'story' }, 'x'));
-
-      // Flag is off, handler should NOT have been called
-      expect(handler).not.toHaveBeenCalled();
-    });
   });
 
   describe('PreStateCommit hook', () => {
     it('skips proposal when PreStateCommit aborts, commits the rest', async () => {
-      process.env.COVEL_HOOKS_V1 = '1';
       const store = createRecordingStore();
       const hookPipeline = createHookPipeline();
 
@@ -139,7 +109,6 @@ describe('session-kernel hook wire-in (S4-T3)', () => {
     });
 
     it('continue path: all proposals commit normally', async () => {
-      process.env.COVEL_HOOKS_V1 = '1';
       const store = createRecordingStore();
       const hookPipeline = createHookPipeline();
 
@@ -164,7 +133,6 @@ describe('session-kernel hook wire-in (S4-T3)', () => {
 
   describe('PostStateCommit hook', () => {
     it('fires after successful commit with the proposal and result', async () => {
-      process.env.COVEL_HOOKS_V1 = '1';
       const store = createRecordingStore();
       const hookPipeline = createHookPipeline();
 
@@ -181,7 +149,6 @@ describe('session-kernel hook wire-in (S4-T3)', () => {
     });
 
     it('abort from PostStateCommit does not undo the commit', async () => {
-      process.env.COVEL_HOOKS_V1 = '1';
       const store = createRecordingStore();
       const hookPipeline = createHookPipeline();
 
@@ -202,7 +169,6 @@ describe('session-kernel hook wire-in (S4-T3)', () => {
 
   describe('EventBus observability (F5)', () => {
     it('emits hook.error to eventBus when a PreStateCommit hook throws', async () => {
-      process.env.COVEL_HOOKS_V1 = '1';
       const store = createRecordingStore();
       const hookPipeline = createHookPipeline();
       const eventBus = createEventBus();

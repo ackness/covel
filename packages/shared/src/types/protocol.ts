@@ -101,7 +101,6 @@ export type ProtocolEventType =
   | 'runtime.failed'
   | 'execution.completed'
   // Session lifecycle
-  | 'phase.changed'
   | 'record.updated'
   | 'event.emitted'
   // World

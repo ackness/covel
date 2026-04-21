@@ -73,8 +73,9 @@ export type { AssembledContext, ContextBuildParams, LLMMessage } from '@covel/co
 export { computePromptDelta, applyPromptDelta } from './prompt-delta.js';
 export type { PromptMessage } from './prompt-delta.js';
 
-// ── Hook Pipeline (S4-T3) ────────────────────────────────────────
-export { HookPipeline, createHookPipeline } from './hooks/index.js';
+// ── Hook Pipeline ────────────────────────────────────────────────
+export { HookPipeline, createHookPipeline, registerPluginHooks } from './hooks/index.js';
+export type { PluginHookSource, RegisterPluginHooksOptions } from './hooks/index.js';
 export type {
   HookEvent,
   HookContext,

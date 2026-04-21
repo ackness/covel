@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Terminal, Activity, ChevronDown, ChevronRight, RefreshCw,
   Zap, Wrench, CheckCircle2, XCircle, MessageSquare, Database,
-  Layers, Clock, Filter, Radio, Box, ArrowRight, FileJson, Gamepad2,
+  Layers, Clock, Filter, Radio, Box, FileJson, Gamepad2,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Badge } from "@/components/ui/badge.js";
@@ -23,7 +23,7 @@ export const Route = createFileRoute("/debug")({
 
 // ── Event type styling ────────────────────────────────────────────
 
-type EventCategory = "flow" | "runtime" | "llm" | "tool" | "message" | "block" | "state" | "phase";
+type EventCategory = "flow" | "runtime" | "llm" | "tool" | "message" | "block" | "state";
 
 function categorize(type: string): EventCategory {
   if (type.startsWith("flow.")) return "flow";
@@ -31,7 +31,6 @@ function categorize(type: string): EventCategory {
   if (type.startsWith("message.")) return "message";
   if (type.startsWith("block.")) return "block";
   if (type.startsWith("state.")) return "state";
-  if (type === "phase_change") return "phase";
   if (type.startsWith("llm.") || type.includes("llm")) return "llm";
   if (type.includes("tool")) return "tool";
   return "flow";
@@ -45,7 +44,6 @@ const CATEGORY_STYLES: Record<EventCategory, { color: string; bg: string; border
   message: { color: "text-cyan-500",   bg: "bg-cyan-500/10",   border: "border-cyan-500/20",  icon: MessageSquare },
   block:   { color: "text-indigo-500", bg: "bg-indigo-500/10", border: "border-indigo-500/20", icon: Box },
   state:   { color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/20", icon: Database },
-  phase:   { color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/20", icon: ArrowRight },
 };
 
 // ── Runtime status derivation ─────────────────────────────────────
@@ -388,6 +386,9 @@ function DebugPage() {
                         <JsonBlock data={{
                           id: snapshotData.session.id,
                           worldId: snapshotData.session.worldId,
+                          // `phase` here is a derived display label the
+                          // snapshot builder computes from status+turnCount —
+                          // not the obsolete SessionRecord.phase field.
                           phase: snapshotData.session.phase,
                           turnCount: snapshotData.session.turnCount,
                           locale: snapshotData.session.locale,
@@ -1092,14 +1093,10 @@ function extractDetail(event: api.TraceEvent): string {
       const patch = p.patch as Record<string, unknown> | undefined;
       return patch ? `${patch.packageName || ""} — ${patch.summary || ""}` : "";
     }
-    case "flow.phase.changed":
-      return `→ ${p.phase || ""}`;
     case "flow.completed":
       return p.retry ? `retry from ${p.retryFromRuntimeId || "all"}` : "";
     case "flow.failed":
       return (p.message as string) || "";
-    case "phase_change":
-      return `→ ${p.phase || ""}`;
     default:
       return "";
   }

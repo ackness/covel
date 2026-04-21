@@ -14,8 +14,8 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 
 | 后端 | 值 | 用途 |
 |------|-----|------|
-| Memory | `memory` (默认) | 开发/测试，数据存于内存，重启丢失 |
-| SQLite | `sqlite` | 单机部署，数据持久化到本地文件 |
+| SQLite | `sqlite` (默认) | 本机开发 / 单机部署，数据落到 `./data/covel.db` |
+| Memory | `memory` | 测试或一次性 demo，数据存于内存，重启丢失 |
 | PostgreSQL | `pg` | 生产环境，需配置 `DATABASE_URL` |
 
 > **注意**: IndexedDB (IDB) 是**前端专用**的存储后端，仅在浏览器中使用，服务器端不可用。
@@ -2245,14 +2245,15 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 |------|--------|--------|------------|
 | 持久化 | 否 (重启丢失) | 是 (本地文件) | 是 (远程数据库) |
 | 并发 | 单进程 | 单进程 | 多进程 |
-| 适用场景 | 开发/测试 | 单机部署 | 生产环境 |
-| 配置 | 默认 | `STORE_BACKEND=sqlite` | `STORE_BACKEND=pg` + `DATABASE_URL` |
+| 适用场景 | 测试 / 一次性 demo | 单机部署（默认） | 生产环境 |
+| 配置 | `STORE_BACKEND=memory` | 默认（`STORE_BACKEND=sqlite`，可显式指定） | `STORE_BACKEND=pg` + `DATABASE_URL` |
 
 ### 关键环境变量
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `STORE_BACKEND` | 存储后端类型 | `memory` |
+| `STORE_BACKEND` | 存储后端类型 | `sqlite` |
+| `SQLITE_PATH` | SQLite 数据库路径 | `./data/covel.db` |
 | `DATABASE_URL` | PostgreSQL 连接字符串 | - |
 | `SERVER_PORT` | 服务器端口 | `3001` |
 | `DEPLOYMENT_TIER` | 部署层级 | - |

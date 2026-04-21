@@ -7,8 +7,9 @@
  * with the spurious 'playing' value, breaking sessions still in pre-game
  * (turnCount: 0).
  *
- * Real phase transitions still flow through `phase.transition` proposals
- * committed via processRuntimeResult().
+ * Post 2026-04-21 audit (F1): `phase` is fully removed — no proposal type,
+ * no SSE event, no persistent session field. This test now protects the
+ * migration by asserting `phase.changed` is never emitted, even indirectly.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';

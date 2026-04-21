@@ -3,7 +3,7 @@
 > 从设置、游玩前、游玩中、游玩后到状态存储，完整描述框架运行机制。
 > 包含玩家 ↔ LLM Agent 之间的翻译层、消息流动、插件设计和前端交互。
 >
-> **2026-04-17 turn-band 重构注记**：下文若干 ASCII 流程图仍显示历史的 `pre-game / character_creation / playing` phase 状态机与 `transitionPhase` / `phase.changed` 路径，**这些已废弃**。现实模型以"Turn Band（优先级分带）"为准——`SessionRecord.phase` 字段已移除，改用 `status` (`active`/`paused`/`ended`) + `turnCount` + `preGameCompleted: string[]` 描述运行进度；Pre-Game 段落由 runtime 输出 `preGameDone: true` 自行登记完成。权威定义见 `docs/reference/plugins.md` 与 `docs/reference/api.md`。本文图表待下一轮架构文档刷新时同步重画。
+> **状态模型（唯一真相源）**：会话的权威状态由三个字段组成——`status` (`active` / `paused` / `ended`) + `turnCount` + `preGameCompleted: string[]`。`turnCount === 0` 表示仍在 Pre-Game 段落；当所有声明 `preGameDone: true` 的 runtime 都登记完成后，Kernel 将 `turnCount` 推进到 1 进入主循环。历史上的 `SessionRecord.phase`、`phase.transition` proposal 与 `phase.changed` SSE 事件均已移除，不再有持久化的 phase 字段；下文若干 ASCII 流程图里仍画着老的 `pre-game / character_creation / playing` 节点名，属于保留的语义标签——等同于"`turnCount === 0` 且 `preGameCompleted` 未覆盖 Pre-Game runtime"或"`turnCount >= 1`"，底层并没有对应的持久字段或事件。
 
 ## 一、系统全景
 
@@ -52,20 +52,25 @@
 ### 2.1 会话阶段（Session Phase）
 
 ```
-                    ┌─────────────────────────────────────────────────┐
-                    │                Session 生命周期                   │
-                    │                                                 │
-  创建会话 ─────────►│  pre-game ─────► character_creation ─────► playing ──┬──► ended
-                    │     │                    │                    │     │
-                    │     │ core-pregame       │ core-char-creator  │     │ 主动结束
-                    │     │ 初始化             │ 表单提交           │     │ 或超时
-                    │     │ + world-init       │ + 角色创建         │     │
-                    │     │ 世界维度           │ + phase 转换       │     │
-                    │     ▼                    ▼                    ▼     │
-                    │   Turn 1              submit-inputs         Turn N  │
-                    │   (所有插件首轮)       (表单处理)            (循环)  │
-                    └─────────────────────────────────────────────────┘
+                    ┌─────────────────────────────────────────────────────┐
+                    │                Session 生命周期                      │
+                    │                                                     │
+  创建会话 ─────────►│  turnCount === 0 ──► turnCount === 0 ──► turnCount >= 1 ──┬──► status = 'ended'
+                    │   (Pre-Game       │   (Pre-Game          (主循环)            │
+                    │   尚未收齐        │   已部分推进)                             │
+                    │   preGameDone)    │                                          │
+                    │     │             │                                          │
+                    │     │ core-pregame│ core-char-creator  │                     │
+                    │     │ 输出        │ 表单提交 + 输出    │                     │
+                    │     │ preGameDone │ preGameDone        │                     │
+                    │     ▼             ▼                    ▼                     │
+                    │   Turn 1        submit-inputs       Turn N                   │
+                    │   (所有插件首轮) (表单处理)          (循环)                   │
+                    └─────────────────────────────────────────────────────┘
 ```
+
+> 上图节点名保留 `pre-game / character_creation / playing` 这些语义标签只是为了便于阅读；
+> 底层唯一真相源是 `status + turnCount + preGameCompleted`，没有持久化的 phase 字段，也不再有 `phase.changed` 事件。
 
 ### 2.2 单轮执行（Turn）状态
 
@@ -163,7 +168,7 @@ narrativeOutput:    ──►    Session Kernel      ──►    ┌───�
 interactions:       ──►     │ → Proposal[]      ──►    ├─────────────────┤
 create-form / form          │                         │  角色创建表单    │
                             │ commitAll()              │  (Form 组件)     │
-phase: "playing"    ──►     │ → SessionEvent[]  ──►    ├─────────────────┤
+state.patch:        ──►     │ → SessionEvent[]  ──►    ├─────────────────┤
 plugin_data 写入      ──►    │ SSE emit()               │  插件消息面 /    │
                             │                         │  右侧面板         │
                             │                  ──►    ├─────────────────┤
@@ -342,7 +347,8 @@ plugins/my-plugin/
 │                                                                  │
 │  execution.started  ──►  executionSteps[]  ──►  进度条           │
 │  runtime.completed  ──►                                          │
-│  phase.changed      ──►  session.phase     ──►  状态标签         │
+│  (phase.changed 已移除) ── 状态标签改由前端基于 status + turnCount │
+│                            派生，无服务端推送                     │
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -437,9 +443,9 @@ plugins/my-plugin/
   │  │   └─ 返回 filledNarrative（不写 turn_messages，不建角色）   │ │
   │  │                                                            │ │
   │  │   下一轮 Turn 由 char-creator 运行：                       │ │
-  │  │   create-character(transitionPhase: "playing") →           │ │
-  │  │     upsertCharacter + updateSession({phase}) +             │ │
-  │  │     hooks.onPhaseTransition → SSE phase.changed            │ │
+  │  │   create-character() → upsertCharacter                     │ │
+  │  │   （Pre-Game runtime 用 `preGameDone: true` 登记完成，     │ │
+  │  │    不再写 session.phase，也不再推 phase.changed）          │ │
   │  │                                                            │ │
   │  │   2. POST /api/actions (player_action)                     │ │
   │  │      → 触发 Turn 2 → narrator + guide + codex              │ │
@@ -456,7 +462,8 @@ plugins/my-plugin/
 │                        DataStore 接口                            │
 │                                                                 │
 │  会话级                                                         │
-│  ├── sessions          会话记录 (id, worldId, phase, plugins)    │
+│  ├── sessions          会话记录 (id, worldId, status, turnCount, │
+│  │                                 preGameCompleted, plugins)    │
 │  ├── turn_results      每轮聚合结果                              │
 │  ├── runtime_results   每个 runtime 的执行结果                   │
 │  ├── tool_calls        工具调用审计日志                          │
@@ -607,11 +614,12 @@ turn_messages (追加式，永不删除):
                        (Turn 2)               ├── narrator 叙事
                                               └── char-creator deterministic handler
                                                   ├── store.upsertCharacter
-                                                  ├── mirror plugin_data[characters]
-                                                  ├── 输出 phase: "playing"
-                                                  └── eventBus.emit
-                                                      → SSE phase.changed
-                       ◄── phase.changed ─────┘
+                                                  └── mirror plugin_data[characters]
+                                                  （Pre-Game runtime 通过输出
+                                                  `preGameDone: true` 让 Kernel
+                                                  更新 preGameCompleted；不再
+                                                  写 session.phase 也不广播
+                                                  phase.changed。）
                        POST /api/actions  ──► SSE 流打开 (Turn 2)
                        (player_action)        │
                                               ├── executeTurn()

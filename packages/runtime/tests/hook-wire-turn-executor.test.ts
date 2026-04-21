@@ -95,54 +95,22 @@ async function makeDeps(llm: LLMAdapter, hookPipeline?: HookPipeline, store?: Da
   };
 }
 
-// ── Feature flag management ──────────────────────���───────────────
-
-const originalFlag = process.env.COVEL_HOOKS_V1;
-
-beforeEach(() => {
-  delete process.env.COVEL_HOOKS_V1;
-});
-
-afterEach(() => {
-  if (originalFlag === undefined) {
-    delete process.env.COVEL_HOOKS_V1;
-  } else {
-    process.env.COVEL_HOOKS_V1 = originalFlag;
-  }
-});
-
 // ── Tests ─────────────────────────────────────────────────────────
 
-describe('Turn executor hook wire-in (S4-T3)', () => {
-  describe('Flag-off path', () => {
+describe('Turn executor hook wire-in', () => {
+  describe('No-pipeline path', () => {
     it('runs normally without hookPipeline — no side effects', async () => {
       const llm = new SimpleMockLLM();
       const deps = await makeDeps(llm);
-      // Flag is OFF, no hookPipeline
       const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
       expect(result.runtimeResults).toHaveLength(1);
       expect(result.runtimeResults[0].status).toBe('success');
       expect(result.abortReason).toBeUndefined();
     });
-
-    it('runs normally with hookPipeline present but flag OFF — hooks are not called', async () => {
-      const llm = new SimpleMockLLM();
-      const pipeline = createHookPipeline();
-      const handler = vi.fn().mockResolvedValue({ action: 'continue' });
-      pipeline.register({ id: 'test:TurnStart:0', event: 'TurnStart', handler });
-
-      const deps = await makeDeps(llm, pipeline);
-      // Flag is OFF
-      const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
-
-      expect(handler).not.toHaveBeenCalled();
-      expect(result.runtimeResults).toHaveLength(1);
-    });
   });
 
   describe('TurnStart hook', () => {
     it('continues turn normally when TurnStart hook returns continue', async () => {
-      process.env.COVEL_HOOKS_V1 = '1';
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();
       pipeline.register({
@@ -158,7 +126,6 @@ describe('Turn executor hook wire-in (S4-T3)', () => {
     });
 
     it('returns minimal TurnResult with abortReason when TurnStart hook aborts', async () => {
-      process.env.COVEL_HOOKS_V1 = '1';
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();
       pipeline.register({
@@ -179,7 +146,6 @@ describe('Turn executor hook wire-in (S4-T3)', () => {
 
   describe('TurnStop hook', () => {
     it('does not change TurnResult even when TurnStop hook returns abort', async () => {
-      process.env.COVEL_HOOKS_V1 = '1';
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();
       pipeline.register({
@@ -201,7 +167,6 @@ describe('Turn executor hook wire-in (S4-T3)', () => {
 
   describe('PreToolUse hook', () => {
     it('skips tool and feeds synthetic error to LLM when PreToolUse aborts', async () => {
-      process.env.COVEL_HOOKS_V1 = '1';
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();
 
@@ -276,7 +241,6 @@ describe('Turn executor hook wire-in (S4-T3)', () => {
 
   describe('PostRuntime hook replace', () => {
     it('rewrites RuntimeResult when PostRuntime returns replace', async () => {
-      process.env.COVEL_HOOKS_V1 = '1';
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();
 
@@ -305,7 +269,6 @@ describe('Turn executor hook wire-in (S4-T3)', () => {
 
   describe('Integration: PreToolUse replace (argument rewriting)', () => {
     it('PreToolUse replace rewrites toolCall.arguments and executor receives the replaced arguments', async () => {
-      process.env.COVEL_HOOKS_V1 = '1';
 
       const llm = new SimpleMockLLM();
       llm.nextResponse({

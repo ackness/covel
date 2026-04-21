@@ -116,10 +116,11 @@ export interface TurnExecutorDeps {
   readonly contextBudget?: Omit<BudgetOptions, 'estimator'>;
 
   /**
-   * Optional hook pipeline (S4-T3).
-   * When present AND `process.env.COVEL_HOOKS_V1 === '1'`, lifecycle hooks
-   * fire at 8 points during turn execution. When absent or flag is off,
-   * all hook sites are pure no-ops — identical to pre-S4-T3 behaviour.
+   * Optional hook pipeline. When present, lifecycle hooks fire at 8 points
+   * during turn execution. When absent, all hook sites are pure no-ops —
+   * identical to pre-hook behaviour. Plugin hooks are registered by
+   * bootstrap; callers that build the executor directly (CLI tools, tests)
+   * can pass `undefined` to keep the non-hook fast path.
    */
   readonly hookPipeline?: HookPipeline;
 

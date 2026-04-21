@@ -271,8 +271,15 @@ export function ChatMessages({
     <ScrollArea className="flex-1 min-h-0">
       <div className="p-4 md:p-6 space-y-6 md:space-y-8 max-w-4xl mx-auto w-full paper:max-w-[42rem] paper:px-8 paper:py-10 paper:space-y-5">
         {messages.length === 0 && !executing && (
+          // Empty-state rendering no longer depends on the historical
+          // `pre-game` / `character_creation` / `playing` enum. After the
+          // turn-band migration the session is fully described by
+          // `status + turnCount + preGameCompleted`; here we only need the
+          // derived `LegacyPhase` (`init` / `playing` / `paused` / `ended`)
+          // to choose between the "begin adventure" CTA and the post-start
+          // empty message.
           <div className="flex flex-col items-center justify-center py-16 text-center space-y-6 paper:py-24">
-            {(phase === "init" || phase === "pre-game") ? (
+            {phase === "init" ? (
               <>
                 <div className="space-y-2 paper:space-y-3">
                   <p className="text-base font-semibold paper:font-serif paper:italic paper:font-normal paper:text-2xl paper:text-foreground">
@@ -295,7 +302,6 @@ export function ChatMessages({
               <>
                 <MessageSquare className="w-8 h-8 text-muted-foreground/50" />
                 <p className="text-sm text-muted-foreground">
-                  {phase === "character_creation" && t("session.emptyCharCreate")}
                   {phase === "playing" && t("session.emptyPlaying")}
                   {phase === "ended" && t("session.emptyEnded")}
                 </p>

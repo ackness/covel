@@ -19,7 +19,6 @@ export type ProposalType =
   | 'interaction.request'
   | 'ui.render'
   | 'asset.generate'
-  | 'phase.transition'
   | 'plugin.data'
   | 'working_memory.set'
   | 'lorebook.upsert';
@@ -61,10 +60,6 @@ export interface StatePatchPayload {
   readonly field: string;
   readonly value: unknown;
   readonly reason?: string;
-}
-
-export interface PhaseTransitionPayload {
-  readonly phase: string;
 }
 
 export interface EventEmitPayload {

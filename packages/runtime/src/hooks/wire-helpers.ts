@@ -1,19 +1,15 @@
 /**
  * Helpers that wire the HookPipeline into turn-executor.ts call sites.
  *
- * TODO(S4-T3.b): Dynamically import HookDeclaration handler files from plugin packages
- * and register them with the HookPipeline at session activation time.
- * Currently, manifest.hooks[] is parsed and stored but handlers are never loaded.
- * The pipeline only runs globally-registered framework/test hooks.
- * Tracking issue: implement `loadPluginHooks(manifest, pipeline)` in plugin-loader
- * and call it inside SessionPluginScope.activate().
+ * Plugin hook handlers are registered at bootstrap — see
+ * `registerPluginHooks()` in `./register-plugin-hooks.ts`. The pipeline
+ * itself is the on/off gate: when callers pass `pipeline: undefined`
+ * (e.g. CLI tools that don't want hooks), all helpers short-circuit
+ * to a no-op continue so the non-hook path stays byte-for-byte identical.
  *
- * Keeping these here lets us extract all the boilerplate flag-checks and
- * HookContext construction out of turn-executor.ts to keep it < 1000 lines.
- *
- * IMPORTANT: All helpers guard on `process.env.COVEL_HOOKS_V1 === '1'` and
- * a non-null pipeline. When either condition is false they return a no-op
- * continue result, preserving the byte-for-byte pre-S4-T3 path.
+ * Keeping these helpers here lets us extract pipeline-plumbing boilerplate
+ * and HookContext construction out of turn-executor.ts to keep it
+ * under the 1000-line budget.
  */
 
 import type { EventBus } from '@covel/events';
@@ -41,7 +37,7 @@ export async function runTurnStartHook(
   opts: BaseOpts,
   payload: TurnStartPayload,
 ): Promise<HookResult<TurnStartPayload>> {
-  if (process.env.COVEL_HOOKS_V1 !== '1' || !opts.pipeline) {
+  if (!opts.pipeline) {
     return { action: 'continue' };
   }
   return opts.pipeline.run(
@@ -58,7 +54,7 @@ export async function runTurnStopHook(
   opts: BaseOpts,
   payload: { readonly runtimeResults: readonly RuntimeResult[]; readonly durationMs: number },
 ): Promise<void> {
-  if (process.env.COVEL_HOOKS_V1 !== '1' || !opts.pipeline) return;
+  if (!opts.pipeline) return;
   await opts.pipeline.run(
     'TurnStop',
     { event: 'TurnStop', sessionId: opts.sessionId, turnId: opts.turnId },
@@ -72,7 +68,7 @@ export async function runTurnStopHook(
 export async function runPreRuntimeHook(
   opts: BaseOpts & { readonly manifest: RuntimeManifest; readonly input: TurnInput },
 ): Promise<HookResult<{ manifest: RuntimeManifest; input: TurnInput }>> {
-  if (process.env.COVEL_HOOKS_V1 !== '1' || !opts.pipeline) {
+  if (!opts.pipeline) {
     return { action: 'continue' };
   }
   return opts.pipeline.run(
@@ -89,7 +85,7 @@ export async function runPostRuntimeHook(
   opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
   result: RuntimeResult,
 ): Promise<RuntimeResult> {
-  if (process.env.COVEL_HOOKS_V1 !== '1' || !opts.pipeline) return result;
+  if (!opts.pipeline) return result;
   const hookResult = await opts.pipeline.run(
     'PostRuntime',
     { event: 'PostRuntime', sessionId: opts.sessionId, turnId: opts.turnId, pluginId: opts.pluginId, runtimeId: opts.runtimeId },
@@ -118,7 +114,7 @@ export async function runPreToolUseHook(
   opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
   toolCall: { id: string; name: string; arguments: string },
 ): Promise<PreToolUseOutcome> {
-  if (process.env.COVEL_HOOKS_V1 !== '1' || !opts.pipeline) return { skipped: false, toolCall };
+  if (!opts.pipeline) return { skipped: false, toolCall };
   const payload: PreToolUsePayload = { toolCall, pluginId: opts.pluginId, runtimeId: opts.runtimeId };
   const hookResult = await opts.pipeline.run(
     'PreToolUse',
@@ -148,7 +144,7 @@ export async function runPostToolUseHook<R>(
   toolCall: { id: string; name: string; arguments: string },
   result: R,
 ): Promise<R> {
-  if (process.env.COVEL_HOOKS_V1 !== '1' || !opts.pipeline) return result;
+  if (!opts.pipeline) return result;
   const payload: PostToolUsePayload = { toolCall, result };
   const hookResult = await opts.pipeline.run(
     'PostToolUse',

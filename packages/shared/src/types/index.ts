@@ -99,7 +99,6 @@ export type {
   NarrativeAppendPayload,
   InteractionRequestPayload,
   StatePatchPayload,
-  PhaseTransitionPayload,
   EventEmitPayload,
   RecordUpsertPayload,
   PluginDataPayload,

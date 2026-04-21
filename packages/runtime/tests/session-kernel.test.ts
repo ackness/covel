@@ -147,14 +147,14 @@ describe('normalizeOutput', () => {
     });
   });
 
-  describe('phase.transition', () => {
-    it('should extract phase field as phase.transition proposal', () => {
+  describe('legacy phase field (ignored post turn-band migration)', () => {
+    it('should not emit any proposal when output carries a phase field', () => {
       const output = { phase: 'playing' };
       const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
 
-      const phaseProposals = proposals.filter(p => p.type === 'phase.transition');
-      expect(phaseProposals).toHaveLength(1);
-      expect(phaseProposals[0].payload).toEqual({ phase: 'playing' });
+      expect(proposals.every(p => p.type !== ('phase.transition' as string))).toBe(true);
+      // Legacy `phase` is dropped silently so plugins can migrate lazily.
+      expect(proposals).toHaveLength(0);
     });
   });
 
@@ -246,6 +246,8 @@ describe('normalizeOutput', () => {
 
   describe('mixed output', () => {
     it('should extract all proposal types from a complex output', () => {
+      // `phase` is intentionally included to assert it is silently dropped;
+      // the migration removed persistent phase so only 3 proposals remain.
       const output = {
         narrativeOutput: 'The story continues.',
         phase: 'playing',
@@ -254,11 +256,10 @@ describe('normalizeOutput', () => {
       };
       const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID, 'story');
 
-      expect(proposals).toHaveLength(4);
+      expect(proposals).toHaveLength(3);
       expect(proposals.map(p => p.type).sort()).toEqual([
         'interaction.request',
         'narrative.append',
-        'phase.transition',
         'state.patch',
       ]);
     });
@@ -266,7 +267,7 @@ describe('normalizeOutput', () => {
     it('should generate unique ids for each proposal', () => {
       const output = {
         narrativeOutput: 'Text',
-        phase: 'playing',
+        events: [{ topic: 'world.ticked', data: {} }],
       };
       const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
 
@@ -398,19 +399,17 @@ describe('createCommitPipeline', () => {
     });
   });
 
-  describe('phase.transition commit', () => {
-    it('should update session phase and emit phase.changed event', async () => {
+  describe('phase.transition commit (removed post turn-band migration)', () => {
+    it('should return committed: false because phase.transition is no longer a known proposal type', async () => {
       const store = createMockStore();
       const pipeline = createCommitPipeline(store as any);
-      const proposal = makeProposal('phase.transition', { phase: 'playing' });
+      const proposal = makeProposal('phase.transition' as any, { phase: 'playing' });
 
       const result = await pipeline.commit(proposal);
 
-      expect(result.committed).toBe(true);
-      expect(result.event!.type).toBe('phase.changed');
-      expect(result.event!.payload.phase).toBe('playing');
-
-      expect(store.updateSession).toHaveBeenCalledWith(SESSION_ID, { phase: 'playing' });
+      expect(result.committed).toBe(false);
+      expect(result.error).toContain('unknown proposal type');
+      expect(store.updateSession).not.toHaveBeenCalled();
     });
   });
 
@@ -467,14 +466,14 @@ describe('createCommitPipeline', () => {
       const pipeline = createCommitPipeline(store as any);
       const proposals = [
         makeProposal('narrative.append', { content: 'Story.', kind: 'story' }),
-        makeProposal('phase.transition', { phase: 'playing' }),
+        makeProposal('event.emit', { topic: 'quest.completed', data: { questId: 'q1' } }),
       ];
 
       const results = await pipeline.commitAll(proposals);
 
       expect(results).toHaveLength(2);
       expect(results[0].event!.type).toBe('narrative.completed');
-      expect(results[1].event!.type).toBe('phase.changed');
+      expect(results[1].event!.type).toBe('event.emitted');
     });
   });
 
@@ -526,22 +525,24 @@ describe('processRuntimeResult', () => {
     const store = createMockStore();
     const result = makeRuntimeResult({
       narrativeOutput: 'The hero enters the cave.',
+      // Legacy `phase` is silently dropped — asserts the migration guard.
       phase: 'playing',
     });
 
     const { events, failedProposals } = await processRuntimeResult(result, store as any, SESSION_ID, 'story');
 
-    // narrative.append + phase.transition = 2 events
-    expect(events).toHaveLength(2);
+    // Only narrative.append remains — phase is no longer a proposal type.
+    expect(events).toHaveLength(1);
     expect(events[0].type).toBe('narrative.completed');
     expect(events[0].payload.content).toBe('The hero enters the cave.');
-    expect(events[1].type).toBe('phase.changed');
+    expect(events.every(e => e.type !== ('phase.changed' as string))).toBe(true);
     expect(failedProposals).toHaveLength(0);
 
-    // Store should have been called: 2 addMessage(narrative) + 1 updateSession(phase) + 2 traces
+    // Store should have been called: 1 addMessage(narrative) + 1 trace.
+    // updateSession should NOT have been called (phase is gone).
     expect(store.addMessage).toHaveBeenCalledOnce();
-    expect(store.updateSession).toHaveBeenCalledOnce();
-    expect(store.addTraceEvent).toHaveBeenCalledTimes(2);
+    expect(store.updateSession).not.toHaveBeenCalled();
+    expect(store.addTraceEvent).toHaveBeenCalledOnce();
   });
 
   it('should return empty result for a failed runtime result', async () => {

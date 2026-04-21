@@ -9,7 +9,7 @@ import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import type { DataStore } from '@covel/store';
 import type { PluginRegistry, LoadedRuntime } from '@covel/plugin-loader';
-import type { LLMAdapter, ToolExecutor } from '@covel/runtime';
+import type { LLMAdapter, ToolExecutor, HookPipeline } from '@covel/runtime';
 import type { EventBus } from '@covel/events';
 import { executeTurn, processRuntimeResult, createTraceRecorder } from '@covel/runtime';
 import type { RuntimeManifest } from '@covel/shared';
@@ -32,6 +32,7 @@ type Env = {
     resolveModel: (manifest: RuntimeManifest, apiOverride?: string) => string | undefined;
     eventBus: EventBus;
     compactorRunner: CompactorRunner;
+    hookPipeline?: HookPipeline;
     memorySystem?: {
       readonly manager: { loadBlocks(sid: string): Promise<readonly { label: string; content: string; updatedAt: string }[]>; initializeDefaults(sid: string): Promise<void> };
       readonly updater: { updateAfterTurn(p: { sessionId: string; narrativeText: string; toolCallSummaries?: readonly string[]; currentBlocks: readonly { label: string; content: string; updatedAt: string }[]; locale?: string }): Promise<{ updated: boolean; blocksChanged: readonly string[]; error?: string }> };
@@ -174,7 +175,7 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
     //
     // Note: EventBus strips `_subType` from the raw payload and puts it on
     // `event.type`. So we whitelist by `event.type`, not by payload fields.
-    const FORWARDED_SUBTYPES = new Set(['plugin-data.changed', 'world.dimensions.changed', 'phase.changed']);
+    const FORWARDED_SUBTYPES = new Set(['plugin-data.changed', 'world.dimensions.changed']);
     const eventBusUnsubscribe = eventBus.onEmit((ev) => {
       if (ev.sessionId !== sessionId) return;
       if (!FORWARDED_SUBTYPES.has(ev.type)) return;
@@ -224,11 +225,11 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
       // Create trace recorder for this turn (persists all lifecycle events to DB)
       const trace = createTraceRecorder(store, sessionId, turnId);
 
-      // NOTE: Removed unconditional `phase.changed { phase: 'playing' }` emit here.
-      // It fired on every action regardless of real session phase, overriding
-      // sessions still in pre-game / character_creation. Real phase transitions
-      // now flow only through phase.transition proposals via processRuntimeResult().
-      // See audits/2026-04-12-backend-webv2-framework-audit Finding 4.
+      // NOTE: Session `phase` is no longer a first-class field. The state
+      // model is `status + turnCount + preGameCompleted`, so there is no
+      // `phase.changed` event to emit here — callers that still care about a
+      // coarse "pre-game vs playing" display label derive it from
+      // `turnCount === 0` vs `> 0`. See audits/2026-04-21-architecture-code-audit.
 
       // Emit execution started (protocol: execution.started)
       await trace.turnStarted({ runtimeCount: activeRuntimes.length });
@@ -338,10 +339,18 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
       });
 
       // Process all runtime results through Session Kernel:
-      // normalize output → commit to Store → emit SessionEvents as SSE
+      // normalize output → commit to Store → emit SessionEvents as SSE.
+      //
+      // hookPipeline / eventBus are forwarded so `PreStateCommit` and
+      // `PostStateCommit` hooks declared by plugins actually fire on the
+      // production write path (previously they only ran in tests).
+      const hookPipeline = c.get('hookPipeline');
       for (const rr of result.runtimeResults) {
         const kind = outputKindMap.get(rr.runtimeId) ?? 'plugin';
-        const { events } = await processRuntimeResult(rr, store, sessionId, kind);
+        const { events } = await processRuntimeResult(rr, store, sessionId, kind, {
+          ...(hookPipeline ? { hookPipeline } : {}),
+          eventBus,
+        });
 
         for (const evt of events) {
           // Emit using ProtocolEventType directly — no legacy mapping
