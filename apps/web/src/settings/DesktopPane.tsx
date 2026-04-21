@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  AlertTriangle,
   FolderOpen,
   FileText,
   RotateCw,
@@ -23,6 +24,7 @@ import { Button } from "@/components/ui/button.js";
 import {
   hasElectronIpc,
   getDesktopInfo,
+  isDesktopApp,
   openLogsDir,
   openConfigDir,
   openDataDir,
@@ -32,6 +34,7 @@ import {
   restartServer,
 } from "@/lib/desktop-bridge.js";
 import { resetOnboarding } from "@/components/onboarding-wizard.js";
+import { useSession } from "@/stores/session-store.js";
 
 interface DesktopInfo {
   version: string;
@@ -49,9 +52,18 @@ interface DesktopInfo {
 
 export function DesktopPane() {
   const { t } = useTranslation();
+  const { state } = useSession();
   const [info, setInfo] = useState<DesktopInfo | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  // First-launch llm.toml detection (O-6). Only surface on desktop builds
+  // where opening the file actually works; Web users can't edit the sidecar
+  // config file anyway. `state.llmConfig.configured === false` means the
+  // server booted without any `[covel.<slot>]` sections and is running on
+  // the built-in DeepSeek fallback — a state the user almost certainly
+  // wants to know about before it silently consumes credits.
+  const showLlmMissingBanner = isDesktopApp() && state.llmConfig?.configured === false;
 
   useEffect(() => {
     getDesktopInfo()
@@ -120,6 +132,34 @@ export function DesktopPane() {
       {toast && (
         <div className="text-xs px-3 py-2 rounded bg-primary/10 border border-primary/20 text-primary">
           {toast}
+        </div>
+      )}
+
+      {showLlmMissingBanner && (
+        <div className="border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 rounded space-y-2">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="space-y-1 flex-1">
+              <p className="text-xs font-medium text-amber-900 dark:text-amber-200">
+                {t("settings.desktopLlmMissingTitle", "No LLM slots configured yet")}
+              </p>
+              <p className="text-[11px] text-amber-800/80 dark:text-amber-200/70 leading-relaxed">
+                {t(
+                  "settings.desktopLlmMissingHint",
+                  "Click below to open ~/.covel/llm.toml and add at least one [covel.<slot>] section.",
+                )}
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => openLlmToml().catch((err) => setToast(String(err)))}
+          >
+            <FileCode className="w-3 h-3 mr-1.5" />
+            {t("settings.desktopEditLlm")}
+          </Button>
         </div>
       )}
 

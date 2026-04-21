@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge.js";
 import { text } from "@/components/world/editor-helpers.js";
 import * as api from "@/services/api.js";
 import type { PackageSummary, PluginLoadError, SessionPluginInfo } from "@/services/api.js";
-import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
+import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
 
 interface PluginListPanelProps {
   packages: PackageSummary[];
@@ -140,6 +140,33 @@ function PluginItem({ pkg, sessionPlugin, executing, onToggle, resolvedSlots, se
           </button>
         )}
       </div>
+
+      {/* Read-only slot binding hint (O-5) — surfaces the resolved model so
+          users don't have to cross-reference the Session Prep screen. Shows
+          the effective slot when one is bound, otherwise the first resolved
+          slot (which is what the runtime will default to). */}
+      {primaryRuntime && (
+        <div className="px-2.5 pb-1 -mt-0.5 flex items-center gap-1 text-[9px] text-muted-foreground/80 paper:px-1">
+          <Cpu className="w-2.5 h-2.5" />
+          {resolvedSlots && resolvedSlots.length > 0
+            ? (() => {
+                const activeSlot = boundSlot
+                  ? resolvedSlots.find((s) => s.slotId === boundSlot) ?? resolvedSlots[0]
+                  : resolvedSlots[0];
+                const label = formatSlotLabel(activeSlot);
+                return (
+                  <span className="truncate" title={t("plugin.modelBindingSource", "Model binding — edit in Session Prep")}>
+                    {label ?? activeSlot?.slotId ?? "—"}
+                  </span>
+                );
+              })()
+            : (
+              <span className="italic">
+                {t("plugin.modelBindingFallback", "Model binding: see Session Prep")}
+              </span>
+            )}
+        </div>
+      )}
 
       {/* Expanded detail */}
       {expanded && (

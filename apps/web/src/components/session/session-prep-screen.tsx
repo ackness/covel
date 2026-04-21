@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { SessionBreadcrumb } from "./session-breadcrumb.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { ActiveModelSlots } from "./active-model-slots.js";
-import { useSlotConfig } from "@/hooks/use-slot-config.js";
+import { useSlotConfig, formatSlotLabel } from "@/hooks/use-slot-config.js";
 import { useRuntimeBindings } from "@/hooks/use-runtime-bindings.js";
 
 interface SessionPrepScreenProps {
@@ -497,16 +497,28 @@ export function SessionPrepScreen({
                               every resolved slot (llm.toml + user custom);
                               picking sets localStorage bindings + (once the
                               session is created) PATCHes runtimeModelOverrides
-                              via the startGame handler. */}
-                          {hasAgentRuntime && isSelected && primaryBinding && resolvedSlots.length > 0 && (
+                              via the startGame handler.
+
+                              Hidden when only one slot is resolvable — the
+                              dropdown would be a no-op and just adds cognitive
+                              load for casual players. P-13 audit finding. */}
+                          {hasAgentRuntime && isSelected && primaryBinding && resolvedSlots.length > 1 && (
                             <select
                               value={primaryBinding.slotName}
                               onChange={(e) => bindingState.setBinding(primaryBinding.qualifiedId, e.target.value)}
-                              className="shrink-0 text-[9px] bg-background border border-border rounded px-1 py-0.5 max-w-[140px]"
-                              aria-label={t("plugin.modelBinding", "Model")}
-                              title={primaryBinding.qualifiedId}
+                              className="shrink-0 text-[9px] bg-background border border-border rounded px-1 py-0.5 max-w-[180px]"
+                              aria-label={t("plugin.modelBindingAria", "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.")}
+                              title={t("plugin.modelBindingAria", "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.")}
                             >
-                              <option value="">auto</option>
+                              <option value="">
+                                {(() => {
+                                  const defaultSlot = resolvedSlots[0];
+                                  const label = formatSlotLabel(defaultSlot);
+                                  return label
+                                    ? t("plugin.useDefaultWith", { value: label, defaultValue: `Use default (${label})` })
+                                    : t("plugin.useDefault", "Use default");
+                                })()}
+                              </option>
                               {resolvedSlots.map((slot) => (
                                 <option key={slot.slotId} value={slot.slotId}>
                                   {slot.slotId}{slot.serverModel ? ` · ${slot.serverModel}` : ""}
