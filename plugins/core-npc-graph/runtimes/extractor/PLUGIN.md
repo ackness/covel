@@ -8,7 +8,7 @@ pluginType: plugin
 # character-tracker so scheduler runs them in parallel.
 priority: 600
 model: plugin
-timeoutMs: 120000
+timeoutMs: 240000
 capabilities: [npc-graph, relationship-tracking]
 outputKind: system
 trigger:
