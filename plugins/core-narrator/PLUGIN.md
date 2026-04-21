@@ -7,6 +7,7 @@ pluginType: core-plugin
 priority: 500
 model: story
 timeoutMs: 240000
+callTimeoutMs: 120000
 outputKind: story
 capabilities: [narrative]
 promptVersion: 2
