@@ -2,6 +2,37 @@
 
 > 所有已实现的 Covel 插件。本页当前以 `plugins/**/PLUGIN.md` 与对应 `handler.js / tools/*.js` 的实现为准。
 
+## 目录
+
+按 **Turn Band**（见 [优先级分带](#优先级分带turn-bands)）分组，点击直达。
+
+### Pre-Game（priority 0–99）
+- [`core-pregame`](#core-pregame) — 游戏初始化 function runtime
+- [`core-char-creator/player-init`](#core-char-creatorplayer-init) — 玩家建角 function runtime
+- [`core-world-init/schema-gen`](#core-world-initschema-gen) — 世界维度 agent runtime（guard 门控）
+
+### Narrator-prep（priority 400）
+- [`core-npc-graph/rag-retriever`](#core-npc-graphrag-retriever) — NPC 图谱结构化检索
+
+### Narrator（priority 500）
+- [`core-narrator`](#core-narrator) — 主叙事生成器
+
+### After-Turn / Narrator-downstream（priority 600）
+- [`core-codex`](#core-codex) — 知识图鉴 agent
+- [`core-guide`](#core-guide) — 行动引导 agent
+- [`core-npc-graph/extractor`](#core-npc-graphextractor) — NPC 关系图抽取 agent
+- [`core-char-creator/character-tracker`](#core-char-creatorcharacter-tracker) — NPC 发现与状态跟踪 agent
+
+### UI-only（无 runtime，仅出现在[概览表](#概览)）
+- `core-memory` — 长期记忆摘要面板，不占调度槽位
+
+### 参考章节
+- [概览表](#概览) · [调度层级说明](#调度层级) · [插件结构规范](#插件结构规范) · [超时与智能重试](#超时与智能重试) · [优先级分带](#优先级分带turn-bands) · [框架–插件隔离规则](#框架插件隔离规则)
+
+## 徽章说明 / Badge legend
+
+🔵 core（`pluginType: core-plugin`，不可禁用） · ⚪ optional（`pluginType: plugin`，可禁用） · 🧠 uses LLM（`agent` runtime） · ⚙ pure function（`runtimeType: function`，零 token） · 🖼 UI only（只提供面板，无 runtime）
+
 ---
 
 ## 调度层级
@@ -37,6 +68,10 @@ Pre-Game band（priority < 100）仍走 priority 串行：`core-pregame(10) → 
 
 ## core-pregame
 
+🔵 core · ⚙ pure function
+
+**Quick use**：如果你要在 session 首轮（先于任何 LLM 调用）跑一段确定性的初始化逻辑——读世界观、发欢迎通知、写 welcome banner——挂这个插件。
+
 **路径**: `plugins/core-pregame/`
 
 | 字段 | 值 |
@@ -55,6 +90,10 @@ Pre-Game band（priority < 100）仍走 priority 串行：`core-pregame(10) → 
 ---
 
 ## core-world-init
+
+🔵 core · 🧠 uses LLM（guard 可能跳过）
+
+**Quick use**：如果你想让 LLM 在首轮根据 `WORLD.md` 自动派生一套"角色属性 schema + 世界词条"并写进 session lorebook，挂这个插件。已有 schema 时 guard 会直接 skip，零 LLM 开销。
 
 **路径**: `plugins/core-world-init/`
 
@@ -95,6 +134,10 @@ Pre-Game band（priority < 100）仍走 priority 串行：`core-pregame(10) → 
 
 ## core-narrator
 
+🔵 core · 🧠 uses LLM
+
+**Quick use**：你想要默认的主叙事引擎——每轮读 `{{ player.message }}` + 世界观 + 历史，输出 `outputKind: story` 的第二人称叙事。换掉它就是换掉整个故事基调。
+
 **路径**: `plugins/core-narrator/`
 
 | 字段 | 值 |
@@ -125,6 +168,10 @@ Pre-Game band（priority < 100）仍走 priority 串行：`core-pregame(10) → 
 ---
 
 ## core-npc-graph
+
+⚪ optional · ⚙ pure function（rag-retriever）· 🧠 uses LLM（extractor）
+
+**Quick use**：你想要一张会话级的 NPC 关系图——叙事里提到的人物、势力、欠债 / 结盟 / 背叛关系自动抽取并持久化，narrator 下轮能沿 2-hop 邻居看到"跟这个人相关的所有事实"。
 
 **路径**: `plugins/core-npc-graph/`
 
@@ -189,6 +236,10 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 ## core-codex
 
+⚪ optional · 🧠 uses LLM
+
+**Quick use**：你想要一本自动更新的世界百科——LLM 读每轮叙事识别新地点/人物/势力/物品，unlock 成卡片；重复出现时补充原有条目而不是新建。
+
 **路径**: `plugins/core-codex/`
 
 | 字段 | 值 |
@@ -214,6 +265,10 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 ---
 
 ## core-char-creator（角色子系统）
+
+🔵 core · ⚙ pure function（player-init）· 🧠 uses LLM（character-tracker）
+
+**Quick use**：你要玩家在首轮填一张"角色创建表单"生成主角；并且每轮自动跟踪叙事里出现的 NPC、角色状态变化（受伤、死亡、装备、关系）并写进 `characters` 表。两个子 runtime 共用同一个 `character-panel.json` 侧边栏。
 
 **路径**: `plugins/core-char-creator/`
 
@@ -269,6 +324,10 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 ---
 
 ## core-guide
+
+⚪ optional · 🧠 uses LLM
+
+**Quick use**：你要让 LLM 在每轮叙事之后给玩家提三组行动建议（safe / aggressive / creative）并接入聊天输入框——让 narrator 专注叙事、选择引导交给这个插件。
 
 **路径**: `plugins/core-guide/`
 
