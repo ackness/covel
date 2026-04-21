@@ -6,6 +6,7 @@
  */
 
 import path from 'node:path';
+import fsSync from 'node:fs';
 import { Hono, type MiddlewareHandler } from 'hono';
 import type { RuntimeManifest } from '@covel/shared';
 import {
@@ -323,13 +324,27 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     if (!manifests) continue;
     for (const parsed of manifests) {
       const localPaths = parsed.manifest.tools?.local ?? [];
-      for (const localPath of localPaths) {
+      for (let i = 0; i < localPaths.length; i += 1) {
+        const localPath = localPaths[i];
+        const fullPath = path.resolve(discovery.rootPath, localPath);
+        const pluginRelPath = path.relative(process.cwd(), path.join(discovery.rootPath, 'PLUGIN.md'));
         try {
-          const fullPath = path.resolve(discovery.rootPath, localPath);
           // Security: prevent path traversal outside plugin root
           const rel = path.relative(discovery.rootPath, fullPath);
           if (rel.startsWith('..') || path.isAbsolute(rel)) {
-            console.warn(`[bootstrap] Rejected path traversal: ${localPath} from ${pluginId}`);
+            console.warn(
+              `[plugin-loader] ${pluginRelPath}: tools.local[${i}] "${localPath}" escapes the plugin root\n` +
+              `Fix: Use a path relative to the plugin directory (no "../" traversal).`,
+            );
+            continue;
+          }
+          // Surface file-not-found with a targeted hint before import() emits
+          // a cryptic ERR_MODULE_NOT_FOUND from Node.
+          if (!fsSync.existsSync(fullPath)) {
+            console.warn(
+              `[plugin-loader] ${pluginRelPath}: tool file not found — ${fullPath} (declared in tools.local[${i}] as "${localPath}")\n` +
+              `Fix: Create the file, or remove the entry from tools.local in PLUGIN.md.`,
+            );
             continue;
           }
           const mod = await import(fullPath);
@@ -353,7 +368,11 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
             localToolNames.add(toolModule.name);
           }
         } catch (err) {
-          console.warn(`[bootstrap] Failed to load local tool ${localPath} from ${pluginId}:`, err);
+          const message = err instanceof Error ? err.message : String(err);
+          console.warn(
+            `[plugin-loader] ${pluginRelPath}: failed to load tools.local[${i}] "${localPath}" — ${message}\n` +
+            `Fix: Ensure ${fullPath} exports a tool module (factory or ToolModule with _type: 'covel-tool').`,
+          );
         }
       }
     }

@@ -17,6 +17,7 @@ import {
   setActiveSession as setActivePluginDataSession,
   type PluginDataChange,
 } from "@/stores/plugin-data-store.js";
+import { emitToast } from "@/lib/toast-channel.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -735,7 +736,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // Provider keys endpoint not available, skip
       }
     } catch (err) {
-      dispatch({ type: "BOOT_ERROR", error: err instanceof Error ? err.message : String(err) });
+      const message = err instanceof Error ? err.message : String(err);
+      dispatch({ type: "BOOT_ERROR", error: message });
+      // Surface boot failure in addition to the in-page banner — the user
+      // frequently sees a blank session shell otherwise.
+      emitToast(
+        "error",
+        i18n.t("toast.bootFailed", { defaultValue: "Failed to initialise session" }) as string,
+        message,
+      );
     }
   }, []);
 
@@ -1365,6 +1374,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             handleSseEvent,
             (err) => {
               dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
+              // Transport failure during SSE (dropped connection, server
+              // crashed mid-turn). Banner shows up in the inline error row,
+              // but a toast is the only thing visible above the fold.
+              emitToast(
+                "error",
+                i18n.t("toast.sendMessageFailed", {
+                  defaultValue: "Failed to send message",
+                }) as string,
+                err.message,
+              );
               resolve();
             },
             () => {

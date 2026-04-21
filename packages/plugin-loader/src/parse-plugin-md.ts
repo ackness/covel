@@ -12,6 +12,113 @@ import {
 } from '@covel/shared';
 import type { ParsedPluginMd } from './types.js';
 
+// ── Diagnostic helpers ────────────────────────────────────────────
+
+/**
+ * Locate the 1-based line number of a top-level YAML key inside the raw
+ * PLUGIN.md source. Returns `null` when the key is not found.
+ * Used purely for diagnostic messages — not parsing.
+ */
+function findYamlKeyLine(source: string, key: string): number | null {
+  const lines = source.split(/\r?\n/);
+  // Scan only until the second `---` fence so we stay within frontmatter.
+  const re = new RegExp(`^${escapeRegex(key)}\\s*:`);
+  let inFrontmatter = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    const trimmed = lines[i].trimStart();
+    if (trimmed.startsWith('---')) {
+      if (!inFrontmatter) {
+        inFrontmatter = true;
+        continue;
+      }
+      return null;
+    }
+    if (inFrontmatter && re.test(trimmed)) return i + 1;
+  }
+  return null;
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * ZodError-shaped detection that survives multiple `zod` versions coexisting
+ * in the monorepo — `@covel/shared` may throw a ZodError whose prototype
+ * points at a different `zod` module than the one imported here, which
+ * makes `instanceof z.ZodError` unreliable. We match on shape instead.
+ */
+interface ZodIssue {
+  readonly code: string;
+  readonly path: readonly (string | number)[];
+  readonly message: string;
+}
+interface ZodErrorLike {
+  readonly name: string;
+  readonly issues: readonly ZodIssue[];
+}
+function asZodErrorLike(err: unknown): ZodErrorLike | null {
+  if (!err || typeof err !== 'object') return null;
+  const maybe = err as { name?: unknown; issues?: unknown };
+  if (maybe.name !== 'ZodError') return null;
+  if (!Array.isArray(maybe.issues)) return null;
+  return err as unknown as ZodErrorLike;
+}
+
+/**
+ * Try to derive a short, actionable "Fix:" suggestion from a Zod validation
+ * error. Falls back to a generic pointer at the schema docs when the issue
+ * isn't one of the well-known cases.
+ */
+function deriveFixHint(error: unknown): string {
+  const zerr = asZodErrorLike(error);
+  if (!zerr) {
+    return 'Check the PLUGIN.md frontmatter against docs/reference/plugins.md.';
+  }
+  const firstIssue = zerr.issues[0];
+  if (!firstIssue) return 'Check the PLUGIN.md frontmatter against docs/reference/plugins.md.';
+
+  const path = firstIssue.path.join('.');
+  const code = firstIssue.code;
+
+  // Common, author-facing failures — keep these terse and specific.
+  if (!path) {
+    return 'Ensure the PLUGIN.md file begins with `---` and contains valid YAML frontmatter.';
+  }
+  if (path === 'name') {
+    return 'Set `name` to a lowercase kebab-case id (e.g. `core-narrator` or `core-plugin/runtime-name`).';
+  }
+  if (path === 'description') {
+    return 'Add a `description:` field — either a single string or an i18n map like `description: { en-US: "...", zh-CN: "..." }`.';
+  }
+  if (path === 'priority') {
+    return 'Set `priority` to an integer between 0 and 1000 (e.g. `priority: 500`).';
+  }
+  if (code === 'unrecognized_keys') {
+    return `Remove or rename the unknown field at "${path}" — refer to docs/reference/plugins.md for the full frontmatter schema.`;
+  }
+  if (code === 'invalid_type') {
+    return `Field "${path}" has the wrong type — ${firstIssue.message}.`;
+  }
+  return `Field "${path}": ${firstIssue.message}.`;
+}
+
+/**
+ * Build the canonical plugin-loader error message. Centralised so every
+ * throw site uses the same `[plugin-loader] <path>[:line]: ...\nFix: ...`
+ * layout, which is what the authoring docs ask plugin developers to grep
+ * for when their plugin fails to load.
+ */
+function formatLoaderError(
+  filePath: string,
+  line: number | null,
+  problem: string,
+  fix: string,
+): string {
+  const location = line !== null ? `${filePath}:${line}` : filePath;
+  return `[plugin-loader] ${location}: ${problem}\nFix: ${fix}`;
+}
+
 // ── Valid hook event names ────────────────────────────────────────
 
 const VALID_HOOK_EVENTS = new Set([
@@ -101,19 +208,29 @@ export function parsePluginMd(content: string, filePath: string): ParsedPluginMd
       // Validate per-entry (not per-array) so a single malformed entry only drops
       // itself with a warning, instead of silently dropping the entire hooks
       // list when one entry has e.g. `handler: 123`. See S4-T3 code review I1.
+      const hooksLine = findYamlKeyLine(content, 'hooks');
       for (const rawEntry of data.hooks) {
         const parsed = lenientHookDeclarationSchema.safeParse(rawEntry);
         if (!parsed.success) {
           console.warn(
-            `[plugin-loader] ${filePath}: malformed hook entry skipped — ${parsed.error.issues.map((i) => i.message).join('; ')}`,
+            formatLoaderError(
+              filePath,
+              hooksLine,
+              `malformed hook entry skipped — ${parsed.error.issues.map((i) => i.message).join('; ')}`,
+              'Each hook needs a string `event` and string `handler`. See docs/reference/plugins.md#hooks.',
+            ),
           );
           continue;
         }
         const entry = parsed.data;
         if (!VALID_HOOK_EVENTS.has(entry.event)) {
           console.warn(
-            `[plugin-loader] ${filePath}: unknown hook event "${entry.event}" — skipping. ` +
-            `Valid events: ${[...VALID_HOOK_EVENTS].join(', ')}`,
+            formatLoaderError(
+              filePath,
+              hooksLine,
+              `unknown hook event "${entry.event}" — skipping`,
+              `Use one of the valid events: ${[...VALID_HOOK_EVENTS].join(', ')}.`,
+            ),
           );
           continue;
         }
@@ -138,7 +255,12 @@ export function parsePluginMd(content: string, filePath: string): ParsedPluginMd
       );
       if (!parsedNote.success) {
         console.warn(
-          `[plugin-loader] ${filePath}: malformed authorsNote skipped — ${parsedNote.error.issues.map((i) => i.message).join('; ')}`,
+          formatLoaderError(
+            filePath,
+            findYamlKeyLine(content, 'authorsNote'),
+            `malformed authorsNote skipped — ${parsedNote.error.issues.map((i) => i.message).join('; ')}`,
+            'An authorsNote must have `content: string` and optional `depth: number` / `role: "system" | "user" | "assistant"`.',
+          ),
         );
         const { authorsNote: _omitted, ...rest } = dataToValidate as Record<string, unknown>;
         dataToValidate = rest;
@@ -150,7 +272,12 @@ export function parsePluginMd(content: string, filePath: string): ParsedPluginMd
       );
       if (!parsedPost.success) {
         console.warn(
-          `[plugin-loader] ${filePath}: malformed postHistory skipped — ${parsedPost.error.issues.map((i) => i.message).join('; ')}`,
+          formatLoaderError(
+            filePath,
+            findYamlKeyLine(content, 'postHistory'),
+            `malformed postHistory skipped — ${parsedPost.error.issues.map((i) => i.message).join('; ')}`,
+            'A postHistory entry must have `content: string` and optional `role: "system" | "user" | "assistant"`.',
+          ),
         );
         const { postHistory: _omitted, ...rest } = dataToValidate as Record<string, unknown>;
         dataToValidate = rest;
@@ -164,7 +291,12 @@ export function parsePluginMd(content: string, filePath: string): ParsedPluginMd
       );
       if (!parsedRpc.success) {
         console.warn(
-          `[plugin-loader] ${filePath}: malformed rpc declaration skipped — ${parsedRpc.error.issues.map((i: { message: string }) => i.message).join('; ')}`,
+          formatLoaderError(
+            filePath,
+            findYamlKeyLine(content, 'rpc'),
+            `malformed rpc declaration skipped — ${parsedRpc.error.issues.map((i: { message: string }) => i.message).join('; ')}`,
+            'Each rpc action needs a lowercase kebab-case name and a `handler` path ending in .js/.mjs/.cjs, relative to the plugin root.',
+          ),
         );
         const { rpc: _omitted, ...rest } = dataToValidate as Record<string, unknown>;
         dataToValidate = rest;
@@ -180,8 +312,21 @@ export function parsePluginMd(content: string, filePath: string): ParsedPluginMd
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : String(error);
+    // Best-effort: attach the source line for the first failing key so the
+    // plugin author can jump straight to the offending line.
+    let line: number | null = null;
+    const zerr = asZodErrorLike(error);
+    if (zerr && zerr.issues[0]?.path.length) {
+      const topKey = String(zerr.issues[0].path[0]);
+      line = findYamlKeyLine(content, topKey);
+    }
     throw new Error(
-      `Invalid PLUGIN.md frontmatter in ${filePath}: ${message}`,
+      formatLoaderError(
+        filePath,
+        line,
+        `invalid PLUGIN.md frontmatter — ${message}`,
+        deriveFixHint(error),
+      ),
     );
   }
 
