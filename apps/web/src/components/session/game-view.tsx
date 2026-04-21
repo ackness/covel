@@ -12,9 +12,18 @@ import {
   Check,
   Bug,
   X,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { Toggle } from "@/components/ui/toggle.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.js";
+import { SuspensionsPanel } from "./suspensions-panel.js";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -159,8 +168,17 @@ export function GameView({
   // ── Unified draft send — pending interaction drafts ──────────────
   // Plugin-declared buttons (guide suggestions, draftMessage actions) push
   // drafts into the session store. The confirm bar materialises them here.
-  const { state: sessionState, clearInteractionDrafts, removeInteractionDraft, submitBlock } = useSession();
+  const {
+    state: sessionState,
+    clearInteractionDrafts,
+    removeInteractionDraft,
+    submitBlock,
+    resumeSuspension,
+    cancelSuspension,
+  } = useSession();
   const pendingDrafts = sessionState.pendingInteractionDrafts;
+  const suspensions = sessionState.suspensions;
+  const [suspensionsOpen, setSuspensionsOpen] = useState(false);
 
   const handleConfirmDrafts = useCallback(() => {
     if (pendingDrafts.length === 0) return;
@@ -200,7 +218,7 @@ export function GameView({
 
   // Load session-scoped plugin list whenever the session changes.
   useEffect(() => {
-    onLoadSessionPlugins().catch(() => {});
+    onLoadSessionPlugins().catch(() => { });
   }, [session.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isMobile = useMediaQuery("(max-width: 768px)");
@@ -290,6 +308,20 @@ export function GameView({
         onOpenChange={handleSettingsOpenChange}
       />
 
+      <Dialog open={suspensionsOpen} onOpenChange={setSuspensionsOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{t("session.suspensionsTitle")}</DialogTitle>
+            <DialogDescription>{t("session.suspensionsDescription")}</DialogDescription>
+          </DialogHeader>
+          <SuspensionsPanel
+            suspensions={suspensions}
+            onResume={resumeSuspension}
+            onCancel={cancelSuspension}
+          />
+        </DialogContent>
+      </Dialog>
+
       <ResizablePanelGroup id="game-layout" orientation={direction} className="w-full h-full">
         {/* Left Panel */}
         <ResizablePanel
@@ -369,12 +401,12 @@ export function GameView({
           className="bg-background flex flex-col min-w-0 min-h-0"
         >
           {/* Header */}
-          <div className="h-14 px-3 border-b border-border flex justify-between items-center bg-background z-10 shrink-0 paper:h-[52px] paper:bg-card">
-            <div className="flex items-center gap-2 overflow-hidden paper:gap-3">
+          <div className="h-14 px-3 border-b border-border flex justify-between items-center bg-background z-10 shrink-0 paper:h-[52px] paper:bg-card abyss:h-[52px] abyss:bg-card">
+            <div className="flex items-center gap-2 overflow-hidden paper:gap-3 abyss:gap-3">
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-8 w-8 rounded-sm shrink-0 paper:rounded-full paper:border paper:border-border ${!isLeftCollapsed && "bg-accent text-accent-foreground"}`}
+                className={`h-8 w-8 rounded-sm shrink-0 paper:rounded-full paper:border paper:border-border abyss:rounded-md ${!isLeftCollapsed && "bg-accent text-accent-foreground"}`}
                 onClick={toggleLeftPanel}
               >
                 <SlidersHorizontal className="w-4 h-4" />
@@ -457,6 +489,21 @@ export function GameView({
               >
                 <KeyRound className="w-4 h-4" />
               </Button>
+
+              {suspensions.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2 rounded-sm shrink-0 gap-1.5 border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/5"
+                  onClick={() => setSuspensionsOpen(true)}
+                  title={t("session.suspensionsTitle")}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span className="text-xs tabular-nums">
+                    {t("session.suspensionsBadge", { count: suspensions.length })}
+                  </span>
+                </Button>
+              )}
 
               <Button
                 variant="ghost"
@@ -560,13 +607,13 @@ export function GameView({
           )}
 
           {/* Input — always fixed at bottom */}
-          <div className="p-3 md:p-4 border-t border-border bg-muted/5 shrink-0 paper:bg-background paper:py-5">
+          <div className="p-3 md:p-4 border-t border-border bg-muted/5 shrink-0 paper:bg-background paper:py-5 abyss:bg-background abyss:py-5">
             {phase === "ended" ? (
               <p className="text-center text-sm text-muted-foreground paper:font-serif paper:italic paper:text-base">
                 {t("session.ended", "This session has ended.")}
               </p>
             ) : (
-              <div className="flex gap-2 max-w-4xl mx-auto paper:max-w-[42rem] paper:gap-2.5">
+              <div className="flex gap-2 max-w-4xl mx-auto paper:max-w-[42rem] paper:gap-2.5 abyss:max-w-[42rem] abyss:gap-2.5">
                 <input
                   type="text"
                   value={inputValue}
@@ -575,15 +622,15 @@ export function GameView({
                   placeholder={
                     phase === "playing"
                       ? t(
-                          "session.inputPlaceholder",
-                          "Enter action or command...",
-                        )
+                        "session.inputPlaceholder",
+                        "Enter action or command...",
+                      )
                       : t("session.inputPlaceholderAny", "Send a message...")
                   }
                   disabled={executing}
                   className={
                     "flex-1 min-w-0 bg-background border border-border px-3 md:px-4 py-2 md:py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary transition-all disabled:opacity-50 " +
-                    "paper:rounded-md paper:bg-card paper:border-[color:var(--color-border)] paper:font-serif paper:text-[15px] paper:px-4 paper:py-3 paper:focus:ring-[color:var(--color-primary)]/40"
+                    "paper:rounded-md paper:bg-card paper:border-[color:var(--color-border)] paper:font-serif paper:text-[15px] paper:px-4 paper:py-3 paper:focus:ring-[color:var(--color-primary)]/40 abyss:rounded-md abyss:bg-card abyss:border-[color:var(--color-border)] abyss:text-[15px] abyss:px-4 abyss:py-3 abyss:focus:ring-[color:var(--color-primary)]/40"
                   }
                 />
                 <Button
@@ -591,7 +638,7 @@ export function GameView({
                   disabled={executing || !inputValue.trim()}
                   className={
                     "rounded-none px-4 md:px-6 h-auto shrink-0 " +
-                    "paper:rounded-md paper:px-0 paper:w-[46px] paper:h-[46px] paper:bg-[color:var(--color-primary)] paper:text-[color:var(--color-primary-foreground)] paper:hover:opacity-90"
+                    "paper:rounded-md paper:px-0 paper:w-[46px] paper:h-[46px] paper:bg-[color:var(--color-primary)] paper:text-[color:var(--color-primary-foreground)] paper:hover:opacity-90 abyss:rounded-md abyss:px-0 abyss:w-[46px] abyss:h-[46px] abyss:bg-[color:var(--color-primary)] abyss:text-[color:var(--color-primary-foreground)] abyss:hover:opacity-90"
                   }
                   size="sm"
                 >

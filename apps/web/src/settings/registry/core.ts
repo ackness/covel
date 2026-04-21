@@ -26,7 +26,7 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
 
   store.register({
     key: "ui.appearance",
-    schema: z.enum(["modern", "paper"]),
+    schema: z.enum(["modern", "paper", "abyss"]),
     default: "paper",
     group: "general",
     widget: "select",
@@ -34,6 +34,7 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
     options: [
       { value: "paper", label: { "zh-CN": "Paper", "en-US": "Paper" } },
       { value: "modern", label: { "zh-CN": "Modern", "en-US": "Modern" } },
+      { value: "abyss", label: { "zh-CN": "深渊", "en-US": "Abyss" } },
     ],
   });
 

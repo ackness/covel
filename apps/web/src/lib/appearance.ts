@@ -2,9 +2,9 @@
  * Appearance primitives. Storage lives in the unified SettingsStore
  * (`ui.appearance`); this module only owns the DOM-side application.
  */
-export type Appearance = "modern" | "paper";
+export type Appearance = "modern" | "paper" | "abyss";
 
-export const APPEARANCES: readonly Appearance[] = ["modern", "paper"];
+export const APPEARANCES: readonly Appearance[] = ["modern", "paper", "abyss"];
 export const DEFAULT_APPEARANCE: Appearance = "paper";
 
 export function isAppearance(value: unknown): value is Appearance {
