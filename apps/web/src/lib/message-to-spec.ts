@@ -17,9 +17,14 @@ const tr = (key: string, vars?: Record<string, unknown>): string => i18n.t(key, 
 /**
  * Convert a StreamMessage to a disabled spec (post-submission state).
  * All interactive elements are disabled, submit button shows "已提交" so
- * the historical block is clearly frozen.
+ * the historical block is clearly frozen. Submitted form values (when
+ * available) are baked back into the spec so the player can see what they
+ * entered.
  */
-export function messageToSpecDisabled(msg: StreamMessage): NestedSpec | null {
+export function messageToSpecDisabled(
+  msg: StreamMessage,
+  submittedValues?: Record<string, unknown>,
+): NestedSpec | null {
   if (!msg.block) return messageToSpec(msg);
 
   const block = msg.block;
@@ -29,7 +34,7 @@ export function messageToSpecDisabled(msg: StreamMessage): NestedSpec | null {
 
   // Form → disabled version
   if (innerType === "form" || type === "interactive_form" || (data.fields && Array.isArray(data.fields))) {
-    return formToSpecDisabled(data);
+    return formToSpecDisabled(data, submittedValues);
   }
 
   // Choice → disabled version
@@ -203,20 +208,15 @@ function formToSpec(data: Record<string, unknown>): NestedSpec {
 
 /**
  * Convert a form block to a disabled json-render spec (post-submission).
+ * If `submittedValues` is provided, each field's submitted value is rendered
+ * inline (as static `value` and `placeholder`) so the player can see what
+ * they originally entered without depending on a live state tree.
  */
-function formToSpecDisabled(data: Record<string, unknown>): NestedSpec {
+function formToSpecDisabled(
+  data: Record<string, unknown>,
+  submittedValues?: Record<string, unknown>,
+): NestedSpec {
   const title = (data.title as string) ?? tr("form.defaultTitle");
-  const submitBehavior = data.submitBehavior as Record<string, unknown> | undefined;
-  if (submitBehavior?.autoContinue === true) {
-    return {
-      type: "Stack",
-      props: { gap: "xs" },
-      children: [
-        { type: "FormHeader", props: { title } },
-        { type: "Text", props: { content: tr("form.submittedAutoContinue"), variant: "muted", size: "sm" } },
-      ],
-    };
-  }
 
   const fields = (data.fields ?? []) as Array<{
     name: string;
@@ -233,16 +233,23 @@ function formToSpecDisabled(data: Record<string, unknown>): NestedSpec {
     const options = field.options?.map((opt) =>
       typeof opt === "string" ? { value: opt, label: opt } : opt,
     );
-    children.push({
-      type: "FormField",
-      props: {
-        fieldType: field.type === "select" ? "select" : "text",
-        label: field.label ?? field.name,
-        options,
-        disabled: true,
-        value: { $bindState: `/form/${field.name}` },
-      },
-    });
+    const raw = submittedValues?.[field.name];
+    const submittedValue =
+      raw === undefined || raw === null ? "" : String(raw);
+    const props: Record<string, unknown> = {
+      fieldType: field.type === "select" ? "select" : "text",
+      label: field.label ?? field.name,
+      options,
+      disabled: true,
+    };
+    if (submittedValue) {
+      props.value = submittedValue;
+      props.placeholder = submittedValue;
+    } else {
+      // No persisted value (legacy submissions) — fall back to live state binding.
+      props.value = { $bindState: `/form/${field.name}` };
+    }
+    children.push({ type: "FormField", props });
   }
 
   children.push({

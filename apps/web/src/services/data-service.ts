@@ -65,17 +65,24 @@ export interface DataService {
   loadStateSnapshot(sessionId: string): Promise<Record<string, unknown> | null>;
 
   /**
-   * Persist submitted block IDs for a session.
-   * Tracks which interactive blocks (choice_set, character_creation, etc.)
-   * have been submitted by the player — permanently locks their UI.
+   * Persist submitted block IDs and their submitted form values for a session.
+   * Tracks which interactive blocks have been submitted (locks their UI) and
+   * keeps the values around so disabled forms can re-display the input.
    */
-  saveSubmittedBlocks(sessionId: string, blockIds: string[]): Promise<void>;
+  saveSubmittedBlocks(
+    sessionId: string,
+    blockIds: string[],
+    values: Record<string, Record<string, unknown>>,
+  ): Promise<void>;
 
   /**
-   * Load submitted block IDs for a session.
-   * Returns an empty array if none exist.
+   * Load submitted block IDs + values for a session. Both default to empty.
+   * Legacy storage that holds only `string[]` is migrated transparently.
    */
-  loadSubmittedBlocks(sessionId: string): Promise<string[]>;
+  loadSubmittedBlocks(sessionId: string): Promise<{
+    ids: string[];
+    values: Record<string, Record<string, unknown>>;
+  }>;
 
   /**
    * Sync session context to server MemoryStore before sending actions.
@@ -179,10 +186,14 @@ class RemoteDataService implements DataService {
     }
   }
 
-  async saveSubmittedBlocks(sessionId: string, blockIds: string[]) {
+  async saveSubmittedBlocks(
+    sessionId: string,
+    blockIds: string[],
+    values: Record<string, Record<string, unknown>>,
+  ) {
     // T3: use client-side IDB — submitted block state is a UI concern.
     // Could be promoted to a server endpoint if cross-device resume is needed.
-    await appKv.saveSubmittedBlocks(sessionId, blockIds);
+    await appKv.saveSubmittedBlocks(sessionId, blockIds, values);
   }
 
   async loadSubmittedBlocks(sessionId: string) {
@@ -474,11 +485,15 @@ class LocalDataService implements DataService {
 
   // ── Submitted blocks ────────────────────────────────────────────
 
-  async saveSubmittedBlocks(sessionId: string, blockIds: string[]): Promise<void> {
-    await appKv.saveSubmittedBlocks(sessionId, blockIds);
+  async saveSubmittedBlocks(
+    sessionId: string,
+    blockIds: string[],
+    values: Record<string, Record<string, unknown>>,
+  ): Promise<void> {
+    await appKv.saveSubmittedBlocks(sessionId, blockIds, values);
   }
 
-  async loadSubmittedBlocks(sessionId: string): Promise<string[]> {
+  async loadSubmittedBlocks(sessionId: string) {
     return appKv.getSubmittedBlocks(sessionId);
   }
 

@@ -37,6 +37,8 @@ export interface ChatMessagesProps {
   packages: PackageSummary[];
   sessionPlugins: SessionPluginInfo[];
   submittedBlockIds: ReadonlySet<string>;
+  /** Form values keyed by submitted block id — used to repopulate disabled forms. */
+  submittedBlockValues: Readonly<Record<string, Record<string, unknown>>>;
   viewMode: "parsed" | "raw";
   blockSelections: Record<string, string>;
   onSendMessage: (msg: string) => void;
@@ -47,7 +49,7 @@ export interface ChatMessagesProps {
     interactionId: string,
     type: 'form' | 'choice' | 'confirmation',
     values: Record<string, unknown>,
-    submitBehavior?: { autoContinue?: boolean; echoFilledNarrative?: boolean },
+    submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<void>;
   onRetryRuntime?: (runtimeId: string | undefined) => void;
   onTriggerEvent?: (type: string, data: Record<string, unknown>) => void;
@@ -68,6 +70,7 @@ export function ChatMessages({
   packages,
   sessionPlugins,
   submittedBlockIds,
+  submittedBlockValues,
   viewMode,
   blockSelections,
   onSendMessage,
@@ -227,33 +230,40 @@ export function ChatMessages({
     }
 
     const blockType = block.type as string;
+    const submittedValues = submittedBlockValues[msg.id];
 
     // Plugin-message surface: plugins push json-render specs via ui.message
     // and state via plugin-data namespace=message. Each spec runs through
     // PluginPanel, which reads the live plugin-data store for reactive state.
     if (blockType === "plugin_message") {
       return (
-        <PluginMessageBlock
-          key={msg.id}
-          block={block}
-          locked={hasLaterUserMessage(msg, messages)}
-        />
+        <div key={msg.id} className="flex flex-col gap-1.5">
+          <PluginMessageBlock
+            block={block}
+            sourceBlockId={msg.id}
+            locked={hasLaterUserMessage(msg, messages)}
+          />
+          <SubmittedSelectionFooter values={submittedValues} />
+        </div>
       );
     }
 
     // Every other block (interactive_form, notification, choice, …) resolves
     // through messageToSpec and json-render.
     return (
-      <MessageBlockRenderer
-        key={msg.id}
-        msg={msg}
-        block={block}
-        submitted={submittedBlockIds.has(msg.id) || hasLaterUserMessage(msg, messages)}
-        executing={executing}
-        onSubmitInteraction={onSubmitInteraction}
-        onSendMessage={onSendMessage}
-        onSubmitBlock={onSubmitBlock}
-      />
+      <div key={msg.id} className="flex flex-col gap-1.5">
+        <MessageBlockRenderer
+          msg={msg}
+          block={block}
+          submitted={submittedBlockIds.has(msg.id) || hasLaterUserMessage(msg, messages)}
+          submittedValues={submittedValues}
+          executing={executing}
+          onSubmitInteraction={onSubmitInteraction}
+          onSendMessage={onSendMessage}
+          onSubmitBlock={onSubmitBlock}
+        />
+        <SubmittedSelectionFooter values={submittedValues} />
+      </div>
     );
   }
 
@@ -394,9 +404,12 @@ export function ChatMessages({
 // for another synthesized block).
 function PluginMessageBlock({
   block,
+  sourceBlockId,
   locked,
 }: {
   block: Record<string, unknown>;
+  /** StreamMessage id of the surrounding block, used to attribute drafts back to their source. */
+  sourceBlockId: string;
   locked: boolean;
 }) {
   const { sendMessage, upsertInteractionDraft, setComposerText } = useSession();
@@ -419,6 +432,7 @@ function PluginMessageBlock({
         type: "suggestion",
         label: text,
         values: { text },
+        sourceBlockId,
         selectionGroup,
       });
     },
@@ -456,12 +470,13 @@ function PluginMessageBlock({
 //
 // Renders any block other than plugin_message using message-to-spec +
 // json-render. Form/choice handlers bridge into onSubmitInteraction so
-// the existing submit-inputs API + autoContinue / echoFilledNarrative
-// UX hints keep working exactly as before.
+// the existing submit-inputs API + echoFilledNarrative UX hint keeps
+// working exactly as before.
 function MessageBlockRenderer({
   msg,
   block,
   submitted,
+  submittedValues,
   executing,
   onSubmitInteraction,
   onSendMessage,
@@ -470,6 +485,8 @@ function MessageBlockRenderer({
   msg: StreamMessage;
   block: Record<string, unknown>;
   submitted: boolean;
+  /** Persisted form values for this block, used to repopulate disabled forms. */
+  submittedValues?: Record<string, unknown>;
   executing: boolean;
   onSubmitInteraction?: (
     blockId: string,
@@ -477,7 +494,7 @@ function MessageBlockRenderer({
     interactionId: string,
     type: "form" | "choice" | "confirmation",
     values: Record<string, unknown>,
-    submitBehavior?: { autoContinue?: boolean; echoFilledNarrative?: boolean },
+    submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<void>;
   onSendMessage: (msg: string) => void;
   onSubmitBlock: (blockId: string) => void;
@@ -488,7 +505,7 @@ function MessageBlockRenderer({
   const effectiveSubmitted = submitted;
   const spec = useMemo(() => {
     const nested = effectiveSubmitted
-      ? messageToSpecDisabled(msg)
+      ? messageToSpecDisabled(msg, submittedValues)
       : messageToSpec(msg);
     if (!nested) return null;
     try {
@@ -496,7 +513,7 @@ function MessageBlockRenderer({
     } catch {
       return null;
     }
-  }, [msg, effectiveSubmitted]);
+  }, [msg, effectiveSubmitted, submittedValues]);
 
   const handleStateChange = useCallback(
     (changes: Array<{ path: string; value: unknown }>) => {
@@ -516,7 +533,6 @@ function MessageBlockRenderer({
     const rawBehavior = data.submitBehavior as Record<string, unknown> | undefined;
     const submitBehavior = rawBehavior
       ? {
-          autoContinue: rawBehavior.autoContinue as boolean | undefined,
           echoFilledNarrative: rawBehavior.echoFilledNarrative as boolean | undefined,
         }
       : undefined;
@@ -574,6 +590,7 @@ function MessageBlockRenderer({
           selectedId: params.choiceId,
           selectedLabel: label,
         },
+        sourceBlockId: msg.id,
         submitBehavior,
       });
     },
@@ -590,6 +607,7 @@ function MessageBlockRenderer({
         type: "suggestion",
         label: text,
         values: { text },
+        sourceBlockId: msg.id,
         selectionGroup,
       });
     },
@@ -619,7 +637,11 @@ function MessageBlockRenderer({
     >
       <JSONUIProvider
         registry={covelRegistry}
-        initialState={{}}
+        initialState={
+          effectiveSubmitted && submittedValues
+            ? { form: submittedValues }
+            : {}
+        }
         handlers={handlers}
         onStateChange={handleStateChange}
       >
@@ -640,6 +662,30 @@ function hasLaterUserMessage(msg: StreamMessage, all: StreamMessage[]): boolean 
     if (all[i].role === "user") return true;
   }
   return false;
+}
+
+// ── SubmittedSelectionFooter ─────────────────────────────────────
+//
+// Shown beneath any interactive block once the player has submitted/confirmed
+// a selection through the draft bar. Generic across block types — it reads
+// `_label` from the persisted submitted-block values map and renders a
+// muted "玩家选择：xxx" line. Forms intentionally don't store `_label`
+// (their values are baked back into the disabled spec instead), so this
+// component renders nothing for them.
+function SubmittedSelectionFooter({
+  values,
+}: {
+  values?: Record<string, unknown>;
+}) {
+  const { t } = useTranslation();
+  const label = values?._label;
+  if (typeof label !== "string" || !label.trim()) return null;
+  return (
+    <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground italic pl-0.5">
+      <span className="font-semibold not-italic">{t("interaction.playerSelected")}</span>
+      <span className="whitespace-pre-wrap break-words">{label}</span>
+    </div>
+  );
 }
 
 // ── RawJsonBlock ─────────────────────────────────────────────────

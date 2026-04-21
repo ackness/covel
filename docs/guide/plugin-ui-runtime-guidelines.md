@@ -277,14 +277,14 @@ Covel 当前的工具层分成两类：
 ```ts
 submitBehavior: {
   echoFilledNarrative?: boolean
-  autoContinue?: boolean
+  immediate?: boolean
 }
 ```
 
-推荐用途：
+字段语义：
 
-- 角色创建表单提交后静默推进
-- 提交完成后自动补 narrator 开场
+- `echoFilledNarrative`（默认 `true`）：把填充后的叙事作为玩家气泡回显到聊天流。设为 `false` 时只用作下一轮的隐藏输入，不出现在对话里。
+- `immediate`：玩家提交后立即关闭表单并继续执行。
 
 这条协议是框架级能力，不绑定任何具体插件。
 
@@ -302,6 +302,19 @@ submitBehavior: {
 - 任务确认
 - 道具选择
 - 小型表单输入
+
+### 4.4 玩家选择回放（自动）
+
+任何走 `draftMessage` / `selectChoice` / `selectSuggestion` 进入"待发送区"的交互，
+框架会在玩家点击底部发送时自动：
+
+1. 将每个 draft 按 `sourceBlockId`（即原 `StreamMessage.id`）汇总；
+2. 调用内部 `submitBlock(sourceBlockId, { _kind: "selection", _label, items })`，把选择持久化到 IDB（`submittedBlockValues` 表）；
+3. 重新渲染该 block 时，框架追加一行 `你的选择：xxx` 的 `SubmittedSelectionFooter`。
+
+`form` 类提交（`submitForm` → `submitInteraction`）走另一条路径：原始字段值已经直接烘焙进 disabled 表单 spec，所以框架**不会**再额外渲染 footer。
+
+插件作者无需特殊适配——只要按 [`core-guide/ui/action-guide-block.json`](../../plugins/core-guide/ui/action-guide-block.json) 的方式使用 `draftMessage` 等动作，玩家选择就会被自动记录与回放。
 
 ---
 

@@ -176,6 +176,7 @@ function SessionPage() {
         executionSteps={state.executionSteps}
         worldSessions={state.worldSessions}
         submittedBlockIds={state.submittedBlockIds}
+        submittedBlockValues={state.submittedBlockValues}
         onSendMessage={sendMessage}
         onSubmitBlock={submitBlock}
         onSubmitInteraction={submitInteraction}

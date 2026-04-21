@@ -131,12 +131,28 @@ export async function removeWorldOverlay(worldId: string): Promise<void> {
 
 // ── Submitted Blocks ────────────────────────────────────────────
 
-export async function getSubmittedBlocks(sessionId: string): Promise<string[]> {
-  return (await idbGet<string[]>(STORE_SUBMITTED_BLOCKS, sessionId)) ?? [];
+export interface SubmittedBlocksRecord {
+  /** Ordered list of submitted block IDs (kept for backward compat with old code paths). */
+  ids: string[];
+  /** Form values keyed by blockId — used to repopulate disabled forms after submission. */
+  values: Record<string, Record<string, unknown>>;
 }
 
-export async function saveSubmittedBlocks(sessionId: string, blockIds: string[]): Promise<void> {
-  return idbPut(STORE_SUBMITTED_BLOCKS, sessionId, blockIds);
+export async function getSubmittedBlocks(sessionId: string): Promise<SubmittedBlocksRecord> {
+  const raw = await idbGet<unknown>(STORE_SUBMITTED_BLOCKS, sessionId);
+  if (!raw) return { ids: [], values: {} };
+  // Legacy shape: plain string[]. Migrate by treating values as empty.
+  if (Array.isArray(raw)) return { ids: raw as string[], values: {} };
+  const obj = raw as Partial<SubmittedBlocksRecord>;
+  return { ids: obj.ids ?? [], values: obj.values ?? {} };
+}
+
+export async function saveSubmittedBlocks(
+  sessionId: string,
+  ids: string[],
+  values: Record<string, Record<string, unknown>>,
+): Promise<void> {
+  return idbPut<SubmittedBlocksRecord>(STORE_SUBMITTED_BLOCKS, sessionId, { ids, values });
 }
 
 export async function removeSubmittedBlocks(sessionId: string): Promise<void> {
