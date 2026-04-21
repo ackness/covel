@@ -672,12 +672,25 @@ export function OnboardingWizard() {
                 slotName="story"
               />
 
+              {storyContinueDisabled && (
+                <p className="text-[11px] text-amber-500/80 leading-relaxed">
+                  {t(
+                    "onboarding.disabledHint",
+                    "Fill in API Key and Model ID to continue, or skip below to configure later.",
+                  )}
+                </p>
+              )}
+
               <div className="flex items-center gap-2 pt-2">
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  className="rounded-none text-xs text-zinc-500"
+                  className="rounded-none text-xs"
                   onClick={handleNext}
+                  title={t(
+                    "onboarding.skipTitle",
+                    "You can configure this later in Settings.",
+                  )}
                 >
                   {t("onboarding.skip", "Skip for now")}
                 </Button>
@@ -777,11 +790,20 @@ export function OnboardingWizard() {
                 />
               )}
 
+              {pluginContinueDisabled && (
+                <p className="text-[11px] text-amber-500/80 leading-relaxed">
+                  {t(
+                    "onboarding.disabledHint",
+                    "Fill in API Key and Model ID to continue, or skip below to configure later.",
+                  )}
+                </p>
+              )}
+
               <div className="flex items-center gap-2 pt-2">
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  className="rounded-none text-xs text-zinc-500"
+                  className="rounded-none text-xs"
                   onClick={handleBack}
                 >
                   {t("onboarding.back", "Back")}

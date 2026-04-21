@@ -5,6 +5,7 @@ import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { OnboardingWizard } from "@/components/onboarding-wizard";
+import { AppErrorBoundary } from "@/components/error-boundary";
 import { useLocalePreference } from "@/hooks/useLocalePreference";
 
 export const Route = createRootRoute({
@@ -71,7 +72,9 @@ function RootLayout() {
         </header>
 
         <main className="flex-1 flex flex-col w-full min-h-0 overflow-hidden relative">
-          <Outlet />
+          <AppErrorBoundary>
+            <Outlet />
+          </AppErrorBoundary>
         </main>
 
         <footer className={`flex-shrink-0 border-t border-border transition-all bg-background paper:bg-card ${isSession ? 'py-1.5' : 'py-8'}`}>

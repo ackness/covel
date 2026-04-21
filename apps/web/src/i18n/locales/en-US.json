@@ -3,6 +3,10 @@
     "title": "Covel",
     "description": "AI RPG Plugin Framework"
   },
+  "home": {
+    "startPlaying": "Start Playing",
+    "viewRepository": "View Repository"
+  },
   "nav": {
     "home": "Home",
     "play": "Play",
@@ -74,6 +78,9 @@
     "selectWorld": "Select World",
     "worldSelectDesc": "Choose a world to begin your adventure. Each world has unique lore, characters, and narration style.",
     "loadingWorlds": "Loading worlds...",
+    "worldsEmptyTitle": "No worlds yet",
+    "worldsEmptyDesc": "Generate a new world with AI, or add a world package under the worlds/ folder.",
+    "worldsEmptyViewExamples": "View examples",
     "pluginsLoaded": "{{count}} plugins loaded",
     "noPluginsLoaded": "No plugins loaded",
     "resume": "Resume",
@@ -300,6 +307,10 @@
     "keyConfigured": "Configured",
     "keyUnconfigured": "Not configured",
     "pingTest": "Connection Test",
+    "noProvidersTitle": "No providers registered yet",
+    "noProvidersDesktopDesc": "Open your local llm.toml and add at least one [covel.<slot>] section, then reload this dialog.",
+    "noProvidersWebDesc": "This web build reads slot definitions from the server's llm.toml. Ask your operator to configure a slot, or run a desktop build where you can edit the file locally.",
+    "openLlmToml": "Open llm.toml",
     "advancedDesc": "Leave empty to use model provider defaults.",
     "selectSlot": "Select Slot",
     "hasApiKey": "Has Key",
@@ -453,6 +464,8 @@
     "pluginDifferent": "Use a different model",
     "pluginDifferentHint": "Route plugins to a faster/cheaper provider.",
     "skip": "Skip for now",
+    "skipTitle": "You can configure this later in Settings.",
+    "disabledHint": "Fill in API Key and Model ID to continue, or skip below to configure later.",
     "back": "Back",
     "continue": "Continue",
     "ready": "You're all set",

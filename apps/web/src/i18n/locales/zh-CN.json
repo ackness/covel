@@ -3,6 +3,10 @@
     "title": "Covel",
     "description": "AI RPG 插件式框架"
   },
+  "home": {
+    "startPlaying": "开始游玩",
+    "viewRepository": "查看仓库"
+  },
   "nav": {
     "home": "首页",
     "play": "游玩",
@@ -74,6 +78,9 @@
     "selectWorld": "选择世界",
     "worldSelectDesc": "选择一个世界开始你的冒险。每个世界都有独特的背景故事、角色和叙事风格。",
     "loadingWorlds": "正在加载世界...",
+    "worldsEmptyTitle": "还没有可用的世界",
+    "worldsEmptyDesc": "让 AI 生成一个新世界,或把世界包放入 worlds/ 目录。",
+    "worldsEmptyViewExamples": "查看示例",
     "pluginsLoaded": "{{count}} 个插件已加载",
     "noPluginsLoaded": "未加载插件",
     "resume": "继续",
@@ -300,6 +307,10 @@
     "keyConfigured": "已配置",
     "keyUnconfigured": "未配置",
     "pingTest": "连通测试",
+    "noProvidersTitle": "尚未注册任何提供商",
+    "noProvidersDesktopDesc": "打开本机 llm.toml,添加至少一个 [covel.<slot>] 区块并重新打开此面板。",
+    "noProvidersWebDesc": "网页版读取服务端 llm.toml 的插槽定义。请联系管理员配置,或运行桌面版以在本地直接编辑。",
+    "openLlmToml": "打开 llm.toml",
     "advancedDesc": "留空则使用模型提供商默认值。",
     "selectSlot": "选择插槽",
     "hasApiKey": "有密钥",
@@ -453,6 +464,8 @@
     "pluginDifferent": "使用不同的模型",
     "pluginDifferentHint": "为插件单独指定一个更快/更便宜的提供商。",
     "skip": "稍后配置",
+    "skipTitle": "可以稍后在设置里配置。",
+    "disabledHint": "请填写 API 密钥和模型 ID 后继续,或点「稍后配置」跳过。",
     "back": "上一步",
     "continue": "继续",
     "ready": "一切就绪",

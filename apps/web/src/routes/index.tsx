@@ -1,9 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Cpu, Code2, Database, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+
+const REPO_URL = "https://github.com/ackness/covel";
 
 export const Route = createFileRoute("/")({
   component: HomePage,
@@ -28,11 +29,15 @@ function HomePage() {
             {t("app.description", "A modular monolith architecture for building plugin-driven role-playing experiences.")}
           </p>
           <div className="flex flex-col sm:flex-row gap-4">
-            <Button size="lg" className="h-14 px-8 text-base rounded-none font-medium uppercase tracking-wider">
-              Explore Docs <ArrowRight className="ml-2 h-5 w-5" />
+            <Button size="lg" asChild className="h-14 px-8 text-base rounded-none font-medium uppercase tracking-wider">
+              <Link to="/session">
+                {t("home.startPlaying", "Start Playing")} <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
             </Button>
-            <Button size="lg" variant="outline" className="h-14 px-8 text-base rounded-none font-medium uppercase tracking-wider border-2">
-              View Repository
+            <Button size="lg" variant="outline" asChild className="h-14 px-8 text-base rounded-none font-medium uppercase tracking-wider border-2">
+              <a href={REPO_URL} target="_blank" rel="noreferrer noopener">
+                {t("home.viewRepository", "View Repository")}
+              </a>
             </Button>
           </div>
         </div>

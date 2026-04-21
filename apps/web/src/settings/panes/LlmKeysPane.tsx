@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   CheckCircle2,
+  FolderOpen,
   Info,
   Loader2,
   XCircle,
@@ -17,6 +18,35 @@ import { Button } from "@/components/ui/button.js";
 import { SettingWidget } from "../widgets/index.js";
 import { useSettingsStore } from "../use-settings.js";
 import { useSession } from "@/stores/session-store.js";
+import { isDesktopApp, openLlmToml } from "@/lib/desktop-bridge.js";
+
+/**
+ * Classify a raw error string into a ping failure category and produce
+ * a short, human-actionable kind label plus the cleaned detail.
+ */
+function classifyPingError(raw: string | undefined): {
+  kind: string;
+  detail: string;
+} {
+  if (!raw) return { kind: "unknown", detail: "Unknown error" };
+  const lower = raw.toLowerCase();
+  if (/\b401\b|unauthoriz|invalid.+key|invalid.*api.?key/.test(lower)) {
+    return { kind: "auth", detail: raw };
+  }
+  if (/\b403\b|forbidden/.test(lower)) return { kind: "forbidden", detail: raw };
+  if (/\b404\b|not found/.test(lower)) return { kind: "not-found", detail: raw };
+  if (/\b429\b|rate[-\s]?limit|too many/.test(lower))
+    return { kind: "rate-limited", detail: raw };
+  if (/\b5\d\d\b|server error|bad gateway|unavailable/.test(lower))
+    return { kind: "server", detail: raw };
+  if (/timeout|timed out|etimedout/.test(lower))
+    return { kind: "timeout", detail: raw };
+  if (
+    /network|fetch|econnrefused|enotfound|socket|dns|offline|cors/.test(lower)
+  )
+    return { kind: "network", detail: raw };
+  return { kind: "error", detail: raw };
+}
 
 /**
  * API keys pane — renders one SecretWidget per registered `keys.<provider>`
@@ -53,10 +83,12 @@ export function LlmKeysPane() {
   ];
 
   const handlePing = async (presetId: string) => {
-    setPingResults((prev) => ({
-      ...prev,
-      [presetId]: { ok: false, latencyMs: 0, testing: true },
-    }));
+    setPingResults((prev) => {
+      const next = { ...prev };
+      delete next[presetId];
+      next[presetId] = { ok: false, latencyMs: 0, testing: true };
+      return next;
+    });
     try {
       const result = await pingPreset(presetId);
       setPingResults((prev) => ({ ...prev, [presetId]: result }));
@@ -73,10 +105,43 @@ export function LlmKeysPane() {
   };
 
   if (keyEntries.length === 0) {
+    const desktop = isDesktopApp();
     return (
-      <div className="text-xs text-muted-foreground">
-        No providers registered. Configure at least one slot in `llm.toml` to
-        surface API key inputs.
+      <div className="border border-dashed border-border p-4 space-y-3 text-xs">
+        <div className="flex items-start gap-2">
+          <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
+          <div className="space-y-1">
+            <div className="font-medium text-sm">
+              {t("settings.noProvidersTitle", "No providers registered yet")}
+            </div>
+            <p className="text-muted-foreground leading-relaxed">
+              {desktop
+                ? t(
+                    "settings.noProvidersDesktopDesc",
+                    "Open your local llm.toml and add at least one [covel.<slot>] section, then reload this dialog.",
+                  )
+                : t(
+                    "settings.noProvidersWebDesc",
+                    "This web build reads slot definitions from the server's llm.toml. Ask your operator to configure a slot, or run a desktop build where you can edit the file locally.",
+                  )}
+            </p>
+          </div>
+        </div>
+        {desktop && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              void openLlmToml().catch((err: unknown) => {
+                console.error("[LlmKeysPane] openLlmToml failed", err);
+              });
+            }}
+            className="text-[11px]"
+          >
+            <FolderOpen className="w-3 h-3 mr-1.5" />
+            {t("settings.openLlmToml", "Open llm.toml")}
+          </Button>
+        )}
       </div>
     );
   }
@@ -127,55 +192,60 @@ export function LlmKeysPane() {
                 {providerPresets.map((preset) => {
                   const ping = pingResults[preset.id];
                   const isTesting = ping?.testing;
+                  const errInfo = ping && !ping.ok ? classifyPingError(ping.error) : null;
                   return (
-                    <div
-                      key={preset.id}
-                      className="flex items-center gap-2 text-xs"
-                    >
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-[11px] px-2.5 shrink-0"
-                        disabled={isTesting}
-                        onClick={() => handlePing(preset.id)}
-                      >
-                        {isTesting ? (
-                          <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                        ) : (
-                          <Zap className="w-3 h-3 mr-1" />
-                        )}
-                        Ping
-                      </Button>
-                      <span className="truncate text-muted-foreground">
-                        {preset.name}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">
-                        ({preset.model})
-                      </span>
-                      {ping && !isTesting && (
-                        <span className="flex items-center gap-1 ml-auto shrink-0">
-                          {ping.ok ? (
-                            <>
-                              <CheckCircle2 className="w-3 h-3 text-green-500" />
-                              <span className="text-green-600 font-mono">
-                                {ping.ttfbMs ?? ping.latencyMs}ms
-                              </span>
-                              <span className="text-[10px] text-muted-foreground">
-                                TTFB
-                              </span>
-                            </>
+                    <div key={preset.id} className="space-y-1">
+                      <div className="flex items-center gap-2 text-xs">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[11px] px-2.5 shrink-0"
+                          disabled={isTesting}
+                          onClick={() => handlePing(preset.id)}
+                        >
+                          {isTesting ? (
+                            <Loader2 className="w-3 h-3 animate-spin mr-1" />
                           ) : (
-                            <>
-                              <XCircle className="w-3 h-3 text-destructive" />
-                              <span
-                                className="text-destructive truncate max-w-[120px]"
-                                title={ping.error}
-                              >
-                                {ping.error?.slice(0, 30)}
-                              </span>
-                            </>
+                            <Zap className="w-3 h-3 mr-1" />
                           )}
+                          Ping
+                        </Button>
+                        <span className="truncate text-muted-foreground">
+                          {preset.name}
                         </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          ({preset.model})
+                        </span>
+                        {ping && !isTesting && (
+                          <span className="flex items-center gap-1 ml-auto shrink-0">
+                            {ping.ok ? (
+                              <>
+                                <CheckCircle2 className="w-3 h-3 text-green-500" />
+                                <span className="text-green-600 font-mono">
+                                  {ping.ttfbMs ?? ping.latencyMs}ms
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  TTFB
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="w-3 h-3 text-destructive" />
+                                <Badge
+                                  variant="destructive"
+                                  className="text-[10px] font-mono uppercase"
+                                >
+                                  {errInfo?.kind ?? "error"}
+                                </Badge>
+                              </>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                      {ping && !ping.ok && !isTesting && errInfo && (
+                        <pre className="text-[10px] font-mono text-destructive/80 bg-destructive/5 border border-destructive/20 px-2 py-1 whitespace-pre-wrap break-all max-h-24 overflow-auto">
+                          {errInfo.detail}
+                        </pre>
                       )}
                     </div>
                   );
