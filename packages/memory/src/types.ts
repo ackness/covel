@@ -137,6 +137,13 @@ export interface MemoryUpdater {
   /**
    * Analyze completed turn results and update core memory blocks.
    * Uses a cheap LLM call to extract key information.
+   *
+   * Callers typically fire-and-forget this at turn end, but the updater
+   * internally tracks the in-flight promise per session. Use
+   * {@link MemoryUpdater.awaitPending} at the start of the next turn to
+   * guarantee the next prompt sees the freshest blocks — critical when
+   * the player submits two messages back-to-back and the LLM call from
+   * the previous turn has not yet finished persisting.
    */
   updateAfterTurn(params: {
     sessionId: string;
@@ -145,6 +152,14 @@ export interface MemoryUpdater {
     currentBlocks: readonly CoreMemoryBlock[];
     locale?: string;
   }): Promise<MemoryUpdateResult>;
+
+  /**
+   * Resolve when the most recently started `updateAfterTurn` for the given
+   * session has finished (success or failure). No-op when no update is
+   * pending. Used by the turn executor to avoid the "next turn reads stale
+   * memory blocks while previous turn's update is still writing" race.
+   */
+  awaitPending(sessionId: string): Promise<void>;
 }
 
 // ── Recall Memory (conversation history search) ─────────────────

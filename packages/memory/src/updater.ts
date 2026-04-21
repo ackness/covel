@@ -74,11 +74,23 @@ export function createMemoryUpdater(
     currentBlocks: readonly CoreMemoryBlock[];
     locale?: string;
   }): Promise<MemoryUpdateResult>;
+  awaitPending(sessionId: string): Promise<void>;
 } {
   const resolvedLocale = config?.locale ?? 'zh-CN';
 
-  return {
-    async updateAfterTurn(params): Promise<MemoryUpdateResult> {
+  // Per-session pending-promise map. Tracks the most recent in-flight
+  // updateAfterTurn() call so the next turn can await it before reading
+  // blocks. Stale-by-one-turn memory is acceptable (intentional trade-off)
+  // but stale-mid-turn is not — especially when players spam submit.
+  const pending = new Map<string, Promise<unknown>>();
+
+  async function runUpdate(params: {
+    sessionId: string;
+    narrativeText: string;
+    toolCallSummaries?: readonly string[];
+    currentBlocks: readonly CoreMemoryBlock[];
+    locale?: string;
+  }): Promise<MemoryUpdateResult> {
       const { sessionId, narrativeText, toolCallSummaries, currentBlocks, locale } = params;
       const lang = (locale ?? resolvedLocale).startsWith('zh') ? 'zh' : 'en';
 
@@ -119,6 +131,36 @@ export function createMemoryUpdater(
           blocksChanged: [],
           error: err instanceof Error ? err.message : String(err),
         };
+      }
+  }
+
+  return {
+    updateAfterTurn(params): Promise<MemoryUpdateResult> {
+      // Chain this call behind any in-flight update for the same session so
+      // we never race two LLM completions writing the same block, and so
+      // `awaitPending` can serialise on the latest write.
+      const previous = pending.get(params.sessionId) ?? Promise.resolve();
+      const next = previous
+        .catch(() => { /* previous failure already reported to its caller */ })
+        .then(() => runUpdate(params));
+      // Store a promise that resolves regardless of success/failure.
+      pending.set(
+        params.sessionId,
+        next.then(
+          () => undefined,
+          () => undefined,
+        ),
+      );
+      return next;
+    },
+    async awaitPending(sessionId: string): Promise<void> {
+      const p = pending.get(sessionId);
+      if (!p) return;
+      try {
+        await p;
+      } catch {
+        // Errors already surfaced to the original caller via its returned
+        // MemoryUpdateResult; swallow here so awaitPending never throws.
       }
     },
   };

@@ -306,6 +306,16 @@ export interface RuntimeManifest {
    * Examples: `['narrative']`, `['world-data-provider']`, `['image-generation']`.
    */
   readonly capabilities?: readonly string[];
+  /**
+   * Runtime IDs this runtime depends on for a successful upstream output.
+   * When any listed upstream ran with `status !== 'success'` in the same
+   * turn, the framework short-circuits this runtime with `status: 'skipped'`
+   * before the guard / LLM pipeline. Prevents downstream LLMs from being
+   * invoked with empty inject blocks when their upstream failed.
+   *
+   * Implemented in packages/runtime/src/turn-executor.ts (executeOneRuntime).
+   */
+  readonly upstreamRequired?: readonly string[];
   readonly trigger?: TriggerConfig;
   readonly tools?: ToolsConfig;
   readonly input?: InputConfig;

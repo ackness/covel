@@ -319,6 +319,16 @@ export const runtimeManifestSchema = z
     pluginType: z.enum(['core-plugin', 'plugin']).optional(),
     outputKind: outputKindSchema.optional(),
     capabilities: z.array(z.string().min(1)).optional(),
+    /**
+     * Runtime IDs this runtime depends on for a successful upstream output.
+     * When any listed upstream ran with `status !== 'success'` in the same
+     * turn, the framework short-circuits this runtime and reports
+     * `status: 'skipped'` before the guard / LLM pipeline. Use this for
+     * plugins whose prompt is meaningless without fresh narrative context
+     * (guide, codex, char-creator/character-tracker, npc-graph/extractor
+     * all depend on core-narrator succeeding).
+     */
+    upstreamRequired: z.array(z.string().min(1)).optional(),
     trigger: triggerConfigSchema.optional(),
     tools: toolsConfigSchema.optional(),
     input: inputConfigSchema.optional(),

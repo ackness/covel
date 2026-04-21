@@ -19,6 +19,7 @@ import { isSuspendSentinel, isRuntimeDoneSentinel } from '@covel/tools';
 import type { EventBus } from '@covel/events';
 import { shouldTrigger } from './trigger.js';
 import { scheduleByPriority } from './scheduler.js';
+import { scheduleByDag } from './dag-scheduler.js';
 import {
   buildContext,
   buildContextAsync,
@@ -151,6 +152,8 @@ export interface TurnExecutorDeps {
         currentBlocks: readonly { label: string; content: string; updatedAt: string }[];
         locale?: string;
       }): Promise<{ updated: boolean; blocksChanged: readonly string[]; error?: string }>;
+      /** Optional — await any pending updateAfterTurn for the session. */
+      awaitPending?(sessionId: string): Promise<void>;
     };
   };
 
@@ -177,6 +180,49 @@ export interface TurnExecutorOptions {
 // ── Helpers ─────────────────────────────────────────────────────
 
 /** Emit a subscription-style event via the EventBus (if present). */
+/**
+ * Heuristic: does `content` look like structured (non-narrative) runtime
+ * output that the narrator should NOT ingest as prior prose? Covers:
+ *
+ *  - Raw JSON (starts with `{` or `[`)
+ *  - Markdown-fenced JSON: ```` ```json ```` / ```` ```ts ```` / ```` ``` ````
+ *    wrapping an object/array body
+ *  - Bare backtick-wrapped bodies (codex EntryCard text dumps)
+ *  - `<tool>`-prefixed transcripts that tool-using plugins occasionally log
+ *
+ * Any false positive here just reduces context the narrator sees — much
+ * safer than leaking structured JSON into the prose stream and triggering
+ * the narrator to mimic the schema.
+ *
+ * Exported for unit testing (see turn-executor-story-filter.test.ts).
+ */
+export function looksLikeStructuredRuntimeOutput(raw: string | undefined | null): boolean {
+  if (!raw) return false;
+  let s = raw.trim();
+  if (s.length === 0) return false;
+
+  // Strip one level of markdown fences (```json / ```ts / ```).
+  const fence = s.match(/^```[\w-]*\s*([\s\S]*?)\s*```$/);
+  if (fence && fence[1]) {
+    s = fence[1].trim();
+  }
+
+  // Classic JSON opener.
+  if (s.startsWith('{') || s.startsWith('[')) return true;
+
+  // Bare backtick-wrapped body — codex/guide sometimes emit ``…`` with JSON
+  // inside. Strip a single pair of backticks and recheck.
+  if (s.startsWith('`') && s.endsWith('`')) {
+    const inner = s.slice(1, -1).trim();
+    if (inner.startsWith('{') || inner.startsWith('[')) return true;
+  }
+
+  // `<tool>` / `<tool-call>` transcript dumps.
+  if (/^<tool[- >]/i.test(s)) return true;
+
+  return false;
+}
+
 function emitSubEvent(
   eventBus: EventBus | undefined,
   subTopic: string,
@@ -441,6 +487,16 @@ export async function executeTurn(
     }
   }
 
+  // 0a. Await any in-flight memory update from the previous turn before we
+  // load coreMemoryBlocks. Without this, a player who submits two turns
+  // back-to-back will see the second turn's prompt assembled against the
+  // stale blocks from *before* last turn's update finished writing.
+  // Fire-and-forget semantics are preserved for callers that don't care —
+  // only THIS turn-start blocks on the previous write.
+  if (deps.memorySystem?.updater.awaitPending) {
+    await deps.memorySystem.updater.awaitPending(input.sessionId);
+  }
+
   // 0. Load message history from store (append-only conversation history)
   let messageHistory: readonly TurnMessageRecord[] = [];
   if (deps.store) {
@@ -576,7 +632,29 @@ export async function executeTurn(
   });
 
   // 2. Schedule by priority — band filter uses turnNumber to gate Pre-Game vs main loop.
-  const groups = scheduleByPriority(triggered, turnNumber);
+  //
+  // Pre-Game band (turn 0) keeps strict priority ordering because Pre-Game
+  // plugins have implicit write-ordering that is not captured in manifest
+  // inject declarations (pregame runs first, then player-init, then world-init).
+  //
+  // Main-loop band (turn >= 1) can opt into a DAG scheduler via
+  // COVEL_DAG_SCHEDULER=1 — it parallelises all runtimes whose declared
+  // upstreams (input.inject + upstreamRequired) have already completed.
+  // Falls back to priority scheduling on cycle detection.
+  let groups = scheduleByPriority(triggered, turnNumber);
+  if (process.env.COVEL_DAG_SCHEDULER === '1' && turnNumber >= 1) {
+    // Only the main-loop runtimes survive the band filter at this turn; reuse
+    // them for the DAG pass so Pre-Game plugins stay out of the graph.
+    const mainLoop = triggered.filter(
+      (rt) => rt.priority !== undefined && rt.priority > 99,
+    );
+    const dag = scheduleByDag(mainLoop);
+    if (dag.error) {
+      console.warn(`[turn-executor] DAG scheduler: ${dag.error}; falling back to priority ordering`);
+    } else {
+      groups = dag.groups;
+    }
+  }
 
   // Load session summaries for compaction substitution in buildContext (S2-T2)
   let sessionSummaries: import('@covel/store').SessionSummaryRecord[] = [];
@@ -668,11 +746,42 @@ export async function executeTurn(
     }
   }
 
-  // Pre-Game completion tracking (Turn 0 only).
-  // Marks Pre-Game runtimes as done when their output reports `preGameDone: true`,
-  // their guard skipped them, or they exhausted `maxTriggerCount`. When all
-  // Pre-Game runtimes are accounted for, advance the session into the main loop
-  // by bumping `turnCount` from 0 → 1.
+  // ── Pre-Game completion tracking (Turn 0 only) ───────────────────
+  //
+  // The Pre-Game band (priority 0–99) runs in turn 0 and is responsible for
+  // one-off initialisation: welcome text, world schema generation, opening
+  // character form, etc. A Pre-Game runtime is considered "done" when ANY
+  // of the following hold:
+  //
+  //   1. Its output reports `preGameDone: true`
+  //        - Used by runtimes that complete deterministically in one turn
+  //          (e.g. `core-pregame` handler returns `{ preGameDone: true }`
+  //          after writing the welcome notification).
+  //        - Also used by runtimes whose guard triggers completion after the
+  //          player submits an interactive form (e.g. `core-char-creator/
+  //          player-init` only returns `preGameDone: true` in the guard
+  //          branch that observes a submitted character form).
+  //
+  //   2. Its guard returned `{ skip: true }`
+  //        - Covers `core-world-init/schema-gen` when a prior session of
+  //          the same world has already generated and persisted schema
+  //          + entries; the guard skips the LLM call entirely.
+  //
+  //   3. It ran out of trigger budget
+  //        - Runtimes with `trigger.maxTriggerCount` that have already
+  //          hit their cap in a previous turn aren't scheduled again;
+  //          they're still recorded as done so they don't block advancement.
+  //
+  // The session's `preGameCompleted` array accumulates these runtime IDs
+  // across turns (important — some plugins require multiple turns to hit
+  // their completion signal). When every Pre-Game runtime in the active
+  // set is in `preGameCompleted`, the kernel bumps `turnCount` from 0 → 1,
+  // moving scheduling into the main-loop band.
+  //
+  // IMPORTANT: plugins with a form-submission completion signal (like
+  // player-init) MUST NOT report `preGameDone: true` in the "form shown"
+  // turn — they report it only after the player submits the form. This
+  // keeps the user interactable while Pre-Game is still progressing.
   if (turnNumber === 0 && deps.store) {
     const newlyDone: string[] = [];
     for (const [name, result] of completedResults) {
@@ -1326,6 +1435,54 @@ async function executeOneRuntime(
   const timeoutMs = manifest.timeoutMs ?? defaultTimeoutMs;
 
   try {
+    // ── Upstream gate (manifest.upstreamRequired) ─────────────────
+    // Must run before loadRuntime so a failing upstream short-circuits
+    // the whole pipeline: no prompt template read, no guard, no LLM call,
+    // no runtime.started event. Emits a single runtime.completed{skipped}
+    // so the frontend shows the runtime as skipped rather than hanging.
+    const required = manifest.upstreamRequired ?? [];
+    if (required.length > 0) {
+      const missing = required.filter((id) => {
+        const up = completedResults.get(id);
+        return !up || up.status !== 'success';
+      });
+      if (missing.length > 0) {
+        const reason = `upstream not success: ${missing.join(', ')}`;
+        const skipResult: RuntimeResult = {
+          pluginId: manifest.pluginId,
+          runtimeId: manifest.name,
+          runId,
+          turnId: input.turnId,
+          status: 'skipped',
+          output: {
+            skipped: true,
+            reason,
+            skippedBy: 'framework:upstreamRequired',
+            missingUpstreams: missing,
+          },
+          toolCalls: [],
+          durationMs: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+        };
+        try {
+          await deps.onRuntimeComplete?.({
+            runtimeId: manifest.name,
+            pluginId: manifest.pluginId,
+            status: 'skipped',
+            durationMs: skipResult.durationMs,
+          });
+        } catch { /* callback error must not kill runtime */ }
+        emitSubEvent(deps.eventBus, 'runtime', 'runtime.completed', input.sessionId, {
+          runtimeId: manifest.name,
+          pluginId: manifest.pluginId,
+          status: 'skipped',
+          durationMs: skipResult.durationMs,
+          reason,
+        });
+        return skipResult;
+      }
+    }
+
     // Load the runtime (prompt template, references, handler, etc.)
     const loaded = await deps.loadRuntime(manifest, input.locale);
     if (!loaded) {
@@ -1521,12 +1678,18 @@ async function executeOneRuntime(
       });
 
       if (guardOutput.skip === true) {
+        // Record `skipped` in the internal RuntimeResult so downstream
+        // consumers (Pre-Game completion tracker, session-kernel's
+        // `result.status !== 'success'` gate, SSE payload) all see the same
+        // story. Earlier code set `status: 'success'` here and only reported
+        // 'skipped' in the outgoing SSE, which made the Pre-Game tracker's
+        // `guardSkipped = result.status === 'skipped'` check dead code.
         const result: RuntimeResult = {
           pluginId: manifest.pluginId,
           runtimeId: manifest.name,
           runId,
           turnId: input.turnId,
-          status: 'success',
+          status: 'skipped',
           output: guardOutput,
           toolCalls: [],
           durationMs: Date.now() - startTime,
@@ -1648,26 +1811,15 @@ async function executeOneRuntime(
     // are kept (conservative — don't drop unknown messages).
     let filteredHistory = messageHistory;
     if (manifest.outputKind === 'story') {
-      // Build a set of runtimeIds whose outputKind is NOT 'story' (plugin/system outputs)
-      const nonStoryRuntimeIds = new Set<string>();
-      for (const rt of completedResults.keys()) {
-        // completedResults only has current turn's runtimes; we also need
-        // historical ones. Use a broader check: any sourceRuntimeId that
-        // matches a known non-story runtime should be filtered.
-      }
-      // Simpler approach: only keep messages where:
-      // - sourceType is player/system (user messages, system messages)
-      // - sourceType is runtime AND sourceRuntimeId matches THIS runtime (own history)
-      // - sourceType is runtime AND the message looks like narrative text (not JSON)
       filteredHistory = messageHistory.filter((m) => {
         if (m.sourceType === 'player' || m.sourceType === 'system') return true;
         if (m.sourceType === 'runtime') {
-          // Keep own previous outputs
+          // Keep own previous outputs.
           if (m.sourceRuntimeId === manifest.name) return true;
-          // Filter out messages that look like structured tool output (JSON objects)
-          const content = m.content?.trim() ?? '';
-          if (content.startsWith('{') || content.startsWith('[')) return false;
-          // Keep narrative-like text from other runtimes
+          // Filter out messages that look like structured tool output so the
+          // narrator doesn't mimic JSON / block / category-list formats.
+          if (looksLikeStructuredRuntimeOutput(m.content)) return false;
+          // Keep narrative-like text from other runtimes.
           return true;
         }
         return true;

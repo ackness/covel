@@ -22,15 +22,17 @@ export const subscribeRoutes = new Hono<Env>();
 /**
  * Derive the SSE event field name from a SubscriptionEvent.
  *
- * Prefers `_subType` from payload (set by EventBus conventions) over
- * the generic `topic.type` fallback. This ensures that events like
- * `world.dimensions.changed` reach the frontend with their semantic type
- * rather than the generic `system.event`.
+ * EventBus normalises `payload._subType` onto `event.type` before handlers
+ * run (see packages/events/src/event-bus.ts), so `event.type` already holds
+ * the full semantic type (`plugin-data.changed`, `world.dimensions.changed`,
+ * `runtime.started`, …). Emit it verbatim — any rewriting here silently
+ * drops subType segments and breaks the frontend switch matchers that route
+ * plugin panels and world updates.
+ *
+ * Exported for regression tests (tests/api/subscribe-event-name.test.ts).
  */
-function deriveSseEventName(event: { topic: string; type: string; payload?: Record<string, unknown> }): string {
-  const subType = event.payload?._subType as string | undefined;
-  if (subType) return subType;
-  return `${event.topic}.${event.type.split('.').pop()}`;
+export function deriveSseEventName(event: { topic: string; type: string; payload?: Record<string, unknown> }): string {
+  return event.type;
 }
 
 // GET /events/stream?sessionId=xxx&topics=runtime,state&lastEventId=xxx

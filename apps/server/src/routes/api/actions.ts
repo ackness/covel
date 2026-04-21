@@ -318,6 +318,19 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
       // Update session turn count — derive from actual turn results to avoid
       // concurrent read-modify-write races (two parallel turns reading the same
       // stale `session.turnCount` and overwriting each other).
+      //
+      // Semantic note: `session.turnCount` measures completed turns
+      // (including Pre-Game turn 0), which differs from `turnNumber` inside
+      // `executeTurn` (which counts PLAYER messages). After the pre-game turn,
+      // `session.turnCount === 1` but the next executeTurn's `turnNumber`
+      // is still 0 (no player message has been appended yet). The two are
+      // intentionally distinct — `turnCount` drives UI labels; `turnNumber`
+      // drives trigger math. See turn-executor.ts for the turnNumber formula.
+      //
+      // Invariant we rely on: `executeTurn` always calls `store.saveTurnResult`
+      // before returning, otherwise `listTurnResults` here would miss the
+      // current turn and `turnCount` would drift behind. Locked in by
+      // tests/turn-executor-turn-result-always-saved.test.ts.
       const turnResults = await store.listTurnResults(sessionId);
       await store.updateSession(sessionId, {
         turnCount: turnResults.length,

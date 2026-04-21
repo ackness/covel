@@ -851,7 +851,12 @@ describe('TurnExecutor _interaction protocol', () => {
       toolExecutor: createToolExecutor({ findTool: (n) => toolMap.get(n), store }),
     };
 
-    const result = await executeTurn(makeTurnInput(), [charManifest], deps);
+    // Strip upstreamRequired for this unit test — the real player-init
+    // declares `upstreamRequired: [core-pregame]` so the framework skips
+    // it when pregame isn't scheduled. This test focuses on the interaction
+    // protocol in isolation and doesn't need to wire in core-pregame.
+    const isolatedManifest = { ...charManifest, upstreamRequired: undefined };
+    const result = await executeTurn(makeTurnInput(), [isolatedManifest], deps);
 
     // Should have pendingInputs with the interaction protocol
     expect(result.pendingInputs).toBeDefined();

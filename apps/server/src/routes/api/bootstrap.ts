@@ -185,6 +185,23 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
       discoveryMap.set(discovery.id, discovery);
       manifestCache.set(discovery.id, manifests);
 
+      // Sanity check: `trigger.type: 'manual'` runtimes (UI-only plugins like
+      // core-memory) must leave `priority` undefined so the scheduler never
+      // considers them. A stray priority + manual trigger will be filtered
+      // today (shouldTrigger returns isManualTrigger=false for auto flows),
+      // but the combination is almost certainly a manifest typo and will
+      // produce confusing behaviour if the trigger logic evolves. Warn loudly
+      // so plugin authors catch it during development.
+      for (const parsed of manifests) {
+        const mf = parsed.manifest;
+        if (mf.trigger?.type === 'manual' && typeof mf.priority === 'number') {
+          console.warn(
+            `[bootstrap] Runtime "${mf.name}" declares trigger.type='manual' but also sets priority=${mf.priority}. ` +
+              `Manual runtimes are UI-only and should omit priority entirely — remove one of the two to keep the scheduler intent clear.`,
+          );
+        }
+      }
+
       // Register with all manifests (first is primary for getActiveRuntimes)
       registry.register({
         id: discovery.id,
@@ -688,12 +705,41 @@ function emitPluginDataChangedEvent(
       _subType: 'plugin-data.changed',
       pluginId,
       changes,
+      // `source: 'store-proxy'` flags this write as bypassing the Session
+      // Kernel proposal/commit pipeline — it came directly from a tool or
+      // API handler calling store.setPluginData / setPluginDataBatch /
+      // deletePluginData. Future additions that route plugin-data through
+      // proposals should set source='commit-pipeline' so observers can
+      // distinguish governed writes from direct writes.
+      source: 'store-proxy',
     },
     sessionId,
     timestamp: new Date().toISOString(),
   });
 }
 
+/**
+ * Wrap a DataStore with a transparent Proxy that emits a `plugin-data.changed`
+ * event after every `setPluginData` / `setPluginDataBatch` / `deletePluginData`
+ * call, regardless of caller (kernel commit pipeline, plugin RPC handlers,
+ * plugin-local tool direct writes, admin API endpoints).
+ *
+ * Governance contract:
+ * - The emitted event carries `source: 'store-proxy'` to flag that the write
+ *   bypassed the Session Kernel proposal/commit pipeline. This is the path
+ *   used by `codex/tools/unlock-codex-entries.js`, `guide/tools/generate-guide.js`,
+ *   `builtin/character-tools.ts`, etc.
+ * - Because these writes skip the commit pipeline, `PreStateCommit` hooks
+ *   registered via `COVEL_HOOKS_V1=1` cannot currently intercept them.
+ *   Plugins that require PreStateCommit governance on their persistent data
+ *   MUST use the proposal pipeline (emit `state.patch` / `event.emit` /
+ *   future `plugin-data.set` proposal types) instead of direct store writes.
+ * - Observability is still complete: every direct write produces a
+ *   `plugin-data.changed` SessionEvent persisted by eventBus.persistEvent
+ *   into the `events` table, and is pushed to every `/events/stream`
+ *   subscriber. The frontend `plugin-data-store` applies changes to its
+ *   in-memory cache so right-panel UI updates live.
+ */
 export function wrapStoreWithPluginDataEvents(baseStore: DataStore, eventBus: EventBus): DataStore {
   return new Proxy(baseStore, {
     get(target, prop, receiver) {

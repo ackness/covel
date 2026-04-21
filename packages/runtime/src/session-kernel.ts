@@ -104,6 +104,28 @@ export function normalizeOutput(
     }
   }
 
+  // notifications[] — system-level messages surfaced to the chat feed.
+  // Each notification is normalised into a narrative.append proposal with
+  // kind='system' so it flows through the same commit path as any assistant
+  // message without requiring a new proposal type or frontend wiring.
+  //
+  // Plugins that want a richer notification UI can additionally emit
+  // `events: [{ topic: 'notification.shown', data: {...} }]` — the event.emit
+  // branch above already handles that and the frontend can subscribe.
+  const notifications = output.notifications as Array<Record<string, unknown>> | undefined;
+  if (notifications && notifications.length > 0) {
+    for (const n of notifications) {
+      const title = typeof n.title === 'string' ? n.title.trim() : '';
+      const message = typeof n.message === 'string' ? n.message.trim() : '';
+      if (!title && !message) continue; // empty notification — skip
+      const content = title && message ? `${title}\n${message}` : title || message;
+      proposals.push(makeProposal('narrative.append', source, turnId, sessionId, {
+        content,
+        kind: 'system',
+      }));
+    }
+  }
+
   return proposals;
 }
 

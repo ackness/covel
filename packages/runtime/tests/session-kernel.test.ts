@@ -173,6 +173,77 @@ describe('normalizeOutput', () => {
     });
   });
 
+  describe('notifications', () => {
+    // core-pregame and similar plugins return a `notifications[]` array of
+    // { level, title, message } objects to surface system-level messages to
+    // the player (welcome banner, world intro, etc.). Before this change the
+    // kernel silently dropped them. We map each notification to a
+    // narrative.append proposal with kind='system' so it reaches the chat
+    // surface through the same commit path as any other system message.
+    it('emits one narrative.append per notification with kind=system', () => {
+      const output = {
+        notifications: [
+          { level: 'info', title: '🌍 欢迎来到九州', message: '你的冒险即将开始...' },
+          { level: 'warn', title: '⚠ 低灵根', message: '修炼速度较慢' },
+        ],
+      };
+      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+
+      expect(proposals).toHaveLength(2);
+      expect(proposals[0].type).toBe('narrative.append');
+      expect(proposals[0].payload).toEqual({
+        content: '🌍 欢迎来到九州\n你的冒险即将开始...',
+        kind: 'system',
+      });
+      expect(proposals[1].payload).toEqual({
+        content: '⚠ 低灵根\n修炼速度较慢',
+        kind: 'system',
+      });
+    });
+
+    it('omits missing title or message gracefully', () => {
+      const output = {
+        notifications: [
+          { level: 'info', message: '仅有正文' },
+          { level: 'info', title: '仅有标题' },
+        ],
+      };
+      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+
+      expect(proposals).toHaveLength(2);
+      expect(proposals[0].payload).toMatchObject({ content: '仅有正文', kind: 'system' });
+      expect(proposals[1].payload).toMatchObject({ content: '仅有标题', kind: 'system' });
+    });
+
+    it('skips entries that have neither title nor message', () => {
+      const output = {
+        notifications: [
+          { level: 'info' },
+          { level: 'warn', message: '' },
+        ],
+      };
+      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+      expect(proposals).toHaveLength(0);
+    });
+
+    it('produces notifications in addition to narrativeOutput', () => {
+      const output = {
+        narrativeOutput: 'World intro text.',
+        notifications: [{ level: 'info', title: '欢迎', message: '开始冒险' }],
+      };
+      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+
+      expect(proposals).toHaveLength(2);
+      const kinds = proposals.map((p) => ({ type: p.type, kind: (p.payload as { kind?: string }).kind }));
+      expect(kinds).toEqual(
+        expect.arrayContaining([
+          { type: 'narrative.append', kind: 'plugin' },
+          { type: 'narrative.append', kind: 'system' },
+        ]),
+      );
+    });
+  });
+
   describe('mixed output', () => {
     it('should extract all proposal types from a complex output', () => {
       const output = {

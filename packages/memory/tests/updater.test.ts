@@ -136,4 +136,77 @@ describe('MemoryUpdater', () => {
 
     expect(result.blocksChanged).toEqual(['scene']);
   });
+
+  describe('awaitPending — prevents next-turn races', () => {
+    it('resolves immediately when no update is pending', async () => {
+      const llm = createMockLLM('{}');
+      const updater = createMemoryUpdater(manager, llm);
+      await expect(updater.awaitPending('sess-fresh')).resolves.toBeUndefined();
+    });
+
+    it('blocks until the fire-and-forget updateAfterTurn has finished writing', async () => {
+      let resolveLlm: () => void;
+      const llmDone = new Promise<void>((r) => { resolveLlm = r; });
+      const slowLlm: MemoryLLMAdapter = {
+        async complete() {
+          await llmDone;
+          return { content: JSON.stringify({ scene: 'written-after-pending-await' }) };
+        },
+      };
+
+      const updater = createMemoryUpdater(manager, slowLlm);
+      // Fire-and-forget — do not await.
+      const fire = updater.updateAfterTurn({
+        sessionId: 'sess-race',
+        narrativeText: 'turn 1',
+        currentBlocks,
+      });
+
+      // Pre-condition: block has not been written yet.
+      const before = await manager.getBlock('sess-race', 'scene');
+      expect(before?.content).not.toBe('written-after-pending-await');
+
+      // Let the LLM respond and the update finish.
+      resolveLlm!();
+      await updater.awaitPending('sess-race');
+
+      const after = await manager.getBlock('sess-race', 'scene');
+      expect(after?.content).toBe('written-after-pending-await');
+
+      // Also ensure the original promise resolved.
+      const fireResult = await fire;
+      expect(fireResult.blocksChanged).toEqual(['scene']);
+    });
+
+    it('serialises back-to-back updateAfterTurn calls for the same session', async () => {
+      const order: string[] = [];
+      let step = 0;
+      const sequenced: MemoryLLMAdapter = {
+        async complete() {
+          const me = ++step;
+          order.push(`start-${me}`);
+          await new Promise((r) => setTimeout(r, 20));
+          order.push(`end-${me}`);
+          return { content: JSON.stringify({ scene: `content-${me}` }) };
+        },
+      };
+
+      const updater = createMemoryUpdater(manager, sequenced);
+      const p1 = updater.updateAfterTurn({
+        sessionId: 'sess-seq',
+        narrativeText: 't1',
+        currentBlocks,
+      });
+      const p2 = updater.updateAfterTurn({
+        sessionId: 'sess-seq',
+        narrativeText: 't2',
+        currentBlocks,
+      });
+
+      await Promise.all([p1, p2]);
+
+      // Each call must complete before the next starts — never interleaved.
+      expect(order).toEqual(['start-1', 'end-1', 'start-2', 'end-2']);
+    });
+  });
 });
