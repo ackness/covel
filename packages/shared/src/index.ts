@@ -8,6 +8,13 @@ export {
   splitPromptCacheSegments,
   stripPromptCacheMarkers,
 } from './utils/prompt-cache.js';
+export {
+  apiKeyEnvNameToProviderId,
+  normalizeProviderKeyMap,
+  providerIdToApiKeyEnvName,
+  providerKeyToId,
+  toApiKeyEnvMap,
+} from './utils/provider-keys.js';
 
 // ── Plugin Schemas ───────────────────────────────────────────────
 export {

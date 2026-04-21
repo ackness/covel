@@ -23,6 +23,7 @@ import { resolve, join, dirname, isAbsolute } from "node:path";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { spawn } from "node:child_process";
+import { normalizeProviderKeyMap, providerKeyToId, toApiKeyEnvMap } from "@covel/shared";
 
 export interface ConfigApiDeps {
   /** Mutable map shared with the gateway adapter. PUT handlers mutate in-place. */
@@ -59,8 +60,8 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     const entries = readKeysEnv(file);
     const providers: string[] = [];
     for (const key of Object.keys(entries)) {
-      if (key.endsWith("_API_KEY") && entries[key]) {
-        providers.push(key.slice(0, -"_API_KEY".length).toLowerCase());
+      if (entries[key]) {
+        providers.push(key);
       }
     }
     return c.json({ providers });
@@ -91,14 +92,13 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     const entries = readKeysEnv(file);
 
     for (const [provider, raw] of Object.entries(body as Record<string, unknown>)) {
-      if (!/^[a-z0-9_-]+$/i.test(provider)) continue; // guard arbitrary names
-      const envKey = `${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
-      const providerId = provider.toLowerCase();
+      const providerId = providerKeyToId(provider);
+      if (!providerId) continue;
       if (typeof raw === "string" && raw.trim()) {
-        entries[envKey] = raw.trim();
+        entries[providerId] = raw.trim();
         deps.apiKeys[providerId] = raw.trim();
       } else {
-        delete entries[envKey];
+        delete entries[providerId];
         delete deps.apiKeys[providerId];
       }
     }
@@ -306,15 +306,16 @@ function readKeysEnv(file: string): Record<string, string> {
   } catch (err) {
     console.warn(`[config-api] Could not read ${file}:`, err);
   }
-  return result;
+  return normalizeProviderKeyMap(result);
 }
 
 function writeKeysEnv(file: string, entries: Record<string, string>): void {
+  const envEntries = toApiKeyEnvMap(entries);
   const header =
     `# Covel provider API keys. One KEY=VALUE per line.\n` +
     `# Managed by Settings → Desktop. Manual edits survive restarts.\n` +
     `# File mode is 0600 — keep it that way.\n\n`;
-  const body = Object.entries(entries)
+  const body = Object.entries(envEntries)
     .filter(([k, v]) => k && typeof v === "string" && v.trim())
     .map(([k, v]) => `${k}=${v.trim()}`)
     .join("\n");

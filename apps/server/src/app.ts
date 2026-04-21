@@ -25,6 +25,7 @@ import { createModelDbRoutes } from "./routes/model-db.js";
 import { createMiscApiRoutes } from "./routes/misc-api.js";
 import { createConfigApiRoutes } from "./routes/config-api.js";
 import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
+import { apiKeyEnvNameToProviderId, providerIdToApiKeyEnvName } from "@covel/shared";
 
 /**
  * Merge `~/.covel/keys.env` (or `$COVEL_HOME/keys.env` when overridden)
@@ -51,7 +52,8 @@ function loadKeysEnvInto(target: NodeJS.ProcessEnv): void {
       ) {
         val = val.slice(1, -1);
       }
-      if (key && target[key] === undefined) target[key] = val;
+      const envKey = providerIdToApiKeyEnvName(key);
+      if (envKey && target[envKey] === undefined) target[envKey] = val;
     }
   } catch (err) {
     console.warn(`[server] Could not read ${file}:`, err);
@@ -137,8 +139,8 @@ const store = await createStoreFromEnv();
 // to llm.toml without requiring code changes here.
 const apiKeys: Record<string, string> = {};
 for (const [key, value] of Object.entries(process.env)) {
-  if (key.endsWith("_API_KEY") && value) {
-    const provider = key.slice(0, -8).toLowerCase(); // strip "_API_KEY" suffix
+  const provider = apiKeyEnvNameToProviderId(key);
+  if (provider && value) {
     apiKeys[provider] = value;
   }
 }

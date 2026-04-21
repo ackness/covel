@@ -3,6 +3,10 @@
  */
 
 import type { I18nText } from "@covel/shared";
+import {
+  normalizeProviderKeyMap,
+  providerKeyToId,
+} from "@covel/shared";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -955,7 +959,7 @@ function readLocalKeys(): Record<string, string> {
   try {
     const parsed = JSON.parse(stored);
     if (parsed && typeof parsed === "object") {
-      return parsed as Record<string, string>;
+      return normalizeProviderKeyMap(parsed as Record<string, string>);
     }
   } catch {
     // ignore
@@ -965,7 +969,7 @@ function readLocalKeys(): Record<string, string> {
 
 function writeLocalKeys(keys: Record<string, string>): void {
   if (typeof localStorage === "undefined") return;
-  localStorage.setItem(LEGACY_KEYS_STORAGE, JSON.stringify(keys));
+  localStorage.setItem(LEGACY_KEYS_STORAGE, JSON.stringify(normalizeProviderKeyMap(keys)));
 }
 
 async function pushKeysToServer(keys: Record<string, string>): Promise<void> {
@@ -998,11 +1002,12 @@ export async function loadProviderKeysFromStorage(): Promise<void> {
       const fromFile = await ipc.invoke<Record<string, string>>("covel:keys:load");
       const legacy = readLocalKeys();
       if (Object.keys(legacy).length > 0 && Object.keys(fromFile ?? {}).length === 0) {
-        await ipc.invoke("covel:keys:save", legacy);
-        providerKeysCache = { ...legacy };
+        const normalized = normalizeProviderKeyMap(legacy);
+        await ipc.invoke("covel:keys:save", normalized);
+        providerKeysCache = { ...normalized };
         try { localStorage.removeItem(LEGACY_KEYS_STORAGE); } catch { /* ignore */ }
       } else {
-        providerKeysCache = { ...(fromFile ?? {}), ...legacy };
+        providerKeysCache = normalizeProviderKeyMap({ ...(fromFile ?? {}), ...legacy });
         if (Object.keys(legacy).length > 0) {
           await ipc.invoke("covel:keys:save", providerKeysCache);
           try { localStorage.removeItem(LEGACY_KEYS_STORAGE); } catch { /* ignore */ }
@@ -1025,10 +1030,10 @@ export async function loadProviderKeysFromStorage(): Promise<void> {
         const legacy = readLocalKeys();
         if (Object.keys(legacy).length > 0) {
           // One-shot migration: push localStorage keys to server, then clear.
-          await pushKeysToServer(legacy);
+          await pushKeysToServer(normalizeProviderKeyMap(legacy));
           try { localStorage.removeItem(LEGACY_KEYS_STORAGE); } catch { /* ignore */ }
         }
-        providerKeysCache = legacy; // server doesn't return values; trust user session
+        providerKeysCache = normalizeProviderKeyMap(legacy); // server doesn't return values; trust user session
         return;
       }
     }
@@ -1040,22 +1045,22 @@ export async function loadProviderKeysFromStorage(): Promise<void> {
 }
 
 export function getProviderKeys(): Record<string, string> {
-  return { ...providerKeysCache };
+  return { ...normalizeProviderKeyMap(providerKeysCache) };
 }
 
 export function setProviderKeys(keys: Record<string, string>): void {
-  providerKeysCache = { ...keys };
+  providerKeysCache = normalizeProviderKeyMap(keys);
   const ipc = getIpc();
   if (ipc) {
-    void ipc.invoke("covel:keys:save", keys).catch((err) => {
+    void ipc.invoke("covel:keys:save", providerKeysCache).catch((err) => {
       console.warn("[api] setProviderKeys (ipc) failed:", err);
     });
   } else if (desktopRestMode) {
-    void pushKeysToServer(keys).catch((err) => {
+    void pushKeysToServer(providerKeysCache).catch((err) => {
       console.warn("[api] setProviderKeys (rest) failed:", err);
     });
   } else {
-    writeLocalKeys(keys);
+    writeLocalKeys(providerKeysCache);
   }
 }
 
@@ -1063,11 +1068,11 @@ export function setProviderKeys(keys: Record<string, string>): void {
 export async function setProviderKeysAsync(
   keys: Record<string, string>,
 ): Promise<{ ok: boolean }> {
-  providerKeysCache = { ...keys };
+  providerKeysCache = normalizeProviderKeyMap(keys);
   const ipc = getIpc();
   if (ipc) {
     try {
-      const result = await ipc.invoke<{ ok: boolean }>("covel:keys:save", keys);
+      const result = await ipc.invoke<{ ok: boolean }>("covel:keys:save", providerKeysCache);
       return result ?? { ok: false };
     } catch (err) {
       console.warn("[api] setProviderKeysAsync (ipc) failed:", err);
@@ -1076,14 +1081,14 @@ export async function setProviderKeysAsync(
   }
   if (desktopRestMode) {
     try {
-      await pushKeysToServer(keys);
+      await pushKeysToServer(providerKeysCache);
       return { ok: true };
     } catch (err) {
       console.warn("[api] setProviderKeysAsync (rest) failed:", err);
       return { ok: false };
     }
   }
-  writeLocalKeys(keys);
+  writeLocalKeys(providerKeysCache);
   return { ok: true };
 }
 
@@ -1123,14 +1128,28 @@ export function getCustomPresets(): CustomPreset[] {
   const stored = localStorage.getItem(CUSTOM_PRESETS_KEY);
   if (!stored) return [];
   try {
-    return JSON.parse(stored);
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((preset): preset is CustomPreset => !!preset && typeof preset === "object")
+      .map((preset) => ({
+        ...preset,
+        provider: providerKeyToId(preset.provider) ?? String(preset.provider ?? "").trim(),
+      }))
+      .filter((preset) => preset.provider.length > 0);
   } catch {
     return [];
   }
 }
 
 export function setCustomPresets(presets: CustomPreset[]): void {
-  localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(presets));
+  const normalized = presets
+    .map((preset) => ({
+      ...preset,
+      provider: providerKeyToId(preset.provider) ?? preset.provider.trim(),
+    }))
+    .filter((preset) => preset.provider.length > 0);
+  localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(normalized));
 }
 
 export function addCustomPreset(preset: CustomPreset): void {

@@ -42,8 +42,8 @@ protocol = "openai-chat-v1"
  *   2. Built-in DEFAULT_LLM_TOML — deepseek "story" slot, always available
  *
  * We never throw on missing config. The desktop app can boot with nothing
- * configured; users can then add slots / keys through the Settings UI,
- * which writes to userConfigDir/llm.toml for subsequent launches.
+ * configured; persistent llm.toml edits stay user-managed in the desktop
+ * config directory, and request-scoped UI overrides ride through headers.
  */
 export function createAiStack(): AiStack {
   let config: AiConfig;

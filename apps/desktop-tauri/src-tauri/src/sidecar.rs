@@ -208,6 +208,44 @@ fn check_exists(p: &Path, label: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn provider_key_to_env_name(input: &str) -> Option<String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let upper = trimmed.to_uppercase();
+    if upper.ends_with("_API_KEY")
+        && upper
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+    {
+        return Some(upper);
+    }
+
+    let sanitized = trimmed
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_uppercase()
+            } else if c == '-' || c == '_' {
+                '_'
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>()
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("_");
+
+    if sanitized.is_empty() {
+        return None;
+    }
+    Some(format!("{}_API_KEY", sanitized))
+}
+
 /// Parse a `.env`-style file into an iterable. Missing file → empty.
 /// Strips matching single/double quotes around values, skips blanks and
 /// comment lines. Keeps implementation minimal — no interpolation support.
@@ -229,8 +267,8 @@ fn read_env_file(path: &Path) -> Vec<(String, String)> {
             {
                 val = val[1..val.len() - 1].to_string();
             }
-            if !key.is_empty() {
-                out.push((key, val));
+            if let Some(env_key) = provider_key_to_env_name(&key) {
+                out.push((env_key, val));
             }
         }
     }

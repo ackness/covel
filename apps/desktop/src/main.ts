@@ -38,6 +38,7 @@ import {
   userServerPortFile,
   writeDataRoot,
 } from "./paths.js";
+import { normalizeProviderKeyMap, toApiKeyEnvMap } from "./provider-keys.js";
 
 // Name matters on macOS (app menu "About …") and Windows (DPAPI service
 // label if we ever re-introduce secure-storage). Derived default would be
@@ -372,23 +373,27 @@ function loadEnvFiles(baseDir: string): Record<string, string> {
 }
 
 /**
- * Read `~/.covel/keys.env` — KEY=VALUE lines, same syntax as .env. Missing
- * file is fine (fresh install). Returned record is injected into the server
- * sidecar's environment; the server pulls `*_API_KEY` entries for provider
- * resolution.
+ * Read `~/.covel/keys.env` into a provider-id keyed record for the renderer.
+ * Missing file is fine (fresh install). Legacy bare keys like `deepseek=...`
+ * are folded into the same shape as `DEEPSEEK_API_KEY=...`.
  */
 function loadKeysEnv(keysFile: string): Record<string, string> {
   const result: Record<string, string> = {};
   if (!fs.existsSync(keysFile)) return result;
   parseEnvFileInto(keysFile, result);
-  return result;
+  return normalizeProviderKeyMap(result);
+}
+
+function loadKeysEnvForChild(keysFile: string): Record<string, string> {
+  return toApiKeyEnvMap(loadKeysEnv(keysFile));
 }
 
 function saveKeysEnv(keysFile: string, keys: Record<string, string>): void {
+  const envKeys = toApiKeyEnvMap(keys);
   const body =
     `# Covel provider API keys. One KEY=VALUE per line.\n` +
     `# Example:\n#   DEEPSEEK_API_KEY=sk-xxx\n#   OPENAI_API_KEY=sk-xxx\n\n` +
-    Object.entries(keys)
+    Object.entries(envKeys)
       .filter(([k, v]) => k && typeof v === "string" && v.trim())
       .map(([k, v]) => `${k}=${v.trim()}`)
       .join("\n") +
@@ -456,7 +461,7 @@ async function startServer(paths: ReturnType<typeof ensureUserPaths>): Promise<n
   const tsxPath = resolveTsx();
 
   const envOverrides = loadEnvFiles(projectRoot);
-  const keysEnv = loadKeysEnv(paths.userKeysEnvPath);
+  const keysEnv = loadKeysEnvForChild(paths.userKeysEnvPath);
 
   // Data dir lives at <dataRoot>/; ensure the db's parent (and logs dir) exist.
   fs.mkdirSync(path.dirname(paths.dbPath), { recursive: true });
