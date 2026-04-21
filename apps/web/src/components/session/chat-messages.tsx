@@ -151,29 +151,52 @@ export function ChatMessages({
     return (
       <div
         key={msg.id}
-        className={`flex flex-col gap-1.5 ${isUser ? "items-end" : ""}`}
+        className={`flex flex-col gap-1.5 paper:gap-1.5 ${isUser ? "items-end paper:items-start paper:w-full" : "paper:w-full"}`}
       >
-        <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+        {/* Eyebrow label — Modern: small uppercase; Paper: mono eyebrow tinted primary for user */}
+        <span
+          className={
+            "text-xs text-muted-foreground uppercase tracking-wider font-semibold " +
+            "paper:font-mono paper:text-[10px] paper:tracking-[0.12em] " +
+            (isUser ? "paper:text-[color:var(--color-primary)]" : "paper:text-muted-foreground")
+          }
+        >
           {isUser ? "Player" : "Assistant"}
           {msg.turnId && (
-            <span className="ml-2 font-mono text-[10px]">{msg.turnId}</span>
+            <span className="ml-2 font-mono text-[10px] paper:text-[10px]">
+              {isUser ? `· ${msg.turnId}` : msg.turnId}
+            </span>
           )}
         </span>
+
         <div
-          className={`border border-border p-4 text-sm wrap-break-words max-w-[90%] md:max-w-[85%] ${
-            isUser
-              ? "bg-primary text-primary-foreground"
-              : "bg-card text-card-foreground prose prose-sm dark:prose-invert max-w-none"
-          }`}
+          className={
+            "text-sm wrap-break-words max-w-[90%] md:max-w-[85%] " +
+            "paper:max-w-none paper:w-full paper:p-0 paper:bg-transparent paper:text-foreground " +
+            (isUser
+              ? "border border-border p-4 bg-primary text-primary-foreground " +
+                // Paper user turn: bare, left-aligned, 2px accent bar on the left
+                "paper:border-0 paper:border-l-2 paper:border-l-[color:var(--color-primary)] paper:pl-3.5 paper:py-0"
+              : "border border-border p-4 bg-card text-card-foreground prose prose-sm dark:prose-invert max-w-none " +
+                // Paper assistant narrative: iA Writer style — no card, centered column, serif 18/1.78/300
+                "paper:border-0 paper:bg-transparent paper:text-foreground paper:p-0 paper-narrative paper:max-w-[42rem] paper:mx-0")
+          }
         >
-          <Markdown>{msg.content}</Markdown>
+          {isUser ? (
+            <p className="paper:font-sans paper:text-[14px] paper:leading-[1.6] paper:text-foreground m-0">
+              {msg.content}
+            </p>
+          ) : (
+            <Markdown>{msg.content}</Markdown>
+          )}
         </div>
+
         {showImageButton && (
           <div className="flex items-center gap-1.5">
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1"
+              className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1 paper:font-mono paper:tracking-[0.08em]"
               disabled={executing}
               onClick={() => handleGenerateImage(msg.content)}
               title={t("coreImage.generateButton")}
@@ -236,20 +259,22 @@ export function ChatMessages({
 
   return (
     <ScrollArea className="flex-1 min-h-0">
-      <div className="p-4 md:p-6 space-y-6 md:space-y-8 max-w-4xl mx-auto w-full">
+      <div className="p-4 md:p-6 space-y-6 md:space-y-8 max-w-4xl mx-auto w-full paper:max-w-[42rem] paper:px-8 paper:py-10 paper:space-y-5">
         {messages.length === 0 && !executing && (
-          <div className="flex flex-col items-center justify-center py-16 text-center space-y-6">
+          <div className="flex flex-col items-center justify-center py-16 text-center space-y-6 paper:py-24">
             {(phase === "init" || phase === "pre-game") ? (
               <>
-                <div className="space-y-2">
-                  <p className="text-base font-semibold">{world ? (typeof world.name === "string" ? world.name : (world.name as Record<string, string>)["zh-CN"] ?? "") : ""}</p>
-                  <p className="text-sm text-muted-foreground max-w-xs">
+                <div className="space-y-2 paper:space-y-3">
+                  <p className="text-base font-semibold paper:font-serif paper:italic paper:font-normal paper:text-2xl paper:text-foreground">
+                    {world ? (typeof world.name === "string" ? world.name : (world.name as Record<string, string>)["zh-CN"] ?? "") : ""}
+                  </p>
+                  <p className="text-sm text-muted-foreground max-w-xs paper:font-serif paper:max-w-md paper:leading-relaxed">
                     {t("session.beginAdventureHint")}
                   </p>
                 </div>
                 <Button
                   size="lg"
-                  className="px-10 py-5 text-sm uppercase tracking-widest font-bold"
+                  className="px-10 py-5 text-sm uppercase tracking-widest font-bold paper:rounded-md paper:bg-[color:var(--color-primary)] paper:text-[color:var(--color-primary-foreground)] paper:font-sans paper:font-medium paper:tracking-[0.1em]"
                   onClick={onBeginAdventure}
                 >
                   <Flame className="w-4 h-4 mr-2" />

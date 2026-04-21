@@ -45,11 +45,11 @@ export function RuntimeBindingPanel({ bindingState }: RuntimeBindingPanelProps) 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {allBound ? (
-            <Badge variant="secondary" className="text-[10px] bg-green-500/10 text-green-600">
+            <Badge variant="secondary" className="text-[10px] bg-green-500/10 text-green-600 paper:rounded-full paper:font-mono paper:tracking-[0.04em] paper:uppercase paper:bg-green-500/15">
               {t("session.allBound")}
             </Badge>
           ) : (
-            <Badge variant="secondary" className="text-[10px] bg-amber-500/10 text-amber-600">
+            <Badge variant="secondary" className="text-[10px] bg-amber-500/10 text-amber-600 paper:rounded-full paper:font-mono paper:tracking-[0.04em] paper:uppercase paper:bg-amber-500/15">
               {t("session.unboundRuntimes")}
             </Badge>
           )}
@@ -78,10 +78,10 @@ export function RuntimeBindingPanel({ bindingState }: RuntimeBindingPanelProps) 
                     </span>
                     <Badge
                       variant="outline"
-                      className={`text-[10px] shrink-0 ${
+                      className={`text-[10px] shrink-0 paper:rounded-full paper:font-mono paper:tracking-[0.04em] paper:uppercase ${
                         entry.providerTag === "image"
-                          ? "border-purple-500/50 text-purple-600"
-                          : "border-blue-500/50 text-blue-600"
+                          ? "border-purple-500/50 text-purple-600 paper:border-purple-500/60"
+                          : "border-blue-500/50 text-blue-600 paper:border-[color:var(--color-primary)]/60 paper:text-[color:var(--color-primary)]"
                       }`}
                     >
                       {entry.providerTag}

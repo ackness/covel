@@ -26,6 +26,8 @@ import {
 } from "@/services/api.js";
 import { useSession } from "@/stores/session-store.js";
 import { useLocalePreference, type SupportedLocale } from "@/hooks/useLocalePreference";
+import { useAppearance, type Appearance } from "@/hooks/useAppearance";
+import { APPEARANCES } from "@/lib/appearance";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -38,6 +40,7 @@ const LEGACY_SLOTS = ["story", "plugin", "memory", "image", "fast", "balance", "
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const { t } = useTranslation();
   const { locale, setLocale } = useLocalePreference();
+  const { appearance, setAppearance } = useAppearance();
   const { state } = useSession();
   const [saved, setSaved] = useState(false);
 
@@ -298,6 +301,34 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             <option value="zh-CN">{t("settings.langZh")}</option>
             <option value="en-US">{t("settings.langEn")}</option>
           </select>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 px-0.5 py-1 border-b border-border">
+          <Label htmlFor="appearance-select" className="text-xs uppercase tracking-widest text-muted-foreground">
+            {t("settings.appearance", "Appearance")}
+          </Label>
+          <div className="inline-flex border border-border overflow-hidden">
+            {APPEARANCES.map((id) => {
+              const active = appearance === id;
+              const labelKey = id === "paper" ? "settings.appearancePaper" : "settings.appearanceModern";
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setAppearance(id as Appearance)}
+                  aria-pressed={active}
+                  className={
+                    "px-3 py-1 text-[11px] uppercase tracking-widest font-mono transition-colors " +
+                    (active
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:text-foreground")
+                  }
+                >
+                  {t(labelKey, id)}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Storage mode is always "remote" (server-side SQLite). Toggle removed. */}

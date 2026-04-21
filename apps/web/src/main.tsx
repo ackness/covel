@@ -6,9 +6,13 @@ import { SessionProvider } from "@/stores/session-store";
 import { setStorageMode } from "@/services/data-service";
 import { loadProviderKeysFromStorage } from "@/services/api";
 import { probeDesktopMode } from "@/lib/desktop-bridge";
+import { applyAppearance, resolveInitialAppearance } from "@/lib/appearance";
 import "@/i18n";
 import "@/index.css";
 import { routeTree } from "./routeTree.gen";
+
+// Apply the stored appearance before React hydrates to avoid a flash.
+applyAppearance(resolveInitialAppearance());
 
 const router = createRouter({ routeTree });
 

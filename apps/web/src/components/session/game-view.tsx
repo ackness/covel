@@ -343,12 +343,12 @@ export function GameView({
           className="bg-background flex flex-col min-w-0 min-h-0"
         >
           {/* Header */}
-          <div className="h-14 px-3 border-b border-border flex justify-between items-center bg-background z-10 shrink-0">
-            <div className="flex items-center gap-2 overflow-hidden">
+          <div className="h-14 px-3 border-b border-border flex justify-between items-center bg-background z-10 shrink-0 paper:h-[52px] paper:bg-card">
+            <div className="flex items-center gap-2 overflow-hidden paper:gap-3">
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-8 w-8 rounded-sm shrink-0 ${!isLeftCollapsed && "bg-accent text-accent-foreground"}`}
+                className={`h-8 w-8 rounded-sm shrink-0 paper:rounded-full paper:border paper:border-border ${!isLeftCollapsed && "bg-accent text-accent-foreground"}`}
                 onClick={toggleLeftPanel}
               >
                 <SlidersHorizontal className="w-4 h-4" />
@@ -360,6 +360,24 @@ export function GameView({
                 onGoPrep={onResetSession}
                 disabled={executing}
               />
+              {/* Paper-only streaming pill — Variant A style */}
+              <span
+                className={
+                  "hidden paper:inline-flex items-center gap-1 ml-2 px-2 py-[3px] rounded-full border text-[10px] font-mono uppercase tracking-[0.08em] " +
+                  (executing
+                    ? "border-transparent bg-[color:var(--color-primary)]/15 text-[color:var(--color-primary)]"
+                    : "border-transparent bg-[oklch(62%_0.10_140_/_0.18)] text-[oklch(62%_0.10_140)]")
+                }
+                aria-live="polite"
+              >
+                <span
+                  className={
+                    "w-[5px] h-[5px] rounded-full bg-current " +
+                    (executing ? "paper-pulse-dot" : "")
+                  }
+                />
+                {executing ? "Streaming" : "Playing"}
+              </span>
             </div>
             <div className="flex items-center gap-4 shrink-0">
               <div className="hidden sm:flex items-center border border-border rounded-md overflow-hidden">
@@ -511,13 +529,13 @@ export function GameView({
           )}
 
           {/* Input — always fixed at bottom */}
-          <div className="p-3 md:p-4 border-t border-border bg-muted/5 shrink-0">
+          <div className="p-3 md:p-4 border-t border-border bg-muted/5 shrink-0 paper:bg-background paper:py-5">
             {phase === "ended" ? (
-              <p className="text-center text-sm text-muted-foreground">
+              <p className="text-center text-sm text-muted-foreground paper:font-serif paper:italic paper:text-base">
                 {t("session.ended", "This session has ended.")}
               </p>
             ) : (
-              <div className="flex gap-2 max-w-4xl mx-auto">
+              <div className="flex gap-2 max-w-4xl mx-auto paper:max-w-[42rem] paper:gap-2.5">
                 <input
                   type="text"
                   value={inputValue}
@@ -532,12 +550,18 @@ export function GameView({
                       : t("session.inputPlaceholderAny", "Send a message...")
                   }
                   disabled={executing}
-                  className="flex-1 min-w-0 bg-background border border-border px-3 md:px-4 py-2 md:py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary transition-all disabled:opacity-50"
+                  className={
+                    "flex-1 min-w-0 bg-background border border-border px-3 md:px-4 py-2 md:py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary transition-all disabled:opacity-50 " +
+                    "paper:rounded-md paper:bg-card paper:border-[color:var(--color-border)] paper:font-serif paper:text-[15px] paper:px-4 paper:py-3 paper:focus:ring-[color:var(--color-primary)]/40"
+                  }
                 />
                 <Button
                   onClick={handleSubmit}
                   disabled={executing || !inputValue.trim()}
-                  className="rounded-none px-4 md:px-6 h-auto shrink-0"
+                  className={
+                    "rounded-none px-4 md:px-6 h-auto shrink-0 " +
+                    "paper:rounded-md paper:px-0 paper:w-[46px] paper:h-[46px] paper:bg-[color:var(--color-primary)] paper:text-[color:var(--color-primary-foreground)] paper:hover:opacity-90"
+                  }
                   size="sm"
                 >
                   {executing ? (

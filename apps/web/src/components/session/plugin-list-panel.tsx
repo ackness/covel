@@ -85,21 +85,23 @@ function PluginItem({ pkg, sessionPlugin, executing, onToggle, resolvedSlots, se
   const toggleDisabled = executing === true || isLocked;
 
   return (
-    <div className="border border-border rounded-md overflow-hidden">
+    <div className="border border-border rounded-md overflow-hidden paper:rounded-none paper:border-x-0 paper:border-t-0 paper:border-b paper:border-dashed paper:last:border-b-0">
       {/* Header — flex row with expand button and toggle as siblings (no nested buttons) */}
-      <div className="flex items-center gap-0 hover:bg-muted/50 transition-colors">
+      <div className="flex items-center gap-0 hover:bg-muted/50 transition-colors paper:hover:bg-transparent">
         <button
           type="button"
-          className="flex-1 flex items-center gap-2 px-2.5 py-2 text-left min-w-0"
+          className="flex-1 flex items-center gap-2 px-2.5 py-2 text-left min-w-0 paper:px-1 paper:py-2"
           onClick={() => setExpanded((v) => !v)}
         >
           <ChevronRight
             className={`w-3 h-3 shrink-0 text-muted-foreground transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
           />
-          <Puzzle className="w-3.5 h-3.5 shrink-0 text-primary/60" />
-          <span className="text-xs font-medium truncate flex-1">{displayName}</span>
+          <Puzzle className="w-3.5 h-3.5 shrink-0 text-primary/60 paper:hidden" />
+          <span className="text-xs font-medium truncate flex-1 paper:font-mono paper:text-[11px] paper:font-normal paper:text-foreground">
+            {displayName}
+          </span>
           {mainRuntime && (
-            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 shrink-0">
+            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 shrink-0 paper:bg-transparent paper:border paper:border-border paper:rounded-full paper:font-mono paper:tracking-[0.04em] paper:text-muted-foreground">
               P{mainRuntime.priority}
             </Badge>
           )}
@@ -124,7 +126,10 @@ function PluginItem({ pkg, sessionPlugin, executing, onToggle, resolvedSlots, se
               "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent mr-2.5",
               "transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2",
               "focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              isActive ? "bg-primary" : "bg-input",
+              "paper:h-3 paper:w-[22px] paper:border paper:border-[color:var(--color-border)]",
+              isActive
+                ? "bg-primary paper:bg-[color:var(--color-primary)] paper:border-transparent"
+                : "bg-input paper:bg-[color:var(--color-muted)]",
               toggleDisabled ? "opacity-50 cursor-not-allowed" : "",
             ].join(" ")}
             onClick={() => { if (!toggleDisabled) onToggle(pkg.name, !isActive); }}
@@ -132,7 +137,10 @@ function PluginItem({ pkg, sessionPlugin, executing, onToggle, resolvedSlots, se
             <span
               className={[
                 "pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out",
-                isActive ? "translate-x-3" : "translate-x-0",
+                "paper:h-2 paper:w-2 paper:shadow-none",
+                isActive
+                  ? "translate-x-3 paper:translate-x-[10px] paper:bg-[color:var(--color-primary-foreground)]"
+                  : "translate-x-0 paper:translate-x-[1px] paper:bg-muted-foreground",
               ].join(" ")}
             />
           </button>
@@ -388,25 +396,27 @@ function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, session
   const runtimeLabel = RUNTIME_TYPE_ICONS[plugin.runtimeType ?? "agent"] ?? "LLM";
 
   return (
-    <div className="border border-border rounded-md overflow-hidden">
+    <div className="border border-border rounded-md overflow-hidden paper:rounded-none paper:border-x-0 paper:border-t-0 paper:border-b paper:border-dashed paper:last:border-b-0">
       {/* Header — flex row with expand button and toggle as siblings (no nested buttons) */}
-      <div className="flex items-center gap-0 hover:bg-muted/50 transition-colors">
+      <div className="flex items-center gap-0 hover:bg-muted/50 transition-colors paper:hover:bg-transparent">
         <button
           type="button"
-          className="flex-1 flex items-center gap-2 px-2.5 py-2 text-left min-w-0"
+          className="flex-1 flex items-center gap-2 px-2.5 py-2 text-left min-w-0 paper:px-1 paper:py-2"
           onClick={() => setExpanded((v) => !v)}
         >
           <ChevronRight
             className={`w-3 h-3 shrink-0 text-muted-foreground transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
           />
-          <Puzzle className="w-3.5 h-3.5 shrink-0 text-primary/60" />
-          <span className="text-xs font-medium truncate flex-1">{displayName}</span>
+          <Puzzle className="w-3.5 h-3.5 shrink-0 text-primary/60 paper:hidden" />
+          <span className="text-xs font-medium truncate flex-1 paper:font-mono paper:text-[11px] paper:font-normal paper:text-foreground">
+            {displayName}
+          </span>
           {plugin.priority !== undefined && (
-            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 shrink-0">
+            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 shrink-0 paper:bg-transparent paper:border paper:border-border paper:rounded-full paper:font-mono paper:tracking-[0.04em] paper:text-muted-foreground">
               P{plugin.priority}
             </Badge>
           )}
-          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0">
+          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0 paper:rounded-full paper:font-mono paper:tracking-[0.04em]">
             {runtimeLabel}
           </Badge>
           {isLocked && (
@@ -465,7 +475,10 @@ function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, session
               "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent mr-2.5",
               "transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2",
               "focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              plugin.isActive ? "bg-primary" : "bg-input",
+              "paper:h-3 paper:w-[22px] paper:border paper:border-[color:var(--color-border)]",
+              plugin.isActive
+                ? "bg-primary paper:bg-[color:var(--color-primary)] paper:border-transparent"
+                : "bg-input paper:bg-[color:var(--color-muted)]",
               toggleDisabled ? "opacity-50 cursor-not-allowed" : "",
             ].join(" ")}
             onClick={() => { if (!toggleDisabled) onToggle(plugin.id, !plugin.isActive); }}
@@ -473,7 +486,10 @@ function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, session
             <span
               className={[
                 "pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out",
-                plugin.isActive ? "translate-x-3" : "translate-x-0",
+                "paper:h-2 paper:w-2 paper:shadow-none",
+                plugin.isActive
+                  ? "translate-x-3 paper:translate-x-[10px] paper:bg-[color:var(--color-primary-foreground)]"
+                  : "translate-x-0 paper:translate-x-[1px] paper:bg-muted-foreground",
               ].join(" ")}
             />
           </button>

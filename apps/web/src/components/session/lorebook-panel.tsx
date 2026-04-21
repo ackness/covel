@@ -194,9 +194,10 @@ function LorebookEntryCard({
             <span
               className={clsx(
                 "px-1 py-px rounded text-[9px] uppercase tracking-wider font-medium",
+                "paper:rounded-full paper:font-mono paper:tracking-[0.06em] paper:px-1.5 paper:bg-transparent paper:border paper:border-border",
                 entry.strategy === "constant"
-                  ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300"
-                  : "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300",
+                  ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 paper:text-[color:var(--color-primary)]"
+                  : "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 paper:text-muted-foreground",
               )}
             >
               {entry.strategy}
@@ -230,13 +231,19 @@ function LorebookEntryCard({
             title={entry.enabled ? t("lorebook.disable") : t("lorebook.enable")}
             className={clsx(
               "w-8 h-4 rounded-full relative transition-colors disabled:opacity-50",
-              entry.enabled ? "bg-emerald-500" : "bg-muted-foreground/30",
+              "paper:h-3 paper:w-[22px] paper:border paper:border-border",
+              entry.enabled
+                ? "bg-emerald-500 paper:bg-[color:var(--color-primary)] paper:border-transparent"
+                : "bg-muted-foreground/30 paper:bg-muted",
             )}
           >
             <span
               className={clsx(
                 "absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all",
-                entry.enabled ? "left-[18px]" : "left-0.5",
+                "paper:h-2 paper:w-2 paper:top-[3px]",
+                entry.enabled
+                  ? "left-[18px] paper:left-[11px] paper:bg-[color:var(--color-primary-foreground)]"
+                  : "left-0.5 paper:left-[3px] paper:bg-muted-foreground",
               )}
             />
           </button>
