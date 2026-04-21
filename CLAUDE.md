@@ -31,6 +31,7 @@ Before changing anything non-trivial, consult the matching reference doc — the
 | Prompt externalisation spec | [devs/docs/prompt-externalization-spec.md](./devs/docs/prompt-externalization-spec.md) |
 | World package spec (world.yaml + WORLD.md) | [devs/docs/world-package-spec.md](./devs/docs/world-package-spec.md) |
 | Plugin system requirements, refactor plans | [devs/docs/plugin-system-req.md](./devs/docs/plugin-system-req.md) · [devs/docs/refactor-plan/](./devs/docs/refactor-plan/) |
+| Architecture audit follow-up tickets (F3/F4/F5/F7) | [devs/docs/architecture-audit-followups/](./devs/docs/architecture-audit-followups/) |
 | Contributing & release workflow | [docs/CONTRIBUTING.md](./docs/CONTRIBUTING.md) |
 
 ## Commands
