@@ -107,6 +107,71 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     return c.json({ ok: true });
   });
 
+  // GET /api/config/settings — return the entire settings.json bundle.
+  // Tauri / self-deploy uses this in place of the Electron `covel:settings:*`
+  // IPC channels. Web deployments never see `isDesktop: true` so this never
+  // leaks on production web tiers.
+  app.get("/api/config/settings", (c) => {
+    const covelHome = resolveCovelHome();
+    if (!covelHome) {
+      return c.json({ schemaVersion: 1, savedAt: "", entries: {} });
+    }
+    const file = join(covelHome, "settings.json");
+    try {
+      if (!existsSync(file)) {
+        return c.json({ schemaVersion: 1, savedAt: "", entries: {} });
+      }
+      const raw = readFileSync(file, "utf-8");
+      const parsed = JSON.parse(raw) as {
+        schemaVersion?: number;
+        savedAt?: string;
+        entries?: Record<string, unknown>;
+      };
+      return c.json({
+        schemaVersion: parsed.schemaVersion ?? 1,
+        savedAt: parsed.savedAt ?? "",
+        entries: parsed.entries ?? {},
+      });
+    } catch {
+      return c.json({ schemaVersion: 1, savedAt: "", entries: {} });
+    }
+  });
+
+  // PUT /api/config/settings — body: { entries: Record<string, unknown> }
+  // Atomically rewrites the bundle. Mode 0600 to match `keys.env` — even
+  // though `settings.json` should not contain secrets, the user might
+  // import/export with `includeSecrets: true`.
+  app.put("/api/config/settings", async (c) => {
+    const covelHome = resolveCovelHome();
+    if (!covelHome) {
+      return c.json({ error: "Not a desktop deployment" }, 400);
+    }
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    if (!body || typeof body !== "object") {
+      return c.json({ error: "Body must be { entries: object }" }, 400);
+    }
+    const entries =
+      (body as { entries?: unknown }).entries &&
+      typeof (body as { entries?: unknown }).entries === "object"
+        ? ((body as { entries?: Record<string, unknown> }).entries ?? {})
+        : {};
+
+    const payload = {
+      schemaVersion: 1,
+      savedAt: new Date().toISOString(),
+      entries,
+    };
+    const file = join(covelHome, "settings.json");
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify(payload, null, 2) + "\n", { mode: 0o600 });
+    return c.json({ ok: true });
+  });
+
   // PUT /api/config/data-root — body: { path: string }
   // Rewrites `[paths] data_root` in `~/.covel/config.toml`. Does NOT move
   // existing data: the contract is "new location, fresh start; old data

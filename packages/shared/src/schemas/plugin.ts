@@ -277,6 +277,36 @@ export const uiSpecSchema = z
   })
   .strict();
 
+// ── User-declared plugin settings ────────────────────────────────
+
+const i18nTextLoose = z.union([z.string(), z.record(z.string(), z.string())]);
+
+export const pluginUserSettingSpecSchema = z
+  .object({
+    key: z
+      .string()
+      .min(1)
+      .regex(/^[a-zA-Z][a-zA-Z0-9_-]*$/, {
+        message: 'key must start with a letter and contain only letters/digits/underscore/hyphen',
+      }),
+    type: z.enum(['text', 'number', 'toggle', 'select', 'textarea']),
+    default: z.unknown(),
+    label: i18nTextLoose,
+    description: i18nTextLoose.optional(),
+    min: z.number().optional(),
+    max: z.number().optional(),
+    step: z.number().optional(),
+    options: z
+      .array(
+        z.object({
+          value: z.string(),
+          label: i18nTextLoose,
+        }),
+      )
+      .optional(),
+  })
+  .strict();
+
 // ── Runtime manifest ─────────────────────────────────────────────
 
 export const runtimeManifestSchema = z
@@ -336,6 +366,7 @@ export const runtimeManifestSchema = z
     config: z.record(z.string(), pluginConfigFieldSchema).optional(),
     i18n: z.record(z.string(), z.string()).optional(),
     ui: uiSpecSchema.optional(),
+    userSettings: z.array(pluginUserSettingSpecSchema).optional(),
     hooks: z.array(hookDeclarationSchema).optional(),
     summaryFocus: z.array(z.string()).optional(),
     authorsNote: authorsNoteDeclSchema.optional(),

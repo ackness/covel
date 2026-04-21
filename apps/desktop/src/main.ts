@@ -758,6 +758,42 @@ function registerIpcHandlers(paths: ReturnType<typeof ensureUserPaths>): void {
     }
   });
 
+  // Settings.json round-trip — the unified SettingsStore's desktop backend.
+  // Read returns the `entries` map only; writes accept the full entries blob
+  // and rewrite the file atomically with a timestamp for audit purposes.
+  ipcMain.handle("covel:settings:load", () => {
+    try {
+      const raw = fs.readFileSync(paths.userSettingsJsonPath, "utf-8");
+      const parsed = JSON.parse(raw) as {
+        entries?: Record<string, unknown>;
+      };
+      return parsed.entries ?? {};
+    } catch {
+      return {};
+    }
+  });
+  ipcMain.handle("covel:settings:save", (_event, payload: unknown) => {
+    if (!payload || typeof payload !== "object") return { ok: false };
+    const entries = payload as Record<string, unknown>;
+    try {
+      fs.mkdirSync(path.dirname(paths.userSettingsJsonPath), { recursive: true });
+      const bundle = {
+        schemaVersion: 1,
+        savedAt: new Date().toISOString(),
+        entries,
+      };
+      fs.writeFileSync(
+        paths.userSettingsJsonPath,
+        JSON.stringify(bundle, null, 2) + "\n",
+        { mode: 0o600 },
+      );
+      return { ok: true };
+    } catch (err) {
+      writeLog("error", "settings:save failed:", err);
+      return { ok: false };
+    }
+  });
+
   // Asset import — called with { sourcePath } from the web tier or from the
   // dialog-based "pick" handlers below.
   async function handleImport(

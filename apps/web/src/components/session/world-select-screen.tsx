@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
-import { SettingsDialog } from "@/components/settings-dialog.js";
+import { SettingsDialog } from "@/settings/SettingsDialog.js";
 import { SessionBreadcrumb } from "./session-breadcrumb.js";
 import { WorldDetailView } from "@/components/world/world-detail-view.js";
 import { WorldEditor } from "@/components/world/world-editor.js";

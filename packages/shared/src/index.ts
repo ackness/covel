@@ -92,3 +92,6 @@ export {
 } from './schemas/interaction-record.js';
 
 export type { InteractionRecordSchema } from './schemas/interaction-record.js';
+
+// ── Unified Settings Store ─────────────────────────────────────────
+export * from './settings/index.js';

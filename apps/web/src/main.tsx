@@ -6,13 +6,13 @@ import { SessionProvider } from "@/stores/session-store";
 import { setStorageMode } from "@/services/data-service";
 import { loadProviderKeysFromStorage } from "@/services/api";
 import { probeDesktopMode } from "@/lib/desktop-bridge";
-import { applyAppearance, resolveInitialAppearance } from "@/lib/appearance";
+import { applyAppearance, type Appearance } from "@/lib/appearance";
+import { getSettings, initSettings } from "@/settings/store";
+import i18n from "@/i18n";
+import type { SupportedLocale } from "@/i18n/locale-detector";
 import "@/i18n";
 import "@/index.css";
 import { routeTree } from "./routeTree.gen";
-
-// Apply the stored appearance before React hydrates to avoid a flash.
-applyAppearance(resolveInitialAppearance());
 
 const router = createRouter({ routeTree });
 
@@ -43,18 +43,43 @@ async function syncStorageMode(): Promise<void> {
   }
 }
 
-Promise.all([
-  syncStorageMode(),
-  probeDesktopMode(),
-  loadProviderKeysFromStorage(),
-]).then(() => {
-  createRoot(document.getElementById("root")!).render(
-    <StrictMode>
-      <ThemeProvider defaultTheme="dark" attribute="class">
-        <SessionProvider>
-          <RouterProvider router={router} />
-        </SessionProvider>
-      </ThemeProvider>
-    </StrictMode>,
-  );
-});
+// Boot order: hydrate settings store first so appearance / locale apply
+// without a flash, then run the rest of the bootstrap in parallel.
+initSettings()
+  .then(() => {
+    const store = getSettings();
+    // Apply initial appearance / locale ASAP so the first paint matches.
+    applyAppearance(store.get<Appearance>("ui.appearance"));
+    const initialLocale = store.get<SupportedLocale>("ui.locale");
+    if (i18n.language !== initialLocale) void i18n.changeLanguage(initialLocale);
+    if (typeof document !== "undefined") {
+      document.documentElement.lang = initialLocale;
+    }
+    // Global subscribers so changes from the Settings UI propagate even when
+    // no component is currently mounted that reads the underlying setting.
+    store.subscribe<Appearance>("ui.appearance", (next) => {
+      applyAppearance(next);
+    });
+    store.subscribe<SupportedLocale>("ui.locale", (next) => {
+      if (i18n.language !== next) void i18n.changeLanguage(next);
+      if (typeof document !== "undefined") {
+        document.documentElement.lang = next;
+      }
+    });
+    return Promise.all([
+      syncStorageMode(),
+      probeDesktopMode(),
+      loadProviderKeysFromStorage(),
+    ]);
+  })
+  .then(() => {
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode>
+        <ThemeProvider defaultTheme="dark" attribute="class">
+          <SessionProvider>
+            <RouterProvider router={router} />
+          </SessionProvider>
+        </ThemeProvider>
+      </StrictMode>,
+    );
+  });

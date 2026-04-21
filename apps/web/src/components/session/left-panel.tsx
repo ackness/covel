@@ -2,7 +2,6 @@ import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   SlidersHorizontal,
-  Settings2,
   History,
   KeyRound,
   Plus,
@@ -188,19 +187,9 @@ export function LeftPanel({
 
           {/* ── Models ── */}
           <div className="px-3 py-3 border-b border-border space-y-2 paper:px-5 paper:py-4 paper:space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground paper:paper-eyebrow paper:font-mono paper:font-normal paper:tracking-[0.12em]">
-                {t("session.activeModels", "Models")}
-              </h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
-                onClick={onOpenSettings}
-              >
-                <Settings2 className="w-3 h-3" />
-              </Button>
-            </div>
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground paper:paper-eyebrow paper:font-mono paper:font-normal paper:tracking-[0.12em]">
+              {t("session.activeModels", "Models")}
+            </h3>
             <ActiveModelSlots slots={resolvedSlots} variant="compact" />
           </div>
 

@@ -7,6 +7,7 @@ import {
   normalizeProviderKeyMap,
   providerKeyToId,
 } from "@covel/shared";
+import { getSettings, registerKnownProviders } from "@/settings/store";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -92,6 +93,18 @@ export interface PackageSummary {
   requires?: string[];
   version?: string;
   author?: string;
+  /** User-editable settings declared in PLUGIN.md frontmatter. */
+  userSettings?: Array<{
+    key: string;
+    type: "text" | "number" | "toggle" | "select" | "textarea";
+    default: unknown;
+    label: string | Record<string, string>;
+    description?: string | Record<string, string>;
+    min?: number;
+    max?: number;
+    step?: number;
+    options?: Array<{ value: string; label: string | Record<string, string> }>;
+  }>;
 }
 
 export interface CommandSummary {
@@ -116,12 +129,6 @@ export interface SseEnvelope {
   payload: Record<string, unknown>;
 }
 
-// ── Storage Keys ──────────────────────────────────────────────────
-
-const SLOT_CONFIG_KEY = "covel:slotConfig";
-const CUSTOM_PRESETS_KEY = "covel:customPresets";
-const PARAM_OVERRIDES_KEY = "covel:paramOverrides";
-
 // ── Helpers ────────────────────────────────────────────────────────
 
 /** Routes that need the provider API keys header. */
@@ -133,11 +140,14 @@ function needsProviderKeys(url: string): boolean {
 
 function buildProviderKeysHeader(): Record<string, string> {
   const headers: Record<string, string> = {};
-  // Start from the in-memory cache (populated at boot via loadProviderKeysFromStorage).
-  const keys: Record<string, string> = { ...providerKeysCache };
-  // Merge API keys from custom presets (custom preset key overrides global for same provider)
-  const customPresets = getCustomPresets();
-  for (const preset of customPresets) {
+  // Pull every secret the store knows about (registered or not).
+  const keys: Record<string, string> = {
+    ...((getSettings() as unknown as {
+      snapshotSecrets(): Record<string, string>;
+    }).snapshotSecrets()),
+  };
+  // Custom preset keys override globals for the same provider.
+  for (const preset of getCustomPresets()) {
     if (preset.apiKey?.trim() && preset.provider) {
       keys[preset.provider] = preset.apiKey.trim();
     }
@@ -162,20 +172,8 @@ interface SlotConfigHeaderOptions {
 function buildSlotConfigHeaderInternal(
   options: SlotConfigHeaderOptions = {},
 ): Record<string, string> {
-  const slotConfigRaw = localStorage.getItem(SLOT_CONFIG_KEY);
-  const paramOverridesRaw = localStorage.getItem(PARAM_OVERRIDES_KEY);
-  let slotConfig: Record<string, SlotConfigEntry> = {};
-  let paramOverrides: Record<string, ModelParameterOverrides> = {};
-  try {
-    slotConfig = slotConfigRaw ? JSON.parse(slotConfigRaw) : {};
-  } catch {
-    slotConfig = {};
-  }
-  try {
-    paramOverrides = paramOverridesRaw ? JSON.parse(paramOverridesRaw) : {};
-  } catch {
-    paramOverrides = {};
-  }
+  const slotConfig = getSlotConfig();
+  const paramOverrides = getParamOverrides();
 
   const slotPresetOverrides = Object.fromEntries(
     Object.entries(slotConfig)
@@ -738,22 +736,20 @@ export async function refreshModelDb(): Promise<{ ok: boolean; count?: number; e
   });
 }
 
-// ── Capability Overrides (localStorage) ──────────────────────────
-
-const CAPABILITY_OVERRIDES_KEY = "covel:capabilityOverrides";
+// ── Capability Overrides ─────────────────────────────────────────
 
 export function getCapabilityOverrides(): Record<string, Partial<ModelCapabilityInfo>> {
-  const stored = localStorage.getItem(CAPABILITY_OVERRIDES_KEY);
-  if (!stored) return {};
-  try {
-    return JSON.parse(stored);
-  } catch {
-    return {};
-  }
+  return (
+    getSettings().get<Record<string, Partial<ModelCapabilityInfo>>>(
+      "llm.capabilityOverrides",
+    ) ?? {}
+  );
 }
 
-export function setCapabilityOverrides(overrides: Record<string, Partial<ModelCapabilityInfo>>): void {
-  localStorage.setItem(CAPABILITY_OVERRIDES_KEY, JSON.stringify(overrides));
+export function setCapabilityOverrides(
+  overrides: Record<string, Partial<ModelCapabilityInfo>>,
+): void {
+  void getSettings().set("llm.capabilityOverrides", overrides);
 }
 
 /**
@@ -924,195 +920,69 @@ export function triggerEvent(
 
 // ── Provider Keys ──────────────────────────────────────────────────
 //
-// Storage strategy (priority order):
-//   1. Electron IPC (`covel:keys:*`) when `window.covelIpc` is present —
-//      reads/writes `~/.covel/keys.env` directly via the main process.
-//   2. Server REST (`/api/config/keys`) when the server reports
-//      `isDesktop: true` (Tauri shell, or a self-deploy that created
-//      `~/.covel/`). Values live in the same `keys.env` file.
-//   3. Browser `localStorage` fallback for pure web tiers (T2/T3).
-//
-// All three modes maintain `providerKeysCache`, which is a sync snapshot
-// read on the hot path of every request. The cache is hydrated once at
-// boot via `loadProviderKeysFromStorage()` — callers MUST await it before
-// the first AI-backed request.
-
-const LEGACY_KEYS_STORAGE = "covel:providerKeys";
-
-let providerKeysCache: Record<string, string> = {};
-let desktopRestMode = false; // true when IPC is absent AND server says isDesktop
-
-interface CovelIpcApiShape {
-  invoke<T = unknown>(channel: string, payload?: unknown): Promise<T>;
-}
-
-function getIpc(): CovelIpcApiShape | null {
-  if (typeof window === "undefined") return null;
-  const bridge = (window as unknown as { covelIpc?: CovelIpcApiShape }).covelIpc;
-  return bridge ?? null;
-}
-
-function readLocalKeys(): Record<string, string> {
-  if (typeof localStorage === "undefined") return {};
-  const stored = localStorage.getItem(LEGACY_KEYS_STORAGE);
-  if (!stored) return {};
-  try {
-    const parsed = JSON.parse(stored);
-    if (parsed && typeof parsed === "object") {
-      return normalizeProviderKeyMap(parsed as Record<string, string>);
-    }
-  } catch {
-    // ignore
-  }
-  return {};
-}
-
-function writeLocalKeys(keys: Record<string, string>): void {
-  if (typeof localStorage === "undefined") return;
-  localStorage.setItem(LEGACY_KEYS_STORAGE, JSON.stringify(normalizeProviderKeyMap(keys)));
-}
-
-async function pushKeysToServer(keys: Record<string, string>): Promise<void> {
-  const res = await fetch("/api/config/keys", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(keys),
-  });
-  if (!res.ok) {
-    throw new Error(`PUT /api/config/keys failed: ${res.status}`);
-  }
-}
+// Routes through the unified SettingsStore. On desktop (Electron IPC or
+// REST) secrets go to `keys.env` with mode 600; on pure web they live in
+// `covel:keys` localStorage. Callers see a flat `{ provider -> key }` map.
 
 /**
- * Hydrate the in-memory provider key cache from disk. Must be awaited once
- * during app bootstrap, before any AI-backed request is issued.
- *
- * Strategy:
- *   - Electron: read via IPC (keys.env round-trip goes through main)
- *   - Other: probe /api/config/info; when isDesktop === true, mirror any
- *     legacy localStorage keys to server once, then trust server as source
- *     of truth. Server doesn't echo values back (security), so the local
- *     cache only carries what the user actively sets this session.
- *   - Pure web: localStorage only
+ * Kept for backwards compatibility with `main.tsx`. The real hydration now
+ * happens in `initSettings()`; this awaits the store's ready promise.
  */
 export async function loadProviderKeysFromStorage(): Promise<void> {
-  const ipc = getIpc();
-  if (ipc) {
-    try {
-      const fromFile = await ipc.invoke<Record<string, string>>("covel:keys:load");
-      const legacy = readLocalKeys();
-      if (Object.keys(legacy).length > 0 && Object.keys(fromFile ?? {}).length === 0) {
-        const normalized = normalizeProviderKeyMap(legacy);
-        await ipc.invoke("covel:keys:save", normalized);
-        providerKeysCache = { ...normalized };
-        try { localStorage.removeItem(LEGACY_KEYS_STORAGE); } catch { /* ignore */ }
-      } else {
-        providerKeysCache = normalizeProviderKeyMap({ ...(fromFile ?? {}), ...legacy });
-        if (Object.keys(legacy).length > 0) {
-          await ipc.invoke("covel:keys:save", providerKeysCache);
-          try { localStorage.removeItem(LEGACY_KEYS_STORAGE); } catch { /* ignore */ }
-        }
-      }
-    } catch (err) {
-      console.warn("[api] loadProviderKeysFromStorage (ipc) failed:", err);
-      providerKeysCache = readLocalKeys();
-    }
-    return;
-  }
+  await (getSettings() as unknown as { ready(): Promise<void> }).ready();
+}
 
-  // No IPC: probe the server to see if we should use REST vs pure localStorage.
-  try {
-    const res = await fetch("/api/config/info");
-    if (res.ok) {
-      const info = (await res.json()) as { isDesktop?: boolean };
-      if (info.isDesktop) {
-        desktopRestMode = true;
-        const legacy = readLocalKeys();
-        if (Object.keys(legacy).length > 0) {
-          // One-shot migration: push localStorage keys to server, then clear.
-          await pushKeysToServer(normalizeProviderKeyMap(legacy));
-          try { localStorage.removeItem(LEGACY_KEYS_STORAGE); } catch { /* ignore */ }
-        }
-        providerKeysCache = normalizeProviderKeyMap(legacy); // server doesn't return values; trust user session
-        return;
-      }
-    }
-  } catch {
-    // Fall through to pure-web path.
-  }
-
-  providerKeysCache = readLocalKeys();
+function providerKeysSnapshot(): Record<string, string> {
+  const store = getSettings() as unknown as {
+    snapshotSecrets(): Record<string, string>;
+  };
+  return store.snapshotSecrets();
 }
 
 export function getProviderKeys(): Record<string, string> {
-  return { ...normalizeProviderKeyMap(providerKeysCache) };
+  return normalizeProviderKeyMap(providerKeysSnapshot());
 }
 
 export function setProviderKeys(keys: Record<string, string>): void {
-  providerKeysCache = normalizeProviderKeyMap(keys);
-  const ipc = getIpc();
-  if (ipc) {
-    void ipc.invoke("covel:keys:save", providerKeysCache).catch((err) => {
-      console.warn("[api] setProviderKeys (ipc) failed:", err);
-    });
-  } else if (desktopRestMode) {
-    void pushKeysToServer(providerKeysCache).catch((err) => {
-      console.warn("[api] setProviderKeys (rest) failed:", err);
-    });
-  } else {
-    writeLocalKeys(providerKeysCache);
-  }
+  void setProviderKeysAsync(keys);
 }
 
 /** Promise-returning variant for call sites that want to report success. */
 export async function setProviderKeysAsync(
   keys: Record<string, string>,
 ): Promise<{ ok: boolean }> {
-  providerKeysCache = normalizeProviderKeyMap(keys);
-  const ipc = getIpc();
-  if (ipc) {
-    try {
-      const result = await ipc.invoke<{ ok: boolean }>("covel:keys:save", providerKeysCache);
-      return result ?? { ok: false };
-    } catch (err) {
-      console.warn("[api] setProviderKeysAsync (ipc) failed:", err);
-      return { ok: false };
-    }
+  const normalized = normalizeProviderKeyMap(keys);
+  const store = getSettings();
+  // Ensure every provider has a registered entry so the Settings UI
+  // surfaces it immediately after the first call.
+  registerKnownProviders(Object.keys(normalized));
+  // Clear any providers no longer present.
+  const existing = providerKeysSnapshot();
+  try {
+    await Promise.all([
+      ...Object.entries(normalized).map(([provider, value]) =>
+        store.set(`keys.${provider}`, value),
+      ),
+      ...Object.keys(existing)
+        .filter((p) => !(p in normalized))
+        .map((p) => store.clear(`keys.${p}`)),
+    ]);
+    return { ok: true };
+  } catch (err) {
+    console.warn("[api] setProviderKeysAsync failed:", err);
+    return { ok: false };
   }
-  if (desktopRestMode) {
-    try {
-      await pushKeysToServer(providerKeysCache);
-      return { ok: true };
-    } catch (err) {
-      console.warn("[api] setProviderKeysAsync (rest) failed:", err);
-      return { ok: false };
-    }
-  }
-  writeLocalKeys(providerKeysCache);
-  return { ok: true };
 }
 
-// ── Slot Config (localStorage) ────────────────────────────────────
+// ── Slot / Preset / Parameter / Runtime-priority config ───────────
+//
+// All of these used to live in individual `covel:*` localStorage keys. They
+// are now thin wrappers over the unified SettingsStore. The API shape below
+// is preserved so existing call sites keep compiling.
 
 export interface SlotConfigEntry {
   presetId: string;
 }
-
-export function getSlotConfig(): Record<string, SlotConfigEntry> {
-  const stored = localStorage.getItem(SLOT_CONFIG_KEY);
-  if (!stored) return {};
-  try {
-    return JSON.parse(stored);
-  } catch {
-    return {};
-  }
-}
-
-export function setSlotConfig(config: Record<string, SlotConfigEntry>): void {
-  localStorage.setItem(SLOT_CONFIG_KEY, JSON.stringify(config));
-}
-
-// ── Custom Presets (localStorage) ─────────────────────────────────
 
 export interface CustomPreset {
   id: string;
@@ -1124,22 +994,33 @@ export interface CustomPreset {
   apiKey?: string;
 }
 
+export interface ModelParameterOverrides {
+  temperature?: number;
+  topP?: number;
+  maxOutputTokens?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+}
+
+export function getSlotConfig(): Record<string, SlotConfigEntry> {
+  return getSettings().get<Record<string, SlotConfigEntry>>("llm.slotConfig") ?? {};
+}
+
+export function setSlotConfig(config: Record<string, SlotConfigEntry>): void {
+  void getSettings().set("llm.slotConfig", config);
+}
+
 export function getCustomPresets(): CustomPreset[] {
-  const stored = localStorage.getItem(CUSTOM_PRESETS_KEY);
-  if (!stored) return [];
-  try {
-    const parsed = JSON.parse(stored);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((preset): preset is CustomPreset => !!preset && typeof preset === "object")
-      .map((preset) => ({
-        ...preset,
-        provider: providerKeyToId(preset.provider) ?? String(preset.provider ?? "").trim(),
-      }))
-      .filter((preset) => preset.provider.length > 0);
-  } catch {
-    return [];
-  }
+  const raw = getSettings().get<CustomPreset[]>("llm.customPresets") ?? [];
+  return raw
+    .filter((preset): preset is CustomPreset => !!preset && typeof preset === "object")
+    .map((preset) => ({
+      ...preset,
+      provider:
+        providerKeyToId(preset.provider) ??
+        String(preset.provider ?? "").trim(),
+    }))
+    .filter((preset) => preset.provider.length > 0);
 }
 
 export function setCustomPresets(presets: CustomPreset[]): void {
@@ -1149,85 +1030,80 @@ export function setCustomPresets(presets: CustomPreset[]): void {
       provider: providerKeyToId(preset.provider) ?? preset.provider.trim(),
     }))
     .filter((preset) => preset.provider.length > 0);
-  localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(normalized));
+  void getSettings().set("llm.customPresets", normalized);
 }
 
 export function addCustomPreset(preset: CustomPreset): void {
-  const presets = getCustomPresets();
-  presets.push(preset);
-  setCustomPresets(presets);
+  setCustomPresets([...getCustomPresets(), preset]);
 }
 
 export function removeCustomPreset(id: string): void {
-  const presets = getCustomPresets().filter((p) => p.id !== id);
-  setCustomPresets(presets);
-}
-
-// ── Parameter Overrides (localStorage) ────────────────────────────
-
-export interface ModelParameterOverrides {
-  temperature?: number;
-  topP?: number;
-  maxOutputTokens?: number;
-  frequencyPenalty?: number;
-  presencePenalty?: number;
+  setCustomPresets(getCustomPresets().filter((p) => p.id !== id));
 }
 
 export function getParamOverrides(): Record<string, ModelParameterOverrides> {
-  const stored = localStorage.getItem(PARAM_OVERRIDES_KEY);
-  if (!stored) return {};
-  try {
-    return JSON.parse(stored);
-  } catch {
-    return {};
-  }
+  return (
+    getSettings().get<Record<string, ModelParameterOverrides>>(
+      "llm.paramOverrides",
+    ) ?? {}
+  );
 }
 
-export function setParamOverrides(overrides: Record<string, ModelParameterOverrides>): void {
-  localStorage.setItem(PARAM_OVERRIDES_KEY, JSON.stringify(overrides));
+export function setParamOverrides(
+  overrides: Record<string, ModelParameterOverrides>,
+): void {
+  void getSettings().set("llm.paramOverrides", overrides);
 }
-
-// ── Runtime Priority Config (localStorage) ───────────────────────
-
-const RUNTIME_PRIORITY_KEY = "covel:runtimePriority";
 
 export function getRuntimePriorityOverrides(): Record<string, number> {
-  const stored = localStorage.getItem(RUNTIME_PRIORITY_KEY);
-  if (!stored) return {};
-  try {
-    return JSON.parse(stored);
-  } catch {
-    return {};
-  }
+  return (
+    getSettings().get<Record<string, number>>("llm.runtimePriority") ?? {}
+  );
 }
 
-export function setRuntimePriorityOverrides(overrides: Record<string, number>): void {
-  localStorage.setItem(RUNTIME_PRIORITY_KEY, JSON.stringify(overrides));
+export function setRuntimePriorityOverrides(
+  overrides: Record<string, number>,
+): void {
+  void getSettings().set("llm.runtimePriority", overrides);
 }
 
-// ── Runtime Bindings (localStorage, per-session) ────────────────
-
-const RUNTIME_BINDINGS_PREFIX = "covel:runtimeBindings:";
-
-/** Get saved runtime bindings for a session. */
-export function getRuntimeBindings(sessionId: string): Record<string, string> {
-  const stored = localStorage.getItem(RUNTIME_BINDINGS_PREFIX + sessionId);
-  if (!stored) return {};
-  try {
-    return JSON.parse(stored);
-  } catch {
-    return {};
-  }
+/**
+ * Prep-phase runtime bindings (pre-session), keyed by worldId. Wiped by the
+ * caller once the real session is created and the bindings are copied onto
+ * the SessionRecord.
+ */
+export function getPrepRuntimeBindings(
+  worldId: string,
+): Record<string, string> {
+  const all =
+    getSettings().get<Record<string, Record<string, string>>>(
+      "llm.prepRuntimeBindings",
+    ) ?? {};
+  return all[worldId] ?? {};
 }
 
-/** Save runtime bindings for a session. */
-export function setRuntimeBindings(sessionId: string, bindings: Record<string, string>): void {
-  localStorage.setItem(RUNTIME_BINDINGS_PREFIX + sessionId, JSON.stringify(bindings));
+export function setPrepRuntimeBindings(
+  worldId: string,
+  bindings: Record<string, string>,
+): void {
+  const store = getSettings();
+  const all =
+    store.get<Record<string, Record<string, string>>>(
+      "llm.prepRuntimeBindings",
+    ) ?? {};
+  void store.set("llm.prepRuntimeBindings", { ...all, [worldId]: bindings });
 }
 
-/** Clear saved runtime bindings for a session (e.g., on session delete). */
-export function clearRuntimeBindings(sessionId: string): void {
-  localStorage.removeItem(RUNTIME_BINDINGS_PREFIX + sessionId);
+export function clearPrepRuntimeBindings(worldId: string): void {
+  const store = getSettings();
+  const all =
+    store.get<Record<string, Record<string, string>>>(
+      "llm.prepRuntimeBindings",
+    ) ?? {};
+  if (!(worldId in all)) return;
+  const next = { ...all };
+  delete next[worldId];
+  void store.set("llm.prepRuntimeBindings", next);
 }
 
 // ── World Overlay (IndexedDB via app-kv-store) ─────────────────

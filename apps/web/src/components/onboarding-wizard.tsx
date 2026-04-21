@@ -13,6 +13,7 @@ import {
 } from "@/services/api.js";
 import type { PingResult, PresetSummary, CustomPreset } from "@/services/api.js";
 import { useLocalePreference } from "@/hooks/useLocalePreference";
+import { getSettings } from "@/settings/store";
 
 /**
  * Onboarding persistence uses a version number rather than a boolean so that
@@ -20,8 +21,6 @@ import { useLocalePreference } from "@/hooks/useLocalePreference";
  * Bump ONBOARDING_VERSION whenever the wizard flow changes in a way that
  * existing users should see again.
  */
-const STORAGE_KEY = "covel:onboardedVersion";
-const LEGACY_STORAGE_KEY = "covel:onboarded";
 const ONBOARDING_VERSION = 3;
 const CUSTOM_PROVIDER_ID = "__custom__";
 
@@ -35,25 +34,17 @@ const PROVIDERS = [
 const TOTAL_STEPS = 4;
 
 function isOnboarded(): boolean {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored) {
-    const parsed = Number.parseInt(stored, 10);
-    return Number.isFinite(parsed) && parsed >= ONBOARDING_VERSION;
-  }
-  // Migrate legacy boolean flag: if the user already dismissed the v0 wizard,
-  // do not force-show v1 unless the version actually bumped above 1.
-  return localStorage.getItem(LEGACY_STORAGE_KEY) === "1" && ONBOARDING_VERSION <= 1;
+  const stored = getSettings().get<number>("ui.onboardedVersion");
+  return typeof stored === "number" && stored >= ONBOARDING_VERSION;
 }
 
 function markOnboarded(): void {
-  localStorage.setItem(STORAGE_KEY, String(ONBOARDING_VERSION));
-  localStorage.removeItem(LEGACY_STORAGE_KEY);
+  void getSettings().set("ui.onboardedVersion", ONBOARDING_VERSION);
 }
 
 /** Force the onboarding wizard to appear again on next mount. Used by Settings "re-run tutorial". */
 export function resetOnboarding(): void {
-  localStorage.removeItem(STORAGE_KEY);
-  localStorage.removeItem(LEGACY_STORAGE_KEY);
+  void getSettings().clear("ui.onboardedVersion");
 }
 
 interface ProviderFormState {

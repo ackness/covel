@@ -77,13 +77,20 @@ pnpm build:desktop                       # both shells
 
 ## Config Files
 
-Three files, copied from `*.example`:
+Dev-time files (copied from `*.example`):
 
 - `.env` — infrastructure (`STORE_BACKEND`, `DATABASE_URL`, `SERVER_PORT`, `COVEL_WORLDS_DIR`, etc.)
 - `llm.toml` — slot routing (`[covel.<slot>]` sections). If missing, server falls back to built-in DeepSeek `story` slot and boots anyway.
 - `.env.llm` — provider API keys. Dev server (`tsx watch`) loads `.env` + `.env.llm` from repo root.
 
-API keys live in browser localStorage in the running app and are passed per-request via the `X-Provider-Keys` header (base64) — **never persisted server-side**.
+Desktop-shell files under `<covelHome>/` (typically `~/.covel/`):
+
+- `config.toml` — desktop shell config (paths, log rotation)
+- `llm.toml` — hand-editable slot / provider definitions (same schema as dev-time)
+- `keys.env` — provider API keys, mode 600
+- `settings.json` — front-end user preferences (locale, appearance, slot overrides, custom presets, parameter overrides, per-plugin settings). Managed via the unified **SettingsStore** in `packages/shared/src/settings/` — see [devs/docs/unified-settings-spec.md](./devs/docs/unified-settings-spec.md). Auto-saved on every change; mirrored to `localStorage` (`covel:settings`) on pure-web tiers.
+
+Provider API keys flow through the `SettingsStore` too: writes end up in `keys.env` on desktop, `localStorage` (`covel:keys`) on web. They are never persisted server-side by the REST API — each AI request passes them via the `X-Provider-Keys` header (base64).
 
 ## Monorepo Structure
 

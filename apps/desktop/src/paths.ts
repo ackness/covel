@@ -55,6 +55,10 @@ export function userKeysEnvPath(): string {
   return path.join(covelHome(), "keys.env");
 }
 
+export function userSettingsJsonPath(): string {
+  return path.join(covelHome(), "settings.json");
+}
+
 export function userPluginsDir(): string {
   return path.join(covelHome(), "plugins");
 }
@@ -200,6 +204,7 @@ export interface ResolvedPaths {
   readonly userWorldsDir: string;
   readonly userLlmTomlPath: string;
   readonly userKeysEnvPath: string;
+  readonly userSettingsJsonPath: string;
   /** llm.toml the server actually reads — user override wins. */
   readonly effectiveLlmToml: string;
   /** Bundled worlds first, then user worlds. Filtered by existence. */
@@ -279,6 +284,7 @@ export function ensureUserPaths(): ResolvedPaths {
     userWorldsDir: userWorldsDir(),
     userLlmTomlPath: userLlm,
     userKeysEnvPath: userKeysEnvPath(),
+    userSettingsJsonPath: userSettingsJsonPath(),
     effectiveLlmToml,
     worldsDirs,
     pluginsDirs,

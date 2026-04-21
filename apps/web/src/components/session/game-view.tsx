@@ -11,6 +11,7 @@ import {
   KeyRound,
   Check,
   Bug,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { Toggle } from "@/components/ui/toggle.js";
@@ -22,7 +23,7 @@ import {
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
-import { SettingsDialog } from "@/components/settings-dialog.js";
+import { SettingsDialog } from "@/settings/SettingsDialog.js";
 import { SessionBreadcrumb } from "./session-breadcrumb.js";
 import { ChatMessages } from "./chat-messages.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
@@ -71,6 +72,8 @@ interface GameViewProps {
   worldSessions: SessionRecord[];
   /** Block IDs that have been submitted (permanently locked). */
   submittedBlockIds: ReadonlySet<string>;
+  /** Form values keyed by submitted block id — for repopulating disabled forms. */
+  submittedBlockValues: Readonly<Record<string, Record<string, unknown>>>;
   /** Kick off the narrative — called when player clicks 开始冒险. */
   onBeginAdventure: () => void;
   onSendMessage: (content: string) => void;
@@ -83,7 +86,7 @@ interface GameViewProps {
     interactionId: string,
     type: 'form' | 'choice' | 'confirmation',
     values: Record<string, unknown>,
-    submitBehavior?: { autoContinue?: boolean; echoFilledNarrative?: boolean },
+    submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<void>;
   /** Retry from a specific runtime (undefined = retry all). */
   onRetryRuntime?: (runtimeId?: string) => void;
@@ -119,6 +122,7 @@ export function GameView({
   executionSteps,
   worldSessions,
   submittedBlockIds,
+  submittedBlockValues,
   onBeginAdventure,
   onSendMessage,
   onSubmitBlock,
@@ -155,7 +159,7 @@ export function GameView({
   // ── Unified draft send — pending interaction drafts ──────────────
   // Plugin-declared buttons (guide suggestions, draftMessage actions) push
   // drafts into the session store. The confirm bar materialises them here.
-  const { state: sessionState, clearInteractionDrafts, removeInteractionDraft } = useSession();
+  const { state: sessionState, clearInteractionDrafts, removeInteractionDraft, submitBlock } = useSession();
   const pendingDrafts = sessionState.pendingInteractionDrafts;
 
   const handleConfirmDrafts = useCallback(() => {
@@ -168,10 +172,31 @@ export function GameView({
       clearInteractionDrafts();
       return;
     }
+    // Stamp each source block with the player's selection so the disabled
+    // re-render can show what was chosen. Generic across plugin types — any
+    // draft that names a sourceBlockId participates without per-plugin code.
+    const bySource = new Map<string, typeof pendingDrafts>();
+    for (const draft of pendingDrafts) {
+      if (!draft.sourceBlockId) continue;
+      const list = bySource.get(draft.sourceBlockId) ?? [];
+      list.push(draft);
+      bySource.set(draft.sourceBlockId, list);
+    }
+    for (const [blockId, drafts] of bySource) {
+      const items = drafts.map((d) => ({
+        type: d.type,
+        label: d.label,
+        values: d.values,
+        interactionId: d.interactionId,
+        selectionGroup: d.selectionGroup,
+      }));
+      const labelSummary = drafts.map((d) => d.label).filter(Boolean).join(" / ");
+      submitBlock(blockId, { _kind: "selection", _label: labelSummary, items });
+    }
     onSendMessage(combined);
     clearInteractionDrafts();
     setBlockSelections({});
-  }, [pendingDrafts, clearInteractionDrafts, onSendMessage]);
+  }, [pendingDrafts, clearInteractionDrafts, onSendMessage, submitBlock]);
 
   // Load session-scoped plugin list whenever the session changes.
   useEffect(() => {
@@ -323,6 +348,7 @@ export function GameView({
             >
               <RightPanel
                 sessionId={session.id}
+                world={world}
                 statePatches={statePatches}
                 onToggleRightPanel={toggleRightPanel}
               />
@@ -376,7 +402,7 @@ export function GameView({
                     (executing ? "paper-pulse-dot" : "")
                   }
                 />
-                {executing ? "Streaming" : "Playing"}
+                {executing ? t("session.stateStreaming") : t("session.statePlaying")}
               </span>
             </div>
             <div className="flex items-center gap-4 shrink-0">
@@ -388,7 +414,7 @@ export function GameView({
                   className="rounded-none border-0 h-7 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
                 >
                   <LayoutTemplate className="w-3.5 h-3.5 mr-1.5" />
-                  <span className="text-xs">Parsed</span>
+                  <span className="text-xs">{t("session.viewParsed")}</span>
                 </Toggle>
                 <Toggle
                   pressed={viewMode === "raw"}
@@ -397,7 +423,7 @@ export function GameView({
                   className="rounded-none border-0 h-7 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
                 >
                   <Code className="w-3.5 h-3.5 mr-1.5" />
-                  <span className="text-xs">Raw</span>
+                  <span className="text-xs">{t("session.viewRaw")}</span>
                 </Toggle>
               </div>
 
@@ -407,7 +433,7 @@ export function GameView({
                   onPressedChange={() => setViewMode("parsed")}
                   size="sm"
                   className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                  aria-label="Parsed view"
+                  aria-label={t("session.viewParsedAria")}
                 >
                   <LayoutTemplate className="w-3.5 h-3.5" />
                 </Toggle>
@@ -416,7 +442,7 @@ export function GameView({
                   onPressedChange={() => setViewMode("raw")}
                   size="sm"
                   className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                  aria-label="Raw view"
+                  aria-label={t("session.viewRawAria")}
                 >
                   <Code className="w-3.5 h-3.5" />
                 </Toggle>
@@ -437,7 +463,7 @@ export function GameView({
                 size="icon"
                 className="h-8 w-8 rounded-sm shrink-0"
                 asChild
-                title="Debug Traces"
+                title={t("session.debugTraces")}
               >
                 <Link to="/debug" search={{ sid: session.id }}>
                   <Bug className="w-4 h-4" />
@@ -449,7 +475,7 @@ export function GameView({
                 size="icon"
                 className={`h-8 w-8 rounded-sm shrink-0 ${!isRightCollapsed && "bg-accent text-accent-foreground"}`}
                 onClick={toggleRightPanel}
-                title="Toggle State & World Context"
+                title={t("session.toggleContextPanel")}
               >
                 <Database className="w-4 h-4" />
               </Button>
@@ -467,6 +493,7 @@ export function GameView({
             packages={packages}
             sessionPlugins={sessionPlugins}
             submittedBlockIds={submittedBlockIds}
+            submittedBlockValues={submittedBlockValues}
             viewMode={viewMode}
             blockSelections={blockSelections}
             onSendMessage={onSendMessage}
@@ -483,23 +510,25 @@ export function GameView({
               draftMessage actions) stage their text here. Confirm joins them
               with newlines and sends as one player message. */}
           {pendingDrafts.length > 0 && (
-            <div className="px-3 md:px-4 py-2 border-t border-border bg-primary/5 shrink-0">
-              <div className="max-w-4xl mx-auto space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">
-                    {t("session.selectionsReady", {
-                      count: pendingDrafts.length,
-                      defaultValue: "{{count}} selection(s) ready",
-                    })}
-                  </span>
+            <div className="px-3 md:px-4 py-2.5 border-t border-border bg-primary/5 shrink-0">
+              <div className="max-w-4xl mx-auto space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-[11px] font-medium tabular-nums leading-none">
+                      {pendingDrafts.length}
+                    </span>
+                    <span className="text-xs text-muted-foreground truncate">
+                      {t("session.selectionsReady", { count: pendingDrafts.length })}
+                    </span>
+                  </div>
                   <Button
                     size="sm"
-                    className="rounded-none gap-1.5"
+                    className="h-7 rounded-sm gap-1.5 shrink-0"
                     disabled={executing}
                     onClick={handleConfirmDrafts}
                   >
                     <Check className="w-3.5 h-3.5" />
-                    {t("session.confirmSelections", "Confirm")}
+                    {t("session.confirmSelections")}
                   </Button>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -509,16 +538,18 @@ export function GameView({
                     return (
                       <span
                         key={d.id}
-                        className="group inline-flex items-center gap-1 max-w-full rounded border border-border bg-background/80 px-2 py-0.5 text-[11px] leading-tight text-foreground"
+                        className="group inline-flex items-center gap-1 max-w-full rounded-sm border border-primary/20 bg-background pl-2 pr-0.5 py-0.5 text-[11px] leading-tight text-foreground shadow-sm"
                       >
-                        <span className="truncate max-w-[260px]" title={label}>{label}</span>
+                        <span className="truncate max-w-[260px]" title={label}>
+                          {label}
+                        </span>
                         <button
                           type="button"
                           onClick={() => removeInteractionDraft(d.id)}
-                          className="text-muted-foreground/70 hover:text-destructive transition-colors"
-                          aria-label="remove draft"
+                          className="inline-flex items-center justify-center w-4 h-4 rounded-sm text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                          aria-label={t("session.removeDraft")}
                         >
-                          ×
+                          <X className="w-3 h-3" />
                         </button>
                       </span>
                     );
@@ -596,6 +627,7 @@ export function GameView({
             >
               <RightPanel
                 sessionId={session.id}
+                world={world}
                 statePatches={statePatches}
                 onToggleRightPanel={toggleRightPanel}
               />

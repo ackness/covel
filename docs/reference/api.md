@@ -301,7 +301,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 - `PATCH` → `{ success: true, entryId, enabled }`
 - `DELETE` → `{ success: true }`
 
-404 场景：session 不存在、entryId 不存在。无 feature-flag 开关，始终启用。消费方：`apps/web/src/components/session/lorebook-panel.tsx` 右侧面板的 "Lorebook" 框架自持 Tab。
+404 场景：session 不存在、entryId 不存在。无 feature-flag 开关，始终启用。消费方：当前无内置 UI（右侧面板"世界"Tab 已切换为 WORLD.md 渲染，见 `docs/reference/ui-panels.md`）；插件可通过 `ui.right` JSON spec 自行消费这些端点。
 
 ### Suspend / Resume（S4-T4）
 
@@ -371,12 +371,19 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 | 方法 | 路径 | 描述 |
 |------|------|------|
 | GET | `/api/presets` | 列出配置的模型预设 |
-| GET | `/api/packages` | 列出已加载插件包（含 runtime/tool 信息） |
+| GET | `/api/packages` | 列出已加载插件包（含 runtime/tool/`userSettings` 信息） |
 | GET | `/api/commands` | 列出注册的命令 |
 | GET | `/api/block-schemas` | 列出插件 block schema |
 | GET | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件 |
 | GET | `/api/llm-config` | 返回 slot 配置与能力信息 |
 | GET | `/api/provider-keys` | 返回服务器配置的 API 密钥（仅 T1） |
+| GET | `/api/config/info` | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等） |
+| GET | `/api/config/keys` | 仅桌面：列出已配置的 provider（不返回值） |
+| PUT | `/api/config/keys` | 仅桌面：写入 `<covelHome>/keys.env`；body `{ provider: value }` |
+| GET | `/api/config/settings` | 仅桌面：读取 `<covelHome>/settings.json`（unified SettingsStore） |
+| PUT | `/api/config/settings` | 仅桌面：原子写 `settings.json`；body `{ entries: Record<string, unknown> }` |
+| PUT | `/api/config/data-root` | 仅桌面：改写 `config.toml` 的 `data_root` 行，需要重启服务器 |
+| POST | `/api/config/open-folder` | 仅桌面：打开 config/data/logs 目录或 `llm.toml` / `keys.env` |
 
 #### GET /api/ui-specs
 

@@ -1,32 +1,30 @@
-import { useCallback, useEffect, useState } from "react";
-import {
-  applyAppearance,
-  emitAppearanceChange,
-  resolveInitialAppearance,
-  setStoredAppearance,
-  subscribeAppearance,
-  type Appearance,
-} from "@/lib/appearance";
+import { useCallback, useEffect } from "react";
+import { useSetting } from "@/settings/use-settings.js";
+import { applyAppearance, type Appearance } from "@/lib/appearance";
 
 export type { Appearance } from "@/lib/appearance";
 
+/**
+ * Read and write the current appearance through the unified settings store.
+ * Re-applies the `data-appearance` attribute on the document root whenever
+ * the value changes.
+ */
 export function useAppearance(): {
   appearance: Appearance;
   setAppearance: (next: Appearance) => void;
 } {
-  const [appearance, setAppearanceState] = useState<Appearance>(() => resolveInitialAppearance());
+  const [appearance, setAsync] = useSetting<Appearance>("ui.appearance");
 
   useEffect(() => {
-    const unsubscribe = subscribeAppearance(setAppearanceState);
-    return unsubscribe;
-  }, []);
+    applyAppearance(appearance);
+  }, [appearance]);
 
-  const setAppearance = useCallback((next: Appearance) => {
-    setStoredAppearance(next);
-    applyAppearance(next);
-    setAppearanceState(next);
-    emitAppearanceChange(next);
-  }, []);
+  const setAppearance = useCallback(
+    (next: Appearance) => {
+      void setAsync(next);
+    },
+    [setAsync],
+  );
 
   return { appearance, setAppearance };
 }

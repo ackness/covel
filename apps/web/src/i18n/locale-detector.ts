@@ -1,30 +1,21 @@
+/**
+ * Locale constants and type guards. Storage moved to the unified
+ * SettingsStore (`ui.locale`) — this module no longer reads or writes
+ * localStorage directly.
+ */
 export type SupportedLocale = "zh-CN" | "en-US";
 
-export const SUPPORTED_LOCALES: readonly SupportedLocale[] = ["zh-CN", "en-US"];
-export const LOCALE_STORAGE_KEY = "covel:locale";
+export const SUPPORTED_LOCALES: readonly SupportedLocale[] = [
+  "zh-CN",
+  "en-US",
+];
 export const DEFAULT_LOCALE: SupportedLocale = "zh-CN";
 
 export function isSupportedLocale(value: unknown): value is SupportedLocale {
-  return typeof value === "string" && SUPPORTED_LOCALES.includes(value as SupportedLocale);
-}
-
-export function getStoredLocale(): SupportedLocale | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(LOCALE_STORAGE_KEY);
-    return isSupportedLocale(raw) ? raw : null;
-  } catch {
-    return null;
-  }
-}
-
-export function setStoredLocale(locale: SupportedLocale): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
-  } catch {
-    // storage unavailable (private mode / quota); silently skip
-  }
+  return (
+    typeof value === "string" &&
+    SUPPORTED_LOCALES.includes(value as SupportedLocale)
+  );
 }
 
 function detectFromNavigator(): SupportedLocale | null {
@@ -35,6 +26,16 @@ function detectFromNavigator(): SupportedLocale | null {
   return null;
 }
 
+/**
+ * Best-effort guess used only before the SettingsStore has hydrated (e.g.
+ * for SSR defaults or tests). Once `initSettings()` resolves, callers should
+ * prefer `useSetting('ui.locale')`.
+ */
 export function resolveInitialLocale(): SupportedLocale {
-  return getStoredLocale() ?? detectFromNavigator() ?? DEFAULT_LOCALE;
+  return detectFromNavigator() ?? DEFAULT_LOCALE;
+}
+
+/** Kept as a no-op for backwards compatibility — storage lives in settings. */
+export function getStoredLocale(): SupportedLocale | null {
+  return null;
 }

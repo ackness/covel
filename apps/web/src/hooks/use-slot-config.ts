@@ -77,8 +77,8 @@ export function useSlotConfig(
    * Union of THREE sources, in priority order:
    *   1. llm.toml `[covel.<slot>]` sections from the server (authoritative
    *      config; includes model/tag/serverModel metadata)
-   *   2. localStorage `covel:slotConfig` entries that name slots NOT in (1)
-   *      — i.e. user-defined slots added through the settings UI that don't
+   *   2. SettingsStore `llm.slotConfig` entries that name slots NOT in (1)
+   *      — i.e. user-defined slots added through the Settings UI that don't
    *      correspond to any llm.toml section yet
    *   3. If both (1) and (2) are empty, synthesize a single `default` slot
    *      so the UI never renders a completely empty picker when at least one

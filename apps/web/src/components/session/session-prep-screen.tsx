@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.j
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
-import { SettingsDialog } from "@/components/settings-dialog.js";
+import { SettingsDialog } from "@/settings/SettingsDialog.js";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog.js";
 import { SessionBreadcrumb } from "./session-breadcrumb.js";
 import { text } from "@/components/world/editor-helpers.js";
@@ -84,7 +84,22 @@ export function SessionPrepScreen({
     () => packages.filter((p) => selectedPlugins.has(p.name)),
     [packages, selectedPlugins],
   );
-  const bindingState = useRuntimeBindings(`prep:${world.id}`, selectedPackages, resolvedSlots);
+  // Prep bindings live in the SettingsStore under llm.prepRuntimeBindings
+  // keyed by worldId. The hook keeps them in sync via `onPersist`.
+  const [prepBindings, setPrepBindingsState] = useState<Record<string, string>>(
+    () => api.getPrepRuntimeBindings(world.id),
+  );
+  const bindingState = useRuntimeBindings(
+    `prep:${world.id}`,
+    selectedPackages,
+    resolvedSlots,
+    undefined,
+    prepBindings,
+    (next) => {
+      setPrepBindingsState(next);
+      api.setPrepRuntimeBindings(world.id, next);
+    },
+  );
 
   // Plugin flow data for execution preview
   const [flowData, setFlowData] = useState<api.PluginFlowResponse | null>(null);

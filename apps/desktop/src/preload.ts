@@ -23,6 +23,8 @@ const INVOKE_CHANNELS = [
   "covel:restart-server",
   "covel:keys:load",
   "covel:keys:save",
+  "covel:settings:load",
+  "covel:settings:save",
   "covel:import:plugin",
   "covel:import:world",
   "covel:import:pick-plugin",

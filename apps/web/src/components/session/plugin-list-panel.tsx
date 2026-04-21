@@ -4,7 +4,6 @@ import { ChevronRight, Puzzle, Wrench, Zap, Link, AlertTriangle, Lock, Cpu } fro
 import { Badge } from "@/components/ui/badge.js";
 import { text } from "@/components/world/editor-helpers.js";
 import * as api from "@/services/api.js";
-import { getRuntimeBindings, setRuntimeBindings } from "@/services/api.js";
 import type { PackageSummary, PluginLoadError, SessionPluginInfo } from "@/services/api.js";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 
@@ -21,6 +20,8 @@ interface PluginListPanelProps {
   resolvedSlots?: ResolvedSlot[];
   /** Current session ID (for persisting runtime bindings). */
   sessionId?: string;
+  /** Current `runtimeModelOverrides` map from SessionRecord. */
+  runtimeModelOverrides?: Record<string, string>;
 }
 
 const TRIGGER_LABELS: Record<string, { key: string; fallback: string }> = {
@@ -37,9 +38,10 @@ interface PluginItemProps {
   onToggle?: (pluginId: string, enable: boolean) => void;
   resolvedSlots?: ResolvedSlot[];
   sessionId?: string;
+  runtimeModelOverrides?: Record<string, string>;
 }
 
-function PluginItem({ pkg, sessionPlugin, executing, onToggle, resolvedSlots, sessionId }: PluginItemProps) {
+function PluginItem({ pkg, sessionPlugin, executing, onToggle, resolvedSlots, sessionId, runtimeModelOverrides }: PluginItemProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
@@ -50,27 +52,19 @@ function PluginItem({ pkg, sessionPlugin, executing, onToggle, resolvedSlots, se
   const agentRuntimes = (pkg.runtimes ?? []).filter((rt) => rt.kind !== "function" && rt.providerTag);
   const primaryRuntime = agentRuntimes[0];
   const runtimeKey = primaryRuntime?.id ?? "";
-  const initialSlot = useRef(sessionId && runtimeKey ? (getRuntimeBindings(sessionId)[runtimeKey] ?? "") : "");
+  const initialSlot = useRef(runtimeKey ? (runtimeModelOverrides?.[runtimeKey] ?? "") : "");
   const [boundSlot, setBoundSlot] = useState<string>(initialSlot.current);
 
   const handleSlotChange = useCallback((newSlot: string) => {
     setBoundSlot(newSlot);
     if (!sessionId || !runtimeKey) return;
-    const bindings = getRuntimeBindings(sessionId);
-    if (newSlot) {
-      bindings[runtimeKey] = newSlot;
-    } else {
-      delete bindings[runtimeKey];
-    }
-    setRuntimeBindings(sessionId, bindings);
-    const overrides: Record<string, string> = {};
-    for (const [k, v] of Object.entries(bindings)) {
-      if (typeof v === "string" && v.length > 0) overrides[k] = v;
-    }
-    void api.updateSession(sessionId, { runtimeModelOverrides: overrides }).catch(() => {
-      // Non-fatal — localStorage still holds the intent for retry on next change.
+    const next: Record<string, string> = { ...(runtimeModelOverrides ?? {}) };
+    if (newSlot) next[runtimeKey] = newSlot;
+    else delete next[runtimeKey];
+    void api.updateSession(sessionId, { runtimeModelOverrides: next }).catch(() => {
+      // Non-fatal — user can retry by changing the slot again.
     });
-  }, [sessionId, runtimeKey]);
+  }, [sessionId, runtimeKey, runtimeModelOverrides]);
 
   const displayName = text(pkg.displayName) || pkg.name;
   const description = text(pkg.description);
@@ -306,6 +300,7 @@ interface SessionPluginItemProps {
   onToggle?: (pluginId: string, enable: boolean) => void;
   resolvedSlots?: ResolvedSlot[];
   sessionId?: string;
+  runtimeModelOverrides?: Record<string, string>;
 }
 
 const TRIGGER_TYPE_I18N: Record<string, { key: string; fallback: string }> = {
@@ -322,7 +317,7 @@ const RUNTIME_TYPE_ICONS: Record<string, string> = {
   function: "Fn",
 };
 
-function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, sessionId }: SessionPluginItemProps) {
+function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, sessionId, runtimeModelOverrides }: SessionPluginItemProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
@@ -359,31 +354,21 @@ function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, session
   // is already the canonical runtime id (`pluginId` or `pluginId/runtimeName`)
   // accepted by the server regex; no prefix needed.
   const runtimeKey = plugin.id;
-  const initialSlot = useRef(sessionId ? (getRuntimeBindings(sessionId)[runtimeKey] ?? "") : "");
+  const initialSlot = useRef(runtimeModelOverrides?.[runtimeKey] ?? "");
   const [boundSlot, setBoundSlot] = useState<string>(initialSlot.current);
 
   const handleSlotChange = useCallback((newSlot: string) => {
     setBoundSlot(newSlot);
     if (!sessionId) return;
-    const bindings = getRuntimeBindings(sessionId);
-    if (newSlot) {
-      bindings[runtimeKey] = newSlot;
-    } else {
-      delete bindings[runtimeKey];
-    }
-    setRuntimeBindings(sessionId, bindings);
-    // Push the full override map to the server so the next turn's
-    // runtime-slot-resolver picks it up. Without this PATCH the selection
-    // only lives in localStorage and is ignored by the backend — the
-    // `X-Slot-Config` header channel has been removed.
-    const overrides: Record<string, string> = {};
-    for (const [k, v] of Object.entries(bindings)) {
-      if (typeof v === "string" && v.length > 0) overrides[k] = v;
-    }
-    void api.updateSession(sessionId, { runtimeModelOverrides: overrides }).catch(() => {
-      // Non-fatal — localStorage still holds the intent for retry on next change.
-    });
-  }, [sessionId, runtimeKey]);
+    const next: Record<string, string> = { ...(runtimeModelOverrides ?? {}) };
+    if (newSlot) next[runtimeKey] = newSlot;
+    else delete next[runtimeKey];
+    void api.updateSession(sessionId, { runtimeModelOverrides: next }).catch(
+      () => {
+        // Non-fatal — user can retry by changing the slot again.
+      },
+    );
+  }, [sessionId, runtimeKey, runtimeModelOverrides]);
 
   const displayName = typeof plugin.displayName === "string" ? plugin.displayName : plugin.id;
   const description = typeof plugin.description === "string" ? plugin.description : undefined;
@@ -581,6 +566,7 @@ export function PluginListPanel({
   onTogglePlugin,
   resolvedSlots,
   sessionId,
+  runtimeModelOverrides,
 }: PluginListPanelProps) {
   const { t } = useTranslation();
 
@@ -624,6 +610,7 @@ export function PluginListPanel({
               onToggle={onTogglePlugin}
               resolvedSlots={resolvedSlots}
               sessionId={sessionId}
+              runtimeModelOverrides={runtimeModelOverrides}
             />
           ))
         : packages.map((pkg) => (
@@ -635,6 +622,7 @@ export function PluginListPanel({
               onToggle={onTogglePlugin}
               resolvedSlots={resolvedSlots}
               sessionId={sessionId}
+              runtimeModelOverrides={runtimeModelOverrides}
             />
           ))
       }

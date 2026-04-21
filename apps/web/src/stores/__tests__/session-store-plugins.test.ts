@@ -36,7 +36,7 @@ vi.mock("../../services/api.js", () => ({
   getCustomPresets: vi.fn(() => []),
   getSlotConfig: vi.fn(() => ({})),
   getRuntimePriorityOverrides: vi.fn(() => ({})),
-  getRuntimeBindings: vi.fn(() => ({})),
+  getPrepRuntimeBindings: vi.fn(() => ({})),
   getProviderKeys: vi.fn(() => ({})),
   getCapabilityOverrides: vi.fn(() => ({})),
   fetchServerHealth: vi.fn(() => Promise.resolve({ status: "ok", timestamp: "", version: "", storeBackend: "memory" })),
@@ -44,8 +44,8 @@ vi.mock("../../services/api.js", () => ({
   uid: vi.fn(() => "test-uid"),
   ensureServerSession: vi.fn(() => Promise.resolve()),
   setProviderKeys: vi.fn(),
-  clearRuntimeBindings: vi.fn(),
-  setRuntimeBindings: vi.fn(),
+  setPrepRuntimeBindings: vi.fn(),
+  clearPrepRuntimeBindings: vi.fn(),
   getWorldOverlay: vi.fn(() => Promise.resolve(null)),
 }));
 
@@ -69,7 +69,7 @@ vi.mock("../../../services/data-service.js", () => ({
     addStatePatch: vi.fn(() => Promise.resolve()),
     loadStateSnapshot: vi.fn(() => Promise.resolve(null)),
     persistStateSnapshot: vi.fn(() => Promise.resolve()),
-    loadSubmittedBlocks: vi.fn(() => Promise.resolve([])),
+    loadSubmittedBlocks: vi.fn(() => Promise.resolve({ ids: [], values: {} })),
     saveSubmittedBlocks: vi.fn(() => Promise.resolve()),
     syncToServer: vi.fn(() => Promise.resolve()),
     updateSession: vi.fn(() => Promise.resolve()),

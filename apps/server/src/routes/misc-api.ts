@@ -340,6 +340,12 @@ export function createMiscApiRoutes(
           }),
         ]);
 
+      // Aggregate userSettings across every runtime of this plugin so the
+      // frontend Settings UI can render them under "Plugins > <pluginId>".
+      const userSettings = liveManifests.flatMap((m) =>
+        (m.manifest.userSettings ?? []).map((spec) => ({ ...spec })),
+      );
+
       packages.push({
         name: entry.id,
         displayName: textValue(liveSummary.name),
@@ -348,6 +354,7 @@ export function createMiscApiRoutes(
         enabled: true,
         runtimes,
         tools,
+        ...(userSettings.length > 0 ? { userSettings } : {}),
       });
     }
 

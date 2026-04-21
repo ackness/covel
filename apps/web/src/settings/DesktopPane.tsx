@@ -1,18 +1,26 @@
 /**
- * Desktop-only tab for the Settings dialog.
+ * Desktop-only pane for the Settings dialog.
  *
- * Visible only when running inside the Electron shell (detected via
+ * Visible only when running inside the Electron/Tauri shell (detected via
  * `isDesktopApp()`). Exposes paths and actions: open config / data / logs
  * folders, change data_root, restart the backend server, reset onboarding.
  */
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
-  FolderOpen, FileText, RotateCw, Info, Loader2, RefreshCcw, HardDrive, FileCode, KeyRound,
+  FolderOpen,
+  FileText,
+  RotateCw,
+  Info,
+  Loader2,
+  RefreshCcw,
+  HardDrive,
+  FileCode,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import {
-  isDesktopApp,
   hasElectronIpc,
   getDesktopInfo,
   openLogsDir,
@@ -39,13 +47,16 @@ interface DesktopInfo {
   serverPort: number;
 }
 
-export function DesktopSettingsTab() {
+export function DesktopPane() {
+  const { t } = useTranslation();
   const [info, setInfo] = useState<DesktopInfo | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
-    getDesktopInfo().then((i) => setInfo(i as DesktopInfo | null)).catch(() => {});
+    getDesktopInfo()
+      .then((i) => setInfo(i as DesktopInfo | null))
+      .catch(() => {});
   }, []);
 
   async function refreshInfo() {
@@ -74,8 +85,6 @@ export function DesktopSettingsTab() {
   async function handlePickDataDir() {
     setBusy("pick");
     try {
-      // Electron has a native folder picker; REST-mode desktop (Tauri, self-
-      // host) doesn't, so we prompt the user for an absolute path.
       let manualPath: string | undefined;
       if (!hasElectronIpc()) {
         const entered = window.prompt(
@@ -87,7 +96,6 @@ export function DesktopSettingsTab() {
         if (!entered || !entered.trim()) return;
         manualPath = entered.trim();
       }
-
       const picked = await pickDataDir(manualPath);
       if (picked) {
         setToast(`Data root set to ${picked}. Restart the app to apply.`);
@@ -108,36 +116,51 @@ export function DesktopSettingsTab() {
   }
 
   return (
-    <div className="space-y-5 mt-0">
+    <div className="space-y-5">
       {toast && (
         <div className="text-xs px-3 py-2 rounded bg-primary/10 border border-primary/20 text-primary">
           {toast}
         </div>
       )}
 
-      {/* ── Paths ───────────────────────────────────────────── */}
       <section className="space-y-2">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Data Locations
+          {t("settings.desktopDataLocations")}
         </h3>
         <div className="space-y-2 text-xs">
-          <InfoRow label="Config" value={info?.covelHome ?? "—"} mono />
-          <InfoRow label="Data" value={info?.dataRoot ?? "—"} mono />
-          <InfoRow label="Database" value={info?.dbPath ?? "—"} mono />
-          <InfoRow label="Logs" value={info?.logsDir ?? "—"} mono />
+          <InfoRow
+            label={t("settings.desktopDataConfig")}
+            value={info?.covelHome ?? "—"}
+            mono
+          />
+          <InfoRow
+            label={t("settings.desktopDataData")}
+            value={info?.dataRoot ?? "—"}
+            mono
+          />
+          <InfoRow
+            label={t("settings.desktopDataDb")}
+            value={info?.dbPath ?? "—"}
+            mono
+          />
+          <InfoRow
+            label={t("settings.desktopDataLogs")}
+            value={info?.logsDir ?? "—"}
+            mono
+          />
         </div>
         <div className="flex flex-wrap gap-2 pt-1">
           <Button size="sm" variant="outline" onClick={() => openConfigDir()}>
             <FolderOpen className="w-3 h-3 mr-1.5" />
-            Open config (~/.covel)
+            {t("settings.desktopOpenConfig")}
           </Button>
           <Button size="sm" variant="outline" onClick={() => openDataDir()}>
             <FolderOpen className="w-3 h-3 mr-1.5" />
-            Open data folder
+            {t("settings.desktopOpenData")}
           </Button>
           <Button size="sm" variant="outline" onClick={() => openLogsDir()}>
             <FileText className="w-3 h-3 mr-1.5" />
-            Open logs folder
+            {t("settings.desktopOpenLogs")}
           </Button>
           <Button
             size="sm"
@@ -146,19 +169,17 @@ export function DesktopSettingsTab() {
             disabled={busy !== null}
           >
             <HardDrive className="w-3 h-3 mr-1.5" />
-            Change data location…
+            {t("settings.desktopChangeData")}
           </Button>
         </div>
       </section>
 
-      {/* ── Editor shortcuts ────────────────────────────────── */}
       <section className="space-y-2">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Edit config files
+          {t("settings.desktopEditFiles")}
         </h3>
         <div className="text-xs text-muted-foreground">
-          Opens in your default editor. Restart Covel after saving for changes
-          to take effect.
+          {t("settings.desktopEditFilesHint")}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -167,7 +188,7 @@ export function DesktopSettingsTab() {
             onClick={() => openLlmToml().catch((err) => setToast(String(err)))}
           >
             <FileCode className="w-3 h-3 mr-1.5" />
-            Edit llm.toml
+            {t("settings.desktopEditLlm")}
           </Button>
           <Button
             size="sm"
@@ -175,18 +196,17 @@ export function DesktopSettingsTab() {
             onClick={() => openKeysEnv().catch((err) => setToast(String(err)))}
           >
             <KeyRound className="w-3 h-3 mr-1.5" />
-            Edit keys.env
+            {t("settings.desktopEditKeys")}
           </Button>
         </div>
       </section>
 
-      {/* ── Server ──────────────────────────────────────────── */}
       <section className="space-y-2">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Backend Server
+          {t("settings.desktopServer")}
         </h3>
         <div className="text-xs text-muted-foreground">
-          Local API server running on port{" "}
+          {t("settings.desktopServerPort")}
           <span className="font-mono text-foreground">
             {info?.serverPort ?? "?"}
           </span>
@@ -204,7 +224,7 @@ export function DesktopSettingsTab() {
             ) : (
               <RotateCw className="w-3 h-3 mr-1.5" />
             )}
-            Restart server
+            {t("settings.desktopRestart")}
           </Button>
           <Button
             size="sm"
@@ -213,43 +233,53 @@ export function DesktopSettingsTab() {
             disabled={busy !== null}
           >
             <RefreshCcw className="w-3 h-3 mr-1.5" />
-            Refresh info
+            {t("settings.desktopRefresh")}
           </Button>
         </div>
       </section>
 
-      {/* ── Tutorial ────────────────────────────────────────── */}
       <section className="space-y-2">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Tutorial
+          {t("settings.desktopTutorial")}
         </h3>
         <div className="text-xs text-muted-foreground">
-          Re-run the onboarding wizard the next time Covel launches.
+          {t("settings.desktopResetOnboardingHint")}
         </div>
         <Button size="sm" variant="outline" onClick={handleResetOnboarding}>
-          Reset onboarding
+          {t("settings.desktopResetOnboarding")}
         </Button>
       </section>
 
-      {/* ── About ───────────────────────────────────────────── */}
       <section className="space-y-2">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          About
+          {t("settings.desktopAbout")}
         </h3>
         <div className="space-y-1 text-xs">
-          <InfoRow label="Version" value={info?.version ?? "—"} />
-          <InfoRow label="Platform" value={info?.platform ?? "—"} />
           <InfoRow
-            label="Mode"
-            value={info ? (info.isDev ? "Development" : "Production") : "—"}
+            label={t("settings.desktopVersion")}
+            value={info?.version ?? "—"}
+          />
+          <InfoRow
+            label={t("settings.desktopPlatform")}
+            value={info?.platform ?? "—"}
+          />
+          <InfoRow
+            label={t("settings.desktopMode")}
+            value={
+              info
+                ? info.isDev
+                  ? t("settings.desktopModeDev")
+                  : t("settings.desktopModeProd")
+                : "—"
+            }
           />
         </div>
         <div className="flex items-start gap-1.5 pt-1 text-xs text-muted-foreground">
           <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
           <span>
-            API keys live in <code className="font-mono">{info?.keysEnvPath ?? "~/.covel/keys.env"}</code> as
-            plain text. Protect the file with OS permissions; the app sets
-            mode 600 when writing.
+            {t("settings.desktopKeysNote", {
+              path: info?.keysEnvPath ?? "~/.covel/keys.env",
+            })}
           </span>
         </div>
       </section>
@@ -257,7 +287,15 @@ export function DesktopSettingsTab() {
   );
 }
 
-function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function InfoRow({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
   return (
     <div className="flex items-start gap-3">
       <span className="text-muted-foreground min-w-[80px]">{label}:</span>
@@ -268,9 +306,4 @@ function InfoRow({ label, value, mono }: { label: string; value: string; mono?: 
       </span>
     </div>
   );
-}
-
-/** Convenience flag so callers can skip rendering the tab entirely in web mode. */
-export function isDesktop(): boolean {
-  return isDesktopApp();
 }

@@ -156,6 +156,29 @@ export interface PluginConfigField {
   readonly description?: string;
 }
 
+// ── User-declared plugin settings ────────────────────────────────
+
+/**
+ * A user-editable setting declared by a plugin in its PLUGIN.md
+ * frontmatter. The framework renders these in the Settings UI under
+ * `Plugins > <pluginId>` and stores values under
+ * `plugin.<pluginId>.<key>` in the unified SettingsStore.
+ */
+export interface PluginUserSettingSpec {
+  readonly key: string;
+  readonly type: 'text' | 'number' | 'toggle' | 'select' | 'textarea';
+  readonly default: unknown;
+  readonly label: import('./world.js').I18nText;
+  readonly description?: import('./world.js').I18nText;
+  readonly min?: number;
+  readonly max?: number;
+  readonly step?: number;
+  readonly options?: ReadonlyArray<{
+    readonly value: string;
+    readonly label: import('./world.js').I18nText;
+  }>;
+}
+
 // ── Hook declarations ────────────────────────────────────────────
 
 /**
@@ -323,6 +346,15 @@ export interface RuntimeManifest {
   readonly config?: Readonly<Record<string, PluginConfigField>>;
   readonly i18n?: Readonly<Record<string, string>>;
   readonly ui?: UISpec;
+  /**
+   * User-facing settings the plugin exposes in the Settings UI.
+   * Each entry is auto-registered under `plugin.<pluginId>.<key>` in the
+   * unified SettingsStore and rendered as a form field in the Plugins tab.
+   *
+   * See `PluginUserSettingSpec` for the allowed shape. Plugins read values
+   * through their runtime context; the framework handles persistence.
+   */
+  readonly userSettings?: readonly PluginUserSettingSpec[];
   /**
    * Hook declarations for this runtime.
    * Each entry registers a lifecycle handler loaded lazily on first invocation.

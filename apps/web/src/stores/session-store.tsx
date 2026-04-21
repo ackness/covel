@@ -145,6 +145,12 @@ interface SessionState {
 
   /** Block IDs that have been submitted by the player (permanently locked). */
   submittedBlockIds: ReadonlySet<string>;
+
+  /**
+   * Form values keyed by submitted block id. Used to repopulate disabled
+   * forms so the player can still see what they originally entered.
+   */
+  submittedBlockValues: Readonly<Record<string, Record<string, unknown>>>;
 }
 
 export interface PendingInteractionDraft {
@@ -154,8 +160,16 @@ export interface PendingInteractionDraft {
   type: "form" | "choice" | "confirmation" | "suggestion";
   label: string;
   values: Record<string, unknown>;
+  /**
+   * StreamMessage id of the block that produced this draft. When the player
+   * confirms drafts, the framework stamps the block as submitted and
+   * records the player's chosen labels — so re-rendering the disabled
+   * block can show the historical selection. Optional for backward
+   * compatibility with drafts that originate outside a block (e.g. composer-only).
+   */
+  sourceBlockId?: string;
   selectionGroup?: string;
-  submitBehavior?: { echoFilledNarrative?: boolean; autoContinue?: boolean };
+  submitBehavior?: { echoFilledNarrative?: boolean };
 }
 
 type Action =
@@ -180,7 +194,7 @@ type Action =
   | { type: "CLEAR_EXECUTION_STEPS" }
   | { type: "FINALIZE_HANGING_RUNTIMES"; reason: string }
   | { type: "RESET_SESSION" }
-  | { type: "SUBMIT_BLOCK"; blockId: string }
+  | { type: "SUBMIT_BLOCK"; blockId: string; values?: Record<string, unknown> }
   | { type: "RESET_TO_WORLD_SELECT" }
   | { type: "REMOVE_MESSAGES_FROM_TURN"; turnId: string; keepRuntimeIds: ReadonlySet<string> }
   | { type: "SET_GAME_STATE"; state: Record<string, unknown> }
@@ -216,6 +230,7 @@ const initialState: SessionState = {
   gameState: {},
   pluginData: {},
   submittedBlockIds: new Set<string>(),
+  submittedBlockValues: {},
   sessionPlugins: [],
   messageUiSpecs: [],
   pendingInteractionDrafts: [],
@@ -377,11 +392,17 @@ function reducer(state: SessionState, action: Action): SessionState {
       // Only clear in-memory — localStorage is preserved for session history
       return { ...state, executionSteps: [] };
     case "SUBMIT_BLOCK":
-      return { ...state, submittedBlockIds: new Set([...state.submittedBlockIds, action.blockId]) };
+      return {
+        ...state,
+        submittedBlockIds: new Set([...state.submittedBlockIds, action.blockId]),
+        submittedBlockValues: action.values
+          ? { ...state.submittedBlockValues, [action.blockId]: action.values }
+          : state.submittedBlockValues,
+      };
     case "RESET_SESSION":
-      return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [] };
+      return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), submittedBlockValues: {}, sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [] };
     case "RESET_TO_WORLD_SELECT":
-      return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [] };
+      return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), submittedBlockValues: {}, sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [] };
     case "LOAD_SESSION_PLUGINS":
       return { ...state, sessionPlugins: action.plugins };
     case "TOGGLE_SESSION_PLUGIN":
@@ -556,18 +577,16 @@ interface SessionContextValue {
   /** Delete a session and all its data. */
   deleteSession: (sessionId: string) => Promise<void>;
   sendMessage: (content: string) => void;
-  /** Mark a block as submitted (permanently locks it). */
-  submitBlock: (blockId: string) => void;
+  /**
+   * Mark a block as submitted (permanently locks it).
+   * Optionally stash the form values so disabled forms can re-display them.
+   */
+  submitBlock: (blockId: string, values?: Record<string, unknown>) => void;
   /**
    * Submit an interactive block through the submit-inputs API (form/choice/confirmation).
    *
    * `submitBehavior` is a plugin-declared UX hint on the originating block's
    * `data.submitBehavior`. Currently honoured:
-   *   - `autoContinue`: after the turn triggered by the filled narrative
-   *     completes, fire a second `send_message("")` so runtimes that only
-   *     fire in the new phase (narrator, guide, …) get their first chance
-   *     to run without requiring the player to type anything. Mirrors the
-   *     V2 frontend's behaviour.
    *   - `echoFilledNarrative`: when `false`, do not surface the filled
    *     narrative as a user-visible message; send empty content instead.
    */
@@ -577,7 +596,7 @@ interface SessionContextValue {
     interactionId: string,
     type: 'form' | 'choice' | 'confirmation',
     values: Record<string, unknown>,
-    submitBehavior?: { autoContinue?: boolean; echoFilledNarrative?: boolean },
+    submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<void>;
   executeCommand: (command: string) => void;
   /**
@@ -659,6 +678,30 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         api.fetchLlmConfig().catch(() => null),
       ]);
       setBlockSchemas(schemas as Record<string, BlockSchemaDeclaration>);
+      // Register plugin-declared user settings from PLUGIN.md frontmatter.
+      // Each plugin with `userSettings:` shows up under Plugins > <pluginId>
+      // in the Settings UI, with values stored under `plugin.<pluginId>.<key>`.
+      const { registerPluginUserSettings } = await import(
+        "@/settings/registry/plugin.js"
+      );
+      const { getSettings } = await import("@/settings/store.js");
+      for (const pkg of packagesRes.packages) {
+        if (pkg.userSettings && pkg.userSettings.length > 0) {
+          registerPluginUserSettings(
+            getSettings(),
+            pkg.name,
+            pkg.userSettings,
+          );
+        }
+      }
+      // Register known providers discovered from llm.toml so the Settings UI
+      // shows a secret input per provider.
+      if (llmConfig?.providers && llmConfig.providers.length > 0) {
+        const { registerKnownProviders } = await import(
+          "@/settings/store.js"
+        );
+        registerKnownProviders(llmConfig.providers);
+      }
       dispatch({
         type: "BOOT_SUCCESS",
         presets,
@@ -1011,18 +1054,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // onto the server record. The per-runtime slot resolver reads
       // session.runtimeModelOverrides at turn time; without a PATCH, any
       // selection made on the prep screen has zero effect on the backend.
-      const prepBindings = api.getRuntimeBindings(`prep:${state.world.id}`);
+      const prepBindings = api.getPrepRuntimeBindings(state.world.id);
       if (Object.keys(prepBindings).length > 0) {
-        api.setRuntimeBindings(session.id, prepBindings);
         const overrides: Record<string, string> = {};
         for (const [runtimeId, slot] of Object.entries(prepBindings)) {
-          if (typeof slot === "string" && slot.length > 0) overrides[runtimeId] = slot;
+          if (typeof slot === "string" && slot.length > 0)
+            overrides[runtimeId] = slot;
         }
         try {
           await api.updateSession(session.id, { runtimeModelOverrides: overrides });
         } catch {
           // Non-fatal: overrides fall back to manifest defaults when missing
         }
+        // Prep bindings are no longer needed — authoritative copy now lives
+        // on the SessionRecord.
+        api.clearPrepRuntimeBindings(state.world.id);
       }
       // Sync context to server so the stateless server can process the first turn
       await ds.syncToServer(session.id);
@@ -1187,12 +1233,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // Discard if session changed during restore
     if (sessionIdRef.current !== targetSessionId) return;
 
-    // Restore submitted block IDs via DataService
+    // Restore submitted block IDs (and any persisted form values) via DataService
     try {
-      const blockIds = await ds.loadSubmittedBlocks(session.id);
+      const { ids: blockIds, values: blockValues } = await ds.loadSubmittedBlocks(session.id);
       if (sessionIdRef.current !== targetSessionId) return;
       for (const blockId of blockIds) {
-        dispatch({ type: "SUBMIT_BLOCK", blockId });
+        dispatch({ type: "SUBMIT_BLOCK", blockId, values: blockValues[blockId] });
       }
     } catch { /* ignore load errors */ }
 
@@ -1265,7 +1311,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const deleteSession = useCallback(async (sessionId: string) => {
     await ds.deleteSession(sessionId);
-    api.clearRuntimeBindings(sessionId);
     dispatch({ type: "REMOVE_SESSION", sessionId });
   }, []);
 
@@ -1275,10 +1320,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
    * expected to own the `executing` flag.
    *
    * Rationale: `sendMessage` below is the public fire-and-forget entry point,
-   * but `submitInteraction` needs to await turn completion before firing a
-   * follow-up (autoContinue). Promisifying the action call makes that
-   * chaining explicit. See the V2 frontend's equivalent submitInputsBatch
-   * helper for the mirror implementation.
+   * but `submitInteraction` needs to await turn completion before returning
+   * (so the caller can release its `executing` flag). Promisifying the action
+   * call makes that sequencing explicit.
    */
   const runSingleAction = useCallback(
     (content: string, opts: { echoUserMessage: boolean }): Promise<void> => {
@@ -1349,17 +1393,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     });
   }, [state.session, state.executing, runSingleAction]);
 
-  const submitBlock = useCallback((blockId: string) => {
-    dispatch({ type: "SUBMIT_BLOCK", blockId });
-    // Persist via DataService so submitted state survives refresh
+  const submitBlock = useCallback((blockId: string, values?: Record<string, unknown>) => {
+    dispatch({ type: "SUBMIT_BLOCK", blockId, values });
+    // Persist via DataService so submitted state (and form values) survives refresh
     const sid = sessionIdRef.current;
-    if (sid) {
-      ds.loadSubmittedBlocks(sid).then((existing) => {
-        if (!existing.includes(blockId)) {
-          ds.saveSubmittedBlocks(sid, [...existing, blockId]).catch(() => { });
-        }
-      }).catch(() => { });
-    }
+    if (!sid) return;
+    ds.loadSubmittedBlocks(sid).then(({ ids, values: existingValues }) => {
+      const nextIds = ids.includes(blockId) ? ids : [...ids, blockId];
+      const nextValues = values
+        ? { ...existingValues, [blockId]: values }
+        : existingValues;
+      ds.saveSubmittedBlocks(sid, nextIds, nextValues).catch(() => { });
+    }).catch(() => { });
   }, []);
 
   /**
@@ -1373,17 +1418,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     interactionId: string,
     type: 'form' | 'choice' | 'confirmation',
     values: Record<string, unknown>,
-    submitBehavior?: { autoContinue?: boolean; echoFilledNarrative?: boolean },
+    submitBehavior?: { echoFilledNarrative?: boolean },
   ) => {
     const sid = sessionIdRef.current;
     if (!sid) return;
 
-    const autoContinue = submitBehavior?.autoContinue === true;
     const echo = submitBehavior?.echoFilledNarrative !== false; // default true
 
     try {
-      // 1. Mark block as submitted (UI lock)
-      submitBlock(blockId);
+      // 1. Mark block as submitted (UI lock) and stash the values so the
+      //    disabled form can repopulate them after refresh.
+      submitBlock(blockId, values);
 
       // 2. Call submit-inputs API — handles template fill, character creation, phase transition
       const result = await api.submitInputs(sid, {
@@ -1407,22 +1452,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // Non-critical: character panel will update on next refresh
       }
 
-      // 4. Trigger the next turn with the filled narrative, then optionally
-      //    chain a follow-up empty-message turn so runtimes that only unlock
-      //    after phase transition (narrator, guide, …) get their first run.
+      // 4. Trigger the next turn with the filled narrative. This advances
+      //    narrator / guide / etc. once with real player context; the player
+      //    then decides the following turn. We intentionally never chain an
+      //    additional empty-message turn — doing so would re-trigger narrator
+      //    without guidance and auto-advance past pending guide suggestions.
       const filled = result.results?.[0]?.filledNarrative ?? '';
       const firstContent = echo ? filled : '';
 
-      // Own the executing flag across BOTH chained actions so concurrent
-      // player input is blocked and the UI stays in "executing" throughout.
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
       try {
         await runSingleAction(firstContent, { echoUserMessage: echo && Boolean(filled) });
-        if (autoContinue) {
-          await runSingleAction('', { echoUserMessage: false });
-        }
       } finally {
         dispatch({ type: "SET_EXECUTING", value: false });
         dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });

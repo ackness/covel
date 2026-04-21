@@ -112,6 +112,7 @@ Every currently-stored key must be placed in one of these buckets:
 | `covel:runtimePriority` | `settings.plugin.<pluginId>.runtime.<runtimeId>.priority` | Flattens into plugin namespace |
 | `covel:providerKeys` | `keys.env` (already has primary home); API surfaces as `settings.keys.<provider>` | Wrapped through SettingsStore but stored in `keys.env` |
 | `covel:runtimeBindings:<sessionId>` | `SessionRecord.runtimeModelOverrides` (field already exists server-side) | Delete localStorage key; UI reads from session state |
+| _(no legacy)_ | `settings.llm.prepRuntimeBindings` | New — pre-session runtime-to-slot map keyed by worldId. Transient: copied to `SessionRecord.runtimeModelOverrides` on session create, then cleared. |
 | `covel:storageMode` | Delete | Deprecated (always "remote") |
 | `covel:idbMigrated` | Keep (unrelated IDB migration flag) | Game-data migration, not settings |
 
@@ -215,10 +216,15 @@ export interface SettingsStore {
 
   // Subscribe
   subscribe<T>(key: SettingKey, handler: (value: T) => void): () => void;
+  subscribeAll(handler: SettingsListener): () => void;
 
   // Registry (called at boot / plugin load)
   register<T>(entry: SettingEntry<T>): void;
   unregister(key: SettingKey): void;                  // on plugin unload
+
+  // Secrets helpers — raw access for code that ships API keys as headers
+  listSecretProviders(): readonly string[];
+  snapshotSecrets(): Record<string, string>;
 }
 
 export interface SettingsExportBundle {
@@ -505,3 +511,6 @@ _None — all decisions finalized in the brainstorming session._
 | 8 | Delete `runtimeBindings:<sessionId>` localStorage; use `SessionRecord.runtimeModelOverrides` | Already exists server-side; removes last per-session localStorage key |
 | 9 | Export defaults exclude keys; opt-in checkbox | Exported files often get shared / committed; secrets must be explicit |
 | 10 | Import shows diff preview + selective apply | Low blast radius; users understand what they'll overwrite |
+| 11 | Default appearance is `paper` (not `modern`) | Paper is Covel's primary visual identity; new users should experience it first. Changeable via General → Appearance. |
+| 12 | Global subscribers in `main.tsx` for `ui.locale` / `ui.appearance` | The hooks (`useLocalePreference`, `useAppearance`) only fire their `useEffect` when a consumer component is mounted. Changes from the new SelectWidget path bypass those hooks entirely — without a global subscriber, swapping appearance from Settings would not re-apply `data-appearance` until the next mount. |
+| 13 | Prep-phase runtime bindings keyed by worldId under `llm.prepRuntimeBindings` | The prep screen has no SessionRecord yet, so transient overrides need a home. Settings store is the natural place; cleared at session creation. |
