@@ -5,7 +5,18 @@
   },
   "home": {
     "startPlaying": "开始游玩",
-    "viewRepository": "查看仓库"
+    "viewRepository": "查看仓库",
+    "forPlayersEyebrow": "面向玩家",
+    "forPlayersTitle": "进入一个会倾听你的故事。",
+    "playerPointStart": "片刻开始冒险。",
+    "playerPointStartDesc": "无需配置。选一个世界，点击开始游玩，叙事者便会回应你说的每一句话。",
+    "playerPointWorld": "挑选契合心情的世界。",
+    "playerPointWorldDesc": "赛博朋克、高魔奇幻，或是慢节奏悬疑 —— 每个世界都是一套独立的基调与设定。",
+    "playerPointModel": "自选 AI 的思考方式。",
+    "playerPointModelDesc": "按槽位切换底层模型 —— 快速草稿、深度推理，或带上你自己的 API 密钥。",
+    "underTheHoodEyebrow": "底层架构",
+    "underTheHoodHint": "仅供好奇的访客 —— 玩游戏无需关心。",
+    "debuggerLink": "打开调试器"
   },
   "nav": {
     "home": "首页",
@@ -141,8 +152,10 @@
     "selectionsReady": "已选择 {{count}} 项",
     "confirmSelections": "发送选择",
     "viewParsed": "解析",
+    "viewDetailed": "详情",
     "viewRaw": "原始",
     "viewParsedAria": "解析视图",
+    "viewDetailedAria": "详情视图",
     "viewRawAria": "原始视图",
     "stateStreaming": "生成中",
     "statePlaying": "进行中",
@@ -412,7 +425,14 @@
     "desktopModeProd": "生产",
     "desktopKeysNote": "API 密钥存储于 {{path}}，以明文保存。使用操作系统权限保护该文件；应用写入时会设为 mode 600。",
     "presetProviderPlaceholder": "Provider（如 openai）",
-    "presetModelPlaceholder": "Model ID（如 deepseek-chat）"
+    "presetModelPlaceholder": "Model ID（如 deepseek-chat）",
+    "slotChainSummary": "插件 → Slot → 预设 → API 密钥。更换预设即可切换模型；密钥在「Keys」标签管理。",
+    "chainRuntime": "运行时",
+    "chainSlot": "Slot",
+    "chainPreset": "预设",
+    "chainKey": "API 密钥",
+    "desktopLlmMissingTitle": "尚未配置任何 LLM slot",
+    "desktopLlmMissingHint": "点击下方按钮打开 ~/.covel/llm.toml，至少添加一个 [covel.<slot>] 片段。"
   },
   "plugin": {
     "runtimes": "运行时",
@@ -426,7 +446,12 @@
     "core": "核心",
     "enable": "开启插件",
     "disable": "关闭插件",
-    "emptyPlaceholder": "{{label}} 暂无数据，等待游戏推进……"
+    "emptyPlaceholder": "{{label}} 暂无数据，等待游戏推进……",
+    "useDefault": "使用默认",
+    "useDefaultWith": "使用默认（{{value}}）",
+    "modelBindingAria": "该插件运行时将使用的模型 Slot，除非需要特别覆盖否则保持默认即可。",
+    "modelBindingSource": "模型绑定 — 在「会话准备」中修改",
+    "modelBindingFallback": "模型绑定：前往「会话准备」查看"
   },
   "coreImage": {
     "generateButton": "生成插画",
@@ -533,6 +558,19 @@
   },
   "interaction": {
     "playerSelected": "你的选择："
+  },
+  "toast": {
+    "copy": "复制详情",
+    "dismiss": "关闭",
+    "errorTitle": "出错了",
+    "networkError": "网络异常 — 请检查网络连接",
+    "bootFailed": "会话初始化失败",
+    "sendMessageFailed": "消息发送失败"
+  },
+  "error": {
+    "plugin": {
+      "loadFailed": "插件加载失败"
+    }
   },
   "common": {
     "loading": "加载中...",

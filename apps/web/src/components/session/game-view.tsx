@@ -7,6 +7,7 @@ import {
   Send,
   Code,
   LayoutTemplate,
+  ListTree,
   Loader2,
   KeyRound,
   Check,
@@ -143,7 +144,7 @@ export function GameView({
     llmConfig,
   );
 
-  const [viewMode, setViewMode] = useState<"parsed" | "raw">("parsed");
+  const [viewMode, setViewMode] = useState<"parsed" | "detailed" | "raw">("parsed");
   const [inputValue, setInputValue] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -417,6 +418,15 @@ export function GameView({
                   <span className="text-xs">{t("session.viewParsed")}</span>
                 </Toggle>
                 <Toggle
+                  pressed={viewMode === "detailed"}
+                  onPressedChange={() => setViewMode("detailed")}
+                  size="sm"
+                  className="rounded-none border-0 h-7 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                >
+                  <ListTree className="w-3.5 h-3.5 mr-1.5" />
+                  <span className="text-xs">{t("session.viewDetailed")}</span>
+                </Toggle>
+                <Toggle
                   pressed={viewMode === "raw"}
                   onPressedChange={() => setViewMode("raw")}
                   size="sm"
@@ -436,6 +446,15 @@ export function GameView({
                   aria-label={t("session.viewParsedAria")}
                 >
                   <LayoutTemplate className="w-3.5 h-3.5" />
+                </Toggle>
+                <Toggle
+                  pressed={viewMode === "detailed"}
+                  onPressedChange={() => setViewMode("detailed")}
+                  size="sm"
+                  className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                  aria-label={t("session.viewDetailedAria")}
+                >
+                  <ListTree className="w-3.5 h-3.5" />
                 </Toggle>
                 <Toggle
                   pressed={viewMode === "raw"}

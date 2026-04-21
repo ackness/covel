@@ -5,7 +5,18 @@
   },
   "home": {
     "startPlaying": "Start Playing",
-    "viewRepository": "View Repository"
+    "viewRepository": "View Repository",
+    "forPlayersEyebrow": "For players",
+    "forPlayersTitle": "Step into a story that listens.",
+    "playerPointStart": "Start an adventure in seconds.",
+    "playerPointStartDesc": "No setup. Pick a world, hit Start Playing, and the narrator responds to your words.",
+    "playerPointWorld": "Pick the world that fits your mood.",
+    "playerPointWorldDesc": "Cyberpunk, high fantasy, or slow-burn mystery — each world is a self-contained setting with its own tone.",
+    "playerPointModel": "Choose how the AI thinks.",
+    "playerPointModelDesc": "Swap the underlying model per-slot — fast drafts, deeper reasoning, or your own provider key.",
+    "underTheHoodEyebrow": "Under the hood",
+    "underTheHoodHint": "For the curious — you don't need to care to play.",
+    "debuggerLink": "Open Debugger"
   },
   "nav": {
     "home": "Home",
@@ -141,8 +152,10 @@
     "selectionsReady": "{{count}} selection(s) ready",
     "confirmSelections": "Send selections",
     "viewParsed": "Parsed",
+    "viewDetailed": "Detailed",
     "viewRaw": "Raw",
     "viewParsedAria": "Parsed view",
+    "viewDetailedAria": "Detailed view",
     "viewRawAria": "Raw view",
     "stateStreaming": "Streaming",
     "statePlaying": "Playing",
@@ -412,7 +425,14 @@
     "desktopModeProd": "Production",
     "desktopKeysNote": "API keys live in {{path}} as plain text. Protect the file with OS permissions; the app sets mode 600 when writing.",
     "presetProviderPlaceholder": "Provider (e.g. openai)",
-    "presetModelPlaceholder": "Model ID (e.g. deepseek-chat)"
+    "presetModelPlaceholder": "Model ID (e.g. deepseek-chat)",
+    "slotChainSummary": "Plugins → Slots → Presets → API keys. Change a preset to swap models; manage keys in the Keys tab.",
+    "chainRuntime": "Runtime",
+    "chainSlot": "Slot",
+    "chainPreset": "Preset",
+    "chainKey": "API key",
+    "desktopLlmMissingTitle": "No LLM slots configured yet",
+    "desktopLlmMissingHint": "Click below to open ~/.covel/llm.toml and add at least one [covel.<slot>] section."
   },
   "plugin": {
     "runtimes": "Runtimes",
@@ -426,7 +446,12 @@
     "core": "core",
     "enable": "Enable plugin",
     "disable": "Disable plugin",
-    "emptyPlaceholder": "{{label}} has no data yet. Waiting for the story to progress…"
+    "emptyPlaceholder": "{{label}} has no data yet. Waiting for the story to progress…",
+    "useDefault": "Use default",
+    "useDefaultWith": "Use default ({{value}})",
+    "modelBindingAria": "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.",
+    "modelBindingSource": "Model binding — edit in Session Prep",
+    "modelBindingFallback": "Model binding: see Session Prep"
   },
   "coreImage": {
     "generateButton": "Generate Illustration",
@@ -533,6 +558,19 @@
   },
   "interaction": {
     "playerSelected": "You chose:"
+  },
+  "toast": {
+    "copy": "Copy detail",
+    "dismiss": "Dismiss",
+    "errorTitle": "Something went wrong",
+    "networkError": "Network error — check your connection",
+    "bootFailed": "Failed to initialise session",
+    "sendMessageFailed": "Failed to send message"
+  },
+  "error": {
+    "plugin": {
+      "loadFailed": "Plugin load failed"
+    }
   },
   "common": {
     "loading": "Loading...",
