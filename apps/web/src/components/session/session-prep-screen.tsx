@@ -331,7 +331,15 @@ export function SessionPrepScreen({
             <CollapsibleCardHeader
               expanded={loreExpanded}
               onToggle={() => setLoreExpanded(!loreExpanded)}
-              summary={isLoreModified ? t("session.modified") : t("session.loreSummary", { count: originalLore.length })}
+              summary={
+                isLoreModified
+                  ? t("session.modified")
+                  : t("session.loreSummaryHint", {
+                      count: originalLore.length,
+                      defaultValue:
+                        "{{count}} characters · click to edit world lore",
+                    })
+              }
             >
               <FileText className="w-4 h-4" />
               {t("session.worldLore", "World Document")}
@@ -448,6 +456,7 @@ export function SessionPrepScreen({
                             role="switch"
                             aria-checked={isSelected}
                             disabled={isCore}
+                            title={isCore ? t("plugin.locked") : undefined}
                             className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full border-2 border-transparent transition-colors ${
                               isSelected ? "bg-primary" : "bg-input"
                             } ${isCore ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
@@ -460,7 +469,15 @@ export function SessionPrepScreen({
 
                           {/* Name + badges */}
                           <span className="text-xs font-medium truncate flex-1">{displayName}</span>
-                          {isCore && <span title={t("plugin.locked")}><Lock className="w-3 h-3 text-muted-foreground/50 shrink-0" /></span>}
+                          {isCore && (
+                            <span
+                              title={t("plugin.locked")}
+                              className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/70 shrink-0"
+                            >
+                              <Lock className="w-3 h-3" />
+                              <span className="hidden sm:inline">{t("plugin.core", "core")}</span>
+                            </span>
+                          )}
                           {runtimes[0] && (
                             <Badge variant="outline" className="text-[9px] shrink-0">
                               P{runtimes[0].priority}

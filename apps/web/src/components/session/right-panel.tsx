@@ -4,7 +4,7 @@ import {
   Database,
   PanelRightClose,
   BookOpen,
-  Layout,
+  HelpCircle,
 } from "lucide-react";
 import * as Icons from "lucide-react";
 import {
@@ -51,7 +51,19 @@ function resolvePluginIcon(name: string): Icons.LucideIcon {
     .split("-")
     .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
     .join("");
-  return (Icons as Record<string, unknown>)[pascal] as Icons.LucideIcon ?? Layout;
+  const resolved = (Icons as Record<string, unknown>)[pascal] as
+    | Icons.LucideIcon
+    | undefined;
+  if (resolved) return resolved;
+  // Surface the mismatch loudly in dev so plugin authors notice mis-typed
+  // icons without crashing the panel.
+  if (import.meta.env.DEV) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[right-panel] unknown lucide icon "${name}" (looked up as "${pascal}") — falling back to HelpCircle`,
+    );
+  }
+  return HelpCircle;
 }
 
 function aggregateSpecsIntoGroups(

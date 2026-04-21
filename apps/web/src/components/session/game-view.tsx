@@ -405,7 +405,7 @@ export function GameView({
                 {executing ? t("session.stateStreaming") : t("session.statePlaying")}
               </span>
             </div>
-            <div className="flex items-center gap-4 shrink-0">
+            <div className="flex items-center gap-2 md:gap-4 shrink-0">
               <div className="hidden sm:flex items-center border border-border rounded-md overflow-hidden">
                 <Toggle
                   pressed={viewMode === "parsed"}
@@ -461,7 +461,7 @@ export function GameView({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-sm shrink-0"
+                className="hidden md:inline-flex h-8 w-8 rounded-sm shrink-0"
                 asChild
                 title={t("session.debugTraces")}
               >
@@ -566,41 +566,53 @@ export function GameView({
                 {t("session.ended", "This session has ended.")}
               </p>
             ) : (
-              <div className="flex gap-2 max-w-4xl mx-auto paper:max-w-[42rem] paper:gap-2.5">
-                <input
-                  type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={
-                    phase === "playing"
-                      ? t(
-                          "session.inputPlaceholder",
-                          "Enter action or command...",
-                        )
-                      : t("session.inputPlaceholderAny", "Send a message...")
-                  }
-                  disabled={executing}
-                  className={
-                    "flex-1 min-w-0 bg-background border border-border px-3 md:px-4 py-2 md:py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary transition-all disabled:opacity-50 " +
-                    "paper:rounded-md paper:bg-card paper:border-[color:var(--color-border)] paper:font-serif paper:text-[15px] paper:px-4 paper:py-3 paper:focus:ring-[color:var(--color-primary)]/40"
-                  }
-                />
-                <Button
-                  onClick={handleSubmit}
-                  disabled={executing || !inputValue.trim()}
-                  className={
-                    "rounded-none px-4 md:px-6 h-auto shrink-0 " +
-                    "paper:rounded-md paper:px-0 paper:w-[46px] paper:h-[46px] paper:bg-[color:var(--color-primary)] paper:text-[color:var(--color-primary-foreground)] paper:hover:opacity-90"
-                  }
-                  size="sm"
-                >
-                  {executing ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
-                </Button>
+              <div className="max-w-4xl mx-auto paper:max-w-[42rem] space-y-1">
+                <div className="flex gap-2 paper:gap-2.5">
+                  <input
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    aria-label={t(
+                      "session.inputAriaLabel",
+                      "Story input — press Enter to send",
+                    )}
+                    placeholder={
+                      phase === "playing"
+                        ? t(
+                            "session.inputPlaceholder",
+                            "Enter action or command...",
+                          )
+                        : t("session.inputPlaceholderAny", "Send a message...")
+                    }
+                    disabled={executing}
+                    className={
+                      "flex-1 min-w-0 bg-background border border-border px-3 md:px-4 py-2 md:py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary transition-all disabled:opacity-50 " +
+                      "paper:rounded-md paper:bg-card paper:border-[color:var(--color-border)] paper:font-serif paper:text-[15px] paper:px-4 paper:py-3 paper:focus:ring-[color:var(--color-primary)]/40"
+                    }
+                  />
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={executing || !inputValue.trim()}
+                    className={
+                      "rounded-none px-4 md:px-6 h-auto shrink-0 " +
+                      "paper:rounded-md paper:px-0 paper:w-[46px] paper:h-[46px] paper:bg-[color:var(--color-primary)] paper:text-[color:var(--color-primary-foreground)] paper:hover:opacity-90"
+                    }
+                    size="sm"
+                  >
+                    {executing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
+                <div className="hidden md:flex justify-end items-center gap-1 text-[10px] text-muted-foreground/70 pr-1 select-none">
+                  <kbd className="px-1.5 py-0.5 font-mono border border-border/60 bg-muted/30 rounded-sm">
+                    {"\u23CE"}
+                  </kbd>
+                  <span>{t("session.inputKbdHint", "to send")}</span>
+                </div>
               </div>
             )}
           </div>

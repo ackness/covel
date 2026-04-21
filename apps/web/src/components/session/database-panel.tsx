@@ -95,9 +95,27 @@ export function DatabasePanel({ sessionId, refreshKey = 0 }: DatabasePanelProps)
       </div>
 
       {error && (
-        <p className="text-[11px] text-red-500 italic">
-          {t("session.dbLoadError")}: {error}
-        </p>
+        <div className="text-[11px] border border-destructive/40 bg-destructive/5 text-destructive p-2 space-y-1.5">
+          <div className="flex items-start justify-between gap-2">
+            <span className="italic break-all">
+              {t("session.dbLoadError")}: {error}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 text-[10px] px-2 shrink-0"
+              onClick={handleRefresh}
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <RefreshCw className="w-3 h-3" />
+              )}
+              <span className="ml-1">{t("session.retry", "Retry")}</span>
+            </Button>
+          </div>
+        </div>
       )}
 
       {!loading && !error && tables.length === 0 && (
