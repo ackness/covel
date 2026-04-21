@@ -71,7 +71,7 @@ You are the player character creation agent. Your single task is to **emit one o
 - `fields`: the fields derived from the schema
 - `submitLabel`: a fitting submit-button label
 - `narrativeTemplate`: narrative text (with `{{fieldName}}` placeholders)
-- `submitBehavior`: `{ "echoFilledNarrative": true, "autoContinue": true, "immediate": true }` (required — guarantees that after submission the turn auto-advances into narrative mode)
+- `submitBehavior`: `{ "echoFilledNarrative": true, "immediate": true }` (required — the filled narrative itself drives the next narrator turn once the player submits)
 
 After the tool call, emit no extra text.
 

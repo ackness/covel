@@ -25,7 +25,6 @@ const formFieldSchema = z.object({
 
 const submitBehaviorSchema = z.object({
   echoFilledNarrative: z.boolean().optional(),
-  autoContinue: z.boolean().optional(),
   immediate: z.boolean().optional(),
 });
 
@@ -38,7 +37,7 @@ export const createFormTool = tool({
     fields: z.array(formFieldSchema).min(1).describe('表单字段列表'),
     submitLabel: z.string().min(1).describe('提交按钮文本'),
     narrativeTemplate: z.string().describe('叙事模板，包含 {{fieldName}} 占位符，玩家提交后由框架填充为完整叙事'),
-    submitBehavior: submitBehaviorSchema.optional().describe('可选的提交行为：是否回显提交内容、是否在无 story 输出时自动继续一轮'),
+    submitBehavior: submitBehaviorSchema.optional().describe('可选的提交行为：是否回显提交内容、是否立即提交'),
   }),
   execute: async (params) => ({
     created: true,
