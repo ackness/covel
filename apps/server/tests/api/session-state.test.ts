@@ -271,12 +271,19 @@ describe('State Routes', () => {
   });
 
   describe('GET /api/sessions/:id/state', () => {
-    it('returns empty tables when no state exists', async () => {
+    it('returns only the synthetic session table when no user state exists', async () => {
+      // Post-2026-04: the endpoint always surfaces the `session` record as a
+      // virtual table so the right-panel Database tab has something to show
+      // even on a fresh session. Character / plugin_data tables are omitted
+      // until actual data lands, but `session` is guaranteed.
       const res = await app.request(`/api/sessions/${sessionId}/state`);
       expect(res.status).toBe(200);
 
-      const body = await json(res) as Record<string, unknown>;
-      expect(body.tables).toEqual({});
+      const body = await json(res) as {
+        tables: Record<string, { data: Record<string, unknown> }>;
+      };
+      expect(Object.keys(body.tables)).toEqual(['session']);
+      expect(body.tables.session.data.id).toBe(sessionId);
     });
 
     it('returns table data after creating a table', async () => {

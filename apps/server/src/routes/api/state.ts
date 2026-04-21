@@ -24,7 +24,22 @@ type Env = {
 
 export const stateRoutes = new Hono<Env>();
 
-// GET /sessions/:id/state — Get all state tables
+// GET /sessions/:id/state — aggregated "database view" for the right-panel
+// Database tab. Returns a `tables` map where each virtual table holds:
+//
+//   - `session`: the SessionRecord (turnCount, status, activePlugins,
+//     preGameCompleted, runtimeModelOverrides, locale, worldId, etc.).
+//   - `characters`: every row in the characters table for this session,
+//     keyed by character id.
+//   - `plugin_data/<pluginId>:<namespace>`: one virtual table per plugin
+//     namespace — keyed by the record's `key`, value is the full JSON.
+//   - Any `stateManager`-registered state tables (legacy path; currently
+//     no production plugin uses this but kept for future compatibility).
+//
+// The front-end DatabasePanel renders the map as a list of collapsible
+// tables; the `schema.fields` array is derived from the data keys so the
+// accordion header shows the right field/value counts even for tables
+// with no registered schema.
 stateRoutes.get('/:id/state', async (c) => {
   const store = c.get('store');
   const stateManager = c.get('stateManager');
@@ -35,16 +50,95 @@ stateRoutes.get('/:id/state', async (c) => {
     return c.json({ error: `Session not found: ${id}` }, 404);
   }
 
-  const schemas = await stateManager.getTableSchemas(id);
   const tables: Record<string, { schema: unknown; data: Record<string, unknown> }> = {};
 
+  // ── Legacy stateManager tables (typically empty today) ────────────
+  const schemas = await stateManager.getTableSchemas(id);
   await Promise.all(schemas.map(async (schema) => {
     const data = await stateManager.getTableSnapshot(id, schema.name);
     tables[schema.name] = { schema, data: { ...data } };
   }));
 
+  // ── session record ────────────────────────────────────────────────
+  const sessionData = { ...session } as Record<string, unknown>;
+  tables.session = {
+    schema: {
+      name: 'session',
+      description: 'Session metadata (turnCount, status, active plugins, etc.)',
+      fields: Object.keys(sessionData).map((name) => ({
+        name,
+        type: typeOf(sessionData[name]),
+      })),
+    },
+    data: sessionData,
+  };
+
+  // ── characters ────────────────────────────────────────────────────
+  try {
+    const characters = await store.listCharacters(id);
+    if (characters.length > 0) {
+      const data: Record<string, unknown> = {};
+      for (const ch of characters) {
+        data[ch.id] = ch;
+      }
+      tables.characters = {
+        schema: {
+          name: 'characters',
+          description: `${characters.length} character(s)`,
+          fields: Object.keys(characters[0]).map((name) => ({
+            name,
+            type: typeOf((characters[0] as unknown as Record<string, unknown>)[name]),
+          })),
+        },
+        data,
+      };
+    }
+  } catch {
+    // Non-critical: characters table optional on slim stores.
+  }
+
+  // ── plugin_data grouped by (pluginId, namespace) ──────────────────
+  try {
+    const pluginRows = await store.listPluginDataSessionScope(id);
+    const byTable = new Map<string, { keys: Set<string>; data: Record<string, unknown> }>();
+    for (const row of pluginRows) {
+      const tableName = `plugin_data/${row.pluginId}:${row.namespace}`;
+      let entry = byTable.get(tableName);
+      if (!entry) {
+        entry = { keys: new Set(), data: {} };
+        byTable.set(tableName, entry);
+      }
+      entry.data[row.key] = row.value;
+      entry.keys.add(row.key);
+    }
+    // Stable alphabetical ordering so the UI doesn't shuffle between refreshes.
+    const sortedNames = [...byTable.keys()].sort();
+    for (const name of sortedNames) {
+      const entry = byTable.get(name)!;
+      tables[name] = {
+        schema: {
+          name,
+          description: `${entry.keys.size} entr${entry.keys.size === 1 ? 'y' : 'ies'}`,
+          fields: [...entry.keys].slice(0, 50).map((key) => ({
+            name: key,
+            type: typeOf(entry.data[key]),
+          })),
+        },
+        data: entry.data,
+      };
+    }
+  } catch {
+    // Non-critical: session may have no plugin_data rows yet.
+  }
+
   return c.json({ tables });
 });
+
+function typeOf(v: unknown): string {
+  if (v === null) return 'null';
+  if (Array.isArray(v)) return 'array';
+  return typeof v;
+}
 
 // GET /sessions/:id/state/:table — Get table snapshot
 stateRoutes.get('/:id/state/:table', async (c) => {
