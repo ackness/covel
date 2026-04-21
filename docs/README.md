@@ -12,9 +12,12 @@ docs/
 ├── CHANGELOG.md             # 版本发布记录（Keep a Changelog）
 ├── CONTRIBUTING.md / .en.md # 贡献指南
 │
+├── glossary.md              # 术语表（session / runtime / slot / …）
+│
 ├── guide/                   # 上手与作者指南
 │   ├── plugin-authoring.md
 │   ├── plugin-ui-runtime-guidelines.md
+│   ├── plugin-testing.md    # 插件测试（harness + 示例）
 │   ├── e2e-plugin-verify.md
 │   ├── e2e-testing.md
 │   ├── desktop-config.md / .en.md  # 桌面版配置与数据目录
@@ -27,6 +30,7 @@ docs/
 │   ├── plugins.md
 │   ├── tools.md
 │   ├── ui-panels.md
+│   ├── ui-components.md     # json-render 组件目录
 │   ├── prompt-structure.md
 │   └── transactions.md
 │
@@ -43,7 +47,9 @@ docs/
 3. **写插件** — [`guide/plugin-authoring.md`](./guide/plugin-authoring.md) + [`reference/plugins.md`](./reference/plugins.md)
 4. **理解执行** — [`architecture/flow.md`](./architecture/flow.md) 描述整条回合管线
 5. **查 API** — [`reference/api.md`](./reference/api.md) 与 [`reference/protocol.md`](./reference/protocol.md)
-6. **发布** — [`CONTRIBUTING.md#release-process`](./CONTRIBUTING.md#release-process) + [`../apps/desktop/PACKAGING.md`](../apps/desktop/PACKAGING.md)
+6. **测试插件** — [`guide/plugin-testing.md`](./guide/plugin-testing.md) 的 harness / MockLLM / `e2e-plugin-verify` 选型
+7. **查术语** — [`glossary.md`](./glossary.md) 对 session / runtime / slot / binding / proposal 等核心概念给出一页式定义
+8. **发布** — [`CONTRIBUTING.md#release-process`](./CONTRIBUTING.md#release-process) + [`../apps/desktop/PACKAGING.md`](../apps/desktop/PACKAGING.md)（Electron）/ [`../apps/desktop-tauri/PACKAGING.md`](../apps/desktop-tauri/PACKAGING.md)（Tauri）
 
 ## 文档约定
 
