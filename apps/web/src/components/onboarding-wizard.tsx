@@ -561,6 +561,33 @@ export function OnboardingWizard() {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+      {/* Always-on locale toggle — cheaper than forcing users back to Step 0. */}
+      <div className="absolute top-6 left-6 flex items-center gap-1 text-[10px] font-medium uppercase tracking-widest">
+        <button
+          type="button"
+          onClick={() => setLocale("zh-CN")}
+          className={`px-2 py-1 border transition-colors ${
+            locale === "zh-CN"
+              ? "border-primary text-primary"
+              : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
+          }`}
+          aria-label={t("onboarding.localeZh", "Switch to Chinese")}
+        >
+          {"\u4E2D"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setLocale("en-US")}
+          className={`px-2 py-1 border transition-colors ${
+            locale === "en-US"
+              ? "border-primary text-primary"
+              : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
+          }`}
+          aria-label={t("onboarding.localeEn", "Switch to English")}
+        >
+          EN
+        </button>
+      </div>
       <button
         onClick={dismiss}
         className="absolute top-6 right-6 text-zinc-500 hover:text-zinc-300 transition-colors"

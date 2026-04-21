@@ -546,8 +546,9 @@ export function GameView({
                         <button
                           type="button"
                           onClick={() => removeInteractionDraft(d.id)}
-                          className="inline-flex items-center justify-center w-4 h-4 rounded-sm text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                          className="inline-flex items-center justify-center h-6 w-6 -my-1 rounded-sm text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
                           aria-label={t("session.removeDraft")}
+                          title={t("session.removeDraft")}
                         >
                           <X className="w-3 h-3" />
                         </button>

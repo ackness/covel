@@ -115,7 +115,7 @@ export function LeftPanel({
           <div className="px-3 py-2.5 border-b border-border space-y-1.5 paper:px-5 paper:py-4 paper:space-y-2">
             <div className="paper:mb-0.5">
               <span className="hidden paper:inline-block paper-eyebrow">
-                {t("session.currentWorld", "当前会话")}
+                {t("session.currentWorld", "Current session")}
               </span>
             </div>
             <div className="flex items-center justify-between">

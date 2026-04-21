@@ -25,6 +25,23 @@ function inferClientSlotTag(slotId: string): string {
   return "text";
 }
 
+/**
+ * Format a slot for compact display as `<provider> · <model>`. Prefers
+ * the resolved preset (user's current selection), then the server-side
+ * llm.toml model, and finally just the slot id so the caller always
+ * gets something back.
+ */
+export function formatSlotLabel(slot: ResolvedSlot | null | undefined): string | null {
+  if (!slot) return null;
+  if (slot.preset) {
+    return `${slot.preset.provider} \u00B7 ${slot.preset.model}`;
+  }
+  if (slot.serverModel) {
+    return `${slot.slotId} \u00B7 ${slot.serverModel}`;
+  }
+  return slot.slotId;
+}
+
 
 /**
  * Hook that reads slot config + custom presets from localStorage,

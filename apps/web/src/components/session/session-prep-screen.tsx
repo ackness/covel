@@ -261,7 +261,7 @@ export function SessionPrepScreen({
             </CollapsibleCardHeader>
             {worldInfoExpanded && (
               <CardContent className="space-y-2">
-                <p className="text-sm text-muted-foreground">{text(world.description)}</p>
+                <p className="text-sm text-muted-foreground break-words [overflow-wrap:anywhere]">{text(world.description)}</p>
                 {world.tags && world.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {world.tags.map((tag) => (
@@ -526,10 +526,24 @@ export function SessionPrepScreen({
                 {/* Execution Flow Preview */}
                 {selectedFlowSteps.length > 0 && (
                   <div className="space-y-2 pt-2 border-t border-dashed border-border">
-                    <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                      <Zap className="w-3 h-3" />
-                      {t("session.executionFlow", "Execution Flow")}
-                    </h4>
+                    <div className="space-y-0.5">
+                      <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                        <Zap className="w-3 h-3" />
+                        {t("session.executionFlow", "Execution Flow")}
+                      </h4>
+                      <p
+                        className="text-[10px] text-muted-foreground/70 leading-snug"
+                        title={t(
+                          "session.executionFlowTitle",
+                          "Plugins run in priority order every turn. Pre-Turn and After-Turn band the narrator on either side.",
+                        )}
+                      >
+                        {t(
+                          "session.executionFlowHint",
+                          "Turn order — lower priority runs first.",
+                        )}
+                      </p>
+                    </div>
                     <div className="space-y-1">
                       {(flowData?.segments ?? []).map((seg) => {
                         const stepsInSeg = selectedFlowSteps

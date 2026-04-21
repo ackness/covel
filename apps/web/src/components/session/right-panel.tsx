@@ -88,6 +88,21 @@ function aggregateSpecsIntoGroups(
 
       const existing = groupMap.get(groupKey);
       if (existing) {
+        // Warn when two plugins share the same `group` but disagree on
+        // `groupLabel`. The first-defined label wins (so tabs stay
+        // stable) but the disagreement is surfaced so plugin authors
+        // notice the collision during dev.
+        const incomingLabel = resolveI18n(spec.groupLabel, locale);
+        if (
+          import.meta.env.DEV &&
+          incomingLabel &&
+          incomingLabel !== existing.label
+        ) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[right-panel] plugin "${entry.pluginId}" declares group "${groupKey}" with label "${incomingLabel}", but group already exists with label "${existing.label}". Keeping first.`,
+          );
+        }
         existing.subPanels.push(sub);
       } else {
         groupMap.set(groupKey, {
