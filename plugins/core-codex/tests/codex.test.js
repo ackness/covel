@@ -323,7 +323,9 @@ describe('core-codex plugin manifest', () => {
   it('should be a non-core agent-runtime plugin', () => {
     expect(manifest.pluginType).toBe('plugin');
     expect(manifest.name).toBe('core-codex');
-    expect(manifest.priority).toBe(650);
+    // Narrator-downstream layer — shares 600 with guide / extractor /
+    // character-tracker so the scheduler runs all four in parallel.
+    expect(manifest.priority).toBe(600);
     // Agent runtime — no `runtimeType` field means default 'agent'
     expect(manifest.runtimeType).toBeUndefined();
     expect(manifest.handler).toBeUndefined();
@@ -369,9 +371,14 @@ describe('core-codex plugin manifest', () => {
     expect(loaded.promptTemplate).toContain('<existing-entries>');
   });
 
-  it('should have scheduled trigger with interval', () => {
-    expect(manifest.trigger?.type).toBe('scheduled');
-    expect(manifest.trigger?.interval).toBe(2);
+  it('should have auto trigger (runs every turn after narrator)', () => {
+    // Post 2026-04 refactor: codex runs every turn so no narrative is lost
+    // between discovery passes. Priority 600 plus upstreamRequired:
+    // [core-narrator] ensure codex (and its peers guide / extractor /
+    // character-tracker) schedule after narrator completes; on that layer
+    // the DAG scheduler executes them concurrently.
+    expect(manifest.trigger?.type).toBe('auto');
+    expect(manifest.upstreamRequired).toContain('core-narrator');
   });
 
   it('should declare right panel UI spec', () => {

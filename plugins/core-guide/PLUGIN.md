@@ -4,7 +4,11 @@ description:
   zh: 行动引导插件。分析叙事结果，为玩家生成分风格的选择建议（稳妥/激进/创意/疯狂），让 narrator 专注叙事。
   en: Action guide. Reads the latest narrative and offers the player categorised suggestions (safe / bold / creative / wild) so the narrator can focus on prose.
 pluginType: plugin
-priority: 550
+# Narrator-downstream layer — shares priority 600 with codex, npc-graph
+# extractor, and character-tracker so the scheduler runs them in parallel.
+# They all declare upstreamRequired: [core-narrator] and only depend on
+# narrator's output; they do not read each other's writes.
+priority: 600
 model: plugin
 outputKind: system
 timeoutMs: 120000
@@ -13,6 +17,10 @@ trigger:
   type: scheduled
   interval: 1
   cooldownTurns: 1
+# Suggestions only make sense when narrator produced fresh prose.
+# Framework skips this runtime before the LLM call if narrator failed.
+upstreamRequired:
+  - core-narrator
 input:
   inject:
     - from: core-narrator

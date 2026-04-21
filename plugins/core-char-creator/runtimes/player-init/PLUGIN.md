@@ -12,11 +12,20 @@ promptVersion: 2
 guard: ./guard.js
 trigger:
   type: auto
+upstreamRequired:
+  # Pre-Game band: without a successful pregame run there is no world
+  # summary to seed the opening form on. Skip rather than ask the LLM
+  # to invent a form without context.
+  - core-pregame
 input:
   inject:
-    - from: core-narrator
+    # Pre-Game band: core-narrator is NOT scheduled in turn 0, so we inject
+    # the deterministic opening text produced by core-pregame (priority 10)
+    # instead. core-narrator only comes online in turn 1+ and is consumed
+    # by main-loop plugins (guide, codex, character-tracker, etc.).
+    - from: core-pregame
       field: narrativeOutput
-      as: "<narrator-opening>"
+      as: "<pregame-opening>"
 tools:
   builtin:
     - create-form
@@ -34,8 +43,8 @@ postHistory:
 
 你是玩家角色创建 agent。你的唯一任务是**生成一次开场角色表单**。角色的真正落库由框架在玩家提交表单后自动完成，你**完全不需要**也**无法**调用创角工具——你的工具清单里只有 `create-form`。
 
-## 主叙事开场
-<narrator-opening>{{ inputs.core-narrator.core-narrator.narrativeOutput }}</narrator-opening>
+## 开场摘要（由 core-pregame 在 Pre-Game 阶段生成）
+<pregame-opening>{{ inputs.core-pregame.core-pregame.narrativeOutput }}</pregame-opening>
 
 ## 世界观
 <world-lore>
@@ -51,7 +60,7 @@ postHistory:
 
 ## 你要做的事
 
-1. 写一段**角色觉醒/诞生的短叙事**（150-250字），基于上面的开场叙事，自然地引出需要玩家填写的信息
+1. 写一段**角色觉醒/诞生的短叙事**（150-250字），基于上面的 `<pregame-opening>` 世界摘要，自然地引出需要玩家填写的信息
 2. 调用 `create-form` **一次**创建角色表单，随后调用 `runtime-done` 结束
 
 ### 表单字段生成规则

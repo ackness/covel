@@ -4,7 +4,9 @@ description:
   zh: NPC 关系图抽取器 — 分析叙事文本抽取人物、群体、势力及其关系事实，维护一张可检索的知识图谱。
   en: NPC relationship graph extractor — parses the narrative to extract characters, groups, factions, and their relationship facts, maintaining a queryable knowledge graph.
 pluginType: plugin
-priority: 620
+# Narrator-downstream layer — shares priority 600 with guide, codex, and
+# character-tracker so scheduler runs them in parallel.
+priority: 600
 model: plugin
 timeoutMs: 120000
 capabilities: [npc-graph, relationship-tracking]
@@ -13,6 +15,9 @@ trigger:
   type: scheduled
   interval: 1
   cooldownTurns: 1
+# Extractor parses narrator output — skip when narrator failed.
+upstreamRequired:
+  - core-narrator
 input:
   inject:
     - from: core-narrator

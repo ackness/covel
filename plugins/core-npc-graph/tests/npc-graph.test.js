@@ -88,7 +88,9 @@ describe('core-npc-graph manifests', () => {
     const extractor = manifests.find((m) => m.name === 'core-npc-graph/extractor');
     expect(extractor).toBeDefined();
     expect(extractor.pluginType).toBe('plugin');
-    expect(extractor.priority).toBe(620);
+    // Narrator-downstream layer — shares priority 600 with guide, codex,
+    // and character-tracker. The scheduler runs all four in parallel.
+    expect(extractor.priority).toBe(600);
     expect(extractor.capabilities).toContain('npc-graph');
     expect(extractor.tools?.local).toContain('./tools/upsert-npc-graph.js');
     expect(extractor.tools?.local).toContain('./tools/list-npc-graph.js');
@@ -104,7 +106,8 @@ describe('core-npc-graph manifests', () => {
     expect(retriever).toBeDefined();
     expect(retriever.runtimeType).toBe('function');
     expect(retriever.handler).toBe('./handler.js');
-    expect(retriever.priority).toBe(490); // before narrator priority 500
+    // Narrator-prep layer — runs before narrator (500).
+    expect(retriever.priority).toBe(400);
     expect(retriever.capabilities).toContain('graph-rag');
     // Main-loop band membership enforced by priority >= 100 server-side.
     expect(retriever.priority).toBeGreaterThanOrEqual(100);

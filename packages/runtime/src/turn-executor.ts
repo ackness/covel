@@ -33,7 +33,7 @@ import type {
   CompactorRunner,
 } from '@covel/context';
 import { executeParallel } from './parallel-executor.js';
-import type { TriggerContext } from './types.js';
+import type { TriggerContext, ScheduledGroup } from './types.js';
 import type { LLMAdapter, LLMMessage } from './llm-adapter.js';
 import type { ToolExecutor } from './tool-executor.js';
 import type { HookPipeline } from './hooks/pipeline.js';
@@ -631,26 +631,34 @@ export async function executeTurn(
     return shouldTrigger(rt, triggerContext);
   });
 
-  // 2. Schedule by priority — band filter uses turnNumber to gate Pre-Game vs main loop.
+  // 2. Schedule runtimes.
   //
-  // Pre-Game band (turn 0) keeps strict priority ordering because Pre-Game
-  // plugins have implicit write-ordering that is not captured in manifest
-  // inject declarations (pregame runs first, then player-init, then world-init).
+  // Pre-Game band (turn 0) uses strict priority ordering: pregame plugins
+  // have implicit write-ordering (pregame → player-init → world-init) that
+  // is NOT captured in manifest inject declarations, so falling back to
+  // priority is the right semantic.
   //
-  // Main-loop band (turn >= 1) can opt into a DAG scheduler via
-  // COVEL_DAG_SCHEDULER=1 — it parallelises all runtimes whose declared
-  // upstreams (input.inject + upstreamRequired) have already completed.
-  // Falls back to priority scheduling on cycle detection.
-  let groups = scheduleByPriority(triggered, turnNumber);
-  if (process.env.COVEL_DAG_SCHEDULER === '1' && turnNumber >= 1) {
-    // Only the main-loop runtimes survive the band filter at this turn; reuse
-    // them for the DAG pass so Pre-Game plugins stay out of the graph.
+  // Main-loop band (turn >= 1) uses the DAG scheduler: it parallelises any
+  // runtimes whose declared upstreams (input.inject + upstreamRequired) have
+  // already completed. Independent branches (narrator's four downstream
+  // plugins — guide/codex/extractor/char-tracker) run concurrently instead
+  // of being serialised by numeric priority. Falls back to priority ordering
+  // only if a cycle is detected (plugin authoring mistake).
+  //
+  // See packages/runtime/src/dag-scheduler.ts for the algorithm.
+  let groups: readonly ScheduledGroup[];
+  if (turnNumber === 0) {
+    groups = scheduleByPriority(triggered, turnNumber);
+  } else {
     const mainLoop = triggered.filter(
       (rt) => rt.priority !== undefined && rt.priority > 99,
     );
     const dag = scheduleByDag(mainLoop);
     if (dag.error) {
-      console.warn(`[turn-executor] DAG scheduler: ${dag.error}; falling back to priority ordering`);
+      console.warn(
+        `[turn-executor] DAG scheduler: ${dag.error}; falling back to priority ordering`,
+      );
+      groups = scheduleByPriority(triggered, turnNumber);
     } else {
       groups = dag.groups;
     }

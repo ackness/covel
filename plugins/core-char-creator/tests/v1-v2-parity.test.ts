@@ -55,6 +55,12 @@ function loadCharacterTracker() {
 const NARRATOR_OUTPUT_TEXT =
   'You awaken on a wind-worn bluff above the Cloudmere archipelago. A bronze bell tolls once in the valley below. From behind a stone cairn, a hooded traveler — Elina — steps into view and offers a hand.';
 
+// Post 2026-04: player-init (Pre-Game band, priority 50) no longer injects
+// core-narrator (main-loop band, priority 500) because the narrator is not
+// scheduled in turn 0. It injects core-pregame.narrativeOutput instead.
+const PREGAME_OUTPUT_TEXT =
+  '【Cloudmere】A high-altitude archipelago of sky-islands held aloft by ancient crystals. A bronze bell tolls once in the valley below.';
+
 function makeNarratorResult(turnId: string): RuntimeResult {
   return {
     pluginId: 'core-narrator',
@@ -67,6 +73,23 @@ function makeNarratorResult(turnId: string): RuntimeResult {
     },
     toolCalls: [],
     durationMs: 100,
+    timestamp: '2026-04-13T00:00:00.000Z',
+  };
+}
+
+function makePregameResult(turnId: string): RuntimeResult {
+  return {
+    pluginId: 'core-pregame',
+    runtimeId: 'core-pregame',
+    runId: 'run-0',
+    turnId,
+    status: 'success',
+    output: {
+      narrativeOutput: PREGAME_OUTPUT_TEXT,
+      preGameDone: true,
+    },
+    toolCalls: [],
+    durationMs: 2,
     timestamp: '2026-04-13T00:00:00.000Z',
   };
 }
@@ -90,7 +113,7 @@ function makePlayerInitParams(
     promptTemplate,
     manifest,
     turnInput: makeTurnInput(),
-    completedResults: new Map([['core-narrator', makeNarratorResult('turn-1')]]),
+    completedResults: new Map([['core-pregame', makePregameResult('turn-0')]]),
     config: {
       worldLore:
         'Cloudmere is a high-altitude archipelago of sky-islands held aloft by ancient crystals.',
@@ -222,11 +245,13 @@ describe('core-char-creator/player-init V1/V2 prompt parity', () => {
     process.env.COVEL_PROMPT_V2 = '1';
     const v2 = buildContext(params);
 
-    // Narrator inject block.
-    expect(v1.systemPrompt).toContain(NARRATOR_OUTPUT_TEXT);
-    expect(v2.systemPrompt).toContain(NARRATOR_OUTPUT_TEXT);
-    expect(v1.systemPrompt).toContain('<narrator-opening>');
-    expect(v2.systemPrompt).toContain('<narrator-opening>');
+    // Pregame inject block — Pre-Game band doesn't see the (unscheduled)
+    // narrator, so the opening text comes from core-pregame.narrativeOutput
+    // under the <pregame-opening> tag.
+    expect(v1.systemPrompt).toContain(PREGAME_OUTPUT_TEXT);
+    expect(v2.systemPrompt).toContain(PREGAME_OUTPUT_TEXT);
+    expect(v1.systemPrompt).toContain('<pregame-opening>');
+    expect(v2.systemPrompt).toContain('<pregame-opening>');
 
     // World lore interpolation.
     expect(v1.systemPrompt).toContain('Cloudmere is a high-altitude');

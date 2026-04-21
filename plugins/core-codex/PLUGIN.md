@@ -4,15 +4,20 @@ description:
   zh: 知识图鉴系统。读取叙事文本与已有条目，用 LLM 判断本轮是否出现了值得登记的新发现（地点/人物/势力/物品/技能/传闻），通过 unlock-codex-entries / update-codex-entry 写入图鉴。对"没有新发现"的回合直接结束。
   en: Knowledge codex. Inspects narrative text and existing entries, asks the LLM whether this turn introduced anything worth cataloguing (locations, characters, factions, items, skills, lore), then writes via unlock-codex-entries / update-codex-entry. Skips turns with no new discoveries.
 pluginType: plugin
-priority: 650
+# Narrator-downstream layer (see core-guide for the rationale). Every
+# plugin in this layer shares priority 600 so priority-based fallback
+# scheduling still runs them in parallel.
+priority: 600
 outputKind: system
 model: plugin
 timeoutMs: 120000
 promptVersion: 2
 trigger:
-  type: scheduled
-  interval: 2
-  cooldownTurns: 1
+  type: auto
+# Codex registers discoveries from the latest narrative — skip when narrator
+# failed to avoid LLM hallucinating entries from an empty <narrator-output>.
+upstreamRequired:
+  - core-narrator
 input:
   inject:
     - from: core-narrator

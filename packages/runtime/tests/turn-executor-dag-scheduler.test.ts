@@ -1,10 +1,11 @@
 /**
- * turn-executor DAG scheduler integration — verifies that when
- * COVEL_DAG_SCHEDULER=1, same-level downstreams really run concurrently
- * instead of being serialised by priority number.
+ * turn-executor DAG scheduler integration — verifies that the main-loop
+ * band always uses the DAG scheduler (no feature flag) and that same-level
+ * downstreams really run concurrently instead of being serialised by
+ * priority number.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import type { RuntimeManifest, TurnInput } from '@covel/shared';
 import { createMemoryStore } from '@covel/store';
 import type { DataStore } from '@covel/store';
@@ -55,17 +56,7 @@ function manifest(
   } as RuntimeManifest;
 }
 
-describe('executeTurn + COVEL_DAG_SCHEDULER', () => {
-  const originalFlag = process.env.COVEL_DAG_SCHEDULER;
-
-  beforeEach(() => {
-    process.env.COVEL_DAG_SCHEDULER = '1';
-  });
-  afterEach(() => {
-    if (originalFlag === undefined) delete process.env.COVEL_DAG_SCHEDULER;
-    else process.env.COVEL_DAG_SCHEDULER = originalFlag;
-  });
-
+describe('executeTurn main-loop DAG scheduler', () => {
   it('runs independent narrator downstreams concurrently', async () => {
     // narrator, then guide + codex + char-tracker in parallel (all depend only
     // on narrator). Without the DAG scheduler they would execute strictly in

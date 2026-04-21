@@ -64,12 +64,20 @@ describe('core-char-creator plugin', () => {
       expect(manifest.tools?.builtin).toEqual(['create-form']);
     });
 
-    it('injects narrator.narrativeOutput as <narrator-opening>', () => {
+    it('injects core-pregame.narrativeOutput as <pregame-opening>', () => {
+      // Pre-Game band: core-narrator is NOT scheduled on turn 0, so player-init
+      // consumes the opening summary produced by core-pregame (priority 10)
+      // rather than the (missing) narrator output. See plugin README / the
+      // turn-executor scheduler band gate.
       expect(manifest.input?.inject).toHaveLength(1);
       const inject = manifest.input.inject[0];
-      expect(inject.from).toBe('core-narrator');
+      expect(inject.from).toBe('core-pregame');
       expect(inject.field).toBe('narrativeOutput');
-      expect(inject.as).toBe('<narrator-opening>');
+      expect(inject.as).toBe('<pregame-opening>');
+    });
+
+    it('declares upstreamRequired so it is skipped when pregame failed', () => {
+      expect(manifest.upstreamRequired).toEqual(['core-pregame']);
     });
 
     it('uses an auto trigger with a guard to gate re-runs', () => {

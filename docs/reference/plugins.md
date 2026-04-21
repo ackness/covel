@@ -4,6 +4,20 @@
 
 ---
 
+## 调度层级
+
+主循环每一轮的调度图由 **DAG 调度器** 依据每个 runtime 的 `input.inject[].from` 和 `upstreamRequired` 推导 —— 无环依赖的 runtime 自动归入同一层并发执行。下面的 priority 仅作同层内部的稳定排序 tiebreaker，调度的真正依据是依赖声明：
+
+| 层 | priority | Runtime | 说明 |
+|---|---|---|---|
+| Narrator-prep | 400 | `core-npc-graph/rag-retriever` | narrator 的依赖上游（function runtime，无 LLM） |
+| Narrator | 500 | `core-narrator` | 主叙事生成器 |
+| Narrator-downstream | 600 | `core-guide` · `core-codex` · `core-npc-graph/extractor` · `core-char-creator/character-tracker` | 四者都只依赖 narrator，彼此独立 → **同层并行执行** |
+
+Pre-Game band（priority < 100）仍走 priority 串行：`core-pregame(10) → core-char-creator/player-init(50) → core-world-init/schema-gen(85)`。Pre-Game 插件之间存在隐式 config 依赖（player-init 读取 world-init 写的 `plugin_data[schema]` 经由 `loadSessionConfig` 注入），目前不在 DAG 里表达，所以保留串行兜底。
+
+---
+
 ## 概览
 
 | ID | 类型 | 优先级 | 触发方式 | 模型 slot | 描述 |
@@ -11,12 +25,12 @@
 | core-pregame | core-plugin | 10 | scheduled（仅首轮） | — | 游戏初始化（function runtime） |
 | core-world-init/schema-gen | core-plugin | 85 | scheduled（仅首轮） | `plugin` | 世界维度初始化（guard + agent） |
 | core-char-creator/player-init | core-plugin | 50 | scheduled（maxTriggerCount=2, guard, function runtime） | `plugin` | 玩家角色创建（deterministic handler；Pre-Game 阶段） |
-| core-narrator | core-plugin | 500 | auto | `story` | 主叙事生成器 |
-| core-guide | plugin | 550 | scheduled（interval=1, cooldown=1） | `plugin` | 行动引导 + 聊天内建议面 |
-| core-npc-graph/rag-retriever | plugin | 490 | scheduled（interval=1，function runtime） | — | NPC 图谱结构化检索器，向 narrator 注入相关关系事实 |
-| core-npc-graph/extractor | plugin | 620 | scheduled（interval=1, cooldown=1） | `plugin` | NPC 关系图抽取器（受 MiroFish 启发） |
-| core-codex | plugin | 650 | scheduled（interval=2, cooldown=1） | `plugin` | 知识图鉴系统（deterministic handler） |
-| core-char-creator/character-tracker | core-plugin | 750 | scheduled（interval=1, cooldown=1） | `plugin` | NPC 发现 + 角色状态跟踪 |
+| core-npc-graph/rag-retriever | plugin | 400 | scheduled（interval=1，function runtime） | — | Narrator-prep 层：NPC 图谱结构化检索器，向 narrator 注入相关关系事实 |
+| core-narrator | core-plugin | 500 | auto | `story` | Narrator 层：主叙事生成器 |
+| core-guide | plugin | 600 | scheduled（interval=1, cooldown=1） | `plugin` | Narrator-downstream 层：行动引导 + 聊天内建议面 |
+| core-codex | plugin | 600 | auto（每轮，紧跟 narrator 之后） | `plugin` | Narrator-downstream 层：知识图鉴系统（agent runtime） |
+| core-npc-graph/extractor | plugin | 600 | scheduled（interval=1, cooldown=1） | `plugin` | Narrator-downstream 层：NPC 关系图抽取器 |
+| core-char-creator/character-tracker | core-plugin | 600 | scheduled（interval=1, cooldown=1） | `plugin` | Narrator-downstream 层：NPC 发现 + 角色状态跟踪 |
 | core-memory | core-plugin | — | UI-only（无 runtime） | — | 长期记忆摘要面板（UI 呈现，无独立 runtime） |
 
 ---
@@ -123,7 +137,7 @@
 | pluginType | `plugin` |
 | runtimeType | `function`（无 LLM 调用，纯结构化检索） |
 | handler | `./runtimes/rag-retriever/handler.js` |
-| priority | 490（在 `core-narrator=500` **之前**） |
+| priority | 400（Narrator-prep 层，在 `core-narrator=500` **之前**） |
 | capabilities | `[npc-graph, graph-rag]` |
 | trigger | `scheduled`，`interval: 1` |
 
@@ -137,7 +151,7 @@
 |------|----|
 | pluginType | `plugin` |
 | runtimeType | `agent`（LLM 驱动） |
-| priority | 620（位于 narrator=500 与 codex=650 之间） |
+| priority | 600（Narrator-downstream 层，与 guide / codex / character-tracker 并行执行） |
 | capabilities | `[npc-graph, relationship-tracking]` |
 | trigger | `scheduled`，`interval: 1`，`cooldownTurns: 1` |
 | input.inject | `core-narrator.narrative` → `<narrator-output>` |
@@ -180,9 +194,9 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | 字段 | 值 |
 |------|----|
 | pluginType | `plugin`（可禁用） |
-| priority | 650 |
+| priority | 600（Narrator-downstream 层） |
 | runtimeType | `agent`（默认，LLM 驱动） |
-| trigger | `scheduled`，`interval: 2`，`cooldownTurns: 1` |
+| trigger | `auto`（每轮触发；`upstreamRequired: [core-narrator]` 保证在 narrator 失败时 skip，不会用空 `<narrator-output>` 幻觉） |
 | model | `plugin` |
 | tools.local | `unlock-codex-entries`, `update-codex-entry` |
 | ui.right | `./ui/codex-panel.json` |
@@ -238,11 +252,12 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | 字段 | 值 |
 |------|----|
 | pluginType | `core-plugin` |
-| priority | 750 |
+| priority | 600（Narrator-downstream 层，与 guide / codex / extractor 并行） |
 | trigger | `scheduled`，`interval: 1`，`cooldownTurns: 1` |
 | model | `plugin` |
 | tools.builtin | `create-character`, `update-character`, `list-characters`, `get-character` |
 | input.inject | `core-narrator` → `narrativeOutput` → `<narrator-output>` |
+| upstreamRequired | `[core-narrator]` — 框架在 narrator 失败时 skip |
 
 **职责**: 每轮扫描 narrator 输出，发现新的有名字 NPC → `create-character(type="npc")`；检测叙事中的角色状态变化（受伤、死亡、装备、关系）→ `update-character(fields: {...})`。工作流：
 1. `list-characters` 获取现有角色（避免重复）
@@ -260,12 +275,13 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | 字段 | 值 |
 |------|----|
 | pluginType | `plugin`（可禁用） |
-| priority | 550（narrator 之后、codex 之前） |
+| priority | 600（Narrator-downstream 层，与 codex / extractor / character-tracker 并行） |
 | trigger | `scheduled`，`interval: 1`，`cooldownTurns: 1` |
 | model | `plugin` |
 | tools.local | `generate-guide` |
 | ui.message | `./ui/action-guide-block.json` |
 | input.inject | `core-narrator` → `narrativeOutput` → `<narrator-output>` |
+| upstreamRequired | `[core-narrator]` |
 
 **职责**: 在叙事推进后，分析当前情境，为玩家生成分风格的行动建议。让 narrator 专注叙事，选择引导交由本插件。
 
