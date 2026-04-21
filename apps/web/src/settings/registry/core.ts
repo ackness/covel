@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SettingsStoreApi } from "@covel/shared";
+import { registerThemeSettings } from "@/theme-system/settings.js";
 
 /**
  * Core/general user preferences that apply app-wide regardless of session.
@@ -24,19 +25,7 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
     ],
   });
 
-  store.register({
-    key: "ui.appearance",
-    schema: z.enum(["modern", "paper", "abyss"]),
-    default: "paper",
-    group: "general",
-    widget: "select",
-    label: { "zh-CN": "外观", "en-US": "Appearance" },
-    options: [
-      { value: "paper", label: { "zh-CN": "Paper", "en-US": "Paper" } },
-      { value: "modern", label: { "zh-CN": "Modern", "en-US": "Modern" } },
-      { value: "abyss", label: { "zh-CN": "深渊", "en-US": "Abyss" } },
-    ],
-  });
+  registerThemeSettings(store);
 
   store.register({
     key: "ui.onboardedVersion",

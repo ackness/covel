@@ -110,7 +110,7 @@ const Grid: ComponentRenderer = ({ element, children }) => {
 };
 
 const Separator: ComponentRenderer = () => (
-  <hr className="border-t border-border my-2 paper:border-dashed paper:opacity-70" />
+  <hr className="ui-rule border-t border-border my-2" />
 );
 
 // ── Display Components ───────────────────────────────────────────
@@ -127,10 +127,10 @@ const Text: ComponentRenderer = ({ element, children }) => {
     <p className={clsx(
       "leading-relaxed text-foreground",
       variant === "muted" && "text-muted-foreground",
-      weight === "bold" && "font-semibold paper:font-medium",
+      weight === "bold" && "font-semibold",
       size === "xs" && "text-[10px]",
       size === "sm" && "text-xs",
-      size === "lg" && "text-lg paper:font-serif paper:italic paper:font-normal",
+      size === "lg" && "text-lg ui-entry-title",
       align === "center" && "text-center",
     )}>
       {content || children}
@@ -142,21 +142,17 @@ const Badge: ComponentRenderer = ({ element }) => {
   const resolve = useI18nResolver();
   const label = resolve(element.props?.label);
   const color = element.props?.color as string;
-  // Status colors keep their semantic hue; Paper dials saturation down via
-  // a softer background so it still reads as a tag, not an alarm.
   const colorMap: Record<string, string> = {
-    red: "bg-red-500/10 text-red-600 border-red-500/30 paper:bg-red-500/15 paper:text-red-500/90",
-    amber: "bg-amber-500/10 text-amber-600 border-amber-500/30 paper:bg-amber-500/15 paper:text-amber-600/90",
-    blue: "bg-blue-500/10 text-blue-600 border-blue-500/30 paper:bg-blue-500/15 paper:text-blue-500/90",
-    green: "bg-green-500/10 text-green-600 border-green-500/30 paper:bg-green-500/15 paper:text-green-600/90",
-    purple: "bg-purple-500/10 text-purple-600 border-purple-500/30 paper:bg-purple-500/15 paper:text-purple-500/90",
-    cyan: "bg-cyan-500/10 text-cyan-600 border-cyan-500/30 paper:bg-cyan-500/15 paper:text-cyan-600/90",
+    red: "bg-red-500/10 text-red-600 border-red-500/30",
+    amber: "bg-amber-500/10 text-amber-600 border-amber-500/30",
+    blue: "bg-blue-500/10 text-blue-600 border-blue-500/30",
+    green: "bg-green-500/10 text-green-600 border-green-500/30",
+    purple: "bg-purple-500/10 text-purple-600 border-purple-500/30",
+    cyan: "bg-cyan-500/10 text-cyan-600 border-cyan-500/30",
   };
   return (
     <span className={clsx(
-      "inline-flex items-center px-1.5 py-0.5 text-[10px] border rounded-sm",
-      // Paper badges lean mono + pill, echoing Variant A's RtChip style.
-      "paper:rounded-full paper:font-mono paper:tracking-[0.04em] paper:px-2 paper:uppercase",
+      "ui-chip inline-flex items-center px-1.5 py-0.5 text-[10px] border",
       colorMap[color ?? ""] ?? "bg-muted text-muted-foreground border-border",
     )}>
       {label}
@@ -181,7 +177,7 @@ const TagList: ComponentRenderer = ({ element }) => {
       {tags.map((tag) => (
         <span
           key={tag}
-          className="text-[9px] px-1.5 py-0.5 bg-muted text-muted-foreground rounded-sm paper:rounded-full paper:border paper:border-border paper:bg-transparent paper:font-mono paper:tracking-[0.04em] paper:px-2"
+          className="ui-chip text-[9px] px-1.5 py-0.5 bg-muted text-muted-foreground"
         >
           {tag}
         </span>
@@ -196,9 +192,9 @@ const Card: ComponentRenderer = ({ element, children }) => {
   const variant = element.props?.variant as string;
   return (
     <div className={clsx(
-      "border border-border rounded-md p-3 bg-card/60 paper:bg-card paper:rounded-lg",
-      variant === "glow" && "shadow-lg shadow-amber-500/20 border-amber-500/50 paper:shadow-none paper:border-[color:var(--color-primary)]/50",
-      variant === "subtle" && "bg-muted/40 paper:bg-card/40 paper:border-dashed",
+      "ui-card-surface border border-border rounded-[var(--radius-card)] p-3 bg-card/60",
+      variant === "glow" && "shadow-lg shadow-amber-500/20 border-amber-500/50",
+      variant === "subtle" && "bg-muted/40 border-dashed",
     )}>
       {children}
     </div>
@@ -235,17 +231,16 @@ const EntryCard: ComponentRenderer = ({ element }) => {
     monster: "skull", item: "gem", location: "map-pin",
     lore: "scroll-text", character: "users", skill: "sparkles",
   };
-  // Rarity accent — keeps semantic color in Modern; Paper dims saturation.
   const rarityColors: Record<string, string> = {
-    legendary: "border-l-amber-500 paper:border-l-[color:var(--color-primary)]",
-    rare: "border-l-purple-500 paper:border-l-purple-500/70",
-    uncommon: "border-l-blue-500 paper:border-l-blue-500/60",
-    common: "border-l-border paper:border-l-border",
+    legendary: "border-l-amber-500",
+    rare: "border-l-purple-500/70",
+    uncommon: "border-l-blue-500/60",
+    common: "border-l-border",
   };
   const rarityBadgeColors: Record<string, string> = {
-    legendary: "bg-amber-500/10 text-amber-600 border-amber-500/30 paper:bg-amber-500/15",
-    rare: "bg-purple-500/10 text-purple-600 border-purple-500/30 paper:bg-purple-500/15",
-    uncommon: "bg-blue-500/10 text-blue-600 border-blue-500/30 paper:bg-blue-500/15",
+    legendary: "bg-amber-500/10 text-amber-600 border-amber-500/30",
+    rare: "bg-purple-500/10 text-purple-600 border-purple-500/30",
+    uncommon: "bg-blue-500/10 text-blue-600 border-blue-500/30",
     common: "bg-muted text-muted-foreground border-border",
   };
   const categoryIconColors: Record<string, string> = {
@@ -259,8 +254,8 @@ const EntryCard: ComponentRenderer = ({ element }) => {
 
   const CategoryIcon = resolveIcon(externalIcon ?? categoryIcons[category] ?? "book-open");
   const iconColorClass = externalColor
-    ? `${categoryIconColors[externalColor] ?? "text-muted-foreground"} paper:text-[color:var(--color-primary)]`
-    : "text-muted-foreground paper:text-[color:var(--color-primary)]";
+    ? `${categoryIconColors[externalColor] ?? "text-primary"}`
+    : "text-primary";
   const Chevron = expanded ? Icons.ChevronDown : Icons.ChevronRight;
   const SparkleIcon = Icons.Sparkles;
 
@@ -273,8 +268,7 @@ const EntryCard: ComponentRenderer = ({ element }) => {
   return (
     <div
       className={clsx(
-        "border border-border rounded-md p-2.5 border-l-2 space-y-1.5 bg-card/60",
-        "paper:rounded-lg paper:bg-card paper:p-3 paper:space-y-2",
+        "ui-card-surface border border-border rounded-[var(--radius-card)] p-3 border-l-2 space-y-2 bg-card",
         rarityColors[rarity],
       )}
     >
@@ -295,12 +289,12 @@ const EntryCard: ComponentRenderer = ({ element }) => {
           <Chevron className="w-3 h-3 shrink-0 text-muted-foreground" aria-hidden="true" />
         )}
         {CategoryIcon && <CategoryIcon className={clsx("w-3.5 h-3.5 shrink-0", iconColorClass)} />}
-        <span className="text-xs font-medium flex-1 truncate text-foreground paper:font-serif paper:italic paper:font-normal paper:text-[13px]">
+        <span className="ui-entry-title text-[13px] font-medium flex-1 truncate text-foreground">
           {title}
         </span>
         {isNew && (
           <span
-            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-semibold tracking-wider uppercase text-purple-600 dark:text-purple-300 bg-purple-500/10 border border-purple-500/30 rounded-sm paper:rounded-full paper:font-mono"
+            className="ui-chip inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-semibold tracking-wider uppercase text-purple-600 dark:text-purple-300 bg-purple-500/10 border border-purple-500/30"
             aria-label="new"
           >
             <SparkleIcon className="w-2.5 h-2.5" />
@@ -309,8 +303,7 @@ const EntryCard: ComponentRenderer = ({ element }) => {
         )}
         <span
           className={clsx(
-            "inline-flex items-center px-1.5 py-0.5 text-[10px] border rounded-sm",
-            "paper:rounded-full paper:font-mono paper:tracking-[0.06em] paper:uppercase paper:px-2",
+            "ui-chip inline-flex items-center px-1.5 py-0.5 text-[10px] border",
             rarityBadgeColors[rarity],
           )}
         >
@@ -318,7 +311,7 @@ const EntryCard: ComponentRenderer = ({ element }) => {
         </span>
       </div>
       {showBody && content && (
-        <p className="text-[11px] text-muted-foreground leading-relaxed paper:font-serif paper:text-[12.5px] paper:leading-[1.6] paper:text-foreground/80">
+        <p className="text-[12.5px] text-muted-foreground leading-[1.6]">
           {content}
         </p>
       )}
@@ -327,7 +320,7 @@ const EntryCard: ComponentRenderer = ({ element }) => {
           {tags.map((tag) => (
             <span
               key={tag}
-              className="text-[9px] px-1.5 py-0.5 bg-muted text-muted-foreground rounded-sm paper:rounded-full paper:border paper:border-border paper:bg-transparent paper:font-mono paper:tracking-[0.04em] paper:px-2"
+              className="ui-chip text-[9px] px-1.5 py-0.5 bg-muted text-muted-foreground"
             >
               {tag}
             </span>
@@ -348,12 +341,12 @@ const StatBar: ComponentRenderer = ({ element }) => {
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs">
-        <span className="text-muted-foreground paper:paper-eyebrow paper:font-mono paper:tracking-[0.12em]">{label}</span>
-        <span className="font-mono text-foreground paper:text-muted-foreground">{value}/{max}</span>
+        <span className="ui-eyebrow text-muted-foreground">{label}</span>
+        <span className="font-mono text-muted-foreground">{value}/{max}</span>
       </div>
-      <div className="h-1.5 bg-muted rounded-full overflow-hidden paper:h-1 paper:bg-[color:var(--color-border)]">
+      <div className="ui-meter-track h-1.5 bg-muted rounded-full overflow-hidden">
         <div
-          className="h-full bg-blue-500 rounded-full transition-all paper:bg-[color:var(--color-primary)]"
+          className="ui-meter-fill h-full bg-primary rounded-full transition-all"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -370,10 +363,10 @@ const Progress: ComponentRenderer = ({ element }) => {
 
   return (
     <div className="space-y-1">
-      {label && <span className="text-xs text-muted-foreground paper:paper-eyebrow paper:font-mono paper:tracking-[0.12em]">{label}</span>}
-      <div className="h-2 bg-muted rounded-full overflow-hidden paper:h-1 paper:bg-[color:var(--color-border)]">
+      {label && <span className="ui-eyebrow text-xs text-muted-foreground">{label}</span>}
+      <div className="ui-meter-track h-2 bg-muted rounded-full overflow-hidden">
         <div
-          className="h-full bg-emerald-500 rounded-full transition-all paper:bg-[color:var(--color-primary)]"
+          className="ui-meter-fill h-full bg-emerald-500 rounded-full transition-all"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -409,14 +402,14 @@ const Section: ComponentRenderer = ({ element, children }) => {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors paper:paper-eyebrow paper:font-mono paper:font-normal paper:tracking-[0.12em]"
+        className="ui-eyebrow flex w-full items-center gap-1.5 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
       >
         <Chevron className={clsx("w-3 h-3 transition-transform shrink-0", open && "rotate-90")} />
-        {SectionIcon && <SectionIcon className="w-3 h-3 shrink-0 paper:hidden" />}
+        {SectionIcon && <SectionIcon className="w-3 h-3 shrink-0" />}
         <span className="truncate text-left">{title}</span>
       </button>
       {open && (
-        <div className="border-l border-border pl-3 ml-1.5 space-y-1 pb-2 pt-0.5 paper:border-dashed">
+        <div className="ui-outline-rail border-l border-border pl-3 ml-1.5 space-y-1 pb-2 pt-0.5">
           {children}
         </div>
       )}
@@ -437,7 +430,7 @@ function renderJsonValue(value: unknown, depth: number): ReactNode {
     return <span className="text-[11px] text-foreground/90 whitespace-pre-wrap">{value}</span>;
   }
   if (typeof value === "number" || typeof value === "boolean") {
-    return <span className="text-[11px] font-mono text-blue-600 dark:text-blue-400 paper:text-[color:var(--color-primary)]">{String(value)}</span>;
+    return <span className="text-[11px] font-mono text-primary">{String(value)}</span>;
   }
   if (Array.isArray(value)) {
     if (value.length === 0) {
@@ -452,7 +445,7 @@ function renderJsonValue(value: unknown, depth: number): ReactNode {
           {value.map((v, i) => (
             <span
               key={i}
-              className="text-[9px] px-1.5 py-0.5 bg-muted text-muted-foreground rounded-sm paper:rounded-full paper:border paper:border-border paper:bg-transparent paper:font-mono"
+              className="ui-chip text-[9px] px-1.5 py-0.5 bg-muted text-muted-foreground"
             >
               {String(v)}
             </span>
@@ -463,7 +456,7 @@ function renderJsonValue(value: unknown, depth: number): ReactNode {
     return (
       <div className="space-y-1.5">
         {value.map((item, i) => (
-          <div key={i} className="border-l border-border pl-2 paper:border-dashed">
+          <div key={i} className="ui-outline-rail border-l border-border pl-2">
             {renderJsonValue(item, depth + 1)}
           </div>
         ))}
@@ -481,7 +474,7 @@ function renderJsonValue(value: unknown, depth: number): ReactNode {
           const isNested = v !== null && typeof v === "object";
           return (
             <div key={k} className="text-[11px] leading-snug">
-              <span className="text-muted-foreground font-medium paper:font-mono paper:tracking-[0.04em]">{k}</span>
+              <span className="font-mono text-muted-foreground">{k}</span>
               <span className="text-muted-foreground/60">: </span>
               {isNested ? (
                 <div className="pl-2 mt-0.5">{renderJsonValue(v, depth + 1)}</div>
@@ -547,22 +540,19 @@ const Button: ComponentRenderer = ({ element, emit }) => {
       aria-pressed={isSelected || undefined}
       data-selected={isSelected ? "true" : undefined}
       className={clsx(
-        "font-medium rounded-md transition-all text-left relative paper:rounded-md",
-        size === "compact" ? "px-2.5 py-1 text-[11px]" : "px-3 py-1.5 text-xs paper:px-3.5 paper:py-1.5",
-        // Base variant styles — applied only when NOT selected.
-        !isSelected && variant === "primary" && "bg-blue-600 text-white hover:bg-blue-700 paper:bg-[color:var(--color-primary)] paper:text-[color:var(--color-primary-foreground)] paper:hover:opacity-90",
-        !isSelected && variant === "default" && "bg-muted text-foreground hover:bg-accent paper:bg-card paper:border paper:border-border paper:hover:border-[color:var(--color-primary)]/40",
-        !isSelected && variant === "ghost" && "bg-card/60 border border-border hover:bg-muted paper:bg-transparent paper:border-dashed paper:border-border paper:hover:border-[color:var(--color-primary)]/60",
-        !isSelected && variant === "danger" && "bg-red-600 text-white hover:bg-red-700 paper:bg-red-600/90",
-        // Selected state — distinct from every variant so the pick is obvious.
-        isSelected && "bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-200 border border-blue-500 dark:border-blue-400 ring-2 ring-blue-500/40 dark:ring-blue-400/30 shadow-sm " +
-          "paper:bg-[color:var(--color-primary)]/10 paper:text-[color:var(--color-primary)] paper:border-[color:var(--color-primary)] paper:ring-[color:var(--color-primary)]/30",
+        "font-medium rounded-[var(--radius-control)] transition-all text-left relative",
+        size === "compact" ? "px-2.5 py-1 text-[11px]" : "px-3.5 py-1.5 text-xs",
+        !isSelected && variant === "primary" && "bg-primary text-primary-foreground hover:opacity-90",
+        !isSelected && variant === "default" && "bg-card text-foreground border border-border hover:border-primary/40",
+        !isSelected && variant === "ghost" && "bg-card/60 border border-border border-dashed hover:border-primary/60",
+        !isSelected && variant === "danger" && "bg-red-600 text-white hover:bg-red-700",
+        isSelected && "bg-primary/10 text-primary border border-primary ring-2 ring-primary/30 shadow-sm",
       )}
     >
       {isSelected && (
         <span
           aria-hidden="true"
-          className="inline-block mr-1.5 text-blue-600 dark:text-blue-300 paper:text-[color:var(--color-primary)]"
+          className="inline-block mr-1.5 text-primary"
         >
           ✓
         </span>
@@ -573,8 +563,7 @@ const Button: ComponentRenderer = ({ element, emit }) => {
 };
 
 const inputBase =
-  "w-full bg-background border border-border px-2.5 py-1.5 text-xs rounded-md outline-none focus:ring-1 focus:ring-ring text-foreground placeholder:text-muted-foreground " +
-  "paper:bg-card paper:font-sans paper:text-[12.5px] paper:focus:ring-[color:var(--color-primary)]/40";
+  "ui-input-shell w-full bg-background border border-border px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring text-foreground placeholder:text-muted-foreground";
 
 const Input: ComponentRenderer = ({ element, bindings }) => {
   const resolve = useI18nResolver();
@@ -587,7 +576,7 @@ const Input: ComponentRenderer = ({ element, bindings }) => {
   return (
     <div className="space-y-1">
       {label && (
-        <label className="text-xs text-muted-foreground paper:paper-eyebrow paper:font-mono paper:tracking-[0.12em]">
+        <label className="ui-eyebrow text-xs text-muted-foreground">
           {label}
         </label>
       )}
@@ -635,7 +624,7 @@ const Select: ComponentRenderer = ({ element, bindings }) => {
   return (
     <div className="space-y-1">
       {label && (
-        <label className="text-xs text-muted-foreground paper:paper-eyebrow paper:font-mono paper:tracking-[0.12em]">
+        <label className="ui-eyebrow text-xs text-muted-foreground">
           {label}
         </label>
       )}
@@ -668,8 +657,8 @@ const Switch: ComponentRenderer = ({ element, bindings }) => {
         className={clsx(
           "w-8 h-4.5 rounded-full transition-colors relative",
           checked
-            ? "bg-blue-600 paper:bg-[color:var(--color-primary)]"
-            : "bg-muted paper:bg-[color:var(--color-border)]",
+            ? "bg-primary"
+            : "bg-muted",
         )}
       >
         <div className={clsx(
@@ -701,10 +690,10 @@ const FilterBar: ComponentRenderer = ({ element, bindings }) => {
             onClick={() => bindPath && set(bindPath, opt.value)}
             className={clsx(
               "inline-flex items-center gap-1 px-2 py-0.5 text-[10px] uppercase tracking-wider border rounded-sm transition-colors",
-              "paper:rounded-full paper:font-mono paper:tracking-[0.08em] paper:px-2.5",
+              "ui-chip",
               active
-                ? "bg-primary text-primary-foreground border-primary paper:bg-[color:var(--color-primary)] paper:text-[color:var(--color-primary-foreground)] paper:border-[color:var(--color-primary)]"
-                : "bg-transparent text-muted-foreground border-border hover:border-foreground/40 paper:hover:border-[color:var(--color-primary)]/60 paper:hover:text-foreground",
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-transparent text-muted-foreground border-border hover:border-foreground/40 hover:text-foreground",
             )}
           >
             {OptIcon && <OptIcon className="w-3 h-3" />}
@@ -855,7 +844,7 @@ const Tabs: ComponentRenderer = ({ element, bindings }) => {
   };
 
   return (
-    <div role="tablist" className="flex flex-wrap gap-1 border-b border-border pb-1 paper:border-dashed paper:gap-2 paper:pb-0">
+    <div role="tablist" className="ui-rule flex flex-wrap gap-2 border-b border-border pb-1">
       {tabs.map((tab) => {
         const active = value === tab.value;
         const TabIcon = resolveIcon(tab.icon);
@@ -873,22 +862,19 @@ const Tabs: ComponentRenderer = ({ element, bindings }) => {
             }}
             className={clsx(
               "inline-flex items-center gap-1 px-2 py-1 text-[11px] border-b-2 -mb-[5px] transition-colors",
-              // Paper tabs adopt Variant A's crumb-bar underline style: mono
-              // uppercase label, 1.5px accent underline on the active tab.
-              "paper:font-mono paper:text-[10px] paper:uppercase paper:tracking-[0.08em] paper:px-2.5 paper:py-1 paper:border-b-[1.5px]",
+              "ui-eyebrow px-2.5 py-1 border-b-[1.5px]",
               active
                 ? clsx(
-                    "font-semibold text-foreground",
+                    "text-foreground",
                     accent || "border-foreground",
-                    "paper:font-normal paper:border-[color:var(--color-primary)] paper:text-foreground",
                   )
-                : "border-transparent text-muted-foreground hover:text-foreground paper:hover:text-foreground",
+                : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
-            {TabIcon && <TabIcon className="w-3 h-3 paper:hidden" />}
+            {TabIcon && <TabIcon className="w-3 h-3" />}
             {resolve(tab.label)}
             {count !== undefined && (
-              <span className="text-[10px] text-muted-foreground/70 ml-0.5 paper:font-mono">({count})</span>
+              <span className="text-[10px] text-muted-foreground/70 ml-0.5 font-mono">({count})</span>
             )}
           </button>
         );
@@ -976,7 +962,7 @@ const FilterContainer: ComponentRenderer = ({ element }) => {
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={searchPlaceholder}
             aria-label={searchPlaceholder || "search"}
-            className="w-full bg-background border border-border pl-7 pr-3 py-1.5 text-xs rounded-md outline-none focus:ring-1 focus:ring-ring text-foreground placeholder:text-muted-foreground paper:bg-card paper:font-sans paper:text-[12.5px] paper:focus:ring-[color:var(--color-primary)]/40"
+            className="ui-input-shell w-full bg-background border border-border pl-7 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring text-foreground placeholder:text-muted-foreground"
           />
         </div>
       )}
@@ -997,7 +983,7 @@ const FilterContainer: ComponentRenderer = ({ element }) => {
       )}
       <div className="flex flex-col gap-2">
         {filtered.length === 0 && (
-          <p className="text-xs text-muted-foreground italic text-center py-4 paper:font-serif paper:text-[13px]">
+          <p className="ui-empty-copy text-xs italic text-center py-4 mx-auto">
             {emptyMessage || fallbackEmpty}
           </p>
         )}
@@ -1077,7 +1063,7 @@ function FilterContainerFooter({
   const rendered = raw.replace(/\{\{\s*count\s*\}\}/g, String(totalCount));
   if (!rendered) return null;
   return (
-    <p className="text-[11px] text-muted-foreground text-center pt-1 border-t border-border/60 paper:border-dashed paper:font-mono paper:tracking-[0.04em]">
+    <p className="ui-rule text-[11px] text-muted-foreground text-center pt-1 border-t border-border/60 font-mono tracking-[0.04em]">
       {rendered}
     </p>
   );
@@ -1101,15 +1087,15 @@ const Prose: ComponentRenderer = ({ element }) => {
   const paragraphs = content.split(/\n\n+/).filter(Boolean);
 
   return (
-    <div className="space-y-3 paper:space-y-5 paper-narrative paper:max-w-[42rem]">
+    <div className="ui-narrative space-y-5 max-w-[var(--story-max-width)]">
       {paragraphs.map((p, i) => (
         <p
           key={i}
-          className="text-sm text-foreground leading-relaxed paper:text-[18px] paper:leading-[1.78] paper:font-light"
+          className="text-sm text-foreground leading-relaxed"
         >
           {p.split(/(\*\*[^*]+\*\*)/).map((segment, j) =>
             segment.startsWith("**") && segment.endsWith("**")
-              ? <strong key={j} className="font-semibold paper:font-medium">{segment.slice(2, -2)}</strong>
+              ? <strong key={j} className="font-semibold">{segment.slice(2, -2)}</strong>
               : segment
           )}
         </p>
@@ -1124,12 +1110,12 @@ const Prose: ComponentRenderer = ({ element }) => {
 const PlayerMessage: ComponentRenderer = ({ element }) => {
   const content = element.props?.content as string ?? "";
   return (
-    <div className="flex justify-end paper:justify-start">
-      <div className="max-w-[80%] bg-blue-600 text-white px-4 py-2.5 rounded-2xl rounded-br-sm text-sm leading-relaxed paper:max-w-none paper:w-full paper:bg-transparent paper:text-foreground paper:px-0 paper:py-0 paper:rounded-none paper:border-l-2 paper:border-l-[color:var(--color-primary)] paper:pl-3.5">
-        <span className="hidden paper:block paper-eyebrow mb-1 text-[color:var(--color-primary)]">
+    <div className="ui-player-message-row flex justify-end">
+      <div className="ui-message-player max-w-[80%] px-4 py-2.5 text-sm leading-relaxed">
+        <span className="ui-eyebrow mb-1 block text-primary">
           You
         </span>
-        <span className="paper:font-sans paper:text-[14px] paper:leading-[1.6]">{content}</span>
+        <span className="text-[14px] leading-[1.6]">{content}</span>
       </div>
     </div>
   );
@@ -1142,19 +1128,17 @@ const Alert: ComponentRenderer = ({ element }) => {
   const title = resolve(element.props?.title);
   const message = resolve(element.props?.message);
 
-  // Paper tints use the warm-paper card surface with a colored left bar,
-  // which keeps semantic signal without breaking the editorial palette.
   const colors: Record<string, string> = {
-    success: "border-emerald-500/30 bg-emerald-50 dark:bg-emerald-900/10 text-emerald-700 dark:text-emerald-400 paper:bg-card paper:text-foreground paper:border-l-2 paper:border-l-emerald-500 paper:border-border",
-    warning: "border-amber-500/30 bg-amber-50 dark:bg-amber-900/10 text-amber-700 dark:text-amber-400 paper:bg-card paper:text-foreground paper:border-l-2 paper:border-l-amber-500 paper:border-border",
-    error: "border-red-500/30 bg-red-50 dark:bg-red-900/10 text-red-700 dark:text-red-400 paper:bg-card paper:text-foreground paper:border-l-2 paper:border-l-red-500 paper:border-border",
-    info: "border-blue-500/30 bg-blue-50 dark:bg-blue-900/10 text-blue-700 dark:text-blue-400 paper:bg-card paper:text-foreground paper:border-l-2 paper:border-l-[color:var(--color-primary)] paper:border-border",
+    success: "border-emerald-500/30 bg-emerald-50 dark:bg-emerald-900/10 text-emerald-700 dark:text-emerald-400",
+    warning: "border-amber-500/30 bg-amber-50 dark:bg-amber-900/10 text-amber-700 dark:text-amber-400",
+    error: "border-red-500/30 bg-red-50 dark:bg-red-900/10 text-red-700 dark:text-red-400",
+    info: "border-blue-500/30 bg-blue-50 dark:bg-blue-900/10 text-blue-700 dark:text-blue-400",
   };
 
   return (
-    <div className={clsx("border rounded-lg px-4 py-2.5 text-sm paper:rounded-md", colors[level])}>
-      {title && <div className="font-medium text-xs paper:paper-eyebrow paper:font-mono paper:tracking-[0.12em] paper:mb-1">{title}</div>}
-      {message && <div className="text-xs mt-0.5 opacity-80 paper:opacity-100 paper:font-serif paper:text-[13px] paper:leading-[1.55]">{message}</div>}
+    <div className={clsx("ui-card-surface border rounded-[var(--radius-card)] px-4 py-2.5 text-sm", colors[level])}>
+      {title && <div className="ui-eyebrow font-medium text-xs mb-1">{title}</div>}
+      {message && <div className="text-[13px] mt-0.5 opacity-90 leading-[1.55]">{message}</div>}
     </div>
   );
 };
@@ -1174,12 +1158,11 @@ const FormField: ComponentRenderer = ({ element, bindings }) => {
   const bindPath = bindings?.value;
 
   const fieldCls =
-    "w-full bg-background border border-border px-3 py-1.5 text-sm rounded-md outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 text-foreground placeholder:text-muted-foreground " +
-    "paper:bg-card paper:font-sans paper:text-[13px] paper:focus:ring-[color:var(--color-primary)]/40 paper:py-2";
+    "ui-input-shell w-full bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 text-foreground placeholder:text-muted-foreground";
 
   return (
-    <div className="space-y-1 paper:space-y-1.5">
-      <label className="text-xs text-muted-foreground paper:paper-eyebrow paper:font-mono paper:tracking-[0.12em]">
+    <div className="space-y-1.5">
+      <label className="ui-eyebrow text-xs text-muted-foreground">
         {label}
         {required && <span className="text-destructive ml-0.5">*</span>}
       </label>
@@ -1221,11 +1204,10 @@ const SubmitButton: ComponentRenderer = ({ element, emit }) => {
       onClick={() => emit("click")}
       disabled={disabled}
       className={clsx(
-        "w-full py-2.5 text-sm font-medium rounded-md transition-colors",
-        "paper:py-3 paper:text-[13px] paper:tracking-[0.04em]",
+        "w-full py-3 text-sm font-medium rounded-[var(--radius-control)] transition-colors tracking-[0.04em]",
         disabled
           ? "bg-muted text-muted-foreground cursor-not-allowed"
-          : "bg-blue-600 text-white hover:bg-blue-700 paper:bg-[color:var(--color-primary)] paper:text-[color:var(--color-primary-foreground)] paper:hover:opacity-90",
+          : "bg-primary text-primary-foreground hover:opacity-90",
       )}
     >
       {label}
@@ -1237,7 +1219,7 @@ const SubmitButton: ComponentRenderer = ({ element, emit }) => {
 const Source: ComponentRenderer = ({ element }) => {
   const label = element.props?.label as string ?? "";
   return (
-    <span className="text-[9px] text-muted-foreground/70 block mt-1 paper:font-mono paper:tracking-[0.04em]">
+    <span className="text-[9px] text-muted-foreground/70 block mt-1 font-mono tracking-[0.04em]">
       {label}
     </span>
   );
@@ -1270,8 +1252,8 @@ const WorldDimensions: ComponentRenderer = () => {
 
 const Form: ComponentRenderer = ({ children }) => {
   return (
-    <div className="border border-border rounded-lg overflow-hidden bg-card/60 paper:bg-card paper:rounded-lg">
-      <div className="p-4 space-y-3 paper:p-5 paper:space-y-4">{children}</div>
+    <div className="ui-card-surface border border-border rounded-[var(--radius-card)] overflow-hidden bg-card">
+      <div className="p-5 space-y-4">{children}</div>
     </div>
   );
 };
@@ -1281,8 +1263,8 @@ const FormHeader: ComponentRenderer = ({ element }) => {
   const resolve = useI18nResolver();
   const title = resolve(element.props?.title);
   return (
-    <div className="bg-muted/60 px-4 py-2 -mx-4 -mt-4 mb-3 border-b border-border paper:bg-transparent paper:border-dashed paper:px-5 paper:-mx-5 paper:-mt-5 paper:py-3">
-      <span className="text-xs font-medium text-foreground paper:font-serif paper:italic paper:font-normal paper:text-[15px] paper:text-foreground">
+    <div className="ui-rule bg-muted/60 px-5 py-3 -mx-5 -mt-5 mb-3 border-b border-border">
+      <span className="ui-entry-title text-[15px] font-medium text-foreground">
         {title}
       </span>
     </div>

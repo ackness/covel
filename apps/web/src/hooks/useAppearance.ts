@@ -6,7 +6,7 @@ export type { Appearance } from "@/lib/appearance";
 
 /**
  * Read and write the current appearance through the unified settings store.
- * Re-applies the `data-appearance` attribute on the document root whenever
+ * Re-applies the active theme attribute on the document root whenever
  * the value changes.
  */
 export function useAppearance(): {

@@ -18,6 +18,7 @@ docs/
 │   ├── e2e-plugin-verify.md
 │   ├── e2e-testing.md
 │   ├── desktop-config.md / .en.md  # 桌面版配置与数据目录
+│   ├── themes.md
 │   └── skills.md
 │
 ├── reference/               # API / 协议 / 插件 / 工具参考
@@ -28,6 +29,7 @@ docs/
 │   ├── tools.md
 │   ├── ui-panels.md
 │   ├── prompt-structure.md
+│   ├── theme-packages.md
 │   └── transactions.md
 │
 └── architecture/            # 系统设计与历史变更
@@ -41,9 +43,10 @@ docs/
 1. **先看 README** — [`../README.md`](../README.md) 了解项目定位与快速开始
 2. **贡献准备** — [`CONTRIBUTING.md`](./CONTRIBUTING.md) 的 Code style / Commit / Release 段
 3. **写插件** — [`guide/plugin-authoring.md`](./guide/plugin-authoring.md) + [`reference/plugins.md`](./reference/plugins.md)
-4. **理解执行** — [`architecture/flow.md`](./architecture/flow.md) 描述整条回合管线
-5. **查 API** — [`reference/api.md`](./reference/api.md) 与 [`reference/protocol.md`](./reference/protocol.md)
-6. **发布** — [`CONTRIBUTING.md#release-process`](./CONTRIBUTING.md#release-process) + [`../apps/desktop/PACKAGING.md`](../apps/desktop/PACKAGING.md)
+4. **做主题** — [`guide/themes.md`](./guide/themes.md) + [`reference/theme-packages.md`](./reference/theme-packages.md)
+5. **理解执行** — [`architecture/flow.md`](./architecture/flow.md) 描述整条回合管线
+6. **查 API** — [`reference/api.md`](./reference/api.md) 与 [`reference/protocol.md`](./reference/protocol.md)
+7. **发布** — [`CONTRIBUTING.md#release-process`](./CONTRIBUTING.md#release-process) + [`../apps/desktop/PACKAGING.md`](../apps/desktop/PACKAGING.md)
 
 ## 文档约定
 

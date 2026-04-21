@@ -113,12 +113,11 @@ function RuntimeChip({
     <span
       className={
         "group inline-flex items-center gap-1 px-2 py-0.5 text-[11px] border transition-colors " +
-        // Paper: pill shape, dashed separators, mono label color
-        "paper:rounded-full paper:px-2.5 paper:py-[3px] paper:bg-card " +
+        "ui-chip " +
         (isActive
-          ? "border-primary/30 bg-primary/5 text-foreground paper:border-[color:var(--color-primary)]/60"
+          ? "border-primary/30 bg-primary/5 text-foreground"
           : rt.status === "failed"
-            ? "border-destructive/30 bg-destructive/5 text-destructive paper:border-destructive/60"
+            ? "border-destructive/30 bg-destructive/5 text-destructive"
             : rt.status === "skipped"
               ? "border-border/40 bg-muted/20 text-muted-foreground/70 italic"
               : rt.status === "suspended"
@@ -127,7 +126,7 @@ function RuntimeChip({
       }
     >
       <StatusIcon status={rt.status} />
-      <span className="font-medium truncate max-w-[120px] paper:font-mono paper:text-[10px] paper:text-[color:var(--color-primary)]">{rt.label}</span>
+      <span className="font-medium truncate max-w-[120px] ui-chip-name">{rt.label}</span>
       {rt.status === "tool" && rt.toolName && (
         <span className="text-[10px] text-muted-foreground truncate max-w-[140px] font-mono">
           {rt.toolName}

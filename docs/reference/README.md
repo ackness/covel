@@ -21,6 +21,7 @@ Covel 框架能力注册表与 API 参考。内容与 `@covel/shared`、`@covel/
 | 文档 | 描述 |
 |------|------|
 | [ui-panels.md](ui-panels.md) | 右侧面板 Tab 与 json-render 声明式 UI — 7 个 Tab 的职责、数据源、扩展指南 |
+| [theme-packages.md](theme-packages.md) | 主题包参考 — 主题包格式、token 契约、语义 hook、运行时注册与持久化 |
 
 ## Prompt 组装
 

@@ -25,45 +25,44 @@ function RootLayout() {
     <>
       <OnboardingWizard />
       <div className="h-screen w-full bg-background text-foreground font-sans selection:bg-primary selection:text-primary-foreground flex flex-col overflow-hidden">
-        <header className={`flex-shrink-0 z-50 border-b border-border bg-background/95 backdrop-blur-md transition-all paper:bg-card/95 ${isSession ? 'h-12' : 'h-16'}`}>
+        <header className={`ui-panel-header flex-shrink-0 z-50 border-b border-border/80 backdrop-blur-md transition-all ${isSession ? 'h-12' : 'h-16'}`}>
           <div className="w-full flex h-full items-center justify-between px-4 md:px-6">
-            <div className="flex items-center gap-8 paper:gap-6">
-              <Link to="/" className={`font-display font-bold tracking-tight flex items-center gap-2 paper:font-serif paper:italic paper:font-normal paper:tracking-normal ${isSession ? 'text-lg' : 'text-2xl'}`}>
-                <span className={`bg-primary flex items-center justify-center paper:bg-transparent paper:border paper:border-[color:var(--color-primary)] paper:rounded-full ${isSession ? 'h-4 w-4' : 'h-6 w-6'}`}>
-                  <span className={`bg-background rounded-full paper:bg-[color:var(--color-primary)] ${isSession ? 'h-1.5 w-1.5' : 'h-2 w-2'}`}></span>
+            <div className="flex items-center gap-8 md:gap-6">
+              <Link to="/" className={`ui-title flex items-center gap-2 tracking-tight ${isSession ? 'text-lg' : 'text-2xl'}`}>
+                <span className={`flex items-center justify-center rounded-full border border-primary/45 ${isSession ? 'h-4 w-4' : 'h-6 w-6'}`}>
+                  <span className={`rounded-full bg-primary ${isSession ? 'h-1.5 w-1.5' : 'h-2 w-2'}`}></span>
                 </span>
-                <span className="paper:hidden">COVEL</span>
-                <span className="hidden paper:inline">Covel</span>
+                <span>Covel</span>
               </Link>
-              <nav className="hidden md:flex items-center gap-6 text-xs font-medium uppercase tracking-wider paper:font-sans paper:normal-case paper:tracking-normal paper:text-[13px] paper:font-normal paper:gap-5">
+              <nav className="hidden md:flex items-center gap-6 text-xs font-medium tracking-[0.14em] uppercase">
                 <Link
                   to="/session"
-                  className="text-muted-foreground hover:text-primary transition-colors [&.active]:text-primary paper:hover:text-foreground"
+                  className="text-muted-foreground hover:text-primary transition-colors [&.active]:text-primary"
                 >
                   {t("nav.studio", "Studio")}
                 </Link>
                 <Link
                   to="/debug"
-                  className="text-muted-foreground hover:text-primary transition-colors [&.active]:text-primary paper:hover:text-foreground"
+                  className="text-muted-foreground hover:text-primary transition-colors [&.active]:text-primary"
                 >
                   {t("nav.debug", "Debugger")}
                 </Link>
               </nav>
             </div>
-            <div className="flex items-center gap-3 paper:gap-2">
+            <div className="flex items-center gap-3">
               <ThemeToggle />
               <button
                 onClick={toggleLocale}
-                className="hidden md:flex items-center justify-center h-9 px-3 text-xs font-semibold uppercase tracking-widest border border-border hover:bg-primary hover:text-primary-foreground transition-colors paper:h-[34px] paper:w-[34px] paper:px-0 paper:rounded-full paper:bg-card paper:font-mono paper:tracking-[0.04em] paper:text-[11px] paper:text-muted-foreground paper:hover:bg-card paper:hover:text-foreground"
+                className="hidden md:flex items-center justify-center h-9 px-3 text-xs font-semibold uppercase tracking-widest border border-border/80 hover:bg-primary hover:text-primary-foreground transition-colors rounded-[var(--radius-control)]"
               >
                 {locale === "zh-CN" ? "EN" : "中"} {/* i18n-allow: toggle shows the *other* language */}
               </button>
               {!isSession && (
-                <Button variant="default" asChild className="hidden md:flex h-9 rounded-none text-xs font-semibold uppercase tracking-widest paper:rounded-md paper:normal-case paper:tracking-normal paper:font-medium">
+                <Button variant="default" asChild className="hidden md:flex h-9 text-xs font-semibold uppercase tracking-widest">
                   <Link to="/session">{t("nav.getStarted", "Get Started")}</Link>
                 </Button>
               )}
-              <Button variant="ghost" size="icon" className="md:hidden rounded-none h-9 w-9 paper:rounded-full">
+              <Button variant="ghost" size="icon" className="md:hidden h-9 w-9">
                 <Menu className="h-4 w-4" />
               </Button>
             </div>
@@ -74,14 +73,13 @@ function RootLayout() {
           <Outlet />
         </main>
 
-        <footer className={`flex-shrink-0 border-t border-border transition-all bg-background paper:bg-card ${isSession ? 'py-1.5' : 'py-8'}`}>
+        <footer className={`ui-panel-footer flex-shrink-0 border-t border-border transition-all ${isSession ? 'py-1.5' : 'py-8'}`}>
           <div className={`w-full px-4 md:px-6 flex items-center justify-between ${isSession ? 'gap-2' : 'flex-col md:flex-row gap-6'}`}>
-            <div className={`flex items-center gap-2 font-display font-bold paper:font-serif paper:italic paper:font-normal paper:tracking-normal ${isSession ? 'text-xs' : 'text-base'}`}>
-              <span className={`bg-primary paper:bg-transparent paper:border paper:border-[color:var(--color-primary)] paper:rounded-full ${isSession ? 'h-2 w-2' : 'h-3 w-3'}`}></span>
-              <span className="paper:hidden">COVEL STUDIO</span>
-              <span className="hidden paper:inline">Covel Studio</span>
+            <div className={`ui-title flex items-center gap-2 ${isSession ? 'text-xs' : 'text-base'}`}>
+              <span className={`rounded-full border border-primary/45 ${isSession ? 'h-2 w-2' : 'h-3 w-3'}`}></span>
+              <span>Covel Studio</span>
             </div>
-            <div className={`text-muted-foreground uppercase tracking-widest paper:font-mono paper:normal-case paper:tracking-[0.04em] ${isSession ? 'text-[10px]' : 'text-xs'}`}>
+            <div className={`ui-eyebrow text-muted-foreground ${isSession ? 'text-[10px]' : 'text-xs'}`}>
               &copy; {new Date().getFullYear()} Covel Framework.
             </div>
           </div>

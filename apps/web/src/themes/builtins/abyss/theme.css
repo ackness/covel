@@ -1,0 +1,92 @@
+html[data-theme="abyss"] {
+  --color-background: oklch(10% 0.015 270);
+  --color-foreground: oklch(88% 0.012 80);
+  --color-card: oklch(13% 0.02 270);
+  --color-card-foreground: oklch(90% 0.01 80);
+  --color-popover: oklch(13% 0.02 270);
+  --color-popover-foreground: oklch(90% 0.01 80);
+  --color-primary: oklch(60% 0.06 270);
+  --color-primary-foreground: oklch(10% 0.015 270);
+  --color-secondary: oklch(18% 0.02 270);
+  --color-secondary-foreground: oklch(85% 0.015 80);
+  --color-muted: oklch(16% 0.02 270);
+  --color-muted-foreground: oklch(55% 0.03 270);
+  --color-accent: oklch(55% 0.07 300);
+  --color-accent-foreground: oklch(92% 0.012 80);
+  --color-destructive: oklch(55% 0.12 25);
+  --color-destructive-foreground: oklch(90% 0.01 80);
+  --color-border: oklch(22% 0.02 270 / 0.45);
+  --color-input: oklch(22% 0.02 270 / 0.45);
+  --color-ring: oklch(60% 0.06 270 / 0.6);
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Fraunces", "Newsreader", Georgia, serif;
+
+  --surface-app: var(--color-background);
+  --surface-panel: color-mix(in oklab, var(--color-card) 88%, transparent);
+  --surface-panel-strong: color-mix(in oklab, var(--color-card) 96%, white 4%);
+  --surface-dialog: color-mix(in oklab, var(--color-card) 96%, white 4%);
+  --surface-player: transparent;
+  --surface-empty: color-mix(in oklab, var(--color-muted) 72%, transparent);
+  --border-subtle: color-mix(in oklab, var(--color-border) 78%, transparent);
+
+  --radius-card: var(--radius-lg);
+  --radius-control: var(--radius-md);
+  --radius-dialog: var(--radius-lg);
+  --radius-chip: 999px;
+
+  --panel-header-height: 3.25rem;
+  --panel-section-padding-x: 1.25rem;
+  --panel-section-padding-y: 1rem;
+  --composer-max-width: 42rem;
+  --session-column-max-width: 42rem;
+
+  --eyebrow-font-family: var(--font-mono);
+  --eyebrow-font-size: 0.625rem;
+  --eyebrow-font-weight: 400;
+  --eyebrow-letter-spacing: 0.14em;
+  --eyebrow-text-transform: uppercase;
+
+  --title-font-family: var(--font-serif);
+  --title-font-style: italic;
+  --title-font-weight: 400;
+  --title-letter-spacing: -0.01em;
+  --title-text-transform: none;
+
+  --story-font-family: var(--font-serif);
+  --story-font-size: 1.125rem;
+  --story-line-height: 1.78;
+  --story-font-weight: 300;
+  --story-letter-spacing: 0.005em;
+  --story-max-width: 42rem;
+
+  --shadow-card: 0 0 26px -12px oklch(60% 0.06 270 / 0.3);
+  --shadow-dialog: 0 0 50px -18px oklch(55% 0.07 300 / 0.28);
+
+  font-feature-settings: "ss01", "cv11";
+}
+
+html[data-theme="abyss"] .ui-message-row {
+  align-items: flex-start;
+}
+
+html[data-theme="abyss"] .ui-player-message-row {
+  justify-content: flex-start;
+}
+
+html[data-theme="abyss"] .ui-message-player {
+  background: transparent;
+  color: var(--color-foreground);
+  border-width: 0 0 0 2px;
+  border-color: var(--color-primary);
+  border-radius: 0;
+  max-width: var(--story-max-width);
+  padding-left: 0.875rem;
+  padding-right: 0;
+  padding-block: 0;
+}

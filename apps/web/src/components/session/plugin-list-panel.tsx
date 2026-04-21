@@ -79,23 +79,23 @@ function PluginItem({ pkg, sessionPlugin, executing, onToggle, resolvedSlots, se
   const toggleDisabled = executing === true || isLocked;
 
   return (
-    <div className="border border-border rounded-md overflow-hidden paper:rounded-none paper:border-x-0 paper:border-t-0 paper:border-b paper:border-dashed paper:last:border-b-0">
+    <div className="border border-border rounded-[var(--radius-card)] overflow-hidden">
       {/* Header — flex row with expand button and toggle as siblings (no nested buttons) */}
-      <div className="flex items-center gap-0 hover:bg-muted/50 transition-colors paper:hover:bg-transparent">
+      <div className="flex items-center gap-0 hover:bg-muted/50 transition-colors">
         <button
           type="button"
-          className="flex-1 flex items-center gap-2 px-2.5 py-2 text-left min-w-0 paper:px-1 paper:py-2"
+          className="flex-1 flex items-center gap-2 px-2.5 py-2 text-left min-w-0"
           onClick={() => setExpanded((v) => !v)}
         >
           <ChevronRight
             className={`w-3 h-3 shrink-0 text-muted-foreground transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
           />
-          <Puzzle className="w-3.5 h-3.5 shrink-0 text-primary/60 paper:hidden" />
-          <span className="text-xs font-medium truncate flex-1 paper:font-mono paper:text-[11px] paper:font-normal paper:text-foreground">
+          <Puzzle className="w-3.5 h-3.5 shrink-0 text-primary/60" />
+          <span className="text-xs font-medium truncate flex-1">
             {displayName}
           </span>
           {mainRuntime && (
-            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 shrink-0 paper:bg-transparent paper:border paper:border-border paper:rounded-full paper:font-mono paper:tracking-[0.04em] paper:text-muted-foreground">
+            <Badge variant="secondary" className="ui-chip text-[9px] px-1.5 py-0 h-4 shrink-0">
               P{mainRuntime.priority}
             </Badge>
           )}
@@ -120,10 +120,9 @@ function PluginItem({ pkg, sessionPlugin, executing, onToggle, resolvedSlots, se
               "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent mr-2.5",
               "transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2",
               "focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              "paper:h-3 paper:w-[22px] paper:border paper:border-[color:var(--color-border)]",
               isActive
-                ? "bg-primary paper:bg-[color:var(--color-primary)] paper:border-transparent"
-                : "bg-input paper:bg-[color:var(--color-muted)]",
+                ? "bg-primary"
+                : "bg-input",
               toggleDisabled ? "opacity-50 cursor-not-allowed" : "",
             ].join(" ")}
             onClick={() => { if (!toggleDisabled) onToggle(pkg.name, !isActive); }}
@@ -131,10 +130,9 @@ function PluginItem({ pkg, sessionPlugin, executing, onToggle, resolvedSlots, se
             <span
               className={[
                 "pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out",
-                "paper:h-2 paper:w-2 paper:shadow-none",
                 isActive
-                  ? "translate-x-3 paper:translate-x-[10px] paper:bg-[color:var(--color-primary-foreground)]"
-                  : "translate-x-0 paper:translate-x-[1px] paper:bg-muted-foreground",
+                  ? "translate-x-3"
+                  : "translate-x-0",
               ].join(" ")}
             />
           </button>
@@ -381,27 +379,27 @@ function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, session
   const runtimeLabel = RUNTIME_TYPE_ICONS[plugin.runtimeType ?? "agent"] ?? "LLM";
 
   return (
-    <div className="border border-border rounded-md overflow-hidden paper:rounded-none paper:border-x-0 paper:border-t-0 paper:border-b paper:border-dashed paper:last:border-b-0">
+    <div className="border border-border rounded-[var(--radius-card)] overflow-hidden">
       {/* Header — flex row with expand button and toggle as siblings (no nested buttons) */}
-      <div className="flex items-center gap-0 hover:bg-muted/50 transition-colors paper:hover:bg-transparent">
+      <div className="flex items-center gap-0 hover:bg-muted/50 transition-colors">
         <button
           type="button"
-          className="flex-1 flex items-center gap-2 px-2.5 py-2 text-left min-w-0 paper:px-1 paper:py-2"
+          className="flex-1 flex items-center gap-2 px-2.5 py-2 text-left min-w-0"
           onClick={() => setExpanded((v) => !v)}
         >
           <ChevronRight
             className={`w-3 h-3 shrink-0 text-muted-foreground transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
           />
-          <Puzzle className="w-3.5 h-3.5 shrink-0 text-primary/60 paper:hidden" />
-          <span className="text-xs font-medium truncate flex-1 paper:font-mono paper:text-[11px] paper:font-normal paper:text-foreground">
+          <Puzzle className="w-3.5 h-3.5 shrink-0 text-primary/60" />
+          <span className="text-xs font-medium truncate flex-1">
             {displayName}
           </span>
           {plugin.priority !== undefined && (
-            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 shrink-0 paper:bg-transparent paper:border paper:border-border paper:rounded-full paper:font-mono paper:tracking-[0.04em] paper:text-muted-foreground">
+            <Badge variant="secondary" className="ui-chip text-[9px] px-1.5 py-0 h-4 shrink-0">
               P{plugin.priority}
             </Badge>
           )}
-          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0 paper:rounded-full paper:font-mono paper:tracking-[0.04em]">
+          <Badge variant="outline" className="ui-chip text-[9px] px-1 py-0 h-4 shrink-0">
             {runtimeLabel}
           </Badge>
           {isLocked && (
@@ -426,7 +424,7 @@ function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, session
               disabled={executing}
               title={t("plugin.modelOverrideHint", "Override active — next turn will use this model")}
               aria-label={t("plugin.modelBinding", "Model")}
-              className="shrink-0 mr-2 max-w-[140px] text-[9px] bg-background border border-border rounded px-1 py-0.5 disabled:opacity-50"
+              className="ui-input-shell shrink-0 mr-2 max-w-[140px] text-[9px] bg-background border border-border px-1 py-0.5 disabled:opacity-50"
             >
               <option value="">
                 {plugin.model ? `auto · ${plugin.model}` : "auto"}
@@ -460,10 +458,9 @@ function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, session
               "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent mr-2.5",
               "transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2",
               "focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              "paper:h-3 paper:w-[22px] paper:border paper:border-[color:var(--color-border)]",
               plugin.isActive
-                ? "bg-primary paper:bg-[color:var(--color-primary)] paper:border-transparent"
-                : "bg-input paper:bg-[color:var(--color-muted)]",
+                ? "bg-primary"
+                : "bg-input",
               toggleDisabled ? "opacity-50 cursor-not-allowed" : "",
             ].join(" ")}
             onClick={() => { if (!toggleDisabled) onToggle(plugin.id, !plugin.isActive); }}
@@ -471,10 +468,9 @@ function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, session
             <span
               className={[
                 "pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out",
-                "paper:h-2 paper:w-2 paper:shadow-none",
                 plugin.isActive
-                  ? "translate-x-3 paper:translate-x-[10px] paper:bg-[color:var(--color-primary-foreground)]"
-                  : "translate-x-0 paper:translate-x-[1px] paper:bg-muted-foreground",
+                  ? "translate-x-3"
+                  : "translate-x-0",
               ].join(" ")}
             />
           </button>

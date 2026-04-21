@@ -1,18 +1,9 @@
 /**
  * Appearance primitives. Storage lives in the unified SettingsStore
- * (`ui.appearance`); this module only owns the DOM-side application.
+ * (`ui.appearance`); this module only owns DOM-side theme application.
  */
-export type Appearance = "modern" | "paper" | "abyss";
-
-export const APPEARANCES: readonly Appearance[] = ["modern", "paper", "abyss"];
-export const DEFAULT_APPEARANCE: Appearance = "paper";
-
-export function isAppearance(value: unknown): value is Appearance {
-  return (
-    typeof value === "string" &&
-    (APPEARANCES as readonly string[]).includes(value)
-  );
-}
+export type Appearance = string;
+export const DEFAULT_APPEARANCE = "paper";
 
 /**
  * Apply the appearance to the document root as a data attribute, so CSS
@@ -20,5 +11,5 @@ export function isAppearance(value: unknown): value is Appearance {
  */
 export function applyAppearance(appearance: Appearance): void {
   if (typeof document === "undefined") return;
-  document.documentElement.setAttribute("data-appearance", appearance);
+  document.documentElement.setAttribute("data-theme", appearance);
 }

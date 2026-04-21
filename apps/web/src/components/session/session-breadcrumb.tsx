@@ -53,25 +53,19 @@ export function SessionBreadcrumb({
   }
 
   return (
-    <nav className="flex items-center gap-1 text-xs text-muted-foreground paper:text-[13px] paper:gap-1.5">
+    <nav className="flex items-center gap-1.5 text-xs text-muted-foreground">
       {items.map((item, i) => (
-        <span key={i} className="flex items-center gap-1 paper:gap-1.5">
-          {i > 0 && <ChevronRight className="w-3 h-3 paper:w-3 paper:h-3 paper:opacity-60" />}
+        <span key={i} className="flex items-center gap-1.5">
+          {i > 0 && <ChevronRight className="w-3 h-3 opacity-60" />}
           {item.onClick ? (
             <button
-              className="hover:text-primary transition-colors underline-offset-2 hover:underline paper:hover:no-underline paper:hover:text-foreground"
+              className="hover:text-primary transition-colors underline-offset-2 hover:underline"
               onClick={item.onClick}
             >
               {item.label}
             </button>
           ) : (
-            <span
-              className={
-                item.active
-                  ? "text-foreground font-medium paper:font-normal paper:text-foreground"
-                  : "paper:text-muted-foreground"
-              }
-            >
+            <span className={item.active ? "text-foreground font-medium" : ""}>
               {item.label}
             </span>
           )}

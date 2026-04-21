@@ -4,7 +4,9 @@ import { Eye, EyeOff } from "lucide-react";
 import type { SettingEntry, WidgetKind } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
+import { ThemeManagerWidget } from "@/components/theme-manager.js";
 import { useSetting } from "../use-settings.js";
+import { THEME_MANAGER_WIDGET_KEY } from "@/theme-system/storage.js";
 
 function resolveLabel(
   label: SettingEntry["label"] | undefined,
@@ -248,6 +250,10 @@ function JsonWidget({ entry }: { entry: SettingEntry }) {
 }
 
 function CustomWidgetPlaceholder({ entry }: { entry: SettingEntry }) {
+  if (entry.key === THEME_MANAGER_WIDGET_KEY) {
+    return <ThemeManagerWidget />;
+  }
+
   const { t } = useTranslation();
   return (
     <FieldShell entry={entry}>

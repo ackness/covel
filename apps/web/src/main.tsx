@@ -8,6 +8,8 @@ import { loadProviderKeysFromStorage } from "@/services/api";
 import { probeDesktopMode } from "@/lib/desktop-bridge";
 import { applyAppearance, type Appearance } from "@/lib/appearance";
 import { getSettings, initSettings } from "@/settings/store";
+import { CUSTOM_THEMES_KEY } from "@/theme-system/storage.js";
+import { syncThemeRegistry } from "@/theme-system/registry.js";
 import i18n from "@/i18n";
 import type { SupportedLocale } from "@/i18n/locale-detector";
 import "@/i18n";
@@ -48,6 +50,7 @@ async function syncStorageMode(): Promise<void> {
 initSettings()
   .then(() => {
     const store = getSettings();
+    syncThemeRegistry(store);
     // Apply initial appearance / locale ASAP so the first paint matches.
     applyAppearance(store.get<Appearance>("ui.appearance"));
     const initialLocale = store.get<SupportedLocale>("ui.locale");
@@ -59,6 +62,9 @@ initSettings()
     // no component is currently mounted that reads the underlying setting.
     store.subscribe<Appearance>("ui.appearance", (next) => {
       applyAppearance(next);
+    });
+    store.subscribe(CUSTOM_THEMES_KEY, () => {
+      syncThemeRegistry(store);
     });
     store.subscribe<SupportedLocale>("ui.locale", (next) => {
       if (i18n.language !== next) void i18n.changeLanguage(next);

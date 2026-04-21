@@ -165,7 +165,7 @@ function ProviderForm({
     <div className="space-y-4">
       {/* Provider quick-select */}
       <div className="space-y-2">
-        <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
+        <Label className="ui-eyebrow text-[10px]">
           {t("onboarding.selectProvider", "Provider")}
         </Label>
         <div className="grid grid-cols-2 gap-2">
@@ -173,10 +173,10 @@ function ProviderForm({
             <button
               key={p.id}
               onClick={() => handleProviderSelect(p.id)}
-              className={`px-3 py-2 text-xs font-medium border text-left transition-colors ${
+              className={`rounded-[var(--radius-control)] px-3 py-2 text-xs font-medium border text-left transition-colors ${
                 state.selected === p.id
                   ? "border-primary bg-primary/10 text-primary"
-                  : "border-zinc-700 text-zinc-400 hover:border-zinc-500"
+                  : "border-border text-muted-foreground hover:border-primary/40"
               }`}
             >
               {p.name}
@@ -184,10 +184,10 @@ function ProviderForm({
           ))}
           <button
             onClick={() => handleProviderSelect(CUSTOM_PROVIDER_ID)}
-            className={`col-span-2 px-3 py-2 text-xs font-medium border text-left transition-colors ${
+            className={`col-span-2 rounded-[var(--radius-control)] px-3 py-2 text-xs font-medium border text-left transition-colors ${
               isCustom
                 ? "border-primary bg-primary/10 text-primary"
-                : "border-zinc-700 text-zinc-400 hover:border-zinc-500"
+                : "border-border text-muted-foreground hover:border-primary/40"
             }`}
           >
             {t("onboarding.customProvider", "Custom (OpenAI Compatible)")}
@@ -197,7 +197,7 @@ function ProviderForm({
 
       {!isCustom && (
         <div className="space-y-1.5">
-          <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
+          <Label className="ui-eyebrow text-[10px]">
             {t("onboarding.modelId", "Model ID")}
           </Label>
           <input
@@ -206,7 +206,7 @@ function ProviderForm({
             placeholder="deepseek-chat / gpt-4o / claude-sonnet-4-20250514"
             value={state.builtInModel}
             onChange={(e) => onChange({ ...state, builtInModel: e.target.value, pingResult: null })}
-            className="w-full bg-zinc-900 border border-zinc-700 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
+            className="ui-input-shell w-full bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
           />
           {modelOptions.length > 0 && (
             <>
@@ -215,7 +215,7 @@ function ProviderForm({
                   <option key={model} value={model} />
                 ))}
               </datalist>
-              <div className="text-[10px] text-zinc-500">
+              <div className="text-[10px] text-muted-foreground">
                 {t("onboarding.modelIdHint", "Pick one of the detected models or type a model ID directly.")}
               </div>
             </>
@@ -226,7 +226,7 @@ function ProviderForm({
       {isCustom && (
         <div className="space-y-2">
           <div className="space-y-1.5">
-            <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
+            <Label className="ui-eyebrow text-[10px]">
               Base URL
             </Label>
             <input
@@ -234,12 +234,12 @@ function ProviderForm({
               placeholder="https://api.example.com/v1"
               value={state.customBaseUrl}
               onChange={(e) => onChange({ ...state, customBaseUrl: e.target.value, pingResult: null })}
-              className="w-full bg-zinc-900 border border-zinc-700 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
+              className="ui-input-shell w-full bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
             />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
+              <Label className="ui-eyebrow text-[10px]">
                 {t("onboarding.providerName", "Provider Name")}
               </Label>
               <input
@@ -247,11 +247,11 @@ function ProviderForm({
                 placeholder="my-provider"
                 value={state.customProviderName}
                 onChange={(e) => onChange({ ...state, customProviderName: e.target.value, pingResult: null })}
-                className="w-full bg-zinc-900 border border-zinc-700 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
+                className="ui-input-shell w-full bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
+              <Label className="ui-eyebrow text-[10px]">
                 {t("onboarding.modelId", "Model ID")}
               </Label>
               <input
@@ -259,7 +259,7 @@ function ProviderForm({
                 placeholder="gpt-4o / deepseek-chat"
                 value={state.customModel}
                 onChange={(e) => onChange({ ...state, customModel: e.target.value, pingResult: null })}
-                className="w-full bg-zinc-900 border border-zinc-700 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
+                className="ui-input-shell w-full bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
               />
             </div>
           </div>
@@ -267,7 +267,7 @@ function ProviderForm({
       )}
 
       <div className="space-y-2">
-        <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
+        <Label className="ui-eyebrow text-[10px]">
           {t("onboarding.apiKey", "API Key")}
         </Label>
         <div className="flex gap-1">
@@ -276,19 +276,19 @@ function ProviderForm({
             placeholder={isCustom ? "sk-..." : provider.placeholder}
             value={state.apiKey}
             onChange={(e) => onChange({ ...state, apiKey: e.target.value, pingResult: null })}
-            className="flex-1 bg-zinc-900 border border-zinc-700 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
+            className="ui-input-shell flex-1 bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
           />
           <Button
             variant="outline"
             size="icon"
             onClick={() => onChange({ ...state, keyVisible: !state.keyVisible })}
-            className="shrink-0 rounded-none"
+            className="shrink-0"
           >
             {state.keyVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
           </Button>
         </div>
         {!isCustom && (
-          <div className="text-[10px] text-zinc-500 font-mono">
+          <div className="text-[10px] text-muted-foreground font-mono">
             {provider.keyEnv}
           </div>
         )}
@@ -299,7 +299,7 @@ function ProviderForm({
           <Button
             variant="outline"
             size="sm"
-            className="rounded-none text-[11px]"
+            className="text-[11px]"
             disabled={state.pingResult?.testing}
             onClick={onPing}
           >
@@ -563,7 +563,7 @@ export function OnboardingWizard() {
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
       <button
         onClick={dismiss}
-        className="absolute top-6 right-6 text-zinc-500 hover:text-zinc-300 transition-colors"
+        className="absolute top-6 right-6 text-muted-foreground hover:text-foreground transition-colors"
         aria-label="Close"
       >
         <X className="w-5 h-5" />
@@ -580,26 +580,26 @@ export function OnboardingWizard() {
                   ? "w-8 bg-primary"
                   : i < step
                     ? "w-4 bg-primary/50"
-                    : "w-4 bg-zinc-700"
+                    : "w-4 bg-border"
               }`}
             />
           ))}
         </div>
 
-        <div className="border border-zinc-800 bg-zinc-950 p-8">
+        <div className="ui-dialog-shell border border-border p-8">
           {/* Step 0: Welcome */}
           {step === 0 && (
             <div className="space-y-8 text-center">
               <div className="space-y-4">
                 <div className="flex items-center justify-center">
-                  <div className="h-12 w-12 bg-primary flex items-center justify-center">
-                    <div className="h-4 w-4 bg-zinc-950 rounded-full" />
+                  <div className="h-12 w-12 rounded-[var(--radius-card)] bg-primary flex items-center justify-center">
+                    <div className="h-4 w-4 bg-[var(--surface-dialog)] rounded-full" />
                   </div>
                 </div>
                 <h1 className="text-2xl font-bold tracking-tight">
                   {t("onboarding.welcome", "Welcome to Covel")}
                 </h1>
-                <p className="text-sm text-zinc-400 leading-relaxed max-w-xs mx-auto">
+                <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
                   {t(
                     "onboarding.tagline",
                     "AI-driven RPG engine. Craft interactive stories powered by large language models.",
@@ -608,26 +608,26 @@ export function OnboardingWizard() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
+                <Label className="ui-eyebrow text-[10px]">
                   {t("onboarding.language", "Language")}
                 </Label>
                 <div className="flex items-center justify-center gap-2">
                   <button
                     onClick={() => setLocale("zh-CN")}
-                    className={`px-4 py-2 text-xs font-medium border transition-colors ${
+                    className={`rounded-[var(--radius-control)] px-4 py-2 text-xs font-medium border transition-colors ${
                       locale === "zh-CN"
                         ? "border-primary bg-primary/10 text-primary"
-                        : "border-zinc-700 text-zinc-400 hover:border-zinc-500"
+                        : "border-border text-muted-foreground hover:border-primary/40"
                     }`}
                   >
                     {"\u4E2D\u6587"}
                   </button>
                   <button
                     onClick={() => setLocale("en-US")}
-                    className={`px-4 py-2 text-xs font-medium border transition-colors ${
+                    className={`rounded-[var(--radius-control)] px-4 py-2 text-xs font-medium border transition-colors ${
                       locale === "en-US"
                         ? "border-primary bg-primary/10 text-primary"
-                        : "border-zinc-700 text-zinc-400 hover:border-zinc-500"
+                        : "border-border text-muted-foreground hover:border-primary/40"
                     }`}
                   >
                     English
@@ -637,7 +637,7 @@ export function OnboardingWizard() {
 
               <Button
                 onClick={handleNext}
-                className="w-full rounded-none text-xs uppercase tracking-widest"
+                className="w-full text-xs uppercase tracking-widest"
               >
                 {t("onboarding.getStarted", "Get Started")}
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -651,12 +651,12 @@ export function OnboardingWizard() {
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <KeyRound className="w-4 h-4 text-primary" />
-                  <h2 className="text-sm font-semibold uppercase tracking-widest">
+                  <h2 className="ui-title text-sm">
                     {t("onboarding.narratorModel", "Narrator Model")}
                   </h2>
-                  <code className="text-[10px] text-zinc-500 font-mono">covel.story</code>
+                  <code className="text-[10px] text-muted-foreground font-mono">covel.story</code>
                 </div>
-                <p className="text-xs text-zinc-400 leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   {t(
                     "onboarding.narratorModelDesc",
                     "The core model that drives the main story. Pick a provider and paste your key.",
@@ -676,7 +676,7 @@ export function OnboardingWizard() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="rounded-none text-xs text-zinc-500"
+                  className="text-xs text-muted-foreground"
                   onClick={handleNext}
                 >
                   {t("onboarding.skip", "Skip for now")}
@@ -684,7 +684,7 @@ export function OnboardingWizard() {
                 <div className="flex-1" />
                 <Button
                   onClick={handleContinueFromStory}
-                  className="rounded-none text-xs uppercase tracking-widest"
+                  className="text-xs uppercase tracking-widest"
                   disabled={storyContinueDisabled}
                 >
                   {t("onboarding.continue", "Continue")}
@@ -700,12 +700,12 @@ export function OnboardingWizard() {
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Package className="w-4 h-4 text-primary" />
-                  <h2 className="text-sm font-semibold uppercase tracking-widest">
+                  <h2 className="ui-title text-sm">
                     {t("onboarding.pluginModel", "Plugin Model")}
                   </h2>
-                  <code className="text-[10px] text-zinc-500 font-mono">covel.plugin</code>
+                  <code className="text-[10px] text-muted-foreground font-mono">covel.plugin</code>
                 </div>
-                <p className="text-xs text-zinc-400 leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   {t(
                     "onboarding.pluginModelDesc",
                     "Plugins (character tracker, world generator, codex, …) can share the narrator model or use a cheaper one.",
@@ -716,48 +716,48 @@ export function OnboardingWizard() {
               <div className="space-y-2">
                 <button
                   onClick={() => setPluginMode("same")}
-                  className={`w-full flex items-start gap-3 p-3 border text-left transition-colors ${
+                  className={`w-full flex items-start gap-3 p-3 rounded-[var(--radius-card)] border text-left transition-colors ${
                     pluginMode === "same"
                       ? "border-primary bg-primary/10"
-                      : "border-zinc-700 hover:border-zinc-500"
+                      : "border-border hover:border-primary/40"
                   }`}
                 >
                   <div
                     className={`mt-0.5 h-3.5 w-3.5 rounded-full border shrink-0 ${
                       pluginMode === "same"
                         ? "border-primary bg-primary"
-                        : "border-zinc-600"
+                        : "border-border"
                     }`}
                   />
                   <div className="min-w-0">
                     <div className="text-xs font-medium">
                       {t("onboarding.pluginSame", "Use same as narrator")}
                     </div>
-                    <div className="text-[11px] text-zinc-500 font-mono truncate">
+                    <div className="text-[11px] text-muted-foreground font-mono truncate">
                       {storySummary}
                     </div>
                   </div>
                 </button>
                 <button
                   onClick={() => setPluginMode("different")}
-                  className={`w-full flex items-start gap-3 p-3 border text-left transition-colors ${
+                  className={`w-full flex items-start gap-3 p-3 rounded-[var(--radius-card)] border text-left transition-colors ${
                     pluginMode === "different"
                       ? "border-primary bg-primary/10"
-                      : "border-zinc-700 hover:border-zinc-500"
+                      : "border-border hover:border-primary/40"
                   }`}
                 >
                   <div
                     className={`mt-0.5 h-3.5 w-3.5 rounded-full border shrink-0 ${
                       pluginMode === "different"
                         ? "border-primary bg-primary"
-                        : "border-zinc-600"
+                        : "border-border"
                     }`}
                   />
                   <div className="min-w-0">
                     <div className="text-xs font-medium">
                       {t("onboarding.pluginDifferent", "Use a different model")}
                     </div>
-                    <div className="text-[11px] text-zinc-500">
+                    <div className="text-[11px] text-muted-foreground">
                       {t(
                         "onboarding.pluginDifferentHint",
                         "Route plugins to a faster/cheaper provider.",
@@ -781,7 +781,7 @@ export function OnboardingWizard() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="rounded-none text-xs text-zinc-500"
+                  className="text-xs text-muted-foreground"
                   onClick={handleBack}
                 >
                   {t("onboarding.back", "Back")}
@@ -789,7 +789,7 @@ export function OnboardingWizard() {
                 <div className="flex-1" />
                 <Button
                   onClick={handleContinueFromPlugin}
-                  className="rounded-none text-xs uppercase tracking-widest"
+                  className="text-xs uppercase tracking-widest"
                   disabled={pluginContinueDisabled}
                 >
                   {t("onboarding.continue", "Continue")}
@@ -809,7 +809,7 @@ export function OnboardingWizard() {
                 <h2 className="text-xl font-bold tracking-tight">
                   {t("onboarding.ready", "You're all set")}
                 </h2>
-                <p className="text-sm text-zinc-400 leading-relaxed max-w-xs mx-auto">
+                <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
                   {t(
                     "onboarding.readyDesc",
                     "Select a world, then start your adventure. You can adjust settings anytime from the top bar.",
@@ -817,25 +817,25 @@ export function OnboardingWizard() {
                 </p>
               </div>
 
-              <div className="border border-zinc-800 p-4 text-left space-y-3">
+              <div className="border border-border p-4 text-left space-y-3 rounded-[var(--radius-card)] bg-card/35">
                 <div className="flex items-start gap-3">
-                  <Globe className="w-4 h-4 text-zinc-500 mt-0.5 shrink-0" />
+                  <Globe className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
                   <div>
                     <div className="text-xs font-medium">
                       {t("onboarding.step1Label", "Pick a world")}
                     </div>
-                    <div className="text-[11px] text-zinc-500">
+                    <div className="text-[11px] text-muted-foreground">
                       {t("onboarding.step1Desc", "Choose from built-in worlds or create your own.")}
                     </div>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
-                  <Sparkles className="w-4 h-4 text-zinc-500 mt-0.5 shrink-0" />
+                  <Sparkles className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
                   <div>
                     <div className="text-xs font-medium">
                       {t("onboarding.step2Label", "Start your adventure")}
                     </div>
-                    <div className="text-[11px] text-zinc-500">
+                    <div className="text-[11px] text-muted-foreground">
                       {t("onboarding.step2Desc", "The AI narrator will build a story around you.")}
                     </div>
                   </div>
@@ -844,7 +844,7 @@ export function OnboardingWizard() {
 
               <Button
                 onClick={dismiss}
-                className="w-full rounded-none text-xs uppercase tracking-widest"
+                className="w-full text-xs uppercase tracking-widest"
               >
                 {t("onboarding.enter", "Enter Covel")}
                 <ChevronRight className="w-3.5 h-3.5" />

@@ -1,0 +1,13 @@
+{
+  "id": "modern",
+  "label": {
+    "zh-CN": "Modern",
+    "en-US": "Modern"
+  },
+  "source": "builtin",
+  "schemes": ["light", "dark"],
+  "description": {
+    "zh-CN": "利落、偏工具化的工作台风格。",
+    "en-US": "A sharp, tool-first workbench style."
+  }
+}

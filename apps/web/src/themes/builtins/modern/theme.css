@@ -1,0 +1,99 @@
+html[data-theme="modern"] {
+  --color-background: hsl(222 18% 97%);
+  --color-foreground: hsl(228 18% 12%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(228 18% 12%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(228 18% 12%);
+  --color-primary: hsl(250 15% 15%);
+  --color-primary-foreground: hsl(210 40% 98%);
+  --color-secondary: hsl(220 20% 94%);
+  --color-secondary-foreground: hsl(228 18% 12%);
+  --color-muted: hsl(220 18% 91%);
+  --color-muted-foreground: hsl(225 8% 40%);
+  --color-accent: hsl(220 18% 91%);
+  --color-accent-foreground: hsl(228 18% 12%);
+  --color-destructive: hsl(0 72% 52%);
+  --color-destructive-foreground: hsl(210 40% 98%);
+  --color-border: hsl(220 14% 82%);
+  --color-input: hsl(220 14% 82%);
+  --color-ring: hsl(250 15% 22%);
+
+  --radius-sm: 0.125rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.5rem;
+
+  --surface-app: color-mix(in oklab, var(--color-background) 96%, white 4%);
+  --surface-panel: color-mix(in oklab, var(--color-background) 92%, white 8%);
+  --surface-panel-strong: var(--color-card);
+  --surface-dialog: var(--color-card);
+  --surface-player: var(--color-primary);
+  --surface-empty: color-mix(in oklab, var(--color-muted) 65%, transparent);
+  --border-subtle: color-mix(in oklab, var(--color-border) 72%, transparent);
+
+  --radius-card: var(--radius-md);
+  --radius-control: var(--radius-sm);
+  --radius-dialog: var(--radius-lg);
+  --radius-chip: 999px;
+
+  --panel-header-height: 3.5rem;
+  --panel-section-padding-x: 0.75rem;
+  --panel-section-padding-y: 0.75rem;
+  --composer-max-width: 64rem;
+
+  --eyebrow-font-family: var(--font-mono);
+  --eyebrow-font-size: 0.6875rem;
+  --eyebrow-font-weight: 500;
+  --eyebrow-letter-spacing: 0.14em;
+  --eyebrow-text-transform: uppercase;
+
+  --title-font-family: var(--font-display);
+  --title-font-style: normal;
+  --title-font-weight: 700;
+  --title-letter-spacing: 0.16em;
+  --title-text-transform: uppercase;
+
+  --story-font-family: var(--font-sans);
+  --story-font-size: 0.9375rem;
+  --story-line-height: 1.72;
+  --story-font-weight: 400;
+  --story-letter-spacing: 0;
+  --story-max-width: 54rem;
+
+  --shadow-card: 0 12px 30px -24px rgb(15 23 42 / 0.3);
+  --shadow-dialog: 0 28px 80px -40px rgb(15 23 42 / 0.55);
+}
+
+html[data-theme="modern"].dark {
+  --color-background: hsl(228 18% 8%);
+  --color-foreground: hsl(210 40% 96%);
+  --color-card: hsl(228 18% 10.5%);
+  --color-card-foreground: hsl(210 40% 96%);
+  --color-popover: hsl(228 18% 10.5%);
+  --color-popover-foreground: hsl(210 40% 96%);
+  --color-primary: hsl(210 40% 96%);
+  --color-primary-foreground: hsl(250 15% 15%);
+  --color-secondary: hsl(228 14% 16%);
+  --color-secondary-foreground: hsl(210 40% 96%);
+  --color-muted: hsl(228 14% 15%);
+  --color-muted-foreground: hsl(220 10% 65%);
+  --color-accent: hsl(228 14% 15%);
+  --color-accent-foreground: hsl(210 40% 96%);
+  --color-destructive: hsl(0 63% 43%);
+  --color-destructive-foreground: hsl(210 40% 96%);
+  --color-border: hsl(228 14% 18%);
+  --color-input: hsl(228 14% 18%);
+  --color-ring: hsl(220 20% 78%);
+
+  --surface-app: hsl(228 18% 8%);
+  --surface-panel: hsl(228 17% 9.5%);
+  --surface-panel-strong: hsl(228 16% 11%);
+  --surface-dialog: hsl(228 16% 11%);
+  --surface-player: hsl(210 40% 96%);
+  --surface-empty: color-mix(in oklab, var(--color-muted) 80%, transparent);
+  --border-subtle: color-mix(in oklab, var(--color-border) 80%, transparent);
+
+  --shadow-card: 0 18px 40px -30px rgb(0 0 0 / 0.65);
+  --shadow-dialog: 0 36px 96px -42px rgb(0 0 0 / 0.72);
+}

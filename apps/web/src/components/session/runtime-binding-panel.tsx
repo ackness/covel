@@ -45,11 +45,11 @@ export function RuntimeBindingPanel({ bindingState }: RuntimeBindingPanelProps) 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {allBound ? (
-            <Badge variant="secondary" className="text-[10px] bg-green-500/10 text-green-600 paper:rounded-full paper:font-mono paper:tracking-[0.04em] paper:uppercase paper:bg-green-500/15">
+            <Badge variant="secondary" className="ui-chip text-[10px] bg-green-500/10 text-green-600">
               {t("session.allBound")}
             </Badge>
           ) : (
-            <Badge variant="secondary" className="text-[10px] bg-amber-500/10 text-amber-600 paper:rounded-full paper:font-mono paper:tracking-[0.04em] paper:uppercase paper:bg-amber-500/15">
+            <Badge variant="secondary" className="ui-chip text-[10px] bg-amber-500/10 text-amber-600">
               {t("session.unboundRuntimes")}
             </Badge>
           )}
@@ -78,10 +78,10 @@ export function RuntimeBindingPanel({ bindingState }: RuntimeBindingPanelProps) 
                     </span>
                     <Badge
                       variant="outline"
-                      className={`text-[10px] shrink-0 paper:rounded-full paper:font-mono paper:tracking-[0.04em] paper:uppercase ${
+                      className={`ui-chip text-[10px] shrink-0 ${
                         entry.providerTag === "image"
-                          ? "border-purple-500/50 text-purple-600 paper:border-purple-500/60"
-                          : "border-blue-500/50 text-blue-600 paper:border-[color:var(--color-primary)]/60 paper:text-[color:var(--color-primary)]"
+                          ? "border-purple-500/50 text-purple-600"
+                          : "border-blue-500/50 text-blue-600"
                       }`}
                     >
                       {entry.providerTag}
@@ -96,7 +96,7 @@ export function RuntimeBindingPanel({ bindingState }: RuntimeBindingPanelProps) 
                       <select
                         value={entry.slotName}
                         onChange={(e) => setBinding(entry.qualifiedId, e.target.value)}
-                        className="bg-background border border-border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary min-w-[120px]"
+                        className="ui-input-shell bg-background border border-border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary min-w-[120px]"
                       >
                         <option value="">
                           {t("session.selectSlot")}

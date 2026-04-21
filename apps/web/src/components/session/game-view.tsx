@@ -401,12 +401,12 @@ export function GameView({
           className="bg-background flex flex-col min-w-0 min-h-0"
         >
           {/* Header */}
-          <div className="h-14 px-3 border-b border-border flex justify-between items-center bg-background z-10 shrink-0 paper:h-[52px] paper:bg-card abyss:h-[52px] abyss:bg-card">
-            <div className="flex items-center gap-2 overflow-hidden paper:gap-3 abyss:gap-3">
+          <div className="ui-panel-header px-3 border-b border-border flex justify-between items-center z-10 shrink-0">
+            <div className="flex items-center gap-3 overflow-hidden">
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-8 w-8 rounded-sm shrink-0 paper:rounded-full paper:border paper:border-border abyss:rounded-md ${!isLeftCollapsed && "bg-accent text-accent-foreground"}`}
+                className={`h-8 w-8 shrink-0 border border-border/80 ${!isLeftCollapsed && "bg-accent text-accent-foreground"}`}
                 onClick={toggleLeftPanel}
               >
                 <SlidersHorizontal className="w-4 h-4" />
@@ -418,21 +418,16 @@ export function GameView({
                 onGoPrep={onResetSession}
                 disabled={executing}
               />
-              {/* Paper-only streaming pill — Variant A style */}
               <span
-                className={
-                  "hidden paper:inline-flex items-center gap-1 ml-2 px-2 py-[3px] rounded-full border text-[10px] font-mono uppercase tracking-[0.08em] " +
-                  (executing
-                    ? "border-transparent bg-[color:var(--color-primary)]/15 text-[color:var(--color-primary)]"
-                    : "border-transparent bg-[oklch(62%_0.10_140_/_0.18)] text-[oklch(62%_0.10_140)]")
-                }
+                className={`ui-chip hidden sm:inline-flex ml-2 text-[10px] ${
+                  executing
+                    ? "border-transparent bg-primary/10 text-primary"
+                    : "border-transparent bg-emerald-500/12 text-emerald-600 dark:text-emerald-400"
+                }`}
                 aria-live="polite"
               >
                 <span
-                  className={
-                    "w-[5px] h-[5px] rounded-full bg-current " +
-                    (executing ? "paper-pulse-dot" : "")
-                  }
+                  className={`w-[5px] h-[5px] rounded-full bg-current ${executing ? "ui-pulse-dot" : ""}`}
                 />
                 {executing ? t("session.stateStreaming") : t("session.statePlaying")}
               </span>
@@ -443,7 +438,7 @@ export function GameView({
                   pressed={viewMode === "parsed"}
                   onPressedChange={() => setViewMode("parsed")}
                   size="sm"
-                  className="rounded-none border-0 h-7 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                  className="rounded-[var(--radius-control)] border-0 h-7 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
                 >
                   <LayoutTemplate className="w-3.5 h-3.5 mr-1.5" />
                   <span className="text-xs">{t("session.viewParsed")}</span>
@@ -452,7 +447,7 @@ export function GameView({
                   pressed={viewMode === "raw"}
                   onPressedChange={() => setViewMode("raw")}
                   size="sm"
-                  className="rounded-none border-0 h-7 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                  className="rounded-[var(--radius-control)] border-0 h-7 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
                 >
                   <Code className="w-3.5 h-3.5 mr-1.5" />
                   <span className="text-xs">{t("session.viewRaw")}</span>
@@ -464,7 +459,7 @@ export function GameView({
                   pressed={viewMode === "parsed"}
                   onPressedChange={() => setViewMode("parsed")}
                   size="sm"
-                  className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                  className="rounded-[var(--radius-control)] border-0 h-7 px-2 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
                   aria-label={t("session.viewParsedAria")}
                 >
                   <LayoutTemplate className="w-3.5 h-3.5" />
@@ -473,7 +468,7 @@ export function GameView({
                   pressed={viewMode === "raw"}
                   onPressedChange={() => setViewMode("raw")}
                   size="sm"
-                  className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                  className="rounded-[var(--radius-control)] border-0 h-7 px-2 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
                   aria-label={t("session.viewRawAria")}
                 >
                   <Code className="w-3.5 h-3.5" />
@@ -483,7 +478,7 @@ export function GameView({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-sm shrink-0"
+                className="h-8 w-8 shrink-0 border border-transparent"
                 onClick={() => setSettingsOpen(true)}
                 title={t("nav.settings")}
               >
@@ -494,7 +489,7 @@ export function GameView({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 px-2 rounded-sm shrink-0 gap-1.5 border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/5"
+                  className="h-8 px-2 shrink-0 gap-1.5 border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/5"
                   onClick={() => setSuspensionsOpen(true)}
                   title={t("session.suspensionsTitle")}
                 >
@@ -508,7 +503,7 @@ export function GameView({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-sm shrink-0"
+                className="h-8 w-8 shrink-0 border border-transparent"
                 asChild
                 title={t("session.debugTraces")}
               >
@@ -520,7 +515,7 @@ export function GameView({
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-8 w-8 rounded-sm shrink-0 ${!isRightCollapsed && "bg-accent text-accent-foreground"}`}
+                className={`h-8 w-8 shrink-0 border border-transparent ${!isRightCollapsed && "bg-accent text-accent-foreground"}`}
                 onClick={toggleRightPanel}
                 title={t("session.toggleContextPanel")}
               >
@@ -570,7 +565,7 @@ export function GameView({
                   </div>
                   <Button
                     size="sm"
-                    className="h-7 rounded-sm gap-1.5 shrink-0"
+                    className="h-7 gap-1.5 shrink-0"
                     disabled={executing}
                     onClick={handleConfirmDrafts}
                   >
@@ -585,7 +580,7 @@ export function GameView({
                     return (
                       <span
                         key={d.id}
-                        className="group inline-flex items-center gap-1 max-w-full rounded-sm border border-primary/20 bg-background pl-2 pr-0.5 py-0.5 text-[11px] leading-tight text-foreground shadow-sm"
+                        className="group inline-flex items-center gap-1 max-w-full rounded-[var(--radius-control)] border border-primary/20 bg-background pl-2 pr-0.5 py-0.5 text-[11px] leading-tight text-foreground shadow-sm"
                       >
                         <span className="truncate max-w-[260px]" title={label}>
                           {label}
@@ -593,7 +588,7 @@ export function GameView({
                         <button
                           type="button"
                           onClick={() => removeInteractionDraft(d.id)}
-                          className="inline-flex items-center justify-center w-4 h-4 rounded-sm text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                          className="inline-flex items-center justify-center w-4 h-4 rounded-[var(--radius-control)] text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
                           aria-label={t("session.removeDraft")}
                         >
                           <X className="w-3 h-3" />
@@ -607,13 +602,13 @@ export function GameView({
           )}
 
           {/* Input — always fixed at bottom */}
-          <div className="p-3 md:p-4 border-t border-border bg-muted/5 shrink-0 paper:bg-background paper:py-5 abyss:bg-background abyss:py-5">
+          <div className="border-t border-border bg-muted/5 shrink-0 px-3 md:px-4 py-4 md:py-5">
             {phase === "ended" ? (
-              <p className="text-center text-sm text-muted-foreground paper:font-serif paper:italic paper:text-base">
+              <p className="ui-empty-copy mx-auto text-center text-sm">
                 {t("session.ended", "This session has ended.")}
               </p>
             ) : (
-              <div className="flex gap-2 max-w-4xl mx-auto paper:max-w-[42rem] paper:gap-2.5 abyss:max-w-[42rem] abyss:gap-2.5">
+              <div className="ui-composer-frame flex gap-2.5 mx-auto">
                 <input
                   type="text"
                   value={inputValue}
@@ -628,18 +623,12 @@ export function GameView({
                       : t("session.inputPlaceholderAny", "Send a message...")
                   }
                   disabled={executing}
-                  className={
-                    "flex-1 min-w-0 bg-background border border-border px-3 md:px-4 py-2 md:py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary transition-all disabled:opacity-50 " +
-                    "paper:rounded-md paper:bg-card paper:border-[color:var(--color-border)] paper:font-serif paper:text-[15px] paper:px-4 paper:py-3 paper:focus:ring-[color:var(--color-primary)]/40 abyss:rounded-md abyss:bg-card abyss:border-[color:var(--color-border)] abyss:text-[15px] abyss:px-4 abyss:py-3 abyss:focus:ring-[color:var(--color-primary)]/40"
-                  }
+                  className="ui-composer-input flex-1 min-w-0 border border-border px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-primary transition-all disabled:opacity-50"
                 />
                 <Button
                   onClick={handleSubmit}
                   disabled={executing || !inputValue.trim()}
-                  className={
-                    "rounded-none px-4 md:px-6 h-auto shrink-0 " +
-                    "paper:rounded-md paper:px-0 paper:w-[46px] paper:h-[46px] paper:bg-[color:var(--color-primary)] paper:text-[color:var(--color-primary-foreground)] paper:hover:opacity-90 abyss:rounded-md abyss:px-0 abyss:w-[46px] abyss:h-[46px] abyss:bg-[color:var(--color-primary)] abyss:text-[color:var(--color-primary-foreground)] abyss:hover:opacity-90"
-                  }
+                  className="ui-composer-submit px-0 w-[46px] h-[46px] shrink-0"
                   size="sm"
                 >
                   {executing ? (

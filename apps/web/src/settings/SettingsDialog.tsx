@@ -35,13 +35,18 @@ export function SettingsDialog({
   const { t, i18n } = useTranslation();
   const [query, setQuery] = useState("");
   const desktop = isDesktopApp();
+  const [storeRevision, setStoreRevision] = useState(0);
+
+  useEffect(() => store.subscribeAll(() => {
+    setStoreRevision((value) => value + 1);
+  }), [store]);
 
   const tree = useMemo(
     () =>
       buildNavTree(store, { includeDesktop: desktop, locale: i18n.language }),
     // `open` included so the tree rebuilds when dialog opens and plugins
     // registered new entries since last render.
-    [store, desktop, i18n.language, open],
+    [store, desktop, i18n.language, open, storeRevision],
   );
   const filtered = useMemo(
     () => filterNav(tree, query, i18n.language),

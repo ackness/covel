@@ -1,0 +1,127 @@
+html[data-theme="paper"] {
+  --color-background: oklch(95.5% 0.023 85);
+  --color-foreground: oklch(18% 0.01 50);
+  --color-card: oklch(98% 0.015 85);
+  --color-card-foreground: oklch(18% 0.01 50);
+  --color-popover: oklch(98% 0.015 85);
+  --color-popover-foreground: oklch(18% 0.01 50);
+  --color-primary: oklch(44% 0.05 60);
+  --color-primary-foreground: oklch(95.5% 0.023 85);
+  --color-secondary: oklch(92% 0.025 85);
+  --color-secondary-foreground: oklch(30% 0.02 60);
+  --color-muted: oklch(92% 0.025 85);
+  --color-muted-foreground: oklch(48% 0.015 60);
+  --color-accent: oklch(88% 0.04 85);
+  --color-accent-foreground: oklch(30% 0.02 60);
+  --color-destructive: oklch(58% 0.15 30);
+  --color-destructive-foreground: oklch(98% 0.015 85);
+  --color-border: oklch(87% 0.025 85);
+  --color-input: oklch(87% 0.025 85);
+  --color-ring: oklch(44% 0.05 60);
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1rem;
+
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-display: "Newsreader", Georgia, serif;
+  --font-serif: "Newsreader", Georgia, serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --surface-app: var(--color-background);
+  --surface-panel: var(--color-card);
+  --surface-panel-strong: var(--color-card);
+  --surface-dialog: var(--color-card);
+  --surface-player: transparent;
+  --surface-empty: color-mix(in oklab, var(--color-card) 88%, var(--color-background));
+  --border-subtle: color-mix(in oklab, var(--color-border) 70%, transparent);
+
+  --radius-card: var(--radius-lg);
+  --radius-control: var(--radius-md);
+  --radius-dialog: var(--radius-lg);
+  --radius-chip: 999px;
+
+  --panel-header-height: 3.25rem;
+  --panel-section-padding-x: 1.25rem;
+  --panel-section-padding-y: 1rem;
+  --composer-max-width: 42rem;
+  --session-column-max-width: 42rem;
+
+  --eyebrow-font-family: var(--font-mono);
+  --eyebrow-font-size: 0.625rem;
+  --eyebrow-font-weight: 400;
+  --eyebrow-letter-spacing: 0.12em;
+  --eyebrow-text-transform: uppercase;
+
+  --title-font-family: var(--font-display);
+  --title-font-style: italic;
+  --title-font-weight: 400;
+  --title-letter-spacing: -0.01em;
+  --title-text-transform: none;
+
+  --story-font-family: var(--font-serif);
+  --story-font-size: 1.125rem;
+  --story-line-height: 1.78;
+  --story-font-weight: 300;
+  --story-letter-spacing: -0.002em;
+  --story-max-width: 42rem;
+
+  --shadow-card: 0 18px 50px -40px rgb(103 72 41 / 0.35);
+  --shadow-dialog: 0 30px 90px -48px rgb(74 53 29 / 0.4);
+
+  font-feature-settings: "ss01", "cv11";
+}
+
+html[data-theme="paper"] .ui-message-row {
+  align-items: flex-start;
+}
+
+html[data-theme="paper"] .ui-player-message-row {
+  justify-content: flex-start;
+}
+
+html[data-theme="paper"] .ui-message-player {
+  background: transparent;
+  color: var(--color-foreground);
+  border-width: 0 0 0 2px;
+  border-color: var(--color-primary);
+  border-radius: 0;
+  max-width: var(--story-max-width);
+  padding-left: 0.875rem;
+  padding-right: 0;
+  padding-block: 0;
+}
+
+html[data-theme="paper"] .ui-rule {
+  border-style: dashed;
+}
+
+html[data-theme="paper"] .ui-outline-rail {
+  border-left-style: dashed;
+}
+
+html[data-theme="paper"].dark {
+  --color-background: oklch(15% 0.008 75);
+  --color-foreground: oklch(92% 0.018 78);
+  --color-card: oklch(18% 0.009 75);
+  --color-card-foreground: oklch(92% 0.018 78);
+  --color-popover: oklch(18% 0.009 75);
+  --color-popover-foreground: oklch(92% 0.018 78);
+  --color-primary: oklch(85% 0.05 78);
+  --color-primary-foreground: oklch(15% 0.008 75);
+  --color-secondary: oklch(22% 0.009 75);
+  --color-secondary-foreground: oklch(85% 0.022 78);
+  --color-muted: oklch(22% 0.009 75);
+  --color-muted-foreground: oklch(62% 0.018 75);
+  --color-accent: oklch(28% 0.016 75);
+  --color-accent-foreground: oklch(85% 0.05 78);
+  --color-destructive: oklch(60% 0.15 30);
+  --color-destructive-foreground: oklch(95% 0.02 80);
+  --color-border: oklch(28% 0.012 75);
+  --color-input: oklch(28% 0.012 75);
+  --color-ring: oklch(85% 0.05 78);
+
+  --shadow-card: 0 16px 40px -30px rgb(0 0 0 / 0.55);
+  --shadow-dialog: 0 36px 96px -42px rgb(0 0 0 / 0.66);
+}
