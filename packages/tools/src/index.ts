@@ -1,5 +1,7 @@
 // ── Tool definition ──────────────────────────────────────────────
 export { tool, ToolValidationError } from './tool.js';
+export { getPendingProposals, getToolContent, withPendingProposals } from './result.js';
+export type { ToolExecutionEnvelope } from './result.js';
 
 // ── Zod re-export (for plugin tool factory injection) ───────────
 export { z } from 'zod';

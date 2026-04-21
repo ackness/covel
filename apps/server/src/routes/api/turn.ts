@@ -68,61 +68,74 @@ turnRoutes.post('/:id/turn', rateLimiter({ max: 30 }), async (c) => {
   const sessionConfig = await loadSessionConfig(store, sessionId, session.worldId ?? undefined, worldDataPluginId);
   const turnGetConfig = (_pluginId: string, _runtimeId: string): Readonly<Record<string, unknown>> => sessionConfig;
 
-  // Execute the turn through the full pipeline.
-  //
-  // Sprint 1-D: pass `worldDataPluginId` into deps so `TurnExecutor` can build
-  // a unified `SessionContextSnapshot` when `COVEL_SESSION_CONTEXT=1`.
-  // When the flag is off, the field is ignored and the legacy scattered loads
-  // run unchanged.
-  const result = await executeTurn(
-    {
-      sessionId,
-      turnId,
-      playerMessage: body.message,
-      locale: body.locale,
-      modelOverride: body.model, // API-level model override
-    },
-    activeRuntimes,
-    {
-      loadRuntime: loadRuntimeFn,
-      llm: llmAdapter,
-      getConfig: turnGetConfig,
-      store,
-      toolExecutor,
-      resolveModel,
-      compactor: compactorRunner,
-      worldDataPluginId,
-    },
-  );
-
-  // Update session turn count — derive from actual turn results to avoid
-  // concurrent read-modify-write races (two parallel turns reading the same
-  // stale `session.turnCount` and overwriting each other).
-  const turnResults = await store.listTurnResults(sessionId);
-  await store.updateSession(sessionId, {
-    turnCount: turnResults.length,
-    updatedAt: new Date().toISOString(),
-  });
-
-  // Process runtime results through the same commit pipeline as /api/actions.
-  // Without this, turn.ts would write runtime_results but not messages/state/events,
-  // leaving snapshot restore desynced from LLM history. Audit Finding 3.
-  //
-  // Forward hookPipeline + eventBus so PreStateCommit / PostStateCommit hooks
-  // registered by plugins fire on this route too, matching /api/actions.
   const hookPipeline = c.get('hookPipeline');
   const eventBus = c.get('eventBus');
-  const outputKindMap = new Map<string, string>();
-  for (const rt of activeRuntimes) {
-    outputKindMap.set(rt.name, rt.outputKind ?? 'plugin');
-  }
-  for (const rr of result.runtimeResults) {
-    const kind = outputKindMap.get(rr.runtimeId) ?? 'plugin';
-    await processRuntimeResult(rr, store, sessionId, kind, {
-      ...(hookPipeline ? { hookPipeline } : {}),
-      ...(eventBus ? { eventBus } : {}),
+  const sessionLock = c.get('sessionLock');
+
+  // Execute the full turn pipeline under the session lock. Without this,
+  // two concurrent POST /:id/turn requests could interleave their
+  // `listTurnResults().length`-based turnCount update, duplicate commit
+  // writes, and fire the same hooks twice. The actions SSE route already
+  // serializes on the same lock; wrapping here keeps the two entry points
+  // consistent and makes PG-backed multi-pod deployments safe (audit
+  // 2026-04-21 F5).
+  const result = await sessionLock.withLock(sessionId, async () => {
+    // Sprint 1-D: pass `worldDataPluginId` into deps so `TurnExecutor` can
+    // build a unified `SessionContextSnapshot` when `COVEL_SESSION_CONTEXT=1`.
+    // When the flag is off, the field is ignored and the legacy scattered
+    // loads run unchanged.
+    const executed = await executeTurn(
+      {
+        sessionId,
+        turnId,
+        playerMessage: body.message,
+        locale: body.locale,
+        modelOverride: body.model, // API-level model override
+      },
+      activeRuntimes,
+      {
+        loadRuntime: loadRuntimeFn,
+        llm: llmAdapter,
+        getConfig: turnGetConfig,
+        store,
+        toolExecutor,
+        resolveModel,
+        compactor: compactorRunner,
+        worldDataPluginId,
+      },
+    );
+
+    // Update session turn count — derive from actual turn results to avoid
+    // concurrent read-modify-write races (two parallel turns reading the
+    // same stale `session.turnCount` and overwriting each other).
+    const turnResults = await store.listTurnResults(sessionId);
+    await store.updateSession(sessionId, {
+      turnCount: turnResults.length,
+      updatedAt: new Date().toISOString(),
     });
-  }
+
+    // Process runtime results through the same commit pipeline as
+    // /api/actions. Without this, turn.ts would write runtime_results but
+    // not messages/state/events, leaving snapshot restore desynced from
+    // LLM history. Audit Finding 3.
+    //
+    // Forward hookPipeline + eventBus so PreStateCommit / PostStateCommit
+    // hooks registered by plugins fire on this route too, matching
+    // /api/actions.
+    const outputKindMap = new Map<string, string>();
+    for (const rt of activeRuntimes) {
+      outputKindMap.set(rt.name, rt.outputKind ?? 'plugin');
+    }
+    for (const rr of executed.runtimeResults) {
+      const kind = outputKindMap.get(rr.runtimeId) ?? 'plugin';
+      await processRuntimeResult(rr, store, sessionId, kind, {
+        ...(hookPipeline ? { hookPipeline } : {}),
+        ...(eventBus ? { eventBus } : {}),
+      });
+    }
+
+    return executed;
+  });
 
   return c.json(result);
 });

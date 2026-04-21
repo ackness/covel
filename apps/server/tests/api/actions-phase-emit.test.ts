@@ -24,6 +24,7 @@ import {
   type LoadedRuntime,
 } from '@covel/plugin-loader';
 import { actionRoutes } from '../../src/routes/api/actions.js';
+import { createInProcessSessionLock } from '../../src/lib/session-lock.js';
 import { makeFakeLLM, makeFakeLoadedRuntime } from './__helpers/fake-llm.js';
 
 function makeSummary(overrides: Partial<PluginSummary> = {}): PluginSummary {
@@ -121,6 +122,7 @@ describe('POST /api/actions — phase.changed hygiene (Finding 4 regression)', (
 
     const eventBus = createEventBus(store);
     const { llm } = makeFakeLLM('A fake reply.');
+    const sessionLock = createInProcessSessionLock();
 
     app = new Hono();
     app.use('*', async (c, next) => {
@@ -134,6 +136,7 @@ describe('POST /api/actions — phase.changed hygiene (Finding 4 regression)', (
       c.set('getConfigFn', () => ({}));
       c.set('resolveModel', () => undefined);
       c.set('eventBus', eventBus);
+      c.set('sessionLock', sessionLock);
       await next();
     });
     app.route('/api/actions', actionRoutes);

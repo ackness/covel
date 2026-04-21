@@ -133,7 +133,18 @@
     "statePlaying": "进行中",
     "debugTraces": "调试追踪",
     "toggleContextPanel": "切换状态与世界上下文",
-    "removeDraft": "移除该选择"
+    "removeDraft": "移除该选择",
+    "suspensionsBadge": "{{count}} 个等待中",
+    "suspensionsTitle": "挂起的执行",
+    "suspensionsDescription": "插件暂停等待外部数据，在下方输入 resume 数据以继续执行。",
+    "suspensionsEmpty": "没有等待中的执行。",
+    "suspensionResumeLabel": "继续执行",
+    "suspensionCancelLabel": "放弃",
+    "suspensionResumePlaceholder": "resume 数据（JSON 或文本）",
+    "suspensionAgoSeconds": "{{count}} 秒前",
+    "suspensionAgoMinutes": "{{count}} 分钟前",
+    "suspensionAgoHours": "{{count}} 小时前",
+    "suspensionAgoDays": "{{count}} 天前"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",

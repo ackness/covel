@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { normalizeOutput, createCommitPipeline, processRuntimeResult, createTraceRecorder } from '../src/session-kernel.js';
+import { withPendingProposals } from '@covel/tools';
 import type { Proposal, SessionEvent, RuntimeResult } from '@covel/shared';
 
 const SOURCE = { pluginId: 'test-plugin', runtimeId: 'test-runtime' };
@@ -301,6 +302,7 @@ describe('createCommitPipeline', () => {
       saveEvent: vi.fn(),
       upsertCharacter: vi.fn(),
       setPluginData: vi.fn(),
+      setPluginDataBatch: vi.fn(),
       addTraceEvent: vi.fn(),
       addStateChange: vi.fn(),
     };
@@ -443,6 +445,47 @@ describe('createCommitPipeline', () => {
     });
   });
 
+  describe('plugin.data commit', () => {
+    it('should persist plugin data through the store', async () => {
+      const store = createMockStore();
+      const pipeline = createCommitPipeline(store as any);
+      const proposal = makeProposal('plugin.data', {
+        namespace: 'entries',
+        key: 'codex-qingping',
+        value: { title: '青萍山' },
+      });
+
+      const result = await pipeline.commit(proposal);
+
+      expect(result.committed).toBe(true);
+      expect(store.setPluginData).toHaveBeenCalledOnce();
+      expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
+        sessionId: SESSION_ID,
+        pluginId: 'test-plugin',
+        namespace: 'entries',
+        key: 'codex-qingping',
+        value: { title: '青萍山' },
+      });
+    });
+
+    it('should persist plugin data batches through the store', async () => {
+      const store = createMockStore();
+      const pipeline = createCommitPipeline(store as any);
+      const proposal = makeProposal('plugin.data.batch', {
+        items: [
+          { namespace: 'entries', key: 'geography', value: { region: '云梦泽' } },
+          { namespace: 'entries', key: 'factions', value: { name: '青萍宗' } },
+        ],
+      });
+
+      const result = await pipeline.commit(proposal);
+
+      expect(result.committed).toBe(true);
+      expect(store.setPluginDataBatch).toHaveBeenCalledOnce();
+      expect(store.setPluginDataBatch.mock.calls[0][0]).toHaveLength(2);
+    });
+  });
+
   describe('trace recording', () => {
     it('should write trace event for every committed proposal', async () => {
       const store = createMockStore();
@@ -501,6 +544,7 @@ describe('processRuntimeResult', () => {
       saveEvent: vi.fn(),
       upsertCharacter: vi.fn(),
       setPluginData: vi.fn(),
+      setPluginDataBatch: vi.fn(),
       addTraceEvent: vi.fn(),
       addStateChange: vi.fn(),
     };
@@ -620,6 +664,39 @@ describe('processRuntimeResult', () => {
     expect(store.addMessage).toHaveBeenCalledTimes(2);
     expect(store.addMessage.mock.calls[0][0].role).toBe('system');
     expect(store.addMessage.mock.calls[1][0].metadata.block.type).toBe('action-guide');
+  });
+
+  it('should append pending proposals from runtime output and commit them', async () => {
+    const store = createMockStore();
+    const result = makeRuntimeResult(
+      withPendingProposals(
+        { narrativeOutput: '写入图鉴。' },
+        [{
+          id: 'proposal-plugin-data-1',
+          type: 'plugin.data',
+          source: { pluginId: 'test-plugin', runtimeId: 'test-runtime' },
+          turnId: TURN_ID,
+          sessionId: SESSION_ID,
+          payload: {
+            namespace: 'entries',
+            key: 'codex-qingping',
+            value: { title: '青萍山' },
+          },
+          timestamp: new Date().toISOString(),
+        }],
+      ) as Record<string, unknown>,
+    );
+
+    const { events, failedProposals } = await processRuntimeResult(result, store as any, SESSION_ID, 'story');
+
+    expect(events).toHaveLength(1);
+    expect(failedProposals).toHaveLength(0);
+    expect(store.setPluginData).toHaveBeenCalledOnce();
+    expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
+      namespace: 'entries',
+      key: 'codex-qingping',
+      value: { title: '青萍山' },
+    });
   });
 
   it('should use runtimeId and pluginId from the RuntimeResult', async () => {

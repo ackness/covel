@@ -3,6 +3,7 @@
  */
 
 import type { z, ZodType } from 'zod';
+import type { ToolExecutionEnvelope } from './result.js';
 
 // ── Tool execution context ───────────────────────────────────────
 
@@ -24,7 +25,10 @@ export interface ToolModule<
   readonly description: string;
   readonly parametersSchema: TParams;
   readonly jsonSchema: Readonly<Record<string, unknown>>;
-  execute(params: z.infer<TParams>, context: ToolExecutionContext): Promise<TOutput>;
+  execute(
+    params: z.infer<TParams>,
+    context: ToolExecutionContext,
+  ): Promise<TOutput | ToolExecutionEnvelope<TOutput>>;
 }
 
 // ── Tool definition input (passed to tool()) ─────────────────────
@@ -36,7 +40,10 @@ export interface ToolDefinitionInput<
   readonly name: string;
   readonly description: string;
   readonly parameters: TParams;
-  execute(params: z.infer<TParams>, context: ToolExecutionContext): Promise<TOutput>;
+  execute(
+    params: z.infer<TParams>,
+    context: ToolExecutionContext,
+  ): Promise<TOutput | ToolExecutionEnvelope<TOutput>>;
 }
 
 // ── Resolved tool (registered in registry) ───────────────────────

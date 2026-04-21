@@ -67,9 +67,9 @@ Local 工具承接插件自己的业务封装，例如：
 
 ### 当前代码状态
 
-当前实现允许 local tool 与 deterministic function handler 使用注入的 `store` 完成插件包内批量写入。
+当前实现里，local tool 可以读取注入的 `store`，持久化写入优先通过 `withPendingProposals(...)` 交给 commit chain；deterministic function handler 继续使用 `store` 完成内部批量工作。
 
-这条能力适合插件内部实现。插件对外暴露给 runtime 的稳定契约依旧建议留在插件目录内，由插件自己维护测试。
+插件对外暴露给 runtime 的稳定契约依旧建议留在插件目录内，由插件自己维护测试。
 
 ---
 
@@ -140,6 +140,8 @@ Local 工具承接插件自己的业务封装，例如：
 
 **输出**: `{ success, namespace, key }`
 
+**治理路径**: 写入经 Session Kernel commit chain 提交，统一进入 `PreStateCommit` / `PostStateCommit`、trace 与 `COVEL_COMMIT_TXN_V1` 事务开关。
+
 ---
 
 ### plugin-data-set-batch
@@ -158,6 +160,8 @@ Local 工具承接插件自己的业务封装，例如：
 | value | unknown | ✓ | 要存储的 JSON 数据 |
 
 **输出**: `{ success, count, items: [{ namespace, key }] }`
+
+**治理路径**: 写入经 Session Kernel commit chain 提交，batch 保持单 proposal 粒度，hook / trace / 事务路径与单条写入一致。
 
 **设计原则**: 框架提供通用批量写入能力。对于专用场景（如世界初始化），推荐插件创建自己的 local tools，用更精确的 schema 引导 LLM 生成正确结构的数据。
 
@@ -399,6 +403,7 @@ Attributes:
 - 文件放在插件自己的 `tools/` 或 runtime 子目录下
 - 在 `PLUGIN.md` 里通过 `tools.local` 显式声明
 - 为每个 local tool 提供独立测试
+- 持久化写入优先返回 `withPendingProposals(...)`，让 commit chain 接管落盘
 - 通过 local tool 封装插件自己的数据 schema 和批量写入逻辑
 
 ### set-world-schema

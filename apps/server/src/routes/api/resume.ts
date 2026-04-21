@@ -33,7 +33,6 @@ import type { LLMAdapter, ToolExecutor, HookPipeline } from '@covel/runtime';
 import { resumeSuspendedRuntime } from '@covel/runtime';
 import type { RuntimeManifest } from '@covel/shared';
 import type { EventBus } from '@covel/events';
-import { withSessionLock } from '../../lib/session-lock.js';
 
 type Env = {
   Variables: {
@@ -189,9 +188,10 @@ resumeRoutes.post('/:id/resume', async (c) => {
 
   const hookPipeline = c.get('hookPipeline');
   const eventBus = c.get('eventBus');
+  const sessionLock = c.get('sessionLock');
 
   try {
-    const result = await withSessionLock(sessionId, () => resumeSuspendedRuntime(
+    const result = await sessionLock.withLock(sessionId, () => resumeSuspendedRuntime(
       suspension,
       data,
       effectiveManifest!,

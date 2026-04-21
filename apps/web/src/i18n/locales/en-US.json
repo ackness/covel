@@ -133,7 +133,18 @@
     "statePlaying": "Playing",
     "debugTraces": "Debug Traces",
     "toggleContextPanel": "Toggle State & World Context",
-    "removeDraft": "Remove this selection"
+    "removeDraft": "Remove this selection",
+    "suspensionsBadge": "{{count}} waiting",
+    "suspensionsTitle": "Suspended executions",
+    "suspensionsDescription": "Runtimes paused for external data. Enter resume data below to continue.",
+    "suspensionsEmpty": "No suspended executions.",
+    "suspensionResumeLabel": "Resume",
+    "suspensionCancelLabel": "Abandon",
+    "suspensionResumePlaceholder": "resume data (JSON or text)",
+    "suspensionAgoSeconds": "{{count}}s ago",
+    "suspensionAgoMinutes": "{{count}}m ago",
+    "suspensionAgoHours": "{{count}}h ago",
+    "suspensionAgoDays": "{{count}}d ago"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",

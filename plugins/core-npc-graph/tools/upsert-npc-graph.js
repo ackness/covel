@@ -23,6 +23,8 @@
  *
  * @param {{ tool: Function, z: import('zod'), shortIdBatch: Function, store: any }} injection
  */
+import { withPendingProposals } from '@covel/tools';
+
 export default function ({ tool, z, shortIdBatch, store }) {
   const nodeInputSchema = z.object({
     name: z.string().min(1).describe('人物/群体/势力的规范名称（用于去重）'),
@@ -295,22 +297,37 @@ export default function ({ tool, z, shortIdBatch, store }) {
       }
 
       // ── 6. Persist everything in one batch ──
-      if (pluginDataWrites.length > 0) {
-        await store.setPluginDataBatch(pluginDataWrites);
-      }
-
-      return {
-        nodes: {
-          created: nodeResults.filter((r) => r.status === 'created').length,
-          updated: nodeResults.filter((r) => r.status === 'updated').length,
-          results: nodeResults,
+      return withPendingProposals(
+        {
+          nodes: {
+            created: nodeResults.filter((r) => r.status === 'created').length,
+            updated: nodeResults.filter((r) => r.status === 'updated').length,
+            results: nodeResults,
+          },
+          edges: {
+            created: edgeResults.filter((r) => !r.skipped).length,
+            skipped: edgeResults.filter((r) => r.skipped).length,
+            results: edgeResults,
+          },
         },
-        edges: {
-          created: edgeResults.filter((r) => !r.skipped).length,
-          skipped: edgeResults.filter((r) => r.skipped).length,
-          results: edgeResults,
-        },
-      };
+        pluginDataWrites.length > 0
+          ? [{
+              id: crypto.randomUUID(),
+              type: 'plugin.data.batch',
+              source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
+              turnId: context.turnId,
+              sessionId: context.sessionId,
+              payload: {
+                items: pluginDataWrites.map((record) => ({
+                  namespace: record.namespace,
+                  key: record.key,
+                  value: record.value,
+                })),
+              },
+              timestamp: now,
+            }]
+          : [],
+      );
     },
   });
 }

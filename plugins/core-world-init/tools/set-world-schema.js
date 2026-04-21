@@ -4,6 +4,8 @@
  *
  * @param {{ tool: Function, z: import('zod'), store: any }} injection
  */
+import { withPendingProposals } from '@covel/tools';
+
 export default function ({ tool, z, store }) {
   const attributeSchema = z.object({
     id: z.string().min(1).describe('属性唯一标识（如 "hp", "level", "skills"）'),
@@ -26,21 +28,26 @@ export default function ({ tool, z, store }) {
     }),
     execute: async (params, context) => {
       const now = new Date().toISOString();
-      await store.setPluginData({
-        id: crypto.randomUUID(),
-        sessionId: context.sessionId,
-        pluginId: context.pluginId,
-        namespace: 'schema',
-        key: 'character-attributes',
-        value: { version: 1, attributes: params.attributes },
-        createdAt: now,
-        updatedAt: now,
-      });
-      return {
-        success: true,
-        attributeCount: params.attributes.length,
-        categories: [...new Set(params.attributes.map((a) => a.category))],
-      };
+      return withPendingProposals(
+        {
+          success: true,
+          attributeCount: params.attributes.length,
+          categories: [...new Set(params.attributes.map((a) => a.category))],
+        },
+        [{
+          id: crypto.randomUUID(),
+          type: 'plugin.data',
+          source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
+          turnId: context.turnId,
+          sessionId: context.sessionId,
+          payload: {
+            namespace: 'schema',
+            key: 'character-attributes',
+            value: { version: 1, attributes: params.attributes },
+          },
+          timestamp: now,
+        }],
+      );
     },
   });
 }

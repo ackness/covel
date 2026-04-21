@@ -19,7 +19,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import path from 'node:path';
 import { discoverPlugins, loadPluginManifest, loadRuntime } from '@covel/plugin-loader';
-import { tool, z, shortIdBatch } from '@covel/tools';
+import { getPendingProposals, tool, z, shortIdBatch } from '@covel/tools';
 import createUnlockCodexEntries from '../tools/unlock-codex-entries.js';
 import createUpdateCodexEntry from '../tools/update-codex-entry.js';
 import { CODEX_CATEGORY_METADATA, getCategoryMetadata } from '../category-metadata.js';
@@ -58,6 +58,45 @@ function createMockPluginDataStore() {
   };
 }
 
+async function applyPendingPluginData(result, store) {
+  for (const proposal of getPendingProposals(result)) {
+    if (proposal.type === 'plugin.data') {
+      await store.setPluginData({
+        id: proposal.id,
+        sessionId: proposal.sessionId,
+        pluginId: proposal.source.pluginId,
+        namespace: proposal.payload.namespace,
+        key: proposal.payload.key,
+        value: proposal.payload.value,
+        createdAt: proposal.timestamp,
+        updatedAt: proposal.timestamp,
+      });
+      continue;
+    }
+
+    if (proposal.type === 'plugin.data.batch') {
+      await store.setPluginDataBatch(
+        proposal.payload.items.map((item, index) => ({
+          id: `${proposal.id}:${index}`,
+          sessionId: proposal.sessionId,
+          pluginId: proposal.source.pluginId,
+          namespace: item.namespace,
+          key: item.key,
+          value: item.value,
+          createdAt: proposal.timestamp,
+          updatedAt: proposal.timestamp,
+        })),
+      );
+    }
+  }
+}
+
+async function executeAndCommit(toolModule, params, context, store) {
+  const result = await toolModule.execute(params, context);
+  await applyPendingPluginData(result, store);
+  return result;
+}
+
 const PLUGINS_DIR = path.resolve(import.meta.dirname, '../..');
 
 // ── Tool unit tests ──────────────────────────────────────────────
@@ -76,7 +115,7 @@ describe('core-codex tools', () => {
 
   describe('unlock-codex-entries', () => {
     it('should unlock a single entry with UI card', async () => {
-      const result = await unlockCodexEntriesTool.execute({
+      const result = await executeAndCommit(unlockCodexEntriesTool, {
         entries: [{
           category: 'location',
           title: '青萍山',
@@ -84,7 +123,7 @@ describe('core-codex tools', () => {
           tags: ['宗门', '灵脉'],
           rarity: 'common',
         }],
-      }, ctx);
+      }, ctx, mockStore);
 
       expect(result.unlocked).toBe(1);
       expect(result.entries[0].title).toBe('青萍山');
@@ -99,7 +138,7 @@ describe('core-codex tools', () => {
     });
 
     it('should persist entries to plugin-data store', async () => {
-      const result = await unlockCodexEntriesTool.execute({
+      const result = await executeAndCommit(unlockCodexEntriesTool, {
         entries: [{
           category: 'location',
           title: '青萍山',
@@ -107,7 +146,7 @@ describe('core-codex tools', () => {
           tags: ['宗门'],
           rarity: 'common',
         }],
-      }, ctx);
+      }, ctx, mockStore);
 
       const entryId = result.entries[0].entryId;
       const stored = await mockStore.getPluginData('sess-1', 'core-codex', 'entries', entryId);
@@ -127,7 +166,7 @@ describe('core-codex tools', () => {
 
     it('should attach categoryMeta for every known category', async () => {
       const categories = Object.keys(CODEX_CATEGORY_METADATA);
-      const result = await unlockCodexEntriesTool.execute({
+      const result = await executeAndCommit(unlockCodexEntriesTool, {
         entries: categories.map((category) => ({
           category,
           title: `测试-${category}`,
@@ -135,7 +174,7 @@ describe('core-codex tools', () => {
           tags: [category],
           rarity: 'common',
         })),
-      }, ctx);
+      }, ctx, mockStore);
 
       for (let i = 0; i < categories.length; i++) {
         const category = categories[i];
@@ -147,13 +186,13 @@ describe('core-codex tools', () => {
     });
 
     it('should batch unlock multiple entries', async () => {
-      const result = await unlockCodexEntriesTool.execute({
+      const result = await executeAndCommit(unlockCodexEntriesTool, {
         entries: [
           { category: 'character', title: '苏婉', content: '青萍宗外门首席弟子，冰灵根。', tags: ['弟子', '冰灵根'], rarity: 'uncommon' },
           { category: 'item', title: '梦莲', content: '野生灵植，可短暂扩展灵识但有成瘾风险。', tags: ['灵植', '危险'], rarity: 'rare' },
           { category: 'monster', title: '瘴气蟾蜍', content: '百灵沼泽常见妖兽，练气中期实力。', tags: ['妖兽', '沼泽'], rarity: 'common' },
         ],
-      }, ctx);
+      }, ctx, mockStore);
 
       expect(result.unlocked).toBe(3);
       expect(result.ui).toHaveLength(3);
@@ -169,7 +208,7 @@ describe('core-codex tools', () => {
     });
 
     it('should generate legendary entry with glow animation', async () => {
-      const result = await unlockCodexEntriesTool.execute({
+      const result = await executeAndCommit(unlockCodexEntriesTool, {
         entries: [{
           category: 'lore',
           title: '上古灵潮',
@@ -178,7 +217,7 @@ describe('core-codex tools', () => {
           rarity: 'legendary',
           imageHint: '远古天空裂开，金色灵气如瀑布倾泻而下',
         }],
-      }, ctx);
+      }, ctx, mockStore);
 
       expect(result.ui[0].spec.props.rarity).toBe('legendary');
       // imageHint is kept in block `meta` so tools/traces can still see it,
@@ -189,7 +228,7 @@ describe('core-codex tools', () => {
 
   describe('update-codex-entry', () => {
     it('should update existing entry from store', async () => {
-      const unlockResult = await unlockCodexEntriesTool.execute({
+      const unlockResult = await executeAndCommit(unlockCodexEntriesTool, {
         entries: [{
           category: 'location',
           title: '青萍山',
@@ -197,14 +236,14 @@ describe('core-codex tools', () => {
           tags: ['宗门'],
           rarity: 'common',
         }],
-      }, ctx);
+      }, ctx, mockStore);
 
       const entryId = unlockResult.entries[0].entryId;
 
-      const result = await updateCodexEntryTool.execute({
+      const result = await executeAndCommit(updateCodexEntryTool, {
         entryId,
         appendContent: '据传青萍山灵脉近年有衰退迹象，原因不明。',
-      }, ctx);
+      }, ctx, mockStore);
 
       expect(result.updated).toBe(true);
       expect(result.entryId).toBe(entryId);
@@ -236,27 +275,27 @@ describe('core-codex tools', () => {
         updatedAt: new Date().toISOString(),
       });
 
-      await updateCodexEntryTool.execute({
+      await executeAndCommit(updateCodexEntryTool, {
         entryId: legacyId,
         appendContent: '新增补充信息。',
-      }, ctx);
+      }, ctx, mockStore);
 
       const stored = await mockStore.getPluginData('sess-1', 'core-codex', 'entries', legacyId);
       expect(stored.value.categoryMeta).toEqual(getCategoryMetadata('lore'));
     });
 
     it('should return error for non-existent entry', async () => {
-      const result = await updateCodexEntryTool.execute({
+      const result = await executeAndCommit(updateCodexEntryTool, {
         entryId: 'codex-nonexistent',
         appendContent: 'some content',
-      }, ctx);
+      }, ctx, mockStore);
 
       expect(result.updated).toBe(false);
       expect(result.error).toBeDefined();
     });
 
     it('should support rarity upgrade', async () => {
-      const unlockResult = await unlockCodexEntriesTool.execute({
+      const unlockResult = await executeAndCommit(unlockCodexEntriesTool, {
         entries: [{
           category: 'item',
           title: '梦莲',
@@ -264,14 +303,14 @@ describe('core-codex tools', () => {
           tags: ['灵植'],
           rarity: 'common',
         }],
-      }, ctx);
+      }, ctx, mockStore);
       const entryId = unlockResult.entries[0].entryId;
 
-      const result = await updateCodexEntryTool.execute({
+      const result = await executeAndCommit(updateCodexEntryTool, {
         entryId,
         appendContent: '发现梦莲与上古封印有直接关联！',
         rarityUpgrade: 'legendary',
-      }, ctx);
+      }, ctx, mockStore);
 
       // rarityUpgrade lives in block meta (observability only). The spec
       // props surface the new rarity via `rarity`; the renderer handles the

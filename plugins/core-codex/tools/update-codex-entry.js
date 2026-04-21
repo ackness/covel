@@ -11,6 +11,7 @@
  * pre-existing entries written before B2 also gain the metadata.
  */
 
+import { withPendingProposals } from '@covel/tools';
 import { getCategoryMetadata } from '../category-metadata.js';
 
 export default function ({ tool, z, store }) {
@@ -52,40 +53,44 @@ export default function ({ tool, z, store }) {
         updatedAt: now,
       };
 
-      await store.setPluginData({
-        id: crypto.randomUUID(),
-        sessionId: context.sessionId,
-        pluginId: context.pluginId,
-        namespace: 'entries',
-        key: params.entryId,
-        value: updatedValue,
-        createdAt: existing.updatedAt ?? now,
-        updatedAt: now,
-      });
-
-      return {
-        updated: true,
-        entryId: params.entryId,
-        appendedContent: params.appendContent,
-        ui: [{
-          type: 'ui-spec',
+      return withPendingProposals(
+        {
+          updated: true,
           entryId: params.entryId,
-          spec: {
-            type: 'EntryCard',
-            props: {
-              title: updatedValue.title,
-              category: updatedValue.category,
-              content: params.appendContent,
-              tags: params.newTags ?? [],
-              rarity: updatedValue.rarity,
-            },
-          },
-          meta: {
+          appendedContent: params.appendContent,
+          ui: [{
+            type: 'ui-spec',
             entryId: params.entryId,
-            rarityUpgrade: params.rarityUpgrade,
+            spec: {
+              type: 'EntryCard',
+              props: {
+                title: updatedValue.title,
+                category: updatedValue.category,
+                content: params.appendContent,
+                tags: params.newTags ?? [],
+                rarity: updatedValue.rarity,
+              },
+            },
+            meta: {
+              entryId: params.entryId,
+              rarityUpgrade: params.rarityUpgrade,
+            },
+          }],
+        },
+        [{
+          id: crypto.randomUUID(),
+          type: 'plugin.data',
+          source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
+          turnId: context.turnId,
+          sessionId: context.sessionId,
+          payload: {
+            namespace: 'entries',
+            key: params.entryId,
+            value: updatedValue,
           },
+          timestamp: now,
         }],
-      };
+      );
     },
   });
 }

@@ -52,7 +52,7 @@ export interface StreamMessage {
 export interface ExecutionStep {
   runtimeId: string;
   pluginId: string;
-  status: "running" | "llm" | "tool" | "completed" | "failed" | "skipped";
+  status: "running" | "llm" | "tool" | "completed" | "failed" | "skipped" | "suspended";
   label?: string;
   detail?: string;
   /** Qualified tool name when status is "tool". */
@@ -63,6 +63,16 @@ export interface ExecutionStep {
   /** Wall-clock start time (for on-device duration fallback). */
   startedAt?: string;
 }
+
+/**
+ * Suspended runtime awaiting external input (F4 — suspend/resume web integration).
+ *
+ * The backend persists a fuller record in the store (pendingContinuation etc.);
+ * only the UI-visible fields travel through api.ts via `listSuspensions` and
+ * the SSE payloads; we re-export that shape here so callers can keep using
+ * `import type { SuspensionRecord } from "@/stores/session-store"`.
+ */
+export type SuspensionRecord = api.SuspensionRecord;
 
 const EXEC_STEPS_MAX = 500;
 
@@ -118,6 +128,15 @@ interface SessionState {
   executionError: string | null;
   /** Real-time execution progress steps from kernel. */
   executionSteps: ExecutionStep[];
+
+  /**
+   * Active suspensions awaiting external resume (F4).
+   *
+   * Populated from `GET /api/sessions/:id/suspensions` on session restore and
+   * maintained live via `turn.suspended` / `turn.resumed` SSE events. Cleared
+   * when the matching resume/cancel call succeeds.
+   */
+  suspensions: SuspensionRecord[];
 
   // State patches from kernel
   statePatches: Array<{ id: string; summary: string; packageName: string; data?: unknown }>;
@@ -207,7 +226,10 @@ type Action =
   | { type: "UPSERT_PLUGIN_MESSAGE_SURFACE"; pluginId: string }
   | { type: "UPSERT_DRAFT"; draft: PendingInteractionDraft }
   | { type: "REMOVE_DRAFT"; draftId: string }
-  | { type: "CLEAR_DRAFTS" };
+  | { type: "CLEAR_DRAFTS" }
+  | { type: "SET_SUSPENSIONS"; suspensions: SuspensionRecord[] }
+  | { type: "ADD_SUSPENSION"; suspension: SuspensionRecord }
+  | { type: "REMOVE_SUSPENSION"; suspensionId: string };
 
 const initialState: SessionState = {
   presets: [],
@@ -234,6 +256,7 @@ const initialState: SessionState = {
   sessionPlugins: [],
   messageUiSpecs: [],
   pendingInteractionDrafts: [],
+  suspensions: [],
 };
 
 
@@ -391,6 +414,22 @@ function reducer(state: SessionState, action: Action): SessionState {
     case "CLEAR_EXECUTION_STEPS":
       // Only clear in-memory — localStorage is preserved for session history
       return { ...state, executionSteps: [] };
+    case "SET_SUSPENSIONS":
+      return { ...state, suspensions: action.suspensions };
+    case "ADD_SUSPENSION": {
+      // Dedupe by id: the same event can arrive on both the /actions SSE
+      // forward and the persistent /events/stream subscription (they share
+      // the EventBus). Idempotent add keeps the panel state correct.
+      if (state.suspensions.some((s) => s.id === action.suspension.id)) {
+        return state;
+      }
+      return { ...state, suspensions: [...state.suspensions, action.suspension] };
+    }
+    case "REMOVE_SUSPENSION":
+      return {
+        ...state,
+        suspensions: state.suspensions.filter((s) => s.id !== action.suspensionId),
+      };
     case "SUBMIT_BLOCK":
       return {
         ...state,
@@ -400,9 +439,9 @@ function reducer(state: SessionState, action: Action): SessionState {
           : state.submittedBlockValues,
       };
     case "RESET_SESSION":
-      return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), submittedBlockValues: {}, sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [] };
+      return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), submittedBlockValues: {}, sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [], suspensions: [] };
     case "RESET_TO_WORLD_SELECT":
-      return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), submittedBlockValues: {}, sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [] };
+      return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), submittedBlockValues: {}, sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [], suspensions: [] };
     case "LOAD_SESSION_PLUGINS":
       return { ...state, sessionPlugins: action.plugins };
     case "TOGGLE_SESSION_PLUGIN":
@@ -627,6 +666,12 @@ interface SessionContextValue {
   clearInteractionDrafts: () => void;
   /** Update the composer text (single-line input field state). */
   setComposerText: (text: string) => void;
+  /** F4 — resume a suspended runtime with caller-supplied data. */
+  resumeSuspension: (suspensionId: string, data: unknown) => Promise<void>;
+  /** F4 — cancel (abandon) a suspended runtime without resuming. */
+  cancelSuspension: (suspensionId: string) => Promise<void>;
+  /** F4 — refetch suspensions from the server (useful after reconnects). */
+  refreshSuspensions: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -933,12 +978,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         break;
       }
       case "runtime.completed": {
+        // Honour the server-reported status — previously this was hard-coded
+        // to "completed", which masked runtimes that actually suspended
+        // (status: "suspended") and made F4 suspend/resume invisible in the
+        // chat timeline.
+        const rawStatus = payload.status;
+        const status: ExecutionStep["status"] =
+          rawStatus === "suspended"
+            ? "suspended"
+            : rawStatus === "skipped"
+              ? "skipped"
+              : rawStatus === "failed"
+                ? "failed"
+                : "completed";
         dispatch({
           type: "UPSERT_EXECUTION_STEP",
           step: {
             runtimeId: (payload.runtimeId as string) ?? "unknown",
             pluginId: (payload.pluginId as string) ?? "",
-            status: "completed",
+            status,
             durationMs: payload.durationMs as number | undefined,
             turnId,
           },
@@ -975,6 +1033,33 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       case "execution.completed": {
         dispatch({ type: "SET_EXECUTING", value: false });
         dispatch({ type: "FINALIZE_HANGING_RUNTIMES", reason: "__i18n:session.reasonConnectionClosed__" });
+        break;
+      }
+      // ── Suspend / Resume events (F4) ─────────────────────────
+      // Emitted by the runtime executor via eventBus and forwarded onto the
+      // /actions SSE stream (see actions.ts FORWARDED_SUBTYPES). The same
+      // events also arrive on the persistent /events/stream subscription
+      // (topic="game") for the resume path; the reducer dedupes by id.
+      case "turn.suspended": {
+        const id = payload.suspensionId as string | undefined;
+        if (!id) break;
+        const suspension: SuspensionRecord = {
+          id,
+          sessionId: (payload.sessionId as string) ?? envelope.sessionId,
+          turnId: (payload.turnId as string) ?? turnId ?? "",
+          runtimeId: (payload.runtimeId as string) ?? "",
+          pluginId: (payload.pluginId as string) ?? "",
+          suspendedAt: (payload.suspendedAt as string) ?? envelope.timestamp,
+          reason: payload.reason as string | undefined,
+          resumeSchema: payload.resumeSchema,
+        };
+        dispatch({ type: "ADD_SUSPENSION", suspension });
+        break;
+      }
+      case "turn.resumed": {
+        const id = payload.suspensionId as string | undefined;
+        if (!id) break;
+        dispatch({ type: "REMOVE_SUSPENSION", suspensionId: id });
         break;
       }
       case "event.emitted": {
@@ -1272,6 +1357,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     api.listSessionPlugins(session.id).then((res) => {
       if (sessionIdRef.current === targetSessionId) {
         dispatch({ type: "LOAD_SESSION_PLUGINS", plugins: res.available });
+      }
+    }).catch(() => { });
+
+    // Hydrate active suspensions (F4). Tolerates 503 when COVEL_SUSPEND_V1
+    // is disabled on the server — the endpoint rejects the request and we
+    // quietly fall back to an empty list. Any new `turn.suspended` events
+    // after boot will still top up the list via SSE.
+    api.listSuspensions(session.id).then((suspensions) => {
+      if (sessionIdRef.current === targetSessionId) {
+        dispatch({ type: "SET_SUSPENSIONS", suspensions });
       }
     }).catch(() => { });
 
@@ -1659,8 +1754,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // plugin-data.changed arrives on topic="plugin" with _subType="plugin-data.changed"
     // (see apps/server/src/routes/api/bootstrap.ts:emitPluginDataChangedEvent).
     // Do NOT add "plugin-data" as a topic — the server whitelist rejects it (400).
+    //
+    // `game` is required for F4 suspend/resume: `turn.resumed` is emitted
+    // by the `POST /api/sessions/:id/resume` handler, which runs outside
+    // the /actions SSE stream. Without subscribing to `game` the frontend
+    // would never learn a suspension was resolved from another tab.
     const sub = createSessionSubscription(sid, {
-      topics: ["plugin", "system"],
+      topics: ["plugin", "system", "game"],
     });
     subscriptionRef.current = sub;
 
@@ -1695,6 +1795,33 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             dispatch({ type: "PLUGIN_DATA_CHANGED", pluginId, changes });
             applyPluginDataStoreChanges(pluginId, changes);
           }
+          break;
+        }
+        // F4: mirror the /actions SSE handlers so suspensions stay in sync
+        // when events arrive on the persistent subscription channel (e.g.
+        // `turn.resumed` from a POST /resume on a different tab). Reducer
+        // dedupes by id so the double delivery during turn execution is safe.
+        case "turn.suspended": {
+          const p = event.payload ?? {};
+          const id = p.suspensionId as string | undefined;
+          if (!id) break;
+          const suspension: SuspensionRecord = {
+            id,
+            sessionId: (p.sessionId as string) ?? event.sessionId,
+            turnId: (p.turnId as string) ?? "",
+            runtimeId: (p.runtimeId as string) ?? "",
+            pluginId: (p.pluginId as string) ?? "",
+            suspendedAt: (p.suspendedAt as string) ?? event.timestamp,
+            reason: p.reason as string | undefined,
+            resumeSchema: p.resumeSchema,
+          };
+          dispatch({ type: "ADD_SUSPENSION", suspension });
+          break;
+        }
+        case "turn.resumed": {
+          const id = event.payload?.suspensionId as string | undefined;
+          if (!id) break;
+          dispatch({ type: "REMOVE_SUSPENSION", suspensionId: id });
           break;
         }
         default:
@@ -1812,6 +1939,44 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // no-op on V1 — composer is local to GameView
   }, []);
 
+  // ── F4 suspend/resume ────────────────────────────────────────
+  //
+  // Resume waits for the server to finish re-entering the tool loop; the
+  // backend emits `turn.resumed` which the SSE handler translates into
+  // REMOVE_SUSPENSION, so we only dispatch a local removal as a fallback
+  // on success. Validation / network errors bubble up so callers can
+  // surface them to the user while the suspension remains in the list.
+  const resumeSuspension = useCallback(
+    async (suspensionId: string, data: unknown) => {
+      const sid = sessionIdRef.current;
+      if (!sid) return;
+      await api.resumeSuspension(sid, suspensionId, data);
+      // Belt-and-braces removal in case the SSE event was lost. The reducer
+      // is a no-op if the row was already removed by `turn.resumed`.
+      dispatch({ type: "REMOVE_SUSPENSION", suspensionId });
+    },
+    [],
+  );
+
+  const cancelSuspension = useCallback(async (suspensionId: string) => {
+    const sid = sessionIdRef.current;
+    if (!sid) return;
+    await api.cancelSuspension(sid, suspensionId);
+    dispatch({ type: "REMOVE_SUSPENSION", suspensionId });
+  }, []);
+
+  const refreshSuspensions = useCallback(async () => {
+    const sid = sessionIdRef.current;
+    if (!sid) return;
+    try {
+      const suspensions = await api.listSuspensions(sid);
+      if (sessionIdRef.current !== sid) return;
+      dispatch({ type: "SET_SUSPENSIONS", suspensions });
+    } catch {
+      // Non-critical: feature flag may be off, or network blip
+    }
+  }, []);
+
   const value: SessionContextValue = {
     state,
     boot,
@@ -1838,6 +2003,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     removeInteractionDraft,
     clearInteractionDrafts,
     setComposerText,
+    resumeSuspension,
+    cancelSuspension,
+    refreshSuspensions,
   };
 
   return (

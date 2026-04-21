@@ -134,8 +134,13 @@ export interface SseEnvelope {
 /** Routes that need the provider API keys header. */
 const AI_ROUTES = ["/api/actions", "/api/ai/", "/api/kernel/"];
 
+/** `POST /api/sessions/:id/resume` re-enters the LLM tool loop, so it
+ * requires provider API keys just like a regular turn (see resume.ts). */
+const RESUME_ROUTE_REGEX = /^\/api\/sessions\/[^/]+\/resume(?:\?|$)/;
+
 function needsProviderKeys(url: string): boolean {
-  return AI_ROUTES.some((prefix) => url.startsWith(prefix));
+  if (AI_ROUTES.some((prefix) => url.startsWith(prefix))) return true;
+  return RESUME_ROUTE_REGEX.test(url);
 }
 
 function buildProviderKeysHeader(): Record<string, string> {
@@ -1247,6 +1252,75 @@ export async function postPluginRpc(
   return request<Record<string, unknown>>(
     `/api/sessions/${encodeURIComponent(sessionId)}/plugin-rpc`,
     { method: "POST", body: JSON.stringify({ action, ...params }) },
+  );
+}
+
+// ── Suspensions (suspend / resume) ───────────────────────────────
+//
+// Mirrors the S4-T4 backend surface:
+//   GET    /api/sessions/:id/suspensions                   → list active
+//   POST   /api/sessions/:id/resume                        → resume one
+//   DELETE /api/sessions/:id/suspensions/:suspensionId     → cancel one
+//
+// All three are gated server-side by the COVEL_SUSPEND_V1 flag. The web
+// client surfaces suspensions inside GameView (badge + dialog) so players
+// can feed resume data for runtimes that declared a wait-point
+// (e.g. image generation, manual review, external callbacks).
+
+export interface SuspensionRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly runtimeId: string;
+  readonly pluginId: string;
+  /** Normalised from backend `createdAt` — timestamp the runtime was paused. */
+  readonly suspendedAt: string;
+  readonly reason?: string;
+  /** Plain JSON schema describing the shape the plugin expects for resume data. */
+  readonly resumeSchema?: unknown;
+}
+
+function normaliseSuspension(raw: Record<string, unknown>): SuspensionRecord {
+  return {
+    id: String(raw.id ?? ""),
+    sessionId: String(raw.sessionId ?? ""),
+    turnId: String(raw.turnId ?? ""),
+    runtimeId: String(raw.runtimeId ?? ""),
+    pluginId: String(raw.pluginId ?? ""),
+    suspendedAt: String(raw.suspendedAt ?? raw.createdAt ?? ""),
+    reason: typeof raw.reason === "string" ? raw.reason : undefined,
+    resumeSchema: raw.resumeSchema,
+  };
+}
+
+export async function listSuspensions(sessionId: string): Promise<SuspensionRecord[]> {
+  const res = await request<{ suspensions: Array<Record<string, unknown>> }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/suspensions`,
+  );
+  return res.suspensions.map(normaliseSuspension);
+}
+
+export async function resumeSuspension(
+  sessionId: string,
+  suspensionId: string,
+  data: unknown,
+): Promise<void> {
+  await request(
+    `/api/sessions/${encodeURIComponent(sessionId)}/resume`,
+    {
+      method: "POST",
+      body: JSON.stringify({ suspensionId, data }),
+    },
+  );
+}
+
+export async function cancelSuspension(
+  sessionId: string,
+  suspensionId: string,
+): Promise<void> {
+  await request(
+    `/api/sessions/${encodeURIComponent(sessionId)}/suspensions/${encodeURIComponent(suspensionId)}`,
+    { method: "DELETE" },
   );
 }
 

@@ -1,10 +1,14 @@
 # F3 · 把 `plugin-data` 写路径纳入统一 commit chain
 
-**Status**: pending · **Est**: 5–7 hours · **Risk**: medium (touches 8 core plugins) · **Depends on**: F1 + F2 landed (已完成)
+**Status**: ✅ done · **Landed**: 2026-04-21 · **Est**: 5–7 h(实际 ~6 h) · **Risk**: medium(已覆盖) · **Depends on**: F1 + F2(已完成)
+
+> 本文档已更新为 as-shipped 状态。
+> - §1 保留为修复前状态描述(历史背景)。
+> - §2 起反映实际 landed 代码;§8 列出与最初计划的具体差异。
 
 ---
 
-## 1. 背景:为什么需要这个
+## 1. 背景:为什么需要这个(修复前状态)
 
 ### 1.1 Covel 的治理主线
 
@@ -79,193 +83,225 @@ await context.store.setPluginData({
 
 ---
 
-## 2. 目标
+## 2. 目标(已达成)
 
-**一句话**:让 `plugin-data-set` 和 `plugin-data-set-batch` 两个内置工具从"直接写 store"改为"提交 proposal",从而继承 commit chain 的全部治理能力。同时保留 `store.setPluginData()` 作为**底层 API**,供 commit handler 本身调用。
+**一句话**:`plugin-data-set` / `plugin-data-set-batch` 以及全部 core 插件 local tool 的写入已纳入 Session Kernel commit chain,受 `PreStateCommit` / `PostStateCommit` 与 `COVEL_COMMIT_TXN_V1` 事务管控;`store.setPluginData` 保留为底层 API,供 commit handler 本身及生命周期 guard 合法使用。
 
 ---
 
-## 3. 实施方案
+## 3. 实际实现
 
-### 3.1 阶段 1 · Proposal 类型 + commit handler(~2h)
+### 3.1 Proposal 类型 —— `plugin.data` / `plugin.data.batch`
 
-#### 3.1.1 `@covel/shared`
+命名与最初计划不同:落地版本采用与 `working_memory.set` / `lorebook.upsert` 一致的点分风格。
 
-在 [`packages/shared/src/types/proposal.ts`](../../../packages/shared/src/types/proposal.ts) 加:
+[`packages/shared/src/types/proposal.ts`](../../../packages/shared/src/types/proposal.ts)
 
 ```ts
-export interface PluginDataSetPayload {
-  readonly pluginId: string;
-  readonly namespace: string;
-  readonly key: string;
-  readonly value: unknown;
-  /** ISO timestamp; null/undefined means no expiry. */
-  readonly expiresAt?: string | null;
-}
-
-// ProposalType 联合加一条
 export type ProposalType =
   | 'narrative.append'
+  | 'narrative.template'
   | 'state.patch'
   | 'event.emit'
   | 'record.upsert'
+  | 'interaction.request'
   | 'ui.render'
   | 'asset.generate'
-  | 'lorebook.upsert'
-  | 'plugin-data.set';  // 新增
-```
+  | 'plugin.data'        // ← 新增
+  | 'plugin.data.batch'  // ← 新增
+  | 'working_memory.set'
+  | 'lorebook.upsert';
 
-[`packages/shared/src/types/index.ts`](../../../packages/shared/src/types/index.ts) 的 barrel export 加 `PluginDataSetPayload`。
+export interface PluginDataPayload {
+  readonly namespace: string;
+  readonly key: string;
+  readonly value: unknown;
+}
 
-#### 3.1.2 `@covel/runtime` commit handler
-
-在 [`packages/runtime/src/session-kernel.ts`](../../../packages/runtime/src/session-kernel.ts) 的 `handlers` 表里加:
-
-```ts
-const handlers: Record<ProposalType, (p: Proposal) => Promise<CommitResult>> = {
-  // ...existing
-  'plugin-data.set': commitPluginDataSet,
-};
-
-async function commitPluginDataSet(proposal: Proposal): Promise<CommitResult> {
-  const p = proposal.payload as PluginDataSetPayload;
-  try {
-    await store.setPluginData({
-      sessionId: proposal.sessionId,
-      pluginId: p.pluginId,
-      namespace: p.namespace,
-      key: p.key,
-      value: p.value,
-      expiresAt: p.expiresAt ?? null,
-    });
-    return { committed: true };
-  } catch (err) {
-    return { committed: false, error: err instanceof Error ? err.message : String(err) };
-  }
+export interface PluginDataBatchPayload {
+  readonly items: readonly PluginDataPayload[];
 }
 ```
 
-关键:这个 handler 位于 `commit()` 函数的**下方**,也就是说 `PreStateCommit` hook **已经**拦截过了,后续走完整 trace + txn 流程。
+与最初计划的字段差异:
 
-#### 3.1.3 Batch 的选择
+- **Payload 无 `pluginId`** —— 直接从 `proposal.source.pluginId` 取,消除冗余字段
+- **Payload 无 `expiresAt`** —— 当前 store API 无 TTL 需求,按需再加
+- **Batch 字段叫 `items`**(不是 `records`),与 `LorebookUpsertPayload.entries` 保持同类风格
 
-两种做法:
+### 3.2 Commit handler —— `commitPluginData` / `commitPluginDataBatch`
 
-- **A**: 保留 `plugin-data-set-batch` 作为一个独立 proposal type `plugin-data.set-batch`,payload 带数组。优点:一次 commit,事务性好。
-- **B**: batch 工具内部展开成 N 个 `plugin-data.set` proposal。优点:proposal 粒度统一;缺点:1000 个 entry 时 hook 被调 1000 次,性能差。
+[`packages/runtime/src/session-kernel.ts`](../../../packages/runtime/src/session-kernel.ts) 约 430–489 行。两个 handler 注册在 `createCommitPipeline` 的 handler table 中,每条 proposal 依序经过:
 
-**推荐 A**。新增 `PluginDataSetBatchPayload { records: readonly PluginDataSetPayload[] }` 和对应 handler。
+1. `PreStateCommit` hook —— 可拦截 / 替换 / 放行
+2. 执行 handler(调用 `store.setPluginData` / `store.setPluginDataBatch`)
+3. `proposal.committed` trace event 落 `trace_events`
+4. `PostStateCommit` hook —— 纯观测(不能 abort)
 
-### 3.2 阶段 2 · Tool 侧切换(~2h)
+实现要点:
 
-#### 3.2.1 难点:tool 本来不返回 proposal
+- `pluginId` 从 `proposal.source.pluginId` 抽取;每条记录的 `id` 由 handler 自己 `crypto.randomUUID()` 生成
+- Batch 走**单一 proposal + 内部展开**(对应原计划 3.1.3 选项 A),事务粒度是一整个 batch;hook 只被调用一次,性能可控
+- 参数校验:`namespace` / `key` 必须非空字符串;batch `items` 必须非空数组
+- Store 无 `setPluginData(Batch)` 能力时(thin mock)返回 `{ committed: false, error: ... }` 而非抛异常
 
-Covel 目前的 ToolExecutor 约定 tool 返回值是直接给 LLM 看的 `{ ok: true, ... }`,tool 本身无法 emit proposal —— proposal 只有 runtime(agent runner 或 function runner)结束时产生。
+### 3.3 Tool 侧协议 —— `withPendingProposals` 非侵入 carrier
 
-需要扩展 ToolExecutor 协议:**tool 可以声明 pending proposals**。
+**与计划差异最大的一处**:最初计划把 `ToolResult` 扩展为显式的 `{ content, pendingProposals }`。实际采用**非侵入的 Symbol carrier** 协议:
 
-在 [`packages/runtime/src/tool-executor.ts`](../../../packages/runtime/src/tool-executor.ts)(具体行号实施时查)的 `ToolResult` 类型加:
+[`packages/tools/src/result.ts`](../../../packages/tools/src/result.ts)
 
 ```ts
-export interface ToolResult {
-  readonly content: unknown;       // 返给 LLM 的可见结果
-  readonly pendingProposals?: readonly Proposal[];  // 新增:落盘由 commit chain 接管
+const TOOL_PENDING_PROPOSALS = Symbol.for('covel.tools.pendingProposals');
+const TOOL_EXECUTION_ENVELOPE = Symbol.for('covel.tools.executionEnvelope');
+
+export function withPendingProposals<T extends object>(
+  content: T,
+  pendingProposals: readonly Proposal[],
+): T;  // 返回 content 本身,Symbol 属性非枚举
+```
+
+tool 作者的使用方式(所有已迁移 tool 统一):
+
+```ts
+return withPendingProposals(
+  { success: true, namespace, key },       // 给 LLM 看的内容,不变
+  [ makePluginDataProposal(context, { namespace, key, value }, now) ],
+);
+```
+
+协议优势:
+
+- **对 LLM 和旧 adapter 完全透明**:`JSON.stringify` 忽略 Symbol 属性,LLM 看到的仍是 `{ success: true, ... }`
+- **零破坏**:旧 adapter 不读 Symbol 属性,等效 `pendingProposals = []`
+- **不动 `ToolResult` / `tool.execute` 的类型签名**(仍是 `unknown`),避免推动全仓 tool 文件改签名
+- Content 不可扩展(primitive)时自动回退到 envelope `{ content, pendingProposals, [TOOL_EXECUTION_ENVELOPE]: true }`;消费端 `getPendingProposals(v)` 两种形状都能解
+
+### 3.4 Runtime 汇聚 —— ToolCallResult + turn-executor
+
+[`packages/runtime/src/tool-executor.ts:52-60`](../../../packages/runtime/src/tool-executor.ts)
+
+```ts
+export interface ToolCallResult {
+  readonly toolCallId: string;
+  readonly name: string;
+  readonly result: string;              // JSON for LLM
+  readonly parsedResult: unknown;       // via getToolContent(rawResult)
+  readonly pendingProposals?: readonly Proposal[];  // via getPendingProposals(rawResult)
+  readonly success: boolean;
+  readonly approvalStatus?: ApprovalStatus;
 }
 ```
 
-Agent runtime 的 tool 循环 / function runtime 调用 tool 后,把 `pendingProposals` 累积到 `runtime result.proposals` 末尾。Commit chain 负责真正落盘。
+`createToolExecutor.execute` 在调用 `tool.execute` 后,`getToolContent()` 取对 LLM 可见的部分、`getPendingProposals()` 取 proposal 队列,分别填入 `ToolCallResult`。
 
-#### 3.2.2 改 `plugin-data-tools.ts`
+[`packages/runtime/src/turn-executor.ts`](../../../packages/runtime/src/turn-executor.ts) 在 tool loop 中累积 `pendingProposals: Proposal[]`(主循环约 2121 行、resume 路径约 1274 行;suspension 路径会把 pendingProposals 一并持久化到 `SuspensionRecord.pendingContinuation`)。runtime 末尾通过 `withPendingProposals(output, pendingProposals)` 把整批 proposal 挂到 runtime output,最终由外层 Session Kernel commit chain 消费。
 
-```ts
-export const pluginDataSetTool: BuiltinTool = {
-  name: 'plugin-data-set',
-  execute: async ({ pluginId, namespace, key, value, expiresAt }, ctx) => {
-    const proposal: Proposal = {
-      id: crypto.randomUUID(),
-      type: 'plugin-data.set',
-      sessionId: ctx.sessionId,
-      turnId: ctx.turnId,
-      source: { kind: 'tool', name: 'plugin-data-set', runtimeId: ctx.runtimeId },
-      payload: { pluginId, namespace, key, value, expiresAt },
-      createdAt: new Date().toISOString(),
-    };
-    return {
-      content: { ok: true, queued: true },
-      pendingProposals: [proposal],
-    };
-  },
-};
-```
+### 3.5 内置 tool 改写
 
-**向 LLM 隐藏的变化**:结果仍然是 `{ ok: true }`,插件作者无感。
+[`packages/tools/src/builtin/plugin-data-tools.ts`](../../../packages/tools/src/builtin/plugin-data-tools.ts)
 
-### 3.3 阶段 3 · 迁移 core 插件的 local tool(~1–2h)
+- `plugin-data-set` / `plugin-data-set-batch` —— 改为产出 proposal + `withPendingProposals`,**不再**直接调 `store.setPluginData`
+- `plugin-data-get` / `plugin-data-list` —— 读路径无治理需求,仍直接调 store
 
-需要走查并改写的插件 local tool 清单(grep `store.setPluginData\|context.store.setPluginData`):
+### 3.6 Core 插件 local tool 迁移
 
-- [`plugins/core-codex/tools/unlock-codex-entries.js`](../../../plugins/core-codex/tools/unlock-codex-entries.js)
-- [`plugins/core-guide/tools/generate-guide.js`](../../../plugins/core-guide/tools/generate-guide.js)(若有 plugin-data 写)
-- `plugins/core-char-creator/**` / `plugins/core-world-init/**`(若有)
-- 其他:grep 结果为准
+已迁移到 `withPendingProposals(...)` + `plugin.data(.batch)` proposal:
 
-每个 tool 的改动都是**同样的模式**:从 `await context.store.setPluginData(...)` 改成 `return { content: {...}, pendingProposals: [{ type: 'plugin-data.set', payload: {...} }] }`。
+- `plugins/core-codex/tools/unlock-codex-entries.js` (batch)
+- `plugins/core-codex/tools/update-codex-entry.js` (single)
+- `plugins/core-guide/tools/generate-guide.js` (batch)
+- `plugins/core-world-init/tools/set-world-schema.js` (single)
+- `plugins/core-world-init/tools/set-world-entries-batch.js` (batch;`lorebook_entries` 双写保留)
+- `plugins/core-npc-graph/tools/upsert-npc-graph.js` (batch)
 
-### 3.4 阶段 4 · 兼容层 + 弃用通告(~1h)
+验证:`grep -rn "store\.setPluginData" plugins/*/tools/` → 0 命中。
 
-- `store.setPluginData()` 保留作为 runtime internal API,不再向 tool 作者暴露。
-- 在 [`docs/reference/tools.md`](../../../docs/reference/tools.md) 的 `plugin-data-*` 小节加"**写入现在走 commit chain,受 PreStateCommit 影响**"的说明。
-- 在 [`docs/guide/plugin-authoring-advanced.md`](../../../docs/guide/plugin-authoring-advanced.md) 写一个短小节:"如果你的 local tool 直接写 store,迁移到 `pendingProposals` 模式"。
-- 不立即删除 `store.setPluginData` 的公共 export —— 第三方插件可能直接调用。留 6 个月弃用窗口,下次 major bump 删。
+### 3.7 保留的直接调用(设计性例外)
 
-### 3.5 阶段 5 · 测试(~1h)
+- **`plugins/core-world-init/guard.js`** 仍直接调 `s.setPluginData(Batch)`。Guard 是 `onPreGame` 生命周期钩子,在 runtime 回合之外运行、没有 `turnId`、不产出 `RuntimeResult`,无法走 proposal 管道。保留直接写是**有意选择** —— guard 是框架级同步初始化逻辑,不在 LLM 可达写路径上。
+- **`store.setPluginData` 作为底层 API 保留** —— 新的 commit handler 本身、bootstrap fixture、admin API 路由都合法使用。未做弃用标记。
 
-新增测试:
+### 3.8 SSE 事件与 commit chain 解耦
 
-1. `packages/runtime/tests/session-kernel.test.ts` — 断言 `plugin-data.set` proposal 提交后 store 可读。
-2. `packages/runtime/tests/session-kernel.test.ts` — 挂一个 `PreStateCommit` hook 拦截 `plugin-data.set`,断言被拒后 store 不变。
-3. `apps/server/tests/api/hook-pipeline-integration.test.ts` 扩展一个 case:走 HTTP 路径 → 插件 tool 发 `plugin-data.set` → hook 拦下 → 玩家看到合适错误。
-4. `packages/tools/tests/plugin-data-tools.test.ts`(新)— 断言 tool 现在返回 `pendingProposals`,不再直接写 store。
+[`apps/server/src/routes/api/bootstrap.ts`](../../../apps/server/src/routes/api/bootstrap.ts) 引入 `wrapStoreWithPluginDataEvents(store, eventBus)` Proxy:
+
+> 在 `setPluginData` / `setPluginDataBatch` / `deletePluginData` 上透明地发出 `plugin-data.changed` 事件,不论调用者是 kernel commit pipeline、guard 钩子、RPC handler 还是 admin 路由。
+
+这一层让前端 SSE 通路与 commit chain 路径**完全解耦** —— 即使 §3.7 的例外路径(guard)直接写 store,面板也能实时刷新。原计划中 `bootstrap.ts:808–815` 的"skip the commit pipeline"警告注释也已随之删除。
 
 ---
 
-## 4. 风险清单
+## 4. 测试覆盖
 
-| 风险 | 缓解 |
-|------|------|
-| ~8 个 core 插件的 local tool 要改,有可能漏 | 用 `grep -rn "store.setPluginData\b" plugins/` 列完整清单;每改完一个跑对应插件的单测 |
-| `pendingProposals` 协议破坏下游 ToolExecutor 的用户(第三方 ToolAdapter) | `pendingProposals` 标 `readonly` 且 optional,旧 adapter 忽略即可;新增字段不破坏 |
-| 事务原子性:PG 下多个 plugin-data 写进同一个 txn,单 key 冲突时回滚粒度 | 使用现有 `COVEL_COMMIT_TXN_V1` 路径即可,它已经处理 rollback |
-| 性能:多了一层 proposal 间接 | 实测单 commit < 1ms;batch 走单 proposal(3.1.3 选项 A)解决大批量 |
-| 第三方插件靠直接 `store.setPluginData` | 兼容层保留,只是 ~~官方推荐~~ 改为 proposal 模式 |
+| 测试文件 | 覆盖点 |
+|---|---|
+| [`packages/runtime/tests/session-kernel.test.ts`](../../../packages/runtime/tests/session-kernel.test.ts) | `plugin.data` / `plugin.data.batch` 经 commit pipeline 落盘(store round-trip,断言 `setPluginData` / `setPluginDataBatch` 被调) |
+| [`packages/runtime/tests/hook-wire-session-kernel.test.ts`](../../../packages/runtime/tests/hook-wire-session-kernel.test.ts) | `PreStateCommit` 能 abort `plugin.data`,store 未写入("blocks plugin.data proposals before they reach the store") |
+| [`packages/tools/tests/plugin-data-tools.test.ts`](../../../packages/tools/tests/plugin-data-tools.test.ts) | 内置 tool 返回 `pendingProposals`,**不**再直接调 store;读路径 `plugin-data-get` / `-list` 仍走 store |
+| 各插件 `tests/*.test.js` | 各插件的单测通过一个 `applyPendingPluginData(result, store)` helper 把产出的 proposal 回放到 mock store,验证端到端语义 |
 
----
-
-## 5. 交付物验收
-
-- [ ] `ProposalType` 含 `plugin-data.set` + `plugin-data.set-batch`
-- [ ] `session-kernel` 能正确 commit 这两类 proposal(附 store round-trip 测试)
-- [ ] `plugin-data-set` / `plugin-data-set-batch` 两个内置工具改为 pendingProposals 模式
-- [ ] 所有 core 插件 local tool 迁移完成(grep `store.setPluginData` 在 `plugins/` 下为 0 命中)
-- [ ] `PreStateCommit` hook 能拦截 `plugin-data.set`(含集成测试)
-- [ ] 文档更新:`docs/reference/tools.md`、`docs/guide/plugin-authoring-advanced.md`
-- [ ] `pnpm lint` + `pnpm test` 全绿
+**未补**:`apps/server/tests/api/hook-pipeline-integration.test.ts` 原计划的 HTTP 端到端 `plugin.data` 拦截场景尚未覆盖。优先级低,留待出现集成 bug 时补。
 
 ---
 
-## 6. 参考文件清单
+## 5. 风险复盘
 
-实施时必读:
+| 风险 | 缓解情况 |
+|------|---------|
+| ~8 个 core 插件 local tool 可能漏 | grep 闭环 + 每个插件自测套 `applyPendingPluginData` 做 round-trip,无漏 |
+| `pendingProposals` 协议破坏下游 ToolAdapter | 改用**非枚举 Symbol carrier**,content 本身不变,旧 adapter `JSON.stringify` 不会泄漏 Symbol,**零破坏** |
+| 事务原子性:PG 下多个 plugin-data 写进同一个 txn | 由 `COVEL_COMMIT_TXN_V1` + `setPluginDataBatch` 本身的实现兜底,rollback 粒度即整个 commit |
+| 性能:多一层 proposal 间接 | 实测可忽略;batch 路径单 proposal 内部展开,hook 只被调 1 次 |
+| 第三方 `store.setPluginData` 调用 | 底层 API 未移除,仅官方推荐路径切走;未出弃用通告 |
+| **新出现**:guard 绕过治理 | 有意保留(见 §3.7);经 `wrapStoreWithPluginDataEvents` 仍能观测到,未来如需可治理,另开 ticket |
 
-- [`packages/shared/src/types/proposal.ts`](../../../packages/shared/src/types/proposal.ts) — ProposalType 定义
-- [`packages/runtime/src/session-kernel.ts`](../../../packages/runtime/src/session-kernel.ts) — commit chain + handlers
-- [`packages/runtime/src/tool-executor.ts`](../../../packages/runtime/src/tool-executor.ts) — ToolResult 协议
-- [`packages/tools/src/builtin/plugin-data-tools.ts`](../../../packages/tools/src/builtin/plugin-data-tools.ts) — 要改写的工具
-- [`apps/server/src/routes/api/bootstrap.ts`](../../../apps/server/src/routes/api/bootstrap.ts) — 注释里的警告源头
-- 审计原始记录:`audits/2026-04-21-architecture-code-audit/README.md`(审计原始产出,本地 gitignored) 第 3 节
+---
 
-## 7. 可选延展(不在本 ticket 范围)
+## 6. 交付物验收(已完成)
 
-- `plugin-data.delete` 也改为 proposal(当前的 delete 路径是独立的,可在后续 ticket 统一)
-- 给 proposal 加 schema 验证:`payload` 通过 Zod schema 检查,防止插件作者构造畸形 proposal
-- 引入 `proposal.dry-run` 模式,让 hook 作者测试拦截逻辑
+- [x] `ProposalType` 含 `plugin.data` + `plugin.data.batch`
+- [x] `session-kernel` 能 commit 这两类 proposal(`session-kernel.test.ts` round-trip)
+- [x] `plugin-data-set` / `plugin-data-set-batch` 改为 `withPendingProposals` 模式
+- [x] 全部 core 插件 local tool 迁移完成(`grep -rn "store\.setPluginData\b" plugins/*/tools/` = 0)
+- [x] `PreStateCommit` hook 能拦截 `plugin.data`(`hook-wire-session-kernel.test.ts`)
+- [x] 文档更新:[`docs/reference/tools.md`](../../../docs/reference/tools.md)(治理路径说明)、[`docs/guide/plugin-authoring.md`](../../../docs/guide/plugin-authoring.md)(local tool 写入约定)
+- [x] 新增 [`wrapStoreWithPluginDataEvents`](../../../apps/server/src/routes/api/bootstrap.ts) 让 SSE 与 commit chain 解耦
+- [x] `pnpm lint` + `pnpm test` 绿
+- [ ] HTTP 端到端集成测试(低优先级,未补)
+
+---
+
+## 7. 关键文件(as-shipped)
+
+- [`packages/shared/src/types/proposal.ts`](../../../packages/shared/src/types/proposal.ts) — `PluginDataPayload` / `PluginDataBatchPayload` 新增
+- [`packages/runtime/src/session-kernel.ts`](../../../packages/runtime/src/session-kernel.ts) — `commitPluginData` / `commitPluginDataBatch`
+- [`packages/runtime/src/tool-executor.ts`](../../../packages/runtime/src/tool-executor.ts) · [`turn-executor.ts`](../../../packages/runtime/src/turn-executor.ts) — `pendingProposals` 汇聚
+- [`packages/tools/src/result.ts`](../../../packages/tools/src/result.ts) — `withPendingProposals` / `getPendingProposals` carrier 协议
+- [`packages/tools/src/builtin/plugin-data-tools.ts`](../../../packages/tools/src/builtin/plugin-data-tools.ts) — 内置 tool 改写
+- `plugins/core-{codex,guide,world-init,npc-graph}/tools/*.js` — 迁移后的 local tool
+- [`apps/server/src/routes/api/bootstrap.ts`](../../../apps/server/src/routes/api/bootstrap.ts) — `wrapStoreWithPluginDataEvents` Proxy
+- [`docs/reference/tools.md`](../../../docs/reference/tools.md) · [`docs/guide/plugin-authoring.md`](../../../docs/guide/plugin-authoring.md) — 面向插件作者的治理路径说明
+
+---
+
+## 8. 与最初计划的差异
+
+| 维度 | 最初计划(F3 pending 版) | 实际 landed |
+|---|---|---|
+| Proposal 命名 | `plugin-data.set` / `plugin-data.set-batch` | `plugin.data` / `plugin.data.batch` |
+| Payload 字段 | 含 `pluginId` + `expiresAt` | 仅 `namespace` / `key` / `value`;`pluginId` 从 `source` 取,无 `expiresAt` |
+| Batch payload 字段名 | `records` | `items` |
+| Tool 协议 | 扩展显式 `ToolResult { content, pendingProposals }` | 非枚举 Symbol carrier + `withPendingProposals()` helper(零侵入) |
+| SSE 事件路径 | 未涉及 | 新增 `wrapStoreWithPluginDataEvents` Proxy 让 SSE 与 commit chain 解耦 |
+| 弃用通告 | 计划文档提示 6 个月弃用窗口 | 未写弃用通告 —— `store.setPluginData` 继续作为合法底层 API,无需弃用 |
+| HTTP 集成测试 | 计划含 `hook-pipeline-integration.test.ts` 拦截 case | 未补(低优先级) |
+
+---
+
+## 9. 可选延展(未做,可后续 ticket)
+
+- `plugin-data.delete` 也改为 proposal(当前 delete 路径仍独立)
+- 给 `PluginDataPayload` 加 Zod schema 校验,防止插件作者构造畸形 proposal
+- `proposal.dry-run` 模式,让 hook 作者测试拦截逻辑
+- `apps/server/tests/api/hook-pipeline-integration.test.ts` 补 HTTP 端到端 `plugin.data` 拦截 case

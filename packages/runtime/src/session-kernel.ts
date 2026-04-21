@@ -12,7 +12,16 @@
  * - Event Sourcing: append-only proposals → replay → rebuild state
  */
 
-import type { Proposal, ProposalSource, ProposalType, SessionEvent, CommitResult } from '@covel/shared';
+import { getPendingProposals } from '@covel/tools';
+import type {
+  CommitResult,
+  PluginDataBatchPayload,
+  PluginDataPayload,
+  Proposal,
+  ProposalSource,
+  ProposalType,
+  SessionEvent,
+} from '@covel/shared';
 import type { EventBus } from '@covel/events';
 import type { HookPipeline } from './hooks/pipeline.js';
 import type { HookContext } from './hooks/types.js';
@@ -140,6 +149,26 @@ export interface KernelStore {
   saveEvent(record: { id: string; sessionId: string; type: string; topic: string; payload: unknown; createdAt: string }): Promise<void>;
   addStateChange(record: { id: string; sessionId: string; tableName: string; fieldName: string; value: unknown; changedBy: string; turnId: string; reason?: string; createdAt: string }): Promise<void>;
   addTraceEvent(record: { id: string; sessionId: string; type: string; traceId: string; turnId: string; payload: unknown; createdAt: string }): Promise<void>;
+  setPluginData?(record: {
+    id: string;
+    sessionId: string;
+    pluginId: string;
+    namespace: string;
+    key: string;
+    value: unknown;
+    createdAt: string;
+    updatedAt: string;
+  }): Promise<void>;
+  setPluginDataBatch?(records: readonly {
+    id: string;
+    sessionId: string;
+    pluginId: string;
+    namespace: string;
+    key: string;
+    value: unknown;
+    createdAt: string;
+    updatedAt: string;
+  }[]): Promise<void>;
   /**
    * Working Memory upsert (S3-T3). Optional so the kernel stays compatible
    * with thin mock stores in existing tests that don't need WM.
@@ -191,6 +220,8 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
     'interaction.request': commitInteraction,
     'state.patch': commitStatePatch,
     'event.emit': commitEvent,
+    'plugin.data': commitPluginData,
+    'plugin.data.batch': commitPluginDataBatch,
     'working_memory.set': commitWorkingMemory,
     'lorebook.upsert': commitLorebookUpsert,
   };
@@ -396,6 +427,67 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
     };
   }
 
+  async function commitPluginData(proposal: Proposal): Promise<CommitResult> {
+    if (!store.setPluginData) {
+      return { committed: false, error: 'plugin.data: store does not support plugin data writes' };
+    }
+
+    const payload = proposal.payload as unknown as PluginDataPayload;
+    if (typeof payload.namespace !== 'string' || payload.namespace.length === 0) {
+      return { committed: false, error: 'plugin.data: namespace must be a non-empty string' };
+    }
+    if (typeof payload.key !== 'string' || payload.key.length === 0) {
+      return { committed: false, error: 'plugin.data: key must be a non-empty string' };
+    }
+
+    await store.setPluginData({
+      id: crypto.randomUUID(),
+      sessionId: proposal.sessionId,
+      pluginId: proposal.source.pluginId,
+      namespace: payload.namespace,
+      key: payload.key,
+      value: payload.value,
+      createdAt: proposal.timestamp,
+      updatedAt: proposal.timestamp,
+    });
+
+    return { committed: true };
+  }
+
+  async function commitPluginDataBatch(proposal: Proposal): Promise<CommitResult> {
+    if (!store.setPluginDataBatch) {
+      return { committed: false, error: 'plugin.data.batch: store does not support plugin data writes' };
+    }
+
+    const payload = proposal.payload as unknown as PluginDataBatchPayload;
+    if (!Array.isArray(payload.items) || payload.items.length === 0) {
+      return { committed: false, error: 'plugin.data.batch: items must be a non-empty array' };
+    }
+
+    const records = [];
+    for (const item of payload.items) {
+      if (typeof item.namespace !== 'string' || item.namespace.length === 0) {
+        return { committed: false, error: 'plugin.data.batch: every item needs a non-empty namespace' };
+      }
+      if (typeof item.key !== 'string' || item.key.length === 0) {
+        return { committed: false, error: 'plugin.data.batch: every item needs a non-empty key' };
+      }
+      records.push({
+        id: crypto.randomUUID(),
+        sessionId: proposal.sessionId,
+        pluginId: proposal.source.pluginId,
+        namespace: item.namespace,
+        key: item.key,
+        value: item.value,
+        createdAt: proposal.timestamp,
+        updatedAt: proposal.timestamp,
+      });
+    }
+
+    await store.setPluginDataBatch(records);
+    return { committed: true };
+  }
+
   async function commitWorkingMemory(proposal: Proposal): Promise<CommitResult> {
     // Feature-flag gate: reject when COVEL_WORKING_MEMORY_V1 is not enabled.
     if (process.env.COVEL_WORKING_MEMORY_V1 !== '1') {
@@ -577,6 +669,7 @@ export async function processRuntimeResult(
     outputKind,
     result.toolCalls,
   );
+  proposals.push(...getPendingProposals(result.output));
 
   if (proposals.length === 0) {
     return empty;

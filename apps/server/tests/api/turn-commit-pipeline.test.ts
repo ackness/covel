@@ -22,6 +22,7 @@ import {
 import type { RuntimeManifest } from '@covel/shared';
 import type { LoadedRuntime } from '@covel/plugin-loader';
 import { turnRoutes } from '../../src/routes/api/turn.js';
+import { createInProcessSessionLock } from '../../src/lib/session-lock.js';
 import { makeFakeLLM, makeFakeLoadedRuntime } from './__helpers/fake-llm.js';
 
 // ── Test app factory ─────────────────────────────────────────────
@@ -71,12 +72,14 @@ function createTestApp(args: {
       ? args.loadedRuntime
       : undefined;
   };
+  const sessionLock = createInProcessSessionLock();
   app.use('*', async (c, next) => {
     c.set('store', args.store);
     c.set('pluginRegistry', args.registry);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     c.set('llmAdapter', args.llm as any);
     c.set('loadRuntimeFn', loadRuntimeFn);
+    c.set('sessionLock', sessionLock);
     await next();
   });
   app.route('/api/sessions', turnRoutes);

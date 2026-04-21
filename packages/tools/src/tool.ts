@@ -4,6 +4,7 @@
 
 import type { ZodType } from 'zod';
 import { ZodError } from 'zod';
+import type { ToolExecutionEnvelope } from './result.js';
 import type { ToolDefinitionInput, ToolExecutionContext, ToolModule } from './types.js';
 
 /**
@@ -79,7 +80,10 @@ export function tool<TParams extends ZodType, TOutput>(
     description: definition.description,
     parametersSchema: definition.parameters,
     jsonSchema,
-    async execute(params: unknown, context: ToolExecutionContext): Promise<TOutput> {
+    async execute(
+      params: unknown,
+      context: ToolExecutionContext,
+    ): Promise<TOutput | ToolExecutionEnvelope<TOutput>> {
       let validated: unknown;
       try {
         validated = definition.parameters.parse(params);

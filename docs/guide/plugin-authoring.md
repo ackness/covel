@@ -320,15 +320,11 @@ LLM 直接对照两个块即可判断"这个发现在不在已有条目里"，�
 
 **框架如何识别**：只要 manifest 的 `input.inject` 里出现至少一个 `kind: plugin-data` 条目，`turn-executor` 就会把该 runtime 切到 `buildContextAsync` 路径，调 `store.listPluginData` 拿数据；其他 runtime 继续走原来的同步 `buildContext`，零开销零回归。
 
-#### 框架不拦截写入
+#### 写入治理
 
-PR-1 阶段评估过 commit-service 拒绝 pre 段的写入 proposal，最终决定**不做硬约束**。原因：
+post-narrator 段的持久化写入优先走 proposal / commit chain。`plugin-data-set`、`plugin-data-set-batch` 和返回 `withPendingProposals(...)` 的 local tool 都会统一进入 `PreStateCommit` / `PostStateCommit`、trace 与事务路径。
 
-1. 约束是为了"结构稳定 + 后续扩展"，不是为了防滥用
-2. 部分 function runtime 用 `store.*` 直接写（绕过 proposal），硬拦截要么漏要么误伤
-3. 早期生态优先迭代速度
-
-PR review 会盯着新插件是否符合段职责约定。代码评审可能因为段位违规打回，但运行时不会拒绝执行。
+function runtime 和框架内部镜像仍然可以直接使用 `store.*`。这条路径适合内部实现，插件对 runtime 暴露的稳定写接口优先保持在 proposal 模式。
 
 ### 1.5 使用内置工具
 
@@ -340,7 +336,7 @@ PR review 会盯着新插件是否符合段职责约定。代码评审可能因�
 2. 插件自己的 schema、RAG、批量写入、领域动作，放进插件自己的 `tools.local`
 3. local tool 文件保持在插件目录内，例如 `plugins/my-plugin/tools/*.js`
 
-当前实现里，local tool 与 deterministic function handler 可以使用注入的 `store` 完成插件包内批量写入。插件自己的公开契约依旧建议通过 `PLUGIN.md + tools/ + tests/` 保持完整。
+当前实现里，local tool 可以读取注入的 `store`，持久化写入优先返回 `withPendingProposals(...)`；deterministic function handler 继续使用 `store` 完成内部批量写入。插件自己的公开契约依旧建议通过 `PLUGIN.md + tools/ + tests/` 保持完整。
 
 #### create-form — 创建玩家表单
 

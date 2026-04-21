@@ -16,6 +16,7 @@ import { createMemoryStore } from '@covel/store';
 import type { DataStore } from '@covel/store';
 import { createEventBus } from '@covel/events';
 import type { EventBus } from '@covel/events';
+import { getPendingProposals } from '@covel/tools';
 import { executeTurn, resumeSuspendedRuntime } from '../src/turn-executor.js';
 import type { TurnExecutorDeps } from '../src/turn-executor.js';
 import type { LLMAdapter, LLMResponse } from '../src/llm-adapter.js';
@@ -284,6 +285,75 @@ describe('TurnExecutor — agent runtime suspend', () => {
     expect((s.pendingContinuation.toolCallsSoFar as unknown[]).length).toBeGreaterThanOrEqual(1);
     // messages should contain conversation so far
     expect((s.pendingContinuation.messages as unknown[]).length).toBeGreaterThan(0);
+  });
+
+  it('should capture queued proposals in pendingContinuation before suspend', async () => {
+    mockLLM.setResponses([
+      {
+        content: null,
+        toolCalls: [{ id: 'tc-save-1', name: 'some-tool', arguments: '{}' }],
+        finishReason: 'tool_calls',
+        usage: { inputTokens: 10, outputTokens: 5 },
+      },
+      {
+        content: 'Waiting on player input...',
+        toolCalls: [{ id: 'tc-suspend-proposals', name: 'suspend', arguments: JSON.stringify({ reason: 'Need more info', resumeSchema: {} }) }],
+        finishReason: 'tool_calls',
+        usage: { inputTokens: 10, outputTokens: 5 },
+      },
+    ]);
+
+    mockToolExecutor.setToolResult('some-tool', {
+      toolCallId: 'tc-save-1',
+      name: 'some-tool',
+      result: '{"saved":true}',
+      parsedResult: { saved: true },
+      pendingProposals: [{
+        id: 'proposal-before-suspend',
+        type: 'plugin.data',
+        source: { pluginId: 'test-plugin', runtimeId: 'test-plugin' },
+        turnId: 'turn-1',
+        sessionId: 'sess-1',
+        payload: {
+          namespace: 'entries',
+          key: 'codex-qingping',
+          value: { title: '青萍山' },
+        },
+        timestamp: '2026-04-21T00:00:00.000Z',
+      }],
+      success: true,
+    });
+    mockToolExecutor.setToolResult('suspend', {
+      toolCallId: 'tc-suspend-proposals',
+      name: 'suspend',
+      result: JSON.stringify({ _covelSuspend: true, reason: 'Need more info', resumeSchema: {} }),
+      parsedResult: { _covelSuspend: true, reason: 'Need more info', resumeSchema: {} },
+      success: true,
+    });
+
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => agentLoaded,
+      llm: mockLLM,
+      getConfig: () => ({}),
+      store,
+      toolExecutor: mockToolExecutor,
+      eventBus,
+    };
+
+    await executeTurn(makeTurnInput(), [agentManifest], deps);
+
+    const suspensions = await store.listSuspensions('sess-1');
+    expect(suspensions).toHaveLength(1);
+    expect(suspensions[0]!.pendingContinuation.pendingProposals).toEqual([
+      expect.objectContaining({
+        type: 'plugin.data',
+        payload: {
+          namespace: 'entries',
+          key: 'codex-qingping',
+          value: { title: '青萍山' },
+        },
+      }),
+    ]);
   });
 
   it('should emit turn.suspended SSE event', async () => {
@@ -569,6 +639,69 @@ describe('resumeSuspendedRuntime', () => {
 
     expect(result.status).toBe('success');
     expect((result.output as Record<string, unknown>).narrativeOutput).toBe('Resume successful!');
+  });
+
+  it('should re-attach queued proposals from the suspension to the resumed output', async () => {
+    const suspensionId = await createTestSuspension('tc-suspend-x');
+    const suspension = await store.getSuspension(suspensionId);
+    await store.saveSuspension({
+      ...suspension!,
+      pendingContinuation: {
+        ...suspension!.pendingContinuation,
+        pendingProposals: [{
+          id: 'proposal-resume-1',
+          type: 'plugin.data',
+          source: { pluginId: 'test-plugin', runtimeId: 'test-plugin' },
+          turnId: 'turn-resume',
+          sessionId: 'sess-resume',
+          payload: {
+            namespace: 'entries',
+            key: 'codex-resume',
+            value: { title: '恢复后的条目' },
+          },
+          timestamp: '2026-04-21T00:00:00.000Z',
+        }],
+      },
+    });
+
+    mockLLM.setResponses([
+      {
+        content: '{"narrativeOutput": "Resume with queued writes."}',
+        toolCalls: [],
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 8 },
+      },
+    ]);
+
+    const manifest = makeManifest();
+    const loaded: LoadedRuntime = {
+      manifest,
+      promptTemplate: '',
+      references: [],
+    };
+    const refreshed = await store.getSuspension(suspensionId);
+
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => loaded,
+      llm: mockLLM,
+      getConfig: () => ({}),
+      store,
+      toolExecutor: mockToolExecutor,
+      eventBus,
+    };
+
+    const result = await resumeSuspendedRuntime(refreshed!, { name: 'Alice' }, manifest, deps);
+
+    expect(getPendingProposals(result.output)).toEqual([
+      expect.objectContaining({
+        type: 'plugin.data',
+        payload: {
+          namespace: 'entries',
+          key: 'codex-resume',
+          value: { title: '恢复后的条目' },
+        },
+      }),
+    ]);
   });
 
   it('should mark suspension as resolved after successful resume', async () => {

@@ -18,6 +18,7 @@
  * generic `ui-spec` convention, not anything about codex semantics.
  */
 
+import { withPendingProposals } from '@covel/tools';
 import { getCategoryMetadata } from '../category-metadata.js';
 
 export default function ({ tool, z, shortIdBatch, store }) {
@@ -77,8 +78,6 @@ export default function ({ tool, z, shortIdBatch, store }) {
         createdAt: now,
         updatedAt: now,
       }));
-      await store.setPluginDataBatch(records);
-
       const ui = results.map((entry) => ({
         type: 'ui-spec',
         entryId: entry.entryId,
@@ -104,11 +103,28 @@ export default function ({ tool, z, shortIdBatch, store }) {
         },
       }));
 
-      return {
-        unlocked: results.length,
-        entries: results,
-        ui,
-      };
+      return withPendingProposals(
+        {
+          unlocked: results.length,
+          entries: results,
+          ui,
+        },
+        [{
+          id: crypto.randomUUID(),
+          type: 'plugin.data.batch',
+          source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
+          turnId: context.turnId,
+          sessionId: context.sessionId,
+          payload: {
+            items: records.map((record) => ({
+              namespace: record.namespace,
+              key: record.key,
+              value: record.value,
+            })),
+          },
+          timestamp: now,
+        }],
+      );
     },
   });
 }

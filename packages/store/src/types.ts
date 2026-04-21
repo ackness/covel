@@ -663,16 +663,10 @@ export interface SuspensionRecord {
     /**
      * Proposals buffered mid-turn at the suspend point.
      *
-     * INVARIANT (audit 2026-04-20 finding 9b): MUST be empty at suspend time.
-     * The suspend sentinel currently fires before any proposal-generating
-     * runtime output, so the write site in `turn-executor` seeds this with
-     * `[]` and the resume path assumes the tool loop can re-enter cleanly.
-     *
-     * If this array ever becomes non-empty, `resume-executor` MUST replay /
-     * commit the proposals before re-entering the tool loop — otherwise the
-     * mid-turn writes are silently dropped. The suspend write site in
-     * `turn-executor.ts` asserts this invariant; keep the two in sync if
-     * mid-turn proposal collection lands.
+     * Agent tools can queue proposal-backed writes before the runtime
+     * decides to suspend. Resume re-hydrates this array so the buffered
+     * proposals survive the suspend boundary and commit together with the
+     * final runtime output.
      */
     readonly pendingProposals: readonly unknown[];
     /** tool_call_id of the suspend tool call (agent runtime only). Used to append synthetic tool result. */

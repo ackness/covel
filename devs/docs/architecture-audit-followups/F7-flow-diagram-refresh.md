@@ -1,6 +1,67 @@
 # F7 · `docs/architecture/flow.md` 架构图重绘 + Mermaid 化
 
-**Status**: pending · **Est**: 2.5 hours · **Risk**: low (纯文档, 无运行时影响) · **Depends on**: F1 已完成(phase 模型迁移)
+**Status**: partially-done(三类核心图 + phase 清理完成；非 phase 相关 ASCII 图未转 Mermaid) · **Est**: 2.5 hours · **Risk**: low (纯文档, 无运行时影响) · **Depends on**: F1 已完成(phase 模型迁移)
+
+---
+
+## 0. 执行状态 (2026-04-22 update)
+
+### 0.1 已完成
+
+修改文件: [`docs/architecture/flow.md`](../../../docs/architecture/flow.md)。
+
+- **顶部 disclaimer (L6)** — 删除"下文若干 ASCII 流程图里仍画着老的 `pre-game / character_creation / playing` 节点名"的退让说明; 改写为指向 `snapshot-builder.ts` 派生的显示标签(`pre-game | playing | paused | ended`)的澄清。
+- **§ 2.1 会话生命周期** — ASCII 三节点伪状态机 → Mermaid `stateDiagram-v2`(嵌套 `PreGame` / `Playing` state, 显式标出 `turnCount 0 → 1` 推进、`pauseSession/resumeSession/endSession`); 补一段权威状态模型散文(Pre-Game / Turn 0→1 / Playing / Paused / Ended 四态定义)。
+- **§ 2.2 单轮执行** — 重命名为 **单轮 Turn Pipeline**; ASCII 管线 → Mermaid `flowchart TB`, 内容按实际代码校准:
+  - `scheduleByPriority`(turn 0)vs `scheduleByDag` fallback 到 priority(turn ≥ 1)的分支显式画出
+  - `TurnStart / PreRuntime / PostRuntime / PreStateCommit / PostStateCommit` 5 个 hook 位置全部标注
+  - `preGameCompleted` 集齐时 `turnCount 0 → 1` 的判定节点
+  - Proposal 类型列表改为**实际存在**的: `narrative.append / interaction.request / state.patch / event.emit / plugin.data / plugin.data.batch / working_memory.set / lorebook.upsert` (F7 原草稿里写的 `ui.render / record.upsert / asset.generate` 在当前代码里不是 ProposalType, 已更正)
+  - 补优先级 band 表: turn 0 → `0–99`, turn ≥ 1 → `100–1000`
+- **§ 5.3 表单交互** — ASCII 外框保留但清理 phase 标签: `P10 core-pregame → 初始化, phase → character_creation` 改为 `core-pregame → 初始化会话级元数据`; 明确标注"`turnCount === 0, Pre-Game band, priority 0–99`"。
+- **§ 七 完整游戏流程时序图** — 长 ASCII 时序图 → Mermaid `sequenceDiagram`:
+  - 参与者: Player / Web / Server / Kernel / Plugin / LLM
+  - 使用**真实** SSE 事件名: `execution.started / runtime.started / narrative.delta / narrative.completed / interaction.requested / plugin-data.changed / state.changed / event.emitted / record.updated / runtime.completed { status } / execution.completed`
+  - Pre-Game band 用蓝色 `rect` 块, 主循环用绿色 `rect` 块区分
+  - 加入 `COVEL_SUSPEND_V1` 下的 `turn.suspended / turn.resumed` opt 分支(对齐 F4)
+  - 末尾 Note 保留 `phase.changed / phase.transition` 作为历史退役标记
+
+**渲染兼容性**: `flowchart` / `sequenceDiagram` 多行标签统一用 `<br/>`(GitHub / VSCode / Claude Code 的 Mermaid 渲染器都兼容); `stateDiagram-v2` 按官方语法使用 `\n`(该图类型不支持 `<br/>`)。
+
+### 0.2 验收清单对照 (F7 § 6)
+
+| 验收项 | 状态 | 备注 |
+|--------|------|------|
+| 无 `pre-game / character_creation / phase.transition / phase.changed` 作为**模型概念**出现 | ✅ | 残留 grep 命中全部是"已移除/已退役/历史说明"或新模型的 band 名 `Pre-Game band` |
+| 三类核心图(生命周期 / pipeline / SSE 时序)都 Mermaid 化 | ✅ | § 2.1 / § 2.2 / § 七 |
+| 配套散文与 `(status, turnCount, preGameCompleted)` 真相源一致 | ✅ | § 2.1 补了权威状态模型小节 |
+| 内部引用更新 | ✅ | `grep "见.*phase\|参见.*phase"` 仅命中 `docs/reference/tools.md` 中已正确描述为历史退役的段落, 无悬挂引用 |
+| `pnpm lint` 未失败 | n/a | 未触 CLAUDE.md / Documentation Index; 纯文档改动 |
+| 所有 ASCII 图替换为 Mermaid; grep `┌\|│\|└\|▼` 0 命中或只剩无关 ASCII | ⚠️ 部分 | 当前 `grep -cE "^\s*[┌│└▼]" docs/architecture/flow.md` = 331, 全部属"无关 ASCII"(不含 phase 概念), 见 § 0.3 |
+
+### 0.3 剩余未做 (scope 判断)
+
+F7 § 3 原文只显式列了**三类图**(生命周期 / Turn pipeline / SSE 时序), 这些都已处理。剩下的 ASCII 图都**不含 phase 概念**, 属于审计范围外的周边示意图。按 § 6 "只剩无关 ASCII" 的允许条款当前状态合规, 但如果要追求 § 6 严格解读下的"全面 Mermaid 化", 还需处理:
+
+- `§ 一` 系统全景(三层嵌套框图 — 转 Mermaid `flowchart` 加 subgraph, ~15min)
+- `§ 3.1 / 3.2 / 3.3` 消息翻译层(左右对照图 — 可转 `flowchart LR` 或保留 ASCII, 转换收益小, ~30min)
+- `§ 4.1` 插件结构(文件树 — **应保留 ASCII**, 文件树不适合 Mermaid)
+- `§ 4.2 / 4.3` 插件间通信 / 触发决策树(后者适合 `flowchart` 或 `stateDiagram`, ~10min)
+- `§ 5.1 / 5.2` 前端渲染管线 / 插件面板数据流(大框图 — `flowchart TB`, ~20min)
+- `§ 5.3` 表单流程外框(已清理 phase 标签, 但外框仍是 ASCII — 转 `sequenceDiagram` 可合并入 § 七, ~10min)
+- `§ 6.1 / 6.2 / 6.3` 存储层次 / plugin_data 隔离 / 消息历史(层级 + 表格 — Mermaid 收益小, `§ 6.3` 是表格可以 markdown 化, ~15min)
+- `§ 8.1 / 8.2` 包职责 / 依赖关系(后者适合 `flowchart TB`, ~15min)
+- `§ 九` 设计约束三段(短列表, 建议保留)
+
+**估算**: 全部转完约 1.5–2h 追加工作量, 引入的渲染风险更大(节点数量多的 flowchart 在 GitHub 渲染器上有时会截断或排版错乱)。建议作为**后续独立 ticket**(F7.1 `docs/architecture/flow.md 全面 Mermaid 化`)单独处理, 而不是扩大 F7 scope。
+
+### 0.4 仍引用 phase 的残留行(全部合规)
+
+经 `grep -nE "pre-game|character_creation|phase\.(transition|changed)|session\.phase"` 审计, 命中行全部属于以下三类且均 F7 § 6 允许:
+
+1. **历史退役注记** — 明确以"已移除/已退役/不再"字样标注(L89 散文、L357 § 5.1 ASCII 内注、L459 § 5.3 ASCII 内注、L645 § 七 sequenceDiagram Note)
+2. **显示标签 disclaimer** — L6 顶部 disclaimer 指向 `snapshot-builder.ts` 派生的 `SessionSnapshot.session.phase`
+3. **新模型 band 名** — `Pre-Game band` 作为 priority 0–99 这一新调度 band 的权威命名(L60–62 / L84–85 / L100 / L119 / L130 / L422–432 / L595–596 / L616)
 
 ---
 

@@ -16,6 +16,7 @@ import { createMemoryStore, type DataStore } from '@covel/store';
 import { createPluginRegistry, type PluginRegistry } from '@covel/plugin-loader';
 import type { RuntimeManifest } from '@covel/shared';
 import { resumeRoutes } from '../../src/routes/api/resume.js';
+import { createInProcessSessionLock } from '../../src/lib/session-lock.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -42,6 +43,7 @@ function createTestApp(deps: Deps) {
     };
   }>();
 
+  const sessionLock = createInProcessSessionLock();
   app.use('*', async (c, next) => {
     c.set('store', deps.store);
     c.set('pluginRegistry', deps.pluginRegistry);
@@ -54,6 +56,7 @@ function createTestApp(deps: Deps) {
     c.set('getConfigFn', deps.getConfigFn);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     c.set('resolveModel', deps.resolveModel as any);
+    c.set('sessionLock', sessionLock);
     await next();
   });
 

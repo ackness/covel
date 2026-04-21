@@ -102,6 +102,7 @@ export type {
   EventEmitPayload,
   RecordUpsertPayload,
   PluginDataPayload,
+  PluginDataBatchPayload,
   SessionEvent,
   CommitResult,
 } from './proposal.js';

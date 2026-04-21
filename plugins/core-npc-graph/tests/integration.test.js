@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { tool, z, shortIdBatch } from '@covel/tools';
+import { getPendingProposals, tool, z, shortIdBatch } from '@covel/tools';
 import createUpsertNpcGraph from '../tools/upsert-npc-graph.js';
 import retrieverHandler from '../runtimes/rag-retriever/handler.js';
 
@@ -52,6 +52,30 @@ function createMockStore() {
   };
 }
 
+async function applyPendingPluginData(result, store) {
+  for (const proposal of getPendingProposals(result)) {
+    if (proposal.type !== 'plugin.data.batch') continue;
+    await store.setPluginDataBatch(
+      proposal.payload.items.map((item, index) => ({
+        id: `${proposal.id}:${index}`,
+        sessionId: proposal.sessionId,
+        pluginId: proposal.source.pluginId,
+        namespace: item.namespace,
+        key: item.key,
+        value: item.value,
+        createdAt: proposal.timestamp,
+        updatedAt: proposal.timestamp,
+      })),
+    );
+  }
+}
+
+async function executeAndCommit(toolModule, params, context, store) {
+  const result = await toolModule.execute(params, context);
+  await applyPendingPluginData(result, store);
+  return result;
+}
+
 const SESSION = 'sess-integration';
 const PLUGIN = 'core-npc-graph';
 
@@ -74,7 +98,8 @@ describe('core-npc-graph end-to-end (extractor → retriever)', () => {
       pluginId: PLUGIN,
       runtimeId: `${PLUGIN}/extractor`,
     };
-    const extractResult = await upsertTool.execute(
+    const extractResult = await executeAndCommit(
+      upsertTool,
       {
         nodes: [
           {
@@ -114,6 +139,7 @@ describe('core-npc-graph end-to-end (extractor → retriever)', () => {
         ],
       },
       extractorCtx,
+      store,
     );
 
     expect(extractResult.nodes.created).toBe(3);
@@ -149,7 +175,8 @@ describe('core-npc-graph end-to-end (extractor → retriever)', () => {
 
   it('retriever returns empty when player mentions no known NPC', async () => {
     // Seed something
-    await upsertTool.execute(
+    await executeAndCommit(
+      upsertTool,
       {
         nodes: [
           { name: 'Solo', type: 'individual', summary: 'A lone wanderer.' },
@@ -161,6 +188,7 @@ describe('core-npc-graph end-to-end (extractor → retriever)', () => {
         pluginId: PLUGIN,
         runtimeId: `${PLUGIN}/extractor`,
       },
+      store,
     );
 
     const retrieved = await retrieverHandler({
@@ -188,7 +216,8 @@ describe('core-npc-graph end-to-end (extractor → retriever)', () => {
     const ctx2 = { ...ctx1, turnId: 'turn-3' };
 
     // Turn 1: introduce Alice and Bob with a TRUSTS edge
-    await upsertTool.execute(
+    await executeAndCommit(
+      upsertTool,
       {
         nodes: [
           { name: 'Alice', type: 'individual', summary: 'Merchant from the eastern quarter.' },
@@ -205,10 +234,12 @@ describe('core-npc-graph end-to-end (extractor → retriever)', () => {
         ],
       },
       ctx1,
+      store,
     );
 
     // Turn 3: Alice now also FEARS a new character Charlie
-    await upsertTool.execute(
+    await executeAndCommit(
+      upsertTool,
       {
         nodes: [
           { name: 'Charlie', type: 'individual', summary: 'A guard captain who threatened Alice.' },
@@ -224,6 +255,7 @@ describe('core-npc-graph end-to-end (extractor → retriever)', () => {
         ],
       },
       ctx2,
+      store,
     );
 
     // Retriever sees the full graph

@@ -15,7 +15,7 @@ import { createToolExecutor } from '../src/tool-executor.js';
 import type { ToolCall, ToolCallContext } from '../src/tool-executor.js';
 import { createMemoryStore } from '@covel/store';
 import type { DataStore } from '@covel/store';
-import { tool } from '@covel/tools';
+import { tool, withPendingProposals } from '@covel/tools';
 import { z } from 'zod';
 
 const textFirstTool = tool({
@@ -34,6 +34,32 @@ const jsonOnlyTool = tool({
   description: 'Returns a plain object without _text (legacy format)',
   parameters: z.object({ x: z.number() }),
   execute: async (params) => ({ doubled: params.x * 2 }),
+});
+
+const queuedTool = tool({
+  name: 'queued-write',
+  description: 'Returns content plus pending proposals',
+  parameters: z.object({ key: z.string() }),
+  execute: async (params, context) => withPendingProposals(
+    {
+      _text: `queued ${params.key}`,
+      success: true,
+      key: params.key,
+    },
+    [{
+      id: 'proposal-1',
+      type: 'plugin.data',
+      source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
+      turnId: context.turnId,
+      sessionId: context.sessionId,
+      payload: {
+        namespace: 'entries',
+        key: params.key,
+        value: { saved: true },
+      },
+      timestamp: '2026-04-21T00:00:00.000Z',
+    }],
+  ),
 });
 
 function makeCall(name: string, args: Record<string, unknown>): ToolCall {
@@ -104,5 +130,32 @@ describe('ToolExecutor text-result convention', () => {
     expect(result.success).toBe(true);
     // Non-string _text → falls back to JSON.stringify
     expect(result.result).toBe('{"_text":42,"foo":"bar"}');
+  });
+
+  it('keeps pending proposals off the LLM payload and returns them separately', async () => {
+    const executor = createToolExecutor({
+      findTool: (name) => (name === 'queued-write' ? queuedTool : undefined),
+      store,
+    });
+
+    const result = await executor.execute(makeCall('queued-write', { key: 'codex-1' }), ctx);
+
+    expect(result.success).toBe(true);
+    expect(result.result).toBe('queued codex-1');
+    expect(result.parsedResult).toMatchObject({
+      _text: 'queued codex-1',
+      success: true,
+      key: 'codex-1',
+    });
+    expect(result.pendingProposals).toEqual([
+      expect.objectContaining({
+        type: 'plugin.data',
+        payload: {
+          namespace: 'entries',
+          key: 'codex-1',
+          value: { saved: true },
+        },
+      }),
+    ]);
   });
 });

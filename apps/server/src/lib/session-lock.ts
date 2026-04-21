@@ -1,60 +1,119 @@
 /**
- * In-process per-session serializer.
+ * Per-session serializer — pluggable across store backends.
  *
- * `withSessionLock(sessionId, fn)` ensures that at most one `fn` runs at a
- * time for a given sessionId. Subsequent callers queue behind the previous
- * chain tail and wait their turn.
+ * `SessionLock.withLock(sessionId, fn)` guarantees at most one `fn` runs at
+ * a time for a given sessionId. Two implementations ship:
  *
- * Scope: the lock is process-local. For multi-process deployments (one PG
- * backend, N app pods) this must be upgraded to a PG advisory lock
- * (`pg_try_advisory_lock(hashtext(sessionId))`) or a Redis-based lock.
+ *   - {@link createInProcessSessionLock} — `Map<sessionId, Promise>` chain.
+ *     Correct for single-process deployments (Memory / SQLite). Zero-cost,
+ *     no external dependency.
+ *   - {@link createPgAdvisorySessionLock} (see `./pg-session-lock.ts`) — uses
+ *     `pg_advisory_lock` on a dedicated PG connection. Correct across
+ *     multiple Node pods pointing at the same PostgreSQL instance.
  *
- * Rationale (audit 2026-04-20, finding 1): without this, two concurrent
- * `/api/actions` requests to the same session read the same
- * `listTurnResults().length`, compute the same turnNumber, and interleave
- * state patches / auto-snapshots. The UI's `executing` flag is client-side
- * only and cannot protect non-browser callers.
+ * `bootstrapApi()` picks the backend-appropriate lock at composition time
+ * so route handlers only depend on the `SessionLock` interface.
  *
- * The lock is *serialization only*; exceptions thrown by `fn` propagate to
- * the caller and do not poison the chain — the slot releases regardless.
+ * Rationale
+ *   - Audit 2026-04-20 finding 1: without serialization, two concurrent
+ *     `/api/actions` requests to the same session read the same
+ *     `listTurnResults().length`, compute the same turnNumber, and
+ *     interleave state patches / auto-snapshots.
+ *   - Audit 2026-04-21 F5: the previous `Map`-based lock was process-local,
+ *     invisible across pods. Multi-instance PG deployments (the documented
+ *     production topology) had no cross-pod mutual exclusion.
+ *
+ * Contract
+ *   - `fn` exceptions propagate to the caller; the slot releases regardless.
+ *   - Same-session calls are strictly serialized. Different-session calls
+ *     run concurrently.
+ *   - Implementations MUST release the lock on both success and failure
+ *     paths, including if the acquire itself times out.
  */
+
+export interface SessionLock {
+  /**
+   * Acquire the lock for `sessionId`, run `fn`, release. Blocks until the
+   * lock is available. If `fn` throws, the lock is still released and the
+   * error propagates.
+   */
+  withLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T>;
+}
 
 type ChainTail = Promise<unknown>;
 
-const locks = new Map<string, ChainTail>();
+/**
+ * Build an in-process session lock. Correct for single-node deployments.
+ *
+ * Each session has a tail Promise. New callers chain `await previousTail`
+ * before running `fn`, then publish a new tail representing their own slot.
+ * On completion the slot resolves, freeing the next waiter. The map entry
+ * is GC'd when no successor has queued.
+ *
+ * The chain never *rejects* — predecessor failures are swallowed inside the
+ * chain (their error is already delivered to their own caller) so one bad
+ * turn cannot poison every subsequent turn on the session.
+ */
+export function createInProcessSessionLock(): SessionLock & {
+  /** Test-only: observe current lock count. */
+  readonly _sizeForTests: () => number;
+} {
+  const locks = new Map<string, ChainTail>();
 
-export async function withSessionLock<T>(
+  return {
+    async withLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
+      const previousTail: ChainTail = locks.get(sessionId) ?? Promise.resolve();
+
+      let release: () => void = () => { };
+      const slot = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+
+      // Chain this slot *after* the previous tail — use the rejected-branch
+      // handler to make the chain never reject so a failing predecessor
+      // cannot poison successors.
+      const chain: ChainTail = previousTail.then(() => slot, () => slot);
+      locks.set(sessionId, chain);
+
+      try {
+        // Wait for our predecessor to finish (swallow their errors — they
+        // are already propagated to their own caller, we just need ordering).
+        await previousTail.catch(() => { /* isolate */ });
+        return await fn();
+      } finally {
+        release();
+        // If no one queued behind us, drop the map entry to prevent
+        // unbounded growth on cold sessions. Guard against racing inserts.
+        if (locks.get(sessionId) === chain) {
+          locks.delete(sessionId);
+        }
+      }
+    },
+    _sizeForTests: () => locks.size,
+  };
+}
+
+// ── Backwards-compat shim ───────────────────────────────────────────
+//
+// Older call sites imported `withSessionLock(sessionId, fn)` directly from
+// this module. They now route through a shared in-process instance so
+// legacy imports keep working until every caller is migrated to
+// `c.get('sessionLock').withLock(...)`.
+//
+// New code SHOULD NOT import this — use the Hono context variable so PG
+// deployments pick up the advisory-lock implementation automatically.
+
+const _legacyInProcessLock = createInProcessSessionLock();
+
+/** @deprecated Use `c.get('sessionLock').withLock(...)` instead. */
+export function withSessionLock<T>(
   sessionId: string,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const previousTail: ChainTail = locks.get(sessionId) ?? Promise.resolve();
-
-  let release: () => void = () => {};
-  const slot = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-
-  // Chain this slot *after* the previous tail — use `.catch` to make the
-  // chain never reject so a failing predecessor cannot poison successors.
-  const chain: ChainTail = previousTail.then(() => slot, () => slot);
-  locks.set(sessionId, chain);
-
-  try {
-    // Wait for our predecessor to finish (swallow their errors — they are
-    // already propagated to their own caller, we just need ordering).
-    await previousTail.catch(() => { /* isolate */ });
-    return await fn();
-  } finally {
-    release();
-    // If no one queued behind us, drop the map entry to prevent unbounded
-    // growth on cold sessions. Guard against racing inserts.
-    if (locks.get(sessionId) === chain) {
-      locks.delete(sessionId);
-    }
-  }
+  return _legacyInProcessLock.withLock(sessionId, fn);
 }
 
-/** Test-only: observe current lock count. */
+/** Test-only: observe the legacy in-process lock count. */
 export function _lockCountForTests(): number {
-  return locks.size;
+  return _legacyInProcessLock._sizeForTests();
 }

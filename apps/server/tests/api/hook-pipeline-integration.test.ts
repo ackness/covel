@@ -21,6 +21,7 @@ import {
 } from '@covel/plugin-loader';
 import { createHookPipeline, type HookPipeline } from '@covel/runtime';
 import { actionRoutes } from '../../src/routes/api/actions.js';
+import { createInProcessSessionLock } from '../../src/lib/session-lock.js';
 import { makeFakeLLM, makeFakeLoadedRuntime } from './__helpers/fake-llm.js';
 
 function makeSummary(overrides: Partial<PluginSummary> = {}): PluginSummary {
@@ -123,6 +124,7 @@ describe('POST /api/actions — hook pipeline wired through commit chain', () =>
 
     const { llm } = makeFakeLLM(NARRATIVE);
     const eventBus = createEventBus(store);
+    const sessionLock = createInProcessSessionLock();
 
     app = new Hono();
     app.use('*', async (c, next) => {
@@ -137,6 +139,7 @@ describe('POST /api/actions — hook pipeline wired through commit chain', () =>
       c.set('resolveModel', () => undefined);
       c.set('eventBus', eventBus);
       c.set('hookPipeline', hookPipeline);
+      c.set('sessionLock', sessionLock);
       await next();
     });
     app.route('/api/actions', actionRoutes);

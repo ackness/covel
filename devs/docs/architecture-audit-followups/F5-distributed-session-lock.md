@@ -1,6 +1,73 @@
 # F5 · PostgreSQL 后端的分布式 session lock
 
-**Status**: pending · **Est**: 7 hours · **Risk**: medium (生产阻塞 bug, 需 PG 测试环境) · **Depends on**: 无,但建议在任何 multi-instance 部署前完成
+**Status**: done (2026-04-22) · **Est**: 7 hours · **Risk**: medium (生产阻塞 bug, 需 PG 测试环境) · **Depends on**: 无,但建议在任何 multi-instance 部署前完成
+
+---
+
+## 0. 实施总结 (2026-04-22)
+
+### 0.1 最终交付
+
+- 接口 + 两种实现:
+  - [`apps/server/src/lib/session-lock.ts`](../../../apps/server/src/lib/session-lock.ts) — `SessionLock` 接口 + `createInProcessSessionLock()` factory + `withSessionLock()` **deprecated** 向后兼容 shim(保留让旧导入不炸)。
+  - [`apps/server/src/lib/pg-session-lock.ts`](../../../apps/server/src/lib/pg-session-lock.ts) — `createPgAdvisorySessionLock(sql, opts?)`,基于 `pg_try_advisory_lock` + 轮询 + 超时。
+- Bootstrap 注入:
+  - [`apps/server/src/routes/api/bootstrap.ts`](../../../apps/server/src/routes/api/bootstrap.ts) — `ApiBootstrapConfig.sessionLock` 可选注入,默认 in-process。通过 `c.set('sessionLock', ...)` 暴露给每个请求。
+  - [`apps/server/src/env.d.ts`](../../../apps/server/src/env.d.ts) — `ContextVariableMap.sessionLock: SessionLock`(必填,使用方必须显式注入)。
+- 应用层选择:
+  - [`apps/server/src/app.ts`](../../../apps/server/src/app.ts) — `STORE_BACKEND=pg && DATABASE_URL` 时构造独立的 postgres.js 客户端 (`max: 16`) 交给 `createPgAdvisorySessionLock`;否则 in-process。启动日志声明当前锁后端。
+- 调用点迁移:
+  - [`apps/server/src/routes/api/actions.ts`](../../../apps/server/src/routes/api/actions.ts) — `c.get('sessionLock').withLock(sessionId, ...)`,替代原 `withSessionLock`。
+  - [`apps/server/src/routes/api/resume.ts`](../../../apps/server/src/routes/api/resume.ts) — 同上。
+  - [`apps/server/src/routes/api/turn.ts`](../../../apps/server/src/routes/api/turn.ts) — **新增** 把 `executeTurn` + `turnCount` 更新 + commit 管线整体锁住(原来没有任何锁,是一处漏洞)。
+- 测试:
+  - [`apps/server/tests/lib/session-lock.test.ts`](../../../apps/server/tests/lib/session-lock.test.ts) — 5 个 in-process 单元测试。
+  - [`apps/server/tests/integration/pg-session-lock.test.ts`](../../../apps/server/tests/integration/pg-session-lock.test.ts) — 5 个 PG 集成测试 + `hashSessionId` 2 个纯函数测试。`describe.skipIf(!pgReachable)` 守护,无 PG 环境自动跳过。
+- 测试 fixture 补齐(手写 middleware 的测试需要显式注入 sessionLock):
+  - `tests/api/actions-phase-emit.test.ts`
+  - `tests/api/hook-pipeline-integration.test.ts`
+  - `tests/api/resume.test.ts`
+  - `tests/api/turn-commit-pipeline.test.ts`
+- 依赖:
+  - `apps/server/package.json` 显式声明 `"postgres": "^3.4.9"`(原先是 `@covel/store` 的间接依赖,TS 类型解析需要直接依赖)。
+- 文档:
+  - [`docs/reference/api.md`](../../../docs/reference/api.md) 存储后端表 + 多进程部署小节更新,指出 PG 后端自动启用 `pg_advisory_lock` 分布式锁;Memory / SQLite 继续用 in-process `Map`。
+
+### 0.2 与原计划的偏差
+
+| 原计划 | 实际采用 | 原因 |
+|---|---|---|
+| `pg` (node-postgres) 的 `Pool` + `PoolClient` | `postgres.js` 的 `Sql` + `sql.reserve()` | Covel `@covel/store` 已经用 postgres.js,不引入两套驱动。`reserve()` 的语义等价于 `pool.connect()`:占用一条独立连接直到 `release()`,advisory lock 在同一连接上 acquire/release。 |
+| 参数绑定 `pg_try_advisory_lock(${key})`(bigint 直接参数) | `pg_try_advisory_lock(${keyLiteral}::bigint)`(字符串 + 显式 cast) | postgres.js 的 `Serializable` TS 类型不包含 `bigint`(运行时支持但类型不支持)。传 string + `::bigint` cast 是 TS-clean 的方式,且避免 JS `number` 的 2^53 精度陷阱。 |
+| Pool 在 bootstrap 内部构造 | `app.ts` 构造后通过 `sessionLock` 参数注入 bootstrap | 保持 `bootstrapApi` 测试友好:测试直接传 `createInProcessSessionLock()` 即可,不需要 mock PG pool。生产路径 `app.ts` 独立管理 lock 专用连接池,与 data store 的 pool 解耦,避免 lock-holding 连接挤占数据读写的连接配额。 |
+| `withSessionLock` 标记为 deprecated + 旧调用点迁移完后删除 | 保留 deprecated shim,所有 server 内调用点已迁移 | 目前 `apps/server` 所有生产 import 都改成 `c.get('sessionLock').withLock(...)`。shim 只服务于:(a) 未来引入新调用点前的兜底;(b) `apps/desktop/staging/` 镜像(gitignored,构建时从源码再生)里的历史 import。 |
+| turn.ts 迁移既有 `withSessionLock` 调用 | turn.ts 原本就 **没有** 锁,是新加的 | F5 原文把 turn.ts 列为调用点是文档偏差。实际 turn.ts 的 `executeTurn` + `listTurnResults().length` 更新管线和 actions.ts 有同样的并发风险,这次一并补上。 |
+| 手滚 `acquireWithTimeout` 用 `client.query(...)` + `{ rows: [...] }` | 用 postgres.js 模板字面量 + `rows[0]?.locked` | postgres.js 返回值直接是行数组,不是 `QueryResult`。 |
+
+### 0.3 验收状态
+
+- [x] `SessionLock` 接口存在于 `apps/server/src/lib/session-lock.ts`
+- [x] `createInProcessSessionLock()` + `createPgAdvisorySessionLock()` 两个 factory
+- [x] `bootstrapApi()` 接受 `sessionLock` 注入,默认 in-process,启动日志声明来源
+- [x] `actions.ts` / `turn.ts` / `resume.ts` 全部迁移到 `c.get('sessionLock').withLock`
+- [x] PG lock 集成测试:同 sessionId 互斥 ✓、不同 sessionId 并发 ✓、异常释放 ✓、**跨 pool 互斥** ✓、超时报错 ✓
+- [x] 文档 `docs/reference/api.md` 的"存储后端对比"表和"多进程部署"小节已更新
+- [x] `pnpm --filter @covel/server lint` 绿
+- [x] `pnpm --filter @covel/server test` 绿(27 files, 212 passed, 5 skipped — PG 集成测试无 `DATABASE_URL` 时跳过)
+- [x] `pnpm --filter @covel/store test` 绿(370 passed)
+
+### 0.4 如何在本地/CI 打开 PG 集成测试
+
+```bash
+# 起本地 PG
+pnpm db:up
+
+# 运行包含 PG lock 断言的 server 测试(默认 URL 与 pg-store.test.ts 一致)
+DATABASE_URL=postgresql://covel:covel_dev@localhost:5432/covel \
+  pnpm --filter @covel/server test tests/integration/pg-session-lock.test.ts
+```
+
+CI 应当在提供 PG 的 job 里注入 `DATABASE_URL` 以强制跑这套断言 —— 目前没有 PG 的机器上,`describe.skipIf(!pgReachable)` 会自动跳过,避免误伤 dev 环境。
 
 ---
 

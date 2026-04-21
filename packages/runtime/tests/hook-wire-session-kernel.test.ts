@@ -18,6 +18,7 @@ import { createHookPipeline } from '../src/hooks/pipeline.js';
 interface RecordingStore extends KernelStore {
   readonly messages: Array<Record<string, unknown>>;
   readonly stateChanges: Array<Record<string, unknown>>;
+  readonly pluginData: Array<Record<string, unknown>>;
   readonly events: Array<Record<string, unknown>>;
   readonly traceEvents: Array<Record<string, unknown>>;
 }
@@ -25,15 +26,17 @@ interface RecordingStore extends KernelStore {
 function createRecordingStore(): RecordingStore {
   const messages: Array<Record<string, unknown>> = [];
   const stateChanges: Array<Record<string, unknown>> = [];
+  const pluginData: Array<Record<string, unknown>> = [];
   const events: Array<Record<string, unknown>> = [];
   const traceEvents: Array<Record<string, unknown>> = [];
 
   return {
-    messages, stateChanges, events, traceEvents,
+    messages, stateChanges, pluginData, events, traceEvents,
     async addMessage(r) { messages.push(r as Record<string, unknown>); },
     async updateSession() {},
     async saveEvent(r) { events.push(r as Record<string, unknown>); },
     async addStateChange(r) { stateChanges.push(r as Record<string, unknown>); },
+    async setPluginData(r) { pluginData.push(r as Record<string, unknown>); },
     async addTraceEvent(r) { traceEvents.push(r as Record<string, unknown>); },
   };
 }
@@ -128,6 +131,35 @@ describe('session-kernel hook wire-in', () => {
       expect(results.every((r) => r.committed)).toBe(true);
       expect(store.messages).toHaveLength(1);
       expect(store.stateChanges).toHaveLength(1);
+    });
+
+    it('blocks plugin.data proposals before they reach the store', async () => {
+      const store = createRecordingStore();
+      const hookPipeline = createHookPipeline();
+
+      hookPipeline.register({
+        id: 'test:PreStateCommit:block-plugin-data',
+        event: 'PreStateCommit',
+        handler: vi.fn().mockImplementation(async (_ctx, payload: { proposal: { type: string } }) => {
+          if (payload.proposal.type === 'plugin.data') {
+            return { action: 'abort', reason: 'plugin data blocked' };
+          }
+          return { action: 'continue' };
+        }),
+      });
+
+      const pipeline = createCommitPipeline(store, hookPipeline);
+      const result = await pipeline.commit(
+        makeProposal('plugin.data', {
+          namespace: 'entries',
+          key: 'codex-qingping',
+          value: { title: '青萍山' },
+        }, 'plugin-data'),
+      );
+
+      expect(result.committed).toBe(false);
+      expect(result.error).toContain('plugin data blocked');
+      expect(store.pluginData).toHaveLength(0);
     });
   });
 

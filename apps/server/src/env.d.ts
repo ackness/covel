@@ -6,6 +6,7 @@ import type { LLMAdapter, ToolExecutor, RpcExecutor, PluginRpcRegistry, HookPipe
 import type { RpcApprovalGate } from '@covel/approval';
 import type { RuntimeManifest } from '@covel/shared';
 import type { CompactorRunner } from '@covel/context';
+import type { SessionLock } from './lib/session-lock.js';
 
 type LoadRuntimeFn = (manifest: RuntimeManifest, locale?: string) => Promise<LoadedRuntime | undefined>;
 type GetConfigFn = (pluginId: string, runtimeId: string) => Readonly<Record<string, unknown>>;
@@ -29,6 +30,17 @@ declare module 'hono' {
     rpcExecutor: RpcExecutor;
     rpcRegistry: PluginRpcRegistry;
     rpcApprovalGate: RpcApprovalGate;
+    /**
+     * Per-session serializer. Injected by `bootstrapApi()`:
+     *   - `STORE_BACKEND=pg` → `createPgAdvisorySessionLock(sql)` — mutual
+     *     exclusion across Node pods via `pg_advisory_lock`.
+     *   - everything else → `createInProcessSessionLock()` — `Map`-based
+     *     chain, correct for single-process deployments.
+     *
+     * Route handlers MUST use this instead of the legacy `withSessionLock`
+     * import so PG deployments automatically get cross-pod safety.
+     */
+    sessionLock: SessionLock;
     ensureEmbeddingLock?: EnsureEmbeddingLockFn;
     hookPipeline?: HookPipeline;
   }

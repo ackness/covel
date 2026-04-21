@@ -59,6 +59,10 @@ import type { PermissionRule, RpcApprovalGate } from '@covel/approval';
 
 import type { PluginDataRecord } from '@covel/store';
 
+import {
+  createInProcessSessionLock,
+  type SessionLock,
+} from '../../lib/session-lock.js';
 import { sessionRoutes } from './session.js';
 import { turnRoutes } from './turn.js';
 import { pluginRoutes } from './plugins.js';
@@ -133,6 +137,16 @@ export interface ApiBootstrapConfig {
    * that carry browser-defined custom slots or API keys).
    */
   readonly perRequestMiddleware?: readonly MiddlewareHandler[];
+  /**
+   * Per-session serializer used by turn-executing routes. When omitted,
+   * `bootstrapApi()` installs an in-process `Map`-based lock which is
+   * correct for single-node deployments (memory/sqlite, single PG pod).
+   * Multi-pod PG deployments MUST pass a distributed implementation —
+   * typically `createPgAdvisorySessionLock(sql)` from
+   * `../../lib/pg-session-lock.ts` — so mutual exclusion is enforced
+   * across processes. See `docs/architecture-audit-followups/F5-*`.
+   */
+  readonly sessionLock?: SessionLock;
 }
 
 export interface ApiBootstrapResult {
@@ -158,6 +172,16 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   // 1. Create shared infrastructure first (eventBus needed by registry)
   const stateManager = config.stateManager ?? createStateManager(config.store);
   const eventBus = createEventBus(config.store);
+
+  // Per-session serializer. The caller (e.g. `app.ts`) may inject a PG
+  // advisory-lock implementation for multi-pod safety; otherwise we fall
+  // back to the in-process chain lock which is correct for single-process
+  // deployments (memory/sqlite, single PG pod). Route handlers read this
+  // via `c.get('sessionLock')` and never import a concrete lock module.
+  const sessionLock: SessionLock = config.sessionLock ?? createInProcessSessionLock();
+  console.log(
+    `[bootstrap] session lock: ${config.sessionLock ? 'external (injected)' : 'in-process'}`,
+  );
 
   // Wrap store to automatically emit plugin-data.changed SSE events
   // on every setPluginData / setPluginDataBatch call, regardless of caller.
@@ -199,7 +223,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
         if (mf.trigger?.type === 'manual' && typeof mf.priority === 'number') {
           console.warn(
             `[bootstrap] Runtime "${mf.name}" declares trigger.type='manual' but also sets priority=${mf.priority}. ` +
-              `Manual runtimes are UI-only and should omit priority entirely — remove one of the two to keep the scheduler intent clear.`,
+            `Manual runtimes are UI-only and should omit priority entirely — remove one of the two to keep the scheduler intent clear.`,
           );
         }
       }
@@ -675,6 +699,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     c.set('rpcExecutor', rpcExecutor);
     c.set('rpcRegistry', rpcRegistry);
     c.set('rpcApprovalGate', rpcApprovalGate);
+    c.set('sessionLock', sessionLock);
     if (config.ensureEmbeddingLock) {
       c.set('ensureEmbeddingLock', config.ensureEmbeddingLock);
     }
@@ -738,12 +763,8 @@ function emitPluginDataChangedEvent(
       _subType: 'plugin-data.changed',
       pluginId,
       changes,
-      // `source: 'store-proxy'` flags this write as bypassing the Session
-      // Kernel proposal/commit pipeline — it came directly from a tool or
-      // API handler calling store.setPluginData / setPluginDataBatch /
-      // deletePluginData. Future additions that route plugin-data through
-      // proposals should set source='commit-pipeline' so observers can
-      // distinguish governed writes from direct writes.
+      // The proxy is the single emission layer for plugin-data.changed.
+      // Commit-chain writes and direct store writes both pass through here.
       source: 'store-proxy',
     },
     sessionId,
@@ -758,20 +779,14 @@ function emitPluginDataChangedEvent(
  * plugin-local tool direct writes, admin API endpoints).
  *
  * Governance contract:
- * - The emitted event carries `source: 'store-proxy'` to flag that the write
- *   bypassed the Session Kernel proposal/commit pipeline. This is the path
- *   used by `codex/tools/unlock-codex-entries.js`, `guide/tools/generate-guide.js`,
- *   `builtin/character-tools.ts`, etc.
- * - Because these writes skip the commit pipeline, `PreStateCommit` hooks
- *   cannot currently intercept them.
- *   Plugins that require PreStateCommit governance on their persistent data
- *   MUST use the proposal pipeline (emit `state.patch` / `event.emit` /
- *   future `plugin-data.set` proposal types) instead of direct store writes.
- * - Observability is still complete: every direct write produces a
+ * - Proposal-backed plugin-data writes now enter through the Session Kernel
+ *   commit pipeline before the proxy emits `plugin-data.changed`.
+ * - Direct store callers still receive the same event stream, so API routes,
+ *   function handlers, and internal mirrors keep the existing live-update
+ *   behaviour.
+ * - Observability stays complete: every write produces a
  *   `plugin-data.changed` SessionEvent persisted by eventBus.persistEvent
- *   into the `events` table, and is pushed to every `/events/stream`
- *   subscriber. The frontend `plugin-data-store` applies changes to its
- *   in-memory cache so right-panel UI updates live.
+ *   into the `events` table and pushed to `/events/stream` subscribers.
  */
 export function wrapStoreWithPluginDataEvents(baseStore: DataStore, eventBus: EventBus): DataStore {
   return new Proxy(baseStore, {

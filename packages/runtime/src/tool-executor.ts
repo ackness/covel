@@ -10,10 +10,15 @@
  *   6. Return result string for LLM
  */
 
-import { ToolValidationError, type ToolModule } from '@covel/tools';
+import {
+  ToolValidationError,
+  getPendingProposals,
+  getToolContent,
+  type ToolModule,
+} from '@covel/tools';
 import type { DataStore } from '@covel/store';
 import type { ApprovalPipeline } from '@covel/approval';
-import type { ApprovalStatus } from '@covel/shared';
+import type { ApprovalStatus, Proposal } from '@covel/shared';
 
 // ── Structured tool error shape (returned to LLM) ────────────────
 
@@ -49,8 +54,9 @@ export interface ToolCallResult {
   readonly name: string;
   readonly result: string;  // JSON string for LLM
   readonly parsedResult: unknown; // Parsed result for framework use
+  readonly pendingProposals?: readonly Proposal[];
   readonly success: boolean;
-  readonly approvalStatus: ApprovalStatus;
+  readonly approvalStatus?: ApprovalStatus;
 }
 
 export interface ToolInfo {
@@ -146,6 +152,8 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           runtimeId: context.runtimeId,
         };
         const rawResult = await tool.execute(params, execContext);
+        const parsedResult = getToolContent(rawResult);
+        const pendingProposals = getPendingProposals(rawResult);
 
         // Text-first convention: if the tool result is an object with a
         // `_text` string field, send ONLY the text as the LLM-facing payload
@@ -154,12 +162,20 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
         // structured object via `parsedResult`. Falls back to JSON.stringify
         // for tools that don't opt in.
         const resultStr =
-          rawResult && typeof rawResult === 'object' && typeof (rawResult as { _text?: unknown })._text === 'string'
-            ? (rawResult as { _text: string })._text
-            : JSON.stringify(rawResult);
+          parsedResult && typeof parsedResult === 'object' && typeof (parsedResult as { _text?: unknown })._text === 'string'
+            ? (parsedResult as { _text: string })._text
+            : JSON.stringify(parsedResult);
 
         await recordCall(config.store, call, context, resultStr, startTime, true, approvalStatus);
-        return { toolCallId: call.toolCallId, name: call.name, result: resultStr, parsedResult: rawResult, success: true, approvalStatus };
+        return {
+          toolCallId: call.toolCallId,
+          name: call.name,
+          result: resultStr,
+          parsedResult,
+          pendingProposals,
+          success: true,
+          approvalStatus,
+        };
       } catch (error: unknown) {
         let errorResult: string;
         if (error instanceof ToolValidationError) {

@@ -1,4 +1,4 @@
-import { Loader2, CheckCircle2, XCircle, Zap, Wrench, ChevronDown, ChevronUp, RotateCw, SkipForward } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Zap, Wrench, ChevronDown, ChevronUp, RotateCw, SkipForward, Clock } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ExecutionStep } from "@/stores/session-store.js";
@@ -8,7 +8,7 @@ interface RuntimeStatus {
   runtimeId: string;
   pluginId: string;
   label: string;
-  status: "running" | "llm" | "tool" | "completed" | "failed" | "skipped";
+  status: "running" | "llm" | "tool" | "completed" | "failed" | "skipped" | "suspended";
   detail?: string;
   /** Qualified tool name when status is "tool" (e.g. "core-init-wizard:emit-character-form"). */
   toolName?: string;
@@ -67,6 +67,8 @@ function StatusIcon({ status }: { status: RuntimeStatus["status"] }) {
       return <XCircle className="w-3 h-3 text-destructive" />;
     case "skipped":
       return <SkipForward className="w-3 h-3 text-muted-foreground" />;
+    case "suspended":
+      return <Clock className="w-3 h-3 text-amber-500" />;
   }
 }
 
@@ -119,7 +121,9 @@ function RuntimeChip({
             ? "border-destructive/30 bg-destructive/5 text-destructive paper:border-destructive/60"
             : rt.status === "skipped"
               ? "border-border/40 bg-muted/20 text-muted-foreground/70 italic"
-              : "border-border/50 bg-muted/30 text-muted-foreground")
+              : rt.status === "suspended"
+                ? "border-amber-500/40 bg-amber-500/5 text-amber-700 dark:text-amber-400"
+                : "border-border/50 bg-muted/30 text-muted-foreground")
       }
     >
       <StatusIcon status={rt.status} />

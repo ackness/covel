@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import path from 'node:path';
 import { discoverPlugins, loadPluginManifest } from '@covel/plugin-loader';
-import { tool, z, shortIdBatch } from '@covel/tools';
+import { getPendingProposals, tool, z, shortIdBatch } from '@covel/tools';
 import createUpsertNpcGraph from '../tools/upsert-npc-graph.js';
 import createListNpcGraph from '../tools/list-npc-graph.js';
 
@@ -53,6 +53,30 @@ function createMockStore() {
       return results;
     },
   };
+}
+
+async function applyPendingPluginData(result, store) {
+  for (const proposal of getPendingProposals(result)) {
+    if (proposal.type !== 'plugin.data.batch') continue;
+    await store.setPluginDataBatch(
+      proposal.payload.items.map((item, index) => ({
+        id: `${proposal.id}:${index}`,
+        sessionId: proposal.sessionId,
+        pluginId: proposal.source.pluginId,
+        namespace: item.namespace,
+        key: item.key,
+        value: item.value,
+        createdAt: proposal.timestamp,
+        updatedAt: proposal.timestamp,
+      })),
+    );
+  }
+}
+
+async function executeAndCommit(toolModule, params, context, store) {
+  const result = await toolModule.execute(params, context);
+  await applyPendingPluginData(result, store);
+  return result;
 }
 
 const ctx = {
@@ -128,7 +152,8 @@ describe('upsert-npc-graph', () => {
   });
 
   it('creates new nodes with short IDs and persists them', async () => {
-    const result = await upsertTool.execute(
+    const result = await executeAndCommit(
+      upsertTool,
       {
         nodes: [
           {
@@ -146,6 +171,7 @@ describe('upsert-npc-graph', () => {
         ],
       },
       ctx,
+      store,
     );
 
     expect(result.nodes.created).toBe(2);
@@ -161,13 +187,16 @@ describe('upsert-npc-graph', () => {
   });
 
   it('merges when a node with the same name is upserted twice', async () => {
-    await upsertTool.execute(
+    await executeAndCommit(
+      upsertTool,
       {
         nodes: [{ name: '陆沉渊', type: 'individual', summary: '青萍宗宗主。' }],
       },
       ctx,
+      store,
     );
-    const second = await upsertTool.execute(
+    const second = await executeAndCommit(
+      upsertTool,
       {
         nodes: [
           {
@@ -180,6 +209,7 @@ describe('upsert-npc-graph', () => {
         ],
       },
       ctx,
+      store,
     );
 
     expect(second.nodes.created).toBe(0);
@@ -192,7 +222,8 @@ describe('upsert-npc-graph', () => {
   });
 
   it('resolves edge sourceName/targetName to node IDs and persists the adjacency index', async () => {
-    const out = await upsertTool.execute(
+    const out = await executeAndCommit(
+      upsertTool,
       {
         nodes: [
           { name: '萧衍笙', type: 'individual', summary: '碧波宗宗主。' },
@@ -209,6 +240,7 @@ describe('upsert-npc-graph', () => {
         ],
       },
       ctx,
+      store,
     );
 
     expect(out.nodes.created).toBe(2);
@@ -234,7 +266,8 @@ describe('upsert-npc-graph', () => {
   });
 
   it('skips duplicate edges (same source, target, relation)', async () => {
-    await upsertTool.execute(
+    await executeAndCommit(
+      upsertTool,
       {
         nodes: [
           { name: 'A', type: 'individual', summary: 'First character placeholder.' },
@@ -251,9 +284,11 @@ describe('upsert-npc-graph', () => {
         ],
       },
       ctx,
+      store,
     );
 
-    const dup = await upsertTool.execute(
+    const dup = await executeAndCommit(
+      upsertTool,
       {
         edges: [
           {
@@ -266,6 +301,7 @@ describe('upsert-npc-graph', () => {
         ],
       },
       ctx,
+      store,
     );
 
     expect(dup.edges.created).toBe(0);
@@ -274,7 +310,8 @@ describe('upsert-npc-graph', () => {
   });
 
   it('flags edges whose endpoint node cannot be resolved', async () => {
-    const out = await upsertTool.execute(
+    const out = await executeAndCommit(
+      upsertTool,
       {
         edges: [
           {
@@ -287,6 +324,7 @@ describe('upsert-npc-graph', () => {
         ],
       },
       ctx,
+      store,
     );
     expect(out.edges.created).toBe(0);
     expect(out.edges.skipped).toBe(1);

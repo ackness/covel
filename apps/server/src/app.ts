@@ -19,6 +19,11 @@ import { createStoreFromEnv, resolveBackendFromEnv } from "@covel/store";
 import { createEmbeddingLockHelper } from "./embedding-lock.js";
 import { createGatewayAdapter } from "@covel/runtime";
 import { bootstrapApi } from "./routes/api/bootstrap.js";
+import {
+  createInProcessSessionLock,
+  type SessionLock,
+} from "./lib/session-lock.js";
+import { createPgAdvisorySessionLock } from "./lib/pg-session-lock.js";
 import { seedWorlds } from "./world-seed-loader.js";
 import { createWorldFileWatcher } from "./world-file-watcher.js";
 import { createModelDbRoutes } from "./routes/model-db.js";
@@ -135,6 +140,34 @@ const ai = createAiStack();
 const storeBackend = resolveBackendFromEnv();
 const store = await createStoreFromEnv();
 
+// ── Session lock ────────────────────────────────────────────────
+//
+// PG deployments need cross-pod mutual exclusion per sessionId; the
+// in-process `Map`-based lock only serialises within one Node process.
+// We open a separate small postgres.js client dedicated to advisory
+// locks so long-held lock connections never starve the data path.
+//
+// For memory/sqlite or when DATABASE_URL is missing we fall through to
+// the in-process implementation — those topologies are single-process
+// by construction, so the simpler lock is both sufficient and cheaper.
+let sessionLock: SessionLock;
+if (storeBackend === "pg" && process.env.DATABASE_URL) {
+  const { default: postgres } = await import("postgres");
+  // `max` sizes the lock pool. Each in-flight turn holds one reserved
+  // connection for the duration of executeTurn; 16 is well above the
+  // expected peak per pod and keeps PG connection usage bounded.
+  const lockSql = postgres(process.env.DATABASE_URL, { max: 16 });
+  sessionLock = createPgAdvisorySessionLock(lockSql);
+  console.log(
+    "[server] session lock: pg-advisory (cross-pod mutual exclusion enabled)",
+  );
+} else {
+  sessionLock = createInProcessSessionLock();
+  console.log(
+    `[server] session lock: in-process (${storeBackend} backend — single-process scope)`,
+  );
+}
+
 // Collect all *_API_KEY env vars dynamically so any provider can be added
 // to llm.toml without requiring code changes here.
 const apiKeys: Record<string, string> = {};
@@ -175,6 +208,7 @@ const api = await bootstrapApi({
   ensureEmbeddingLock,
   preferredMemorySlot,
   perRequestMiddleware: [perRequestLlm],
+  sessionLock,
 });
 
 // ── Seed worlds ──────────────────────────────────────────────────

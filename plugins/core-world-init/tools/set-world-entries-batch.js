@@ -18,6 +18,8 @@
  *
  * @param {{ tool: Function, z: import('zod'), store: any }} injection
  */
+import { withPendingProposals } from '@covel/tools';
+
 export default function ({ tool, z, store }) {
   return tool({
     name: 'set-world-entries-batch',
@@ -42,7 +44,6 @@ export default function ({ tool, z, store }) {
         createdAt: now,
         updatedAt: now,
       }));
-      await store.setPluginDataBatch(pluginDataRecords);
 
       // 2) Lorebook write — canonical destination for world dimensions.
       // Each entry becomes one `constant` lorebook row. The id is a
@@ -75,11 +76,28 @@ export default function ({ tool, z, store }) {
         }
       }
 
-      return {
-        success: true,
-        count: pluginDataRecords.length,
-        keys: params.entries.map((e) => e.key),
-      };
+      return withPendingProposals(
+        {
+          success: true,
+          count: pluginDataRecords.length,
+          keys: params.entries.map((e) => e.key),
+        },
+        [{
+          id: crypto.randomUUID(),
+          type: 'plugin.data.batch',
+          source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
+          turnId: context.turnId,
+          sessionId: context.sessionId,
+          payload: {
+            items: pluginDataRecords.map((record) => ({
+              namespace: record.namespace,
+              key: record.key,
+              value: record.value,
+            })),
+          },
+          timestamp: now,
+        }],
+      );
     },
   });
 }

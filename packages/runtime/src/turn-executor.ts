@@ -7,7 +7,14 @@
  * arbitrary output shapes. The session kernel normalizes them into typed Proposals.
  */
 
-import type { RuntimeManifest, RuntimeResult, TurnInput, TurnResult, ToolCallRecord } from '@covel/shared';
+import type {
+  Proposal,
+  RuntimeManifest,
+  RuntimeResult,
+  ToolCallRecord,
+  TurnInput,
+  TurnResult,
+} from '@covel/shared';
 import type { LoadedRuntime } from '@covel/plugin-loader';
 import type {
   DataStore,
@@ -15,7 +22,11 @@ import type {
   SuspensionRecord,
   RuntimeOutputRecord,
 } from '@covel/store';
-import { isSuspendSentinel, isRuntimeDoneSentinel } from '@covel/tools';
+import {
+  isSuspendSentinel,
+  isRuntimeDoneSentinel,
+  withPendingProposals,
+} from '@covel/tools';
 import type { EventBus } from '@covel/events';
 import { shouldTrigger } from './trigger.js';
 import { scheduleByPriority } from './scheduler.js';
@@ -839,8 +850,8 @@ export async function executeTurn(
     const form = out.form as Record<string, unknown> | undefined;
     const narrativeFallback =
       typeof out.narrativeTemplate === 'string' ? out.narrativeTemplate :
-      typeof out.narrativeOutput === 'string' ? out.narrativeOutput :
-      '';
+        typeof out.narrativeOutput === 'string' ? out.narrativeOutput :
+          '';
 
     if (interactions && interactions.length > 0) {
       for (const interaction of interactions) {
@@ -1144,16 +1155,16 @@ export async function resumeSuspendedRuntime(
   const finalizeWithPostRuntime = (result: RuntimeResult): RuntimeResult | Promise<RuntimeResult> =>
     hookPipeline
       ? runPostRuntimeHook(
-          {
-            pipeline: hookPipeline,
-            sessionId: suspension.sessionId,
-            turnId: suspension.turnId,
-            pluginId: manifest.pluginId,
-            runtimeId: manifest.name,
-            eventBus: deps.eventBus,
-          },
-          result,
-        )
+        {
+          pipeline: hookPipeline,
+          sessionId: suspension.sessionId,
+          turnId: suspension.turnId,
+          pluginId: manifest.pluginId,
+          runtimeId: manifest.name,
+          eventBus: deps.eventBus,
+        },
+        result,
+      )
       : result;
 
   // Load the runtime to get toolDefs etc.
@@ -1176,6 +1187,7 @@ export async function resumeSuspendedRuntime(
   const collectedToolCalls: ToolCallRecord[] = [...(pendingContinuation.toolCallsSoFar as ToolCallRecord[])];
   const executedToolCalls: ExecutedToolCallState[] = [];
   const failedToolCalls: FailedToolCallState[] = [];
+  const pendingProposals: Proposal[] = [...(pendingContinuation.pendingProposals as Proposal[])];
   let finalContent: string | null = pendingContinuation.partialContent ?? null;
   let steps = 0;
   const deadline = Date.now() + timeoutMs;
@@ -1257,6 +1269,10 @@ export async function resumeSuspendedRuntime(
               toolName: effectiveTc.name,
               message: extractToolFailureMessage(result.result),
             });
+          }
+
+          if (result.pendingProposals && result.pendingProposals.length > 0) {
+            pendingProposals.push(...result.pendingProposals);
           }
 
           // Detect nested suspend — not supported, treat as error result
@@ -1395,16 +1411,24 @@ export async function resumeSuspendedRuntime(
     output.narrativeOutput = sanitizeStoryNarrativeText(output.narrativeOutput);
   }
 
+  if (pendingProposals.length > 0) {
+    output = withPendingProposals(output, pendingProposals) as Record<string, unknown>;
+  }
+
   // Mark suspension as resolved
   if (deps.store) {
     await deps.store.markSuspensionResolved(suspension.id);
   }
 
-  // Emit turn.resumed event
+  // Emit turn.resumed event. Include pluginId/runtimeId so web clients can
+  // also use this payload to stamp execution-timeline chips as resolved
+  // without needing to cross-reference the original suspension record.
   emitSubEvent(deps.eventBus, 'game', 'turn.resumed', suspension.sessionId, {
     sessionId: suspension.sessionId,
     turnId: suspension.turnId,
     suspensionId: suspension.id,
+    pluginId: manifest.pluginId,
+    runtimeId: manifest.name,
   });
 
   return finalizeWithPostRuntime({
@@ -1547,10 +1571,8 @@ async function executeOneRuntime(
         deps.store
       ) {
         const suspensionId = crypto.randomUUID();
-        // INVARIANT (audit 2026-04-20 finding 9b): function runtimes have no
-        // tool loop and therefore produce no mid-turn proposals. `pendingProposals`
-        // MUST stay empty here. Function runtime suspends also carry no partial
-        // content (no streaming output).
+        // Function runtimes have no tool loop, so suspend records carry an
+        // empty pendingProposals array and no partial content.
         const suspension: SuspensionRecord = {
           id: suspensionId,
           sessionId: input.sessionId,
@@ -1572,6 +1594,9 @@ async function executeOneRuntime(
           sessionId: input.sessionId,
           turnId: input.turnId,
           suspensionId,
+          pluginId: manifest.pluginId,
+          runtimeId: manifest.name,
+          suspendedAt: suspension.createdAt,
           reason: suspension.reason,
           resumeSchema: suspension.resumeSchema,
         });
@@ -1631,8 +1656,8 @@ async function executeOneRuntime(
       if (deps.store) {
         const narrativeContent =
           typeof output.narrativeOutput === 'string' ? output.narrativeOutput :
-          typeof output.content === 'string' ? output.content :
-          JSON.stringify(output);
+            typeof output.content === 'string' ? output.content :
+              JSON.stringify(output);
 
         await deps.store.appendTurnMessage({
           id: crypto.randomUUID(),
@@ -1871,6 +1896,7 @@ async function executeOneRuntime(
     const collectedToolCalls: ToolCallRecord[] = [];
     const executedToolCalls: ExecutedToolCallState[] = [];
     const failedToolCalls: FailedToolCallState[] = [];
+    const pendingProposals: Proposal[] = [];
     let steps = 0;
 
     const deadline = Date.now() + timeoutMs;
@@ -2092,6 +2118,10 @@ async function executeOneRuntime(
               });
             }
 
+            if (toolResult.pendingProposals && toolResult.pendingProposals.length > 0) {
+              pendingProposals.push(...toolResult.pendingProposals);
+            }
+
             // ── Suspend detection (S4-T4) ────────────────────────
             // When COVEL_SUSPEND_V1=1 and the suspend tool was called, capture
             // the current loop state and persist a SuspensionRecord. The tool
@@ -2106,20 +2136,14 @@ async function executeOneRuntime(
               const suspensionId = crypto.randomUUID();
 
               // Messages array currently has the assistant message (with tool_calls)
-              // but NOT the tool result for the suspend call. We capture the full
-              // message array up to this point (including the assistant message).
-              //
-              // INVARIANT (audit 2026-04-20 finding 9b): `pendingProposals` is
-              // empty at suspend time. The agent tool loop emits proposals only
-              // via committed tool outputs, which all complete before the suspend
-              // sentinel fires. If that contract ever changes, capture the
-              // buffered proposals here and replay them in `resume-executor`
-              // before re-entering the loop.
+              // but not the suspend tool result. We capture the full message
+              // array together with any buffered proposals so resume can
+              // continue with the same mid-turn write set.
               const pendingContinuation: SuspensionRecord['pendingContinuation'] = {
                 messages: [...messages],
                 partialContent: finalContent ?? undefined,
                 toolCallsSoFar: [...collectedToolCalls],
-                pendingProposals: [],
+                pendingProposals: [...pendingProposals],
                 // Store the suspend tool's call ID so resume can append a proper tool result
                 suspendToolCallId: effectiveTc.id,
               };
@@ -2138,11 +2162,17 @@ async function executeOneRuntime(
 
               await deps.store.saveSuspension(suspension);
 
-              // Emit turn.suspended SSE event via the actions channel
+              // Emit turn.suspended SSE event via the actions channel.
+              // Include pluginId/runtimeId/suspendedAt so web clients can
+              // render a suspension row without a follow-up REST fetch
+              // (F4 web suspend/resume integration).
               emitSubEvent(deps.eventBus, 'game', 'turn.suspended', input.sessionId, {
                 sessionId: input.sessionId,
                 turnId: input.turnId,
                 suspensionId,
+                pluginId: manifest.pluginId,
+                runtimeId: manifest.name,
+                suspendedAt: suspension.createdAt,
                 reason: sentinel.reason,
                 resumeSchema: sentinel.resumeSchema,
               });
@@ -2205,7 +2235,7 @@ async function executeOneRuntime(
               input: parsedInput,
               output: toolResult.parsedResult,
               durationMs: Date.now() - tcStart,
-              approvalStatus: toolResult.approvalStatus,
+              approvalStatus: toolResult.approvalStatus ?? 'auto-allowed',
               timestamp: new Date().toISOString(),
             });
 
@@ -2403,6 +2433,10 @@ async function executeOneRuntime(
       output.narrativeOutput = sanitizeStoryNarrativeText(output.narrativeOutput);
     }
 
+    if (pendingProposals.length > 0) {
+      output = withPendingProposals(output, pendingProposals) as Record<string, unknown>;
+    }
+
     const result: RuntimeResult = {
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
@@ -2420,9 +2454,9 @@ async function executeOneRuntime(
       // Extract narrative content: try narrativeTemplate (for form-based plugins), then narrativeOutput, then stringify
       const narrativeContent =
         typeof output.narrativeTemplate === 'string' ? output.narrativeTemplate :
-        typeof output.narrativeOutput === 'string' ? output.narrativeOutput :
-        typeof output.content === 'string' ? output.content :
-        JSON.stringify(output);
+          typeof output.narrativeOutput === 'string' ? output.narrativeOutput :
+            typeof output.content === 'string' ? output.content :
+              JSON.stringify(output);
 
       // Extract pendingInput: prefer interactions array, fall back to legacy form
       const interactionsArr = output.interactions as unknown[] | undefined;

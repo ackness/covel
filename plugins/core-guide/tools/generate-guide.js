@@ -8,6 +8,8 @@
  * Returns UI blocks that json-render renders as styled choice cards.
  */
 
+import { withPendingProposals } from '@covel/tools';
+
 const STYLE_CONFIG = {
   safe:       { zh: '稳妥', en: 'Safe',       icon: 'shield',     color: 'blue' },
   aggressive: { zh: '激进', en: 'Aggressive',  icon: 'swords',     color: 'red' },
@@ -15,7 +17,7 @@ const STYLE_CONFIG = {
   wild:       { zh: '疯狂', en: 'Wild',        icon: 'flame',      color: 'amber' },
 };
 
-export default function ({ tool, z, store }) {
+export default function ({ tool, z }) {
   const categorySchema = z.object({
     style: z.enum(['safe', 'aggressive', 'creative', 'wild']),
     label: z.string().optional(),
@@ -46,16 +48,39 @@ export default function ({ tool, z, store }) {
         };
       });
 
-      if (store && typeof store.setPluginDataBatch === "function") {
-        const now = new Date().toISOString();
-        const messageRecords = [
+      const now = new Date().toISOString();
+      const messageRecords = [
+        {
+          id: crypto.randomUUID(),
+          sessionId: context.sessionId,
+          pluginId: context.pluginId,
+          namespace: "message",
+          key: "__turnId",
+          value: context.turnId,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: crypto.randomUUID(),
+          sessionId: context.sessionId,
+          pluginId: context.pluginId,
+          namespace: "message",
+          key: "topic",
+          value: topic,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ];
+
+      for (const category of resolvedCategories.slice(0, 3)) {
+        messageRecords.push(
           {
             id: crypto.randomUUID(),
             sessionId: context.sessionId,
             pluginId: context.pluginId,
             namespace: "message",
-            key: "__turnId",
-            value: context.turnId,
+            key: `category${category.slot}Label`,
+            value: category.label,
             createdAt: now,
             updatedAt: now,
           },
@@ -64,68 +89,58 @@ export default function ({ tool, z, store }) {
             sessionId: context.sessionId,
             pluginId: context.pluginId,
             namespace: "message",
-            key: "topic",
-            value: topic,
+            key: `category${category.slot}Icon`,
+            value: category.icon,
             createdAt: now,
             updatedAt: now,
           },
-        ];
+          {
+            id: crypto.randomUUID(),
+            sessionId: context.sessionId,
+            pluginId: context.pluginId,
+            namespace: "message",
+            key: `category${category.slot}Color`,
+            value: category.color,
+            createdAt: now,
+            updatedAt: now,
+          },
+        );
 
-        for (const category of resolvedCategories.slice(0, 3)) {
-          messageRecords.push(
-            {
-              id: crypto.randomUUID(),
-              sessionId: context.sessionId,
-              pluginId: context.pluginId,
-              namespace: "message",
-              key: `category${category.slot}Label`,
-              value: category.label,
-              createdAt: now,
-              updatedAt: now,
-            },
-            {
-              id: crypto.randomUUID(),
-              sessionId: context.sessionId,
-              pluginId: context.pluginId,
-              namespace: "message",
-              key: `category${category.slot}Icon`,
-              value: category.icon,
-              createdAt: now,
-              updatedAt: now,
-            },
-            {
-              id: crypto.randomUUID(),
-              sessionId: context.sessionId,
-              pluginId: context.pluginId,
-              namespace: "message",
-              key: `category${category.slot}Color`,
-              value: category.color,
-              createdAt: now,
-              updatedAt: now,
-            },
-          );
-
-          for (let i = 0; i < 3; i += 1) {
-            messageRecords.push({
-              id: crypto.randomUUID(),
-              sessionId: context.sessionId,
-              pluginId: context.pluginId,
-              namespace: "message",
-              key: `category${category.slot}Suggestion${i + 1}`,
-              value: category.suggestions[i] ?? "",
-              createdAt: now,
-              updatedAt: now,
-            });
-          }
+        for (let i = 0; i < 3; i += 1) {
+          messageRecords.push({
+            id: crypto.randomUUID(),
+            sessionId: context.sessionId,
+            pluginId: context.pluginId,
+            namespace: "message",
+            key: `category${category.slot}Suggestion${i + 1}`,
+            value: category.suggestions[i] ?? "",
+            createdAt: now,
+            updatedAt: now,
+          });
         }
-
-        await store.setPluginDataBatch(messageRecords);
       }
 
-      return {
-        topic,
-        categories: resolvedCategories,
-      };
+      return withPendingProposals(
+        {
+          topic,
+          categories: resolvedCategories,
+        },
+        [{
+          id: crypto.randomUUID(),
+          type: 'plugin.data.batch',
+          source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
+          turnId: context.turnId,
+          sessionId: context.sessionId,
+          payload: {
+            items: messageRecords.map((record) => ({
+              namespace: record.namespace,
+              key: record.key,
+              value: record.value,
+            })),
+          },
+          timestamp: now,
+        }],
+      );
     },
   });
 }

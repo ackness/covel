@@ -20,6 +20,7 @@ export type ProposalType =
   | 'ui.render'
   | 'asset.generate'
   | 'plugin.data'
+  | 'plugin.data.batch'
   | 'working_memory.set'
   | 'lorebook.upsert';
 
@@ -77,6 +78,10 @@ export interface PluginDataPayload {
   readonly namespace: string;
   readonly key: string;
   readonly value: unknown;
+}
+
+export interface PluginDataBatchPayload {
+  readonly items: readonly PluginDataPayload[];
 }
 
 export interface WorkingMemorySetPayload {

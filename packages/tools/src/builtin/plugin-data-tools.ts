@@ -2,26 +2,19 @@
  * Built-in plugin data tools — allow LLM agents to read/write plugin-scoped
  * persistent data via function calling.
  *
- * These tools require a DataStore instance, injected at creation time via
- * `createPluginDataTools(store)`. The store is captured in closures.
+ * Read tools use the injected store directly. Write tools return
+ * proposal-backed results so the Session Kernel commit chain performs the
+ * actual persistence.
  */
 
+import type { PluginDataBatchPayload, PluginDataPayload, Proposal } from '@covel/shared';
 import { z } from 'zod';
+import { withPendingProposals } from '../result.js';
 import { tool } from '../tool.js';
 import type { ToolModule } from '../types.js';
 
-/** Minimal store interface for plugin data operations (avoids @covel/store dependency). */
+/** Minimal read-only store interface for plugin data operations. */
 interface PluginDataStore {
-  setPluginData(record: {
-    id: string; sessionId: string; pluginId: string;
-    namespace: string; key: string; value: unknown;
-    createdAt: string; updatedAt: string;
-  }): Promise<void>;
-  setPluginDataBatch(records: readonly {
-    id: string; sessionId: string; pluginId: string;
-    namespace: string; key: string; value: unknown;
-    createdAt: string; updatedAt: string;
-  }[]): Promise<void>;
   getPluginData(sessionId: string, pluginId: string, namespace: string, key: string): Promise<{
     namespace: string; key: string; value: unknown; updatedAt: string;
   } | null>;
@@ -30,9 +23,41 @@ interface PluginDataStore {
   }>>;
 }
 
+function makePluginDataProposal(
+  context: { sessionId: string; turnId: string; pluginId: string; runtimeId: string },
+  payload: PluginDataPayload,
+  timestamp: string,
+): Proposal {
+  return {
+    id: crypto.randomUUID(),
+    type: 'plugin.data',
+    source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
+    turnId: context.turnId,
+    sessionId: context.sessionId,
+    payload: payload as unknown as Record<string, unknown>,
+    timestamp,
+  };
+}
+
+function makePluginDataBatchProposal(
+  context: { sessionId: string; turnId: string; pluginId: string; runtimeId: string },
+  payload: PluginDataBatchPayload,
+  timestamp: string,
+): Proposal {
+  return {
+    id: crypto.randomUUID(),
+    type: 'plugin.data.batch',
+    source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
+    turnId: context.turnId,
+    sessionId: context.sessionId,
+    payload: payload as unknown as Record<string, unknown>,
+    timestamp,
+  };
+}
+
 // ── plugin-data-set ─────────────────────────────────────────────
 
-function createPluginDataSetTool(store: PluginDataStore): ToolModule {
+function createPluginDataSetTool(): ToolModule {
   return tool({
     name: 'plugin-data-set',
     description: '将数据写入插件的持久化存储。数据按 namespace + key 组织，value 为任意 JSON。相同 (namespace, key) 会覆盖旧值。',
@@ -42,29 +67,28 @@ function createPluginDataSetTool(store: PluginDataStore): ToolModule {
       value: z.unknown().describe('要存储的 JSON 数据'),
     }),
     execute: async (params, context) => {
-      const now = new Date().toISOString();
-      await store.setPluginData({
-        id: crypto.randomUUID(),
-        sessionId: context.sessionId,
-        pluginId: context.pluginId,
-        namespace: params.namespace,
-        key: params.key,
-        value: params.value,
-        createdAt: now,
-        updatedAt: now,
-      });
-      return {
-        success: true,
-        namespace: params.namespace,
-        key: params.key,
-      };
+      const timestamp = new Date().toISOString();
+      return withPendingProposals(
+        {
+          success: true,
+          namespace: params.namespace,
+          key: params.key,
+        },
+        [
+          makePluginDataProposal(context, {
+            namespace: params.namespace,
+            key: params.key,
+            value: params.value,
+          }, timestamp),
+        ],
+      );
     },
   });
 }
 
 // ── plugin-data-set-batch ───────────────────────────────────────
 
-function createPluginDataSetBatchTool(store: PluginDataStore): ToolModule {
+function createPluginDataSetBatchTool(): ToolModule {
   return tool({
     name: 'plugin-data-set-batch',
     description: '批量写入多条数据到插件持久化存储。一次调用写入整个数组，避免逐条调用的开销。相同 (namespace, key) 会覆盖旧值。',
@@ -76,23 +100,23 @@ function createPluginDataSetBatchTool(store: PluginDataStore): ToolModule {
       })).min(1).describe('要批量写入的数据条目数组'),
     }),
     execute: async (params, context) => {
-      const now = new Date().toISOString();
-      const records = params.items.map((item) => ({
-        id: crypto.randomUUID(),
-        sessionId: context.sessionId,
-        pluginId: context.pluginId,
-        namespace: item.namespace,
-        key: item.key,
-        value: item.value,
-        createdAt: now,
-        updatedAt: now,
-      }));
-      await store.setPluginDataBatch(records);
-      return {
-        success: true,
-        count: records.length,
-        items: params.items.map((item) => ({ namespace: item.namespace, key: item.key })),
-      };
+      const timestamp = new Date().toISOString();
+      return withPendingProposals(
+        {
+          success: true,
+          count: params.items.length,
+          items: params.items.map((item) => ({ namespace: item.namespace, key: item.key })),
+        },
+        [
+          makePluginDataBatchProposal(context, {
+            items: params.items.map((item) => ({
+              namespace: item.namespace,
+              key: item.key,
+              value: item.value,
+            })),
+          }, timestamp),
+        ],
+      );
     },
   });
 }
@@ -169,8 +193,8 @@ function createPluginDataListTool(store: PluginDataStore): ToolModule {
  */
 export function createPluginDataTools(store: PluginDataStore): ToolModule[] {
   return [
-    createPluginDataSetTool(store),
-    createPluginDataSetBatchTool(store),
+    createPluginDataSetTool(),
+    createPluginDataSetBatchTool(),
     createPluginDataGetTool(store),
     createPluginDataListTool(store),
   ];

@@ -16,7 +16,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 |------|-----|------|
 | SQLite | `sqlite` (默认) | 本机开发 / 单机部署，数据落到 `./data/covel.db` |
 | Memory | `memory` | 测试或一次性 demo，数据存于内存，重启丢失 |
-| PostgreSQL | `pg` | 生产环境，需配置 `DATABASE_URL` |
+| PostgreSQL | `pg` | 生产环境，需配置 `DATABASE_URL`；**多实例部署自动启用 `pg_advisory_lock` 分布式会话锁，跨 Node 进程对同一 session 互斥** |
 
 > **注意**: IndexedDB (IDB) 是**前端专用**的存储后端，仅在浏览器中使用，服务器端不可用。
 
@@ -2244,9 +2244,11 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 | 能力 | Memory | SQLite | PostgreSQL |
 |------|--------|--------|------------|
 | 持久化 | 否 (重启丢失) | 是 (本地文件) | 是 (远程数据库) |
-| 并发 | 单进程 | 单进程 | 多进程 |
+| 并发 | 单进程 | 单进程 | 多进程（`pg_advisory_lock` 实现 session 级跨进程串行化） |
 | 适用场景 | 测试 / 一次性 demo | 单机部署（默认） | 生产环境 |
 | 配置 | `STORE_BACKEND=memory` | 默认（`STORE_BACKEND=sqlite`，可显式指定） | `STORE_BACKEND=pg` + `DATABASE_URL` |
+
+> **多进程部署 session 锁**：当 `STORE_BACKEND=pg` 时，服务器启动日志会输出 `session lock: pg-advisory`。每次 `/api/actions` / `/api/sessions/:id/turn` / `/api/sessions/:id/resume` 都会在专用 PG 连接上拿到 `pg_advisory_lock(hash(sessionId))`，确保同一 session 在任意时刻只有一个 Node 进程执行 turn。Memory / SQLite 后端使用进程内 `Map` 锁，足以覆盖单进程场景。
 
 ### 关键环境变量
 
