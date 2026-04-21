@@ -16,7 +16,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
-import { LorebookPanel } from "./lorebook-panel.js";
+import { WorldDocumentPanel } from "./world-document-panel.js";
 import { PluginPanel } from "./plugin-panel.js";
 import { DatabasePanel } from "./database-panel.js";
 import {
@@ -24,7 +24,7 @@ import {
   fetchUiSpecs,
   listPluginData,
 } from "@/services/api.js";
-import type { UISlotEntry } from "@/services/api.js";
+import type { UISlotEntry, WorldRecord } from "@/services/api.js";
 import { resolveI18n } from "@/lib/catalog.js";
 import { loadPluginData } from "@/stores/plugin-data-store.js";
 
@@ -94,6 +94,8 @@ function aggregateSpecsIntoGroups(
 
 export interface RightPanelProps {
   sessionId: string;
+  /** Currently loaded world — its `lore` (WORLD.md) is rendered in the World tab. */
+  world: WorldRecord | null;
   /**
    * State change patches — only used as a freshness signal for the DB
    * tab. We pass the length as `refreshKey` so the panel re-fetches
@@ -115,6 +117,7 @@ export interface RightPanelProps {
  */
 export function RightPanel({
   sessionId,
+  world,
   statePatches,
   onToggleRightPanel,
 }: RightPanelProps) {
@@ -239,7 +242,7 @@ export function RightPanel({
             <BookOpen className="w-4 h-4 shrink-0" />{" "}
             {t("session.worldTab")}
           </h3>
-          <LorebookPanel sessionId={sessionId} />
+          <WorldDocumentPanel world={world} />
         </TabsContent>
         <TabsContent value="database" className="p-4 m-0">
           <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">

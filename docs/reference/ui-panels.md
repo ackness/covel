@@ -63,19 +63,16 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 > `core-char-creator` 的 character-panel 由 player-init runtime 声明，character-tracker runtime 共享同一个 namespace `characters`（由 `create-character` / `update-character` builtin 工具写入）。
 > `core-npc-graph/extractor` 的 npc-graph-panel 引用 `GraphCanvas` 组件读取 `nodes` + `edges` 两个 namespace，呈现 force-directed 关系图（react-force-graph-2d 懒加载）。
 
-### Lorebook（框架自持 Tab）
+### 世界文档（框架自持 Tab）
 
-`Lorebook` 是 activity bar 中**框架自持**的 Tab（S3-T6），与插件驱动的 Tab 并列但不受 `/api/ui-specs` 影响：
+`世界` 是 activity bar 中**框架自持**的 Tab，与插件驱动的 Tab 并列但不受 `/api/ui-specs` 影响：
 
-- **数据源**：`GET /api/sessions/:id/lorebook` → `{ entries: LorebookEntryRecord[] }`，直接读取 store 层的 session 级 lorebook 表（由插件通过 proposal commit 写入）。
-- **交互**：
-  - 展示每条 entry 的 `id` / `pluginId` / `strategy` / `position` / `insertionOrder` / `keys`
-  - 内容支持展开/收起（预览 120 字符）
-  - 启用/禁用开关 → `PATCH /api/sessions/:id/lorebook/:entryId { enabled }`
-  - 删除 → `DELETE /api/sessions/:id/lorebook/:entryId`
-- **刷新策略（MVP）**：首次挂载 fetch + 顶部手动刷新按钮。没有专用 SSE 事件；lorebook 通过回合 commit 路径写入，接受回合间最终一致。
-- **实现**：`apps/web/src/components/session/lorebook-panel.tsx`，在 `right-panel.tsx` 中以独立的 activity-bar 按钮挂载（`FRAMEWORK_TAB_LOREBOOK` 常量），仅在 session 存在时显示。
-- **隔离规则**：Tab 代码属于框架，但不硬编码任何具体插件 ID —— 每条 entry 的 `pluginId` 字段由数据自身携带，仅作显示用途。
+- **数据源**：当前 session 的 `WorldRecord.lore`（即 `worlds/<id>/WORLD.md`，按 `defaultLocale` 解析 `WORLD.<lang>.md` → `WORLD.md`），由 `world-seed-loader` 在启动时写入 store。
+- **交互**：以 Markdown 渲染（`@/components/ui/markdown`，`react-markdown` + `remark-gfm`）。`lore` 为空时回退展示 `description`，再为空展示 `worldDocumentEmpty` 文案。
+- **实现**：`apps/web/src/components/session/world-document-panel.tsx`，在 `right-panel.tsx` 中以 `world` Tab 挂载，由 `game-view.tsx` 注入当前 `world: WorldRecord | null` prop。
+- **隔离规则**：Tab 代码属于框架，仅依赖 `WorldRecord` 公开字段，不感知任何插件 ID。
+
+> Lorebook 仍由 HTTP API（`GET/PATCH/DELETE /api/sessions/:id/lorebook[/:entryId]`）提供，目前没有内置 UI 消费方；如需展示，可由插件通过 `ui.right` JSON spec 自行实现。
 
 ### 声明方式
 
