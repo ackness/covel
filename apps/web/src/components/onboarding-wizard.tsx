@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   X, ChevronRight, Sparkles, KeyRound, Rocket, Package,
@@ -8,10 +8,10 @@ import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
 import {
   getProviderKeys, setProviderKeys, pingPreset,
-  addCustomPreset, uid, listPresets,
+  getCustomPresets, setCustomPresets, uid, listPresets,
   getSlotConfig, setSlotConfig,
 } from "@/services/api.js";
-import type { PingResult } from "@/services/api.js";
+import type { PingResult, PresetSummary, CustomPreset } from "@/services/api.js";
 import { useLocalePreference } from "@/hooks/useLocalePreference";
 
 /**
@@ -22,7 +22,7 @@ import { useLocalePreference } from "@/hooks/useLocalePreference";
  */
 const STORAGE_KEY = "covel:onboardedVersion";
 const LEGACY_STORAGE_KEY = "covel:onboarded";
-const ONBOARDING_VERSION = 2;
+const ONBOARDING_VERSION = 3;
 const CUSTOM_PROVIDER_ID = "__custom__";
 
 const PROVIDERS = [
@@ -60,6 +60,7 @@ interface ProviderFormState {
   selected: string;
   apiKey: string;
   keyVisible: boolean;
+  builtInModel: string;
   customBaseUrl: string;
   customModel: string;
   customProviderName: string;
@@ -71,11 +72,59 @@ function emptyFormState(initialProvider = "deepseek"): ProviderFormState {
     selected: initialProvider,
     apiKey: "",
     keyVisible: false,
+    builtInModel: "",
     customBaseUrl: "",
     customModel: "",
     customProviderName: "",
     pingResult: null,
   };
+}
+
+function providerOptionLabel(providerId: string): string {
+  return PROVIDERS.find((item) => item.id === providerId)?.name ?? providerId;
+}
+
+function modelOptionsForProvider(
+  presets: PresetSummary[],
+  providerId: string,
+): string[] {
+  return [...new Set(
+    presets
+      .filter((preset) => preset.enabled && preset.provider === providerId)
+      .map((preset) => preset.model),
+  )];
+}
+
+function defaultModelForProvider(
+  presets: PresetSummary[],
+  providerId: string,
+): string {
+  return modelOptionsForProvider(presets, providerId)[0] ?? "";
+}
+
+function findReusableCustomPreset(
+  expected: Pick<CustomPreset, "provider" | "model" | "baseUrl" | "protocol">,
+): CustomPreset | undefined {
+  return getCustomPresets().find((preset) =>
+    preset.provider === expected.provider
+    && preset.model === expected.model
+    && (preset.baseUrl ?? "") === (expected.baseUrl ?? "")
+    && (preset.protocol ?? "") === (expected.protocol ?? "")
+  );
+}
+
+function upsertTransientPreset(
+  input: Omit<CustomPreset, "id">,
+): string {
+  const existing = findReusableCustomPreset(input);
+  if (existing) return existing.id;
+
+  const nextPreset: CustomPreset = {
+    ...input,
+    id: `custom_${uid()}`,
+  };
+  setCustomPresets([...getCustomPresets(), nextPreset]);
+  return nextPreset.id;
 }
 
 /**
@@ -87,14 +136,20 @@ function ProviderForm({
   state,
   onChange,
   onPing,
+  presets,
+  slotName,
 }: {
   state: ProviderFormState;
   onChange: (next: ProviderFormState) => void;
   onPing: () => void;
+  presets: PresetSummary[];
+  slotName: "story" | "plugin";
 }) {
   const { t } = useTranslation();
   const isCustom = state.selected === CUSTOM_PROVIDER_ID;
   const provider = PROVIDERS.find((p) => p.id === state.selected) ?? PROVIDERS[0];
+  const modelOptions = modelOptionsForProvider(presets, state.selected);
+  const modelListId = `onboarding-models-${slotName}`;
 
   const handleProviderSelect = (providerId: string) => {
     const existing = getProviderKeys();
@@ -102,6 +157,10 @@ function ProviderForm({
       selected: providerId,
       apiKey: providerId === CUSTOM_PROVIDER_ID ? "" : (existing[providerId] ?? ""),
       keyVisible: false,
+      builtInModel:
+        providerId === CUSTOM_PROVIDER_ID
+          ? state.builtInModel
+          : defaultModelForProvider(presets, providerId),
       pingResult: null,
       customBaseUrl: providerId === CUSTOM_PROVIDER_ID ? state.customBaseUrl : "",
       customModel: providerId === CUSTOM_PROVIDER_ID ? state.customModel : "",
@@ -144,6 +203,34 @@ function ProviderForm({
           </button>
         </div>
       </div>
+
+      {!isCustom && (
+        <div className="space-y-1.5">
+          <Label className="text-[10px] uppercase tracking-widest text-zinc-500">
+            {t("onboarding.modelId", "Model ID")}
+          </Label>
+          <input
+            type="text"
+            list={modelOptions.length > 0 ? modelListId : undefined}
+            placeholder="deepseek-chat / gpt-4o / claude-sonnet-4-20250514"
+            value={state.builtInModel}
+            onChange={(e) => onChange({ ...state, builtInModel: e.target.value, pingResult: null })}
+            className="w-full bg-zinc-900 border border-zinc-700 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
+          />
+          {modelOptions.length > 0 && (
+            <>
+              <datalist id={modelListId}>
+                {modelOptions.map((model) => (
+                  <option key={model} value={model} />
+                ))}
+              </datalist>
+              <div className="text-[10px] text-zinc-500">
+                {t("onboarding.modelIdHint", "Pick one of the detected models or type a model ID directly.")}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {isCustom && (
         <div className="space-y-2">
@@ -261,8 +348,8 @@ function ProviderForm({
 /**
  * Persist an API key + slot binding.
  *
- * For built-in providers we look up the first enabled preset whose
- * `provider` field matches the user's pick and point the slot at it.
+ * For built-in providers we bind the slot to the exact provider/model pair.
+ * Existing presets are reused; arbitrary model IDs synthesize a local preset.
  * For custom providers we register a local custom preset and point the
  * slot at that. Returns the resolved preset ID, or undefined if no match
  * could be found (e.g. built-in provider with no server-side preset yet).
@@ -270,6 +357,7 @@ function ProviderForm({
 async function persistSlot(
   form: ProviderFormState,
   slotName: "story" | "plugin",
+  presetCatalog: PresetSummary[],
 ): Promise<string | undefined> {
   const key = form.apiKey.trim();
   if (!key) return undefined;
@@ -281,9 +369,7 @@ async function persistSlot(
     const existingKeys = getProviderKeys();
     setProviderKeys({ ...existingKeys, [provName]: key });
 
-    const presetId = `custom_${uid()}`;
-    addCustomPreset({
-      id: presetId,
+    const presetId = upsertTransientPreset({
       name: `${provName} — ${form.customModel || "default"}`,
       provider: provName,
       baseUrl: form.customBaseUrl.trim(),
@@ -298,15 +384,32 @@ async function persistSlot(
 
   const existingKeys = getProviderKeys();
   setProviderKeys({ ...existingKeys, [form.selected]: key });
+  const desiredModel = form.builtInModel.trim();
+  if (!desiredModel) return undefined;
 
   try {
-    const presets = await listPresets();
-    const match = presets.find((p) => p.provider === form.selected && p.enabled);
+    const presets = presetCatalog.length > 0 ? presetCatalog : await listPresets();
+    const match = presets.find((p) =>
+      p.provider === form.selected
+      && p.enabled
+      && p.model === desiredModel,
+    );
     if (match) {
       const slots = getSlotConfig();
       setSlotConfig({ ...slots, [slotName]: { presetId: match.id } });
       return match.id;
     }
+
+    const presetId = upsertTransientPreset({
+      name: `${providerOptionLabel(form.selected)} — ${desiredModel}`,
+      provider: form.selected,
+      model: desiredModel,
+      baseUrl: "",
+      apiKey: key,
+    });
+    const slots = getSlotConfig();
+    setSlotConfig({ ...slots, [slotName]: { presetId } });
+    return presetId;
   } catch {
     // Network hiccup — leave slot config untouched so the ping probe
     // surfaces the real problem to the user.
@@ -319,10 +422,49 @@ export function OnboardingWizard() {
   const { t } = useTranslation();
   const { locale, setLocale } = useLocalePreference();
   const [step, setStep] = useState(0);
+  const [availablePresets, setAvailablePresets] = useState<PresetSummary[]>([]);
 
   const [storyForm, setStoryForm] = useState<ProviderFormState>(() => emptyFormState());
   const [pluginMode, setPluginMode] = useState<"same" | "different">("same");
   const [pluginForm, setPluginForm] = useState<ProviderFormState>(() => emptyFormState());
+
+  useEffect(() => {
+    let alive = true;
+    void listPresets()
+      .then((presets) => {
+        if (!alive) return;
+        setAvailablePresets(presets.filter((preset) => preset.enabled));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setAvailablePresets([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (storyForm.selected === CUSTOM_PROVIDER_ID || storyForm.builtInModel.trim()) return;
+    const nextModel = defaultModelForProvider(availablePresets, storyForm.selected);
+    if (!nextModel) return;
+    setStoryForm((current) =>
+      current.selected === CUSTOM_PROVIDER_ID || current.builtInModel.trim()
+        ? current
+        : { ...current, builtInModel: nextModel },
+    );
+  }, [availablePresets, storyForm.selected, storyForm.builtInModel]);
+
+  useEffect(() => {
+    if (pluginForm.selected === CUSTOM_PROVIDER_ID || pluginForm.builtInModel.trim()) return;
+    const nextModel = defaultModelForProvider(availablePresets, pluginForm.selected);
+    if (!nextModel) return;
+    setPluginForm((current) =>
+      current.selected === CUSTOM_PROVIDER_ID || current.builtInModel.trim()
+        ? current
+        : { ...current, builtInModel: nextModel },
+    );
+  }, [availablePresets, pluginForm.selected, pluginForm.builtInModel]);
 
   const dismiss = useCallback(() => {
     markOnboarded();
@@ -342,7 +484,7 @@ export function OnboardingWizard() {
   }, [step]);
 
   const handlePingStory = useCallback(async () => {
-    await persistSlot(storyForm, "story");
+    await persistSlot(storyForm, "story", availablePresets);
     setStoryForm((s) => ({ ...s, pingResult: { ok: false, latencyMs: 0, testing: true } }));
     try {
       const result = await pingPreset("slot-story");
@@ -357,10 +499,10 @@ export function OnboardingWizard() {
         },
       }));
     }
-  }, [storyForm]);
+  }, [storyForm, availablePresets]);
 
   const handlePingPlugin = useCallback(async () => {
-    await persistSlot(pluginForm, "plugin");
+    await persistSlot(pluginForm, "plugin", availablePresets);
     setPluginForm((p) => ({ ...p, pingResult: { ok: false, latencyMs: 0, testing: true } }));
     try {
       const result = await pingPreset("slot-plugin");
@@ -375,10 +517,10 @@ export function OnboardingWizard() {
         },
       }));
     }
-  }, [pluginForm]);
+  }, [pluginForm, availablePresets]);
 
   const handleContinueFromStory = useCallback(async () => {
-    await persistSlot(storyForm, "story");
+    await persistSlot(storyForm, "story", availablePresets);
     // Default plugin slot to story when entering step 2 for the first time
     // so the "use same" radio reflects a real binding.
     const slots = getSlotConfig();
@@ -386,11 +528,11 @@ export function OnboardingWizard() {
       setSlotConfig({ ...slots, plugin: slots.story });
     }
     setStep((s) => s + 1);
-  }, [storyForm]);
+  }, [storyForm, availablePresets]);
 
   const handleContinueFromPlugin = useCallback(async () => {
     if (pluginMode === "different" && pluginForm.apiKey.trim()) {
-      await persistSlot(pluginForm, "plugin");
+      await persistSlot(pluginForm, "plugin", availablePresets);
     } else {
       const slots = getSlotConfig();
       if (slots.story) {
@@ -401,24 +543,30 @@ export function OnboardingWizard() {
       }
     }
     setStep((s) => s + 1);
-  }, [pluginForm, pluginMode]);
+  }, [pluginForm, pluginMode, availablePresets]);
 
   if (!visible) return null;
 
   const storyCustom = storyForm.selected === CUSTOM_PROVIDER_ID;
   const storyProvider = PROVIDERS.find((p) => p.id === storyForm.selected) ?? PROVIDERS[0];
   const storyContinueDisabled =
-    !storyForm.apiKey.trim() || (storyCustom && !storyForm.customBaseUrl.trim());
+    !storyForm.apiKey.trim()
+    || (storyCustom
+      ? !storyForm.customBaseUrl.trim()
+      : !storyForm.builtInModel.trim());
 
   const pluginCustom = pluginForm.selected === CUSTOM_PROVIDER_ID;
   const pluginContinueDisabled =
     pluginMode === "different" &&
-    (!pluginForm.apiKey.trim() || (pluginCustom && !pluginForm.customBaseUrl.trim()));
+    (!pluginForm.apiKey.trim()
+      || (pluginCustom
+        ? !pluginForm.customBaseUrl.trim()
+        : !pluginForm.builtInModel.trim()));
 
   const storySummary = storyCustom
     ? (storyForm.customProviderName.trim() || "custom") +
       (storyForm.customModel.trim() ? ` — ${storyForm.customModel.trim()}` : "")
-    : storyProvider.name;
+    : `${storyProvider.name}${storyForm.builtInModel.trim() ? ` — ${storyForm.builtInModel.trim()}` : ""}`;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
@@ -525,7 +673,13 @@ export function OnboardingWizard() {
                 </p>
               </div>
 
-              <ProviderForm state={storyForm} onChange={setStoryForm} onPing={handlePingStory} />
+              <ProviderForm
+                state={storyForm}
+                onChange={setStoryForm}
+                onPing={handlePingStory}
+                presets={availablePresets}
+                slotName="story"
+              />
 
               <div className="flex items-center gap-2 pt-2">
                 <Button
@@ -627,6 +781,8 @@ export function OnboardingWizard() {
                   state={pluginForm}
                   onChange={setPluginForm}
                   onPing={handlePingPlugin}
+                  presets={availablePresets}
+                  slotName="plugin"
                 />
               )}
 

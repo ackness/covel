@@ -302,52 +302,34 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
         {/* Storage mode is always "remote" (server-side SQLite). Toggle removed. */}
 
-        <Tabs defaultValue={isConfigured ? "overview" : "slots"} className="flex-1 overflow-hidden flex flex-col">
+        <Tabs defaultValue="slots" className="flex-1 overflow-hidden flex flex-col">
           {(() => {
             const desktop = isDesktop();
-            // Add one extra column when the Desktop tab is shown
-            const baseCols = isConfigured ? 3 : 4;
+            const baseCols = 4;
             const gridCols = desktop ? baseCols + 1 : baseCols;
             return (
               <TabsList
                 className="w-full grid"
                 style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
               >
-                {isConfigured ? (
-                  <>
-                    <TabsTrigger value="overview" className="text-xs">
-                      <Cpu className="w-3 h-3 mr-1" />
-                      Slots
-                    </TabsTrigger>
-                    <TabsTrigger value="keys" className="text-xs">
-                      <KeyRound className="w-3 h-3 mr-1" />
-                      Keys
-                    </TabsTrigger>
-                    <TabsTrigger value="advanced" className="text-xs">
-                      <SlidersHorizontal className="w-3 h-3 mr-1" />
-                      Advanced
-                    </TabsTrigger>
-                  </>
-                ) : (
-                  <>
-                    <TabsTrigger value="slots" className="text-xs">
-                      <Cpu className="w-3 h-3 mr-1" />
-                      Slots
-                    </TabsTrigger>
-                    <TabsTrigger value="keys" className="text-xs">
-                      <KeyRound className="w-3 h-3 mr-1" />
-                      Keys
-                    </TabsTrigger>
-                    <TabsTrigger value="advanced" className="text-xs">
-                      <SlidersHorizontal className="w-3 h-3 mr-1" />
-                      Advanced
-                    </TabsTrigger>
-                    <TabsTrigger value="presets" className="text-xs">
-                      <Plus className="w-3 h-3 mr-1" />
-                      Presets
-                    </TabsTrigger>
-                  </>
-                )}
+                <>
+                  <TabsTrigger value="slots" className="text-xs">
+                    <Cpu className="w-3 h-3 mr-1" />
+                    Slots
+                  </TabsTrigger>
+                  <TabsTrigger value="keys" className="text-xs">
+                    <KeyRound className="w-3 h-3 mr-1" />
+                    Keys
+                  </TabsTrigger>
+                  <TabsTrigger value="advanced" className="text-xs">
+                    <SlidersHorizontal className="w-3 h-3 mr-1" />
+                    Advanced
+                  </TabsTrigger>
+                  <TabsTrigger value="presets" className="text-xs">
+                    <Plus className="w-3 h-3 mr-1" />
+                    Presets
+                  </TabsTrigger>
+                </>
                 {desktop && (
                   <TabsTrigger value="desktop" className="text-xs">
                     <Monitor className="w-3 h-3 mr-1" />
@@ -359,95 +341,151 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           })()}
 
           <div className="flex-1 overflow-y-auto mt-2 pr-1">
-            {/* ── Configured mode: Slot Overview (read-only from llm.toml) ── */}
-            {isConfigured && (
-              <TabsContent value="overview" className="space-y-3 mt-0">
+            {/* ── Slot Configuration ── */}
+            <TabsContent value="slots" className="space-y-3 mt-0">
+              {isConfigured && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Info className="w-3 h-3" />
                   <span>{t("settings.configuredByToml")}</span>
                 </div>
-                {configuredSlots.map((slotId) => {
-                  const slot = llm!.slots[slotId];
-                  const presetId = `slot-${slotId}`;
-                  const ping = pingResults[presetId];
-                  const isTesting = ping?.testing;
-                  const cap = slot.capability;
-                  const isFirst = slotId === configuredSlots[0];
-                  return (
-                    <div key={slotId} className="border border-border p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">
-                            {slotId}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {isFirst && <Badge variant="default" className="text-[10px]">default</Badge>}
-                          {slot.fallback && (
-                            <Badge variant="secondary" className="text-[10px]">
-                              fallback: {slot.fallback}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-xs text-muted-foreground grid grid-cols-3 gap-1">
-                        <span>Provider: {slot.provider}</span>
-                        <span>Model: {slot.model}</span>
-                        <span>Protocol: {(slot.protocol ?? "").replace("-v1", "")}</span>
-                      </div>
+              )}
+              {(isConfigured ? configuredSlots : LEGACY_SLOTS).map((slotId) => {
+                const selectedPresetId = slotConfig[slotId]?.presetId ?? "";
+                const selectedPreset = allPresets.find((p) => p.id === selectedPresetId);
+                const serverSlot = isConfigured ? llm!.slots[slotId] : null;
+                const effectiveProvider = selectedPreset?.provider ?? serverSlot?.provider ?? "";
+                const effectiveModel = selectedPreset?.model ?? serverSlot?.model ?? "";
+                const effectiveProtocol = serverSlot?.protocol ?? "";
+                const isRequired = !isConfigured && slotId === "default";
+                const isFallback = !selectedPresetId && !isConfigured && slotId !== "default";
+                const isFirst = isConfigured && slotId === configuredSlots[0];
+                const pingId = `slot-${slotId}`;
+                const ping = pingResults[pingId];
+                const isTesting = ping?.testing;
+                const effectiveCap = isConfigured ? getEffectiveCapability(slotId) : null;
+                const hasCapOverride = isConfigured && !!capOverrides[slotId];
+                const isEditing = editingSlot === slotId;
 
-                      {/* ── Capability Tags ── */}
-                      {(() => {
-                        const effective = getEffectiveCapability(slotId);
-                        const hasOverride = !!capOverrides[slotId];
-                        const isEditing = editingSlot === slotId;
-                        return (
-                          <>
-                            {effective && <CapabilityTags capability={effective} />}
-                            <div className="flex items-center gap-1.5">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 text-[10px] px-1.5"
-                                onClick={() => setEditingSlot(isEditing ? null : slotId)}
-                              >
-                                <Pencil className="w-3 h-3 mr-0.5" />
-                                {isEditing ? t("settings.collapseCapability") : t("settings.editCapability")}
-                              </Button>
-                              {hasOverride && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 text-[10px] px-1.5 text-amber-600"
-                                  onClick={() => resetCapOverride(slotId)}
-                                >
-                                  <RotateCw className="w-3 h-3 mr-0.5" />
-                                  {t("settings.resetOverride")}
-                                </Button>
-                              )}
-                              {hasOverride && (
-                                <Badge variant="outline" className="text-[9px] text-amber-600 border-amber-400">{t("settings.overrideApplied")}</Badge>
-                              )}
-                            </div>
-                            {isEditing && (
-                              <CapabilityEditor
-                                slotId={slotId}
-                                serverCap={slot.capability}
-                                override={capOverrides[slotId]}
-                                onUpdate={(patch) => updateCapOverride(slotId, patch)}
-                              />
-                            )}
-                          </>
-                        );
-                      })()}
+                return (
+                  <div key={slotId} className="border border-border p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{slotId}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {isRequired && <Badge variant="default" className="text-[10px]">required</Badge>}
+                        {isFirst && <Badge variant="default" className="text-[10px]">default</Badge>}
+                        {serverSlot?.fallback && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            fallback: {serverSlot.fallback}
+                          </Badge>
+                        )}
+                        {isFallback && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            fallback: default
+                          </Badge>
+                        )}
+                        {selectedPreset && (
+                          <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-400">
+                            {t("settings.overrideApplied")}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
 
+                    <select
+                      value={selectedPresetId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val) {
+                          setSlotConfigLocal({ ...slotConfig, [slotId]: { presetId: val } });
+                        } else {
+                          const updated = { ...slotConfig };
+                          delete updated[slotId];
+                          setSlotConfigLocal(updated);
+                        }
+                      }}
+                      className="w-full bg-background border border-border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
+                    >
+                      <option value="">
+                        -- {isConfigured ? "Use base slot config" : (isRequired ? t("settings.selectPreset") : t("settings.noPresetFallback"))} --
+                      </option>
+                      {state.presets.length > 0 && (
+                        <optgroup label="Built-in">
+                          {state.presets.map((p) => (
+                            <option key={p.id} value={p.id}>{p.name} ({p.provider}/{p.model})</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {customPresets.length > 0 && (
+                        <optgroup label="Custom">
+                          {customPresets.map((p) => (
+                            <option key={p.id} value={p.id}>{p.name} ({p.provider}/{p.model})</option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+
+                    <div className="text-xs text-muted-foreground grid grid-cols-3 gap-1">
+                      <span>Provider: {effectiveProvider || "—"}</span>
+                      <span>Model: {effectiveModel || "—"}</span>
+                      <span>
+                        {selectedPreset
+                          ? (selectedPreset.isCustom ? "Preset: custom" : "Preset: override")
+                          : `Protocol: ${(effectiveProtocol || "").replace("-v1", "") || "—"}`}
+                      </span>
+                    </div>
+
+                    {isConfigured && (
+                      <div className="text-[11px] text-muted-foreground">
+                        Base slot: {serverSlot?.provider ?? "—"} / {serverSlot?.model ?? "—"}
+                      </div>
+                    )}
+
+                    {isConfigured && effectiveCap && <CapabilityTags capability={effectiveCap} />}
+
+                    {isConfigured && (
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[10px] px-1.5"
+                          onClick={() => setEditingSlot(isEditing ? null : slotId)}
+                        >
+                          <Pencil className="w-3 h-3 mr-0.5" />
+                          {isEditing ? t("settings.collapseCapability") : t("settings.editCapability")}
+                        </Button>
+                        {hasCapOverride && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-[10px] px-1.5 text-amber-600"
+                            onClick={() => resetCapOverride(slotId)}
+                          >
+                            <RotateCw className="w-3 h-3 mr-0.5" />
+                            {t("settings.resetOverride")}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+
+                    {isConfigured && isEditing && (
+                      <CapabilityEditor
+                        slotId={slotId}
+                        serverCap={serverSlot?.capability}
+                        override={capOverrides[slotId]}
+                        onUpdate={(patch) => updateCapOverride(slotId, patch)}
+                      />
+                    )}
+
+                    {isConfigured && (
                       <div className="flex items-center gap-2">
                         <Button
                           variant="outline"
                           size="sm"
                           className="h-7 text-[11px] px-2.5"
                           disabled={isTesting}
-                          onClick={() => handlePing(presetId)}
+                          onClick={() => handlePing(pingId)}
                         >
                           {isTesting ? (
                             <Loader2 className="w-3 h-3 animate-spin mr-1" />
@@ -475,11 +513,12 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                           </span>
                         )}
                       </div>
-                    </div>
-                  );
-                })}
+                    )}
+                  </div>
+                );
+              })}
 
-                {/* ── Model Database Info ── */}
+              {isConfigured && (
                 <div className="border border-dashed border-border p-3 space-y-2 mt-2">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
@@ -510,74 +549,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     <div className="text-[10px] text-muted-foreground">{t("settings.dbUnavailable")}</div>
                   )}
                 </div>
-              </TabsContent>
-            )}
-
-            {/* ── Legacy mode: Manual Slot Assignment ── */}
-            {!isConfigured && (
-              <TabsContent value="slots" className="space-y-3 mt-0">
-                {LEGACY_SLOTS.map((slotId) => {
-                  const selectedPresetId = slotConfig[slotId]?.presetId ?? "";
-                  const selectedPreset = allPresets.find((p) => p.id === selectedPresetId);
-                  const isRequired = slotId === "default";
-                  const isFallback = !selectedPresetId && slotId !== "default";
-                  return (
-                    <div key={slotId} className="border border-border p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{slotId}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {isRequired && <Badge variant="default" className="text-[10px]">required</Badge>}
-                          {isFallback && (
-                            <Badge variant="secondary" className="text-[10px]">
-                              fallback: default
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      <select
-                        value={selectedPresetId}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val) {
-                            setSlotConfigLocal({ ...slotConfig, [slotId]: { presetId: val } });
-                          } else {
-                            const updated = { ...slotConfig };
-                            delete updated[slotId];
-                            setSlotConfigLocal(updated);
-                          }
-                        }}
-                        className="w-full bg-background border border-border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
-                      >
-                        <option value="">-- {isRequired ? t("settings.selectPreset") : t("settings.noPresetFallback")} --</option>
-                        {state.presets.length > 0 && (
-                          <optgroup label="Built-in">
-                            {state.presets.map((p) => (
-                              <option key={p.id} value={p.id}>{p.name} ({p.provider}/{p.model})</option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {customPresets.length > 0 && (
-                          <optgroup label="Custom">
-                            {customPresets.map((p) => (
-                              <option key={p.id} value={p.id}>{p.name} ({p.provider}/{p.model})</option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
-                      {selectedPreset && (
-                        <div className="text-xs text-muted-foreground grid grid-cols-3 gap-1">
-                          <span>Provider: {selectedPreset.provider}</span>
-                          <span>Model: {selectedPreset.model}</span>
-                          {selectedPreset.isCustom && <span className="text-amber-500">custom</span>}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </TabsContent>
-            )}
+              )}
+            </TabsContent>
 
             {/* ── Keys Tab ── */}
             <TabsContent value="keys" className="space-y-3 mt-0">
