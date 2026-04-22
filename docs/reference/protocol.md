@@ -285,9 +285,9 @@ These events ride the standard SSE envelope and are also persisted into `trace_e
 | `tool.calling` | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus }` |
 | `tool.completed` | `{ runtimeId, pluginId, toolName, toolCallId, label, result, parsedResult, durationMs, approvalStatus, success: true }` |
 | `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, details?, durationMs, approvalStatus, success: false }` |
-| `llm.calling` | `{ runtimeId, pluginId, slot, model, provider?, messages, tools, attempt, streaming? }` |
+| `llm.calling` | `{ runtimeId, pluginId, slot, model, provider: string \| null, messages, tools, attempt, streaming? }` |
 | `llm.responded` | `{ runtimeId, pluginId, text?, toolCalls?, usage, finishReason, durationMs, attempt, error? }` |
-| `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }` |
+| `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }` — `deltaCount` is the number of upstream `narrative.delta` events the runtime produced. Frontend views aggregating live `narrative.delta` streams use a separate synthesized `_aggregated` field; the two are not interchangeable — `deltaCount` is the authoritative persisted count. |
 | `block.emitted` | `{ runtimeId, pluginId, proposalId, source, block }` |
 | `state.patch.applied` | `{ runtimeId, pluginId, proposalId, patch: { packageName, summary, ops } }` |
 | `hook.fired` | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType }` |
