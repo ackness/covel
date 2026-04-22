@@ -1969,6 +1969,10 @@ async function executeOneRuntime(
     const failedToolCalls: FailedToolCallState[] = [];
     const pendingProposals: Proposal[] = [];
     let steps = 0;
+    // Count streaming text deltas so the `message.completed` trace event can
+    // report how many chunks the narrative was assembled from. Non-streaming
+    // runtimes keep this at 0; trace consumers treat that as "not streamed".
+    let streamDeltaCount = 0;
 
     const deadline = Date.now() + timeoutMs;
     let stoppedWithResponse = false;
@@ -2066,6 +2070,7 @@ async function executeOneRuntime(
             policy: retryPolicy,
             deadline,
             onDelta: async (textDelta) => {
+              streamDeltaCount++;
               try {
                 await deps.onDelta!({
                   runtimeId: manifest.name,
@@ -2636,6 +2641,22 @@ async function executeOneRuntime(
         durationMs: result.durationMs,
       });
     } catch { /* callback error must not kill runtime */ }
+
+    // Emit a compact `message.completed` trace event for story runtimes that
+    // produced non-empty narrative content. The realtime `message.delta`
+    // channel keeps flowing per-token; this event is the single persisted
+    // record of the final aggregated content and the delta count, so the
+    // `/debug` timeline shows one row per runtime output instead of
+    // thousands of per-token rows.
+    if (deps.emitter && finalContent && manifest.outputKind === 'story') {
+      await deps.emitter.emit('message.completed', {
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        content: finalContent,
+        len: finalContent.length,
+        deltaCount: streamDeltaCount,
+      });
+    }
 
     emitSubEvent(deps.eventBus, 'runtime', 'runtime.completed', input.sessionId, {
       runtimeId: manifest.name,
