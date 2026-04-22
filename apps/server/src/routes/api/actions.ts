@@ -297,6 +297,7 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
           store,
           toolExecutor,
           resolveModel,
+          emitter,
           onDelta: async (delta) => {
             await stream.writeSSE({
               data: JSON.stringify(makeEnvelope('narrative.delta', {

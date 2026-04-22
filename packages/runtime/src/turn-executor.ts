@@ -180,6 +180,14 @@ export interface TurnExecutorDeps {
    * runs unchanged.
    */
   readonly worldDataPluginId?: string;
+
+  /**
+   * Trace emitter for per-turn observability. When present, runtime emits
+   * tool.calling / tool.completed / llm.calling / llm.responded / message.completed
+   * etc. into trace_events and the action SSE stream via eventBus.
+   * Optional for backward compatibility with tests and embedders.
+   */
+  readonly emitter?: import('./turn-emitter.js').TurnEmitter;
 }
 
 export interface TurnExecutorOptions {
