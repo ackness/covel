@@ -6,9 +6,6 @@ import {
   Loader2,
   Pencil,
   RotateCw,
-  Zap,
-  XCircle,
-  CheckCircle2,
 } from "lucide-react";
 import {
   fetchModelDbInfo,
@@ -16,7 +13,6 @@ import {
   getCustomPresets,
   getSlotConfig,
   mergeCapability,
-  pingPreset,
   refreshModelDb,
   setCapabilityOverrides,
   setSlotConfig,
@@ -25,7 +21,6 @@ import {
   type ModelDbInfo,
   type ModelFeature,
   type OutputModality,
-  type PingResult,
   type SlotConfigEntry,
 } from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
@@ -61,9 +56,6 @@ export function LlmSlotsPane() {
     Record<string, Partial<ModelCapabilityInfo>>
   >(() => getCapabilityOverrides());
   const [editingSlot, setEditingSlot] = useState<string | null>(null);
-  const [pingResults, setPingResults] = useState<
-    Record<string, PingResult & { testing?: boolean }>
-  >({});
   const [modelDbInfo, setModelDbInfo] = useState<ModelDbInfo | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -123,26 +115,6 @@ export function LlmSlotsPane() {
     return mergeCapability(serverCap, capOverrides[slotId]);
   };
 
-  const handlePing = async (presetId: string) => {
-    setPingResults((prev) => ({
-      ...prev,
-      [presetId]: { ok: false, latencyMs: 0, testing: true },
-    }));
-    try {
-      const result = await pingPreset(presetId);
-      setPingResults((prev) => ({ ...prev, [presetId]: result }));
-    } catch (err) {
-      setPingResults((prev) => ({
-        ...prev,
-        [presetId]: {
-          ok: false,
-          latencyMs: 0,
-          error: err instanceof Error ? err.message : "Network error",
-        },
-      }));
-    }
-  };
-
   const handleRefreshModelDb = async () => {
     setRefreshing(true);
     try {
@@ -169,6 +141,10 @@ export function LlmSlotsPane() {
           <span>{t("settings.configuredByToml")}</span>
         </div>
       )}
+      <div className="flex items-center gap-2 text-[10px] text-muted-foreground italic">
+        <Info className="w-3 h-3 shrink-0" />
+        <span>{t("settings.slotPingMovedHint")}</span>
+      </div>
       {slots.map((slotId) => {
         const selectedPresetId = slotConfig[slotId]?.presetId ?? "";
         const selectedPreset = allPresets.find(
@@ -182,9 +158,6 @@ export function LlmSlotsPane() {
         const effectiveProtocol = serverSlot?.protocol ?? "";
         const isRequired = !isConfigured && slotId === "default";
         const isFirst = isConfigured && slotId === configuredSlots[0];
-        const pingId = `slot-${slotId}`;
-        const ping = pingResults[pingId];
-        const isTesting = ping?.testing;
         const effectiveCap = isConfigured
           ? getEffectiveCapability(slotId)
           : null;
@@ -316,49 +289,6 @@ export function LlmSlotsPane() {
               />
             )}
 
-            {isConfigured && (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-[11px] px-2.5"
-                  disabled={isTesting}
-                  onClick={() => handlePing(pingId)}
-                >
-                  {isTesting ? (
-                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                  ) : (
-                    <Zap className="w-3 h-3 mr-1" />
-                  )}
-                  Ping
-                </Button>
-                {ping && !isTesting && (
-                  <span className="flex items-center gap-1 text-xs">
-                    {ping.ok ? (
-                      <>
-                        <CheckCircle2 className="w-3 h-3 text-green-500" />
-                        <span className="text-green-600 font-mono">
-                          {ping.ttfbMs ?? ping.latencyMs}ms
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">
-                          TTFB
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="w-3 h-3 text-destructive" />
-                        <span
-                          className="text-destructive truncate max-w-[200px]"
-                          title={ping.error}
-                        >
-                          {ping.error?.slice(0, 40)}
-                        </span>
-                      </>
-                    )}
-                  </span>
-                )}
-              </div>
-            )}
           </div>
         );
       })}

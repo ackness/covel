@@ -295,16 +295,50 @@ export function createMiscApiRoutes(
   const app = new Hono();
 
   // GET /api/presets — list configured model presets
+  //
+  // Each entry carries enough info for the settings UI to identify exactly
+  // what a Ping would hit:
+  //   - `baseUrl`: preset-level override, else the provider default
+  //   - `protocol`: preset-level protocol, else the provider default
+  //   - `slotBindings`: every slot id whose `presetId` resolves here — lets
+  //     the UI show e.g. `default, fast` next to the preset so operators can
+  //     tell which aliases share a single underlying model.
   app.get('/api/presets', (c) => {
-    const presets = ai.presetRegistry.listPresets().map((p) => ({
-      id: p.id,
-      name: p.name,
-      provider: p.provider,
-      model: p.model,
-      enabled: p.enabled,
-      isDefault: p.isDefault ?? false,
-      scope: 'global',
-    }));
+    const slotMap = ai.slotRegistry.listSlots();
+    const slotBindingsByPreset = new Map<string, string[]>();
+    for (const [slotId, slot] of Object.entries(slotMap)) {
+      const list = slotBindingsByPreset.get(slot.presetId) ?? [];
+      list.push(slotId);
+      slotBindingsByPreset.set(slot.presetId, list);
+    }
+
+    const presets = ai.presetRegistry.listPresets().map((p) => {
+      // Fall back to the provider's registered default baseUrl/protocol
+      // when the preset itself doesn't override them. `resolve` never
+      // throws for a known provider; unknown providers return null here.
+      let providerBaseUrl: string | undefined;
+      let providerProtocol: string | undefined;
+      try {
+        const resolution = ai.providerRegistry.resolve({ provider: p.provider });
+        providerBaseUrl = resolution.config.baseUrl;
+        providerProtocol = resolution.protocol;
+      } catch {
+        // Unknown provider — leave both undefined; the UI will show "-"
+      }
+
+      return {
+        id: p.id,
+        name: p.name,
+        provider: p.provider,
+        model: p.model,
+        enabled: p.enabled,
+        isDefault: p.isDefault ?? false,
+        scope: 'global',
+        baseUrl: p.baseUrl ?? providerBaseUrl,
+        protocol: p.protocol ?? providerProtocol,
+        slotBindings: slotBindingsByPreset.get(p.id) ?? [],
+      };
+    });
     return c.json(presets);
   });
 
@@ -617,17 +651,25 @@ export function createMiscApiRoutes(
     //   2. `slot-<name>` → client slotPresetOverrides → slotRegistry
     //   3. Text-tag fallback (mirrors gateway.streamText behaviour)
     //   4. Any enabled preset
+    //
+    // `resolvedVia` is echoed back in `testedTarget` so the UI can warn
+    // when a slot Ping silently fell through to a tag-fallback preset
+    // (i.e. the slot the user typed isn't actually configured).
+    type ResolvedVia = 'direct' | 'slot' | 'tag-fallback' | 'any';
+    let resolvedVia: ResolvedVia = 'direct';
     let preset = allPresets.find((p) => p.id === requested);
     if (!preset && requested.startsWith('slot-')) {
       const slotName = requested.slice('slot-'.length);
       const overrideId = slotConfig.slotPresetOverrides?.[slotName];
       if (overrideId) {
         preset = allPresets.find((p) => p.id === overrideId);
+        if (preset) resolvedVia = 'slot';
       }
       if (!preset) {
         const presetIdFromSlot = ai.slotRegistry.resolveSlot(slotName);
         if (presetIdFromSlot) {
           preset = allPresets.find((p) => p.id === presetIdFromSlot);
+          if (preset) resolvedVia = 'slot';
         }
       }
     }
@@ -635,9 +677,13 @@ export function createMiscApiRoutes(
       const textSlots = ai.slotRegistry.listSlotsByTag('text');
       if (textSlots.length > 0) {
         preset = allPresets.find((p) => p.id === textSlots[0].presetId);
+        if (preset) resolvedVia = 'tag-fallback';
       }
     }
-    if (!preset) preset = allPresets[0];
+    if (!preset) {
+      preset = allPresets[0];
+      if (preset) resolvedVia = 'any';
+    }
 
     if (!preset) {
       cleanupTransient();
@@ -647,6 +693,32 @@ export function createMiscApiRoutes(
         error: 'No LLM provider configured. Add a slot to llm.toml or via Settings.',
       });
     }
+
+    // Resolve the effective baseUrl/protocol once so error + success paths
+    // both report the exact target. Unknown providers can still ping via
+    // the preset's own baseUrl, so treat resolution failure as non-fatal.
+    let effectiveBaseUrl = preset.baseUrl;
+    let effectiveProtocol: string | undefined = preset.protocol;
+    try {
+      const resolution = ai.providerRegistry.resolve({
+        provider: preset.provider,
+        baseUrl: preset.baseUrl,
+        protocol: preset.protocol,
+      });
+      effectiveBaseUrl = resolution.config.baseUrl ?? preset.baseUrl;
+      effectiveProtocol = resolution.protocol;
+    } catch {
+      // Provider not registered — fall back to preset fields as-is.
+    }
+
+    const testedTarget = {
+      presetId: preset.id,
+      provider: preset.provider,
+      model: preset.model,
+      baseUrl: effectiveBaseUrl,
+      protocol: effectiveProtocol,
+      resolvedVia,
+    };
 
     const startedAt = Date.now();
     let ttfbMs: number | null = null;
@@ -707,6 +779,7 @@ export function createMiscApiRoutes(
           latencyMs: Date.now() - startedAt,
           ...(ttfbMs !== null ? { ttfbMs } : {}),
           error: message,
+          testedTarget,
         });
       }
       // Deliberate abort — either a post-TTFB early-stop or our 30s timeout.
@@ -722,6 +795,7 @@ export function createMiscApiRoutes(
         error: timedOut
           ? 'Provider did not return any content within 30s'
           : 'Provider returned no content',
+        testedTarget,
       });
     }
 
@@ -731,6 +805,7 @@ export function createMiscApiRoutes(
       ttfbMs,
       text: `${preset.name} (${preset.provider}/${preset.model})`,
       ...(finalUsage ? { usage: finalUsage } : {}),
+      testedTarget,
     });
   });
 

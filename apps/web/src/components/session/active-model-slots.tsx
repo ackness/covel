@@ -2,11 +2,20 @@ import { Cpu } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { Badge } from "@/components/ui/badge.js";
+import { PingButton } from "@/components/shared/ping-button.js";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 
 /**
  * Displays the user's configured model slots.
- * Two variants: "card" for prep screen, "compact" for sidebar.
+ *
+ * Each row embeds a <PingButton> so the user can verify connectivity /
+ * latency without leaving the game view. Results are cached for 60s at
+ * the PingButton layer, so repeat clicks are free until the cache expires.
+ *
+ * Variants:
+ *   - `card` — used on the prep screen; shows model and Ping inline.
+ *   - `compact` — used in the session sidebar; uses the icon-only variant
+ *     to fit the narrow column.
  */
 export function ActiveModelSlots({
   slots,
@@ -37,11 +46,19 @@ export function ActiveModelSlots({
                   {modelName}
                 </span>
               </div>
-              {provider && (
-                <span className="text-[10px] text-muted-foreground shrink-0 ml-1">
-                  {provider}
-                </span>
-              )}
+              <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                {provider && (
+                  <span className="text-[10px] text-muted-foreground">
+                    {provider}
+                  </span>
+                )}
+                <PingButton
+                  target={{ kind: "slot", slotId: slot.slotId }}
+                  variant="icon"
+                  size="xs"
+                  hideResult
+                />
+              </div>
             </div>
           );
         })}
@@ -56,18 +73,26 @@ export function ActiveModelSlots({
         const displayName = slot.preset?.name ?? slot.serverModel ?? slot.presetId;
         return (
           <Card key={slot.slotId}>
-            <CardContent className="p-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Cpu className="w-4 h-4 shrink-0 text-primary" />
-                <span className="text-sm font-medium truncate">
-                  {displayName}
-                </span>
+            <CardContent className="p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Cpu className="w-4 h-4 shrink-0 text-primary" />
+                  <span className="text-sm font-medium truncate">
+                    {displayName}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Badge variant="outline" className="text-[10px] uppercase">{slot.label}</Badge>
+                  <Badge variant="default" className="shrink-0">
+                    {modelName}
+                  </Badge>
+                </div>
               </div>
-              <div className="flex items-center gap-1.5">
-                <Badge variant="outline" className="text-[10px] uppercase">{slot.label}</Badge>
-                <Badge variant="default" className="shrink-0">
-                  {modelName}
-                </Badge>
+              <div className="flex items-center justify-end">
+                <PingButton
+                  target={{ kind: "slot", slotId: slot.slotId }}
+                  size="xs"
+                />
               </div>
             </CardContent>
           </Card>

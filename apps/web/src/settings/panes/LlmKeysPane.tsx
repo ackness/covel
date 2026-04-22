@@ -1,46 +1,55 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  CheckCircle2,
-  Info,
-  Loader2,
-  XCircle,
-  Zap,
-} from "lucide-react";
-import {
-  getCustomPresets,
-  pingPreset,
-  type PingResult,
-} from "@/services/api.js";
+import { Info } from "lucide-react";
+import { getCustomPresets, type PresetSummary } from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
-import { Button } from "@/components/ui/button.js";
 import { SettingWidget } from "../widgets/index.js";
 import { useSettingsStore } from "../use-settings.js";
 import { useSession } from "@/stores/session-store.js";
+import { PingButton } from "@/components/shared/ping-button.js";
+
+/**
+ * Shape we need per preset for rendering — a minimal projection of both
+ * server-registered (`PresetSummary`) and client-defined ("custom") presets.
+ *
+ * `baseUrl`/`slotBindings` only exist on server-registered presets; for
+ * custom presets those fields stay undefined and the UI falls back gracefully.
+ */
+interface PresetRow {
+  id: string;
+  name: string;
+  provider: string;
+  model: string;
+  baseUrl?: string;
+  slotBindings?: string[];
+  isCustom: boolean;
+}
 
 /**
  * API keys pane — renders one SecretWidget per registered `keys.<provider>`
- * entry plus a Ping button under each provider for every preset using it.
+ * entry plus a Ping button under each preset using it.
+ *
+ * This is the authoritative place to validate a freshly-entered API key:
+ * `PingButton` shows baseUrl + slot bindings in its tooltip so the operator
+ * knows exactly which target was hit.
  */
 export function LlmKeysPane() {
   const { t } = useTranslation();
   const store = useSettingsStore();
   const { state } = useSession();
-  const [pingResults, setPingResults] = useState<
-    Record<string, PingResult & { testing?: boolean }>
-  >({});
 
   const isConfigured = state.llmConfig?.configured ?? false;
 
   const keyEntries = store.listEntries().filter((e) => e.backend === "keys");
 
   const customPresets = getCustomPresets();
-  const allPresets = [
-    ...state.presets.map((p) => ({
+  const allPresets: PresetRow[] = [
+    ...state.presets.map((p: PresetSummary) => ({
       id: p.id,
       name: p.name,
       provider: p.provider,
       model: p.model,
+      baseUrl: p.baseUrl,
+      slotBindings: p.slotBindings,
       isCustom: false,
     })),
     ...customPresets.map((p) => ({
@@ -48,29 +57,11 @@ export function LlmKeysPane() {
       name: p.name,
       provider: p.provider,
       model: p.model,
+      baseUrl: p.baseUrl,
+      slotBindings: undefined,
       isCustom: true,
     })),
   ];
-
-  const handlePing = async (presetId: string) => {
-    setPingResults((prev) => ({
-      ...prev,
-      [presetId]: { ok: false, latencyMs: 0, testing: true },
-    }));
-    try {
-      const result = await pingPreset(presetId);
-      setPingResults((prev) => ({ ...prev, [presetId]: result }));
-    } catch (err) {
-      setPingResults((prev) => ({
-        ...prev,
-        [presetId]: {
-          ok: false,
-          latencyMs: 0,
-          error: err instanceof Error ? err.message : "Network error",
-        },
-      }));
-    }
-  };
 
   if (keyEntries.length === 0) {
     return (
@@ -120,71 +111,51 @@ export function LlmKeysPane() {
             </div>
             <SettingWidget entry={entry} />
             {hasKey && providerPresets.length > 0 && (
-              <div className="space-y-1.5 pt-1">
+              <div className="space-y-2 pt-1">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-widest">
                   {t("settings.pingTest")}
                 </span>
-                {providerPresets.map((preset) => {
-                  const ping = pingResults[preset.id];
-                  const isTesting = ping?.testing;
-                  return (
-                    <div
-                      key={preset.id}
-                      className="flex items-center gap-2 text-xs"
-                    >
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-[11px] px-2.5 shrink-0"
-                        disabled={isTesting}
-                        onClick={() => handlePing(preset.id)}
-                      >
-                        {isTesting ? (
-                          <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                        ) : (
-                          <Zap className="w-3 h-3 mr-1" />
-                        )}
-                        Ping
-                      </Button>
-                      <span className="truncate text-muted-foreground">
-                        {preset.name}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">
-                        ({preset.model})
-                      </span>
-                      {ping && !isTesting && (
-                        <span className="flex items-center gap-1 ml-auto shrink-0">
-                          {ping.ok ? (
-                            <>
-                              <CheckCircle2 className="w-3 h-3 text-green-500" />
-                              <span className="text-green-600 font-mono">
-                                {ping.ttfbMs ?? ping.latencyMs}ms
-                              </span>
-                              <span className="text-[10px] text-muted-foreground">
-                                TTFB
-                              </span>
-                            </>
-                          ) : (
-                            <>
-                              <XCircle className="w-3 h-3 text-destructive" />
-                              <span
-                                className="text-destructive truncate max-w-[120px]"
-                                title={ping.error}
-                              >
-                                {ping.error?.slice(0, 30)}
-                              </span>
-                            </>
-                          )}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
+                {providerPresets.map((preset) => (
+                  <PresetPingRow key={preset.id} preset={preset} />
+                ))}
               </div>
             )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function PresetPingRow({ preset }: { preset: PresetRow }) {
+  return (
+    <div className="flex items-start gap-2 text-xs">
+      <PingButton target={{ kind: "preset", presetId: preset.id }} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 truncate">
+          <span className="truncate">{preset.name}</span>
+          <span className="text-[10px] text-muted-foreground">
+            ({preset.model})
+          </span>
+          {preset.isCustom && (
+            <Badge variant="outline" className="text-[9px] px-1 py-0 h-auto">
+              custom
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+          {preset.baseUrl && (
+            <span className="truncate font-mono" title={preset.baseUrl}>
+              {preset.baseUrl}
+            </span>
+          )}
+          {preset.slotBindings && preset.slotBindings.length > 0 && (
+            <span className="shrink-0">
+              → {preset.slotBindings.join(", ")}
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

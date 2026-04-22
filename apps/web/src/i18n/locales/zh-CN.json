@@ -281,6 +281,7 @@
     "configuredDesc": "llm.toml 已配置。管理 API 密钥和高级参数。",
     "unconfiguredDesc": "配置模型插槽、API 密钥和高级参数。所有数据仅存储在浏览器本地。",
     "configuredByToml": "基础 slot 来自 llm.toml。前端选择的 preset 覆盖会保存在当前客户端。",
+    "slotPingMovedHint": "连通性测试已统一到 API 密钥面板（或活跃模型列表）。",
     "language": "界面语言",
     "langZh": "简体中文",
     "langEn": "English",

@@ -2,7 +2,7 @@
  * API client for communicating with the Covel server.
  */
 
-import type { I18nText } from "@covel/shared";
+import type { I18nText, RuntimeResult, SessionEvent } from "@covel/shared";
 import {
   normalizeProviderKeyMap,
   providerKeyToId,
@@ -67,6 +67,12 @@ export interface PresetSummary {
   enabled: boolean;
   isDefault: boolean;
   scope: string;
+  /** Effective baseUrl (preset override → provider default). Undefined if provider not registered. */
+  baseUrl?: string;
+  /** Effective protocol (openai-chat/anthropic/...). Undefined if unresolvable. */
+  protocol?: string;
+  /** Slot IDs whose presetId resolves here (e.g. ["default","fast"]). */
+  slotBindings?: string[];
 }
 
 export interface RuntimeSummary {
@@ -789,6 +795,27 @@ export async function fetchBlockSchemas(): Promise<Record<string, unknown>> {
 
 // ── AI Ping ───────────────────────────────────────────────────────
 
+/**
+ * Which of the server's resolution rules picked the preset:
+ *   - `direct`: exact presetId match
+ *   - `slot`: `slot-<name>` → client override or slotRegistry
+ *   - `tag-fallback`: text-tag fallback (slot didn't exist → first text preset)
+ *   - `any`: last-resort "any enabled preset"
+ *
+ * UIs should flag `tag-fallback` / `any` when the user explicitly requested
+ * a specific slot — it means that slot isn't actually configured.
+ */
+export type PingResolvedVia = 'direct' | 'slot' | 'tag-fallback' | 'any';
+
+export interface PingTestedTarget {
+  presetId: string;
+  provider: string;
+  model: string;
+  baseUrl?: string;
+  protocol?: string;
+  resolvedVia: PingResolvedVia;
+}
+
 export interface PingResult {
   ok: boolean;
   latencyMs: number;
@@ -796,6 +823,8 @@ export interface PingResult {
   text?: string;
   usage?: { inputTokens: number; outputTokens: number };
   error?: string;
+  /** Echoes the exact preset/baseUrl/model that was probed. Always present for resolved pings. */
+  testedTarget?: PingTestedTarget;
 }
 
 /**
@@ -1280,6 +1309,11 @@ export interface SuspensionRecord {
   readonly resumeSchema?: unknown;
 }
 
+export interface ResumeSuspensionResponse {
+  readonly result: RuntimeResult;
+  readonly events: readonly SessionEvent[];
+}
+
 function normaliseSuspension(raw: Record<string, unknown>): SuspensionRecord {
   return {
     id: String(raw.id ?? ""),
@@ -1304,8 +1338,8 @@ export async function resumeSuspension(
   sessionId: string,
   suspensionId: string,
   data: unknown,
-): Promise<void> {
-  await request(
+): Promise<ResumeSuspensionResponse> {
+  return request<ResumeSuspensionResponse>(
     `/api/sessions/${encodeURIComponent(sessionId)}/resume`,
     {
       method: "POST",

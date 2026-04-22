@@ -1,17 +1,21 @@
 import { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  X, ChevronRight, Sparkles, KeyRound, Rocket, Package,
-  Eye, EyeOff, CheckCircle2, XCircle, Loader2, Globe,
+  X, ChevronRight, KeyRound, Rocket, Package,
+  Eye, EyeOff, Globe, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
 import {
-  getProviderKeys, setProviderKeys, pingPreset,
+  getProviderKeys, setProviderKeys,
   getCustomPresets, setCustomPresets, uid, listPresets,
   getSlotConfig, setSlotConfig,
 } from "@/services/api.js";
-import type { PingResult, PresetSummary, CustomPreset } from "@/services/api.js";
+import type { PresetSummary, CustomPreset } from "@/services/api.js";
+import {
+  PingButton,
+  invalidatePingResult,
+} from "@/components/shared/ping-button.js";
 import { useLocalePreference } from "@/hooks/useLocalePreference";
 import { getSettings } from "@/settings/store";
 
@@ -55,7 +59,6 @@ interface ProviderFormState {
   customBaseUrl: string;
   customModel: string;
   customProviderName: string;
-  pingResult: (PingResult & { testing?: boolean }) | null;
 }
 
 function emptyFormState(initialProvider = "deepseek"): ProviderFormState {
@@ -67,8 +70,15 @@ function emptyFormState(initialProvider = "deepseek"): ProviderFormState {
     customBaseUrl: "",
     customModel: "",
     customProviderName: "",
-    pingResult: null,
   };
+}
+
+/**
+ * Drop stale cached Ping results when the form inputs change — otherwise a
+ * green badge from a previous URL/key combination can linger and mislead.
+ */
+function clearCachedPing(slotName: "story" | "plugin"): void {
+  invalidatePingResult({ kind: "slot", slotId: slotName });
 }
 
 function providerOptionLabel(providerId: string): string {
@@ -126,13 +136,18 @@ function upsertTransientPreset(
 function ProviderForm({
   state,
   onChange,
-  onPing,
+  onBeforePing,
   presets,
   slotName,
 }: {
   state: ProviderFormState;
   onChange: (next: ProviderFormState) => void;
-  onPing: () => void;
+  /**
+   * Called right before Ping fires — wizard uses this to persist the form
+   * into providerKeys + custom presets + slot bindings so the server can
+   * resolve `slot-<slotName>` correctly.
+   */
+  onBeforePing: () => Promise<void>;
   presets: PresetSummary[];
   slotName: "story" | "plugin";
 }) {
@@ -144,6 +159,7 @@ function ProviderForm({
 
   const handleProviderSelect = (providerId: string) => {
     const existing = getProviderKeys();
+    clearCachedPing(slotName);
     onChange({
       selected: providerId,
       apiKey: providerId === CUSTOM_PROVIDER_ID ? "" : (existing[providerId] ?? ""),
@@ -152,14 +168,19 @@ function ProviderForm({
         providerId === CUSTOM_PROVIDER_ID
           ? state.builtInModel
           : defaultModelForProvider(presets, providerId),
-      pingResult: null,
       customBaseUrl: providerId === CUSTOM_PROVIDER_ID ? state.customBaseUrl : "",
       customModel: providerId === CUSTOM_PROVIDER_ID ? state.customModel : "",
       customProviderName: providerId === CUSTOM_PROVIDER_ID ? state.customProviderName : "",
     });
   };
 
-  const latencyDisplay = state.pingResult?.ttfbMs ?? state.pingResult?.latencyMs;
+  const updateField = <K extends keyof ProviderFormState>(
+    key: K,
+    value: ProviderFormState[K],
+  ) => {
+    clearCachedPing(slotName);
+    onChange({ ...state, [key]: value });
+  };
 
   return (
     <div className="space-y-4">
@@ -205,7 +226,7 @@ function ProviderForm({
             list={modelOptions.length > 0 ? modelListId : undefined}
             placeholder="deepseek-chat / gpt-4o / claude-sonnet-4-20250514"
             value={state.builtInModel}
-            onChange={(e) => onChange({ ...state, builtInModel: e.target.value, pingResult: null })}
+            onChange={(e) => updateField("builtInModel", e.target.value)}
             className="ui-input-shell w-full bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
           />
           {modelOptions.length > 0 && (
@@ -233,7 +254,7 @@ function ProviderForm({
               type="text"
               placeholder="https://api.example.com/v1"
               value={state.customBaseUrl}
-              onChange={(e) => onChange({ ...state, customBaseUrl: e.target.value, pingResult: null })}
+              onChange={(e) => updateField("customBaseUrl", e.target.value)}
               className="ui-input-shell w-full bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
             />
           </div>
@@ -246,7 +267,7 @@ function ProviderForm({
                 type="text"
                 placeholder="my-provider"
                 value={state.customProviderName}
-                onChange={(e) => onChange({ ...state, customProviderName: e.target.value, pingResult: null })}
+                onChange={(e) => updateField("customProviderName", e.target.value)}
                 className="ui-input-shell w-full bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
               />
             </div>
@@ -258,7 +279,7 @@ function ProviderForm({
                 type="text"
                 placeholder="gpt-4o / deepseek-chat"
                 value={state.customModel}
-                onChange={(e) => onChange({ ...state, customModel: e.target.value, pingResult: null })}
+                onChange={(e) => updateField("customModel", e.target.value)}
                 className="ui-input-shell w-full bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
               />
             </div>
@@ -275,7 +296,7 @@ function ProviderForm({
             type={state.keyVisible ? "text" : "password"}
             placeholder={isCustom ? "sk-..." : provider.placeholder}
             value={state.apiKey}
-            onChange={(e) => onChange({ ...state, apiKey: e.target.value, pingResult: null })}
+            onChange={(e) => updateField("apiKey", e.target.value)}
             className="ui-input-shell flex-1 bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
           />
           <Button
@@ -296,40 +317,10 @@ function ProviderForm({
 
       {state.apiKey.trim() && (
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-[11px]"
-            disabled={state.pingResult?.testing}
-            onClick={onPing}
-          >
-            {state.pingResult?.testing ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <Sparkles className="w-3 h-3" />
-            )}
-            {t("onboarding.testConnection", "Test Connection")}
-          </Button>
-          {state.pingResult && !state.pingResult.testing && (
-            <span className="flex items-center gap-1 text-xs">
-              {state.pingResult.ok ? (
-                <>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-                  <span className="text-green-500 font-mono">
-                    {latencyDisplay ?? 0}ms
-                    <span className="ml-1 text-[10px] text-green-500/70">TTFB</span>
-                  </span>
-                </>
-              ) : (
-                <>
-                  <XCircle className="w-3.5 h-3.5 text-red-400" />
-                  <span className="text-red-400 text-[11px] truncate max-w-[180px]">
-                    {state.pingResult.error?.slice(0, 60) ?? "Failed"}
-                  </span>
-                </>
-              )}
-            </span>
-          )}
+          <PingButton
+            target={{ kind: "slot", slotId: slotName }}
+            onBeforePing={onBeforePing}
+          />
         </div>
       )}
     </div>
@@ -474,40 +465,12 @@ export function OnboardingWizard() {
     if (step > 0) setStep((s) => s - 1);
   }, [step]);
 
-  const handlePingStory = useCallback(async () => {
+  const handleBeforePingStory = useCallback(async () => {
     await persistSlot(storyForm, "story", availablePresets);
-    setStoryForm((s) => ({ ...s, pingResult: { ok: false, latencyMs: 0, testing: true } }));
-    try {
-      const result = await pingPreset("slot-story");
-      setStoryForm((s) => ({ ...s, pingResult: result }));
-    } catch (err) {
-      setStoryForm((s) => ({
-        ...s,
-        pingResult: {
-          ok: false,
-          latencyMs: 0,
-          error: err instanceof Error ? err.message : "Network error",
-        },
-      }));
-    }
   }, [storyForm, availablePresets]);
 
-  const handlePingPlugin = useCallback(async () => {
+  const handleBeforePingPlugin = useCallback(async () => {
     await persistSlot(pluginForm, "plugin", availablePresets);
-    setPluginForm((p) => ({ ...p, pingResult: { ok: false, latencyMs: 0, testing: true } }));
-    try {
-      const result = await pingPreset("slot-plugin");
-      setPluginForm((p) => ({ ...p, pingResult: result }));
-    } catch (err) {
-      setPluginForm((p) => ({
-        ...p,
-        pingResult: {
-          ok: false,
-          latencyMs: 0,
-          error: err instanceof Error ? err.message : "Network error",
-        },
-      }));
-    }
   }, [pluginForm, availablePresets]);
 
   const handleContinueFromStory = useCallback(async () => {
@@ -667,7 +630,7 @@ export function OnboardingWizard() {
               <ProviderForm
                 state={storyForm}
                 onChange={setStoryForm}
-                onPing={handlePingStory}
+                onBeforePing={handleBeforePingStory}
                 presets={availablePresets}
                 slotName="story"
               />
@@ -771,7 +734,7 @@ export function OnboardingWizard() {
                 <ProviderForm
                   state={pluginForm}
                   onChange={setPluginForm}
-                  onPing={handlePingPlugin}
+                  onBeforePing={handleBeforePingPlugin}
                   presets={availablePresets}
                   slotName="plugin"
                 />

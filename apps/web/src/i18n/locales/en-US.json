@@ -281,6 +281,7 @@
     "configuredDesc": "llm.toml configured. Manage API keys and advanced parameters.",
     "unconfiguredDesc": "Configure model slots, API keys, and advanced parameters. All data is stored locally in your browser.",
     "configuredByToml": "Base slots come from llm.toml. Frontend preset overrides are saved on this client.",
+    "slotPingMovedHint": "To test connectivity, use Ping in the API Keys pane (or the active-model list).",
     "language": "Interface Language",
     "langZh": "简体中文",
     "langEn": "English",
