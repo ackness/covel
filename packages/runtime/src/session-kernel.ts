@@ -294,6 +294,7 @@ export function createCommitPipeline(
           pluginId: effectiveProposal.source.pluginId,
           proposalId: effectiveProposal.id,
           source: effectiveProposal.source,
+          // block.meta is already expressed by outer runtimeId/pluginId/turnId — omitted intentionally
           block: {
             id: effectiveProposal.id,
             type: resolveBlockType(payloadAny),
@@ -306,6 +307,7 @@ export function createCommitPipeline(
           runtimeId: effectiveProposal.source.runtimeId,
           pluginId: effectiveProposal.source.pluginId,
           proposalId: effectiveProposal.id,
+          // packageName / summary follow spec naming; semantically these are DB table / column from the state.patch payload
           patch: {
             packageName: typeof p.table === 'string' ? p.table : undefined,
             summary: typeof p.field === 'string' ? p.field : undefined,

@@ -9,25 +9,23 @@
 import { describe, it, expect } from 'vitest';
 import { createHookPipeline } from '../src/hooks/pipeline.js';
 import { runPreToolUseHook } from '../src/hooks/wire-helpers.js';
-import type { TurnEmitter } from '../src/turn-emitter.js';
-
-interface EmitterSpy extends TurnEmitter {
-  readonly events: Array<{ type: string; payload: Record<string, unknown> }>;
-}
-
-function makeEmitterSpy(): EmitterSpy {
-  const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
-  return {
-    sessionId: 'sess',
-    turnId: 'turn',
-    async emit(type: string, payload: Record<string, unknown>): Promise<void> {
-      events.push({ type, payload });
-    },
-    events,
-  };
-}
+import { makeEmitterSpy } from './_helpers/emitter-spy.js';
 
 describe('HookPipeline emitter integration', () => {
+  it('does not emit any hook.* event when no handlers are registered', async () => {
+    const emitter = makeEmitterSpy();
+    const pipeline = createHookPipeline();
+
+    await pipeline.run(
+      'PreStateCommit',
+      { event: 'PreStateCommit', sessionId: 'S', turnId: 'T' },
+      { proposal: { id: 'p1', type: 'state.patch' } },
+      { emitter },
+    );
+
+    expect(emitter.events).toHaveLength(0);
+  });
+
   it('emits hook.fired for each handler invoked', async () => {
     const emitter = makeEmitterSpy();
     const pipeline = createHookPipeline();

@@ -24,18 +24,8 @@ import { z } from 'zod';
 import { executeTurn } from '../src/turn-executor.js';
 import type { TurnExecutorDeps } from '../src/turn-executor.js';
 import type { LLMAdapter } from '../src/llm-adapter.js';
-import type { TurnEmitter } from '../src/turn-emitter.js';
 import { createToolExecutor } from '../src/tool-executor.js';
-
-function makeEmitterSpy(): TurnEmitter & { events: Array<{ type: string; payload: Record<string, unknown> }> } {
-  const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
-  return {
-    sessionId: 'sess',
-    turnId: 'turn',
-    async emit(type, payload) { events.push({ type, payload }); },
-    events,
-  } as TurnEmitter & { events: Array<{ type: string; payload: Record<string, unknown> }> };
-}
+import { makeEmitterSpy } from './_helpers/emitter-spy.js';
 
 async function createMainLoopStore(sessionId = 'sess-1') {
   const store = createMemoryStore();

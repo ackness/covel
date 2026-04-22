@@ -6,25 +6,9 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { normalizeOutput, createCommitPipeline, processRuntimeResult, createTraceRecorder } from '../src/session-kernel.js';
-import type { TurnEmitter } from '../src/turn-emitter.js';
 import { withPendingProposals } from '@covel/tools';
 import type { Proposal, SessionEvent, RuntimeResult } from '@covel/shared';
-
-interface EmitterSpy extends TurnEmitter {
-  readonly events: Array<{ type: string; payload: Record<string, unknown> }>;
-}
-
-function makeEmitterSpy(): EmitterSpy {
-  const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
-  return {
-    sessionId: 'sess',
-    turnId: 'turn',
-    async emit(type: string, payload: Record<string, unknown>): Promise<void> {
-      events.push({ type, payload });
-    },
-    events,
-  };
-}
+import { makeEmitterSpy } from './_helpers/emitter-spy.js';
 
 const SOURCE = { pluginId: 'test-plugin', runtimeId: 'test-runtime' };
 const TURN_ID = 'turn-001';

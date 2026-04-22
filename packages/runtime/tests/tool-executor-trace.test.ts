@@ -8,20 +8,10 @@ import { describe, it, expect } from 'vitest';
 import { ZodError, z } from 'zod';
 import { createToolExecutor } from '../src/tool-executor.js';
 import type { ToolCallContext } from '../src/tool-executor.js';
-import type { TurnEmitter } from '../src/turn-emitter.js';
 import { ToolValidationError } from '@covel/tools';
 import type { ToolModule } from '@covel/tools';
 import type { ApprovalPipeline } from '@covel/approval';
-
-function makeEmitterSpy(): TurnEmitter & { events: Array<{ type: string; payload: Record<string, unknown> }> } {
-  const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
-  return {
-    sessionId: 'sess',
-    turnId: 'turn',
-    async emit(type, payload) { events.push({ type, payload }); },
-    events,
-  } as TurnEmitter & { events: Array<{ type: string; payload: Record<string, unknown> }> };
-}
+import { makeEmitterSpy } from './_helpers/emitter-spy.js';
 
 const baseCtx: ToolCallContext = {
   sessionId: 'sess',

@@ -551,17 +551,7 @@ describe('streamLLMWithRetry', () => {
 
 // ── Trace emission tests ────────────────────────────────────────────
 
-import type { TurnEmitter } from '../src/turn-emitter.js';
-
-function makeEmitterSpy(): TurnEmitter & { events: Array<{ type: string; payload: Record<string, unknown> }> } {
-  const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
-  return {
-    sessionId: 'sess',
-    turnId: 'turn',
-    async emit(type, payload) { events.push({ type, payload }); },
-    events,
-  } as TurnEmitter & { events: Array<{ type: string; payload: Record<string, unknown> }> };
-}
+import { makeEmitterSpy } from './_helpers/emitter-spy.js';
 
 describe('callLLMWithRetry trace emissions', () => {
   it('emits llm.calling then llm.responded on success', async () => {
