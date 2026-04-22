@@ -379,6 +379,7 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
         const { events } = await processRuntimeResult(rr, store, sessionId, kind, {
           ...(hookPipeline ? { hookPipeline } : {}),
           eventBus,
+          emitter,
         });
 
         for (const evt of events) {

@@ -214,7 +214,12 @@ export interface CommitPipeline {
   commitAll(proposals: readonly Proposal[]): Promise<CommitResult[]>;
 }
 
-export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipeline, eventBus?: EventBus): CommitPipeline {
+export function createCommitPipeline(
+  store: KernelStore,
+  hookPipeline?: HookPipeline,
+  eventBus?: EventBus,
+  emitter?: import('./turn-emitter.js').TurnEmitter,
+): CommitPipeline {
   const handlers: Record<string, (p: Proposal) => Promise<CommitResult>> = {
     'narrative.append': commitNarrative,
     'interaction.request': commitInteraction,
@@ -282,6 +287,39 @@ export function createCommitPipeline(store: KernelStore, hookPipeline?: HookPipe
         payload: { proposalType: effectiveProposal.type, proposalId: effectiveProposal.id, source: effectiveProposal.source },
         createdAt: new Date().toISOString(),
       });
+    }
+
+    // Fan out fine-grained trace + SSE events based on proposal type.
+    // The generic `proposal.committed` row above is kept for back-compat;
+    // these richer events carry the full block / state-patch payload so
+    // the debug UI can render them without extra joins.
+    if (result.committed && emitter) {
+      if (effectiveProposal.type === 'interaction.request') {
+        const payloadAny = effectiveProposal.payload as Record<string, unknown>;
+        await emitter.emit('block.emitted', {
+          runtimeId: effectiveProposal.source.runtimeId,
+          pluginId: effectiveProposal.source.pluginId,
+          proposalId: effectiveProposal.id,
+          source: effectiveProposal.source,
+          block: {
+            id: effectiveProposal.id,
+            type: resolveBlockType(payloadAny),
+            data: payloadAny,
+          },
+        });
+      } else if (effectiveProposal.type === 'state.patch') {
+        const p = effectiveProposal.payload as Record<string, unknown>;
+        await emitter.emit('state.patch.applied', {
+          runtimeId: effectiveProposal.source.runtimeId,
+          pluginId: effectiveProposal.source.pluginId,
+          proposalId: effectiveProposal.id,
+          patch: {
+            packageName: typeof p.table === 'string' ? p.table : undefined,
+            summary: typeof p.field === 'string' ? p.field : undefined,
+            ops: p,
+          },
+        });
+      }
     }
 
     // ── PostStateCommit hook — Post* cannot abort ────────────────
@@ -651,6 +689,7 @@ export async function processRuntimeResult(
   opts?: {
     readonly hookPipeline?: HookPipeline;
     readonly eventBus?: EventBus;
+    readonly emitter?: import('./turn-emitter.js').TurnEmitter;
   },
 ): Promise<ProcessRuntimeResultOutput> {
   const empty: ProcessRuntimeResultOutput = { events: [], failedProposals: [] };
@@ -678,7 +717,7 @@ export async function processRuntimeResult(
   // Thread the hook pipeline + eventBus through so PreStateCommit /
   // PostStateCommit actually run on real turn commits (previously these
   // hooks only fired in tests because callers didn't pass them).
-  const pipeline = createCommitPipeline(store, opts?.hookPipeline, opts?.eventBus);
+  const pipeline = createCommitPipeline(store, opts?.hookPipeline, opts?.eventBus, opts?.emitter);
   const commitResults = await pipeline.commitAll(proposals);
 
   const events: SessionEvent[] = [];
