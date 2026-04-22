@@ -3,6 +3,7 @@
  */
 
 import type { z, ZodType } from 'zod';
+import type { Proposal } from '@covel/shared';
 import type { ToolExecutionEnvelope } from './result.js';
 
 // ── Tool execution context ───────────────────────────────────────
@@ -12,6 +13,12 @@ export interface ToolExecutionContext {
   readonly turnId: string;
   readonly pluginId: string;
   readonly runtimeId: string;
+  /**
+   * Proposal writes buffered earlier in the same tool loop.
+   * Tools can consult this view to read same-turn plugin-data updates
+   * before the session kernel commits them at runtime end.
+   */
+  readonly pendingProposals?: readonly Proposal[];
 }
 
 // ── Tool module (result of tool() call) ──────────────────────────

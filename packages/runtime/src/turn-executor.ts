@@ -1254,7 +1254,13 @@ export async function resumeSuspendedRuntime(
 
           const rawResult = await deps.toolExecutor.execute(
             { toolCallId: effectiveTc.id, name: effectiveTc.name, arguments: effectiveTc.arguments },
-            { sessionId: suspension.sessionId, turnId: suspension.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name },
+            {
+              sessionId: suspension.sessionId,
+              turnId: suspension.turnId,
+              pluginId: manifest.pluginId,
+              runtimeId: manifest.name,
+              pendingProposals: pendingProposals,
+            },
           );
 
           // PostToolUse hook
@@ -2105,7 +2111,13 @@ async function executeOneRuntime(
 
             const result = await deps.toolExecutor.execute(
               { toolCallId: effectiveTc.id, name: effectiveTc.name, arguments: effectiveTc.arguments },
-              { sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name },
+              {
+                sessionId: input.sessionId,
+                turnId: input.turnId,
+                pluginId: manifest.pluginId,
+                runtimeId: manifest.name,
+                pendingProposals: pendingProposals,
+              },
             );
 
             // ── PostToolUse hook (S4-T3) ─────────────────────────

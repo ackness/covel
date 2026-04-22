@@ -284,6 +284,36 @@ describe('core-codex tools', () => {
       expect(stored.value.categoryMeta).toEqual(getCategoryMetadata('lore'));
     });
 
+    it('should update a freshly unlocked entry before the turn commits', async () => {
+      const unlockResult = await unlockCodexEntriesTool.execute({
+        entries: [{
+          category: 'location',
+          title: '青萍山',
+          content: '青萍宗所在的灵脉山峰。',
+          tags: ['宗门'],
+          rarity: 'common',
+        }],
+      }, ctx);
+
+      const entryId = unlockResult.entries[0].entryId;
+      const result = await updateCodexEntryTool.execute({
+        entryId,
+        appendContent: '山顶近来出现新的古阵波动。',
+      }, {
+        ...ctx,
+        pendingProposals: getPendingProposals(unlockResult),
+      });
+
+      expect(result.updated).toBe(true);
+      expect(result.entryId).toBe(entryId);
+
+      await applyPendingPluginData(unlockResult, mockStore);
+      await applyPendingPluginData(result, mockStore);
+
+      const stored = await mockStore.getPluginData('sess-1', 'core-codex', 'entries', entryId);
+      expect(stored.value.content).toContain('古阵波动');
+    });
+
     it('should return error for non-existent entry', async () => {
       const result = await executeAndCommit(updateCodexEntryTool, {
         entryId: 'codex-nonexistent',

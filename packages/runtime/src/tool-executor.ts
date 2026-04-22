@@ -47,6 +47,7 @@ export interface ToolCallContext {
   readonly turnId: string;
   readonly pluginId: string;
   readonly runtimeId: string;
+  readonly pendingProposals?: readonly Proposal[];
 }
 
 export interface ToolCallResult {
@@ -150,6 +151,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           turnId: context.turnId,
           pluginId: context.pluginId,
           runtimeId: context.runtimeId,
+          pendingProposals: context.pendingProposals,
         };
         const rawResult = await tool.execute(params, execContext);
         const parsedResult = getToolContent(rawResult);
