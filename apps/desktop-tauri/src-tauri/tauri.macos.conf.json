@@ -1,4 +1,12 @@
 {
+  "app": {
+    "windows": [
+      {
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": { "x": 16, "y": 14 }
+      }
+    ]
+  },
   "bundle": {
     "resources": {
       "binaries/node": "bin/node"

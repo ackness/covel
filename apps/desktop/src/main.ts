@@ -1023,6 +1023,9 @@ function createMainWindow(titleSuffix?: string): BrowserWindow {
   const restored = resolveInitialWindowOptions();
   const icon = resolveWindowIconPath();
 
+  const isMac = process.platform === "darwin";
+  const isWin = process.platform === "win32";
+
   const win = new BrowserWindow({
     x: restored.x,
     y: restored.y,
@@ -1034,6 +1037,14 @@ function createMainWindow(titleSuffix?: string): BrowserWindow {
     backgroundColor: "#09090b",
     show: false,
     icon: icon && fs.existsSync(icon) ? icon : undefined,
+    // Hide the native title bar so the in-app header can extend to the top
+    // edge and follow the active theme. Traffic lights stay (hiddenInset on
+    // macOS); on Windows the WCO overlay draws controls in app colours.
+    titleBarStyle: isMac ? "hiddenInset" : isWin ? "hidden" : "default",
+    trafficLightPosition: isMac ? { x: 16, y: 14 } : undefined,
+    titleBarOverlay: isWin
+      ? { color: "#09090b", symbolColor: "#fafafa", height: 36 }
+      : undefined,
     webPreferences: sharedWebPreferences(),
   });
 
