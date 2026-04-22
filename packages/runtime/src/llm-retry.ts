@@ -469,6 +469,22 @@ export async function streamLLMWithRetry(
       lastError = err;
       lastReason = classifyStreamError(err, callAborter.signal, firstTokenSeen);
 
+      // Pair every `llm.calling` with an `llm.responded` on the error path.
+      // Without this, a streamed turn that fails mid-flight leaves a dangling
+      // `llm.calling` in trace_events and breaks trace-viewer pairing.
+      if (params.emitter) {
+        await params.emitter.emit('llm.responded', {
+          runtimeId: params.runtimeId,
+          pluginId: params.pluginId,
+          finishReason: 'error',
+          error: err instanceof Error ? err.message : String(err),
+          usage: { inputTokens: 0, outputTokens: 0 },
+          durationMs: Date.now() - streamStart,
+          attempt,
+          streaming: true,
+        });
+      }
+
       // Salvage path: stream died mid-flight but we already received useful
       // content. Always prefer salvaging over retry — perturbation on a
       // retry would duplicate the partial text to the user, and partial
