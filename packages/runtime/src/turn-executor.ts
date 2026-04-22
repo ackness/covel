@@ -1276,6 +1276,7 @@ export async function resumeSuspendedRuntime(
               pluginId: manifest.pluginId,
               runtimeId: manifest.name,
               pendingProposals: pendingProposals,
+              emitter: deps.emitter,
             },
           );
 
@@ -2143,6 +2144,7 @@ async function executeOneRuntime(
                 pluginId: manifest.pluginId,
                 runtimeId: manifest.name,
                 pendingProposals: pendingProposals,
+                emitter: deps.emitter,
               },
             );
 
