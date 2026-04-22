@@ -181,10 +181,23 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
     // without this the action stream never delivers them to the web client
     // and the suspend/resume panel in the UI stays empty.
     const FORWARDED_SUBTYPES = new Set([
+      // existing
       'plugin-data.changed',
       'world.dimensions.changed',
       'turn.suspended',
       'turn.resumed',
+      // new — runtime internals from TurnEmitter
+      'tool.calling',
+      'tool.completed',
+      'tool.failed',
+      'llm.calling',
+      'llm.responded',
+      'message.completed',
+      'block.emitted',
+      'state.patch.applied',
+      'hook.fired',
+      'hook.rewrote',
+      'hook.aborted',
     ]);
     const eventBusUnsubscribe = eventBus.onEmit((ev) => {
       if (ev.sessionId !== sessionId) return;
