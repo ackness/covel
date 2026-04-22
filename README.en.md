@@ -38,9 +38,9 @@ Ships with 8 first-party plugins — playable out of the box, and useful as a st
 
 ## Showcase
 
-| Main narrative + plugin messages | Right-side plugin panel | Debug page: Turn / Prompt / Trace |
+| World picker | Main narrative + plugin messages | Debug page: Turn / Prompt / Trace |
 |:-:|:-:|:-:|
-| ![](./.assets/images/Jietu20260420-150324.jpg) | ![](./.assets/images/Jietu20260420-150417.jpg) | ![](./.assets/images/debug.jpg) |
+| ![](./.assets/images/select.png) | ![](./.assets/images/session.jpg) | ![](./.assets/images/debugger.png) |
 
 ## Quick Start
 

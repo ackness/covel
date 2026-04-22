@@ -11,6 +11,7 @@
     "generate:routes": "tsr generate",
     "lint": "tsr generate && tsc --noEmit",
     "check:i18n": "node ./scripts/check-no-chinese-literal.mjs",
+    "build:media": "node ./scripts/build-media.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

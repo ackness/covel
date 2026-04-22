@@ -38,9 +38,9 @@ Covel 是一个基于大模型的文字冒险游戏平台，所有玩法都通�
 
 ## 界面一览
 
-| 主叙事 + 插件消息 | 右侧插件面板 | 调试页：Turn / Prompt / Trace |
+| 选择世界 | 主叙事 + 插件消息 | 调试页：Turn / Prompt / Trace |
 |:-:|:-:|:-:|
-| ![](./.assets/images/Jietu20260420-150324.jpg) | ![](./.assets/images/Jietu20260420-150417.jpg) | ![](./.assets/images/debug.jpg) |
+| ![](./.assets/images/select.png) | ![](./.assets/images/session.jpg) | ![](./.assets/images/debugger.png) |
 
 ## 快速开始
 
