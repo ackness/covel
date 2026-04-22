@@ -571,6 +571,25 @@ turn_messages (追加式，永不删除):
   框架不再为 player-input 生成合成的 `assistant` 镜像消息。
 ```
 
+### 6.4 Observability — TurnEmitter
+
+Per-turn observability is fanned out through a small `TurnEmitter`
+abstraction (`packages/runtime/src/turn-emitter.ts`). One `emit(type, payload)`
+call writes a row into `trace_events` AND broadcasts through the global
+`EventBus`, where the `/actions` SSE route re-forwards it to the connected
+client. New events include: `tool.calling` / `tool.completed` / `tool.failed`,
+`llm.calling` / `llm.responded`, `message.completed`, `block.emitted`,
+`state.patch.applied`, `hook.fired` / `hook.rewrote` / `hook.aborted`.
+
+The runtime lifecycle events (`turn.started`, `turn.completed`,
+`runtime.started`, `runtime.completed`, `runtime.failed`) continue to be
+written by `TraceRecorder`; the two mechanisms coexist. Streaming narrative
+deltas are not persisted — only the final `message.completed` per runtime is,
+to keep the table compact.
+
+See [../reference/protocol.md](../reference/protocol.md) section 七 for the
+full payload schemas.
+
 ## 七、完整游戏流程时序图
 
 ```mermaid
