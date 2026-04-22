@@ -61,6 +61,97 @@ function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
   };
 }
 
+describe('turn-executor message.completed trace emission', () => {
+  it('emits message.completed for a story runtime with finalContent', async () => {
+    const manifest: RuntimeManifest = {
+      name: 'story-narrator',
+      pluginId: 'story-narrator',
+      description: 'Story runtime for message.completed trace test.',
+      priority: 500,
+      outputKind: 'story',
+    };
+    const loaded: LoadedRuntime = {
+      manifest,
+      promptTemplate: 'Tell a short story.',
+      references: [],
+    };
+
+    const narrative = 'The village was quiet under the morning mist.';
+    const llm: LLMAdapter = {
+      async generate() {
+        return {
+          content: narrative,
+          toolCalls: [],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20 },
+        };
+      },
+    };
+
+    const emitter = makeEmitterSpy();
+    const store = await createMainLoopStore('sess-1');
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => loaded,
+      llm,
+      getConfig: () => ({}),
+      store,
+      emitter,
+    };
+
+    await executeTurn(makeTurnInput(), [manifest], deps, { maxSteps: 2 });
+
+    const messageCompleted = emitter.events.find((e) => e.type === 'message.completed');
+    expect(messageCompleted).toBeDefined();
+    expect(messageCompleted!.payload).toMatchObject({
+      runtimeId: 'story-narrator',
+      pluginId: 'story-narrator',
+      content: narrative,
+      len: narrative.length,
+    });
+    expect(typeof messageCompleted!.payload.deltaCount).toBe('number');
+  });
+
+  it('does not emit message.completed for plugin-output runtimes', async () => {
+    const manifest: RuntimeManifest = {
+      name: 'plugin-worker',
+      pluginId: 'plugin-worker',
+      description: 'Plugin runtime for message.completed negative test.',
+      priority: 200,
+      outputKind: 'plugin',
+    };
+    const loaded: LoadedRuntime = {
+      manifest,
+      promptTemplate: 'Return structured data.',
+      references: [],
+    };
+
+    const llm: LLMAdapter = {
+      async generate() {
+        return {
+          content: '{"data": "ok"}',
+          toolCalls: [],
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 5 },
+        };
+      },
+    };
+
+    const emitter = makeEmitterSpy();
+    const store = await createMainLoopStore('sess-1');
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => loaded,
+      llm,
+      getConfig: () => ({}),
+      store,
+      emitter,
+    };
+
+    await executeTurn(makeTurnInput(), [manifest], deps, { maxSteps: 2 });
+
+    expect(emitter.events.find((e) => e.type === 'message.completed')).toBeUndefined();
+  });
+});
+
 describe('turn-executor direct-generate error trace pairing (Q1)', () => {
   it('emits llm.responded with finishReason=error when malformed-args fallback also throws', async () => {
     const fallbackTool = tool({
