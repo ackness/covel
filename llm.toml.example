@@ -35,7 +35,7 @@ protocol = "openai-chat-v1"
 
 [covel.utility]
 provider = "dashscope"
-model    = "qwen3.5-flash"
+model    = "qwen3.6-flash"
 baseUrl  = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 protocol = "openai-chat-v1"
 fallback = "story"
