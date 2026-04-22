@@ -230,6 +230,13 @@ export interface CallLLMWithRetryParams {
    * Useful for logging / tracing.
    */
   readonly onRetry?: (info: RetryInfo) => void;
+  /** Emitter for llm.calling / llm.responded trace events. */
+  readonly emitter?: import('./turn-emitter.js').TurnEmitter;
+  /** Identity for trace payload enrichment. */
+  readonly runtimeId?: string;
+  readonly pluginId?: string;
+  /** Provider label for trace payload (e.g. 'deepseek', 'openai'). Optional. */
+  readonly provider?: string;
 }
 
 export interface RetryInfo {
@@ -258,14 +265,49 @@ export async function callLLMWithRetry(params: CallLLMWithRetryParams): Promise<
     const attemptMessages = perturbMessages(messages, attempt, lastReason);
 
     try {
+      const callStart = Date.now();
+      if (params.emitter) {
+        await params.emitter.emit('llm.calling', {
+          runtimeId: params.runtimeId,
+          pluginId: params.pluginId,
+          slot: params.model,
+          model: params.model,
+          provider: params.provider,
+          messages: attemptMessages,
+          tools: params.tools ?? [],
+          attempt,
+        });
+      }
       const response = await llm.generate({
         model,
         messages: attemptMessages,
         tools,
         signal,
       });
+      if (params.emitter) {
+        await params.emitter.emit('llm.responded', {
+          runtimeId: params.runtimeId,
+          pluginId: params.pluginId,
+          text: response.content ?? '',
+          toolCalls: response.toolCalls,
+          usage: response.usage,
+          finishReason: response.finishReason,
+          durationMs: Date.now() - callStart,
+          attempt,
+        });
+      }
       return response;
     } catch (err) {
+      if (params.emitter) {
+        await params.emitter.emit('llm.responded', {
+          runtimeId: params.runtimeId,
+          pluginId: params.pluginId,
+          finishReason: 'error',
+          error: err instanceof Error ? err.message : String(err),
+          durationMs: 0,
+          attempt,
+        });
+      }
       lastError = err;
       lastReason = isCallTimeout(err, signal) ? 'call-timeout' : isTransientError(err) ? 'transient-error' : 'unknown';
       if (attempt >= policy.maxRetries || lastReason === 'unknown') {
@@ -361,6 +403,20 @@ export async function streamLLMWithRetry(
     let streamFinishReason: 'stop' | 'tool_calls' | 'length' | 'error' = 'stop';
     const attemptMessages = perturbMessages(messages, attempt, lastReason);
     const forwardDeltas = attempt === 0; // avoid duplicate text on retry
+    const streamStart = Date.now();
+    if (params.emitter) {
+      await params.emitter.emit('llm.calling', {
+        runtimeId: params.runtimeId,
+        pluginId: params.pluginId,
+        slot: params.model,
+        model: params.model,
+        provider: params.provider,
+        messages: attemptMessages,
+        tools: params.tools ?? [],
+        attempt,
+        streaming: true,
+      });
+    }
 
     try {
       for await (const event of llm.stream({
@@ -384,13 +440,27 @@ export async function streamLLMWithRetry(
       clearTimeout(callTimeoutHandle);
       clearTimeout(ttfbHandle);
 
+      const finalResponse: LLMResponse = {
+        content: streamedContent || null,
+        toolCalls: streamedToolCalls,
+        finishReason: streamFinishReason,
+        usage: { inputTokens: 0, outputTokens: 0 },
+      };
+      if (params.emitter) {
+        await params.emitter.emit('llm.responded', {
+          runtimeId: params.runtimeId,
+          pluginId: params.pluginId,
+          text: finalResponse.content ?? '',
+          toolCalls: finalResponse.toolCalls,
+          usage: finalResponse.usage,
+          finishReason: finalResponse.finishReason,
+          durationMs: Date.now() - streamStart,
+          attempt,
+          streaming: true,
+        });
+      }
       return {
-        response: {
-          content: streamedContent || null,
-          toolCalls: streamedToolCalls,
-          finishReason: streamFinishReason,
-          usage: { inputTokens: 0, outputTokens: 0 },
-        },
+        response: finalResponse,
         attempt,
       };
     } catch (err) {
