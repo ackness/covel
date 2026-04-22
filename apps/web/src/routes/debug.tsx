@@ -1,5 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 import {
   Terminal, Activity, ChevronDown, ChevronRight, RefreshCw,
   Zap, Wrench, CheckCircle2, XCircle, MessageSquare, Database,
@@ -37,13 +39,13 @@ function categorize(type: string): EventCategory {
 }
 
 const CATEGORY_STYLES: Record<EventCategory, { color: string; bg: string; border: string; icon: typeof Activity }> = {
-  flow:    { color: "text-zinc-400",   bg: "bg-zinc-500/10",   border: "border-zinc-500/20",  icon: Layers },
-  runtime: { color: "text-blue-500",   bg: "bg-blue-500/10",   border: "border-blue-500/20",  icon: Activity },
-  llm:     { color: "text-amber-500",  bg: "bg-amber-500/10",  border: "border-amber-500/20", icon: Zap },
-  tool:    { color: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/20", icon: Wrench },
-  message: { color: "text-cyan-500",   bg: "bg-cyan-500/10",   border: "border-cyan-500/20",  icon: MessageSquare },
-  block:   { color: "text-indigo-500", bg: "bg-indigo-500/10", border: "border-indigo-500/20", icon: Box },
-  state:   { color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/20", icon: Database },
+  flow: { color: "text-zinc-400", bg: "bg-zinc-500/10", border: "border-zinc-500/20", icon: Layers },
+  runtime: { color: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/20", icon: Activity },
+  llm: { color: "text-amber-500", bg: "bg-amber-500/10", border: "border-amber-500/20", icon: Zap },
+  tool: { color: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/20", icon: Wrench },
+  message: { color: "text-cyan-500", bg: "bg-cyan-500/10", border: "border-cyan-500/20", icon: MessageSquare },
+  block: { color: "text-indigo-500", bg: "bg-indigo-500/10", border: "border-indigo-500/20", icon: Box },
+  state: { color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/20", icon: Database },
 };
 
 // ── Runtime status derivation ─────────────────────────────────────
@@ -101,7 +103,8 @@ function deriveRuntimesFromTurn(events: api.TraceEvent[]): RuntimeInfo[] {
 function fmtTime(iso: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleTimeString("zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    const locale = i18n.language || "zh-CN";
+    return d.toLocaleTimeString(locale, { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
       + "." + String(d.getMilliseconds()).padStart(3, "0");
   } catch {
     return iso;
@@ -121,6 +124,7 @@ function fmtDuration(startIso: string, endIso: string): string {
 // ── Main Page ─────────────────────────────────────────────────────
 
 function DebugPage() {
+  const { t } = useTranslation();
   const { sid } = Route.useSearch();
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<api.SessionRecord[]>([]);
@@ -226,11 +230,11 @@ function DebugPage() {
       <div className="flex-shrink-0 h-11 px-4 border-b border-border bg-background flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <h1 className="font-display font-bold text-sm uppercase tracking-widest flex items-center gap-2">
-            <Terminal className="w-4 h-4" /> Trace Inspector
+            <Terminal className="w-4 h-4" /> {t("debugger.title")}
           </h1>
           {selectedSessionId && (
             <Badge variant="outline" className="font-mono text-[10px]">
-              {turns.length} turns · {totalEvents} events
+              {t("debugger.turn", { count: turns.length })} · {totalEvents} {t("session.events")}
             </Badge>
           )}
         </div>
@@ -243,7 +247,7 @@ function DebugPage() {
               onClick={() => navigate({ to: "/session", search: { sid: selectedSessionId } })}
             >
               <Gamepad2 className="w-3 h-3" />
-              Session
+              {t("debugger.toSession")}
             </Button>
           )}
           <Button
@@ -253,7 +257,7 @@ function DebugPage() {
             onClick={() => setAutoRefresh((v) => !v)}
           >
             <Radio className={`w-3 h-3 ${autoRefresh ? "animate-pulse" : ""}`} />
-            {autoRefresh ? "LIVE" : "Auto"}
+            {autoRefresh ? t("debugger.live") : t("debugger.auto")}
           </Button>
           <Button
             variant="ghost"
@@ -272,33 +276,31 @@ function DebugPage() {
         <div className="w-56 flex-shrink-0 border-r border-border flex flex-col min-h-0 bg-muted/5">
           <div className="px-3 py-2 border-b border-border">
             <h2 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-              Sessions
+              {t("debugger.sessions")}
             </h2>
           </div>
           <ScrollArea className="flex-1 min-h-0">
             <div className="p-1.5 space-y-0.5">
               {sessions.length === 0 && (
-                <p className="text-[11px] text-muted-foreground italic px-2 py-3">No sessions found</p>
+                <p className="text-[11px] text-muted-foreground italic px-2 py-3">{t("debugger.noSessions")}</p>
               )}
               {sessions.map((s) => (
                 <button
                   key={s.id}
                   onClick={() => selectSession(s.id)}
-                  className={`w-full text-left px-2.5 py-2 text-[11px] border transition-colors ${
-                    selectedSessionId === s.id
-                      ? "border-primary/40 bg-primary/5 text-foreground"
-                      : "border-transparent hover:border-border hover:bg-muted/20 text-muted-foreground"
-                  }`}
+                  className={`w-full text-left px-2.5 py-2 text-[11px] border transition-colors ${selectedSessionId === s.id
+                    ? "border-primary/40 bg-primary/5 text-foreground"
+                    : "border-transparent hover:border-border hover:bg-muted/20 text-muted-foreground"
+                    }`}
                 >
                   <div className="flex items-center gap-1.5 mb-0.5">
-                    <div className={`w-1.5 h-1.5 rounded-full ${
-                      s.status === "active" ? "bg-emerald-500" : "bg-zinc-400"
-                    }`} />
+                    <div className={`w-1.5 h-1.5 rounded-full ${s.status === "active" ? "bg-emerald-500" : "bg-zinc-400"
+                      }`} />
                     <span className="font-mono truncate text-[10px]">{s.id}</span>
                   </div>
                   <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                     <Badge variant="secondary" className="text-[9px] h-4 px-1">{s.status} · t{s.turnCount}</Badge>
-                    <span>{new Date(s.createdAt).toLocaleTimeString("zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit" })}</span>
+                    <span>{new Date(s.createdAt).toLocaleTimeString(i18n.language, { hour12: false, hour: "2-digit", minute: "2-digit" })}</span>
                   </div>
                 </button>
               ))}
@@ -314,23 +316,21 @@ function DebugPage() {
             <div className="flex items-center gap-1 shrink-0 border-r border-border pr-3">
               <button
                 onClick={() => setDebugView("traces")}
-                className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors ${
-                  debugView === "traces"
-                    ? "border-primary/40 bg-primary/10 text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
+                className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors ${debugView === "traces"
+                  ? "border-primary/40 bg-primary/10 text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
               >
-                Traces
+                {t("debugger.traces")}
               </button>
               <button
                 onClick={() => setDebugView("data")}
-                className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors ${
-                  debugView === "data"
-                    ? "border-primary/40 bg-primary/10 text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
+                className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors ${debugView === "data"
+                  ? "border-primary/40 bg-primary/10 text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
               >
-                Session Data
+                {t("debugger.sessionData")}
               </button>
             </div>
             {debugView === "traces" && (
@@ -338,13 +338,12 @@ function DebugPage() {
                 <Filter className="w-3 h-3 text-muted-foreground shrink-0" />
                 <button
                   onClick={() => setFilterCategory(null)}
-                  className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors shrink-0 ${
-                    filterCategory === null
-                      ? "border-primary/40 bg-primary/10 text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  }`}
+                  className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors shrink-0 ${filterCategory === null
+                    ? "border-primary/40 bg-primary/10 text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                    }`}
                 >
-                  All
+                  {t("debugger.all")}
                 </button>
                 {(Object.keys(CATEGORY_STYLES) as EventCategory[]).map((cat) => {
                   const style = CATEGORY_STYLES[cat];
@@ -352,14 +351,13 @@ function DebugPage() {
                     <button
                       key={cat}
                       onClick={() => setFilterCategory(filterCategory === cat ? null : cat)}
-                      className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors shrink-0 flex items-center gap-1 ${
-                        filterCategory === cat
-                          ? `${style.border} ${style.bg} ${style.color}`
-                          : "border-transparent text-muted-foreground hover:text-foreground"
-                      }`}
+                      className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors shrink-0 flex items-center gap-1 ${filterCategory === cat
+                        ? `${style.border} ${style.bg} ${style.color}`
+                        : "border-transparent text-muted-foreground hover:text-foreground"
+                        }`}
                     >
                       <style.icon className="w-2.5 h-2.5" />
-                      {cat}
+                      {t(`debugger.category.${cat}`, cat)}
                     </button>
                   );
                 })}
@@ -374,15 +372,15 @@ function DebugPage() {
               <ScrollArea className="flex-1 min-h-0">
                 <div className="p-4 max-w-5xl space-y-4">
                   {!selectedSessionId && (
-                    <p className="text-sm text-muted-foreground py-20 text-center">Select a session</p>
+                    <p className="text-sm text-muted-foreground py-20 text-center">{t("debugger.selectSession")}</p>
                   )}
                   {selectedSessionId && !snapshotData && (
-                    <p className="text-sm text-muted-foreground py-20 text-center">Loading session data...</p>
+                    <p className="text-sm text-muted-foreground py-20 text-center">{t("debugger.loadingSessionData")}</p>
                   )}
                   {snapshotData && (
                     <>
                       {/* Session Info */}
-                      <DataSection title="Session" icon={<Layers className="w-3.5 h-3.5" />}>
+                      <DataSection title={t("debugger.dataSection.session")} icon={<Layers className="w-3.5 h-3.5" />}>
                         <JsonBlock data={{
                           id: snapshotData.session.id,
                           worldId: snapshotData.session.worldId,
@@ -396,9 +394,9 @@ function DebugPage() {
                       </DataSection>
 
                       {/* Characters */}
-                      <DataSection title={`Characters (${snapshotData.characters.length})`} icon={<Gamepad2 className="w-3.5 h-3.5" />}>
+                      <DataSection title={`${t("debugger.dataSection.characters")} (${snapshotData.characters.length})`} icon={<Gamepad2 className="w-3.5 h-3.5" />}>
                         {snapshotData.characters.length === 0
-                          ? <p className="text-xs text-muted-foreground italic">No characters created</p>
+                          ? <p className="text-xs text-muted-foreground italic">{t("debugger.noCharactersCreated")}</p>
                           : snapshotData.characters.map((ch) => (
                             <div key={ch.id} className="border border-border p-2 space-y-1">
                               <div className="flex items-center gap-2">
@@ -413,13 +411,12 @@ function DebugPage() {
                       </DataSection>
 
                       {/* Messages */}
-                      <DataSection title={`Messages (${snapshotData.messages.length})`} icon={<MessageSquare className="w-3.5 h-3.5" />}>
+                      <DataSection title={`${t("debugger.dataSection.messages")} (${snapshotData.messages.length})`} icon={<MessageSquare className="w-3.5 h-3.5" />}>
                         {snapshotData.messages.length === 0
-                          ? <p className="text-xs text-muted-foreground italic">No messages</p>
+                          ? <p className="text-xs text-muted-foreground italic">{t("debugger.noMessages")}</p>
                           : snapshotData.messages.map((m) => (
-                            <div key={m.id} className={`border p-2 text-[11px] ${
-                              m.role === "user" ? "border-blue-500/20 bg-blue-500/5" : "border-border"
-                            }`}>
+                            <div key={m.id} className={`border p-2 text-[11px] ${m.role === "user" ? "border-blue-500/20 bg-blue-500/5" : "border-border"
+                              }`}>
                               <div className="flex items-center gap-2 mb-1">
                                 <Badge variant="outline" className="text-[9px]">{m.role}</Badge>
                                 {m.kind && <Badge variant="outline" className="text-[9px]">{m.kind}</Badge>}
@@ -428,7 +425,7 @@ function DebugPage() {
                               {m.content ? (
                                 <p className="text-muted-foreground whitespace-pre-wrap line-clamp-3">{m.content}</p>
                               ) : m.block ? (
-                                <Badge variant="outline" className="text-[9px]">Block: {(m.block as Record<string, unknown>).type as string}</Badge>
+                                <Badge variant="outline" className="text-[9px]">{t("debugger.blockType")}: {(m.block as Record<string, unknown>).type as string}</Badge>
                               ) : null}
                             </div>
                           ))
@@ -436,17 +433,17 @@ function DebugPage() {
                       </DataSection>
 
                       {/* Game State */}
-                      <DataSection title="Game State" icon={<Database className="w-3.5 h-3.5" />}>
+                      <DataSection title={t("debugger.dataSection.gameState")} icon={<Database className="w-3.5 h-3.5" />}>
                         {Object.keys(snapshotData.gameState).length === 0
-                          ? <p className="text-xs text-muted-foreground italic">No state data</p>
+                          ? <p className="text-xs text-muted-foreground italic">{t("debugger.noStateData")}</p>
                           : <JsonBlock data={snapshotData.gameState} />
                         }
                       </DataSection>
 
                       {/* Execution Steps */}
-                      <DataSection title={`Execution Steps (${snapshotData.executionSteps.length})`} icon={<Activity className="w-3.5 h-3.5" />}>
+                      <DataSection title={`${t("debugger.dataSection.executionSteps")} (${snapshotData.executionSteps.length})`} icon={<Activity className="w-3.5 h-3.5" />}>
                         {snapshotData.executionSteps.length === 0
-                          ? <p className="text-xs text-muted-foreground italic">No execution traces</p>
+                          ? <p className="text-xs text-muted-foreground italic">{t("debugger.noExecutionTraces")}</p>
                           : snapshotData.executionSteps.map((step, i) => (
                             <div key={i} className="flex items-center gap-2 text-[11px] font-mono py-0.5">
                               <Badge variant="outline" className="text-[9px] shrink-0">{step.type}</Badge>
@@ -474,15 +471,15 @@ function DebugPage() {
                     {!selectedSessionId && (
                       <div className="flex flex-col items-center justify-center py-20 text-center">
                         <Terminal className="w-8 h-8 text-muted-foreground/30 mb-3" />
-                        <p className="text-sm text-muted-foreground">Select a session to inspect traces</p>
+                        <p className="text-sm text-muted-foreground">{t("debugger.selectSessionToInspect")}</p>
                       </div>
                     )}
 
                     {selectedSessionId && turns.length === 0 && !loading && (
                       <div className="flex flex-col items-center justify-center py-20 text-center">
                         <Activity className="w-8 h-8 text-muted-foreground/30 mb-3" />
-                        <p className="text-sm text-muted-foreground">No trace events recorded</p>
-                        <p className="text-xs text-muted-foreground/60 mt-1">Events will appear here as turns execute</p>
+                        <p className="text-sm text-muted-foreground">{t("debugger.noTraceEvents")}</p>
+                        <p className="text-xs text-muted-foreground/60 mt-1">{t("debugger.eventsWillAppear")}</p>
                       </div>
                     )}
 
@@ -508,13 +505,13 @@ function DebugPage() {
                   <div className="w-80 flex-shrink-0 border-l border-border flex flex-col min-h-0 bg-muted/5">
                     <div className="px-3 py-2 border-b border-border flex items-center justify-between">
                       <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                        Event Detail
+                        {t("debugger.eventDetail")}
                       </h3>
                       <button
                         onClick={() => setSelectedEvent(null)}
                         className="text-[10px] text-muted-foreground hover:text-foreground"
                       >
-                        Close
+                        {t("debugger.close")}
                       </button>
                     </div>
                     <ScrollArea className="flex-1 min-h-0">
@@ -554,6 +551,7 @@ function TurnCard({
   onSelectEvent: (event: api.TraceEvent) => void;
   selectedEventSeq?: number;
 }) {
+  const { t } = useTranslation();
   const runtimes = useMemo(() => deriveRuntimesFromTurn(
     turn.events.filter((e) => e.type === "runtime.progress")
   ), [turn.events]);
@@ -599,7 +597,7 @@ function TurnCard({
 
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className="font-display font-bold text-xs uppercase tracking-wider shrink-0">
-            Turn {turnIndex}
+            {t("debugger.turn", { count: turnIndex })}
           </span>
           <span className="font-mono text-[10px] text-muted-foreground truncate">
             {turn.turnId}
@@ -611,7 +609,7 @@ function TurnCard({
           {runtimes.length > 0 && (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] border border-border bg-muted/10 text-muted-foreground">
               <Activity className="w-2.5 h-2.5" />
-              {runtimes.length} runtimes
+              {t("debugger.nRuntimes", { count: runtimes.length })}
               {runtimes.some((rt) => rt.status === "failed") && (
                 <XCircle className="w-2.5 h-2.5 text-destructive" />
               )}
@@ -622,7 +620,7 @@ function TurnCard({
             variant={hasError ? "destructive" : isCompleted ? "secondary" : "outline"}
             className="text-[9px] h-4"
           >
-            {hasError ? "ERROR" : isCompleted ? duration : "RUNNING"}
+            {hasError ? t("debugger.error") : isCompleted ? duration : t("debugger.running")}
           </Badge>
 
           <span className="text-[10px] text-muted-foreground font-mono">
@@ -638,7 +636,7 @@ function TurnCard({
           {runtimes.length > 0 && (
             <div className="px-3 py-2 space-y-1 border-b border-border bg-muted/5">
               <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">
-                Runtimes
+                {t("debugger.runtimes")}
               </h4>
               {runtimes.map((rt) => {
                 const rtKey = `${turn.turnId}:${rt.runtimeId}`;
@@ -664,7 +662,7 @@ function TurnCard({
               {runtimes.length > 0 && (
                 <div className="px-3 py-1.5 bg-muted/5">
                   <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">
-                    Flow Events
+                    {t("debugger.flowEvents")}
                   </h4>
                 </div>
               )}
@@ -680,7 +678,7 @@ function TurnCard({
           )}
           {orphanEvents.length === 0 && runtimes.length === 0 && (
             <div className="px-3 py-4 text-center text-[11px] text-muted-foreground italic">
-              No events matching filter
+              {t("debugger.noEventsMatchingFilter")}
             </div>
           )}
         </div>
@@ -723,13 +721,12 @@ function RuntimeRow({
   }, [runtime.events, filterCategory]);
 
   return (
-    <div className={`border ${
-      runtime.status === "completed"
-        ? "border-emerald-500/15 bg-emerald-500/[0.02]"
-        : runtime.status === "failed"
-          ? "border-destructive/15 bg-destructive/[0.02]"
-          : "border-blue-500/15 bg-blue-500/[0.02]"
-    }`}>
+    <div className={`border ${runtime.status === "completed"
+      ? "border-emerald-500/15 bg-emerald-500/[0.02]"
+      : runtime.status === "failed"
+        ? "border-destructive/15 bg-destructive/[0.02]"
+        : "border-blue-500/15 bg-blue-500/[0.02]"
+      }`}>
       <button
         onClick={onToggle}
         className="w-full px-2.5 py-1.5 flex items-center gap-2 text-left hover:bg-muted/10 transition-colors"
@@ -739,11 +736,10 @@ function RuntimeRow({
           : <ChevronRight className="w-3 h-3 text-muted-foreground" />
         }
 
-        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-          runtime.status === "completed" ? "bg-emerald-500"
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${runtime.status === "completed" ? "bg-emerald-500"
           : runtime.status === "failed" ? "bg-destructive"
-          : "bg-blue-500 animate-pulse"
-        }`} />
+            : "bg-blue-500 animate-pulse"
+          }`} />
 
         <span className="font-mono text-[11px] font-medium flex-1 truncate">
           {runtime.label}
@@ -808,13 +804,11 @@ function EventRow({
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left flex items-center gap-2 transition-colors ${
-        compact ? "px-2.5 py-1" : "px-3 py-1.5"
-      } ${
-        selected
+      className={`w-full text-left flex items-center gap-2 transition-colors ${compact ? "px-2.5 py-1" : "px-3 py-1.5"
+        } ${selected
           ? "bg-primary/5 border-l-2 border-l-primary"
           : "hover:bg-muted/10 border-l-2 border-l-transparent"
-      }`}
+        }`}
     >
       <Icon className={`w-3 h-3 shrink-0 ${style.color}`} />
 
@@ -837,7 +831,7 @@ function EventRow({
 
 // ── Structured Data Renderer ─────────────────────────────────────
 
-function renderStructuredData(type: string, payload: Record<string, unknown>) {
+function renderStructuredData(type: string, payload: Record<string, unknown>, t: (key: string, options?: Record<string, unknown>) => string) {
   const data = payload.data as Record<string, unknown> | undefined;
 
   if (type === "llm.calling" && data?.messages) {
@@ -845,16 +839,15 @@ function renderStructuredData(type: string, payload: Record<string, unknown>) {
     return (
       <div className="space-y-1.5">
         <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-1">
-          <MessageSquare className="w-3 h-3" /> Prompt Messages ({messages.length})
+          <MessageSquare className="w-3 h-3" /> {t("debugger.promptMessages", { count: messages.length })}
         </h4>
         <div className="space-y-1 max-h-[400px] overflow-y-auto">
           {messages.map((msg, i) => (
-            <div key={i} className={`border p-2 text-[10px] ${
-              msg.role === "system" ? "border-blue-500/20 bg-blue-500/5"
+            <div key={i} className={`border p-2 text-[10px] ${msg.role === "system" ? "border-blue-500/20 bg-blue-500/5"
               : msg.role === "user" ? "border-emerald-500/20 bg-emerald-500/5"
-              : msg.role === "tool" ? "border-violet-500/20 bg-violet-500/5"
-              : "border-amber-500/20 bg-amber-500/5"
-            }`}>
+                : msg.role === "tool" ? "border-violet-500/20 bg-violet-500/5"
+                  : "border-amber-500/20 bg-amber-500/5"
+              }`}>
               <span className="font-mono font-bold text-[9px] uppercase">{msg.role}</span>
               {msg.toolCallId && <span className="text-[9px] text-muted-foreground ml-1">({msg.toolCallId})</span>}
               <pre className="mt-1 whitespace-pre-wrap break-all text-muted-foreground leading-relaxed max-h-[150px] overflow-y-auto">
@@ -874,13 +867,13 @@ function renderStructuredData(type: string, payload: Record<string, unknown>) {
       <div className="space-y-1.5">
         {usage && (
           <div className="flex gap-3 text-[10px] text-muted-foreground">
-            <span>Input: {usage.inputTokens ?? 0} tokens</span>
-            <span>Output: {usage.outputTokens ?? 0} tokens</span>
+            <span>{t("debugger.inputTokens")}: {usage.inputTokens ?? 0} tokens</span>
+            <span>{t("debugger.outputTokens")}: {usage.outputTokens ?? 0} tokens</span>
           </div>
         )}
         {typeof data.text === "string" && (
           <div>
-            <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Response Text</h4>
+            <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">{t("debugger.responseText")}</h4>
             <pre className="text-[10px] font-mono text-muted-foreground bg-muted/20 border border-border p-2 whitespace-pre-wrap break-all leading-relaxed max-h-[200px] overflow-y-auto">
               {data.text as string}
             </pre>
@@ -888,7 +881,7 @@ function renderStructuredData(type: string, payload: Record<string, unknown>) {
         )}
         {toolCalls && toolCalls.length > 0 && (
           <div>
-            <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Tool Calls ({toolCalls.length})</h4>
+            <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">{t("debugger.toolCalls", { count: toolCalls.length })}</h4>
             {toolCalls.map((tc, i) => (
               <div key={i} className="border border-violet-500/20 bg-violet-500/5 p-2 text-[10px] mb-1">
                 <span className="font-mono font-bold">{tc.name}</span>
@@ -906,7 +899,7 @@ function renderStructuredData(type: string, payload: Record<string, unknown>) {
     return (
       <div>
         <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1 flex items-center gap-1">
-          <Wrench className="w-3 h-3" /> Tool Result
+          <Wrench className="w-3 h-3" /> {t("debugger.toolResult")}
         </h4>
         <pre className="text-[10px] font-mono text-muted-foreground bg-muted/20 border border-border p-2 whitespace-pre-wrap break-all leading-relaxed max-h-[200px] overflow-y-auto">
           {resultStr}
@@ -919,7 +912,7 @@ function renderStructuredData(type: string, payload: Record<string, unknown>) {
     return (
       <div>
         <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1 flex items-center gap-1">
-          <Wrench className="w-3 h-3" /> Tool Input
+          <Wrench className="w-3 h-3" /> {t("debugger.toolInput")}
         </h4>
         <pre className="text-[10px] font-mono text-muted-foreground bg-muted/20 border border-border p-2 whitespace-pre-wrap break-all leading-relaxed">
           {(() => { try { return JSON.stringify(JSON.parse(payload.detail as string), null, 2); } catch { return payload.detail as string; } })()}
@@ -934,6 +927,7 @@ function renderStructuredData(type: string, payload: Record<string, unknown>) {
 // ── Event Detail Panel ────────────────────────────────────────────
 
 function EventDetail({ event }: { event: api.TraceEvent }) {
+  const { t } = useTranslation();
   const displayType = event.type === "runtime.progress"
     ? (event.payload.type as string) || event.type
     : event.type;
@@ -959,12 +953,12 @@ function EventDetail({ event }: { event: api.TraceEvent }) {
       </div>
 
       {/* Structured data (messages, tool results) */}
-      {renderStructuredData(displayType, event.payload)}
+      {renderStructuredData(displayType, event.payload, t)}
 
       {/* Raw Payload */}
       <details className="group">
         <summary className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1 cursor-pointer">
-          <FileJson className="w-3 h-3" /> Raw Payload
+          <FileJson className="w-3 h-3" /> {t("debugger.rawPayload")}
         </summary>
         <pre className="text-[10px] font-mono text-muted-foreground bg-muted/20 border border-border p-2 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
           {JSON.stringify(event.payload, null, 2)}
