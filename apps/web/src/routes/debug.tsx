@@ -5,7 +5,7 @@ import i18n from "@/i18n";
 import {
   Terminal, Activity, ChevronDown, ChevronRight, RefreshCw,
   Zap, Wrench, CheckCircle2, XCircle, MessageSquare, Database,
-  Layers, Clock, Filter, Radio, Box, FileJson, Gamepad2,
+  Layers, Clock, Filter, Radio, Box, FileJson, Gamepad2, Shield,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Badge } from "@/components/ui/badge.js";
@@ -25,11 +25,12 @@ export const Route = createFileRoute("/debug")({
 
 // ── Event type styling ────────────────────────────────────────────
 
-type EventCategory = "flow" | "runtime" | "llm" | "tool" | "message" | "block" | "state";
+type EventCategory = "flow" | "runtime" | "llm" | "tool" | "message" | "block" | "state" | "hook";
 
 function categorize(type: string): EventCategory {
   if (type.startsWith("flow.")) return "flow";
   if (type.startsWith("runtime.")) return "runtime";
+  if (type.startsWith("hook.")) return "hook";
   if (type.startsWith("message.")) return "message";
   if (type.startsWith("block.")) return "block";
   if (type.startsWith("state.")) return "state";
@@ -39,13 +40,14 @@ function categorize(type: string): EventCategory {
 }
 
 const CATEGORY_STYLES: Record<EventCategory, { color: string; bg: string; border: string; icon: typeof Activity }> = {
-  flow: { color: "text-zinc-400", bg: "bg-zinc-500/10", border: "border-zinc-500/20", icon: Layers },
-  runtime: { color: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/20", icon: Activity },
-  llm: { color: "text-amber-500", bg: "bg-amber-500/10", border: "border-amber-500/20", icon: Zap },
-  tool: { color: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/20", icon: Wrench },
-  message: { color: "text-cyan-500", bg: "bg-cyan-500/10", border: "border-cyan-500/20", icon: MessageSquare },
-  block: { color: "text-indigo-500", bg: "bg-indigo-500/10", border: "border-indigo-500/20", icon: Box },
-  state: { color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/20", icon: Database },
+  flow:    { color: "text-zinc-400",   bg: "bg-zinc-500/10",   border: "border-zinc-500/20",  icon: Layers },
+  runtime: { color: "text-blue-500",   bg: "bg-blue-500/10",   border: "border-blue-500/20",  icon: Activity },
+  llm:     { color: "text-amber-500",  bg: "bg-amber-500/10",  border: "border-amber-500/20", icon: Zap },
+  tool:    { color: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/20", icon: Wrench },
+  message: { color: "text-cyan-500",   bg: "bg-cyan-500/10",   border: "border-cyan-500/20",  icon: MessageSquare },
+  block:   { color: "text-indigo-500", bg: "bg-indigo-500/10", border: "border-indigo-500/20", icon: Box },
+  state:   { color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/20", icon: Database },
+  hook:    { color: "text-rose-500",   bg: "bg-rose-500/10",   border: "border-rose-500/20",  icon: Shield },
 };
 
 // ── Runtime status derivation ─────────────────────────────────────
