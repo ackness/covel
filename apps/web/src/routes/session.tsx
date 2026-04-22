@@ -8,6 +8,7 @@ import { initDesktopBridge } from "@/lib/desktop-bridge.js";
 import { WorldSelectScreen } from "@/components/session/world-select-screen.js";
 import { SessionPrepScreen } from "@/components/session/session-prep-screen.js";
 import { GameView } from "@/components/session/game-view.js";
+import { OnboardingWizard } from "@/components/onboarding-wizard.js";
 
 interface SessionSearchParams {
   sid?: string;
@@ -212,17 +213,22 @@ function SessionPage() {
     );
   }
 
-  // World selection
+  // World selection — onboarding wizard is only mounted here so first-time
+  // users see it when they click "Get Started" and land on world-select,
+  // not on the marketing home page.
   return (
-    <WorldSelectScreen
-      worlds={state.worlds}
-      packages={state.packages}
-      resolvedSlots={resolvedSlots}
-      settingsOpen={settingsOpen}
-      onSettingsOpenChange={setSettingsOpen}
-      onSelectWorld={selectWorld}
-      onWorldUpdated={updateWorldLocal}
-      onWorldCreated={addWorldLocal}
-    />
+    <>
+      <OnboardingWizard />
+      <WorldSelectScreen
+        worlds={state.worlds}
+        packages={state.packages}
+        resolvedSlots={resolvedSlots}
+        settingsOpen={settingsOpen}
+        onSettingsOpenChange={setSettingsOpen}
+        onSelectWorld={selectWorld}
+        onWorldUpdated={updateWorldLocal}
+        onWorldCreated={addWorldLocal}
+      />
+    </>
   );
 }
