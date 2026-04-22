@@ -236,8 +236,12 @@ function extractTargetId(event: HookEvent, payload: unknown): string | undefined
   if (!payload || typeof payload !== 'object') return undefined;
   const p = payload as Record<string, unknown>;
   if (event === 'PreToolUse' || event === 'PostToolUse') {
+    // Production payload shape is `{ toolCall: { id, name, arguments } }`
+    // (built by runPreToolUseHook / runPostToolUseHook in wire-helpers.ts).
+    // The field is `id`, not `toolCallId` — `toolCallId` is on ToolCallRecord
+    // which never reaches the hook pipeline.
     const toolCall = p.toolCall as Record<string, unknown> | undefined;
-    return typeof toolCall?.toolCallId === 'string' ? toolCall.toolCallId : undefined;
+    return typeof toolCall?.id === 'string' ? toolCall.id : undefined;
   }
   if (event === 'PreStateCommit' || event === 'PostStateCommit') {
     const proposal = p.proposal as Record<string, unknown> | undefined;
