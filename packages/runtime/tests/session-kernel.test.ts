@@ -6,8 +6,25 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { normalizeOutput, createCommitPipeline, processRuntimeResult, createTraceRecorder } from '../src/session-kernel.js';
+import type { TurnEmitter } from '../src/turn-emitter.js';
 import { withPendingProposals } from '@covel/tools';
 import type { Proposal, SessionEvent, RuntimeResult } from '@covel/shared';
+
+interface EmitterSpy extends TurnEmitter {
+  readonly events: Array<{ type: string; payload: Record<string, unknown> }>;
+}
+
+function makeEmitterSpy(): EmitterSpy {
+  const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
+  return {
+    sessionId: 'sess',
+    turnId: 'turn',
+    async emit(type: string, payload: Record<string, unknown>): Promise<void> {
+      events.push({ type, payload });
+    },
+    events,
+  };
+}
 
 const SOURCE = { pluginId: 'test-plugin', runtimeId: 'test-runtime' };
 const TURN_ID = 'turn-001';
@@ -530,6 +547,67 @@ describe('createCommitPipeline', () => {
 
       expect(result.committed).toBe(false);
       expect(result.error).toContain('unknown');
+    });
+  });
+
+  describe('CommitPipeline trace emissions (block/state)', () => {
+    it('emits block.emitted when an interaction.request proposal commits', async () => {
+      const emitter = makeEmitterSpy();
+      const store = createMockStore();
+      const pipeline = createCommitPipeline(store as any, undefined, undefined, emitter);
+      const proposal = makeProposal('interaction.request', {
+        interactionId: 'form-1',
+        type: 'form',
+        fields: [],
+      });
+
+      const result = await pipeline.commit(proposal);
+
+      expect(result.committed).toBe(true);
+      const blockEvent = emitter.events.find((e) => e.type === 'block.emitted');
+      expect(blockEvent).toBeDefined();
+      expect(blockEvent!.payload).toMatchObject({
+        proposalId: proposal.id,
+        pluginId: 'test-plugin',
+        runtimeId: 'test-runtime',
+      });
+      expect((blockEvent!.payload.block as Record<string, unknown>).type).toBe('interactive_form');
+    });
+
+    it('emits state.patch.applied when a state.patch proposal commits', async () => {
+      const emitter = makeEmitterSpy();
+      const store = createMockStore();
+      const pipeline = createCommitPipeline(store as any, undefined, undefined, emitter);
+      const proposal = makeProposal('state.patch', {
+        table: 'world',
+        field: 'weather',
+        value: 'rain',
+      });
+
+      const result = await pipeline.commit(proposal);
+
+      expect(result.committed).toBe(true);
+      const stateEvent = emitter.events.find((e) => e.type === 'state.patch.applied');
+      expect(stateEvent).toBeDefined();
+      expect(stateEvent!.payload).toMatchObject({
+        proposalId: proposal.id,
+        pluginId: 'test-plugin',
+        runtimeId: 'test-runtime',
+      });
+      expect((stateEvent!.payload.patch as Record<string, unknown>).packageName).toBe('world');
+      expect((stateEvent!.payload.patch as Record<string, unknown>).summary).toBe('weather');
+    });
+
+    it('does not emit block.emitted or state.patch.applied for narrative proposals', async () => {
+      const emitter = makeEmitterSpy();
+      const store = createMockStore();
+      const pipeline = createCommitPipeline(store as any, undefined, undefined, emitter);
+      const proposal = makeProposal('narrative.append', { content: 'hi', kind: 'story' });
+
+      await pipeline.commit(proposal);
+
+      expect(emitter.events.find((e) => e.type === 'block.emitted')).toBeUndefined();
+      expect(emitter.events.find((e) => e.type === 'state.patch.applied')).toBeUndefined();
     });
   });
 });
