@@ -11,7 +11,7 @@ import type { DataStore } from '@covel/store';
 import type { PluginRegistry, LoadedRuntime } from '@covel/plugin-loader';
 import type { LLMAdapter, ToolExecutor, HookPipeline } from '@covel/runtime';
 import type { EventBus } from '@covel/events';
-import { executeTurn, processRuntimeResult, createTraceRecorder } from '@covel/runtime';
+import { executeTurn, processRuntimeResult, createTraceRecorder, createTurnEmitter } from '@covel/runtime';
 import type { RuntimeManifest } from '@covel/shared';
 import type { CompactorRunner } from '@covel/context';
 import { rateLimiter } from '../../middleware/rate-limit.js';
@@ -234,6 +234,15 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
 
       // Create trace recorder for this turn (persists all lifecycle events to DB)
       const trace = createTraceRecorder(store, sessionId, turnId);
+
+      // Per-turn trace emitter — fans emit() into trace_events + eventBus. Threaded
+      // down into ToolCallContext / llm-retry / hooks etc. via executeTurn deps.
+      const emitter = createTurnEmitter({
+        store,
+        eventBus,
+        sessionId,
+        turnId,
+      });
 
       // NOTE: Session `phase` is no longer a first-class field. The state
       // model is `status + turnCount + preGameCompleted`, so there is no
