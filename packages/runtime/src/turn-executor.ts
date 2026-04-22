@@ -1235,15 +1235,33 @@ export async function resumeSuspendedRuntime(
         attempt: 0,
       });
     }
-    const response = await deps.llm.generate({
-      model: effectiveModel,
-      messages,
-      tools: toolDefs,
-      // Without this signal a hung provider HTTP call blocks forever — the
-      // while-loop deadline only gates between iterations. Using remaining
-      // budget keeps each LLM call bounded by the runtime's overall timeout.
-      signal: AbortSignal.timeout(Math.max(1000, deadline - Date.now())),
-    });
+    let response;
+    try {
+      response = await deps.llm.generate({
+        model: effectiveModel,
+        messages,
+        tools: toolDefs,
+        // Without this signal a hung provider HTTP call blocks forever — the
+        // while-loop deadline only gates between iterations. Using remaining
+        // budget keeps each LLM call bounded by the runtime's overall timeout.
+        signal: AbortSignal.timeout(Math.max(1000, deadline - Date.now())),
+      });
+    } catch (err) {
+      // Pair every `llm.calling` with an `llm.responded` on the error path so
+      // trace-viewer pairing stays intact when the direct generate throws.
+      if (deps.emitter) {
+        await deps.emitter.emit('llm.responded', {
+          runtimeId: manifest.name,
+          pluginId: manifest.pluginId,
+          finishReason: 'error',
+          error: err instanceof Error ? err.message : String(err),
+          usage: { inputTokens: 0, outputTokens: 0 },
+          durationMs: Date.now() - llmCallStart,
+          attempt: 0,
+        });
+      }
+      throw err;
+    }
     if (deps.emitter) {
       await deps.emitter.emit('llm.responded', {
         runtimeId: manifest.name,
@@ -2146,14 +2164,32 @@ async function executeOneRuntime(
               attempt: 0,
             });
           }
-          response = await deps.llm.generate({
-            model: effectiveModel,
-            messages,
-            tools: toolDefs,
-            signal: AbortSignal.timeout(
-              Math.max(1000, Math.min(retryPolicy.callTimeoutMs, deadline - Date.now())),
-            ),
-          });
+          try {
+            response = await deps.llm.generate({
+              model: effectiveModel,
+              messages,
+              tools: toolDefs,
+              signal: AbortSignal.timeout(
+                Math.max(1000, Math.min(retryPolicy.callTimeoutMs, deadline - Date.now())),
+              ),
+            });
+          } catch (fallbackErr) {
+            // Pair every `llm.calling` with an `llm.responded` on the error
+            // path so trace-viewer pairing stays intact when this fallback
+            // generate throws.
+            if (deps.emitter) {
+              await deps.emitter.emit('llm.responded', {
+                runtimeId: manifest.name,
+                pluginId: manifest.pluginId,
+                finishReason: 'error',
+                error: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
+                usage: { inputTokens: 0, outputTokens: 0 },
+                durationMs: Date.now() - fallbackCallStart,
+                attempt: 0,
+              });
+            }
+            throw fallbackErr;
+          }
           if (deps.emitter) {
             await deps.emitter.emit('llm.responded', {
               runtimeId: manifest.name,
