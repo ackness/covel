@@ -31,8 +31,11 @@ createRoutes.post('/world', async (c) => {
     return c.json({ error: 'concept must be 2000 characters or fewer' }, 400);
   }
 
-  const worldsDir = process.env.COVEL_WORLDS_DIR
+  const worldsDir = process.env.COVEL_USER_WORLDS_DIR
+    ?? process.env.COVEL_WORLDS_DIR
     ?? resolve(import.meta.dirname, '../../../../../worlds');
+
+  console.log(`[create/world] outputDir=${worldsDir}, concept="${concept.trim().slice(0, 40)}..."`);
 
   const result = await createWorld({
     llm,
@@ -40,7 +43,14 @@ createRoutes.post('/world', async (c) => {
     outputDir: worldsDir,
     model: typeof body.model === 'string' ? body.model : undefined,
     locale: typeof body.locale === 'string' ? body.locale : 'zh-CN',
+    logger: {
+      info: (...args: unknown[]) => console.log('[createWorld]', ...args),
+      warn: (...args: unknown[]) => console.warn('[createWorld]', ...args),
+      error: (...args: unknown[]) => console.error('[createWorld]', ...args),
+    },
   });
+
+  console.log(`[create/world] result success=${result.success} id=${result.id} files=[${result.files.join(', ')}]`);
 
   if (!result.success) {
     return c.json({ error: 'World generation failed', details: result.errors }, 422);

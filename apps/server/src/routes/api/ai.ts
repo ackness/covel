@@ -52,8 +52,11 @@ aiRoutes.post('/generate-world', rateLimiter({ max: 10 }), singleFlight(), async
     return c.json({ error: 'concept must be 4000 characters or fewer' }, 400);
   }
 
-  const worldsDir = process.env.COVEL_WORLDS_DIR
+  const worldsDir = process.env.COVEL_USER_WORLDS_DIR
+    ?? process.env.COVEL_WORLDS_DIR
     ?? resolve(import.meta.dirname, '../../../../../worlds');
+
+  console.log(`[ai/generate-world] outputDir=${worldsDir}, concept="${(concept as string).trim().slice(0, 40)}..."`);
 
   return streamSSE(c, async (stream) => {
     const send = async (event: GenerateEvent) => {
@@ -63,15 +66,27 @@ aiRoutes.post('/generate-world', rateLimiter({ max: 10 }), singleFlight(), async
     try {
       await send({ type: 'progress', phase: 'generating' });
 
-      const result = await createWorld({
+      const createOpts = {
         llm,
         concept: (concept as string).trim(),
         outputDir: worldsDir,
         model: typeof body.model === 'string' ? body.model : undefined,
         locale: typeof body.locale === 'string' ? body.locale : 'zh-CN',
-      });
+        logger: {
+          info: (...args: unknown[]) => console.log('[createWorld]', ...args),
+          warn: (...args: unknown[]) => console.warn('[createWorld]', ...args),
+          error: (...args: unknown[]) => console.error('[createWorld]', ...args),
+        },
+      };
+
+      const startMs = Date.now();
+      const result = await createWorld(createOpts);
+      const elapsedMs = Date.now() - startMs;
+
+      console.log(`[ai/generate-world] createWorld finished in ${elapsedMs}ms success=${result.success} id=${result.id}`);
 
       if (!result.success) {
+        console.error(`[ai/generate-world] generation failed after ${elapsedMs}ms:`, result.errors);
         await send({
           type: 'error',
           message: result.errors?.join('\n') ?? 'World generation failed',
@@ -97,11 +112,14 @@ aiRoutes.post('/generate-world', rateLimiter({ max: 10 }), singleFlight(), async
       await send({ type: 'progress', phase: 'saving' });
       await store.upsertWorld(record);
 
+      console.log(`[ai/generate-world] world saved to store: id=${record.id}`);
       await send({ type: 'done', world: record });
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[ai/generate-world] unexpected error:', msg);
       await send({
         type: 'error',
-        message: err instanceof Error ? err.message : String(err),
+        message: msg,
       });
     }
   });

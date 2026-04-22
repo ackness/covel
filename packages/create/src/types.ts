@@ -4,6 +4,12 @@
 
 import type { LLMAdapter } from '@covel/runtime';
 
+export interface CreateWorldLogger {
+  info(...args: unknown[]): void;
+  warn(...args: unknown[]): void;
+  error(...args: unknown[]): void;
+}
+
 /** Options for creating a world package. Only `concept` is required. */
 export interface CreateWorldOptions {
   /** LLM adapter for generation. */
@@ -16,6 +22,8 @@ export interface CreateWorldOptions {
   readonly model?: string;
   /** Locale for generated content (default: 'zh-CN'). */
   readonly locale?: string;
+  /** Optional logger for recording generation progress. */
+  readonly logger?: CreateWorldLogger;
 }
 
 /** Result of a creation operation. */
