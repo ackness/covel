@@ -618,6 +618,72 @@ describe('callLLMWithRetry trace emissions', () => {
   });
 });
 
+describe('streamLLMWithRetry trace emissions', () => {
+  it('emits llm.calling then llm.responded with streaming:true on success', async () => {
+    const emitter = makeEmitterSpy();
+    const llm: LLMAdapter = {
+      async generate(): Promise<LLMResponse> {
+        return { content: null, toolCalls: [], finishReason: 'stop', usage: { inputTokens: 0, outputTokens: 0 } };
+      },
+      async *stream() {
+        yield { type: 'text-delta', textDelta: 'hi' };
+        yield { type: 'done', finishReason: 'stop' };
+      },
+    };
+
+    await streamLLMWithRetry({
+      llm,
+      model: 'default',
+      messages: [{ role: 'user', content: 'ping' }],
+      policy: { maxRetries: 0, callTimeoutMs: 10_000, firstTokenTimeoutMs: 5_000, loopDetectionThreshold: 3 },
+      deadline: Date.now() + 30_000,
+      emitter,
+      runtimeId: 'core-narrator/main',
+      pluginId: 'core-narrator',
+    });
+
+    expect(emitter.events.map(e => e.type)).toEqual(['llm.calling', 'llm.responded']);
+    expect(emitter.events[0].payload).toMatchObject({ streaming: true, attempt: 0 });
+    expect(emitter.events[1].payload).toMatchObject({
+      streaming: true,
+      text: 'hi',
+      finishReason: 'stop',
+      attempt: 0,
+    });
+  });
+
+  it('emits llm.calling + llm.responded with error finishReason when stream throws', async () => {
+    const emitter = makeEmitterSpy();
+    const llm: LLMAdapter = {
+      async generate(): Promise<LLMResponse> {
+        return { content: null, toolCalls: [], finishReason: 'stop', usage: { inputTokens: 0, outputTokens: 0 } };
+      },
+      async *stream() {
+        throw new Error('fetch failed');
+        // Unreachable, but required to satisfy the generator type.
+        yield { type: 'done', finishReason: 'error' };
+      },
+    };
+
+    await expect(streamLLMWithRetry({
+      llm,
+      model: 'default',
+      messages: [],
+      policy: { maxRetries: 0, callTimeoutMs: 1_000, firstTokenTimeoutMs: 1_000, loopDetectionThreshold: 3 },
+      deadline: Date.now() + 5_000,
+      emitter,
+    })).rejects.toThrow();
+
+    expect(emitter.events.map(e => e.type)).toEqual(['llm.calling', 'llm.responded']);
+    expect(emitter.events[1].payload).toMatchObject({
+      finishReason: 'error',
+      streaming: true,
+      usage: { inputTokens: 0, outputTokens: 0 },
+    });
+    expect(typeof emitter.events[1].payload.error).toBe('string');
+  });
+});
+
 // ── Silence warn noise ──────────────────────────────────────────────
 
 let warnSpy: ReturnType<typeof vi.spyOn>;
