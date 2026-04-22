@@ -19,6 +19,77 @@ type Env = {
 
 export const worldRoutes = new Hono<Env>();
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function formatWorldEntryContent(key: string, value: unknown): string {
+  let body: string;
+  try {
+    body = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  } catch {
+    body = String(value);
+  }
+  return `[${key}]\n${body}`;
+}
+
+function resolveWorldMetadata(
+  body: Record<string, unknown>,
+  existingMetadata?: Readonly<Record<string, unknown>>,
+): { metadata?: Record<string, unknown>; changedDimensionKeys?: readonly string[]; error?: { status: 400 | 422; body: Record<string, unknown> } } {
+  const hasMetadataPatch = Object.prototype.hasOwnProperty.call(body, 'metadata');
+  if (hasMetadataPatch && body.metadata !== undefined && !isRecord(body.metadata)) {
+    return {
+      error: {
+        status: 400,
+        body: { error: 'metadata must be an object when provided' },
+      },
+    };
+  }
+
+  const metadataPatch = isRecord(body.metadata) ? body.metadata : undefined;
+  const hasTopLevelDimensions = Object.prototype.hasOwnProperty.call(body, 'dimensions');
+  const hasMetadataDimensions = metadataPatch !== undefined &&
+    Object.prototype.hasOwnProperty.call(metadataPatch, 'dimensions');
+  const rawDimensions = hasTopLevelDimensions ? body.dimensions : metadataPatch?.dimensions;
+
+  if ((hasTopLevelDimensions || hasMetadataDimensions) && !isRecord(rawDimensions)) {
+    return {
+      error: {
+        status: 400,
+        body: { error: 'dimensions must be an object when provided' },
+      },
+    };
+  }
+
+  const mergedMetadata = {
+    ...(existingMetadata ?? {}),
+    ...(metadataPatch ?? {}),
+  };
+
+  if (hasTopLevelDimensions || hasMetadataDimensions) {
+    const validation = validateDimensions(rawDimensions);
+    if (!validation.valid) {
+      return {
+        error: {
+          status: 422,
+          body: { error: 'Invalid dimensions', details: validation.errors },
+        },
+      };
+    }
+    const normalizedDimensions = validation.data as Record<string, unknown>;
+    mergedMetadata.dimensions = normalizedDimensions;
+    return {
+      metadata: Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
+      changedDimensionKeys: Object.keys(normalizedDimensions),
+    };
+  }
+
+  return {
+    metadata: Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
+  };
+}
+
 // GET /worlds
 worldRoutes.get('/', async (c) => {
   const store = c.get('store');
@@ -50,6 +121,10 @@ worldRoutes.post('/', async (c) => {
   }
 
   const now = new Date().toISOString();
+  const metadataResult = resolveWorldMetadata(body);
+  if (metadataResult.error) {
+    return c.json(metadataResult.error.body, metadataResult.error.status);
+  }
   const record: WorldRecord = {
     id: body.id,
     name: body.name,
@@ -57,7 +132,7 @@ worldRoutes.post('/', async (c) => {
     lore: typeof body.lore === 'string' ? body.lore : undefined,
     tags: Array.isArray(body.tags) ? body.tags as string[] : undefined,
     locale: typeof body.locale === 'string' ? body.locale : undefined,
-    metadata: body.metadata && typeof body.metadata === 'object' ? body.metadata as Record<string, unknown> : undefined,
+    metadata: metadataResult.metadata,
     createdAt: typeof body.createdAt === 'string' ? body.createdAt : now,
     updatedAt: now,
   };
@@ -77,6 +152,10 @@ worldRoutes.patch('/:id', async (c) => {
 
   const body = await c.req.json<Record<string, unknown>>();
   const now = new Date().toISOString();
+  const metadataResult = resolveWorldMetadata(body, existing.metadata);
+  if (metadataResult.error) {
+    return c.json(metadataResult.error.body, metadataResult.error.status);
+  }
 
   const updated: WorldRecord = {
     ...existing,
@@ -85,9 +164,7 @@ worldRoutes.patch('/:id', async (c) => {
     lore: typeof body.lore === 'string' ? body.lore : existing.lore,
     tags: Array.isArray(body.tags) ? body.tags as string[] : existing.tags,
     locale: typeof body.locale === 'string' ? body.locale : existing.locale,
-    metadata: body.metadata && typeof body.metadata === 'object'
-      ? body.metadata as Record<string, unknown>
-      : existing.metadata,
+    metadata: metadataResult.metadata,
     updatedAt: now,
   };
 
@@ -187,7 +264,8 @@ worldRoutes.post('/:id/dimensions/import', async (c) => {
 
 // ── Session Dimension Sync ──────────────────────────────────────
 
-// POST /worlds/:id/sync-dimensions — re-import world dimensions into a session's plugin_data
+// POST /worlds/:id/sync-dimensions — re-import world dimensions into a session's
+// plugin_data and lorebook canonical entries.
 worldRoutes.post('/:id/sync-dimensions', async (c) => {
   const store = c.get('store');
   const pluginRegistry = c.get('pluginRegistry');
@@ -222,10 +300,12 @@ worldRoutes.post('/:id/sync-dimensions', async (c) => {
     return c.json({ error: 'World has no dimensions to sync' }, 422);
   }
 
-  // Upsert dimensions into plugin_data (setPluginDataBatch uses onConflictDoUpdate).
-  // Stale keys from a previous dimension set are left in place — harmless since
-  // dimension keys are a small, fixed set and the context builder reads by key.
   const now = new Date().toISOString();
+  const nextKeys = new Set(Object.keys(dimensions));
+  const existingRecords = await store.listPluginData(sessionId, worldDataPluginId, 'entries');
+  const stalePluginDataKeys = existingRecords
+    .filter((record) => !nextKeys.has(record.key))
+    .map((record) => record.key);
   const records = Object.entries(dimensions).map(([key, value]) => ({
     id: crypto.randomUUID(),
     sessionId,
@@ -237,7 +317,39 @@ worldRoutes.post('/:id/sync-dimensions', async (c) => {
     updatedAt: now,
   }));
 
+  for (const key of stalePluginDataKeys) {
+    await store.deletePluginData(sessionId, worldDataPluginId, 'entries', key);
+  }
   await store.setPluginDataBatch(records);
+
+  if (typeof store.upsertLorebookEntries === 'function') {
+    const lorebookRecords = Object.entries(dimensions).map(([key, value], idx) => ({
+      id: `world-entry:${key}`,
+      sessionId,
+      pluginId: worldDataPluginId,
+      keys: [key],
+      content: formatWorldEntryContent(key, value),
+      strategy: 'constant' as const,
+      position: 'after_char_defs',
+      insertionOrder: 100 + idx * 100,
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+    }));
+    await store.upsertLorebookEntries(lorebookRecords);
+
+    if (typeof store.listSessionLorebookEntries === 'function' && typeof store.deleteLorebookEntry === 'function') {
+      const staleLorebookEntries = (await store.listSessionLorebookEntries(sessionId)).filter((entry) => {
+        if (entry.pluginId !== worldDataPluginId || entry.strategy !== 'constant') return false;
+        if (!entry.id.startsWith('world-entry:')) return false;
+        const key = entry.keys[0] ?? entry.id.slice('world-entry:'.length);
+        return !nextKeys.has(key);
+      });
+      for (const entry of staleLorebookEntries) {
+        await store.deleteLorebookEntry(sessionId, entry.id);
+      }
+    }
+  }
 
   return c.json({
     success: true,

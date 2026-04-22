@@ -220,6 +220,11 @@ export function createCommitPipeline(
   eventBus?: EventBus,
   emitter?: import('./turn-emitter.js').TurnEmitter,
 ): CommitPipeline {
+  function isCommitTransactionEnabled(): boolean {
+    const raw = process.env.COVEL_COMMIT_TXN_V1?.trim().toLowerCase();
+    return raw !== '0' && raw !== 'false';
+  }
+
   const handlers: Record<string, (p: Proposal) => Promise<CommitResult>> = {
     'narrative.append': commitNarrative,
     'interaction.request': commitInteraction,
@@ -336,12 +341,10 @@ export function createCommitPipeline(
   }
 
   async function commitAll(proposals: readonly Proposal[]): Promise<CommitResult[]> {
-    // Feature-flagged atomic path (S4-T1). When COVEL_COMMIT_TXN_V1=1 and the
-    // store implements the optional tx hooks, we wrap the whole commit chain
-    // in beginTx/commitTx. If any commit throws mid-chain we rollback so no
-    // partial state is persisted. Default (flag off) preserves the legacy
-    // non-transactional behaviour byte-for-byte.
-    const txEnabled = process.env.COVEL_COMMIT_TXN_V1 === '1';
+    // Transactional commit is the default path. Operators can explicitly opt
+    // out with COVEL_COMMIT_TXN_V1=0 / false while debugging or during a
+    // rollback window.
+    const txEnabled = isCommitTransactionEnabled();
     const supportsTx =
       typeof store.beginTx === 'function' &&
       typeof store.commitTx === 'function' &&

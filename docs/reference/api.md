@@ -141,10 +141,10 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | GET | `/api/worlds` | 列出所有世界 |
 | GET | `/api/worlds/:id` | 获取世界详情 |
 | POST | `/api/worlds` | 创建/更新世界 |
-| PATCH | `/api/worlds/:id` | 部分更新世界（lore, tags, metadata 等） |
+| PATCH | `/api/worlds/:id` | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并） |
 | GET | `/api/worlds/:id/dimensions/export` | 导出世界维度（YAML/JSON） |
 | POST | `/api/worlds/:id/dimensions/import` | 导入世界维度 |
-| POST | `/api/worlds/:id/sync-dimensions` | 将世界维度同步到活跃 session 的 plugin_data |
+| POST | `/api/worlds/:id/sync-dimensions` | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key |
 
 ### 会话管理
 
@@ -572,9 +572,37 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 **响应 422:** 维度数据校验失败。
 
+#### `PATCH /api/worlds/:id`
+
+部分更新世界。支持更新基础字段，也支持直接提交顶层 `dimensions`。
+
+行为：
+
+- 顶层 `dimensions` 会写入 `metadata.dimensions`
+- `metadata` 采用 merge 语义，未提及的兄弟字段会保留
+- `dimensions` 与 `metadata.dimensions` 都会经过世界维度校验
+
+**请求体示例:**
+
+```json
+{
+  "description": "更新后的描述",
+  "dimensions": {
+    "geography": { "overview": "新的地理结构" },
+    "factions": { "groups": ["Guild"] }
+  }
+}
+```
+
 #### `POST /api/worlds/:id/sync-dimensions`
 
-将世界最新维度数据同步到指定 session 的 plugin_data 中（覆盖旧数据）。
+将世界最新维度数据同步到指定 session 的 `plugin_data` 与 lorebook 常量词条中。
+
+行为：
+
+- 覆盖同名维度 key
+- 清理目标 session 中已经失效的旧维度 key
+- 保持 `loadSessionConfig()` / `SessionContextSnapshot` 下一轮读取到最新世界词条
 
 **请求体:**
 

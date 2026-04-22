@@ -305,20 +305,22 @@ export async function getWorld(id: string): Promise<WorldRecord> {
 }
 
 export async function createWorld(name: string, description: string, id?: string): Promise<WorldRecord> {
-  return request<WorldRecord>("/api/worlds", {
+  const raw = await request<Record<string, unknown>>("/api/worlds", {
     method: "POST",
     body: JSON.stringify({ id, name, description }),
   });
+  return mapWorldRecord(raw);
 }
 
 export async function updateWorld(
   id: string,
   patch: Partial<Pick<WorldRecord, "name" | "description" | "lore" | "locale" | "tags" | "dimensions">>,
 ): Promise<WorldRecord> {
-  return request<WorldRecord>(`/api/worlds/${encodeURIComponent(id)}`, {
+  const raw = await request<Record<string, unknown>>(`/api/worlds/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
   });
+  return mapWorldRecord(raw);
 }
 
 // ── Dimension Import/Export ──────────────────────────────────────────
@@ -333,10 +335,11 @@ export async function importDimensions(
   worldId: string,
   dimensions: Record<string, unknown>,
 ): Promise<WorldRecord> {
-  return request<WorldRecord>(`/api/worlds/${encodeURIComponent(worldId)}/dimensions/import`, {
+  const raw = await request<Record<string, unknown>>(`/api/worlds/${encodeURIComponent(worldId)}/dimensions/import`, {
     method: "POST",
     body: JSON.stringify({ dimensions }),
   });
+  return mapWorldRecord(raw);
 }
 
 /** Re-sync world dimensions into an active session's plugin_data. */
@@ -1405,20 +1408,21 @@ export async function cancelSuspension(
 // ── Approvals (RPC approval gate) ───────────────────────────────
 
 export interface ApprovalRecord {
-  id: string;
+  approvalId: string;
   sessionId: string;
   action: string;
   pluginId: string;
-  status: "pending" | "allowed" | "denied";
-  scope?: "once" | "session";
-  createdAt: string;
+  payload: unknown;
+  trustLevel: "builtin" | "official" | "community";
+  description?: string;
+  requestedAt: string;
 }
 
 export async function listApprovals(sessionId: string): Promise<ApprovalRecord[]> {
-  const res = await request<{ approvals: ApprovalRecord[] }>(
+  const res = await request<{ pending: ApprovalRecord[] }>(
     `/api/sessions/${encodeURIComponent(sessionId)}/approvals`,
   );
-  return res.approvals;
+  return res.pending;
 }
 
 export async function resolveApproval(

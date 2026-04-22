@@ -2,8 +2,8 @@
  * Session kernel commit-atomicity tests (S4-T1).
  *
  * Verifies that `commitAll()` wraps the proposal chain in a transaction
- * when the COVEL_COMMIT_TXN_V1 feature flag is enabled, and falls back
- * to the legacy non-transactional path when the flag is off.
+ * by default, and falls back to the legacy non-transactional path when
+ * COVEL_COMMIT_TXN_V1 explicitly opts out.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -138,7 +138,9 @@ describe('session-kernel commitAll atomicity (S4-T1)', () => {
     }
   });
 
-  it('with flag OFF: keeps already-persisted writes when a later commit throws (legacy behaviour)', async () => {
+  it('with explicit opt-out: keeps already-persisted writes when a later commit throws (legacy behaviour)', async () => {
+    process.env.COVEL_COMMIT_TXN_V1 = '0';
+
     const store = createRecordingStore();
     store.failOn = { method: 'addStateChange', afterN: 1 };
 
@@ -161,8 +163,7 @@ describe('session-kernel commitAll atomicity (S4-T1)', () => {
     expect(store.rollbackCalls.count).toBe(0);
   });
 
-  it('with flag ON: rolls back earlier writes when a later commit throws', async () => {
-    process.env.COVEL_COMMIT_TXN_V1 = '1';
+  it('with env unset: rolls back earlier writes when a later commit throws', async () => {
 
     const store = createRecordingStore();
     store.failOn = { method: 'addStateChange', afterN: 1 };
@@ -182,6 +183,26 @@ describe('session-kernel commitAll atomicity (S4-T1)', () => {
 
     expect(store.beginCalls.count).toBe(1);
     expect(store.commitCalls.count).toBe(0);
+    expect(store.rollbackCalls.count).toBe(1);
+  });
+
+  it('with explicit opt-in: also rolls back earlier writes when a later commit throws', async () => {
+    process.env.COVEL_COMMIT_TXN_V1 = '1';
+
+    const store = createRecordingStore();
+    store.failOn = { method: 'addStateChange', afterN: 1 };
+
+    const pipeline = createCommitPipeline(store);
+    const proposals: Proposal[] = [
+      makeProposal('narrative.append', { content: 'step 1', kind: 'story' }, 'a'),
+      makeProposal('state.patch', { table: 'stats', field: 'hp', value: 50 }, 'b'),
+    ];
+
+    await expect(pipeline.commitAll(proposals)).rejects.toThrow(/forced failure/);
+
+    expect(store.messages).toHaveLength(0);
+    expect(store.stateChanges).toHaveLength(0);
+    expect(store.beginCalls.count).toBe(1);
     expect(store.rollbackCalls.count).toBe(1);
   });
 

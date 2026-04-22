@@ -3,8 +3,8 @@
 > Covel's `DataStore` interface exposes an imperative transaction contract —
 > `beginTx / commitTx / rollbackTx` — that every backend must honor. This
 > document captures the contract, the per-backend implementation strategy,
-> and how the kernel opts into transactional commits via
-> `COVEL_COMMIT_TXN_V1`.
+> and how the kernel keeps transactional commits enabled by default while
+> still exposing `COVEL_COMMIT_TXN_V1` as an explicit opt-out.
 
 ## Contract
 
@@ -140,14 +140,18 @@ be mistaken for a cooperative rollback.
 
 ## Kernel integration
 
-Turn commit (`packages/runtime/src/session-kernel.ts:commitAll`) is
-gated behind the `COVEL_COMMIT_TXN_V1` environment variable. When the
-flag is set AND the underlying store implements `beginTx` (the method is
-optional on `KernelStore` for backwards compatibility), `commitAll`
-wraps the proposal application in a single transaction:
+Turn commit (`packages/runtime/src/session-kernel.ts:commitAll`) runs in
+a transaction by default. When the underlying store implements
+`beginTx` (the method is optional on `KernelStore` for backwards
+compatibility), `commitAll` wraps the proposal application in a single
+transaction. Operators can explicitly opt out with
+`COVEL_COMMIT_TXN_V1=0` or `COVEL_COMMIT_TXN_V1=false`:
 
 ```ts
-if (process.env.COVEL_COMMIT_TXN_V1 === '1' && typeof store.beginTx === 'function') {
+const txEnabled = process.env.COVEL_COMMIT_TXN_V1 !== '0' &&
+  process.env.COVEL_COMMIT_TXN_V1 !== 'false';
+
+if (txEnabled && typeof store.beginTx === 'function') {
   await store.beginTx();
   try {
     // apply every proposal in order
@@ -164,22 +168,20 @@ if (process.env.COVEL_COMMIT_TXN_V1 === '1' && typeof store.beginTx === 'functio
 }
 ```
 
-Outside the flag, `commitAll` behaves exactly as it did before `S4-T1`
-(serial apply, no rollback on mid-sequence failure), so existing
-deployments are unaffected until they opt in.
+Explicit opt-out preserves the legacy behavior from before `S4-T1`
+(serial apply, no rollback on mid-sequence failure).
 
-### Opting in
+### Opting out
 
 Set the env var at server boot:
 
 ```bash
-COVEL_COMMIT_TXN_V1=1 pnpm dev:server
+COVEL_COMMIT_TXN_V1=0 pnpm dev:server
 # or
-COVEL_COMMIT_TXN_V1=1 pnpm dev:pg
+COVEL_COMMIT_TXN_V1=false pnpm dev:pg
 ```
 
-Rollback path: unset the variable. The kernel falls back to the legacy
-non-transactional commit code path with zero code changes.
+Default path: leave the variable unset, or set it to `1` / `true`.
 
 ### Observability
 

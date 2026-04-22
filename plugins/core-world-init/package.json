@@ -2,5 +2,15 @@
   "name": "@covel/plugin-core-world-init",
   "version": "0.0.1-beta",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@covel/tools": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.4"
+  }
 }
