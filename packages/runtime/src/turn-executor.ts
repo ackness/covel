@@ -1193,7 +1193,15 @@ export async function resumeSuspendedRuntime(
   const deadline = Date.now() + timeoutMs;
   let stoppedWithResponse = false;
 
-  const toolDefs = deps.toolExecutor ? buildToolDefinitions(manifest, deps.toolExecutor) : undefined;
+  const toolContext = {
+    sessionId: suspension.sessionId,
+    turnId: suspension.turnId,
+    pluginId: manifest.pluginId,
+    runtimeId: manifest.name,
+  } as const;
+  const toolDefs = deps.toolExecutor
+    ? buildToolDefinitions(manifest, deps.toolExecutor, toolContext)
+    : undefined;
 
   while (steps < maxSteps && Date.now() < deadline) {
     steps++;
@@ -1908,8 +1916,18 @@ async function executeOneRuntime(
     const deadline = Date.now() + timeoutMs;
     let stoppedWithResponse = false;
 
-    // Build tool definitions from manifest declarations (computed once, reused across steps)
-    const toolDefs = deps.toolExecutor ? buildToolDefinitions(manifest, deps.toolExecutor) : undefined;
+    // Build tool definitions from manifest declarations (computed once, reused across steps).
+    // The ToolCallContext is also passed so the executor can surface session-
+    // specific variants (e.g. character tools with schema-typed `fields`).
+    const toolContext = {
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      pluginId: manifest.pluginId,
+      runtimeId: manifest.name,
+    } as const;
+    const toolDefs = deps.toolExecutor
+      ? buildToolDefinitions(manifest, deps.toolExecutor, toolContext)
+      : undefined;
     // PR-6: per-session per-runtime slot override snapshot. Applies to all
     // runtime kinds (story + plugin), unlike the legacy story-only API
     // override below.

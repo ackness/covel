@@ -70,6 +70,7 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
   const eventBus = c.get('eventBus');
   const compactorRunner = c.get('compactorRunner');
   const sessionLock = c.get('sessionLock');
+  const prepareToolsForSession = c.get('prepareToolsForSession');  // optional — see env.d.ts
 
   const body = await c.req.json<ActionRequest>();
   const { requestId, type, sessionId, locale, model, payload } = body;
@@ -248,6 +249,13 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
           runtimeCount: activeRuntimes.length,
         })),
       });
+
+      // Refresh the per-session character-tool overrides so create/update-
+      // character expose the world's CharacterAttributeSchema directly to
+      // the LLM (Phase 2). No-op when the schema isn't yet populated for
+      // this session — handlers stay correct on schema-less sessions. The
+      // optional-chain keeps tests with hand-built DI middleware working.
+      await prepareToolsForSession?.(sessionId);
 
       // Execute turn through the API pipeline.
       //

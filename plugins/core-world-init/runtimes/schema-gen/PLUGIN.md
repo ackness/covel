@@ -46,22 +46,54 @@ ui:
 
 ### 第 1 步：调用 `set-world-schema` 定义角色属性
 
-一次调用传入所有属性定义：
+一次调用传入所有属性定义。**schema 必须覆盖世界观里反复出现的核心机制**——不是只写通用的 hp/level，而是把这个世界的独特机制（境界、灵根、义体、黑客技能、魔法学派、装备栏位、人际关系网…）都作为一级属性沉淀下来。后续 character-tracker 和 narrator 会严格按你定义的 id 去写 fields，schema 漏掉的概念会被塞进无名键并触发 warning。
+
+**类型清单**：
+
+| type | 用途 | 必填子字段 |
+|------|------|-----------|
+| `string` | 自由文本（背景、职业、当前状态） | — |
+| `number` | 数值属性，能设 min/max/defaultValue | 建议设 min/max 以便出进度条 |
+| `boolean` | 是/否标记（是否中毒、是否觉醒） | — |
+| `enum` | 有限选项（境界阶段、职业分类） | `options: string[]` |
+| `array` | 同类元素列表（技能名、特征） | `itemType: 'string' \| 'number'` |
+| `object` | 固定结构的嵌套对象（装备栏：武器/防具/饰品） | `subSchema: AttributeDefinition[]` |
+| `map` | 自由键的字典（人际关系：姓名→关系类型） | `valueType`（可选，默认 string） |
+
+**属性分类**：`stats`（数值）| `bio`（身份）| `abilities`（能力）| `equipment`（装备）| `social`（社交）
+
+**范例**（修仙/赛博朋克任选，按当前世界观调整）：
 
 ```json
 {
   "attributes": [
     { "id": "hp", "name": "生命值", "type": "number", "min": 0, "max": 100, "defaultValue": 100, "category": "stats", "description": "角色当前生命值" },
-    { "id": "level", "name": "等级", "type": "number", "min": 1, "max": 100, "defaultValue": 1, "category": "stats" },
-    { "id": "skills", "name": "技能", "type": "array", "itemType": "string", "category": "abilities" }
+    { "id": "lingGen", "name": "灵根", "type": "enum", "options": ["金","木","水","火","土"], "category": "bio", "description": "五行灵根决定法术系别" },
+    { "id": "cultivation", "name": "境界", "type": "enum", "options": ["练气","筑基","金丹","元婴","化神"], "category": "stats", "description": "修炼境界阶段" },
+    { "id": "location", "name": "位置", "type": "object", "category": "bio",
+      "subSchema": [
+        { "id": "region", "name": "大区", "type": "string", "category": "bio" },
+        { "id": "landmark", "name": "地标", "type": "string", "category": "bio" }
+      ]
+    },
+    { "id": "equipment", "name": "装备", "type": "object", "category": "equipment",
+      "subSchema": [
+        { "id": "weapon", "name": "法器", "type": "string", "category": "equipment" },
+        { "id": "armor", "name": "护身", "type": "string", "category": "equipment" },
+        { "id": "consumables", "name": "丹药", "type": "array", "itemType": "string", "category": "equipment" }
+      ]
+    },
+    { "id": "relationships", "name": "人际", "type": "map", "valueType": "string", "category": "social", "description": "键=角色名，值=关系描述（如 师姐/信任）" },
+    { "id": "skills", "name": "功法", "type": "array", "itemType": "string", "category": "abilities" }
   ]
 }
 ```
 
-属性类型：`string` | `number`（可设 min/max/defaultValue）| `array`（需 itemType）| `enum`（需 options）| `boolean`
-属性分类：`stats`（数值）| `bio`（基本信息）| `abilities`（能力）| `equipment`（装备）| `social`（社交）
-
-**要求至少 8 个属性**，覆盖 stats + bio + abilities 三个分类。
+**硬要求**：
+- **至少 15 个属性**，覆盖 stats / bio / abilities / equipment / social 全部 5 个分类
+- 世界观里提到 ≥2 次的任何机制都要作为一级属性（例如反复提到灵根，就必须有 `lingGen`）
+- 结构化概念（装备槽、位置、人际关系、物品栏）**必须用 `object` 或 `map`**，不要拆成 equipment_weapon、equipment_armor 这种平铺键
+- 数值属性尽量设 min/max/defaultValue，让 UI 能渲染进度条
 
 ### 第 2 步：调用 `set-world-entries-batch` 批量写入世界词条
 

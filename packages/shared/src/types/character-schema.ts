@@ -13,7 +13,25 @@
 
 // ── Field types ─────────────────────────────────────────────────
 
-export type AttributeFieldType = 'string' | 'number' | 'boolean' | 'enum' | 'array';
+/**
+ * Primitive + structured field types.
+ *
+ * - `'object'` — fixed-shape nested record; requires `subSchema` that lists
+ *   the child attributes (e.g. an `equipment` attribute with weapon/armor
+ *   children). Acts like a scoped mini-schema.
+ * - `'map'` — open-key record of a single value type (e.g. a
+ *   `relationships` attribute keyed by character name, with string values
+ *   describing the bond). Keys are free-form, values are typed via
+ *   `valueType`.
+ */
+export type AttributeFieldType =
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'enum'
+  | 'array'
+  | 'object'
+  | 'map';
 
 export type AttributeCategory = 'stats' | 'bio' | 'abilities' | 'equipment' | 'social';
 
@@ -36,6 +54,16 @@ export interface AttributeDefinition {
   readonly itemType?: 'string' | 'number';
   /** Allowed values (enum type). */
   readonly options?: readonly string[];
+  /**
+   * Nested attribute definitions (object type). Acts as a scoped mini-schema
+   * describing the object's required child keys.
+   */
+  readonly subSchema?: readonly AttributeDefinition[];
+  /**
+   * Element value type for free-key records (map type). When omitted, values
+   * default to strings.
+   */
+  readonly valueType?: 'string' | 'number' | 'boolean';
   /** Grouping category for UI rendering and context organization. */
   readonly category: AttributeCategory;
   /** Optional description of this attribute. */

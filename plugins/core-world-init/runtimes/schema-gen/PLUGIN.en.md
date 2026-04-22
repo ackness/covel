@@ -46,22 +46,54 @@ Using the world lore, call the two dedicated tools to create the world data. **Y
 
 ### Step 1: call `set-world-schema` to define character attributes
 
-Make a single call that includes every attribute definition:
+Make a single call that includes every attribute definition. **The schema must capture every recurring mechanic in the world lore** — don't stop at generic hp/level; turn world-specific concepts (cultivation tiers, spiritual roots, cyberware slots, magic schools, equipment slots, relationship networks…) into first-class attributes. Later, `character-tracker` and the narrator will write fields strictly using the ids you declare here; anything you omit ends up in unnamed keys and triggers a warning.
+
+**Type catalogue**:
+
+| type | use for | required sub-fields |
+|------|---------|---------------------|
+| `string` | free text (background, occupation, current status) | — |
+| `number` | numeric stats with optional min/max/defaultValue | min/max recommended so the UI can render a progress bar |
+| `boolean` | yes/no markers (poisoned, awakened) | — |
+| `enum` | fixed option set (tier stage, class) | `options: string[]` |
+| `array` | list of same-shaped items (skill names, traits) | `itemType: 'string' \| 'number'` |
+| `object` | fixed-shape nested record (equipment slots: weapon/armor/trinket) | `subSchema: AttributeDefinition[]` |
+| `map` | free-key dictionary (relationships: name → relation label) | `valueType` (optional, defaults to string) |
+
+**Categories**: `stats` | `bio` | `abilities` | `equipment` | `social`.
+
+**Example** (xianxia / cyberpunk — adapt to the actual world):
 
 ```json
 {
   "attributes": [
-    { "id": "hp", "name": "Health", "type": "number", "min": 0, "max": 100, "defaultValue": 100, "category": "stats", "description": "Current HP of the character" },
-    { "id": "level", "name": "Level", "type": "number", "min": 1, "max": 100, "defaultValue": 1, "category": "stats" },
-    { "id": "skills", "name": "Skills", "type": "array", "itemType": "string", "category": "abilities" }
+    { "id": "hp", "name": "Health", "type": "number", "min": 0, "max": 100, "defaultValue": 100, "category": "stats" },
+    { "id": "lingGen", "name": "Spiritual Root", "type": "enum", "options": ["Metal","Wood","Water","Fire","Earth"], "category": "bio", "description": "Five-element root — dictates the spell families accessible to the character" },
+    { "id": "cultivation", "name": "Cultivation Tier", "type": "enum", "options": ["Qi Condensation","Foundation","Golden Core","Nascent Soul","Transcendence"], "category": "stats" },
+    { "id": "location", "name": "Location", "type": "object", "category": "bio",
+      "subSchema": [
+        { "id": "region", "name": "Region", "type": "string", "category": "bio" },
+        { "id": "landmark", "name": "Landmark", "type": "string", "category": "bio" }
+      ]
+    },
+    { "id": "equipment", "name": "Equipment", "type": "object", "category": "equipment",
+      "subSchema": [
+        { "id": "weapon", "name": "Weapon", "type": "string", "category": "equipment" },
+        { "id": "armor", "name": "Armor", "type": "string", "category": "equipment" },
+        { "id": "consumables", "name": "Consumables", "type": "array", "itemType": "string", "category": "equipment" }
+      ]
+    },
+    { "id": "relationships", "name": "Relationships", "type": "map", "valueType": "string", "category": "social", "description": "key = character name; value = relation (e.g. senior sister / trusted)" },
+    { "id": "skills", "name": "Techniques", "type": "array", "itemType": "string", "category": "abilities" }
   ]
 }
 ```
 
-Attribute types: `string` | `number` (min/max/defaultValue supported) | `array` (requires `itemType`) | `enum` (requires `options`) | `boolean`.
-Attribute categories: `stats` | `bio` | `abilities` | `equipment` | `social`.
-
-**At least 8 attributes are required**, covering the `stats` + `bio` + `abilities` categories.
+**Hard requirements**:
+- **At least 15 attributes**, covering all 5 categories (stats / bio / abilities / equipment / social)
+- Any mechanic mentioned ≥ 2 times in the world lore must become a first-class attribute (e.g. if spiritual roots keep showing up, you need `lingGen`)
+- Structured concepts (equipment slots, locations, relationships, inventories) **must use `object` or `map`** — don't flatten them into ad-hoc keys like `equipment_weapon`, `equipment_armor`
+- Prefer numeric attributes with `min` / `max` / `defaultValue` so the UI can render progress bars
 
 ### Step 2: call `set-world-entries-batch` to bulk-write world entries
 

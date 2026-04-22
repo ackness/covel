@@ -25,6 +25,7 @@ type Env = {
     compactorRunner?: CompactorRunner;
     hookPipeline?: HookPipeline;
     eventBus?: EventBus;
+    prepareToolsForSession?: (sessionId: string) => Promise<void>;
   };
 };
 
@@ -71,6 +72,13 @@ turnRoutes.post('/:id/turn', rateLimiter({ max: 30 }), async (c) => {
   const hookPipeline = c.get('hookPipeline');
   const eventBus = c.get('eventBus');
   const sessionLock = c.get('sessionLock');
+  const prepareToolsForSession = c.get('prepareToolsForSession');  // optional — see env.d.ts
+
+  // Refresh per-session character-tool overrides so the LLM sees a
+  // schema-aware `fields` shape when invoking create/update-character.
+  // Idempotent and a no-op when no schema is defined yet; optional-chain
+  // keeps tests with hand-built DI middleware working.
+  await prepareToolsForSession?.(sessionId);
 
   // Execute the full turn pipeline under the session lock. Without this,
   // two concurrent POST /:id/turn requests could interleave their

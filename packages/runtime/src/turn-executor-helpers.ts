@@ -3,16 +3,20 @@
  */
 
 import type { RuntimeManifest, RuntimeResult, TurnInput } from '@covel/shared';
-import type { ToolExecutor } from './tool-executor.js';
+import type { ToolCallContext, ToolExecutor } from './tool-executor.js';
 import type { LLMToolDefinition } from './llm-adapter.js';
 
 /**
  * Build LLM tool definitions from a runtime's manifest declarations.
  * Looks up each declared tool in the ToolExecutor's registry to get its JSON schema.
+ *
+ * `context` is optional: when provided, the executor can surface session-
+ * specific tool variants (e.g. `create-character` with schema-typed fields).
  */
 export function buildToolDefinitions(
   manifest: RuntimeManifest,
   toolExecutor: ToolExecutor,
+  context?: ToolCallContext,
 ): LLMToolDefinition[] | undefined {
   const names: string[] = [...(manifest.tools?.builtin ?? [])];
 
@@ -37,7 +41,7 @@ export function buildToolDefinitions(
   const defs: LLMToolDefinition[] = [];
 
   for (const name of names) {
-    const info = toolExecutor.getToolInfo(name);
+    const info = toolExecutor.getToolInfo(name, context);
     if (info) {
       defs.push({
         name: info.name,

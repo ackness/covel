@@ -68,7 +68,16 @@ export interface ToolInfo {
 
 export interface ToolExecutor {
   execute(call: ToolCall, context: ToolCallContext): Promise<ToolCallResult>;
-  getToolInfo(name: string): ToolInfo | undefined;
+  /**
+   * Look up a tool's LLM-facing shape (name/description/jsonSchema).
+   *
+   * `context` is optional so legacy call sites keep working, but passing it
+   * lets the resolver return a session-specific variant — e.g.
+   * `create-character` / `update-character` with `fields` typed against the
+   * active world's CharacterAttributeSchema. Without context the generic
+   * variant is returned.
+   */
+  getToolInfo(name: string, context?: ToolCallContext): ToolInfo | undefined;
 }
 
 // ── Implementation ───────────────────────────────────────────────
@@ -86,8 +95,8 @@ export interface ToolExecutorConfig {
 
 export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
   return {
-    getToolInfo(name: string): ToolInfo | undefined {
-      const tool = config.findTool(name);
+    getToolInfo(name: string, context?: ToolCallContext): ToolInfo | undefined {
+      const tool = config.findTool(name, context);
       if (!tool) return undefined;
       return { name: tool.name, description: tool.description, jsonSchema: tool.jsonSchema as Record<string, unknown> };
     },

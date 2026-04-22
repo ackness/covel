@@ -12,6 +12,7 @@ type LoadRuntimeFn = (manifest: RuntimeManifest, locale?: string) => Promise<Loa
 type GetConfigFn = (pluginId: string, runtimeId: string) => Readonly<Record<string, unknown>>;
 type ResolveModelFn = (manifest: RuntimeManifest, apiOverride?: string) => string | undefined;
 type EnsureEmbeddingLockFn = (sessionId: string) => Promise<void>;
+type PrepareToolsForSessionFn = (sessionId: string) => Promise<void>;
 
 // (sessionScopes context var removed 2026-04-12 — see audit Finding 2)
 
@@ -43,5 +44,13 @@ declare module 'hono' {
     sessionLock: SessionLock;
     ensureEmbeddingLock?: EnsureEmbeddingLockFn;
     hookPipeline?: HookPipeline;
+    /**
+     * Refresh per-session tool override cache. Action handlers should call
+     * this immediately before `executeTurn` so the LLM sees the freshest
+     * schema-aware variants of `(create|update)-character`. Optional so
+     * tests with hand-built DI middleware don't have to wire the cache —
+     * handlers must use optional-chaining: `await c.get('prepareToolsForSession')?.(sid)`.
+     */
+    prepareToolsForSession?: PrepareToolsForSessionFn;
   }
 }

@@ -150,3 +150,21 @@ export function usePluginNamespace(
   const all = useSyncExternalStore(subscribe, getSnapshot);
   return all[pluginId]?.[namespace] ?? EMPTY_NAMESPACE;
 }
+
+/**
+ * React hook — discovers the character-attribute schema written by whichever
+ * plugin declares `capabilities: [world-data-provider]`. The schema lives
+ * under the well-known path `(*, 'schema', 'character-attributes')`, so we
+ * scan across all pluginIds and return the first match instead of hardcoding
+ * `core-world-init` (framework/plugin isolation rule).
+ *
+ * Returns `null` when no world has produced a schema yet.
+ */
+export function useCharacterAttributeSchema(): unknown {
+  const all = useSyncExternalStore(subscribe, getSnapshot);
+  for (const pluginId of Object.keys(all)) {
+    const value = all[pluginId]?.["schema"]?.["character-attributes"];
+    if (value) return value;
+  }
+  return null;
+}

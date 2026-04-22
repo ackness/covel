@@ -189,6 +189,12 @@ resumeRoutes.post('/:id/resume', async (c) => {
   const hookPipeline = c.get('hookPipeline');
   const eventBus = c.get('eventBus');
   const sessionLock = c.get('sessionLock');
+  const prepareToolsForSession = c.get('prepareToolsForSession');  // optional — see env.d.ts
+
+  // Same Phase 2 hook used by /actions and /turn — refresh per-session
+  // character-tool overrides before the resumed runtime can call any tools.
+  // Optional-chain keeps tests with hand-built DI middleware working.
+  await prepareToolsForSession?.(sessionId);
 
   const releaseClaim = async (): Promise<void> => {
     try {

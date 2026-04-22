@@ -63,7 +63,7 @@
                 }
               },
               {
-                "component": "JsonView",
+                "component": "CharacterFieldsView",
                 "props": {
                   "value": { "$item": "value/fields" }
                 }

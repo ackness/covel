@@ -1456,7 +1456,44 @@ export interface PluginFlowResponse {
 }
 
 export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
-  return request<PluginFlowResponse>("/api/plugins/flows");
+  // Server endpoint is `/api/plugin-flows` (not `/api/plugins/flows`, which
+  // falls into `/api/plugins/:id` and 404s with `Plugin "flows" not found`).
+  // The server response also uses `runtimeName` / `trigger.type` /
+  // `minPriority`+`maxPriority`; adapt to the UI-facing shape here.
+  type RawStep = {
+    pluginId: string;
+    runtimeId: string;
+    runtimeName?: string;
+    priority: number;
+    trigger?: { type?: string };
+    runtimeType?: string;
+    outputKind?: string;
+    model?: string;
+  };
+  type RawSegment = {
+    label: string;
+    minPriority: number;
+    maxPriority: number;
+  };
+  const raw = await request<{ steps: RawStep[]; segments: RawSegment[] }>(
+    "/api/plugin-flows",
+  );
+  return {
+    steps: raw.steps.map((s) => ({
+      pluginId: s.pluginId,
+      runtimeId: s.runtimeId,
+      label: s.runtimeName ?? s.runtimeId,
+      priority: s.priority,
+      trigger: { mode: s.trigger?.type ?? "auto" },
+      runtimeType: s.runtimeType,
+      outputKind: s.outputKind,
+      model: s.model,
+    })),
+    segments: raw.segments.map((seg) => ({
+      label: seg.label,
+      range: [seg.minPriority, seg.maxPriority],
+    })),
+  };
 }
 
 export interface PluginDocEntry {

@@ -13,11 +13,16 @@ export type { ToolRegistry } from './registry.js';
 // ── Output validation ────────────────────────────────────────────
 export { validateOutput, selectOutputStrategy, generateSchemaPrompt } from './output-validator.js';
 
+// ── Character schema validation ──────────────────────────────────
+export { validateFieldsAgainstSchema } from './schema-validator.js';
+export type { SchemaValidationResult, SchemaValidationIssue } from './schema-validator.js';
+
 // ── Built-in tools ───────────────────────────────────────────────
 export { createFormTool, createChoicesTool, createNotificationTool, builtinUITools } from './builtin/ui-tools.js';
 export { createPluginDataTools } from './builtin/plugin-data-tools.js';
-export { createCharacterTools } from './builtin/character-tools.js';
-export type { CharacterStore } from './builtin/character-tools.js';
+export { createCharacterTools, buildSessionCharacterWriteTools } from './builtin/character-tools.js';
+export type { CharacterStore, CharacterToolDeps } from './builtin/character-tools.js';
+export { buildFieldsZodFromSchema } from './schema-to-zod.js';
 export { createWorldDimensionTools } from './builtin/world-dimension-tools.js';
 export type { WorldDimensionToolDeps } from './builtin/world-dimension-tools.js';
 export { suspendTool, isSuspendSentinel } from './builtin/suspend.js';

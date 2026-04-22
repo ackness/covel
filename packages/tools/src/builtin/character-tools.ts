@@ -23,9 +23,12 @@
  *     see NPCs created by a character tracker plugin.
  */
 
-import { z } from 'zod';
+import { z, type ZodType } from 'zod';
 import { tool } from '../tool.js';
 import type { ToolModule } from '../types.js';
+import type { CharacterAttributeSchema } from '@covel/shared';
+import { validateFieldsAgainstSchema } from '../schema-validator.js';
+import { buildFieldsZodFromSchema } from '../schema-to-zod.js';
 
 // ── Store contract ───────────────────────────────────────────────
 
@@ -66,6 +69,17 @@ export interface CharacterStore {
     createdAt: string;
     updatedAt: string;
   }): Promise<void>;
+  /**
+   * Fetch a single plugin-data row. Used to load the character-attribute
+   * schema for soft validation during create/update. Optional so existing
+   * test stores that don't provide it gracefully skip validation.
+   */
+  getPluginData?(
+    sessionId: string,
+    pluginId: string,
+    namespace: string,
+    key: string,
+  ): Promise<{ value: unknown; updatedAt: string } | null>;
   /** Optional — reserved for future use; create-character no longer calls this. */
   updateSession?(
     id: string,
@@ -77,6 +91,22 @@ export interface CharacterStore {
       updatedAt?: string;
     },
   ): Promise<void>;
+}
+
+/**
+ * Factory-level dependencies. Kept as a separate bag so the ctor stays
+ * positional and existing test call sites (which pass only a store) still
+ * work — schema validation silently becomes a no-op when the plugin
+ * resolver isn't provided.
+ */
+export interface CharacterToolDeps {
+  /**
+   * Resolve the active plugin package id that holds the character-attribute
+   * schema for this session. Injected so `@covel/tools` stays free of a
+   * runtime dependency on `@covel/plugin-loader` (same pattern as
+   * `createWorldDimensionTools`). Return `undefined` to skip validation.
+   */
+  findWorldDataPluginId?(sessionId: string): string | undefined;
 }
 
 const CHARACTER_NAMESPACE = 'characters';
@@ -118,6 +148,38 @@ function toSnapshot(record: {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
+}
+
+/**
+ * Load the character-attribute schema for this session, if any. Returns
+ * `null` when the store can't read plugin-data, no world-data plugin is
+ * resolved, or the schema hasn't been written yet. Any error swallows to
+ * `null` — validation is a best-effort UX hint, never a failure path.
+ */
+async function loadCharacterSchema(
+  store: CharacterStore,
+  deps: CharacterToolDeps,
+  sessionId: string,
+): Promise<CharacterAttributeSchema | null> {
+  if (typeof store.getPluginData !== 'function') return null;
+  const worldPluginId = deps.findWorldDataPluginId?.(sessionId);
+  if (!worldPluginId) return null;
+  try {
+    const row = await store.getPluginData(
+      sessionId,
+      worldPluginId,
+      'schema',
+      'character-attributes',
+    );
+    if (!row) return null;
+    const value = row.value;
+    if (!value || typeof value !== 'object') return null;
+    const shape = value as { version?: unknown; attributes?: unknown };
+    if (!Array.isArray(shape.attributes)) return null;
+    return value as CharacterAttributeSchema;
+  } catch {
+    return null;
+  }
 }
 
 async function mirrorToPluginData(
@@ -197,19 +259,41 @@ function sortByFrequencyThenRecency<T extends { version: number; updatedAt: stri
 
 // ── create-character ─────────────────────────────────────────────
 
-function createCreateCharacterTool(store: CharacterStore): ToolModule {
+/**
+ * Build the `fields` Zod field for create/update-character parameters.
+ * When `schema` is provided the fields are strongly typed per attribute id
+ * (LLM sees named keys with correct types); otherwise falls back to a
+ * permissive record so storytelling isn't blocked before schema-gen runs.
+ */
+function buildFieldsZod(schema: CharacterAttributeSchema | null): ZodType {
+  const typed = schema ? buildFieldsZodFromSchema(schema) : null;
+  return typed ?? z.record(z.string(), z.unknown());
+}
+
+const CREATE_DESCRIPTION =
+  '创建一个新的角色记录（玩家、NPC 或同伴）。角色写入 characters 表并镜像到插件的 plugin-data 供侧边栏面板订阅。\n' +
+  '\n' +
+  '**fields 约束**（重要）：键名必须严格使用 `<world-schema>` 中声明的 `attributes[*].id`。未声明的键会被保存但会触发 schema warning——LLM 会在返回结果里看到警告并应在下一次调用时自行修正。\n' +
+  '\n' +
+  '**类型对齐**：number 类型的键必须写数字（不是字符串）、enum 键必须在 options 内、array/object/map 类型不要退化成裸字符串。如果世界观里出现了 schema 没覆盖的机制，优先扩展 schema（通过 set-world-schema）而不是把它塞进 fields 的无名键。\n' +
+  '\n' +
+  '同 session 内同 (name, type) 会自动去重——返回已存在的角色，不会创建重复项。';
+
+function createCreateCharacterTool(
+  store: CharacterStore,
+  deps: CharacterToolDeps,
+  schema: CharacterAttributeSchema | null = null,
+): ToolModule {
   return tool({
     name: 'create-character',
-    description:
-      '创建一个新的角色记录（玩家、NPC 或同伴）。角色写入 characters 表并镜像到插件的 plugin-data 供侧边栏面板订阅。fields 应按世界 schema 中定义的角色属性填充（如 hp, level, lingGen 等）。同 session 内同 (name, type) 会自动去重——返回已存在的角色，不会创建重复项。',
+    description: CREATE_DESCRIPTION,
     parameters: z.object({
       name: z.string().min(1).describe('角色名称（必须非空）'),
       type: characterTypeSchema,
       description: z.string().optional().describe('角色简短描述'),
-      fields: z
-        .record(z.string(), z.unknown())
+      fields: buildFieldsZod(schema)
         .optional()
-        .describe('角色属性键值对，应符合世界 schema 中的 character-attributes 定义'),
+        .describe('角色属性键值对。键名必须是 world schema 中声明的 attribute id；未知键会触发 warning。'),
     }),
     execute: async (params, context) => {
       const now = new Date().toISOString();
@@ -256,9 +340,17 @@ function createCreateCharacterTool(store: CharacterStore): ToolModule {
       };
       await mirrorToPluginData(store, context.sessionId, context.pluginId, snapshot);
 
+      // Soft schema validation — runs AFTER the write so the LLM still gets
+      // the character into state even when fields drift off-schema. Warnings
+      // are appended to _text so the LLM sees them as tool feedback and can
+      // self-correct on the next turn.
+      const schema = await loadCharacterSchema(store, deps, context.sessionId);
+      const { warningText } = validateFieldsAgainstSchema(params.fields, schema);
+
       const summary = params.description ? ` — ${truncate(params.description, 60)}` : '';
+      const warning = warningText ? `\n\n${warningText}` : '';
       return {
-        _text: `Created ${params.type} "${params.name}" as ${id}.${summary}`,
+        _text: `Created ${params.type} "${params.name}" as ${id}.${summary}${warning}`,
         success: true,
         existed: false,
         characterId: id,
@@ -271,18 +363,25 @@ function createCreateCharacterTool(store: CharacterStore): ToolModule {
 
 // ── update-character ─────────────────────────────────────────────
 
-function createUpdateCharacterTool(store: CharacterStore): ToolModule {
+const UPDATE_DESCRIPTION =
+  '更新已有角色的描述和/或属性字段。字段按 shallow merge 合并进现有 fields（新键覆盖旧键），version 自动 +1。适用于状态变化、装备变更、受伤、死亡标记等。必须先通过 list-characters 或 get-character 获取目标角色 id。\n' +
+  '\n' +
+  '**fields 约束**（重要）：键名必须严格使用 `<world-schema>` 中声明的 `attributes[*].id`。未声明的键会被保存但会触发 schema warning——看到警告请在下一次调用时改正或先扩展 schema（set-world-schema），不要继续写无名键。number 必须写数字、enum 必须在 options 内、array/object/map 类型保持结构。';
+
+function createUpdateCharacterTool(
+  store: CharacterStore,
+  deps: CharacterToolDeps,
+  schema: CharacterAttributeSchema | null = null,
+): ToolModule {
   return tool({
     name: 'update-character',
-    description:
-      '更新已有角色的描述和/或属性字段。字段按 shallow merge 合并进现有 fields（新键覆盖旧键），version 自动 +1。适用于状态变化、装备变更、受伤、死亡标记等。必须先通过 list-characters 或 get-character 获取目标角色 id。',
+    description: UPDATE_DESCRIPTION,
     parameters: z.object({
       id: z.string().min(1).describe('要更新的角色 id（由 create-character 或 list-characters 返回）'),
       description: z.string().optional().describe('新的描述（可选，未传则保留原值）'),
-      fields: z
-        .record(z.string(), z.unknown())
+      fields: buildFieldsZod(schema)
         .optional()
-        .describe('要合并的字段键值对（shallow merge）'),
+        .describe('要合并的字段键值对（shallow merge）。键名必须是 world schema 中声明的 attribute id；未知键会触发 warning。'),
     }),
     execute: async (params, context) => {
       const all = await store.listCharacters(context.sessionId);
@@ -343,8 +442,15 @@ function createUpdateCharacterTool(store: CharacterStore): ToolModule {
       }
       const changeBlock = changeLines.length > 0 ? `\n${changeLines.join('\n')}` : '';
 
+      // Soft schema validation over the merged fields — catches drift the
+      // LLM introduced this turn as well as ones already in storage, so a
+      // cleanup update can surface outstanding warnings too.
+      const schema = await loadCharacterSchema(store, deps, context.sessionId);
+      const { warningText } = validateFieldsAgainstSchema(mergedFields, schema);
+      const warning = warningText ? `\n\n${warningText}` : '';
+
       return {
-        _text: `Updated ${existing.type} "${existing.name}" (${existing.id}) → v${newVersion}.${changeBlock}`,
+        _text: `Updated ${existing.type} "${existing.name}" (${existing.id}) → v${newVersion}.${changeBlock}${warning}`,
         success: true,
         characterId: existing.id,
         version: newVersion,
@@ -462,12 +568,40 @@ function createGetCharacterTool(store: CharacterStore): ToolModule {
 /**
  * Create the full set of builtin character tools bound to a DataStore instance.
  * Call this during bootstrap when the store is available.
+ *
+ * `deps.findWorldDataPluginId` is optional: when omitted (e.g. from tests),
+ * the create/update tools skip soft schema validation but still function
+ * normally. When present, write tools emit `_text` warnings about
+ * off-schema keys and type mismatches so the LLM can self-correct.
  */
-export function createCharacterTools(store: CharacterStore): readonly ToolModule[] {
+export function createCharacterTools(
+  store: CharacterStore,
+  deps: CharacterToolDeps = {},
+): readonly ToolModule[] {
   return [
-    createCreateCharacterTool(store),
-    createUpdateCharacterTool(store),
+    createCreateCharacterTool(store, deps),
+    createUpdateCharacterTool(store, deps),
     createListCharactersTool(store),
     createGetCharacterTool(store),
+  ];
+}
+
+/**
+ * Build session-specific variants of `create-character` / `update-character`
+ * whose `fields` Zod is derived from the supplied schema — LLM sees named,
+ * correctly-typed keys instead of the generic `Record<string, unknown>`.
+ *
+ * Read tools (`list-characters`, `get-character`) are schema-independent so
+ * they're not rebuilt here; callers keep using the globally-registered
+ * variants from `createCharacterTools`.
+ */
+export function buildSessionCharacterWriteTools(
+  store: CharacterStore,
+  deps: CharacterToolDeps,
+  schema: CharacterAttributeSchema,
+): readonly ToolModule[] {
+  return [
+    createCreateCharacterTool(store, deps, schema),
+    createUpdateCharacterTool(store, deps, schema),
   ];
 }
