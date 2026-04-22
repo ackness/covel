@@ -95,6 +95,77 @@ export interface ToolExecutorConfig {
   readonly getToolSource?: (toolName: string) => 'builtin' | 'local' | 'third-party';
 }
 
+function toolLabel(pluginId: string, toolName: string): string {
+  return `${pluginId}/${toolName}`;
+}
+
+async function emitToolCalling(
+  ctx: ToolCallContext,
+  call: ToolCall,
+  source: 'builtin' | 'local' | 'third-party',
+  approvalStatus: ApprovalStatus,
+): Promise<void> {
+  if (!ctx.emitter) return;
+  await ctx.emitter.emit('tool.calling', {
+    runtimeId: ctx.runtimeId,
+    pluginId: ctx.pluginId,
+    toolName: call.name,
+    toolCallId: call.toolCallId,
+    label: toolLabel(ctx.pluginId, call.name),
+    arguments: call.arguments,
+    source,
+    approvalStatus,
+  });
+}
+
+async function emitToolCompleted(
+  ctx: ToolCallContext,
+  call: ToolCall,
+  result: string,
+  parsedResult: unknown,
+  durationMs: number,
+  approvalStatus: ApprovalStatus,
+): Promise<void> {
+  if (!ctx.emitter) return;
+  await ctx.emitter.emit('tool.completed', {
+    runtimeId: ctx.runtimeId,
+    pluginId: ctx.pluginId,
+    toolName: call.name,
+    toolCallId: call.toolCallId,
+    label: toolLabel(ctx.pluginId, call.name),
+    result,
+    parsedResult,
+    durationMs,
+    approvalStatus,
+    success: true,
+  });
+}
+
+async function emitToolFailed(
+  ctx: ToolCallContext,
+  call: ToolCall,
+  code: ToolErrorCode,
+  error: string,
+  details: string[] | undefined,
+  durationMs: number,
+  approvalStatus: ApprovalStatus,
+): Promise<void> {
+  if (!ctx.emitter) return;
+  await ctx.emitter.emit('tool.failed', {
+    runtimeId: ctx.runtimeId,
+    pluginId: ctx.pluginId,
+    toolName: call.name,
+    toolCallId: call.toolCallId,
+    label: toolLabel(ctx.pluginId, call.name),
+    code,
+    error,
+    ...(details && details.length > 0 ? { details } : {}),
+    durationMs,
+    approvalStatus,
+    success: false,
+  });
+}
+
 export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
   return {
     getToolInfo(name: string, context?: ToolCallContext): ToolInfo | undefined {
@@ -111,14 +182,15 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
       if (!tool) {
         const errorResult = toolError('NOT_FOUND', `Unknown tool: ${call.name}. Check the tool name and try again.`);
         await recordCall(config.store, call, context, errorResult, startTime, false, 'auto-allowed');
+        await emitToolFailed(context, call, 'NOT_FOUND', `Unknown tool: ${call.name}`, undefined, Date.now() - startTime, 'auto-allowed');
         return { toolCallId: call.toolCallId, name: call.name, result: errorResult, parsedResult: null, success: false, approvalStatus: 'auto-allowed' as const };
       }
 
       // 2. Check approval
       let approvalStatus: ApprovalStatus = 'auto-allowed';
+      const toolSource = config.getToolSource?.(call.name) ?? 'local';
 
       if (config.approval) {
-        const toolSource = config.getToolSource?.(call.name) ?? 'local';
         const checkResult = config.approval.check(
           {
             toolName: call.name,
@@ -140,6 +212,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
             approvalStatus = 'user-denied';
             const denyResult = toolError('DENIED', `Tool "${call.name}" was denied by the approval policy. Reason: ${checkResult.reason}. Do not retry this tool call.`);
             await recordCall(config.store, call, context, denyResult, startTime, false, approvalStatus);
+            await emitToolFailed(context, call, 'DENIED', checkResult.reason ?? 'denied by approval policy', undefined, Date.now() - startTime, approvalStatus);
             return { toolCallId: call.toolCallId, name: call.name, result: denyResult, parsedResult: null, success: false, approvalStatus };
           }
         }
@@ -152,8 +225,12 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
       } catch {
         const errorResult = toolError('INVALID_ARGS', `Arguments for tool "${call.name}" are not valid JSON. Ensure the arguments object is properly formatted JSON.`);
         await recordCall(config.store, call, context, errorResult, startTime, false, approvalStatus);
+        await emitToolFailed(context, call, 'INVALID_ARGS', 'arguments are not valid JSON', undefined, Date.now() - startTime, approvalStatus);
         return { toolCallId: call.toolCallId, name: call.name, result: errorResult, parsedResult: null, success: false, approvalStatus };
       }
+
+      // Emit calling AFTER arg-parse so the trace carries the real arguments
+      await emitToolCalling(context, call, toolSource, approvalStatus);
 
       // 4. Execute
       try {
@@ -179,7 +256,9 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
             ? (parsedResult as { _text: string })._text
             : JSON.stringify(parsedResult);
 
+        const durationMs = Date.now() - startTime;
         await recordCall(config.store, call, context, resultStr, startTime, true, approvalStatus);
+        await emitToolCompleted(context, call, resultStr, parsedResult, durationMs, approvalStatus);
         return {
           toolCallId: call.toolCallId,
           name: call.name,
@@ -191,6 +270,9 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
         };
       } catch (error: unknown) {
         let errorResult: string;
+        let code: ToolErrorCode;
+        let details: string[] | undefined;
+        let message: string;
         if (error instanceof ToolValidationError) {
           // Dedupe Zod issues by path so only the FIRST issue on any given
           // field is reported. Zod v4 has a quirk where `z.array(...).max(N)`
@@ -209,17 +291,21 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
             seenPaths.add(key);
             dedupedDetails.push(detail);
           }
-          const details = dedupedDetails.map(d => `${d.path}: ${d.message}`);
+          details = dedupedDetails.map(d => `${d.path}: ${d.message}`);
+          message = dedupedDetails.map(d => d.message).join('; ');
+          code = 'VALIDATION_ERROR';
           errorResult = toolError(
-            'VALIDATION_ERROR',
-            `Invalid parameters for tool "${call.name}": ${dedupedDetails.map(d => d.message).join('; ')}. Fix the highlighted fields and retry.`,
+            code,
+            `Invalid parameters for tool "${call.name}": ${message}. Fix the highlighted fields and retry.`,
             details,
           );
         } else {
-          const message = error instanceof Error ? error.message : String(error);
-          errorResult = toolError('EXECUTION_ERROR', `Tool "${call.name}" failed during execution: ${message}`);
+          message = error instanceof Error ? error.message : String(error);
+          code = 'EXECUTION_ERROR';
+          errorResult = toolError(code, `Tool "${call.name}" failed during execution: ${message}`);
         }
         await recordCall(config.store, call, context, errorResult, startTime, false, approvalStatus);
+        await emitToolFailed(context, call, code, message, details, Date.now() - startTime, approvalStatus);
         return { toolCallId: call.toolCallId, name: call.name, result: errorResult, parsedResult: null, success: false, approvalStatus };
       }
     },
