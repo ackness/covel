@@ -363,6 +363,34 @@ describe('Resume Routes — flag on (COVEL_SUSPEND_V1=1)', () => {
       const body = await res.json() as Record<string, unknown>;
       expect(body.result).toBeDefined();
       expect((body.result as Record<string, unknown>).status).toBe('success');
+      expect(body.events).toBeDefined();
+      expect(body.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: 'narrative.completed' }),
+      ]));
+    });
+
+    it('commits resumed runtime output to the store before returning', async () => {
+      await createSuspension(store);
+      const app = createTestApp(makeDefaultDeps(store));
+
+      const res = await app.request('/api/sessions/sess-1/resume', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Provider-Keys': 'dGVzdA==',
+        },
+        body: JSON.stringify({ suspensionId: 'susp-1', data: { name: 'Alice' } }),
+      });
+
+      expect(res.status).toBe(200);
+
+      const messages = await store.listMessages('sess-1');
+      expect(messages).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          content: 'Resume complete.',
+          role: 'assistant',
+        }),
+      ]));
     });
   });
 

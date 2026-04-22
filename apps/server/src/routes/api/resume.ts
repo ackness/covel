@@ -30,7 +30,7 @@ import { Ajv, type ErrorObject } from 'ajv';
 import type { DataStore } from '@covel/store';
 import type { PluginRegistry, LoadedRuntime } from '@covel/plugin-loader';
 import type { LLMAdapter, ToolExecutor, HookPipeline } from '@covel/runtime';
-import { resumeSuspendedRuntime } from '@covel/runtime';
+import { processRuntimeResult, resumeSuspendedRuntime } from '@covel/runtime';
 import type { RuntimeManifest } from '@covel/shared';
 import type { EventBus } from '@covel/events';
 
@@ -190,6 +190,18 @@ resumeRoutes.post('/:id/resume', async (c) => {
   const eventBus = c.get('eventBus');
   const sessionLock = c.get('sessionLock');
 
+  const releaseClaim = async (): Promise<void> => {
+    try {
+      await store.saveSuspension({ ...suspension, resolvedAt: undefined });
+    } catch (releaseErr) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[resume] failed to release suspension claim after error:',
+        releaseErr instanceof Error ? releaseErr.message : String(releaseErr),
+      );
+    }
+  };
+
   try {
     const result = await sessionLock.withLock(sessionId, () => resumeSuspendedRuntime(
       suspension,
@@ -207,20 +219,26 @@ resumeRoutes.post('/:id/resume', async (c) => {
       },
     ));
 
-    return c.json({ result });
+    if (result.status !== 'success' || !result.output) {
+      await releaseClaim();
+      return c.json({
+        error: `Resume failed: ${result.error ?? `runtime ended with status ${result.status}`}`,
+        result,
+      }, 500);
+    }
+
+    const outputKind = effectiveManifest.outputKind ?? 'plugin';
+    const { events } = await processRuntimeResult(result, store, sessionId, outputKind, {
+      ...(hookPipeline ? { hookPipeline } : {}),
+      ...(eventBus ? { eventBus } : {}),
+    });
+
+    return c.json({ result, events });
   } catch (err: unknown) {
     // Release the claim so legitimate retries can attempt again. The
     // runtime error propagates to the caller; the suspension is back to
     // `unresolved` and appears in subsequent `listSuspensions`.
-    try {
-      await store.saveSuspension({ ...suspension, resolvedAt: undefined });
-    } catch (releaseErr) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        '[resume] failed to release suspension claim after error:',
-        releaseErr instanceof Error ? releaseErr.message : String(releaseErr),
-      );
-    }
+    await releaseClaim();
 
     const message = err instanceof Error ? err.message : String(err);
     return c.json({ error: `Resume failed: ${message}` }, 500);

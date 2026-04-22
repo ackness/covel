@@ -31,15 +31,27 @@ interface ExecutionStep {
   turnId?: string;
 }
 
+interface MessageRecord {
+  id: string;
+  role: "assistant";
+  content: string;
+  timestamp: string;
+  turnId?: string;
+  runtimeId?: string;
+  block?: Record<string, unknown>;
+}
+
 interface State {
   executionSteps: ExecutionStep[];
   suspensions: SuspensionRecord[];
+  messages: MessageRecord[];
 }
 
 type Action =
   | { type: "SET_SUSPENSIONS"; suspensions: SuspensionRecord[] }
   | { type: "ADD_SUSPENSION"; suspension: SuspensionRecord }
   | { type: "REMOVE_SUSPENSION"; suspensionId: string }
+  | { type: "ADD_MESSAGE"; message: MessageRecord }
   | { type: "UPSERT_EXECUTION_STEP"; step: ExecutionStep };
 
 /** Mirrors the F4 reducer slice added to session-store.tsx. */
@@ -57,6 +69,8 @@ function reduce(state: State, action: Action): State {
         ...state,
         suspensions: state.suspensions.filter((s) => s.id !== action.suspensionId),
       };
+    case "ADD_MESSAGE":
+      return { ...state, messages: [...state.messages, action.message] };
     case "UPSERT_EXECUTION_STEP": {
       const key = `${action.step.turnId ?? "__no_turn__"}|${action.step.runtimeId}`;
       const idx = state.executionSteps.findIndex(
@@ -70,6 +84,89 @@ function reduce(state: State, action: Action): State {
     default:
       return state;
   }
+}
+
+function applyResumeResponse(
+  state: State,
+  suspensionId: string,
+  response: {
+    result: {
+      pluginId: string;
+      runtimeId: string;
+      turnId: string;
+      status: "success" | "failed" | "skipped" | "suspended";
+      durationMs: number;
+    };
+    events: Array<{
+      type: string;
+      turnId: string;
+      timestamp: string;
+      source: { pluginId: string; runtimeId: string };
+      payload: Record<string, unknown>;
+    }>;
+  },
+): State {
+  let next = state;
+
+  for (const event of response.events) {
+    switch (event.type) {
+      case "narrative.completed": {
+        const content = event.payload.content as string | undefined;
+        if (!content) break;
+        next = reduce(next, {
+          type: "ADD_MESSAGE",
+          message: {
+            id: (event.payload.messageId as string) ?? `msg-${event.turnId}`,
+            role: "assistant",
+            content,
+            timestamp: event.timestamp,
+            turnId: event.turnId,
+            runtimeId: event.source.runtimeId,
+          },
+        });
+        break;
+      }
+      case "interaction.requested": {
+        const block = event.payload.block as Record<string, unknown> | undefined;
+        if (!block) break;
+        next = reduce(next, {
+          type: "ADD_MESSAGE",
+          message: {
+            id: (block.id as string) ?? `block-${event.turnId}`,
+            role: "assistant",
+            content: "",
+            timestamp: event.timestamp,
+            turnId: event.turnId,
+            runtimeId: event.source.runtimeId,
+            block,
+          },
+        });
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  next = reduce(next, {
+    type: "UPSERT_EXECUTION_STEP",
+    step: {
+      runtimeId: response.result.runtimeId,
+      pluginId: response.result.pluginId,
+      status:
+        response.result.status === "failed"
+          ? "failed"
+          : response.result.status === "skipped"
+            ? "skipped"
+            : response.result.status === "suspended"
+              ? "suspended"
+              : "completed",
+      durationMs: response.result.durationMs,
+      turnId: response.result.turnId,
+    },
+  });
+
+  return reduce(next, { type: "REMOVE_SUSPENSION", suspensionId });
 }
 
 /** Exact copy of the runtime.completed status-resolution branch added to
@@ -100,7 +197,7 @@ const makeSuspension = (overrides: Partial<SuspensionRecord> = {}): SuspensionRe
 // ── Tests ────────────────────────────────────────────────────────
 
 describe("session-store — F4 suspensions slice", () => {
-  const empty: State = { executionSteps: [], suspensions: [] };
+  const empty: State = { executionSteps: [], suspensions: [], messages: [] };
 
   it("SET_SUSPENSIONS: hydrates the list from the server snapshot", () => {
     const snapshot = [makeSuspension({ id: "a" }), makeSuspension({ id: "b" })];
@@ -198,6 +295,72 @@ describe("session-store — F4 suspensions slice", () => {
     // Player hits "Resume" → SSE turn.resumed removes the row
     state = reduce(state, { type: "REMOVE_SUSPENSION", suspensionId: "img-1" });
     expect(state.suspensions).toEqual([]);
+  });
+
+  it("resume response: replays returned events into the active tab and completes the runtime row", () => {
+    const state: State = {
+      ...empty,
+      suspensions: [makeSuspension({ id: "img-1", runtimeId: "core-image-gen", turnId: "turn-1" })],
+      executionSteps: [{
+        runtimeId: "core-image-gen",
+        pluginId: "core-image-gen",
+        status: "suspended",
+        turnId: "turn-1",
+      }],
+    };
+
+    const next = applyResumeResponse(state, "img-1", {
+      result: {
+        pluginId: "core-image-gen",
+        runtimeId: "core-image-gen",
+        turnId: "turn-1",
+        status: "success",
+        durationMs: 84,
+      },
+      events: [
+        {
+          type: "narrative.completed",
+          turnId: "turn-1",
+          timestamp: "2026-04-22T10:00:01.000Z",
+          source: { pluginId: "core-image-gen", runtimeId: "core-image-gen" },
+          payload: {
+            content: "Image generation resumed successfully.",
+            kind: "story",
+            messageId: "msg-1",
+          },
+        },
+        {
+          type: "interaction.requested",
+          turnId: "turn-1",
+          timestamp: "2026-04-22T10:00:02.000Z",
+          source: { pluginId: "core-image-gen", runtimeId: "core-image-gen" },
+          payload: {
+            block: {
+              id: "block-1",
+              type: "ui-spec",
+              data: { title: "Generated image" },
+            },
+          },
+        },
+      ],
+    });
+
+    expect(next.suspensions).toEqual([]);
+    expect(next.executionSteps[0].status).toBe("completed");
+    expect(next.executionSteps[0].durationMs).toBe(84);
+    expect(next.messages).toEqual([
+      expect.objectContaining({
+        id: "msg-1",
+        content: "Image generation resumed successfully.",
+        runtimeId: "core-image-gen",
+      }),
+      expect.objectContaining({
+        id: "block-1",
+        content: "",
+        runtimeId: "core-image-gen",
+        block: expect.objectContaining({ type: "ui-spec" }),
+      }),
+    ]);
   });
 });
 

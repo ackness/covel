@@ -538,6 +538,31 @@ function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function toExecutionStepStatus(status: string | undefined): ExecutionStep["status"] {
+  if (status === "running" || status === "pending") return "running";
+  if (status === "failed") return "failed";
+  if (status === "skipped") return "skipped";
+  if (status === "suspended") return "suspended";
+  return "completed";
+}
+
+function buildResumedExecutionStep(
+  payload: Record<string, unknown>,
+  fallbackTurnId?: string,
+): ExecutionStep | null {
+  const runtimeId = typeof payload.runtimeId === "string" ? payload.runtimeId : "";
+  if (!runtimeId) return null;
+
+  return {
+    runtimeId,
+    pluginId: typeof payload.pluginId === "string" ? payload.pluginId : "",
+    status: toExecutionStepStatus(typeof payload.status === "string" ? payload.status : "completed"),
+    turnId: typeof payload.turnId === "string" ? payload.turnId : fallbackTurnId,
+    ...(typeof payload.durationMs === "number" ? { durationMs: payload.durationMs } : {}),
+    ...(typeof payload.error === "string" ? { detail: payload.error } : {}),
+  };
+}
+
 function applyPluginMessageSurface(state: SessionState, pluginId: string): SessionState {
   const uiEntry = state.messageUiSpecs.find((entry) => entry.pluginId === pluginId);
   if (!uiEntry || uiEntry.specs.length === 0) return state;
@@ -1059,6 +1084,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       case "turn.resumed": {
         const id = payload.suspensionId as string | undefined;
         if (!id) break;
+        const resumedStep = buildResumedExecutionStep(payload, turnId);
+        if (resumedStep) {
+          dispatch({ type: "UPSERT_EXECUTION_STEP", step: resumedStep });
+        }
         dispatch({ type: "REMOVE_SUSPENSION", suspensionId: id });
         break;
       }
@@ -1100,6 +1129,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
     }
   }, []);
+
+  const applyResumeEvents = useCallback((events: api.ResumeSuspensionResponse["events"]) => {
+    for (const event of events) {
+      handleSseEvent({
+        type: event.type,
+        requestId: api.uid(),
+        traceId: event.turnId,
+        sessionId: event.sessionId,
+        turnId: event.turnId,
+        flowId: event.turnId,
+        seq: -1,
+        timestamp: event.timestamp,
+        payload: {
+          ...event.payload,
+          runtimeId: event.source.runtimeId,
+          pluginId: event.source.pluginId,
+        },
+      });
+    }
+  }, [handleSseEvent]);
 
   const selectWorld = useCallback((worldId: string) => {
     dispatch({ type: "RESET_SESSION" });
@@ -1819,8 +1868,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           break;
         }
         case "turn.resumed": {
-          const id = event.payload?.suspensionId as string | undefined;
+          const payload = event.payload ?? {};
+          const id = payload.suspensionId as string | undefined;
           if (!id) break;
+          const resumedStep = buildResumedExecutionStep(
+            payload,
+            typeof payload.turnId === "string" ? payload.turnId : undefined,
+          );
+          if (resumedStep) {
+            dispatch({ type: "UPSERT_EXECUTION_STEP", step: resumedStep });
+          }
           dispatch({ type: "REMOVE_SUSPENSION", suspensionId: id });
           break;
         }
@@ -1950,12 +2007,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     async (suspensionId: string, data: unknown) => {
       const sid = sessionIdRef.current;
       if (!sid) return;
-      await api.resumeSuspension(sid, suspensionId, data);
+      const { result, events } = await api.resumeSuspension(sid, suspensionId, data);
+      applyResumeEvents(events);
+      dispatch({
+        type: "UPSERT_EXECUTION_STEP",
+        step: {
+          runtimeId: result.runtimeId,
+          pluginId: result.pluginId,
+          status: toExecutionStepStatus(result.status),
+          turnId: result.turnId,
+          ...(typeof result.durationMs === "number" ? { durationMs: result.durationMs } : {}),
+          ...(result.error ? { detail: result.error } : {}),
+        },
+      });
       // Belt-and-braces removal in case the SSE event was lost. The reducer
       // is a no-op if the row was already removed by `turn.resumed`.
       dispatch({ type: "REMOVE_SUSPENSION", suspensionId });
     },
-    [],
+    [applyResumeEvents],
   );
 
   const cancelSuspension = useCallback(async (suspensionId: string) => {
