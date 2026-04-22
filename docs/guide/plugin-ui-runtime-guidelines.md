@@ -14,6 +14,10 @@
 - 通用表单 / 选项提交协议
 - 插件数据写入与前端渲染联动
 
+## UI component reference
+
+查组件时先翻 [docs/reference/ui-components.md](../reference/ui-components.md) —— 框架注册的全部 json-render 组件（Stack / Row / Card / FilterContainer / GraphCanvas …）以及各自的关键 props 都在那张目录里。本指南聚焦使用策略与交互约定，具体到某个组件叫什么、接什么参数，优先查目录。面板装配链路（发现、合并、空态、i18n）仍然在 [docs/reference/ui-panels.md](../reference/ui-panels.md)。
+
 ---
 
 ## 1. 架构原则

@@ -51,6 +51,33 @@ function requestIdFor(target: PingTarget): string {
 }
 
 /**
+ * Bucket raw provider/network error strings into a short actionable label
+ * (`auth` / `rate-limited` / `timeout` / …) so the UI can surface what
+ * the user can actually do about it. Pattern-based, never throws.
+ */
+function classifyPingError(raw: string | undefined): {
+  kind: string;
+  detail: string;
+} {
+  if (!raw) return { kind: "unknown", detail: "Unknown error" };
+  const lower = raw.toLowerCase();
+  if (/\b401\b|unauthoriz|invalid.+key|invalid.*api.?key/.test(lower)) {
+    return { kind: "auth", detail: raw };
+  }
+  if (/\b403\b|forbidden/.test(lower)) return { kind: "forbidden", detail: raw };
+  if (/\b404\b|not found/.test(lower)) return { kind: "not-found", detail: raw };
+  if (/\b429\b|rate[-\s]?limit|too many/.test(lower))
+    return { kind: "rate-limited", detail: raw };
+  if (/\b5\d\d\b|server error|bad gateway|unavailable/.test(lower))
+    return { kind: "server", detail: raw };
+  if (/timeout|timed out|etimedout/.test(lower))
+    return { kind: "timeout", detail: raw };
+  if (/network|fetch|econnrefused|enotfound|socket|dns|offline|cors/.test(lower))
+    return { kind: "network", detail: raw };
+  return { kind: "error", detail: raw };
+}
+
+/**
  * Shared Ping button — calls `/api/ai/ping` with a `presetId` or `slot-<name>`,
  * displays latency or error inline, and caches results for `cacheTtlMs`.
  *
@@ -170,6 +197,8 @@ export function PingButton({
 
   if (hideResult) return button;
 
+  const errInfo = result && !result.ok ? classifyPingError(result.error) : null;
+
   return (
     <span className="inline-flex items-center gap-1.5">
       {button}
@@ -191,6 +220,12 @@ export function PingButton({
           ) : (
             <>
               <XCircle className="w-3 h-3 text-destructive" />
+              <span
+                className="text-destructive font-mono uppercase text-[10px] px-1.5 py-0.5 border border-destructive/40 bg-destructive/5 rounded-sm"
+                title={errInfo?.detail ?? result.error}
+              >
+                {errInfo?.kind ?? "error"}
+              </span>
               <span
                 className="text-destructive truncate max-w-[180px]"
                 title={result.error}

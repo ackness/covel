@@ -356,7 +356,7 @@ export function WorldDetailView({ world, onClose, onEdit }: WorldDetailViewProps
 
         {/* Description */}
         {world.description && (
-          <p className="text-sm text-muted-foreground">{text(world.description)}</p>
+          <p className="text-sm text-muted-foreground break-words [overflow-wrap:anywhere]">{text(world.description)}</p>
         )}
 
         <Separator />

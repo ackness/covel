@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { SessionBreadcrumb } from "./session-breadcrumb.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { ActiveModelSlots } from "./active-model-slots.js";
-import { useSlotConfig } from "@/hooks/use-slot-config.js";
+import { useSlotConfig, formatSlotLabel } from "@/hooks/use-slot-config.js";
 import { useRuntimeBindings } from "@/hooks/use-runtime-bindings.js";
 
 interface SessionPrepScreenProps {
@@ -261,7 +261,7 @@ export function SessionPrepScreen({
             </CollapsibleCardHeader>
             {worldInfoExpanded && (
               <CardContent className="space-y-2">
-                <p className="text-sm text-muted-foreground">{text(world.description)}</p>
+                <p className="text-sm text-muted-foreground break-words [overflow-wrap:anywhere]">{text(world.description)}</p>
                 {world.tags && world.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {world.tags.map((tag) => (
@@ -331,7 +331,15 @@ export function SessionPrepScreen({
             <CollapsibleCardHeader
               expanded={loreExpanded}
               onToggle={() => setLoreExpanded(!loreExpanded)}
-              summary={isLoreModified ? t("session.modified") : t("session.loreSummary", { count: originalLore.length })}
+              summary={
+                isLoreModified
+                  ? t("session.modified")
+                  : t("session.loreSummaryHint", {
+                      count: originalLore.length,
+                      defaultValue:
+                        "{{count}} characters · click to edit world lore",
+                    })
+              }
             >
               <FileText className="w-4 h-4" />
               {t("session.worldLore", "World Document")}
@@ -448,6 +456,7 @@ export function SessionPrepScreen({
                             role="switch"
                             aria-checked={isSelected}
                             disabled={isCore}
+                            title={isCore ? t("plugin.locked") : undefined}
                             className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full border-2 border-transparent transition-colors ${
                               isSelected ? "bg-primary" : "bg-input"
                             } ${isCore ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
@@ -460,7 +469,15 @@ export function SessionPrepScreen({
 
                           {/* Name + badges */}
                           <span className="text-xs font-medium truncate flex-1">{displayName}</span>
-                          {isCore && <span title={t("plugin.locked")}><Lock className="w-3 h-3 text-muted-foreground/50 shrink-0" /></span>}
+                          {isCore && (
+                            <span
+                              title={t("plugin.locked")}
+                              className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/70 shrink-0"
+                            >
+                              <Lock className="w-3 h-3" />
+                              <span className="hidden sm:inline">{t("plugin.core", "core")}</span>
+                            </span>
+                          )}
                           {runtimes[0] && (
                             <Badge variant="outline" className="text-[9px] shrink-0">
                               P{runtimes[0].priority}
@@ -480,16 +497,28 @@ export function SessionPrepScreen({
                               every resolved slot (llm.toml + user custom);
                               picking sets localStorage bindings + (once the
                               session is created) PATCHes runtimeModelOverrides
-                              via the startGame handler. */}
-                          {hasAgentRuntime && isSelected && primaryBinding && resolvedSlots.length > 0 && (
+                              via the startGame handler.
+
+                              Hidden when only one slot is resolvable — the
+                              dropdown would be a no-op and just adds cognitive
+                              load for casual players. P-13 audit finding. */}
+                          {hasAgentRuntime && isSelected && primaryBinding && resolvedSlots.length > 1 && (
                             <select
                               value={primaryBinding.slotName}
                               onChange={(e) => bindingState.setBinding(primaryBinding.qualifiedId, e.target.value)}
-                              className="shrink-0 text-[9px] bg-background border border-border rounded px-1 py-0.5 max-w-[140px]"
-                              aria-label={t("plugin.modelBinding", "Model")}
-                              title={primaryBinding.qualifiedId}
+                              className="shrink-0 text-[9px] bg-background border border-border rounded px-1 py-0.5 max-w-[180px]"
+                              aria-label={t("plugin.modelBindingAria", "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.")}
+                              title={t("plugin.modelBindingAria", "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.")}
                             >
-                              <option value="">auto</option>
+                              <option value="">
+                                {(() => {
+                                  const defaultSlot = resolvedSlots[0];
+                                  const label = formatSlotLabel(defaultSlot);
+                                  return label
+                                    ? t("plugin.useDefaultWith", { value: label, defaultValue: `Use default (${label})` })
+                                    : t("plugin.useDefault", "Use default");
+                                })()}
+                              </option>
                               {resolvedSlots.map((slot) => (
                                 <option key={slot.slotId} value={slot.slotId}>
                                   {slot.slotId}{slot.serverModel ? ` · ${slot.serverModel}` : ""}
@@ -509,10 +538,24 @@ export function SessionPrepScreen({
                 {/* Execution Flow Preview */}
                 {selectedFlowSteps.length > 0 && (
                   <div className="space-y-2 pt-2 border-t border-dashed border-border">
-                    <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                      <Zap className="w-3 h-3" />
-                      {t("session.executionFlow", "Execution Flow")}
-                    </h4>
+                    <div className="space-y-0.5">
+                      <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                        <Zap className="w-3 h-3" />
+                        {t("session.executionFlow", "Execution Flow")}
+                      </h4>
+                      <p
+                        className="text-[10px] text-muted-foreground/70 leading-snug"
+                        title={t(
+                          "session.executionFlowTitle",
+                          "Plugins run in priority order every turn. Pre-Turn and After-Turn band the narrator on either side.",
+                        )}
+                      >
+                        {t(
+                          "session.executionFlowHint",
+                          "Turn order — lower priority runs first.",
+                        )}
+                      </p>
+                    </div>
                     <div className="space-y-1">
                       {(flowData?.segments ?? []).map((seg) => {
                         const stepsInSeg = selectedFlowSteps

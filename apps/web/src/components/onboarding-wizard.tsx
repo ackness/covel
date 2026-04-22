@@ -524,6 +524,33 @@ export function OnboardingWizard() {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+      {/* Always-on locale toggle — cheaper than forcing users back to Step 0. */}
+      <div className="absolute top-6 left-6 flex items-center gap-1 text-[10px] font-medium uppercase tracking-widest">
+        <button
+          type="button"
+          onClick={() => setLocale("zh-CN")}
+          className={`px-2 py-1 border transition-colors ${
+            locale === "zh-CN"
+              ? "border-primary text-primary"
+              : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
+          }`}
+          aria-label={t("onboarding.localeZh", "Switch to Chinese")}
+        >
+          {"\u4E2D"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setLocale("en-US")}
+          className={`px-2 py-1 border transition-colors ${
+            locale === "en-US"
+              ? "border-primary text-primary"
+              : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
+          }`}
+          aria-label={t("onboarding.localeEn", "Switch to English")}
+        >
+          EN
+        </button>
+      </div>
       <button
         onClick={dismiss}
         className="absolute top-6 right-6 text-muted-foreground hover:text-foreground transition-colors"
@@ -635,12 +662,25 @@ export function OnboardingWizard() {
                 slotName="story"
               />
 
+              {storyContinueDisabled && (
+                <p className="text-[11px] text-amber-500/80 leading-relaxed">
+                  {t(
+                    "onboarding.disabledHint",
+                    "Fill in API Key and Model ID to continue, or skip below to configure later.",
+                  )}
+                </p>
+              )}
+
               <div className="flex items-center gap-2 pt-2">
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  className="text-xs text-muted-foreground"
+                  className="rounded-none text-xs text-muted-foreground"
                   onClick={handleNext}
+                  title={t(
+                    "onboarding.skipTitle",
+                    "You can configure this later in Settings.",
+                  )}
                 >
                   {t("onboarding.skip", "Skip for now")}
                 </Button>
@@ -740,11 +780,20 @@ export function OnboardingWizard() {
                 />
               )}
 
+              {pluginContinueDisabled && (
+                <p className="text-[11px] text-amber-500/80 leading-relaxed">
+                  {t(
+                    "onboarding.disabledHint",
+                    "Fill in API Key and Model ID to continue, or skip below to configure later.",
+                  )}
+                </p>
+              )}
+
               <div className="flex items-center gap-2 pt-2">
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  className="text-xs text-muted-foreground"
+                  className="rounded-none text-xs text-muted-foreground"
                   onClick={handleBack}
                 >
                   {t("onboarding.back", "Back")}

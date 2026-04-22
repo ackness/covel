@@ -2,11 +2,14 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
+  ChevronDown,
+  ChevronRight,
   Copy,
   Check,
   Flame,
   ImageIcon,
   MessageSquare,
+  Settings2,
 } from "lucide-react";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import { nestedToFlat } from "@json-render/core";
@@ -39,7 +42,7 @@ export interface ChatMessagesProps {
   submittedBlockIds: ReadonlySet<string>;
   /** Form values keyed by submitted block id — used to repopulate disabled forms. */
   submittedBlockValues: Readonly<Record<string, Record<string, unknown>>>;
-  viewMode: "parsed" | "raw";
+  viewMode: "parsed" | "detailed" | "raw";
   blockSelections: Record<string, string>;
   onSendMessage: (msg: string) => void;
   onSubmitBlock: (blockId: string) => void;
@@ -105,15 +108,11 @@ export function ChatMessages({
   }
 
   /**
-   * Visibility rules for parsed (game) mode:
-   *   - user messages → always visible
-   *   - assistant + kind=story → narrative, visible
-   *   - assistant + kind=plugin-message → plugin inline output, visible
-   *   - assistant + block → delegated to renderBlock()
-   *   - system messages → hidden (framework context, plugin system output)
-   *   - assistant + other kind (e.g. "plugin") → hidden (debug only)
-   *
-   * Raw mode shows ALL messages as JSON for inspection.
+   * Visibility rules per view mode:
+   *   parsed   — user/narrative/plugin-inline only. System + debug kinds hidden.
+   *   detailed — everything parsed shows, PLUS system messages as compact one-liners.
+   *              Raw JSON / internal LLM trace stays hidden.
+   *   raw      — show every message as JSON for inspection.
    */
   function renderMessage(msg: StreamMessage) {
     if (msg.block) return renderBlock(msg);
@@ -142,10 +141,14 @@ export function ChatMessages({
       );
     }
 
-    // Parsed mode: filter out non-player-facing messages
-    // System messages are framework internals — never shown in game view
-    if (msg.role === "system") return null;
-    // Assistant messages: only show narrative (story) and plugin inline output
+    // System messages — hidden in parsed mode; compact line in detailed mode.
+    if (msg.role === "system") {
+      if (viewMode !== "detailed") return null;
+      return <SystemMessageLine key={msg.id} msg={msg} />;
+    }
+    // Assistant messages: only show narrative (story) and plugin inline output.
+    // Other kinds (e.g. raw "plugin" debug traces) stay hidden in detailed mode too
+    // — detailed surfaces the *fact* that a runtime ran via system messages, not its guts.
     if (msg.role === "assistant" && msg.kind && msg.kind !== "story" && msg.kind !== "plugin-message") return null;
 
     const isUser = msg.role === "user";
@@ -679,6 +682,53 @@ function SubmittedSelectionFooter({
     <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground italic pl-0.5">
       <span className="font-semibold not-italic">{t("interaction.playerSelected")}</span>
       <span className="whitespace-pre-wrap break-words">{label}</span>
+    </div>
+  );
+}
+
+// ── SystemMessageLine ────────────────────────────────────────────
+//
+// Detailed-view affordance: renders a single system message as a compact
+// one-liner with an expand toggle. Lets curious players see "the narrator
+// ran / plugin X emitted Y" without drowning in JSON. Stays quiet in
+// parsed mode (hidden entirely) and is superseded by the full JSON dump
+// in raw mode.
+function SystemMessageLine({ msg }: { msg: StreamMessage }) {
+  const [expanded, setExpanded] = useState(false);
+  const content = msg.content ?? "";
+  // First non-empty line is the best proxy for a headline.
+  const summary = content.split("\n").find((line) => line.trim().length > 0)?.trim() ?? "";
+  const hasMore = content.trim().length > summary.length;
+
+  return (
+    <div className="flex flex-col gap-1 text-[11px] text-muted-foreground/90 font-mono">
+      <button
+        type="button"
+        onClick={() => hasMore && setExpanded((v) => !v)}
+        disabled={!hasMore}
+        className="flex items-start gap-1.5 text-left hover:text-foreground transition-colors disabled:cursor-default disabled:hover:text-muted-foreground/90"
+      >
+        {hasMore ? (
+          expanded ? (
+            <ChevronDown className="w-3 h-3 mt-[3px] shrink-0 opacity-70" />
+          ) : (
+            <ChevronRight className="w-3 h-3 mt-[3px] shrink-0 opacity-70" />
+          )
+        ) : (
+          <Settings2 className="w-3 h-3 mt-[3px] shrink-0 opacity-60" />
+        )}
+        <span className="truncate">
+          {msg.runtimeId && (
+            <span className="opacity-60 mr-1.5">[{msg.runtimeId}]</span>
+          )}
+          {summary || <span className="italic opacity-60">system</span>}
+        </span>
+      </button>
+      {expanded && hasMore && (
+        <pre className="ml-4 pl-2 border-l border-border/60 text-[11px] whitespace-pre-wrap break-words text-muted-foreground/80">
+          {content}
+        </pre>
+      )}
     </div>
   );
 }

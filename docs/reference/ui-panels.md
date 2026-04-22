@@ -2,6 +2,8 @@
 
 > 前端（`apps/web/`）采用插件驱动的 UI 架构，右侧面板与聊天内插件消息面都由插件通过 json-render spec 声明，框架负责发现、装配与渲染。
 
+> 另见：[docs/reference/ui-components.md](./ui-components.md) — json-render 组件目录（每个组件的名字、用途、关键 props），本页是面板装配逻辑，组件目录单独抽出以便索引。
+
 ## 架构总览
 
 ```

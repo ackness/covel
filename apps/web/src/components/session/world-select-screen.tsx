@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Globe, Sparkles, Loader2, KeyRound, Cpu, Eye, Wand2 } from "lucide-react";
+import { Globe, Sparkles, KeyRound, Cpu, Eye, Wand2, FolderOpen } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
@@ -12,7 +12,7 @@ import { WorldEditor } from "@/components/world/world-editor.js";
 import { AiWorldGenerator } from "@/components/world/ai-world-generator.js";
 import type { WorldRecord, PackageSummary } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
-import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
+import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
 
 type ViewMode = "list" | "detail" | "edit";
 
@@ -38,18 +38,21 @@ export function WorldSelectScreen({
   onWorldCreated,
 }: WorldSelectScreenProps) {
   const { t } = useTranslation();
-  const primarySlot = resolvedSlots[0] ?? null;
-  const primarySlotLabel = primarySlot
-    ? primarySlot.preset
-      ? `${primarySlot.preset.name} (${primarySlot.preset.model})`
-      : primarySlot.serverModel
-        ? `${primarySlot.slotId} (${primarySlot.serverModel})`
-        : null
-    : null;
+  const primarySlotLabel = formatSlotLabel(resolvedSlots[0]);
 
   const [mode, setMode] = useState<ViewMode>("list");
   const [selectedWorldId, setSelectedWorldId] = useState<string | null>(null);
   const [generatorOpen, setGeneratorOpen] = useState(false);
+  const [enteringWorldId, setEnteringWorldId] = useState<string | null>(null);
+
+  function handleEnterWorld(worldId: string) {
+    if (enteringWorldId) return;
+    setEnteringWorldId(worldId);
+    // Give the card its fade-out frame before the route transition.
+    window.requestAnimationFrame(() => {
+      onSelectWorld(worldId);
+    });
+  }
 
   const selectedWorld = selectedWorldId
     ? worlds.find((w) => w.id === selectedWorldId) ?? null
@@ -137,11 +140,18 @@ export function WorldSelectScreen({
           </div>
 
           <div className="grid gap-4 md:gap-6">
-            {worlds.map((world) => (
+            {worlds.map((world) => {
+              const isEntering = enteringWorldId === world.id;
+              const dimmed =
+                enteringWorldId !== null && !isEntering;
+              return (
               <Card
                 key={world.id}
-                className="cursor-pointer transition-all hover:border-primary/50 hover:shadow-md group"
-                onClick={() => onSelectWorld(world.id)}
+                className={`cursor-pointer transition-all duration-200 hover:border-primary/50 hover:shadow-md group ${
+                  isEntering ? "border-primary shadow-md opacity-90" : ""
+                } ${dimmed ? "opacity-40 pointer-events-none" : ""}`}
+                aria-busy={isEntering}
+                onClick={() => handleEnterWorld(world.id)}
               >
                 <CardContent className="p-5 md:p-6">
                   <div className="flex items-start justify-between gap-4">
@@ -149,7 +159,7 @@ export function WorldSelectScreen({
                       <h2 className="font-display font-bold text-lg group-hover:text-primary transition-colors">
                         {text(world.name)}
                       </h2>
-                      <p className="text-sm text-muted-foreground">{text(world.description)}</p>
+                      <p className="text-sm text-muted-foreground break-words [overflow-wrap:anywhere]">{text(world.description)}</p>
                       {world.tags && world.tags.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 pt-1">
                           {world.tags.map((tag) => (
@@ -173,13 +183,46 @@ export function WorldSelectScreen({
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
           </div>
 
           {worlds.length === 0 && (
-            <div className="text-center py-12">
-              <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" />
-              <p className="text-sm text-muted-foreground mt-2">{t("session.loadingWorlds")}</p>
+            <div className="text-center py-16 border border-dashed border-border rounded-sm">
+              <FolderOpen className="w-8 h-8 mx-auto text-muted-foreground" />
+              <h2 className="font-display font-bold text-lg mt-4">
+                {t("session.worldsEmptyTitle", "No worlds yet")}
+              </h2>
+              <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
+                {t(
+                  "session.worldsEmptyDesc",
+                  "Generate a new world with AI, or add a world package under the worlds/ folder.",
+                )}
+              </p>
+              <div className="flex items-center justify-center gap-3 mt-6">
+                <Button
+                  size="sm"
+                  className="text-xs uppercase tracking-widest"
+                  onClick={() => setGeneratorOpen(true)}
+                >
+                  <Wand2 className="w-3.5 h-3.5 mr-1.5" />
+                  {t("world.aiCreate")}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs uppercase tracking-widest"
+                  onClick={() =>
+                    window.open(
+                      "https://github.com/ackness/covel/tree/main/worlds",
+                      "_blank",
+                      "noopener,noreferrer",
+                    )
+                  }
+                >
+                  {t("session.worldsEmptyViewExamples", "View examples")}
+                </Button>
+              </div>
             </div>
           )}
 

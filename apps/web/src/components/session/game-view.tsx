@@ -7,6 +7,7 @@ import {
   Send,
   Code,
   LayoutTemplate,
+  ListTree,
   Loader2,
   KeyRound,
   Check,
@@ -152,7 +153,7 @@ export function GameView({
     llmConfig,
   );
 
-  const [viewMode, setViewMode] = useState<"parsed" | "raw">("parsed");
+  const [viewMode, setViewMode] = useState<"parsed" | "detailed" | "raw">("parsed");
   const [inputValue, setInputValue] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -432,7 +433,7 @@ export function GameView({
                 {executing ? t("session.stateStreaming") : t("session.statePlaying")}
               </span>
             </div>
-            <div className="flex items-center gap-4 shrink-0">
+            <div className="flex items-center gap-2 md:gap-4 shrink-0">
               <div className="hidden sm:flex items-center border border-border rounded-md overflow-hidden">
                 <Toggle
                   pressed={viewMode === "parsed"}
@@ -442,6 +443,15 @@ export function GameView({
                 >
                   <LayoutTemplate className="w-3.5 h-3.5 mr-1.5" />
                   <span className="text-xs">{t("session.viewParsed")}</span>
+                </Toggle>
+                <Toggle
+                  pressed={viewMode === "detailed"}
+                  onPressedChange={() => setViewMode("detailed")}
+                  size="sm"
+                  className="rounded-none border-0 h-7 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                >
+                  <ListTree className="w-3.5 h-3.5 mr-1.5" />
+                  <span className="text-xs">{t("session.viewDetailed")}</span>
                 </Toggle>
                 <Toggle
                   pressed={viewMode === "raw"}
@@ -463,6 +473,15 @@ export function GameView({
                   aria-label={t("session.viewParsedAria")}
                 >
                   <LayoutTemplate className="w-3.5 h-3.5" />
+                </Toggle>
+                <Toggle
+                  pressed={viewMode === "detailed"}
+                  onPressedChange={() => setViewMode("detailed")}
+                  size="sm"
+                  className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                  aria-label={t("session.viewDetailedAria")}
+                >
+                  <ListTree className="w-3.5 h-3.5" />
                 </Toggle>
                 <Toggle
                   pressed={viewMode === "raw"}
@@ -503,7 +522,7 @@ export function GameView({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 shrink-0 border border-transparent"
+                className="hidden md:inline-flex h-8 w-8 shrink-0 border border-transparent"
                 asChild
                 title={t("session.debugTraces")}
               >
@@ -588,8 +607,9 @@ export function GameView({
                         <button
                           type="button"
                           onClick={() => removeInteractionDraft(d.id)}
-                          className="inline-flex items-center justify-center w-4 h-4 rounded-[var(--radius-control)] text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                          className="inline-flex items-center justify-center h-6 w-6 -my-1 rounded-[var(--radius-control)] text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
                           aria-label={t("session.removeDraft")}
+                          title={t("session.removeDraft")}
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -608,35 +628,47 @@ export function GameView({
                 {t("session.ended", "This session has ended.")}
               </p>
             ) : (
-              <div className="ui-composer-frame flex gap-2.5 mx-auto">
-                <input
-                  type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={
-                    phase === "playing"
-                      ? t(
-                        "session.inputPlaceholder",
-                        "Enter action or command...",
-                      )
-                      : t("session.inputPlaceholderAny", "Send a message...")
-                  }
-                  disabled={executing}
-                  className="ui-composer-input flex-1 min-w-0 border border-border px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-primary transition-all disabled:opacity-50"
-                />
-                <Button
-                  onClick={handleSubmit}
-                  disabled={executing || !inputValue.trim()}
-                  className="ui-composer-submit px-0 w-[46px] h-[46px] shrink-0"
-                  size="sm"
-                >
-                  {executing ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
-                </Button>
+              <div className="ui-composer-frame flex flex-col gap-1 mx-auto">
+                <div className="flex gap-2.5">
+                  <input
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    aria-label={t(
+                      "session.inputAriaLabel",
+                      "Story input — press Enter to send",
+                    )}
+                    placeholder={
+                      phase === "playing"
+                        ? t(
+                          "session.inputPlaceholder",
+                          "Enter action or command...",
+                        )
+                        : t("session.inputPlaceholderAny", "Send a message...")
+                    }
+                    disabled={executing}
+                    className="ui-composer-input flex-1 min-w-0 border border-border px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-primary transition-all disabled:opacity-50"
+                  />
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={executing || !inputValue.trim()}
+                    className="ui-composer-submit px-0 w-[46px] h-[46px] shrink-0"
+                    size="sm"
+                  >
+                    {executing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
+                <div className="hidden md:flex justify-end items-center gap-1 text-[10px] text-muted-foreground/70 pr-1 select-none">
+                  <kbd className="px-1.5 py-0.5 font-mono border border-border/60 bg-muted/30 rounded-sm">
+                    {"\u23CE"}
+                  </kbd>
+                  <span>{t("session.inputKbdHint", "to send")}</span>
+                </div>
               </div>
             )}
           </div>

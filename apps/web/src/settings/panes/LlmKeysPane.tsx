@@ -1,11 +1,13 @@
 import { useTranslation } from "react-i18next";
-import { Info } from "lucide-react";
+import { FolderOpen, Info } from "lucide-react";
 import { getCustomPresets, type PresetSummary } from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
+import { Button } from "@/components/ui/button.js";
 import { SettingWidget } from "../widgets/index.js";
 import { useSettingsStore } from "../use-settings.js";
 import { useSession } from "@/stores/session-store.js";
 import { PingButton } from "@/components/shared/ping-button.js";
+import { isDesktopApp, openLlmToml } from "@/lib/desktop-bridge.js";
 
 /**
  * Shape we need per preset for rendering — a minimal projection of both
@@ -64,10 +66,43 @@ export function LlmKeysPane() {
   ];
 
   if (keyEntries.length === 0) {
+    const desktop = isDesktopApp();
     return (
-      <div className="text-xs text-muted-foreground">
-        No providers registered. Configure at least one slot in `llm.toml` to
-        surface API key inputs.
+      <div className="border border-dashed border-border p-4 space-y-3 text-xs">
+        <div className="flex items-start gap-2">
+          <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
+          <div className="space-y-1">
+            <div className="font-medium text-sm">
+              {t("settings.noProvidersTitle", "No providers registered yet")}
+            </div>
+            <p className="text-muted-foreground leading-relaxed">
+              {desktop
+                ? t(
+                    "settings.noProvidersDesktopDesc",
+                    "Open your local llm.toml and add at least one [covel.<slot>] section, then reload this dialog.",
+                  )
+                : t(
+                    "settings.noProvidersWebDesc",
+                    "This web build reads slot definitions from the server's llm.toml. Ask your operator to configure a slot, or run a desktop build where you can edit the file locally.",
+                  )}
+            </p>
+          </div>
+        </div>
+        {desktop && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              void openLlmToml().catch((err: unknown) => {
+                console.error("[LlmKeysPane] openLlmToml failed", err);
+              });
+            }}
+            className="text-[11px]"
+          >
+            <FolderOpen className="w-3 h-3 mr-1.5" />
+            {t("settings.openLlmToml", "Open llm.toml")}
+          </Button>
+        )}
       </div>
     );
   }

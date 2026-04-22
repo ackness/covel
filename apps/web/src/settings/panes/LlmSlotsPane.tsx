@@ -135,6 +135,34 @@ export function LlmSlotsPane() {
 
   return (
     <div className="space-y-3">
+      {/* Relationship summary — explains how slots fit into the bigger picture.
+          O-4 audit finding: players were seeing "slot / preset / key" as three
+          disconnected tabs without any indication that they form a chain. */}
+      <div className="border border-border/60 bg-muted/20 px-3 py-2 space-y-1.5">
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          {t(
+            "settings.slotChainSummary",
+            "Plugins → Slots → Presets → API keys. Change a preset to swap models; manage keys in the Keys tab.",
+          )}
+        </p>
+        <div className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground/80 flex-wrap">
+          <span className="px-1.5 py-0.5 rounded bg-background border border-border">
+            {t("settings.chainRuntime", "Runtime")}
+          </span>
+          <span className="text-muted-foreground/50">▸</span>
+          <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/30">
+            {t("settings.chainSlot", "Slot")}
+          </span>
+          <span className="text-muted-foreground/50">▸</span>
+          <span className="px-1.5 py-0.5 rounded bg-background border border-border">
+            {t("settings.chainPreset", "Preset")}
+          </span>
+          <span className="text-muted-foreground/50">▸</span>
+          <span className="px-1.5 py-0.5 rounded bg-background border border-border">
+            {t("settings.chainKey", "API key")}
+          </span>
+        </div>
+      </div>
       {isConfigured && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Info className="w-3 h-3" />

@@ -1,0 +1,307 @@
+# 插件开发指南 · 高级（TypeScript + 审批 + 发布）
+
+> 面向**专业开发者**：要吃下完整类型系统、写复杂的 `TestHarness` 断言、自定义审批规则、拆多 runtime 插件，并最终发布到社区。
+
+> **前置要求**：先完成 [零代码](./plugin-authoring-zero-code.md) 和 [进阶（agent + 本地 JS）](./plugin-authoring-agent.md)。
+
+> **读完你能做到**
+> - 从 `@covel/shared` / `@covel/plugin-loader` 导入并正确使用插件相关类型
+> - 用 MockLLM 的响应队列 + 自定义工具 + 多轮 harness 做复杂集成测试
+> - 用 `createApprovalPipeline` 定制工具审批规则（allow / ask / deny）
+> - 在一个插件里组织多个 runtime（`runtimes/*/PLUGIN.md`）
+> - 按发布 checklist 完成社区插件的上架准备
+> - 满足 `I18nText` 规范让插件 UI 文本双语化
+
+---
+
+## 1. 完整的类型系统
+
+所有插件相关类型都从 `@covel/shared` 导出：
+
+```typescript
+import type {
+  // 插件类型
+  PluginType,           // 'core-plugin' | 'plugin'
+  PluginManifest,       // 完整插件清单
+  RuntimeManifest,      // 运行时清单（PLUGIN.md frontmatter 的解析结果）
+
+  // 触发系统
+  TriggerType,          // 'auto' | 'manual' | 'scheduled' | 'conditional' | 'event' | 'error-retry'
+  TriggerConfig,        // { type, interval?, condition?, topic?, maxTriggerCount?, cooldownTurns? }
+
+  // 输入/输出
+  InputConfig,          // { inject?, tools? }
+  InputInjectDecl,      // { from, field, as }
+  OutputConfig,         // { schema?, recordAs? }
+
+  // 工具
+  ToolsConfig,          // { builtin?, local? }
+
+  // 配置
+  ConfigFieldType,      // 'string' | 'integer' | 'number' | 'boolean' | 'enum'
+  PluginConfigField,    // { type, default?, min?, max?, options?, label?, description? }
+
+  // 运行时数据
+  TurnInput,            // 每轮输入
+  TurnResult,           // 每轮输出
+  RuntimeResult,        // 单个 runtime 的执行结果
+} from '@covel/shared';
+```
+
+从 `@covel/plugin-loader` 获取加载相关类型：
+
+```typescript
+import type {
+  ParsedPluginMd,       // 解析后的 PLUGIN.md
+  ParsedReference,      // 解析后的参考文件
+  PluginDiscoveryResult,// 发现结果
+  LoadedRuntime,        // 完全加载的 runtime
+  PluginRegistryEntry,  // 注册表条目
+  PluginSource,         // 'builtin' | 'official' | 'community'
+  PluginTrustInfo,      // { source, requiresApproval, autoLoad }
+} from '@covel/plugin-loader';
+```
+
+## 2. TestHarness 高级用法
+
+**自定义 MockLLM 响应队列：**
+
+```typescript
+const mockLLM = new MockLLM();
+
+// 默认响应
+mockLLM.defaultResponse = {
+  content: '你来到了一片神秘的森林...',
+  toolCalls: [],
+  finishReason: 'stop',
+  usage: { inputTokens: 100, outputTokens: 50 },
+};
+```
+
+**注入额外工具：**
+
+```typescript
+import { tool } from '@covel/tools';
+import { z } from 'zod';
+
+const customTool = tool({
+  name: 'test-helper',
+  description: 'Test helper tool',
+  parameters: z.object({ value: z.string() }),
+  execute: async (params) => ({ echoed: params.value }),
+});
+
+const harness = await createTestHarness({
+  pluginsDir: path.resolve(__dirname, '../../'),
+  tools: [customTool],  // 额外注册的工具
+});
+```
+
+**断言 Store 状态：**
+
+```typescript
+const harness = await createTestHarness({ pluginsDir: '...' });
+await harness.executeTurn('开始游戏');
+
+// 通过 store 检查持久化的数据
+const store = harness.store;
+// store 实现了 DataStore 接口，可以查询 state、events、records 等
+```
+
+**多轮测试：**
+
+```typescript
+const harness = await createTestHarness({ pluginsDir: '...' });
+
+// 第一轮
+const result1 = await harness.executeTurn('开始游戏');
+
+// 第二轮（TestHarness 自动递增 turnId）
+const result2 = await harness.executeTurn('我要去探索森林');
+
+// 断言跨轮状态变化
+expect(mockLLM.calls).toHaveLength(2);
+```
+
+## 3. 审批管线
+
+工具调用经过 `ApprovalPipeline` 审批。当前默认规则：
+
+| 来源 | 规则 | 说明 |
+|------|------|------|
+| `builtin:*` | allow | 框架内置工具，始终放行 |
+| `local:*` | allow | 插件本地工具，自动放行 |
+| `third-party:*` | deny | 未知来源工具，拒绝执行 |
+
+**自定义审批规则（用于测试或特殊场景）：**
+
+```typescript
+import { createApprovalPipeline } from '@covel/approval';
+import type { PermissionRule } from '@covel/approval';
+
+const rules: PermissionRule[] = [
+  { pattern: 'builtin:*', action: 'allow' },
+  { pattern: 'local:*', action: 'allow' },
+  { pattern: 'dangerous-tool', action: 'ask' },    // 需要玩家确认
+  { pattern: 'third-party:*', action: 'deny' },
+];
+
+const pipeline = createApprovalPipeline(store, rules);
+
+// 检查工具是否需要审批
+const result = pipeline.check(
+  { toolName: 'dangerous-tool', sessionId: 'sess-1', turnId: 'turn-1' },
+  'local',
+);
+// result: { needsApproval: true, reason: 'rule-ask' }
+```
+
+**审批规则匹配逻辑：**
+
+1. 按规则列表顺序匹配，第一个匹配的规则生效
+2. `builtin:*`、`local:*`、`third-party:*` 按工具来源分类匹配
+3. 具体工具名（如 `dangerous-tool`）精确匹配，不区分来源
+4. 无规则匹配时默认 allow
+
+**来源分类：**
+
+框架 bootstrap 时自动分类：
+- `builtinUITools` 中的工具 → `builtin`
+- 插件 `tools/` 目录加载的工具 → `local`
+- 其他 → `third-party`（预留给社区插件）
+
+新插件只需在 PLUGIN.md 中声明 `tools.local`，bootstrap 自动发现、注册并归类，无需手动修改白名单。
+
+## 4. 多 Runtime 插件
+
+一个插件可以包含多个 runtime（多个 PLUGIN.md），适用于复杂的游戏系统：
+
+```
+plugins/my-combat/
+├── PLUGIN.md              # 主 runtime
+├── runtimes/
+│   ├── combat-init/
+│   │   └── PLUGIN.md      # 战斗初始化 runtime
+│   └── combat-resolve/
+│       └── PLUGIN.md      # 战斗结算 runtime
+├── tools/
+│   └── roll-dice.js
+└── package.json
+```
+
+每个 PLUGIN.md 都是独立的 runtime，有自己的优先级、触发条件和 LLM 提示词。它们可以：
+
+- 使用不同的 model slot（如主 runtime 用 `balance`，初始化用 `fast`）
+- 设置不同的 trigger（如一个 auto，一个 event）
+- 通过 `input.inject` 互相传递数据
+- 共享 `tools/` 目录下的工具
+
+框架 `discoverPlugins()` 会自动扫描主 PLUGIN.md 和 `runtimes/` 子目录中的所有 PLUGIN.md。
+
+`PluginManifest` 类型反映了这种结构：
+
+```typescript
+interface PluginManifest {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly pluginType: PluginType;
+  /** 单 runtime 插件 */
+  readonly runtime?: RuntimeManifest;
+  /** 多 runtime 插件 */
+  readonly runtimes?: readonly RuntimeManifest[];
+  readonly config?: Readonly<Record<string, PluginConfigField>>;
+}
+```
+
+## 5. 发布和分享
+
+### 插件信任等级
+
+| 来源 | 标识 | 加载方式 |
+|------|------|---------|
+| `builtin` | 绿色徽章 | 自动加载，无需确认 |
+| `official` | 绿色徽章 | 白名单匹配，自动加载 |
+| `community` | 橙色/红色警告 | 需用户确认后加载 |
+
+### 插件最低要求
+
+一个可发布的插件至少需要：
+
+```
+my-plugin/
+├── PLUGIN.md       # 必需：frontmatter + 提示词
+└── package.json    # 必需：workspace 依赖声明
+```
+
+### 发布检查清单
+
+- [ ] `PLUGIN.md` frontmatter 通过 `runtimeManifestSchema` 校验
+- [ ] `name` 字段唯一，建议用 `your-prefix-` 前缀避免冲突
+- [ ] `description` 清晰描述插件功能
+- [ ] 本地工具都有 Zod schema 和 `.describe()` 注解
+- [ ] 不依赖内核内部 API（DB 表名、ORM 模型、内核私有模块）
+- [ ] 所有数据写入通过 proposal 或工具返回值，不直接操作 store
+- [ ] 有基本的集成测试
+- [ ] references/ 文件有适当的 keywords 设置
+
+### 插件作者约束
+
+**允许依赖的公开 API：**
+- PLUGIN.md manifest 格式
+- `@covel/tools` 的 `tool()` 包装函数
+- 内置工具（create-form、create-choices、create-notification）
+- `input.inject` 声明
+- 交互协议（interaction 返回值）
+- `@covel/plugin-test-utils` 测试工具
+
+**禁止依赖：**
+- 数据库表名或 ORM 模型
+- 内核调度器、路由器等内部模块
+- 前端组件（UI 通过 blockSchema 或交互协议集成）
+- 直接 SDK 调用（LLM 调用通过 model slot 绑定）
+
+## 6. 插件国际化（i18n）
+
+**所有面向玩家的 UI 字符串必须用 `I18nText` 对象（至少 `zh` + `en`）。** 详情见 [docs/reference/ui-panels.md 的「插件 UI 文本 I18nText 规范」](../reference/ui-panels.md#插件-ui-文本-i18ntext-规范)。
+
+适用范围：
+
+| 位置 | 必须 I18nText 的字段 | 示例 |
+|------|---------------------|------|
+| `plugins/<id>/ui/*.json` | `label` / `groupLabel` / `emptyState.message` / `searchPlaceholder` / `emptyMessage` / `footer` | `{ "label": { "zh": "角色", "en": "Characters" } }` |
+| json-render spec 叶节点 | `Text.content` / `Button.label` / `Badge.label` / `Input.placeholder` / `FormField.label` / `Alert.title` / `Alert.message` | `{ "content": { "zh": "…", "en": "…" } }` |
+| `world.yaml` / `WORLD.*.md` | `name` / `description` / dimension 描述字段 | 世界包通过 `WORLD.zh.md` / `WORLD.en.md` 提供正文 |
+
+无需 i18n 的情形：纯标识符（`icon` 名称、`iconColor`、状态字符串、图像 URL）、多 locale 共用的短词（`"Ping"`、`"NEW"`）、数值或布尔常量。
+
+**回退逻辑**：`resolveI18n(value, locale)` 优先匹配当前 locale，其次语言前缀（`zh-CN` → `zh`），再退到 `en-US` / `en`，最后取对象中任一字符串。切换语言时，json-render 子树会通过 `useI18nResolver()` 自动重渲染。
+
+**合规脚本**：
+- `node scripts/check-plugin-i18n.mjs` 扫描 `plugins/**/ui/*.json`，禁止出现没有 `en` 兄弟 key 的裸中文字符串
+- `pnpm check:i18n` 会同时跑应用代码（`apps/web`）与插件 JSON 两套扫描；CI 里应作为必选 gate
+
+**常见错误**：
+
+```json
+// ✗ 裸中文会被扫描拒绝
+{ "content": "已收录到图鉴" }
+
+// ✗ 只有中文 locale，切到 en 时不会回退到 zh
+{ "label": { "zh": "世界" } }
+
+// ✓ zh + en 双 key
+{ "label": { "zh": "世界", "en": "World" } }
+
+// ✓ 纯标识符（非自然语言），允许单字符串
+{ "icon": "book-open" }
+```
+
+---
+
+## 下一步
+
+- 想看所有已实现插件的完整 frontmatter、调度层级、本体设计？ → [插件注册表 `docs/reference/plugins.md`](../reference/plugins.md)
+- 想写交互 UI 面板的 json-render spec？ → [插件 UI 与 runtime 指南](./plugin-ui-runtime-guidelines.md)
+- 想跑端到端 API harness + 真实 LLM 验证？ → [插件测试指南](./plugin-testing.md) · [E2E plugin verify](./e2e-plugin-verify.md)
+- 想回到入口？ → [插件开发指南 · 索引](./plugin-authoring.md)

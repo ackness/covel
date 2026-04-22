@@ -25,9 +25,13 @@ Before changing anything non-trivial, consult the matching reference doc — the
 | DataStore transactions (begin/commit/rollback) | [docs/reference/transactions.md](./docs/reference/transactions.md) |
 | Writing a plugin (tutorial + frontmatter fields) | [docs/guide/plugin-authoring.md](./docs/guide/plugin-authoring.md) |
 | Plugin UI + runtime guidelines | [docs/guide/plugin-ui-runtime-guidelines.md](./docs/guide/plugin-ui-runtime-guidelines.md) |
+| Plugin testing (harness + examples) | [docs/guide/plugin-testing.md](./docs/guide/plugin-testing.md) |
+| UI component catalogue (json-render primitives) | [docs/reference/ui-components.md](./docs/reference/ui-components.md) |
+| Terminology glossary (session / runtime / slot / …) | [docs/glossary.md](./docs/glossary.md) |
 | E2E plugin verify harness | [docs/guide/e2e-plugin-verify.md](./docs/guide/e2e-plugin-verify.md) |
 | Desktop config (paths, sidecar, safeStorage) | [docs/guide/desktop-config.md](./docs/guide/desktop-config.md) |
-| Desktop packaging, signing, notarisation | [apps/desktop/PACKAGING.md](./apps/desktop/PACKAGING.md) |
+| Desktop packaging (Electron), signing, notarisation | [apps/desktop/PACKAGING.md](./apps/desktop/PACKAGING.md) |
+| Desktop packaging (Tauri), signing, notarisation | [apps/desktop-tauri/PACKAGING.md](./apps/desktop-tauri/PACKAGING.md) |
 | Prompt externalisation spec | [devs/docs/prompt-externalization-spec.md](./devs/docs/prompt-externalization-spec.md) |
 | World package spec (world.yaml + WORLD.md) | [devs/docs/world-package-spec.md](./devs/docs/world-package-spec.md) |
 | Plugin system requirements, refactor plans | [devs/docs/plugin-system-req.md](./devs/docs/plugin-system-req.md) · [devs/docs/refactor-plan/](./devs/docs/refactor-plan/) |

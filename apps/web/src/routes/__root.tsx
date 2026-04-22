@@ -5,6 +5,8 @@ import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { OnboardingWizard } from "@/components/onboarding-wizard";
+import { ToastHost } from "@/components/ui/toast-host";
+import { AppErrorBoundary } from "@/components/error-boundary";
 import { useLocalePreference } from "@/hooks/useLocalePreference";
 
 export const Route = createRootRoute({
@@ -24,6 +26,7 @@ function RootLayout() {
   return (
     <>
       <OnboardingWizard />
+      <ToastHost />
       <div className="h-screen w-full bg-background text-foreground font-sans selection:bg-primary selection:text-primary-foreground flex flex-col overflow-hidden">
         <header className={`ui-panel-header flex-shrink-0 z-50 border-b border-border/80 backdrop-blur-md transition-all ${isSession ? 'h-12' : 'h-16'}`}>
           <div className="w-full flex h-full items-center justify-between px-4 md:px-6">
@@ -70,7 +73,9 @@ function RootLayout() {
         </header>
 
         <main className="flex-1 flex flex-col w-full min-h-0 overflow-hidden relative">
-          <Outlet />
+          <AppErrorBoundary>
+            <Outlet />
+          </AppErrorBoundary>
         </main>
 
         <footer className={`ui-panel-footer flex-shrink-0 border-t border-border transition-all ${isSession ? 'py-1.5' : 'py-8'}`}>

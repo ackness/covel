@@ -332,6 +332,78 @@ describe('parsePluginMd', () => {
     });
   });
 
+  describe('diagnostic error messages (D-4)', () => {
+    it('error contains [plugin-loader] prefix, plugin path and a Fix: hint', () => {
+      // Missing `description` — a required field.
+      const content = md(
+        ['name: core-needs-desc', 'priority: 400'].join('\n'),
+        '\nBody.\n',
+      );
+
+      let caught: Error | undefined;
+      try {
+        parsePluginMd(content, 'plugins/core-needs-desc/PLUGIN.md');
+      } catch (err) {
+        caught = err as Error;
+      }
+
+      expect(caught).toBeDefined();
+      expect(caught!.message).toContain('[plugin-loader]');
+      expect(caught!.message).toContain('plugins/core-needs-desc/PLUGIN.md');
+      expect(caught!.message).toContain('Fix:');
+      // Authoring-facing hint for the specific missing field.
+      expect(caught!.message.toLowerCase()).toContain('description');
+    });
+
+    it('error for bad `name` format points at the name field with a kebab-case Fix hint', () => {
+      const content = md(
+        [
+          'name: BadName',
+          'description: Invalid name shape',
+          'priority: 400',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      let caught: Error | undefined;
+      try {
+        parsePluginMd(content, 'plugins/bad-name/PLUGIN.md');
+      } catch (err) {
+        caught = err as Error;
+      }
+
+      expect(caught).toBeDefined();
+      expect(caught!.message).toMatch(/\[plugin-loader\].*plugins\/bad-name\/PLUGIN\.md/);
+      expect(caught!.message).toContain('Fix:');
+      // The tailored hint for bad `name` mentions kebab-case.
+      expect(caught!.message.toLowerCase()).toContain('kebab-case');
+    });
+
+    it('includes a 1-based line number when the failing key appears in source', () => {
+      const content = md(
+        [
+          'name: core-line',
+          'description: Line test',
+          // priority must be an integer — pass a string to force a Zod error.
+          'priority: "not-a-number"',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      let caught: Error | undefined;
+      try {
+        parsePluginMd(content, 'plugins/core-line/PLUGIN.md');
+      } catch (err) {
+        caught = err as Error;
+      }
+
+      expect(caught).toBeDefined();
+      // `priority:` is the 4th line of the document (1: ---, 2: name, 3: description, 4: priority).
+      expect(caught!.message).toMatch(/plugins\/core-line\/PLUGIN\.md:4:/);
+      expect(caught!.message).toContain('Fix:');
+    });
+  });
+
   describe('empty body', () => {
     it('should return empty string for promptTemplate', () => {
       const content = md(
