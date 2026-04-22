@@ -275,3 +275,28 @@ error.occurred        → executionError
 | StdioTransport | stdin JSON | stdout JSON | TUI / CLI |
 | HTTPTransport | HTTP POST | HTTP polling | REST API 集成 |
 | LocalTransport | 函数调用 | 回调 | 测试 |
+
+## 七、Debug trace events
+
+These events ride the standard SSE envelope and are also persisted into `trace_events`. They are emitted by the runtime's `TurnEmitter` (`packages/runtime/src/turn-emitter.ts`), fanned out both to `trace_events` (for the `/api/traces` read API and the `/debug` inspector) and to the global `EventBus` (where the `/api/actions` SSE route re-forwards them through `FORWARDED_SUBTYPES`).
+
+| Type | Payload |
+|------|---------|
+| `tool.calling` | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus }` |
+| `tool.completed` | `{ runtimeId, pluginId, toolName, toolCallId, label, result, parsedResult, durationMs, approvalStatus, success: true }` |
+| `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, details?, durationMs, approvalStatus, success: false }` |
+| `llm.calling` | `{ runtimeId, pluginId, slot, model, provider?, messages, tools, attempt, streaming? }` |
+| `llm.responded` | `{ runtimeId, pluginId, text?, toolCalls?, usage, finishReason, durationMs, attempt, error? }` |
+| `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }` |
+| `block.emitted` | `{ runtimeId, pluginId, proposalId, source, block }` |
+| `state.patch.applied` | `{ runtimeId, pluginId, proposalId, patch: { packageName, summary, ops } }` |
+| `hook.fired` | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType }` |
+| `hook.rewrote` | `{ event, hookName, pluginId, runtimeId?, targetId?, diff? }` |
+| `hook.aborted` | `{ event, hookName, pluginId, runtimeId?, targetId?, reason }` |
+
+Delta narrative continues to ride `narrative.delta` for realtime UI; only `message.completed` is persisted to keep `trace_events` compact.
+
+Payload notes:
+
+- `llm.calling.tools` is `Array<{ name, description, jsonSchema }>` — mapped from `LLMToolDefinition.parameters` so the recorded schema matches what the provider actually received.
+- `llm.calling.provider` is `null` at direct `generate` / `generateStream` sites where the resolved provider string is not available; slot-routed calls populate it with the provider name (`openai`, `anthropic`, `deepseek`, `qwen`).
