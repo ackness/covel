@@ -523,9 +523,9 @@ export function OnboardingWizard() {
     : `${storyProvider.name}${storyForm.builtInModel.trim() ? ` — ${storyForm.builtInModel.trim()}` : ""}`;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm">
       {/* Always-on locale toggle — cheaper than forcing users back to Step 0. */}
-      <div className="absolute top-6 left-6 flex items-center gap-1 text-[10px] font-medium uppercase tracking-widest">
+      <div className="absolute top-3 left-3 sm:top-6 sm:left-6 flex items-center gap-1 text-[10px] font-medium uppercase tracking-widest z-10">
         <button
           type="button"
           onClick={() => setLocale("zh-CN")}
@@ -553,15 +553,15 @@ export function OnboardingWizard() {
       </div>
       <button
         onClick={dismiss}
-        className="absolute top-6 right-6 text-muted-foreground hover:text-foreground transition-colors"
+        className="absolute top-3 right-3 sm:top-6 sm:right-6 text-muted-foreground hover:text-foreground transition-colors z-10"
         aria-label="Close"
       >
         <X className="w-5 h-5" />
       </button>
 
-      <div className="relative w-full max-w-md mx-4">
+      <div className="relative w-full max-w-md max-h-full flex flex-col min-h-0">
         {/* Step indicator */}
-        <div className="flex items-center justify-center gap-2 mb-6">
+        <div className="flex items-center justify-center gap-2 mb-4 sm:mb-6 shrink-0">
           {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
             <div
               key={i}
@@ -576,7 +576,7 @@ export function OnboardingWizard() {
           ))}
         </div>
 
-        <div className="ui-dialog-shell border border-border p-8">
+        <div className="ui-dialog-shell border border-border p-5 sm:p-8 overflow-y-auto min-h-0">
           {/* Step 0: Welcome */}
           {step === 0 && (
             <div className="space-y-8 text-center">
