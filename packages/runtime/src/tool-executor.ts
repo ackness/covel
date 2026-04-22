@@ -48,6 +48,8 @@ export interface ToolCallContext {
   readonly pluginId: string;
   readonly runtimeId: string;
   readonly pendingProposals?: readonly Proposal[];
+  /** Optional trace emitter — when present, tool.calling / tool.completed / tool.failed are traced. */
+  readonly emitter?: import('./turn-emitter.js').TurnEmitter;
 }
 
 export interface ToolCallResult {
