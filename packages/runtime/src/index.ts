@@ -84,3 +84,7 @@ export type {
   HookRegistration,
   HookDeclaration,
 } from './hooks/index.js';
+
+// ── Turn Emitter (per-turn trace fan-out) ───────────────────────
+export { createTurnEmitter, createNoopTurnEmitter } from './turn-emitter.js';
+export type { TurnEmitter, TurnEmitterStore, CreateTurnEmitterOptions } from './turn-emitter.js';
