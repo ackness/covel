@@ -247,6 +247,12 @@ export function createCommitPipeline(
         event: 'PreStateCommit',
         sessionId: proposal.sessionId,
         turnId: proposal.turnId,
+        // Thread the originating plugin/runtime through so `hook.fired` /
+        // `hook.rewrote` / `hook.aborted` trace rows can link back to the
+        // runtime whose proposal is being gated. Without this, every
+        // state-commit hook event on /debug carries runtimeId=undefined.
+        pluginId: proposal.source.pluginId,
+        runtimeId: proposal.source.runtimeId,
       };
       const preResult = await hookPipeline.run('PreStateCommit', hookCtx, { proposal }, { eventBus, emitter });
       if (preResult.action === 'abort') {
@@ -315,6 +321,10 @@ export function createCommitPipeline(
         event: 'PostStateCommit',
         sessionId: effectiveProposal.sessionId,
         turnId: effectiveProposal.turnId,
+        // Same rationale as the PreStateCommit site above — populate the
+        // runtime identity so trace rows can be cross-linked.
+        pluginId: effectiveProposal.source.pluginId,
+        runtimeId: effectiveProposal.source.runtimeId,
       };
       // Fire-and-forget observability; result is not modified
       await hookPipeline.run('PostStateCommit', hookCtx, { proposal: effectiveProposal, result }, { eventBus, emitter });

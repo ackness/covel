@@ -86,6 +86,7 @@ export class HookPipeline {
       // Emit `hook.fired` once per invocation attempt — before the handler
       // runs so consumers still see the record even if the handler throws.
       if (opts?.emitter) {
+        const proposalType = extractProposalType(event, currentPayload);
         await opts.emitter.emit('hook.fired', {
           event,
           hookName: reg.id,
@@ -93,6 +94,7 @@ export class HookPipeline {
           runtimeId: ctx.runtimeId,
           targetId: extractTargetId(event, currentPayload),
           targetType: extractTargetType(event),
+          ...(proposalType ? { proposalType } : {}),
         });
       }
 
@@ -123,6 +125,7 @@ export class HookPipeline {
           reason: result.reason,
         });
         if (opts?.emitter) {
+          const proposalType = extractProposalType(event, currentPayload);
           await opts.emitter.emit('hook.aborted', {
             event,
             hookName: reg.id,
@@ -131,6 +134,9 @@ export class HookPipeline {
             targetId: extractTargetId(event, currentPayload),
             targetType: extractTargetType(event),
             reason: result.reason,
+            // Spec schema keeps `proposalType` on hook.aborted. Preserves
+            // the field the pre-refactor inline trace write used to carry.
+            ...(proposalType ? { proposalType } : {}),
           });
         }
         return result;
@@ -141,6 +147,7 @@ export class HookPipeline {
         if (opts?.emitter) {
           const before = currentPayload;
           const after = { ...currentPayload, ...result.replace };
+          const proposalType = extractProposalType(event, currentPayload);
           await opts.emitter.emit('hook.rewrote', {
             event,
             hookName: reg.id,
@@ -148,6 +155,7 @@ export class HookPipeline {
             runtimeId: ctx.runtimeId,
             targetId: extractTargetId(event, currentPayload),
             diff: { before, after },
+            ...(proposalType ? { proposalType } : {}),
           });
         }
         Object.assign(accumulated, result.replace);
@@ -269,4 +277,19 @@ function extractTargetType(event: HookEvent): 'proposal' | 'toolCall' | 'turn' {
     default:
       return 'turn';
   }
+}
+
+/**
+ * Extract the `proposal.type` from a state-commit hook payload so the
+ * `hook.aborted` trace row keeps the `proposalType` field the pre-refactor
+ * inline trace write carried. Returns `undefined` for other hook events or
+ * when the payload shape is unexpected.
+ */
+function extractProposalType(event: HookEvent, payload: unknown): string | undefined {
+  if (event !== 'PreStateCommit' && event !== 'PostStateCommit') return undefined;
+  if (!payload || typeof payload !== 'object') return undefined;
+  const proposal = (payload as { proposal?: unknown }).proposal;
+  if (!proposal || typeof proposal !== 'object') return undefined;
+  const type = (proposal as { type?: unknown }).type;
+  return typeof type === 'string' ? type : undefined;
 }
