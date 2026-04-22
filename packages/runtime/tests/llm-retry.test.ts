@@ -549,6 +549,75 @@ describe('streamLLMWithRetry', () => {
   });
 });
 
+// ── Trace emission tests ────────────────────────────────────────────
+
+import type { TurnEmitter } from '../src/turn-emitter.js';
+
+function makeEmitterSpy(): TurnEmitter & { events: Array<{ type: string; payload: Record<string, unknown> }> } {
+  const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
+  return {
+    sessionId: 'sess',
+    turnId: 'turn',
+    async emit(type, payload) { events.push({ type, payload }); },
+    events,
+  } as TurnEmitter & { events: Array<{ type: string; payload: Record<string, unknown> }> };
+}
+
+describe('callLLMWithRetry trace emissions', () => {
+  it('emits llm.calling then llm.responded on success', async () => {
+    const emitter = makeEmitterSpy();
+    const stubResp: LLMResponse = {
+      content: 'hi',
+      toolCalls: [],
+      finishReason: 'stop',
+      usage: { inputTokens: 10, outputTokens: 5 },
+    };
+    const llm: LLMAdapter = { async generate() { return stubResp; } };
+
+    await callLLMWithRetry({
+      llm,
+      model: 'default',
+      messages: [{ role: 'user', content: 'hi' }],
+      policy: { maxRetries: 0, callTimeoutMs: 10_000, firstTokenTimeoutMs: 5_000, loopDetectionThreshold: 3 },
+      deadline: Date.now() + 30_000,
+      emitter,
+      runtimeId: 'core-narrator/main',
+      pluginId: 'core-narrator',
+    });
+
+    expect(emitter.events.map(e => e.type)).toEqual(['llm.calling', 'llm.responded']);
+    expect(emitter.events[0].payload).toMatchObject({
+      runtimeId: 'core-narrator/main',
+      pluginId: 'core-narrator',
+      slot: 'default',
+      attempt: 0,
+    });
+    expect(emitter.events[1].payload).toMatchObject({
+      text: 'hi',
+      finishReason: 'stop',
+      usage: { inputTokens: 10, outputTokens: 5 },
+      attempt: 0,
+    });
+  });
+
+  it('emits llm.calling + llm.responded with error finishReason on throw', async () => {
+    const emitter = makeEmitterSpy();
+    const llm: LLMAdapter = { async generate() { throw new Error('boom'); } };
+
+    await expect(callLLMWithRetry({
+      llm,
+      model: 'default',
+      messages: [],
+      policy: { maxRetries: 0, callTimeoutMs: 1_000, firstTokenTimeoutMs: 1_000, loopDetectionThreshold: 3 },
+      deadline: Date.now() + 5_000,
+      emitter,
+    })).rejects.toThrow();
+
+    expect(emitter.events.map(e => e.type)).toEqual(['llm.calling', 'llm.responded']);
+    expect(emitter.events[1].payload).toMatchObject({ finishReason: 'error' });
+  });
+});
+
 // ── Silence warn noise ──────────────────────────────────────────────
 
 let warnSpy: ReturnType<typeof vi.spyOn>;
