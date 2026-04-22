@@ -248,7 +248,7 @@ export function createCommitPipeline(
         sessionId: proposal.sessionId,
         turnId: proposal.turnId,
       };
-      const preResult = await hookPipeline.run('PreStateCommit', hookCtx, { proposal }, { eventBus });
+      const preResult = await hookPipeline.run('PreStateCommit', hookCtx, { proposal }, { eventBus, emitter });
       if (preResult.action === 'abort') {
         // Surface the blocked commit on the turn timeline so plugin
         // authors can tell from /debug that their hook intervened.
@@ -330,7 +330,7 @@ export function createCommitPipeline(
         turnId: effectiveProposal.turnId,
       };
       // Fire-and-forget observability; result is not modified
-      await hookPipeline.run('PostStateCommit', hookCtx, { proposal: effectiveProposal, result }, { eventBus });
+      await hookPipeline.run('PostStateCommit', hookCtx, { proposal: effectiveProposal, result }, { eventBus, emitter });
     }
 
     return result;

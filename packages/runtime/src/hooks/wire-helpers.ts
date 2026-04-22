@@ -16,6 +16,7 @@ import type { EventBus } from '@covel/events';
 import type { RuntimeManifest, RuntimeResult, TurnInput } from '@covel/shared';
 import type { HookPipeline } from './pipeline.js';
 import type { HookResult } from './types.js';
+import type { TurnEmitter } from '../turn-emitter.js';
 
 // ── Shared options ───────────────────────────────────────────────
 
@@ -24,6 +25,7 @@ interface BaseOpts {
   readonly sessionId: string;
   readonly turnId: string;
   readonly eventBus?: EventBus;
+  readonly emitter?: TurnEmitter;
 }
 
 // ── TurnStart ────────────────────────────────────────────────────
@@ -44,7 +46,7 @@ export async function runTurnStartHook(
     'TurnStart',
     { event: 'TurnStart', sessionId: opts.sessionId, turnId: opts.turnId },
     payload,
-    { eventBus: opts.eventBus },
+    { eventBus: opts.eventBus, emitter: opts.emitter },
   );
 }
 
@@ -59,7 +61,7 @@ export async function runTurnStopHook(
     'TurnStop',
     { event: 'TurnStop', sessionId: opts.sessionId, turnId: opts.turnId },
     payload,
-    { eventBus: opts.eventBus },
+    { eventBus: opts.eventBus, emitter: opts.emitter },
   );
 }
 
@@ -75,7 +77,7 @@ export async function runPreRuntimeHook(
     'PreRuntime',
     { event: 'PreRuntime', sessionId: opts.sessionId, turnId: opts.turnId, pluginId: opts.manifest.pluginId, runtimeId: opts.manifest.name },
     { manifest: opts.manifest, input: opts.input },
-    { eventBus: opts.eventBus },
+    { eventBus: opts.eventBus, emitter: opts.emitter },
   );
 }
 
@@ -90,7 +92,7 @@ export async function runPostRuntimeHook(
     'PostRuntime',
     { event: 'PostRuntime', sessionId: opts.sessionId, turnId: opts.turnId, pluginId: opts.pluginId, runtimeId: opts.runtimeId },
     { result },
-    { eventBus: opts.eventBus },
+    { eventBus: opts.eventBus, emitter: opts.emitter },
   );
   if (hookResult.action === 'continue' && 'replace' in hookResult && hookResult.replace?.result) {
     return hookResult.replace.result as RuntimeResult;
@@ -120,7 +122,7 @@ export async function runPreToolUseHook(
     'PreToolUse',
     { event: 'PreToolUse', sessionId: opts.sessionId, turnId: opts.turnId, pluginId: opts.pluginId, runtimeId: opts.runtimeId },
     payload,
-    { eventBus: opts.eventBus },
+    { eventBus: opts.eventBus, emitter: opts.emitter },
   );
   if (hookResult.action === 'abort') return { skipped: true, reason: hookResult.reason };
 
@@ -150,7 +152,7 @@ export async function runPostToolUseHook<R>(
     'PostToolUse',
     { event: 'PostToolUse', sessionId: opts.sessionId, turnId: opts.turnId, pluginId: opts.pluginId, runtimeId: opts.runtimeId },
     payload,
-    { eventBus: opts.eventBus },
+    { eventBus: opts.eventBus, emitter: opts.emitter },
   );
   if (hookResult.action === 'continue' && 'replace' in hookResult && hookResult.replace?.result !== undefined) {
     return hookResult.replace.result as R;

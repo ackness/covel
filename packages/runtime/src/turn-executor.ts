@@ -497,7 +497,7 @@ export async function executeTurn(
   // ── TurnStart hook (S4-T3) ───────────────────────────────────
   {
     const tsResult = await runTurnStartHook(
-      { pipeline: deps.hookPipeline, sessionId: input.sessionId, turnId: input.turnId, eventBus: deps.eventBus },
+      { pipeline: deps.hookPipeline, sessionId: input.sessionId, turnId: input.turnId, eventBus: deps.eventBus, emitter: deps.emitter },
       { playerMessage: input.playerMessage, activeRuntimes: activeRuntimes.map((r) => r.name) },
     );
     if (tsResult.action === 'abort') {
@@ -1046,7 +1046,7 @@ export async function executeTurn(
 
   // ── TurnStop hook (S4-T3) — Post* hooks cannot abort ────────
   await runTurnStopHook(
-    { pipeline: deps.hookPipeline, sessionId: input.sessionId, turnId: input.turnId, eventBus: deps.eventBus },
+    { pipeline: deps.hookPipeline, sessionId: input.sessionId, turnId: input.turnId, eventBus: deps.eventBus, emitter: deps.emitter },
     { runtimeResults: turnResult.runtimeResults, durationMs: turnResult.durationMs },
   );
 
@@ -1115,6 +1115,7 @@ export async function resumeSuspendedRuntime(
         manifest,
         input: resumeTurnInput as unknown as TurnInput,
         eventBus: deps.eventBus,
+        emitter: deps.emitter,
       },
     );
     if (preRtResult.action === 'abort') {
@@ -1137,6 +1138,7 @@ export async function resumeSuspendedRuntime(
           pluginId: manifest.pluginId,
           runtimeId: manifest.name,
           eventBus: deps.eventBus,
+          emitter: deps.emitter,
         },
         abortedResult,
       );
@@ -1175,6 +1177,7 @@ export async function resumeSuspendedRuntime(
           pluginId: manifest.pluginId,
           runtimeId: manifest.name,
           eventBus: deps.eventBus,
+          emitter: deps.emitter,
         },
         result,
       )
@@ -1301,6 +1304,7 @@ export async function resumeSuspendedRuntime(
             pluginId: manifest.pluginId,
             runtimeId: manifest.name,
             eventBus: deps.eventBus,
+            emitter: deps.emitter,
           };
           const preToolOutcome = await runPreToolUseHook(
             preToolOpts,
@@ -1706,7 +1710,7 @@ async function executeOneRuntime(
         });
 
         return runPostRuntimeHook(
-          { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus },
+          { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus, emitter: deps.emitter },
           suspendedResult,
         );
       }
@@ -1763,7 +1767,7 @@ async function executeOneRuntime(
 
       // PostRuntime hook — function runtime path (S4-T3)
       return runPostRuntimeHook(
-        { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus },
+        { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus, emitter: deps.emitter },
         result,
       );
     }
@@ -1837,7 +1841,7 @@ async function executeOneRuntime(
 
         // PostRuntime hook — guard-skipped path (S4-T3)
         return runPostRuntimeHook(
-          { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus },
+          { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus, emitter: deps.emitter },
           result,
         );
       }
@@ -1862,7 +1866,7 @@ async function executeOneRuntime(
     // ── PreRuntime hook (S4-T3) ──────────────────────────────────
     {
       const preRtResult = await runPreRuntimeHook(
-        { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, manifest, input, eventBus: deps.eventBus },
+        { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, manifest, input, eventBus: deps.eventBus, emitter: deps.emitter },
       );
       if (preRtResult.action === 'abort') {
         return {
@@ -2229,7 +2233,7 @@ async function executeOneRuntime(
             const tcStart = Date.now();
 
             // ── PreToolUse hook (S4-T3) ──────────────────────────
-            const preToolOpts = { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus };
+            const preToolOpts = { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus, emitter: deps.emitter };
             const preToolOutcome = await runPreToolUseHook(preToolOpts, { id: tc.id, name: tc.name, arguments: tc.arguments });
             if (preToolOutcome.skipped) {
               // Skip tool execution; push synthetic tool-role message so LLM sees a result
@@ -2359,7 +2363,7 @@ async function executeOneRuntime(
               });
 
               return runPostRuntimeHook(
-                { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus },
+                { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus, emitter: deps.emitter },
                 suspendedResult,
               );
             }
@@ -2488,7 +2492,7 @@ async function executeOneRuntime(
       };
 
       return runPostRuntimeHook(
-        { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus },
+        { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus, emitter: deps.emitter },
         result,
       );
     }
@@ -2525,7 +2529,7 @@ async function executeOneRuntime(
       };
 
       return runPostRuntimeHook(
-        { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus },
+        { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus, emitter: deps.emitter },
         result,
       );
     } else {
@@ -2667,7 +2671,7 @@ async function executeOneRuntime(
 
     // PostRuntime hook — agent success path (S4-T3)
     return runPostRuntimeHook(
-      { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus },
+      { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus, emitter: deps.emitter },
       result,
     );
   } catch (error: unknown) {
@@ -2691,7 +2695,7 @@ async function executeOneRuntime(
 
     // PostRuntime hook — failure path (S4-T3)
     return runPostRuntimeHook(
-      { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus },
+      { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus, emitter: deps.emitter },
       failedResult,
     );
   }
