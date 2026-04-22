@@ -6,7 +6,7 @@ import { Hono } from 'hono';
 import type { RuntimeManifest } from '@covel/shared';
 import type { PluginRegistry, LoadedRuntime } from '@covel/plugin-loader';
 import type { LLMAdapter, ToolExecutor, HookPipeline } from '@covel/runtime';
-import { executeTurn, processRuntimeResult } from '@covel/runtime';
+import { executeTurn, processRuntimeResult, createTurnEmitter } from '@covel/runtime';
 import type { EventBus } from '@covel/events';
 import { rateLimiter } from '../../middleware/rate-limit.js';
 import { loadSessionConfig } from './load-session-config.js';
@@ -74,6 +74,18 @@ turnRoutes.post('/:id/turn', rateLimiter({ max: 30 }), async (c) => {
   const sessionLock = c.get('sessionLock');
   const prepareToolsForSession = c.get('prepareToolsForSession');  // optional — see env.d.ts
 
+  // Per-turn trace emitter — fans emit() into trace_events + eventBus. Mirrors
+  // the actions.ts wiring so turn.ts also feeds the /debug timeline with
+  // tool / llm / message / block / state / hook events. Without this, routes
+  // that exercise `processRuntimeResult` here would silently drop the
+  // fine-grained trace rows introduced in the debug-trace-expansion work.
+  const emitter = createTurnEmitter({
+    store,
+    ...(eventBus ? { eventBus } : {}),
+    sessionId,
+    turnId,
+  });
+
   // Refresh per-session character-tool overrides so the LLM sees a
   // schema-aware `fields` shape when invoking create/update-character.
   // Idempotent and a no-op when no schema is defined yet; optional-chain
@@ -110,6 +122,7 @@ turnRoutes.post('/:id/turn', rateLimiter({ max: 30 }), async (c) => {
         resolveModel,
         compactor: compactorRunner,
         worldDataPluginId,
+        emitter,
       },
     );
 
@@ -139,6 +152,7 @@ turnRoutes.post('/:id/turn', rateLimiter({ max: 30 }), async (c) => {
       await processRuntimeResult(rr, store, sessionId, kind, {
         ...(hookPipeline ? { hookPipeline } : {}),
         ...(eventBus ? { eventBus } : {}),
+        emitter,
       });
     }
 

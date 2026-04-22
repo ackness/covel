@@ -30,7 +30,7 @@ import { Ajv, type ErrorObject } from 'ajv';
 import type { DataStore } from '@covel/store';
 import type { PluginRegistry, LoadedRuntime } from '@covel/plugin-loader';
 import type { LLMAdapter, ToolExecutor, HookPipeline } from '@covel/runtime';
-import { processRuntimeResult, resumeSuspendedRuntime } from '@covel/runtime';
+import { processRuntimeResult, resumeSuspendedRuntime, createTurnEmitter } from '@covel/runtime';
 import type { RuntimeManifest } from '@covel/shared';
 import type { EventBus } from '@covel/events';
 
@@ -196,6 +196,17 @@ resumeRoutes.post('/:id/resume', async (c) => {
   // Optional-chain keeps tests with hand-built DI middleware working.
   await prepareToolsForSession?.(sessionId);
 
+  // Per-turn trace emitter — mirrors the actions.ts wiring so resume flows
+  // also populate the /debug timeline with tool / llm / message / block /
+  // state / hook events. The resumed runtime reuses the original suspension's
+  // turnId so trace rows line up with the originating turn.
+  const emitter = createTurnEmitter({
+    store,
+    ...(eventBus ? { eventBus } : {}),
+    sessionId,
+    turnId: suspension.turnId,
+  });
+
   const releaseClaim = async (): Promise<void> => {
     try {
       await store.saveSuspension({ ...suspension, resolvedAt: undefined });
@@ -222,6 +233,7 @@ resumeRoutes.post('/:id/resume', async (c) => {
         resolveModel,
         ...(hookPipeline ? { hookPipeline } : {}),
         ...(eventBus ? { eventBus } : {}),
+        emitter,
       },
     ));
 
@@ -237,6 +249,7 @@ resumeRoutes.post('/:id/resume', async (c) => {
     const { events } = await processRuntimeResult(result, store, sessionId, outputKind, {
       ...(hookPipeline ? { hookPipeline } : {}),
       ...(eventBus ? { eventBus } : {}),
+      emitter,
     });
 
     return c.json({ result, events });
