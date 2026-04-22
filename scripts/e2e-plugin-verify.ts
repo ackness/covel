@@ -1474,6 +1474,34 @@ async function runMain(
   kv('Characters', snapshot.characters?.length ?? 0);
   kv('Active plugins', snapshot.plugins?.filter((p) => p.isActive).length ?? 0);
 
+  // Trace coverage assertion: confirm all new event types from the 2026-04-22
+  // debug trace expansion are being emitted. `args.server` already contains
+  // the `/api` prefix (default http://localhost:3001/api), so we use the
+  // relative `/traces/...` path here.
+  const tracesBody = await httpGet<{ events: Array<{ type: string }> }>(
+    args.server,
+    `/traces/${encodeURIComponent(session.id)}`,
+  );
+  const seenTypes = new Set(tracesBody.events.map((e) => e.type));
+  const REQUIRED_TYPES = [
+    'turn.started',
+    'runtime.started',
+    'runtime.completed',
+    'proposal.committed',
+    'tool.calling',
+    'tool.completed',
+    'llm.calling',
+    'llm.responded',
+    'message.completed',
+  ];
+  const missing = REQUIRED_TYPES.filter((t) => !seenTypes.has(t));
+  if (missing.length > 0) {
+    console.error(`[e2e] missing expected trace types: ${missing.join(', ')}`);
+    console.error(`[e2e] seen types: ${Array.from(seenTypes).sort().join(', ')}`);
+    process.exit(1);
+  }
+  console.log(`[e2e] trace type coverage OK (${seenTypes.size} distinct types)`);
+
   // ── Phase 7: Summary ───────────────────────────────────────────
   section('Phase 7: Summary');
   const turnsResp = await httpGet<{ turns: TurnRecord[] }>(
