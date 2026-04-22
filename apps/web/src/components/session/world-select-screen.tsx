@@ -12,7 +12,6 @@ import {
 import { Button } from "@/components/ui/button.js";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
-import { SessionBreadcrumb } from "./session-breadcrumb.js";
 import { WorldDetailView } from "@/components/world/world-detail-view.js";
 import { WorldEditor } from "@/components/world/world-editor.js";
 import { AiWorldGenerator } from "@/components/world/ai-world-generator.js";
@@ -130,10 +129,6 @@ export function WorldSelectScreen({
       />
       <ScrollArea className="w-full h-full">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-10 py-6 md:py-12">
-          <div className="mb-6">
-            <SessionBreadcrumb step="world_select" />
-          </div>
-
           {/* Editorial header */}
           <header className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-10 items-end mb-12 md:mb-16">
             <div className="md:col-span-7">
