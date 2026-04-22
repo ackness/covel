@@ -250,23 +250,10 @@ export function createCommitPipeline(
       };
       const preResult = await hookPipeline.run('PreStateCommit', hookCtx, { proposal }, { eventBus, emitter });
       if (preResult.action === 'abort') {
-        // Surface the blocked commit on the turn timeline so plugin
-        // authors can tell from /debug that their hook intervened.
-        await store.addTraceEvent({
-          id: crypto.randomUUID(),
-          sessionId: proposal.sessionId,
-          type: 'hook.aborted',
-          traceId: proposal.turnId,
-          turnId: proposal.turnId,
-          payload: {
-            event: 'PreStateCommit',
-            proposalType: proposal.type,
-            proposalId: proposal.id,
-            source: proposal.source,
-            reason: preResult.reason,
-          },
-          createdAt: new Date().toISOString(),
-        }).catch(() => { /* best-effort — never block commit on trace write */ });
+        // HookPipeline.run itself now emits `hook.aborted` through the
+        // emitter (persist + broadcast). No inline trace write needed —
+        // keeping one would double-record and split the payload schema
+        // between the two call sites.
         return { committed: false, error: `pre-state-commit hook aborted: ${preResult.reason}` };
       }
       if (preResult.action === 'continue' && 'replace' in preResult && preResult.replace?.proposal) {
