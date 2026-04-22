@@ -274,7 +274,7 @@ export async function callLLMWithRetry(params: CallLLMWithRetryParams): Promise<
           model: params.model,
           provider: params.provider,
           messages: attemptMessages,
-          tools: params.tools ?? [],
+          tools: (params.tools ?? []).map(t => ({ name: t.name, description: t.description, jsonSchema: t.parameters })),
           attempt,
         });
       }
@@ -304,6 +304,7 @@ export async function callLLMWithRetry(params: CallLLMWithRetryParams): Promise<
           pluginId: params.pluginId,
           finishReason: 'error',
           error: err instanceof Error ? err.message : String(err),
+          usage: { inputTokens: 0, outputTokens: 0 },
           durationMs: 0,
           attempt,
         });
@@ -412,7 +413,7 @@ export async function streamLLMWithRetry(
         model: params.model,
         provider: params.provider,
         messages: attemptMessages,
-        tools: params.tools ?? [],
+        tools: (params.tools ?? []).map(t => ({ name: t.name, description: t.description, jsonSchema: t.parameters })),
         attempt,
         streaming: true,
       });

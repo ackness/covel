@@ -1220,13 +1220,18 @@ export async function resumeSuspendedRuntime(
 
     const llmCallStart = Date.now();
     if (deps.emitter) {
+      // Direct generate path (resume): provider is not plumbed here because
+      // the retry helper — which owns provider identification — is bypassed.
+      // `provider: undefined` keeps the payload schema uniform with the
+      // helper-driven emits so consumers can rely on the key being present.
       await deps.emitter.emit('llm.calling', {
         runtimeId: manifest.name,
         pluginId: manifest.pluginId,
         slot: effectiveModel,
         model: effectiveModel,
+        provider: undefined,
         messages,
-        tools: toolDefs ?? [],
+        tools: (toolDefs ?? []).map(t => ({ name: t.name, description: t.description, jsonSchema: t.parameters })),
         attempt: 0,
       });
     }
@@ -2127,13 +2132,17 @@ async function executeOneRuntime(
           }
           const fallbackCallStart = Date.now();
           if (deps.emitter) {
+            // Malformed-tool-arguments fallback bypasses the retry helper, so
+            // provider identity is not available here. Emit `provider: undefined`
+            // so the payload schema stays uniform across all emit sites.
             await deps.emitter.emit('llm.calling', {
               runtimeId: manifest.name,
               pluginId: manifest.pluginId,
               slot: effectiveModel,
               model: effectiveModel,
+              provider: undefined,
               messages,
-              tools: toolDefs ?? [],
+              tools: (toolDefs ?? []).map(t => ({ name: t.name, description: t.description, jsonSchema: t.parameters })),
               attempt: 0,
             });
           }
