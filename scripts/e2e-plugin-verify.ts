@@ -1474,10 +1474,12 @@ async function runMain(
   kv('Characters', snapshot.characters?.length ?? 0);
   kv('Active plugins', snapshot.plugins?.filter((p) => p.isActive).length ?? 0);
 
-  // Trace coverage assertion: confirm all new event types from the 2026-04-22
-  // debug trace expansion are being emitted. `args.server` already contains
-  // the `/api` prefix (default http://localhost:3001/api), so we use the
-  // relative `/traces/...` path here.
+  // Trace coverage assertion: confirm the core trace types expected to fire
+  // on every happy-path turn are being emitted. Negative / conditional
+  // signals (`tool.failed`, `hook.aborted`, `hook.rewrote`) intentionally
+  // stay out of REQUIRED_TYPES — they are only emitted on specific branches.
+  // `args.server` already contains the `/api` prefix (default
+  // http://localhost:3001/api), so we use the relative `/traces/...` path.
   const tracesBody = await httpGet<{ events: Array<{ type: string }> }>(
     args.server,
     `/traces/${encodeURIComponent(session.id)}`,
@@ -1493,6 +1495,8 @@ async function runMain(
     'llm.calling',
     'llm.responded',
     'message.completed',
+    'block.emitted',
+    'hook.fired',
   ];
   const missing = REQUIRED_TYPES.filter((t) => !seenTypes.has(t));
   if (missing.length > 0) {
