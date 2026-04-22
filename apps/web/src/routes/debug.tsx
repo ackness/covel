@@ -87,11 +87,11 @@ function deriveRuntimesFromTurn(events: api.TraceEvent[]): RuntimeInfo[] {
     const info = map.get(runtimeId)!;
     info.events.push(evt);
 
-    const evtType = (p.type as string) || evt.type;
-    if (evtType === "runtime.completed") {
+    // Determine status from the outer type (runtime lifecycle events drive state).
+    if (evt.type === "runtime.completed") {
       info.status = "completed";
       info.completedAt = evt.timestamp;
-    } else if (evtType === "runtime.failed") {
+    } else if (evt.type === "runtime.failed") {
       info.status = "failed";
       info.completedAt = evt.timestamp;
     }
@@ -554,9 +554,7 @@ function TurnCard({
   selectedEventSeq?: number;
 }) {
   const { t } = useTranslation();
-  const runtimes = useMemo(() => deriveRuntimesFromTurn(
-    turn.events.filter((e) => e.type === "runtime.progress")
-  ), [turn.events]);
+  const runtimes = useMemo(() => deriveRuntimesFromTurn(turn.events), [turn.events]);
 
   const hasError = turn.events.some(
     (e) => e.type === "flow.failed" || (e.payload.type as string) === "runtime.failed"
