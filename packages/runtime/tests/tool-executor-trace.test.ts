@@ -121,6 +121,46 @@ describe('ToolExecutor trace emissions', () => {
     });
   });
 
+  it('emits tool.calling/completed with approvalStatus=user-allowed when session already allowed', async () => {
+    const emitter = makeEmitterSpy();
+    const mockTool = {
+      name: 'sensitive',
+      description: '',
+      jsonSchema: {},
+      async execute() { return { ok: true }; },
+    };
+    const approval: ApprovalPipeline = {
+      // needsApproval=true, but hasSessionAllow returns true → tool proceeds
+      // with approvalStatus='user-allowed' (not 'user-denied').
+      check: () => ({ needsApproval: true, reason: 'sensitive action' }),
+      hasSessionAllow: () => true,
+      getSessionApprovals: () => [],
+      recordDecision: () => undefined,
+    };
+    const executor = createToolExecutor({
+      findTool: () => mockTool as unknown as ToolModule,
+      approval,
+    });
+
+    const res = await executor.execute(
+      { toolCallId: 'c-allow', name: 'sensitive', arguments: '{}' },
+      { ...baseCtx, emitter },
+    );
+
+    expect(res.success).toBe(true);
+    expect(res.approvalStatus).toBe('user-allowed');
+    expect(emitter.events.map(e => e.type)).toEqual(['tool.calling', 'tool.completed']);
+    expect(emitter.events[0].payload).toMatchObject({
+      toolName: 'sensitive',
+      approvalStatus: 'user-allowed',
+    });
+    expect(emitter.events[1].payload).toMatchObject({
+      toolName: 'sensitive',
+      success: true,
+      approvalStatus: 'user-allowed',
+    });
+  });
+
   it('emits tool.failed with VALIDATION_ERROR and details (dedup exercised)', async () => {
     const emitter = makeEmitterSpy();
     // Build a ZodError whose issues include two entries on the same path
