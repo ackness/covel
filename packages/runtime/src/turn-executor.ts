@@ -1218,6 +1218,18 @@ export async function resumeSuspendedRuntime(
       ? deps.resolveModel(manifest, undefined)
       : manifest.model;
 
+    const llmCallStart = Date.now();
+    if (deps.emitter) {
+      await deps.emitter.emit('llm.calling', {
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        slot: effectiveModel,
+        model: effectiveModel,
+        messages,
+        tools: toolDefs ?? [],
+        attempt: 0,
+      });
+    }
     const response = await deps.llm.generate({
       model: effectiveModel,
       messages,
@@ -1227,6 +1239,18 @@ export async function resumeSuspendedRuntime(
       // budget keeps each LLM call bounded by the runtime's overall timeout.
       signal: AbortSignal.timeout(Math.max(1000, deadline - Date.now())),
     });
+    if (deps.emitter) {
+      await deps.emitter.emit('llm.responded', {
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        text: response.content ?? '',
+        toolCalls: response.toolCalls,
+        usage: response.usage,
+        finishReason: response.finishReason,
+        durationMs: Date.now() - llmCallStart,
+        attempt: 0,
+      });
+    }
 
     if (response.toolCalls.length > 0) {
       if (response.content) finalContent = response.content;
@@ -2029,6 +2053,9 @@ async function executeOneRuntime(
               }
             },
             onRetry: reportRetry,
+            emitter: deps.emitter,
+            runtimeId: manifest.name,
+            pluginId: manifest.pluginId,
           });
           response = streamed.response;
         } catch (streamError) {
@@ -2044,6 +2071,9 @@ async function executeOneRuntime(
               policy: retryPolicy,
               deadline,
               onRetry: reportRetry,
+              emitter: deps.emitter,
+              runtimeId: manifest.name,
+              pluginId: manifest.pluginId,
             });
           } else {
             throw streamError;
@@ -2067,6 +2097,9 @@ async function executeOneRuntime(
             policy: retryPolicy,
             deadline,
             onRetry: reportRetry,
+            emitter: deps.emitter,
+            runtimeId: manifest.name,
+            pluginId: manifest.pluginId,
           });
         }
       } else {
@@ -2083,11 +2116,26 @@ async function executeOneRuntime(
             policy: retryPolicy,
             deadline,
             onRetry: reportRetry,
+            emitter: deps.emitter,
+            runtimeId: manifest.name,
+            pluginId: manifest.pluginId,
           });
         } catch (error) {
           const cause = error instanceof LLMRetryError ? error.cause : error;
           if (!toolDefs || !shouldRetryMalformedToolArguments(cause)) {
             throw error;
+          }
+          const fallbackCallStart = Date.now();
+          if (deps.emitter) {
+            await deps.emitter.emit('llm.calling', {
+              runtimeId: manifest.name,
+              pluginId: manifest.pluginId,
+              slot: effectiveModel,
+              model: effectiveModel,
+              messages,
+              tools: toolDefs ?? [],
+              attempt: 0,
+            });
           }
           response = await deps.llm.generate({
             model: effectiveModel,
@@ -2097,6 +2145,18 @@ async function executeOneRuntime(
               Math.max(1000, Math.min(retryPolicy.callTimeoutMs, deadline - Date.now())),
             ),
           });
+          if (deps.emitter) {
+            await deps.emitter.emit('llm.responded', {
+              runtimeId: manifest.name,
+              pluginId: manifest.pluginId,
+              text: response.content ?? '',
+              toolCalls: response.toolCalls,
+              usage: response.usage,
+              finishReason: response.finishReason,
+              durationMs: Date.now() - fallbackCallStart,
+              attempt: 0,
+            });
+          }
         }
       }
 
