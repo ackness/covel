@@ -33,6 +33,11 @@ import type {
   LLMToolCall,
   LLMToolDefinition,
 } from './llm-adapter.js';
+import {
+  buildLlmCallingPayload,
+  buildLlmRespondedErrorPayload,
+  buildLlmRespondedSuccessPayload,
+} from './llm-trace-payload.js';
 
 // ── Config ──────────────────────────────────────────────────────────
 
@@ -264,19 +269,19 @@ export async function callLLMWithRetry(params: CallLLMWithRetryParams): Promise<
     const signal = AbortSignal.timeout(budget);
     const attemptMessages = perturbMessages(messages, attempt, lastReason);
 
+    const callStart = Date.now();
     try {
-      const callStart = Date.now();
       if (params.emitter) {
-        await params.emitter.emit('llm.calling', {
+        await params.emitter.emit('llm.calling', buildLlmCallingPayload({
           runtimeId: params.runtimeId,
           pluginId: params.pluginId,
           slot: params.model,
           model: params.model,
           provider: params.provider,
           messages: attemptMessages,
-          tools: (params.tools ?? []).map(t => ({ name: t.name, description: t.description, jsonSchema: t.parameters })),
+          tools: params.tools,
           attempt,
-        });
+        }));
       }
       const response = await llm.generate({
         model,
@@ -285,29 +290,24 @@ export async function callLLMWithRetry(params: CallLLMWithRetryParams): Promise<
         signal,
       });
       if (params.emitter) {
-        await params.emitter.emit('llm.responded', {
+        await params.emitter.emit('llm.responded', buildLlmRespondedSuccessPayload({
           runtimeId: params.runtimeId,
           pluginId: params.pluginId,
-          text: response.content ?? '',
-          toolCalls: response.toolCalls,
-          usage: response.usage,
-          finishReason: response.finishReason,
+          response,
           durationMs: Date.now() - callStart,
           attempt,
-        });
+        }));
       }
       return response;
     } catch (err) {
       if (params.emitter) {
-        await params.emitter.emit('llm.responded', {
+        await params.emitter.emit('llm.responded', buildLlmRespondedErrorPayload({
           runtimeId: params.runtimeId,
           pluginId: params.pluginId,
-          finishReason: 'error',
-          error: err instanceof Error ? err.message : String(err),
-          usage: { inputTokens: 0, outputTokens: 0 },
-          durationMs: 0,
+          error: err,
+          durationMs: Date.now() - callStart,
           attempt,
-        });
+        }));
       }
       lastError = err;
       lastReason = isCallTimeout(err, signal) ? 'call-timeout' : isTransientError(err) ? 'transient-error' : 'unknown';
@@ -406,17 +406,17 @@ export async function streamLLMWithRetry(
     const forwardDeltas = attempt === 0; // avoid duplicate text on retry
     const streamStart = Date.now();
     if (params.emitter) {
-      await params.emitter.emit('llm.calling', {
+      await params.emitter.emit('llm.calling', buildLlmCallingPayload({
         runtimeId: params.runtimeId,
         pluginId: params.pluginId,
         slot: params.model,
         model: params.model,
         provider: params.provider,
         messages: attemptMessages,
-        tools: (params.tools ?? []).map(t => ({ name: t.name, description: t.description, jsonSchema: t.parameters })),
+        tools: params.tools,
         attempt,
         streaming: true,
-      });
+      }));
     }
 
     try {
@@ -448,17 +448,14 @@ export async function streamLLMWithRetry(
         usage: { inputTokens: 0, outputTokens: 0 },
       };
       if (params.emitter) {
-        await params.emitter.emit('llm.responded', {
+        await params.emitter.emit('llm.responded', buildLlmRespondedSuccessPayload({
           runtimeId: params.runtimeId,
           pluginId: params.pluginId,
-          text: finalResponse.content ?? '',
-          toolCalls: finalResponse.toolCalls,
-          usage: finalResponse.usage,
-          finishReason: finalResponse.finishReason,
+          response: finalResponse,
           durationMs: Date.now() - streamStart,
           attempt,
           streaming: true,
-        });
+        }));
       }
       return {
         response: finalResponse,
@@ -474,16 +471,14 @@ export async function streamLLMWithRetry(
       // Without this, a streamed turn that fails mid-flight leaves a dangling
       // `llm.calling` in trace_events and breaks trace-viewer pairing.
       if (params.emitter) {
-        await params.emitter.emit('llm.responded', {
+        await params.emitter.emit('llm.responded', buildLlmRespondedErrorPayload({
           runtimeId: params.runtimeId,
           pluginId: params.pluginId,
-          finishReason: 'error',
-          error: err instanceof Error ? err.message : String(err),
-          usage: { inputTokens: 0, outputTokens: 0 },
+          error: err,
           durationMs: Date.now() - streamStart,
           attempt,
           streaming: true,
-        });
+        }));
       }
 
       // Salvage path: stream died mid-flight but we already received useful

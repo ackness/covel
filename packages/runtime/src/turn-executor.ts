@@ -59,6 +59,11 @@ import {
   type RetryInfo,
 } from './llm-retry.js';
 import {
+  buildLlmCallingPayload,
+  buildLlmRespondedErrorPayload,
+  buildLlmRespondedSuccessPayload,
+} from './llm-trace-payload.js';
+import {
   runTurnStartHook,
   runTurnStopHook,
   runPreRuntimeHook,
@@ -1222,18 +1227,19 @@ export async function resumeSuspendedRuntime(
     if (deps.emitter) {
       // Direct generate path (resume): provider is not plumbed here because
       // the retry helper — which owns provider identification — is bypassed.
-      // `provider: undefined` keeps the payload schema uniform with the
-      // helper-driven emits so consumers can rely on the key being present.
-      await deps.emitter.emit('llm.calling', {
+      // Explicit `null` signals "provider unknown at this call site" and
+      // survives JSON serialisation (unlike `undefined`, which `JSON.stringify`
+      // drops), so downstream consumers see a stable key across all sites.
+      await deps.emitter.emit('llm.calling', buildLlmCallingPayload({
         runtimeId: manifest.name,
         pluginId: manifest.pluginId,
         slot: effectiveModel,
         model: effectiveModel,
-        provider: undefined,
+        provider: null,
         messages,
-        tools: (toolDefs ?? []).map(t => ({ name: t.name, description: t.description, jsonSchema: t.parameters })),
+        tools: toolDefs,
         attempt: 0,
-      });
+      }));
     }
     let response;
     try {
@@ -1250,29 +1256,24 @@ export async function resumeSuspendedRuntime(
       // Pair every `llm.calling` with an `llm.responded` on the error path so
       // trace-viewer pairing stays intact when the direct generate throws.
       if (deps.emitter) {
-        await deps.emitter.emit('llm.responded', {
+        await deps.emitter.emit('llm.responded', buildLlmRespondedErrorPayload({
           runtimeId: manifest.name,
           pluginId: manifest.pluginId,
-          finishReason: 'error',
-          error: err instanceof Error ? err.message : String(err),
-          usage: { inputTokens: 0, outputTokens: 0 },
+          error: err,
           durationMs: Date.now() - llmCallStart,
           attempt: 0,
-        });
+        }));
       }
       throw err;
     }
     if (deps.emitter) {
-      await deps.emitter.emit('llm.responded', {
+      await deps.emitter.emit('llm.responded', buildLlmRespondedSuccessPayload({
         runtimeId: manifest.name,
         pluginId: manifest.pluginId,
-        text: response.content ?? '',
-        toolCalls: response.toolCalls,
-        usage: response.usage,
-        finishReason: response.finishReason,
+        response,
         durationMs: Date.now() - llmCallStart,
         attempt: 0,
-      });
+      }));
     }
 
     if (response.toolCalls.length > 0) {
@@ -2151,18 +2152,20 @@ async function executeOneRuntime(
           const fallbackCallStart = Date.now();
           if (deps.emitter) {
             // Malformed-tool-arguments fallback bypasses the retry helper, so
-            // provider identity is not available here. Emit `provider: undefined`
-            // so the payload schema stays uniform across all emit sites.
-            await deps.emitter.emit('llm.calling', {
+            // provider identity is not available here. Explicit `null` signals
+            // "provider unknown at this call site" and survives JSON serialisation
+            // (unlike `undefined`, which is dropped), keeping the payload schema
+            // uniform across all 4 emit sites.
+            await deps.emitter.emit('llm.calling', buildLlmCallingPayload({
               runtimeId: manifest.name,
               pluginId: manifest.pluginId,
               slot: effectiveModel,
               model: effectiveModel,
-              provider: undefined,
+              provider: null,
               messages,
-              tools: (toolDefs ?? []).map(t => ({ name: t.name, description: t.description, jsonSchema: t.parameters })),
+              tools: toolDefs,
               attempt: 0,
-            });
+            }));
           }
           try {
             response = await deps.llm.generate({
@@ -2178,29 +2181,24 @@ async function executeOneRuntime(
             // path so trace-viewer pairing stays intact when this fallback
             // generate throws.
             if (deps.emitter) {
-              await deps.emitter.emit('llm.responded', {
+              await deps.emitter.emit('llm.responded', buildLlmRespondedErrorPayload({
                 runtimeId: manifest.name,
                 pluginId: manifest.pluginId,
-                finishReason: 'error',
-                error: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
-                usage: { inputTokens: 0, outputTokens: 0 },
+                error: fallbackErr,
                 durationMs: Date.now() - fallbackCallStart,
                 attempt: 0,
-              });
+              }));
             }
             throw fallbackErr;
           }
           if (deps.emitter) {
-            await deps.emitter.emit('llm.responded', {
+            await deps.emitter.emit('llm.responded', buildLlmRespondedSuccessPayload({
               runtimeId: manifest.name,
               pluginId: manifest.pluginId,
-              text: response.content ?? '',
-              toolCalls: response.toolCalls,
-              usage: response.usage,
-              finishReason: response.finishReason,
+              response,
               durationMs: Date.now() - fallbackCallStart,
               attempt: 0,
-            });
+            }));
           }
         }
       }
