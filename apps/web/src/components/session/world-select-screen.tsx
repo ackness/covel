@@ -1,8 +1,14 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Globe, Sparkles, KeyRound, Cpu, Eye, Wand2, FolderOpen } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card.js";
-import { Badge } from "@/components/ui/badge.js";
+import {
+  Sparkles,
+  KeyRound,
+  Cpu,
+  Eye,
+  Wand2,
+  FolderOpen,
+  ArrowRight,
+} from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
@@ -27,6 +33,22 @@ interface WorldSelectScreenProps {
   onWorldCreated?: (world: WorldRecord) => void;
 }
 
+// Cycle through a small palette to give each card a distinctive but on-brand
+// gradient cap. Hashed by world id so each world keeps its colour.
+const CARD_GRADIENTS = [
+  "linear-gradient(135deg, color-mix(in oklab, var(--color-primary) 65%, transparent), color-mix(in oklab, oklch(70% 0.18 280) 55%, transparent))",
+  "linear-gradient(135deg, color-mix(in oklab, oklch(72% 0.16 200) 65%, transparent), color-mix(in oklab, var(--color-primary) 50%, transparent))",
+  "linear-gradient(135deg, color-mix(in oklab, oklch(70% 0.18 25) 60%, transparent), color-mix(in oklab, oklch(60% 0.20 320) 55%, transparent))",
+  "linear-gradient(135deg, color-mix(in oklab, oklch(75% 0.15 130) 55%, transparent), color-mix(in oklab, oklch(60% 0.18 240) 55%, transparent))",
+  "linear-gradient(135deg, color-mix(in oklab, oklch(68% 0.20 60) 55%, transparent), color-mix(in oklab, oklch(60% 0.18 350) 55%, transparent))",
+];
+
+function hashIndex(id: string, mod: number): number {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  return Math.abs(hash) % mod;
+}
+
 export function WorldSelectScreen({
   worlds,
   packages,
@@ -39,6 +61,7 @@ export function WorldSelectScreen({
 }: WorldSelectScreenProps) {
   const { t } = useTranslation();
   const primarySlotLabel = formatSlotLabel(resolvedSlots[0]);
+  const enabledPluginCount = packages.filter((p) => p.enabled).length;
 
   const [mode, setMode] = useState<ViewMode>("list");
   const [selectedWorldId, setSelectedWorldId] = useState<string | null>(null);
@@ -48,7 +71,6 @@ export function WorldSelectScreen({
   function handleEnterWorld(worldId: string) {
     if (enteringWorldId) return;
     setEnteringWorldId(worldId);
-    // Give the card its fade-out frame before the route transition.
     window.requestAnimationFrame(() => {
       onSelectWorld(worldId);
     });
@@ -78,7 +100,6 @@ export function WorldSelectScreen({
     setMode("detail");
   }
 
-  // ── Detail / Edit view ───────────────────────────────────
   if (mode === "detail" && selectedWorld) {
     return (
       <WorldDetailView
@@ -99,7 +120,6 @@ export function WorldSelectScreen({
     );
   }
 
-  // ── World list ───────────────────────────────────────────
   return (
     <div className="flex h-full w-full overflow-hidden">
       <SettingsDialog open={settingsOpen} onOpenChange={onSettingsOpenChange} />
@@ -109,104 +129,185 @@ export function WorldSelectScreen({
         onWorldCreated={(world) => onWorldCreated?.(world)}
       />
       <ScrollArea className="w-full h-full">
-        <div className="max-w-4xl mx-auto px-4 md:px-8 py-8 md:py-16">
-          <div className="mb-4">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-10 py-6 md:py-12">
+          <div className="mb-6">
             <SessionBreadcrumb step="world_select" />
           </div>
 
-          <div className="text-center mb-10 space-y-3">
-            <h1 className="font-display font-bold text-2xl md:text-3xl uppercase tracking-widest flex items-center justify-center gap-3">
-              <Globe className="w-6 h-6 md:w-8 md:h-8" />
-              {t("session.selectWorld", "Select World")}
-            </h1>
-            <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              {t("session.worldSelectDesc")}
-            </p>
-            <div className="flex items-center justify-center gap-3">
-              <Button variant="ghost" size="sm" className="text-xs uppercase tracking-widest" onClick={() => onSettingsOpenChange(true)}>
-                <KeyRound className="w-3.5 h-3.5 mr-1.5" />
-                {t("session.configureKeys")}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs uppercase tracking-widest"
-                onClick={() => setGeneratorOpen(true)}
-              >
-                <Wand2 className="w-3.5 h-3.5 mr-1.5" />
-                {t("world.aiCreate")}
-              </Button>
+          {/* Editorial header */}
+          <header className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-10 items-end mb-12 md:mb-16">
+            <div className="md:col-span-7">
+              <p className="ui-eyebrow text-muted-foreground mb-3">
+                {t("session.worldsHeaderEyebrow", `${worlds.length} worlds available`, {
+                  count: worlds.length,
+                })}
+              </p>
+              <h1 className="font-display font-bold tracking-tight leading-[0.95] text-[clamp(2.25rem,6vw,4.5rem)]">
+                {t("session.selectWorld", "Choose a world")}
+              </h1>
+              <p className="mt-5 text-sm md:text-base text-muted-foreground font-light leading-relaxed max-w-xl">
+                {t(
+                  "session.worldSelectDesc",
+                  "Each world is a self-contained setting with its own tone, characters, and ruleset.",
+                )}
+              </p>
             </div>
-          </div>
 
-          <div className="grid gap-4 md:gap-6">
-            {worlds.map((world) => {
-              const isEntering = enteringWorldId === world.id;
-              const dimmed =
-                enteringWorldId !== null && !isEntering;
-              return (
-              <Card
-                key={world.id}
-                className={`cursor-pointer transition-all duration-200 hover:border-primary/50 hover:shadow-md group ${
-                  isEntering ? "border-primary shadow-md opacity-90" : ""
-                } ${dimmed ? "opacity-40 pointer-events-none" : ""}`}
-                aria-busy={isEntering}
-                onClick={() => handleEnterWorld(world.id)}
+            {/* Right-side action card — promotes AI generate, secondary key config */}
+            <aside className="md:col-span-5 grid grid-cols-1 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setGeneratorOpen(true)}
+                className="group relative overflow-hidden rounded-[var(--radius-card)] border border-primary/30 bg-card hover:border-primary/60 transition-all p-5 text-left"
               >
-                <CardContent className="p-5 md:p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0 space-y-2">
-                      <h2 className="font-display font-bold text-lg group-hover:text-primary transition-colors">
+                <div
+                  aria-hidden="true"
+                  className="absolute -right-12 -top-12 h-32 w-32 rounded-full opacity-50 group-hover:opacity-80 transition-opacity"
+                  style={{
+                    background:
+                      "radial-gradient(circle, color-mix(in oklab, var(--color-primary) 70%, transparent) 0%, transparent 70%)",
+                  }}
+                />
+                <div className="relative">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Wand2 className="w-4 h-4 text-primary" />
+                    <span className="ui-eyebrow text-primary">
+                      {t("world.aiCreate", "AI generate")}
+                    </span>
+                  </div>
+                  <p className="font-display text-base font-semibold leading-snug">
+                    {t(
+                      "session.aiCreateTeaser",
+                      "Spin up a brand new world from a one-line idea.",
+                    )}
+                  </p>
+                  <p className="mt-3 text-xs text-primary inline-flex items-center gap-1.5 group-hover:gap-2.5 transition-all font-medium">
+                    {t("session.aiCreateAction", "Describe your idea")}
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onSettingsOpenChange(true)}
+                className="group flex items-center justify-between rounded-[var(--radius-card)] border border-border bg-card hover:border-primary/40 hover:bg-muted/30 transition-all p-4 text-left"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <KeyRound className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {t("session.configureKeys", "API keys & presets")}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground/80 truncate">
+                      {primarySlotLabel ?? t("session.noModelsConfigured", "No model configured")}
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+              </button>
+            </aside>
+          </header>
+
+          {/* World grid */}
+          {worlds.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-5">
+              {worlds.map((world) => {
+                const isEntering = enteringWorldId === world.id;
+                const dimmed = enteringWorldId !== null && !isEntering;
+                const gradient = CARD_GRADIENTS[hashIndex(world.id, CARD_GRADIENTS.length)];
+                return (
+                  <article
+                    key={world.id}
+                    aria-busy={isEntering}
+                    onClick={() => handleEnterWorld(world.id)}
+                    className={`group relative overflow-hidden rounded-[var(--radius-card)] border border-border bg-card cursor-pointer transition-all duration-300 hover:border-primary/50 hover:-translate-y-0.5 ${
+                      isEntering ? "border-primary -translate-y-0.5" : ""
+                    } ${dimmed ? "opacity-40 pointer-events-none" : ""}`}
+                  >
+                    {/* Gradient hero strip */}
+                    <div
+                      aria-hidden="true"
+                      className="relative h-28 md:h-32 overflow-hidden"
+                      style={{ background: gradient }}
+                    >
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          background:
+                            "radial-gradient(circle at 25% 30%, color-mix(in oklab, var(--surface-app) 35%, transparent) 0%, transparent 60%)",
+                        }}
+                      />
+                      <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between gap-3">
+                        <span className="font-mono text-[10px] uppercase tracking-widest text-foreground/80 bg-background/40 backdrop-blur-sm px-2 py-1 rounded">
+                          {world.id}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleViewDetails(e, world.id)}
+                          aria-label={t("world.viewDetails", "View details")}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 inline-flex items-center justify-center rounded bg-background/60 backdrop-blur-sm hover:bg-background text-foreground"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-5 md:p-6 space-y-3">
+                      <h2 className="font-display font-bold text-lg md:text-xl leading-tight group-hover:text-primary transition-colors">
                         {text(world.name)}
                       </h2>
-                      <p className="text-sm text-muted-foreground break-words [overflow-wrap:anywhere]">{text(world.description)}</p>
-                      {world.tags && world.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {world.tags.map((tag) => (
-                            <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>
+                      <p className="text-sm text-muted-foreground font-light leading-relaxed line-clamp-3 break-words [overflow-wrap:anywhere]">
+                        {text(world.description)}
+                      </p>
+                      <div className="flex items-center justify-between gap-3 pt-1">
+                        <div className="flex flex-wrap gap-1.5 min-w-0">
+                          {(world.tags ?? []).slice(0, 3).map((tag) => (
+                            <span
+                              key={tag}
+                              className="inline-flex items-center px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground border border-border/80 rounded-full"
+                            >
+                              {tag}
+                            </span>
                           ))}
+                          {(world.tags?.length ?? 0) > 3 && (
+                            <span className="text-[10px] text-muted-foreground/60">
+                              +{(world.tags?.length ?? 0) - 3}
+                            </span>
+                          )}
                         </div>
-                      )}
+                        <span className="ui-eyebrow text-primary inline-flex items-center gap-1 shrink-0 group-hover:gap-2 transition-all">
+                          {t("session.enter", "Enter")}
+                          <ArrowRight className="w-3 h-3" />
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0 mt-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={(e) => handleViewDetails(e, world.id)}
-                        title={t("world.viewDetails")}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Sparkles className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              );
-            })}
-          </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
 
           {worlds.length === 0 && (
-            <div className="text-center py-16 border border-dashed border-border rounded-sm">
-              <FolderOpen className="w-8 h-8 mx-auto text-muted-foreground" />
-              <h2 className="font-display font-bold text-lg mt-4">
+            <div className="text-center py-16 md:py-24 border border-dashed border-border rounded-[var(--radius-card)] bg-card/30">
+              <FolderOpen className="w-10 h-10 mx-auto text-muted-foreground/60" />
+              <h2 className="font-display font-bold text-xl mt-5">
                 {t("session.worldsEmptyTitle", "No worlds yet")}
               </h2>
-              <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
+              <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto font-light">
                 {t(
                   "session.worldsEmptyDesc",
                   "Generate a new world with AI, or add a world package under the worlds/ folder.",
                 )}
               </p>
-              <div className="flex items-center justify-center gap-3 mt-6">
+              <div className="flex items-center justify-center gap-3 mt-7">
                 <Button
                   size="sm"
                   className="text-xs uppercase tracking-widest"
                   onClick={() => setGeneratorOpen(true)}
                 >
                   <Wand2 className="w-3.5 h-3.5 mr-1.5" />
-                  {t("world.aiCreate")}
+                  {t("world.aiCreate", "AI create")}
                 </Button>
                 <Button
                   variant="outline"
@@ -226,17 +327,17 @@ export function WorldSelectScreen({
             </div>
           )}
 
-          {/* Footer info */}
-          <div className="mt-10 pt-6 border-t border-border flex flex-wrap items-center justify-center gap-4 text-xs text-muted-foreground">
-            {packages.filter((p) => p.enabled).length > 0 && (
-              <span className="flex items-center gap-1.5">
-                <Cpu className="w-3.5 h-3.5" />
-                {t("session.pluginsLoaded", { count: packages.filter((p) => p.enabled).length })}
+          {/* Footer info chips */}
+          <div className="mt-12 md:mt-16 pt-6 border-t border-border flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
+            {enabledPluginCount > 0 && (
+              <span className="inline-flex items-center gap-1.5">
+                <Cpu className="w-3 h-3" />
+                {t("session.pluginsLoaded", { count: enabledPluginCount })}
               </span>
             )}
             {primarySlotLabel && (
-              <span className="flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" />
+              <span className="inline-flex items-center gap-1.5">
+                <Sparkles className="w-3 h-3" />
                 {primarySlotLabel}
               </span>
             )}
