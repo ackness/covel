@@ -51,7 +51,10 @@ export class HookPipeline {
     event: HookEvent,
     ctx: HookContext,
     payload: P,
-    opts?: { readonly eventBus?: EventBus },
+    opts?: {
+      readonly eventBus?: EventBus;
+      readonly emitter?: import('../turn-emitter.js').TurnEmitter;
+    },
   ): Promise<HookResult<P>> {
     const raw = this.registrations.get(event) ?? [];
     if (raw.length === 0) {
@@ -80,6 +83,19 @@ export class HookPipeline {
       const timeoutMs = reg.timeoutMs ?? DEFAULT_TIMEOUT_MS;
       const handler = reg.handler as HookHandler<P>;
 
+      // Emit `hook.fired` once per invocation attempt — before the handler
+      // runs so consumers still see the record even if the handler throws.
+      if (opts?.emitter) {
+        await opts.emitter.emit('hook.fired', {
+          event,
+          hookName: reg.id,
+          pluginId: reg.pluginId ?? null,
+          runtimeId: ctx.runtimeId,
+          targetId: extractTargetId(event, currentPayload),
+          targetType: extractTargetType(event),
+        });
+      }
+
       let result: HookResult<P>;
       const timeoutMessage = `hook ${reg.id} timed out after ${timeoutMs}ms`;
 
@@ -106,11 +122,34 @@ export class HookPipeline {
           hookPluginId: reg.pluginId,
           reason: result.reason,
         });
+        if (opts?.emitter) {
+          await opts.emitter.emit('hook.aborted', {
+            event,
+            hookName: reg.id,
+            pluginId: reg.pluginId ?? null,
+            runtimeId: ctx.runtimeId,
+            targetId: extractTargetId(event, currentPayload),
+            targetType: extractTargetType(event),
+            reason: result.reason,
+          });
+        }
         return result;
       }
 
       // action === 'continue' — merge optional replace patch
       if ('replace' in result && result.replace !== undefined) {
+        if (opts?.emitter) {
+          const before = currentPayload;
+          const after = { ...currentPayload, ...result.replace };
+          await opts.emitter.emit('hook.rewrote', {
+            event,
+            hookName: reg.id,
+            pluginId: reg.pluginId ?? null,
+            runtimeId: ctx.runtimeId,
+            targetId: extractTargetId(event, currentPayload),
+            diff: { before, after },
+          });
+        }
         Object.assign(accumulated, result.replace);
         hasReplace = true;
         // Apply accumulated patches to the payload for downstream handlers
@@ -185,4 +224,45 @@ function emitHookEvent(
       ...extra,
     },
   });
+}
+
+/**
+ * Extract a target identifier from a hook payload so the `/debug` timeline
+ * can cross-link a hook event to the tool call or proposal it guarded.
+ * Returns `undefined` when the event has no natural target or the payload
+ * is missing the expected fields.
+ */
+function extractTargetId(event: HookEvent, payload: unknown): string | undefined {
+  if (!payload || typeof payload !== 'object') return undefined;
+  const p = payload as Record<string, unknown>;
+  if (event === 'PreToolUse' || event === 'PostToolUse') {
+    const toolCall = p.toolCall as Record<string, unknown> | undefined;
+    return typeof toolCall?.toolCallId === 'string' ? toolCall.toolCallId : undefined;
+  }
+  if (event === 'PreStateCommit' || event === 'PostStateCommit') {
+    const proposal = p.proposal as Record<string, unknown> | undefined;
+    return typeof proposal?.id === 'string' ? proposal.id : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Map a HookEvent to the domain category of its primary target so trace
+ * consumers don't have to re-derive the classification.
+ */
+function extractTargetType(event: HookEvent): 'proposal' | 'toolCall' | 'turn' {
+  switch (event) {
+    case 'PreToolUse':
+    case 'PostToolUse':
+      return 'toolCall';
+    case 'PreStateCommit':
+    case 'PostStateCommit':
+      return 'proposal';
+    case 'TurnStart':
+    case 'TurnStop':
+    case 'PreRuntime':
+    case 'PostRuntime':
+    default:
+      return 'turn';
+  }
 }
