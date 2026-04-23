@@ -14,6 +14,7 @@
     "lint": "turbo lint",
     "lint:ci": "node ./scripts/lint-ci.mjs",
     "clean": "turbo clean",
+    "clean:desktop": "pnpm --filter @covel/desktop clean",
     "db:up": "docker compose -f docker/docker-compose.yml --env-file .env up -d postgres",
     "db:down": "docker compose -f docker/docker-compose.yml --env-file .env down",
     "docker:up": "docker compose -f docker/docker-compose.yml --env-file .env up -d",

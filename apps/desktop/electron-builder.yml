@@ -43,7 +43,8 @@ extraResources:
       - "!**/*.spec.ts"
       - "!**/*.test.js"
       - "!**/*.spec.js"
-      - "!**/*.md"
+      # 注意：不要用 "!**/*.md" —— 世界包 (WORLD*.md)、插件清单
+      # (PLUGIN*.md) 以及 prompts/server/*.md 都是运行时依赖。
       - "!**/CHANGELOG*"
       - "!**/.gitignore"
       - "!**/.npmrc"
@@ -77,9 +78,9 @@ mac:
   icon: resources/icon.icns
   target:
     - target: dmg
-      arch: [arm64]
+      arch: [ arm64 ]
     - target: zip
-      arch: [arm64]
+      arch: [ arm64 ]
   category: public.app-category.games
   darkModeSupport: true
   hardenedRuntime: true
@@ -92,10 +93,10 @@ mac:
   # Auto-signing: electron-builder picks up CSC_LINK from env. `identity` can
   # be set explicitly to disambiguate when multiple certs are installed:
   # identity: "Developer ID Application: Your Name (TEAMID)"
-  notarize: false  # set to `{ teamId: "${APPLE_TEAM_ID}" }` when certs are ready
+  notarize: false # set to `{ teamId: "${APPLE_TEAM_ID}" }` when certs are ready
 
 dmg:
-  sign: false  # DMG signing is redundant once the app inside is signed
+  sign: false # DMG signing is redundant once the app inside is signed
 
 # ── Windows ───────────────────────────────────────────────────────
 # Signing requirements:
@@ -106,9 +107,9 @@ win:
   icon: resources/icon.ico
   target:
     - target: nsis
-      arch: [x64, arm64]
+      arch: [ x64, arm64 ]
     - target: portable
-      arch: [x64]
+      arch: [ x64 ]
   # electron-builder 26.x 起签名相关字段改到 signtoolOptions 下。
   # 未配置 CSC_LINK 时会直接输出 unsigned 产物。
   signtoolOptions:
@@ -127,16 +128,16 @@ nsis:
   createStartMenuShortcut: true
   installerIcon: resources/icon.ico
   uninstallerIcon: resources/icon.ico
-  deleteAppDataOnUninstall: false  # preserve user worlds/plugins on uninstall
+  deleteAppDataOnUninstall: false # preserve user worlds/plugins on uninstall
 
 # ── Linux ─────────────────────────────────────────────────────────
 linux:
   icon: resources/icon.png
   target:
     - target: AppImage
-      arch: [x64, arm64]
+      arch: [ x64, arm64 ]
     - target: deb
-      arch: [x64]
+      arch: [ x64 ]
   category: Game
   maintainer: covel@example.com
   desktop:

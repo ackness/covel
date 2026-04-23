@@ -795,6 +795,10 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
         .run();
     },
 
+    async deleteWorld(id: string): Promise<void> {
+      db.delete(schema.worlds).where(eq(schema.worlds.id, id)).run();
+    },
+
     // ── Trace Events ─────────────────────────────────────────
 
     async addTraceEvent(record: TraceEventRecord): Promise<void> {

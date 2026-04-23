@@ -396,6 +396,7 @@ export interface DataStore {
   listWorlds(): Promise<WorldRecord[]>;
   getWorld(id: string): Promise<WorldRecord | null>;
   upsertWorld(record: WorldRecord): Promise<void>;
+  deleteWorld(id: string): Promise<void>;
 
   // ── Trace ──
   addTraceEvent(record: TraceEventRecord): Promise<void>;

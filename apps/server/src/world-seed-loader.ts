@@ -215,6 +215,7 @@ export async function loadSingleWorld(worldDir: string): Promise<WorldRecord | n
     tags: manifest.tags as string[] | undefined,
     locale: defaultLocale,
     metadata: {
+      source: 'file',
       dimensions: Object.keys(mergedDimensions).length > 0 ? mergedDimensions : undefined,
       dimensionSources: dimensionSources,
       requiredPlugins: manifest.requiredPlugins as string[] | undefined,

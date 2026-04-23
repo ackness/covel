@@ -993,6 +993,14 @@ export function runStoreContractTests(
         const result = await store.getWorld('nonexistent');
         expect(result).toBeNull();
       });
+
+      it('should delete a world', async () => {
+        const world = makeWorld();
+        await store.upsertWorld(world);
+        await store.deleteWorld(world.id);
+        const result = await store.getWorld(world.id);
+        expect(result).toBeNull();
+      });
     });
 
     // ── Trace Events ─────────────────────────────────────────

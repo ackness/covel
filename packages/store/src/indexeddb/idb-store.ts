@@ -548,6 +548,10 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
       await putAndTrack('worlds', structuredClone(record));
     },
 
+    async deleteWorld(id: string): Promise<void> {
+      await db.delete('worlds', id);
+    },
+
     // ── Trace ──
 
     async addTraceEvent(record: TraceEventRecord): Promise<void> {

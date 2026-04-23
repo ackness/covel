@@ -98,7 +98,7 @@ export function userDbPath(): string {
 }
 
 export function userWorldsDir(): string {
-  return path.join(dataRoot(), "worlds");
+  return path.join(covelHome(), "worlds");
 }
 
 export function userLogsDir(): string {

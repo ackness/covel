@@ -757,6 +757,10 @@ export async function createPgStore(
         });
     },
 
+    async deleteWorld(id: string): Promise<void> {
+      await db.delete(schema.worlds).where(eq(schema.worlds.id, id));
+    },
+
     // ── Trace Events ─────────────────────────────────────────
 
     async addTraceEvent(record: TraceEventRecord): Promise<void> {

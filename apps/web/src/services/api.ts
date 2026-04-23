@@ -21,6 +21,8 @@ export interface WorldRecord {
   locale?: string;
   tags?: string[];
   dimensions?: import("@covel/shared").WorldDimensions;
+  /** Server-side metadata. `source === 'file'` means built-in (non-deletable). */
+  metadata?: { source?: string; [key: string]: unknown };
   createdAt: string;
   updatedAt?: string;
 }
@@ -321,6 +323,10 @@ export async function updateWorld(
     body: JSON.stringify(patch),
   });
   return mapWorldRecord(raw);
+}
+
+export async function deleteWorld(id: string): Promise<void> {
+  await request<unknown>(`/api/worlds/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 // ── Dimension Import/Export ──────────────────────────────────────────

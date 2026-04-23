@@ -15,7 +15,8 @@
     "dist": "pnpm build && electron-builder",
     "dist:mac": "pnpm build && electron-builder --mac",
     "dist:win": "pnpm build && electron-builder --win",
-    "dist:linux": "pnpm build && electron-builder --linux"
+    "dist:linux": "pnpm build && electron-builder --linux",
+    "clean": "node ../../scripts/remove-paths.mjs dist staging ../../release/electron"
   },
   "dependencies": {
     "smol-toml": "^1.6.1",

@@ -39,6 +39,7 @@ function SessionPage() {
     backToWorldSelect,
     updateWorldLocal,
     addWorldLocal,
+    removeWorldLocal,
     loadSessionPlugins,
     toggleSessionPlugin,
     triggerEvent,
@@ -228,6 +229,7 @@ function SessionPage() {
         onSelectWorld={selectWorld}
         onWorldUpdated={updateWorldLocal}
         onWorldCreated={addWorldLocal}
+        onWorldDeleted={removeWorldLocal}
       />
     </>
   );

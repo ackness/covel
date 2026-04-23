@@ -1,104 +1,85 @@
 # Covel
 
-> A plugin-driven AI text-adventure platform — every gameplay feature is an Agent.
+A next-generation agent-orchestration platform for AI role-playing games. Gameplay mechanics — narration, NPC relationships, codex, character creation — are each written as an independent plugin agent. **Plugins are the features.**
 
-[![Status](https://img.shields.io/badge/status-WIP-f59e0b)](https://github.com/AcKnEsS/covel)
 [![Version](https://img.shields.io/badge/version-v0.0.1--beta-8b5cf6)](https://github.com/AcKnEsS/covel/releases)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-≥22-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![pnpm](https://img.shields.io/badge/pnpm-10.7-f69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+
+English · [中文](./README.md)
 
 ![Covel demo](./.assets/images/demo.gif)
 
-> English (current) · [中文](./README.md)
->
-> ⚠️ **Work in Progress** — the project is in early `v0.0.x`. APIs, data formats, and plugin frontmatter fields may change in breaking ways from one version to the next. Not recommended for production.
+> The project is in a very early stage. Features are not stable, and **APIs, data formats, and plugin frontmatter fields will break between versions**. Only local usage is supported right now, and the only prebuilt binary is a macOS Apple Silicon test build. Don't keep anything important in it.
 
----
+## Why
 
-## What is it
+Most AI-RPG tools today (SillyTavern, RisuAI, assorted ChatBot shells) are built around a single LLM call: character cards, lorebooks, and prompt templates are assembled into one big request and sent off. Covel takes a different approach — each gameplay mechanic is a **standalone agent** that decides when it fires, which slices of context to read, which tools to call, and what state to write. A single turn can chain several agents together.
 
-Covel is an LLM-powered **text-adventure platform** where every gameplay feature is expressed as a **plugin**.
+Two things follow from this:
 
-Each plugin is an **autonomous Agent Runtime**: it decides when to trigger, which context slices to read, which tools to call, and what state to write. Narration, action guidance, NPC relationship graphs, codex, character creation, world init — each one is an independent plugin you can **install, remove, hot-swap, or write yourself**.
+- Features live in plugins rather than being baked into the kernel. Narration, action guidance, NPC graphs, world knowledge, character creation — all are independent packages you can install, remove, or swap.
+- RPG complexity accumulates in plugins instead of in a single monster system prompt. Each agent only cares about its own slice.
 
-Ships with 8 first-party plugins — playable out of the box, and useful as a starting point for your own.
+## What's in the repo
 
-## Features
+Eight core plugins to start from:
 
-- **Plugin = Agent** — each plugin declares its own trigger rules, context injections, tool list, and write agent; LLM scheduling is entirely plugin-driven
-- **Multi-provider LLM** — DeepSeek · Qwen (DashScope) · OpenAI · Anthropic, routed via `llm.toml` slots with no code changes
-- **Multi-backend storage** — MemoryStore (dev) · IndexedDB (browser) · SQLite (desktop) · PostgreSQL (prod), behind one contract
-- **Three deployment modes** — Web / Electron / Tauri (the latter two share the same Node sidecar; Tauri ships a smaller bundle)
-- **File-based world packages** — `world.yaml` + `WORLD.md`; dimensions can be auto-extracted by the LLM
-- **Declarative UI via json-render** — plugins describe panels and message blocks with JSON specs; no React code required
-- **Graph-RAG memory** — NPC relationship extraction + 2-hop retrieval + three-tier memory (Core / Recall / Archival)
-- **Browser-held API keys** — kept in localStorage and forwarded per request via `X-Provider-Keys`; never persisted on the server
+| Plugin | Role |
+|--------|------|
+| `core-narrator` | Main narration |
+| `core-guide` | Action guidance and option generation |
+| `core-npc-graph` | NPC relationship extraction + 2-hop retrieval |
+| `core-codex` | World-knowledge codex |
+| `core-char-creator` | Character-creation flow |
+| `core-world-init` | World dimension initialisation |
+| `core-pregame` | Pre-game bootstrap (pure-function plugin, no LLM call) |
+| `core-memory` | Memory panel (UI-only plugin) |
 
-## Showcase
+Plus three sample world packs: `cloudmere`, `mistport`, `neonridge`.
 
-| World picker | Main narrative + plugin messages | Debug page: Turn / Prompt / Trace |
+The minimal plugin is `PLUGIN.md` + `package.json`. Frontmatter declares the trigger, context injections, and tool list; the markdown body is the agent's skill prompt. Tools can be built-in (forms, state writes, record appends, …) or custom JS tools.
+
+## Screenshots
+
+| World picker | Main narrative + plugin messages | Debug: Turn / Prompt / Trace |
 |:-:|:-:|:-:|
 | ![](./.assets/images/select.png) | ![](./.assets/images/session.jpg) | ![](./.assets/images/debugger.png) |
 
-## Quick Start
+## Try it
 
-### End users · Download the desktop build
+Only a **macOS arm64** (Apple Silicon) Electron prebuilt test build is available right now — grab `Covel-electron-<version>-mac-arm64.dmg` from [Releases](https://github.com/AcKnEsS/covel/releases). After installing, open Settings and paste your LLM API key to get going.
 
-> ⚠️ The project is very early. Prebuilt binaries on [Releases](https://github.com/AcKnEsS/covel/releases) **may be taken down or reset at any time**. If you want to track the project long-term, prefer the source-build path.
+Windows / Intel Mac / Linux aren't officially shipped — build from source if you want them. The Tauri shell is on hold for now (toolchain issues) and no longer published.
 
-Only **macOS arm64** (Apple Silicon) prebuilds are provided right now. Two shell flavours are published:
+Desktop-build data dir, `config.toml`, `keys.env`, `llm.toml` details: [`docs/guide/desktop-config.en.md`](./docs/guide/desktop-config.en.md).
 
-| Shell | Installer | Recommended | Notes |
-|------|-----------|:-:|-------|
-| **Electron** | `Covel-electron-<version>-mac-arm64.dmg` | ⭐ | More feature-complete; this is what we develop and debug against daily |
-| Tauri | `Covel-tauri_<version>_aarch64.dmg` | | Smaller bundle, native WebView — experimental |
+> The project is still early. Builds on Releases **may be pulled, reset, or reformatted at any time**. Use the source path if you want a stable target.
 
-Both share the same Node sidecar and backend; data is interchangeable. On first launch go to **Settings** and paste your LLM API key. Windows and Intel Mac builds are not provided yet — build from source (see the next section) if you need them.
+## Run from source
 
-Desktop config — `~/.covel/`, `config.toml`, `keys.env`, `llm.toml` details — see [`docs/guide/desktop-config.en.md`](./docs/guide/desktop-config.en.md).
-
-### Developers · Run from source
-
-**Prerequisites**: Node.js ≥ 22, pnpm 10.7+.
+Prerequisites: Node.js ≥ 22, pnpm 10+.
 
 ```bash
 pnpm install
-cp llm.toml.example llm.toml        # fill model IDs and endpoints
-cp .env.llm.example .env.llm        # fill provider API keys
-pnpm dev                            # frontend 5173 + backend 3001 (in-memory store)
+cp llm.toml.example llm.toml        # model IDs and endpoints
+cp .env.llm.example .env.llm        # provider API keys
+pnpm dev                            # frontend 5173 + backend 3001, SQLite by default (./data/covel.db)
 ```
 
-Open `http://localhost:5173`; the debug page is at `/debug`.
+Open `http://localhost:5173`; the debug page is at `/debug`. To skip persistence (process exit wipes everything), set `STORE_BACKEND=memory` in `.env`.
 
-To switch to PostgreSQL: `cp .env.example .env && pnpm db:up && pnpm dev:pg && pnpm dev:web` (backend in a second terminal).
-
-### Self-host · Docker one-liner
+### Build the desktop shell locally
 
 ```bash
-cp .env.example .env
-cp llm.toml.example llm.toml && cp .env.llm.example .env.llm
-pnpm docker:build   # build and start frontend + backend + PostgreSQL
-```
-
-Then open `http://localhost:3001`.
-
-### Build the desktop shells locally
-
-```bash
-pnpm dev:electron      # Electron shell with hot reload (dev)
-pnpm dev:tauri         # Tauri shell with hot reload (dev)
+pnpm dev:electron      # Electron shell with hot reload
 pnpm build:electron    # Current-platform Electron installer → release/
-pnpm build:tauri       # Current-platform Tauri installer   → release/
-pnpm build:desktop     # Produce both in sequence
 ```
 
-Signing & notarisation: [`apps/desktop/PACKAGING.md`](./apps/desktop/PACKAGING.md).
+Signing and notarisation details: [`apps/desktop/PACKAGING.md`](./apps/desktop/PACKAGING.md).
 
 ## Writing a plugin
 
-A minimal plugin is `PLUGIN.md` + `package.json`. Frontmatter declares the trigger, context injections, and tool list; the markdown body is the LLM agent skill prompt.
+Minimal example:
 
 ```yaml
 ---
@@ -115,56 +96,40 @@ tools:
 You are an XXX agent. On this turn you need to…
 ```
 
-Full tutorial: [Plugin authoring guide](./docs/guide/plugin-authoring.md).
-Reference: [Plugin registry](./docs/reference/plugins.md) · [Tool registry](./docs/reference/tools.md).
+Full walkthrough: [Plugin authoring guide](./docs/guide/plugin-authoring.md). Existing plugins are good references too — see the [`plugins/`](./plugins/) directory, or [plugin registry](./docs/reference/plugins.md) and [tool registry](./docs/reference/tools.md).
 
-## Project structure
+## Repo layout
 
 ```
 covel/
 ├── apps/
-│   ├── web/              React 19 + Vite 8 frontend (with json-render plugin panels)
-│   ├── server/           Hono API + Drizzle ORM
-│   ├── desktop/          Electron shell
-│   └── desktop-tauri/    Tauri shell
-├── packages/             Internal packages (shared / runtime / context / ai-provider / …)
-├── plugins/              Core plugins (narrator / codex / npc-graph / char-creator / …)
-├── worlds/               World packages (cloudmere / mistport / neonridge)
+│   ├── web/              Frontend (React 19 + Vite)
+│   ├── server/           Backend (Hono + Drizzle)
+│   └── desktop/          Electron shell
+├── packages/             Internal packages (runtime / context / ai-provider / store / memory / tools / …)
+├── plugins/              Core plugins
+├── worlds/               World packs
 ├── prompts/              Externalised prompt templates
-└── docs/                 Reference docs and developer guides
+└── docs/                 Reference docs and author guides
 ```
 
-Full package list and dependency graph: [`CLAUDE.md`](./CLAUDE.md#monorepo-structure).
+Monorepo managed with pnpm workspaces + Turborepo. Full package list and dependency graph: [`CLAUDE.md`](./CLAUDE.md#monorepo-structure).
 
 ## Documentation
 
-| Role | Entry points |
-|------|--------------|
-| **Understand the project** | [Architecture flow](./docs/architecture/flow.md) · [`CLAUDE.md`](./CLAUDE.md) |
-| **Write a plugin** | [Plugin authoring guide](./docs/guide/plugin-authoring.md) · [Plugin registry](./docs/reference/plugins.md) · [Tool registry](./docs/reference/tools.md) |
-| **Talk to the API** | [API reference](./docs/reference/api.md) · [Protocol](./docs/reference/protocol.md) |
-| **Build UI** | [UI panel architecture](./docs/reference/ui-panels.md) · [Prompt structure](./docs/reference/prompt-structure.md) |
-| **Run desktop builds** | [Desktop config](./docs/guide/desktop-config.en.md) · [Packaging](./apps/desktop/PACKAGING.md) |
-| **Release / Contribute** | [CONTRIBUTING](./docs/CONTRIBUTING.en.md) · [CHANGELOG](./docs/CHANGELOG.md) |
+- Architecture overview: [`docs/architecture/flow.md`](./docs/architecture/flow.md)
+- Writing plugins: [`docs/guide/plugin-authoring.md`](./docs/guide/plugin-authoring.md)
+- Plugin / tool registries: [`docs/reference/plugins.md`](./docs/reference/plugins.md) · [`docs/reference/tools.md`](./docs/reference/tools.md)
+- API and protocol: [`docs/reference/api.md`](./docs/reference/api.md) · [`docs/reference/protocol.md`](./docs/reference/protocol.md)
+- Desktop config: [`docs/guide/desktop-config.en.md`](./docs/guide/desktop-config.en.md)
 
-Full index: [`docs/README.md`](./docs/README.md) (Chinese).
-
-## Roadmap
-
-- ✅ Plugin system + 8 core plugins + json-render UI architecture
-- ✅ Multi-provider / multi-storage / dual desktop shells (Electron + Tauri)
-- 🚧 Long-session context budget and smart truncation
-- 🚧 Keyword-triggered lorebook scanning with Reserved Tokens budgeting
-- 📋 Character Card V2/V3 import/export (SillyTavern / RisuAI interop)
-- 📋 Cross-session long-term memory (embedding / vector recall)
-
-Detailed improvement assessment: [`devs/docs/insights/covel-improvement-plan.md`](./devs/docs/insights/covel-improvement-plan.md).
+Full index (Chinese): [`docs/README.md`](./docs/README.md).
 
 ## Contributing
 
-Issues and pull requests are welcome. Please read [`CONTRIBUTING.en.md`](./docs/CONTRIBUTING.en.md) first.
+It's early days — issues and PRs are both welcome. Please read [`docs/CONTRIBUTING.en.md`](./docs/CONTRIBUTING.en.md) first.
 
-Releases are driven by Git tags: pushing a `v*` tag triggers [`.github/workflows/release.yml`](./.github/workflows/release.yml), which builds Electron + Tauri arm64 dmgs on macOS runners and produces a draft GitHub Release. Windows / Intel Mac / Linux prebuilds are not provided.
+Releases are driven by Git tags: pushing a `v*` tag triggers [`.github/workflows/release.yml`](./.github/workflows/release.yml), which builds the Electron arm64 dmg on a macOS runner and drafts a GitHub Release. No official builds for other platforms yet.
 
 ## License
 

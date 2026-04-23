@@ -593,6 +593,10 @@ export function createMemoryStore(): DataStore & VectorStoreCapability & VectorM
       worlds.set(record.id, record);
     },
 
+    async deleteWorld(id) {
+      worlds.delete(id);
+    },
+
     // ── Trace ──
 
     async addTraceEvent(record) {

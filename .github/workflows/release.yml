@@ -1,13 +1,17 @@
 name: Build Desktop (macOS)
 
 # Manual-only to keep GitHub Actions usage low. Primary distribution path
-# is local builds (`pnpm build:electron` / `pnpm build:tauri`).
+# is local builds (`pnpm build:electron`).
 # This workflow just produces the same artefacts on a clean macOS runner
 # when you want an independent reproduction, or to publish a signed
 # release with the `publish_release` input set.
 #
 # macOS arm64 only. Windows/Linux are intentionally dropped — build them
 # locally on their native OS as needed.
+#
+# Tauri shell is temporarily disabled (toolchain/compile issues). The
+# `build-tauri` job and its release hooks below are commented out rather
+# than removed so we can turn it back on easily later.
 on:
   workflow_dispatch:
     inputs:
@@ -80,67 +84,72 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # ── Tauri shell (macOS arm64, ~50% smaller bundle) ─────────────
-  build-tauri:
-    name: Tauri mac-arm64
-    runs-on: macos-14
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin
-
-      - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: apps/desktop-tauri/src-tauri -> target
-          key: aarch64-apple-darwin
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Stage Electron desktop (shared staging for Tauri sidecar)
-        run: pnpm --filter @covel/desktop build
-
-      - name: Prepare Tauri sidecar (download node + rebuild native deps)
-        run: node apps/desktop-tauri/scripts/prepare-sidecar.mjs --target aarch64-apple-darwin
-
-      - name: Build Tauri bundle
-        working-directory: apps/desktop-tauri
-        run: pnpm tauri build --target aarch64-apple-darwin
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-
-      - name: Stage release artefacts
-        run: node apps/desktop-tauri/scripts/stage-release.mjs aarch64-apple-darwin
-
-      - name: Upload Tauri artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: covel-tauri-mac-arm64
-          path: release/tauri/aarch64-apple-darwin/*.dmg
-          if-no-files-found: error
-          retention-days: 7
+  # ── Tauri shell (macOS arm64) ─— DISABLED ──────────────────────
+  # Tauri packaging is currently on hold (compile chain is brittle). Leave
+  # this job definition commented for now; re-enable once the toolchain
+  # settles. Also re-add `build-tauri` to `needs` of the `release` job and
+  # uncomment the Tauri download/publish steps below when restoring.
+  #
+  # build-tauri:
+  #   name: Tauri mac-arm64
+  #   runs-on: macos-14
+  #
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v5
+  #       with:
+  #         ref: ${{ inputs.tag || github.ref }}
+  #
+  #     - name: Setup pnpm
+  #       uses: pnpm/action-setup@v6
+  #
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v6
+  #       with:
+  #         node-version: 24
+  #         cache: pnpm
+  #
+  #     - name: Setup Rust toolchain
+  #       uses: dtolnay/rust-toolchain@stable
+  #       with:
+  #         targets: aarch64-apple-darwin
+  #
+  #     - name: Cache Rust build
+  #       uses: Swatinem/rust-cache@v2
+  #       with:
+  #         workspaces: apps/desktop-tauri/src-tauri -> target
+  #         key: aarch64-apple-darwin
+  #
+  #     - name: Install dependencies
+  #       run: pnpm install --frozen-lockfile
+  #
+  #     - name: Stage Electron desktop (shared staging for Tauri sidecar)
+  #       run: pnpm --filter @covel/desktop build
+  #
+  #     - name: Prepare Tauri sidecar (download node + rebuild native deps)
+  #       run: node apps/desktop-tauri/scripts/prepare-sidecar.mjs --target aarch64-apple-darwin
+  #
+  #     - name: Build Tauri bundle
+  #       working-directory: apps/desktop-tauri
+  #       run: pnpm tauri build --target aarch64-apple-darwin
+  #       env:
+  #         CSC_IDENTITY_AUTO_DISCOVERY: "false"
+  #
+  #     - name: Stage release artefacts
+  #       run: node apps/desktop-tauri/scripts/stage-release.mjs aarch64-apple-darwin
+  #
+  #     - name: Upload Tauri artifacts
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: covel-tauri-mac-arm64
+  #         path: release/tauri/aarch64-apple-darwin/*.dmg
+  #         if-no-files-found: error
+  #         retention-days: 7
 
   # ── Publish GitHub Release (optional, gated by inputs.publish_release) ─
   release:
     name: Publish GitHub Release
-    needs: [build-electron, build-tauri]
+    needs: [ build-electron ]
     runs-on: ubuntu-latest
     if: ${{ inputs.publish_release && inputs.tag != '' }}
 
@@ -152,19 +161,20 @@ jobs:
           pattern: covel-electron-*
           merge-multiple: true
 
-      - name: Download Tauri artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: release/tauri
-          pattern: covel-tauri-*
-          merge-multiple: true
+      # Tauri publishing disabled along with build-tauri. Re-enable together.
+      # - name: Download Tauri artifacts
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     path: release/tauri
+      #     pattern: covel-tauri-*
+      #     merge-multiple: true
 
       - name: Inspect artifacts
         run: |
           echo "=== release/electron ==="
           ls -lh release/electron/ || true
-          echo "=== release/tauri ==="
-          ls -lh release/tauri/ || true
+          # echo "=== release/tauri ==="
+          # ls -lh release/tauri/ || true
 
       - name: Remove stale releases for this tag
         run: |
@@ -186,9 +196,9 @@ jobs:
           prerelease: ${{ contains(inputs.tag, '-') }}
           generate_release_notes: true
           fail_on_unmatched_files: true
+          # Tauri dmg intentionally omitted — build-tauri is disabled above.
           files: |
             release/electron/*.dmg
             release/electron/*.zip
             release/electron/*.blockmap
             release/electron/latest*.yml
-            release/tauri/*.dmg

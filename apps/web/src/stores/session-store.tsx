@@ -198,6 +198,7 @@ type Action =
   | { type: "SET_WORLD"; world: api.WorldRecord }
   | { type: "ADD_WORLD"; world: api.WorldRecord }
   | { type: "UPDATE_WORLD"; world: api.WorldRecord }
+  | { type: "REMOVE_WORLD"; worldId: string }
   | { type: "SET_SESSION"; session: api.SessionRecord }
   | { type: "SET_WORLD_SESSIONS"; sessions: api.SessionRecord[] }
   | { type: "ADD_MESSAGE"; message: StreamMessage }
@@ -271,6 +272,8 @@ function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, world: action.world };
     case "ADD_WORLD":
       return { ...state, worlds: [...state.worlds, action.world] };
+    case "REMOVE_WORLD":
+      return { ...state, worlds: state.worlds.filter((w) => w.id !== action.worldId) };
     case "UPDATE_WORLD":
       return {
         ...state,
@@ -678,6 +681,8 @@ interface SessionContextValue {
   updateWorldLocal: (world: api.WorldRecord) => void;
   /** Add a newly created world to the local worlds list. */
   addWorldLocal: (world: api.WorldRecord) => void;
+  /** Remove a deleted world from the local worlds list. */
+  removeWorldLocal: (worldId: string) => void;
   /** Load the session-scoped plugin list from the server. */
   loadSessionPlugins: () => Promise<void>;
   /** Enable or disable a plugin for the current session (optimistic update). */
@@ -1935,6 +1940,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "ADD_WORLD", world });
   }, []);
 
+  const removeWorldLocal = useCallback((worldId: string) => {
+    dispatch({ type: "REMOVE_WORLD", worldId });
+  }, []);
+
   const loadSessionPlugins = useCallback(async () => {
     const sid = sessionIdRef.current;
     if (!sid) return;
@@ -2084,6 +2093,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     backToWorldSelect,
     updateWorldLocal,
     addWorldLocal,
+    removeWorldLocal,
     loadSessionPlugins,
     toggleSessionPlugin,
     triggerEvent,

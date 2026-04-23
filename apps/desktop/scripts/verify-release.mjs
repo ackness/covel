@@ -22,6 +22,79 @@ function mustExist(baseDir, relativePath) {
   }
 }
 
+function directoryHasFile(dir, predicate) {
+  if (!fs.existsSync(dir)) return false;
+  return fs.readdirSync(dir).some(predicate);
+}
+
+// Guard against regressions where overly broad electron-builder filters
+// (e.g. "!**/*.md") silently strip runtime-critical content: world lore,
+// plugin manifests, and server prompts.
+function mustHaveBundledWorlds(resourcesDir) {
+  const worldsDir = path.join(resourcesDir, "server/worlds");
+  if (!fs.existsSync(worldsDir)) {
+    throw new Error(`Bundled worlds dir missing: ${worldsDir} `);
+  }
+  const worldDirs = fs
+    .readdirSync(worldsDir, { withFileTypes: true })
+    .filter((e) => e.isDirectory());
+  if (worldDirs.length === 0) {
+    throw new Error(`No bundled worlds present under ${worldsDir} `);
+  }
+  for (const entry of worldDirs) {
+    const dir = path.join(worldsDir, entry.name);
+    if (!fs.existsSync(path.join(dir, "world.yaml"))) {
+      throw new Error(`Bundled world ${entry.name} is missing world.yaml`);
+    }
+    const hasLore = directoryHasFile(dir, (f) => /^WORLD(\.[a-z-]+)?\.md$/i.test(f));
+    if (!hasLore) {
+      throw new Error(
+        `Bundled world ${entry.name} is missing WORLD *.md(likely stripped by a too - broad electron - builder filter such as "!**/*.md")`,
+      );
+    }
+  }
+}
+
+function mustHaveBundledPlugins(resourcesDir) {
+  const pluginsDir = path.join(resourcesDir, "server/plugins");
+  if (!fs.existsSync(pluginsDir)) {
+    throw new Error(`Bundled plugins dir missing: ${pluginsDir} `);
+  }
+  const pluginDirs = fs
+    .readdirSync(pluginsDir, { withFileTypes: true })
+    .filter((e) => e.isDirectory());
+  if (pluginDirs.length === 0) {
+    throw new Error(`No bundled plugins present under ${pluginsDir} `);
+  }
+  for (const entry of pluginDirs) {
+    const dir = path.join(pluginsDir, entry.name);
+    if (!fs.existsSync(path.join(dir, "package.json"))) {
+      throw new Error(`Bundled plugin ${entry.name} is missing package.json`);
+    }
+    const hasManifest = directoryHasFile(dir, (f) =>
+      /^PLUGIN(\.[a-z-]+)?\.md$/i.test(f),
+    );
+    if (!hasManifest) {
+      throw new Error(
+        `Bundled plugin ${entry.name} is missing PLUGIN *.md(likely stripped by a too - broad electron - builder filter)`,
+      );
+    }
+  }
+}
+
+function mustHaveBundledPrompts(resourcesDir) {
+  const promptsDir = path.join(resourcesDir, "server/prompts/server");
+  if (!fs.existsSync(promptsDir)) {
+    throw new Error(`Bundled prompts dir missing: ${promptsDir} `);
+  }
+  const hasAnyPrompt = directoryHasFile(promptsDir, (f) => f.endsWith(".md"));
+  if (!hasAnyPrompt) {
+    throw new Error(
+      `No prompt files under ${promptsDir} (likely stripped by a too - broad electron - builder filter)`,
+    );
+  }
+}
+
 function collectResourceDirs() {
   if (!fs.existsSync(releaseRoot)) {
     return [];
@@ -46,7 +119,7 @@ function collectResourceDirs() {
 
 const resourceDirs = collectResourceDirs();
 if (resourceDirs.length === 0) {
-  console.error(`No unpacked ${platform} release directories found under ${releaseRoot}`);
+  console.error(`No unpacked ${platform} release directories found under ${releaseRoot} `);
   process.exit(1);
 }
 
@@ -55,9 +128,12 @@ for (const resourcesDir of resourceDirs) {
   mustExist(resourcesDir, "server/node_modules/tsx/dist/cli.mjs");
   mustExist(resourcesDir, "server/node_modules/esbuild/package.json");
   mustExist(resourcesDir, "web-dist/index.html");
+  mustHaveBundledWorlds(resourcesDir);
+  mustHaveBundledPlugins(resourcesDir);
+  mustHaveBundledPrompts(resourcesDir);
 }
 
-console.log(`Verified ${platform} desktop release resources:`);
+console.log(`Verified ${platform} desktop release resources: `);
 for (const resourcesDir of resourceDirs) {
-  console.log(`  ✓ ${resourcesDir}`);
+  console.log(`  ✓ ${resourcesDir} `);
 }

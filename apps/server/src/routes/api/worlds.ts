@@ -172,6 +172,22 @@ worldRoutes.patch('/:id', async (c) => {
   return c.json(updated);
 });
 
+// DELETE /worlds/:id
+worldRoutes.delete('/:id', async (c) => {
+  const store = c.get('store');
+  const id = c.req.param('id');
+  const world = await store.getWorld(id);
+  if (!world) {
+    return c.json({ error: 'World not found' }, 404);
+  }
+  const meta = world.metadata as Record<string, unknown> | undefined;
+  if (meta?.source === 'file') {
+    return c.json({ error: 'Built-in worlds cannot be deleted' }, 403);
+  }
+  await store.deleteWorld(id);
+  return c.json({ success: true });
+});
+
 // ── Dimension Export/Import ─────────────────────────────────────
 
 // GET /worlds/:id/dimensions/export — download dimensions as YAML

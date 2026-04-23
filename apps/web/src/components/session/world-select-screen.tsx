@@ -5,16 +5,25 @@ import {
   KeyRound,
   Cpu,
   Eye,
+  Trash2,
   Wand2,
   FolderOpen,
   ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog.js";
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
 import { WorldDetailView } from "@/components/world/world-detail-view.js";
 import { WorldEditor } from "@/components/world/world-editor.js";
 import { AiWorldGenerator } from "@/components/world/ai-world-generator.js";
+import * as api from "@/services/api.js";
 import type { WorldRecord, PackageSummary } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
@@ -30,6 +39,7 @@ interface WorldSelectScreenProps {
   onSelectWorld: (worldId: string) => void;
   onWorldUpdated?: (world: WorldRecord) => void;
   onWorldCreated?: (world: WorldRecord) => void;
+  onWorldDeleted?: (worldId: string) => void;
 }
 
 // Cycle through a small palette to give each card a distinctive but on-brand
@@ -57,6 +67,7 @@ export function WorldSelectScreen({
   onSelectWorld,
   onWorldUpdated,
   onWorldCreated,
+  onWorldDeleted,
 }: WorldSelectScreenProps) {
   const { t } = useTranslation();
   const primarySlotLabel = formatSlotLabel(resolvedSlots[0]);
@@ -66,6 +77,8 @@ export function WorldSelectScreen({
   const [selectedWorldId, setSelectedWorldId] = useState<string | null>(null);
   const [generatorOpen, setGeneratorOpen] = useState(false);
   const [enteringWorldId, setEnteringWorldId] = useState<string | null>(null);
+  const [deletingWorldId, setDeletingWorldId] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   function handleEnterWorld(worldId: string) {
     if (enteringWorldId) return;
@@ -99,6 +112,25 @@ export function WorldSelectScreen({
     setMode("detail");
   }
 
+  function handleDeleteClick(e: React.MouseEvent, worldId: string) {
+    e.stopPropagation();
+    setDeletingWorldId(worldId);
+    setDeleteConfirmOpen(true);
+  }
+
+  async function handleDeleteConfirm() {
+    if (!deletingWorldId) return;
+    try {
+      await api.deleteWorld(deletingWorldId);
+      onWorldDeleted?.(deletingWorldId);
+    } catch {
+      // toast already shown by api request handler
+    } finally {
+      setDeletingWorldId(null);
+      setDeleteConfirmOpen(false);
+    }
+  }
+
   if (mode === "detail" && selectedWorld) {
     return (
       <WorldDetailView
@@ -119,8 +151,36 @@ export function WorldSelectScreen({
     );
   }
 
+  const deletingWorld = deletingWorldId ? worlds.find((w) => w.id === deletingWorldId) : null;
+
   return (
     <div className="flex h-full w-full overflow-hidden">
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {t("world.deleteConfirmTitle", "Delete world?")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("world.deleteConfirmDesc", 'This will permanently delete "{{name}}". This action cannot be undone.', {
+                name: deletingWorld ? text(deletingWorld.name) : deletingWorldId,
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="outline" size="sm" onClick={() => setDeleteConfirmOpen(false)}>
+              {t("common.cancel", "Cancel")}
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+            >
+              {t("world.deleteConfirmAction", "Delete")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <SettingsDialog open={settingsOpen} onOpenChange={onSettingsOpenChange} />
       <AiWorldGenerator
         open={generatorOpen}
@@ -237,14 +297,26 @@ export function WorldSelectScreen({
                         <span className="font-mono text-[10px] uppercase tracking-widest text-foreground/80 bg-background/40 backdrop-blur-sm px-2 py-1 rounded">
                           {world.id}
                         </span>
-                        <button
-                          type="button"
-                          onClick={(e) => handleViewDetails(e, world.id)}
-                          aria-label={t("world.viewDetails", "View details")}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 inline-flex items-center justify-center rounded bg-background/60 backdrop-blur-sm hover:bg-background text-foreground"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            type="button"
+                            onClick={(e) => handleViewDetails(e, world.id)}
+                            aria-label={t("world.viewDetails", "View details")}
+                            className="h-7 w-7 inline-flex items-center justify-center rounded bg-background/60 backdrop-blur-sm hover:bg-background text-foreground"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          {world.metadata?.source !== 'file' && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteClick(e, world.id)}
+                              aria-label={t("world.delete", "Delete world")}
+                              className="h-7 w-7 inline-flex items-center justify-center rounded bg-background/60 backdrop-blur-sm hover:bg-destructive hover:text-destructive-foreground text-foreground"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
 
