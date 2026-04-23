@@ -1,4 +1,5 @@
 import type { ProviderConfig, UsageSummary } from "../types.js";
+import { isEnvEnabled } from "@covel/shared";
 
 /** Maximum characters to include in error message previews. */
 const ERROR_PREVIEW_MAX_CHARS = 200;
@@ -149,7 +150,7 @@ export function sleepWithAbort(ms: number, signal?: AbortSignal): Promise<void> 
  * Read lazily on each call so tests can flip the flag per-case.
  */
 function isRetryDisabled(): boolean {
-  return process.env.COVEL_LLM_RETRY_DISABLED === "1";
+  return isEnvEnabled("COVEL_LLM_RETRY_DISABLED");
 }
 
 /**

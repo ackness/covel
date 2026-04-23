@@ -1,4 +1,5 @@
 import type { ProviderLifecycleHook, UsageSummary } from "../types.js";
+import { readEnvString } from "@covel/shared";
 
 /** Minimal interface for Langfuse span objects. */
 interface LangfuseSpan {
@@ -27,8 +28,9 @@ interface LangfuseClient {
  * - LANGFUSE_BASE_URL (optional, defaults to Langfuse cloud)
  */
 export async function createLangfuseHook(): Promise<ProviderLifecycleHook | null> {
-  const publicKey = process.env.LANGFUSE_PUBLIC_KEY;
-  const secretKey = process.env.LANGFUSE_SECRET_KEY;
+  const publicKey = readEnvString("LANGFUSE_PUBLIC_KEY");
+  const secretKey = readEnvString("LANGFUSE_SECRET_KEY");
+  const baseUrl = readEnvString("LANGFUSE_BASE_URL");
 
   if (!publicKey || !secretKey) return null;
 
@@ -46,9 +48,7 @@ export async function createLangfuseHook(): Promise<ProviderLifecycleHook | null
   const langfuse: LangfuseClient = new LangfuseCtor({
     publicKey,
     secretKey,
-    ...(process.env.LANGFUSE_BASE_URL
-      ? { baseUrl: process.env.LANGFUSE_BASE_URL }
-      : {}),
+    ...(baseUrl ? { baseUrl } : {}),
   });
 
   const activeSpans = new Map<string, LangfuseSpan>();

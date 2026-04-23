@@ -2,7 +2,9 @@
  * Sanitize error messages for production — strip filesystem paths and stack traces.
  */
 
-const isDev = process.env.NODE_ENV !== 'production';
+import { readRuntimeEnv } from '@covel/shared';
+
+const isDev = readRuntimeEnv().nodeEnv !== 'production';
 
 const SENSITIVE_PATTERNS = [
   /\/[^\s:]+\.(ts|js|mjs|cjs)/g,   // File paths

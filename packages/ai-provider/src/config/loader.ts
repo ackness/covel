@@ -1,6 +1,7 @@
 import { parse as parseToml } from "smol-toml";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { readEnvString } from "@covel/shared";
 
 import { aiConfigSchema } from "./schema.js";
 import type { AiConfig } from "../types.js";
@@ -48,7 +49,7 @@ function interpolateEnv(input: string): string {
   const missing: string[] = [];
 
   const result = input.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)}/g, (match, varName: string) => {
-    const value = process.env[varName];
+    const value = readEnvString(varName);
     if (value === undefined) {
       missing.push(varName);
       return match;

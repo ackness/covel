@@ -11,6 +11,10 @@
 import { createConnection } from "node:net";
 import process from "node:process";
 
+if (process.env.COVEL_PG_PREFLIGHT_SKIP === "1") {
+  process.exit(0);
+}
+
 const host = process.env.COVEL_PG_PREFLIGHT_HOST ?? "127.0.0.1";
 const port = Number(process.env.COVEL_PG_PREFLIGHT_PORT ?? 5432);
 const timeoutMs = 1500;

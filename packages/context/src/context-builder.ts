@@ -14,6 +14,7 @@
  */
 
 import { applyBudget } from './budget.js';
+import { isEnvEnabled } from '@covel/shared';
 import { buildContextV2, buildContextV2Async } from './prompt-assembler.js';
 import {
   assemblePromptVariables,
@@ -47,7 +48,7 @@ function buildMessageHistoryWithSummaries(
   messageHistory: readonly MessageHistoryRecord[],
   summaries: readonly SummaryRecord[],
 ): LLMMessage[] {
-  const compactorEnabled = process.env.COVEL_COMPACTOR_V1 === '1';
+  const compactorEnabled = isEnvEnabled('COVEL_COMPACTOR_V1');
 
   if (!compactorEnabled || summaries.length === 0) {
     return messageHistory.map(msg => ({
@@ -169,7 +170,7 @@ export function buildContext(
   // out V2 at the environment level while individual plugins migrate at
   // their own pace. See §A8 of `devs/docs/insights/covel-improvement-plan.md`.
   if (
-    process.env.COVEL_PROMPT_V2 === '1' &&
+    isEnvEnabled('COVEL_PROMPT_V2') &&
     params.manifest.promptVersion === 2
   ) {
     return buildContextV2(params);
@@ -225,7 +226,7 @@ export function buildContext(
   const budgetEnabled =
     params.estimator !== undefined &&
     params.contextBudget !== undefined &&
-    process.env.COVEL_CONTEXT_BUDGET_V1 === '1';
+    isEnvEnabled('COVEL_CONTEXT_BUDGET_V1');
 
   if (budgetEnabled) {
     const result = applyBudget(systemPrompt, messages, {
@@ -271,7 +272,7 @@ export async function buildContextAsync(
   params: ContextBuildParams,
 ): Promise<AssembledContext> {
   if (
-    process.env.COVEL_PROMPT_V2 === '1' &&
+    isEnvEnabled('COVEL_PROMPT_V2') &&
     params.manifest.promptVersion === 2
   ) {
     return buildContextV2Async(params);
@@ -315,7 +316,7 @@ export async function buildContextAsync(
   const budgetEnabled =
     params.estimator !== undefined &&
     params.contextBudget !== undefined &&
-    process.env.COVEL_CONTEXT_BUDGET_V1 === '1';
+    isEnvEnabled('COVEL_CONTEXT_BUDGET_V1');
 
   if (budgetEnabled) {
     const result = applyBudget(systemPrompt, messages, {

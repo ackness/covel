@@ -21,6 +21,7 @@ docs/
 │   ├── e2e-plugin-verify.md
 │   ├── e2e-testing.md
 │   ├── desktop-config.md / .en.md  # 桌面版配置与数据目录
+│   ├── env-registry.md
 │   ├── themes.md
 │   └── skills.md
 │

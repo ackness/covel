@@ -32,6 +32,7 @@ import type { PluginRegistry, LoadedRuntime } from '@covel/plugin-loader';
 import type { LLMAdapter, ToolExecutor, HookPipeline } from '@covel/runtime';
 import { processRuntimeResult, resumeSuspendedRuntime, createTurnEmitter } from '@covel/runtime';
 import type { RuntimeManifest } from '@covel/shared';
+import { isEnvEnabled } from '@covel/shared';
 import type { EventBus } from '@covel/events';
 
 type Env = {
@@ -99,7 +100,7 @@ function validateAgainstJsonSchema(data: unknown, schema: unknown): string | nul
 resumeRoutes.post('/:id/resume', async (c) => {
   // Feature flag check — 503 when flag off (documented choice: 503 Service Unavailable
   // indicates the endpoint exists but the feature is disabled, distinct from 404 Not Found)
-  if (process.env['COVEL_SUSPEND_V1'] !== '1') {
+  if (!isEnvEnabled('COVEL_SUSPEND_V1')) {
     return c.json({ error: 'Suspend/resume feature is not enabled (COVEL_SUSPEND_V1)' }, 503);
   }
 
@@ -267,7 +268,7 @@ resumeRoutes.post('/:id/resume', async (c) => {
 // ── DELETE (abandon) ─────────────────────────────────────────────
 
 resumeRoutes.delete('/:id/suspensions/:suspensionId', async (c) => {
-  if (process.env['COVEL_SUSPEND_V1'] !== '1') {
+  if (!isEnvEnabled('COVEL_SUSPEND_V1')) {
     return c.json({ error: 'Suspend/resume feature is not enabled (COVEL_SUSPEND_V1)' }, 503);
   }
 
@@ -287,7 +288,7 @@ resumeRoutes.delete('/:id/suspensions/:suspensionId', async (c) => {
 // ── GET list ─────────────────────────────────────────────────────
 
 resumeRoutes.get('/:id/suspensions', async (c) => {
-  if (process.env['COVEL_SUSPEND_V1'] !== '1') {
+  if (!isEnvEnabled('COVEL_SUSPEND_V1')) {
     return c.json({ error: 'Suspend/resume feature is not enabled (COVEL_SUSPEND_V1)' }, 503);
   }
 

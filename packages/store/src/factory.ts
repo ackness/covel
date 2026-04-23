@@ -12,6 +12,7 @@
  */
 
 import type { DataStore, StoreConfig } from './types.js';
+import { readRuntimeEnv } from '@covel/shared';
 
 /**
  * Create a `DataStore` instance for the specified backend.
@@ -67,10 +68,11 @@ export async function createStore(config: StoreConfig): Promise<DataStore> {
  * ```
  */
 export function createStoreFromEnv(): Promise<DataStore> {
+  const env = readRuntimeEnv();
   return createStore({
-    backend: resolveBackendFromEnv(),
-    sqlitePath: process.env.SQLITE_PATH ?? './data/covel.db',
-    databaseUrl: process.env.DATABASE_URL,
+    backend: env.storeBackend,
+    sqlitePath: env.sqlitePath,
+    databaseUrl: env.databaseUrl,
   });
 }
 
@@ -82,5 +84,5 @@ export function createStoreFromEnv(): Promise<DataStore> {
  * can report the same value without re-reading or guessing.
  */
 export function resolveBackendFromEnv(): StoreConfig['backend'] {
-  return (process.env.STORE_BACKEND ?? 'sqlite') as StoreConfig['backend'];
+  return readRuntimeEnv().storeBackend;
 }

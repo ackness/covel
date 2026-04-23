@@ -6,6 +6,7 @@
  */
 
 import type { MiddlewareHandler } from 'hono';
+import { readRuntimeEnv } from '@covel/shared';
 
 interface RateLimitOptions {
   /** Maximum requests per window. Default: 60 */
@@ -20,7 +21,7 @@ interface WindowEntry {
 }
 
 export function rateLimiter(opts: RateLimitOptions = {}): MiddlewareHandler {
-  const max = opts.max ?? parseInt(process.env.RATE_LIMIT_RPM ?? '60', 10);
+  const max = opts.max ?? readRuntimeEnv().rateLimitRpm;
   const windowMs = opts.windowMs ?? 60_000;
   const windows = new Map<string, WindowEntry>();
 

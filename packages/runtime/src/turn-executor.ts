@@ -15,6 +15,7 @@ import type {
   TurnInput,
   TurnResult,
 } from '@covel/shared';
+import { isEnvEnabled } from '@covel/shared';
 import type { LoadedRuntime } from '@covel/plugin-loader';
 import type {
   DataStore,
@@ -556,7 +557,7 @@ export async function executeTurn(
   // 0b. Compaction (S2-T2): run before buildContext so summaries are stored
   //     before the turn's context assembly reads them.
   //     Only runs when COVEL_COMPACTOR_V1=1 AND a compactor is injected.
-  if (process.env.COVEL_COMPACTOR_V1 === '1' && deps.compactor && deps.store) {
+  if (isEnvEnabled('COVEL_COMPACTOR_V1') && deps.compactor && deps.store) {
     // Reload messages after appending the player message so the compactor
     // sees the full updated history (including the just-appended player msg).
     const freshMessages = await deps.store.listTurnMessages(input.sessionId);
@@ -691,7 +692,7 @@ export async function executeTurn(
 
   // Load session summaries for compaction substitution in buildContext (S2-T2)
   let sessionSummaries: import('@covel/store').SessionSummaryRecord[] = [];
-  if (process.env.COVEL_COMPACTOR_V1 === '1' && deps.store) {
+  if (isEnvEnabled('COVEL_COMPACTOR_V1') && deps.store) {
     sessionSummaries = [...(await deps.store.listSessionSummaries(input.sessionId))];
   }
 
@@ -720,7 +721,7 @@ export async function executeTurn(
   // When COVEL_MEMORY_V1=1 and a memory system is injected, load the blocks
   // so they can be injected into every runtime's prompt as [Core Memory].
   let coreMemoryBlocks: readonly { label: string; content: string; updatedAt: string }[] = [];
-  if (process.env.COVEL_MEMORY_V1 === '1' && deps.memorySystem) {
+  if (isEnvEnabled('COVEL_MEMORY_V1') && deps.memorySystem) {
     try {
       await deps.memorySystem.manager.initializeDefaults(input.sessionId);
       coreMemoryBlocks = await deps.memorySystem.manager.loadBlocks(input.sessionId);
@@ -744,7 +745,7 @@ export async function executeTurn(
   // flag-on turns for Sprint 1: Sprint 2 (Lorebook) removes the duplicates by
   // deleting the legacy reads once all consumers migrate to the snapshot.
   let sessionContext: SessionContextSnapshot | undefined;
-  if (process.env.COVEL_SESSION_CONTEXT === '1' && deps.store) {
+  if (isEnvEnabled('COVEL_SESSION_CONTEXT') && deps.store) {
     try {
       const sessionRecord = await deps.store.getSession(input.sessionId);
       sessionContext = await buildSessionContextSnapshot(deps.store, input.sessionId, {
@@ -959,7 +960,7 @@ export async function executeTurn(
     // session state at turn boundary. Failures are logged but never fail
     // the turn — snapshots are a best-effort recovery primitive, not a
     // commit invariant.
-    if (process.env['COVEL_SNAPSHOTS_V1'] === '1') {
+    if (isEnvEnabled('COVEL_SNAPSHOTS_V1')) {
       try {
         const { buildSnapshotPayload } = await import('./snapshot-payload-builder.js');
         const payload = await buildSnapshotPayload(
@@ -1005,7 +1006,7 @@ export async function executeTurn(
   // ── Post-turn memory update (Letta-style) ─────────────────────
   // Fire-and-forget: memory update runs asynchronously so it doesn't
   // block the turn response. Stale-by-one-turn is acceptable.
-  if (process.env.COVEL_MEMORY_V1 === '1' && deps.memorySystem && coreMemoryBlocks.length > 0) {
+  if (isEnvEnabled('COVEL_MEMORY_V1') && deps.memorySystem && coreMemoryBlocks.length > 0) {
     // Collect narrative text from all successful runtimes
     const narrativeParts: string[] = [];
     for (const rr of turnResult.runtimeResults) {
@@ -1351,7 +1352,7 @@ export async function resumeSuspendedRuntime(
           }
 
           // Detect nested suspend — not supported, treat as error result
-          if (process.env['COVEL_SUSPEND_V1'] === '1' && isSuspendSentinel(result.parsedResult)) {
+          if (isEnvEnabled('COVEL_SUSPEND_V1') && isSuspendSentinel(result.parsedResult)) {
             messages.push({
               role: 'tool',
               content: JSON.stringify({ error: 'Nested suspend is not supported' }),
@@ -1639,7 +1640,7 @@ async function executeOneRuntime(
       // If the handler returns { status: 'suspended', reason, resumeSchema } and
       // COVEL_SUSPEND_V1=1, persist a suspension and return status: 'suspended'.
       if (
-        process.env['COVEL_SUSPEND_V1'] === '1' &&
+        isEnvEnabled('COVEL_SUSPEND_V1') &&
         typeof output.status === 'string' &&
         output.status === 'suspended' &&
         typeof output.reason === 'string' &&
@@ -2280,7 +2281,7 @@ async function executeOneRuntime(
             // result is NOT pushed back to the LLM — instead we exit the loop
             // with status 'suspended'.
             if (
-              process.env['COVEL_SUSPEND_V1'] === '1' &&
+              isEnvEnabled('COVEL_SUSPEND_V1') &&
               isSuspendSentinel(toolResult.parsedResult) &&
               deps.store
             ) {

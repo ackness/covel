@@ -33,6 +33,7 @@
  */
 
 import type { AuthorsNoteDecl, PostHistoryDecl, RuntimeManifest } from '@covel/shared';
+import { isEnvEnabled } from '@covel/shared';
 import { PROMPT_CACHE_BREAKPOINT_MARKER } from '@covel/shared';
 import { applyBudget } from './budget.js';
 import {
@@ -72,7 +73,7 @@ function buildMessageHistoryWithSummaries(
   messageHistory: readonly MessageHistoryRecord[],
   summaries: readonly SummaryRecord[],
 ): LLMMessage[] {
-  const compactorEnabled = process.env.COVEL_COMPACTOR_V1 === '1';
+  const compactorEnabled = isEnvEnabled('COVEL_COMPACTOR_V1');
 
   if (!compactorEnabled || summaries.length === 0) {
     return messageHistory.map(msg => ({
@@ -422,7 +423,7 @@ function concatenateSystemPrompt(
  * (undefined, `"0"`, `"true"`) keeps the pre-S2-T3 legacy path.
  */
 function isPromptCacheEnabled(): boolean {
-  return process.env.COVEL_PROMPT_CACHE_V1 === '1';
+  return isEnvEnabled('COVEL_PROMPT_CACHE_V1');
 }
 
 /**
@@ -495,7 +496,7 @@ function finalizeV2(
   const budgetEnabled =
     params.estimator !== undefined &&
     params.contextBudget !== undefined &&
-    process.env.COVEL_CONTEXT_BUDGET_V1 === '1';
+    isEnvEnabled('COVEL_CONTEXT_BUDGET_V1');
 
   if (budgetEnabled) {
     const result = applyBudget(systemPrompt, messages, {

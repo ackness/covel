@@ -11,6 +11,7 @@ import {
   setModelDatabase,
   BUNDLED_MODEL_DB_PATH,
 } from "@covel/ai-provider";
+import { readRuntimeEnv } from "@covel/shared";
 import type { AiConfig, LlmConfig, SlotRegistry, ModelDatabase, ModelDbFile } from "@covel/ai-provider";
 
 /**
@@ -48,6 +49,7 @@ protocol = "openai-chat-v1"
 export function createAiStack(): AiStack {
   let config: AiConfig;
   let llmConfig: LlmConfig | null = null;
+  const env = readRuntimeEnv();
 
   // Load bundled LiteLLM model database (package-relative, works in dev and prod)
   const modelDb = loadBundledModelDb();
@@ -58,8 +60,8 @@ export function createAiStack(): AiStack {
 
   // Try llm.toml first. COVEL_LLM_TOML wins (desktop app passes a userData path);
   // otherwise we try ./llm.toml relative to the server's cwd.
-  const llmTomlPath = process.env.COVEL_LLM_TOML
-    ? resolve(process.env.COVEL_LLM_TOML)
+  const llmTomlPath = env.llmToml
+    ? resolve(env.llmToml)
     : resolve(process.cwd(), "llm.toml");
 
   // Any failure here (missing file, TOML parse error, unresolved ${ENV}
@@ -147,10 +149,11 @@ export function createAiStack(): AiStack {
  * without re-releasing the app.
  */
 function loadBundledModelDb(): ModelDatabase | null {
+  const env = readRuntimeEnv();
   const candidates = [
-    process.env.COVEL_MODEL_DB_PATH,
-    process.env.COVEL_USER_CONFIG_DIR
-      ? resolve(process.env.COVEL_USER_CONFIG_DIR, "model-db.json")
+    env.modelDbPath,
+    env.userConfigDir
+      ? resolve(env.userConfigDir, "model-db.json")
       : undefined,
     BUNDLED_MODEL_DB_PATH,
   ].filter((p): p is string => typeof p === "string" && p.length > 0);

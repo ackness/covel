@@ -15,6 +15,7 @@
  */
 
 import type { InputInjectDecl, PluginDataInjectDecl, RuntimeInjectDecl } from '@covel/shared';
+import { isEnvEnabled } from '@covel/shared';
 import type { PluginDataRecord } from '@covel/store';
 import type { ContextBuildParams, SessionMeta } from './types.js';
 
@@ -468,7 +469,7 @@ export function buildFrameworkPreamble(locale?: string): string {
 export function renderWorkingMemory(
   entries: readonly { scope: 'player' | 'story' | 'shared'; key: string; value: unknown }[] | undefined,
 ): string {
-  if (process.env.COVEL_WORKING_MEMORY_V1 !== '1') {
+  if (!isEnvEnabled('COVEL_WORKING_MEMORY_V1')) {
     return '';
   }
   if (!entries || entries.length === 0) {
@@ -506,7 +507,7 @@ export function renderCoreMemory(
   blocks: readonly { label: string; content: string }[] | undefined,
   locale?: string,
 ): string {
-  if (process.env.COVEL_MEMORY_V1 !== '1') return '';
+  if (!isEnvEnabled('COVEL_MEMORY_V1')) return '';
   if (!blocks || blocks.length === 0) return '';
 
   const nonEmpty = blocks.filter((b) => b.content.trim());

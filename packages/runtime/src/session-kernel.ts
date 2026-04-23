@@ -13,6 +13,7 @@
  */
 
 import { getPendingProposals } from '@covel/tools';
+import { isEnvDefaultOn, isEnvEnabled } from '@covel/shared';
 import type {
   CommitResult,
   PluginDataBatchPayload,
@@ -221,8 +222,7 @@ export function createCommitPipeline(
   emitter?: import('./turn-emitter.js').TurnEmitter,
 ): CommitPipeline {
   function isCommitTransactionEnabled(): boolean {
-    const raw = process.env.COVEL_COMMIT_TXN_V1?.trim().toLowerCase();
-    return raw !== '0' && raw !== 'false';
+    return isEnvDefaultOn('COVEL_COMMIT_TXN_V1');
   }
 
   const handlers: Record<string, (p: Proposal) => Promise<CommitResult>> = {
@@ -530,7 +530,7 @@ export function createCommitPipeline(
 
   async function commitWorkingMemory(proposal: Proposal): Promise<CommitResult> {
     // Feature-flag gate: reject when COVEL_WORKING_MEMORY_V1 is not enabled.
-    if (process.env.COVEL_WORKING_MEMORY_V1 !== '1') {
+    if (!isEnvEnabled('COVEL_WORKING_MEMORY_V1')) {
       return { committed: false, error: 'working_memory disabled' };
     }
 

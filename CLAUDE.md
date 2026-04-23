@@ -29,6 +29,7 @@ Before changing anything non-trivial, consult the matching reference doc — the
 | UI component catalogue (json-render primitives) | [docs/reference/ui-components.md](./docs/reference/ui-components.md) |
 | Terminology glossary (session / runtime / slot / …) | [docs/glossary.md](./docs/glossary.md) |
 | E2E plugin verify harness | [docs/guide/e2e-plugin-verify.md](./docs/guide/e2e-plugin-verify.md) |
+| Environment variable registry | [docs/guide/env-registry.md](./docs/guide/env-registry.md) |
 | Desktop config (paths, sidecar, safeStorage) | [docs/guide/desktop-config.md](./docs/guide/desktop-config.md) |
 | Desktop packaging (Electron), signing, notarisation | [apps/desktop/PACKAGING.md](./apps/desktop/PACKAGING.md) |
 | Desktop packaging (Tauri), signing, notarisation | [apps/desktop-tauri/PACKAGING.md](./apps/desktop-tauri/PACKAGING.md) |
@@ -253,7 +254,7 @@ Locale enters the execution chain via `KernelInput.locale` → `RuntimeContextVi
 
 Core objects (never collapse into a single JSON blob): **Run, Branch, Snapshot, State, Event, Record, Character, PluginData**.
 
-Store backends (`@covel/store`): `MemoryStore` (dev/test), `SqliteStore` (desktop), `IdbStore` (browser IDB), `PgStore` (production PG via Drizzle). Selection at server startup: `STORE_BACKEND=pg` + `DATABASE_URL` → PG, else Memory. World seeds load from `COVEL_WORLDS_DIR` (default `worlds/`).
+Store backends (`@covel/store`): `MemoryStore` (dev/test), `SqliteStore` (desktop/default), `IdbStore` (browser IDB), `PgStore` (production PG via Drizzle). Selection at server startup uses `STORE_BACKEND` with default `sqlite`; `STORE_BACKEND=pg` requires `DATABASE_URL`. World seeds load from `COVEL_WORLDS_DIR` (default `worlds/`).
 
 Each SQL backend splits into two files by convention:
 - `*-store-mappers.ts` — DDL + Row→Record conversion.

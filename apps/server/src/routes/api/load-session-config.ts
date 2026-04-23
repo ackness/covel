@@ -31,6 +31,7 @@
  */
 
 import { buildSessionContextSnapshot } from '@covel/context';
+import { isEnvEnabled } from '@covel/shared';
 import type { DataStore, LorebookEntryRecord } from '@covel/store';
 
 export async function loadSessionConfig(
@@ -42,7 +43,7 @@ export async function loadSessionConfig(
   // Sprint 1-D: prefer the unified snapshot loader when the flag is on.
   // `legacyConfigView` is byte-compatible with the legacy implementation, so
   // callers see no observable change beyond fewer round-trips.
-  if (process.env.COVEL_SESSION_CONTEXT === '1') {
+  if (isEnvEnabled('COVEL_SESSION_CONTEXT')) {
     try {
       const snapshot = await buildSessionContextSnapshot(store, sessionId, {
         // `legacyConfigView` does not consult locale / turnNumber; pass

@@ -8,6 +8,7 @@
 import { resolve } from 'node:path';
 import { Hono } from 'hono';
 import { createWorld } from '@covel/create';
+import { readRuntimeEnv } from '@covel/shared';
 import type { LLMAdapter } from '@covel/runtime';
 
 type Env = {
@@ -31,8 +32,9 @@ createRoutes.post('/world', async (c) => {
     return c.json({ error: 'concept must be 2000 characters or fewer' }, 400);
   }
 
-  const worldsDir = process.env.COVEL_USER_WORLDS_DIR
-    ?? process.env.COVEL_WORLDS_DIR
+  const env = readRuntimeEnv();
+  const worldsDir = env.userWorldsDir
+    ?? env.worldsDir
     ?? resolve(import.meta.dirname, '../../../../../worlds');
 
   console.log(`[create/world] outputDir=${worldsDir}, concept="${concept.trim().slice(0, 40)}..."`);

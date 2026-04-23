@@ -16,6 +16,9 @@ export {
   toApiKeyEnvMap,
 } from './utils/provider-keys.js';
 
+// ── Environment Registry ──────────────────────────────────────────
+export * from './env/index.js';
+
 // ── Plugin Schemas ───────────────────────────────────────────────
 export {
   triggerTypeSchema,

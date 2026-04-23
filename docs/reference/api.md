@@ -2280,6 +2280,8 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 
 ### 关键环境变量
 
+完整 registry 见 [`docs/guide/env-registry.md`](../guide/env-registry.md)。
+
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `STORE_BACKEND` | 存储后端类型 | `sqlite` |

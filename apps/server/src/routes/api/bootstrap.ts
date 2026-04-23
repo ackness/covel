@@ -9,6 +9,7 @@ import path from 'node:path';
 import fsSync from 'node:fs';
 import { Hono, type MiddlewareHandler } from 'hono';
 import type { RuntimeManifest } from '@covel/shared';
+import { isEnvEnabled, readEnvString, readRuntimeEnv } from '@covel/shared';
 import {
   createPluginRegistry,
   discoverPluginsMulti,
@@ -670,7 +671,8 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
 
   // Default context window (32k tokens) — used when COVEL_COMPACTOR_V1 is on
   // but no finer-grained window is configured. Callers may override via env.
-  const compactorContextWindow = parseInt(process.env.COVEL_COMPACTOR_CONTEXT_WINDOW ?? '32768', 10);
+  const runtimeEnv = readRuntimeEnv();
+  const compactorContextWindow = runtimeEnv.compactorContextWindow;
 
   // Adapt LLMAdapter to CompactorLLMAdapter (fast slot, system+user messages)
   const fastSlotLlm: CompactorLLMAdapter = {
@@ -703,8 +705,8 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   // When COVEL_MEMORY_V1=1, creates the full memory system with core memory
   // blocks, recall/archival search, and compaction. Slot resolution: memory → story.
   let memorySystem: MemorySystem | undefined;
-  console.log(`[bootstrap] COVEL_MEMORY_V1=${process.env.COVEL_MEMORY_V1 ?? '(unset)'}`);
-  if (process.env.COVEL_MEMORY_V1 === '1') {
+  console.log(`[bootstrap] COVEL_MEMORY_V1=${readEnvString('COVEL_MEMORY_V1', '(unset)')}`);
+  if (isEnvEnabled('COVEL_MEMORY_V1')) {
     // Resolve which slot to use for memory LLM calls. Use slot ids here so
     // memory follows the same contract as runtime bindings and player-facing
     // settings instead of reaching into internal preset ids.
@@ -766,7 +768,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   // 9. Create app with dependency injection middleware
   const app = new Hono();
 
-  const isDev = process.env.NODE_ENV !== 'production';
+  const isDev = runtimeEnv.nodeEnv !== 'production';
   app.onError((err, c) => {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[api] Route error:`, err);

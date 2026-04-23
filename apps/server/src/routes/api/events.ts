@@ -10,6 +10,7 @@ import { streamSSE } from 'hono/streaming';
 import type { EventBus } from '@covel/events';
 import type { DataStore } from '@covel/store';
 import type { CovelMessage } from '@covel/shared';
+import { isEnvTruthy, readRuntimeEnv } from '@covel/shared';
 
 type Env = {
   Variables: {
@@ -63,8 +64,8 @@ eventRoutes.get('/subscribe', async (c) => {
 // POST /events/emit — External event injection (debug/dev only)
 eventRoutes.post('/emit', async (c) => {
   // Gate behind ENABLE_DEBUG_PAGE or non-production to prevent arbitrary event injection
-  const debugEnabled = process.env.ENABLE_DEBUG_PAGE === 'true';
-  const isProduction = process.env.NODE_ENV === 'production';
+  const debugEnabled = isEnvTruthy('ENABLE_DEBUG_PAGE');
+  const isProduction = readRuntimeEnv().nodeEnv === 'production';
   if (isProduction && !debugEnabled) {
     return c.json({ error: 'Event injection is disabled in production' }, 403);
   }

@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { llmConfigSchema, type LlmConfig, type SlotDefinition } from "./llm-schema.js";
 import type { AiConfig, ModelProfile, PresetConfig, ProviderDefaults, OperationMode } from "../types.js";
 import { resolveCapability, type ManualCapabilityOverride } from "../capability/index.js";
+import { readEnvString } from "@covel/shared";
 
 /** Fallback context window when the capability DB does not report one. */
 const DEFAULT_EMBED_CONTEXT_WINDOW = 8_192;
@@ -207,7 +208,7 @@ function interpolateEnv(input: string): string {
       const replaced = active.replace(
         /\$\{([A-Za-z_][A-Za-z0-9_]*)}/g,
         (match, varName: string) => {
-          const value = process.env[varName];
+          const value = readEnvString(varName);
           if (value === undefined) {
             missing.push(varName);
             return match;

@@ -31,6 +31,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readRuntimeEnv } from '@covel/shared';
 
 import { interpolateTemplate } from './prompt-internals.js';
 
@@ -59,7 +60,7 @@ async function findPromptsRoot(): Promise<string> {
   if (promptsRootCache !== null) return promptsRootCache;
 
   // 1. Explicit env override (used by Docker / production deployments).
-  const envOverride = process.env.COVEL_PROMPTS_DIR;
+  const envOverride = readRuntimeEnv().promptsDir;
   if (envOverride) {
     promptsRootCache = path.resolve(envOverride);
     return promptsRootCache;

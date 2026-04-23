@@ -30,7 +30,11 @@ import { createModelDbRoutes } from "./routes/model-db.js";
 import { createMiscApiRoutes } from "./routes/misc-api.js";
 import { createConfigApiRoutes } from "./routes/config-api.js";
 import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
-import { apiKeyEnvNameToProviderId, providerIdToApiKeyEnvName } from "@covel/shared";
+import {
+  providerApiKeysFromEnv,
+  providerIdToApiKeyEnvName,
+  readRuntimeEnv,
+} from "@covel/shared";
 
 /**
  * Merge `~/.covel/keys.env` (or `$COVEL_HOME/keys.env` when overridden)
@@ -40,7 +44,7 @@ import { apiKeyEnvNameToProviderId, providerIdToApiKeyEnvName } from "@covel/sha
  * Missing file is fine.
  */
 function loadKeysEnvInto(target: NodeJS.ProcessEnv): void {
-  const home = process.env.COVEL_HOME ?? join(homedir(), ".covel");
+  const home = readRuntimeEnv(target).covelHome ?? join(homedir(), ".covel");
   const file = join(home, "keys.env");
   if (!existsSync(file)) return;
   try {
@@ -76,9 +80,10 @@ function resolvePreferredMemorySlot(slotRegistry: {
 }
 
 const app = new Hono();
+const env = readRuntimeEnv();
 
 // ── Global error handler ────────────────────────────────────────
-const isDev = process.env.NODE_ENV !== "production";
+const isDev = env.nodeEnv !== "production";
 app.onError((err, c) => {
   const message = err instanceof Error ? err.message : String(err);
   console.error(`[server] Unhandled error:`, err);
@@ -94,7 +99,7 @@ app.use("*", bodyLimit({ maxSize: 1 * 1024 * 1024 }));
 // accidentally-mounted diagnostic endpoint can never leak in a released
 // build. ENABLE_DEBUG_PAGE=1 opts in (e.g. for self-hosted tiers).
 const allowDebugRoutes =
-  isDev || process.env.ENABLE_DEBUG_PAGE === "1" || process.env.ENABLE_DEBUG_PAGE === "true";
+  isDev || env.debugRoutes;
 if (!allowDebugRoutes) {
   app.all("/api/debug/*", (c) => c.json({ error: "Not available" }, 403));
   app.all("/api/internal/*", (c) => c.json({ error: "Not available" }, 403));
@@ -115,9 +120,7 @@ app.use(
   cors({
     origin: (origin) => {
       if (!origin) return origin;
-      const configured = process.env.CORS_ORIGIN
-        ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim())
-        : defaultAllowedOrigins;
+      const configured = env.corsOrigins.length > 0 ? env.corsOrigins : defaultAllowedOrigins;
       if (configured.includes(origin)) return origin;
       if (isLoopbackOrigin(origin)) return origin;
       return null;
@@ -151,12 +154,12 @@ const store = await createStoreFromEnv();
 // the in-process implementation — those topologies are single-process
 // by construction, so the simpler lock is both sufficient and cheaper.
 let sessionLock: SessionLock;
-if (storeBackend === "pg" && process.env.DATABASE_URL) {
+if (storeBackend === "pg" && env.databaseUrl) {
   const { default: postgres } = await import("postgres");
   // `max` sizes the lock pool. Each in-flight turn holds one reserved
   // connection for the duration of executeTurn; 16 is well above the
   // expected peak per pod and keeps PG connection usage bounded.
-  const lockSql = postgres(process.env.DATABASE_URL, { max: 16 });
+  const lockSql = postgres(env.databaseUrl!, { max: 16 });
   sessionLock = createPgAdvisorySessionLock(lockSql);
   console.log(
     "[server] session lock: pg-advisory (cross-pod mutual exclusion enabled)",
@@ -170,13 +173,7 @@ if (storeBackend === "pg" && process.env.DATABASE_URL) {
 
 // Collect all *_API_KEY env vars dynamically so any provider can be added
 // to llm.toml without requiring code changes here.
-const apiKeys: Record<string, string> = {};
-for (const [key, value] of Object.entries(process.env)) {
-  const provider = apiKeyEnvNameToProviderId(key);
-  if (provider && value) {
-    apiKeys[provider] = value;
-  }
-}
+const apiKeys = providerApiKeysFromEnv(process.env);
 const llmAdapter = createGatewayAdapter(ai.gateway, { apiKeys });
 const preferredMemorySlot = resolvePreferredMemorySlot(ai.slotRegistry);
 
@@ -186,9 +183,9 @@ const preferredMemorySlot = resolvePreferredMemorySlot(ai.slotRegistry);
 // (typically `<userData>/plugins`). Bundled wins on id collision so user
 // plugins can augment but not shadow core functionality.
 const bundledPluginsDir =
-  process.env.COVEL_PLUGINS_DIR ??
+  env.pluginsDir ??
   resolve(import.meta.dirname, "../../../plugins");
-const userPluginsDir = process.env.COVEL_USER_PLUGINS_DIR;
+const userPluginsDir = env.userPluginsDir;
 const pluginsDirs = [bundledPluginsDir];
 if (userPluginsDir && userPluginsDir !== bundledPluginsDir) {
   pluginsDirs.push(userPluginsDir);
@@ -216,9 +213,9 @@ const api = await bootstrapApi({
 // (desktop app points it at userData/worlds), user-created worlds are
 // merged on top and hot-reloaded alongside.
 const bundledWorldsDir =
-  process.env.COVEL_WORLDS_DIR ??
+  env.worldsDir ??
   resolve(import.meta.dirname, "../../../worlds");
-const userWorldsDir = process.env.COVEL_USER_WORLDS_DIR;
+const userWorldsDir = env.userWorldsDir;
 const worldsDirs = [bundledWorldsDir];
 if (userWorldsDir && userWorldsDir !== bundledWorldsDir) {
   worldsDirs.push(userWorldsDir);
@@ -250,8 +247,8 @@ app.route("/", createMiscApiRoutes(ai, api.registry, store));
 app.route("/", createConfigApiRoutes({ apiKeys }));
 
 // ── Static file serving (production) ─────────────────────────────
-if (process.env.SERVE_STATIC === "true") {
-  const root = process.env.STATIC_DIR ?? "./web-dist";
+if (env.serveStatic) {
+  const root = env.staticDir;
   app.use("/*", serveStatic({ root }));
   app.get("*", serveStatic({ root, path: "/index.html" }));
 }

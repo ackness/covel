@@ -7,6 +7,7 @@
 import fs from 'node:fs/promises';
 import { resolve, relative } from 'node:path';
 import { Hono } from 'hono';
+import { readEnvString, readRuntimeEnv } from '@covel/shared';
 import type { AiStack } from '../ai-setup.js';
 import { applySlotOverlay, type SlotOverridesInput } from '@covel/ai-provider';
 import {
@@ -34,7 +35,7 @@ const UI_NAMESPACE_BY_SLOT: Record<UiSlotName, string> = {
 };
 
 function resolvePluginsDir(): string {
-  return process.env.COVEL_PLUGINS_DIR
+  return readRuntimeEnv().pluginsDir
     ?? resolve(import.meta.dirname, '../../../../plugins');
 }
 
@@ -561,19 +562,19 @@ export function createMiscApiRoutes(
   app.get('/api/provider-keys', (c) => {
     const KNOWN_PROVIDERS = ['DEEPSEEK', 'DASHSCOPE', 'OPENAI', 'ANTHROPIC', 'OPENROUTER'] as const;
 
-    // Security: allowlist approach — only expose raw keys when DEPLOYMENT_TIER
-    // is explicitly T1 AND the request originates from localhost.
+    // Security: allowlist approach — expose raw keys only for local self-tier
+    // requests so the onboarding UI can hydrate provider settings.
     // All other cases return provider availability booleans + masked metadata.
-    const tier = process.env.DEPLOYMENT_TIER;
+    const tier = readRuntimeEnv().deploymentTier;
     const host = new URL(c.req.url).hostname;
     const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
-    const allowRawKeys = tier === 'T1' && isLocalhost;
+    const allowRawKeys = (tier === 'T1' || tier === 'self') && isLocalhost;
 
     if (allowRawKeys) {
       const keys: Record<string, string> = {};
       for (const provider of KNOWN_PROVIDERS) {
         const envKey = `${provider}_API_KEY`;
-        const value = process.env[envKey];
+        const value = readEnvString(envKey);
         if (value) keys[provider.toLowerCase()] = value;
       }
       return c.json({ keys });
@@ -583,7 +584,7 @@ export function createMiscApiRoutes(
     const providers: Record<string, { configured: boolean; masked: string }> = {};
     for (const provider of KNOWN_PROVIDERS) {
       const envKey = `${provider}_API_KEY`;
-      const value = process.env[envKey];
+      const value = readEnvString(envKey);
       if (value) {
         const masked = value.length > 8
           ? `${value.slice(0, 4)}...${value.slice(-4)}`

@@ -1,8 +1,9 @@
 import { serve } from "@hono/node-server";
+import { readRuntimeEnv } from "@covel/shared";
 import { app } from "./app.js";
 import { registerGracefulShutdown } from "./graceful-shutdown.js";
 
-const port = Number(process.env.SERVER_PORT) || 3001;
+const port = readRuntimeEnv().serverPort;
 
 console.log(`Starting server on port ${port}...`);
 

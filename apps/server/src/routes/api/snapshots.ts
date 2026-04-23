@@ -22,6 +22,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
+import { isEnvEnabled } from '@covel/shared';
 import type {
   DataStore,
   SnapshotRecord,
@@ -52,7 +53,7 @@ const FLAG_OFF_BODY = {
 } as const;
 
 function flagOn(): boolean {
-  return process.env['COVEL_SNAPSHOTS_V1'] === '1';
+  return isEnvEnabled('COVEL_SNAPSHOTS_V1');
 }
 
 // ── POST /api/sessions/:id/snapshot — manual snapshot ─────────────

@@ -14,6 +14,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { DataStore } from '@covel/store';
+import { isEnvEnabled } from '@covel/shared';
 
 type Env = {
   Variables: {
@@ -28,7 +29,7 @@ const VALID_SCOPES = new Set(['player', 'story', 'shared']);
 // GET /sessions/:id/core-memory — Returns core memory blocks (Letta-style)
 // Gated by COVEL_MEMORY_V1=1. Read-only convenience endpoint for the UI panel.
 workingMemoryRoutes.get('/:id/core-memory', async (c) => {
-  if (process.env.COVEL_MEMORY_V1 !== '1') {
+  if (!isEnvEnabled('COVEL_MEMORY_V1')) {
     return c.json({ error: 'Memory system is disabled (set COVEL_MEMORY_V1=1)' }, 404);
   }
 
@@ -53,7 +54,7 @@ workingMemoryRoutes.get('/:id/core-memory', async (c) => {
 
 // GET /sessions/:id/working-memory
 workingMemoryRoutes.get('/:id/working-memory', async (c) => {
-  if (process.env.COVEL_WORKING_MEMORY_V1 !== '1' && process.env.COVEL_MEMORY_V1 !== '1') {
+  if (!isEnvEnabled('COVEL_WORKING_MEMORY_V1') && !isEnvEnabled('COVEL_MEMORY_V1')) {
     return c.json({ error: 'Working memory is disabled' }, 404);
   }
 
@@ -68,7 +69,7 @@ workingMemoryRoutes.get('/:id/working-memory', async (c) => {
 
 // PUT /sessions/:id/working-memory/:scope/:key
 workingMemoryRoutes.put('/:id/working-memory/:scope/:key', async (c) => {
-  if (process.env.COVEL_WORKING_MEMORY_V1 !== '1') {
+  if (!isEnvEnabled('COVEL_WORKING_MEMORY_V1')) {
     return c.json({ error: 'Working memory is disabled' }, 404);
   }
 
@@ -117,7 +118,7 @@ workingMemoryRoutes.put('/:id/working-memory/:scope/:key', async (c) => {
 
 // DELETE /sessions/:id/working-memory/:scope/:key
 workingMemoryRoutes.delete('/:id/working-memory/:scope/:key', async (c) => {
-  if (process.env.COVEL_WORKING_MEMORY_V1 !== '1') {
+  if (!isEnvEnabled('COVEL_WORKING_MEMORY_V1')) {
     return c.json({ error: 'Working memory is disabled' }, 404);
   }
 

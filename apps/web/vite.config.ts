@@ -3,14 +3,15 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 import { fileURLToPath } from "node:url";
+import { readEnvInt, readEnvString } from "@covel/shared";
 
 const RUNTIME_PROXY_PATHS = [
   "/api",
 ] as const;
 
 export function resolveRuntimeProxyTarget(env: Record<string, string | undefined> = process.env): string {
-  const host = env.RUNTIME_HOST?.trim() || "127.0.0.1";
-  const port = env.RUNTIME_PORT?.trim() || "3001";
+  const host = readEnvString("RUNTIME_HOST", "127.0.0.1", env);
+  const port = readEnvInt("RUNTIME_PORT", 3001, env);
   return `http://${host}:${port}`;
 }
 

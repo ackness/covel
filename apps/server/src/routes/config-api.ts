@@ -23,7 +23,7 @@ import { resolve, join, dirname, isAbsolute } from "node:path";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { spawn } from "node:child_process";
-import { normalizeProviderKeyMap, providerKeyToId, toApiKeyEnvMap } from "@covel/shared";
+import { normalizeProviderKeyMap, providerKeyToId, readRuntimeEnv, toApiKeyEnvMap } from "@covel/shared";
 
 export interface ConfigApiDeps {
   /** Mutable map shared with the gateway adapter. PUT handlers mutate in-place. */
@@ -35,17 +35,18 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
 
   app.get("/api/config/info", (c) => {
     const covelHome = resolveCovelHome();
+    const env = readRuntimeEnv();
     const inDesktopMode = covelHome !== null;
     return c.json({
       isDesktop: inDesktopMode,
       covelHome: covelHome,
       dataRoot: resolveDataRoot(),
-      dbPath: process.env.SQLITE_PATH ?? null,
-      logsDir: process.env.COVEL_LOGS_DIR ?? null,
-      llmTomlPath: process.env.COVEL_LLM_TOML ?? null,
+      dbPath: env.sqlitePath ?? null,
+      logsDir: env.logsDir ?? null,
+      llmTomlPath: env.llmToml ?? null,
       keysEnvPath: covelHome ? join(covelHome, "keys.env") : null,
-      pluginsDir: process.env.COVEL_USER_PLUGINS_DIR ?? null,
-      worldsDir: process.env.COVEL_USER_WORLDS_DIR ?? null,
+      pluginsDir: env.userPluginsDir ?? null,
+      worldsDir: env.userWorldsDir ?? null,
     });
   });
 
@@ -229,10 +230,11 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
         : undefined;
 
     const covelHome = resolveCovelHome();
+    const env = readRuntimeEnv();
     const targetMap: Record<string, string | null | undefined> = {
       config: covelHome,
       data: resolveDataRoot(),
-      logs: process.env.COVEL_LOGS_DIR,
+      logs: env.logsDir,
       "llm.toml": covelHome ? join(covelHome, "llm.toml") : null,
       "keys.env": covelHome ? join(covelHome, "keys.env") : null,
     };
@@ -319,9 +321,10 @@ function writeDataRootInConfig(covelHome: string, newPath: string): void {
  * nothing is configured.
  */
 function resolveDataRoot(): string | null {
-  if (process.env.COVEL_DATA_ROOT) return process.env.COVEL_DATA_ROOT;
-  if (process.env.COVEL_USER_WORLDS_DIR) {
-    return resolve(process.env.COVEL_USER_WORLDS_DIR, "..");
+  const env = readRuntimeEnv();
+  if (env.dataRoot) return env.dataRoot;
+  if (env.userWorldsDir) {
+    return resolve(env.userWorldsDir, "..");
   }
   return null;
 }
@@ -340,11 +343,10 @@ function resolveDataRoot(): string | null {
  * endpoints, which prevents a remote client from editing server config.
  */
 function resolveCovelHome(): string | null {
-  const desktopFlag = process.env.COVEL_DESKTOP_REST;
-  const explicitDesktop =
-    desktopFlag === "1" || desktopFlag === "true" || !!process.env.COVEL_HOME;
+  const env = readRuntimeEnv();
+  const explicitDesktop = env.desktopRest || !!env.covelHome;
   if (!explicitDesktop) return null;
-  if (process.env.COVEL_HOME) return process.env.COVEL_HOME;
+  if (env.covelHome) return env.covelHome;
   const candidate = join(homedir(), ".covel");
   return existsSync(candidate) ? candidate : null;
 }

@@ -5,6 +5,7 @@
 import { Hono } from 'hono';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
+import { readRuntimeEnv } from '@covel/shared';
 import { rateLimiter, singleFlight } from '../middleware/rate-limit.js';
 import type { AiStack } from '../ai-setup.js';
 
@@ -69,7 +70,7 @@ export function createModelDbRoutes(ai: AiStack): Hono {
 
       // Persist to the user config dir so the refresh survives restarts.
       // Non-fatal if the disk write fails — the in-memory DB is still updated.
-      const userConfigDir = process.env.COVEL_USER_CONFIG_DIR;
+      const userConfigDir = readRuntimeEnv().userConfigDir;
       let persisted = false;
       if (userConfigDir) {
         try {

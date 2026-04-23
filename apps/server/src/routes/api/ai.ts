@@ -10,6 +10,7 @@ import path, { resolve } from 'node:path';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { createWorld } from '@covel/create';
+import { readRuntimeEnv } from '@covel/shared';
 import type { LLMAdapter } from '@covel/runtime';
 import type { DataStore } from '@covel/store';
 import { rateLimiter, singleFlight } from '../../middleware/rate-limit.js';
@@ -52,8 +53,9 @@ aiRoutes.post('/generate-world', rateLimiter({ max: 10 }), singleFlight(), async
     return c.json({ error: 'concept must be 4000 characters or fewer' }, 400);
   }
 
-  const worldsDir = process.env.COVEL_USER_WORLDS_DIR
-    ?? process.env.COVEL_WORLDS_DIR
+  const env = readRuntimeEnv();
+  const worldsDir = env.userWorldsDir
+    ?? env.worldsDir
     ?? resolve(import.meta.dirname, '../../../../../worlds');
 
   console.log(`[ai/generate-world] outputDir=${worldsDir}, concept="${(concept as string).trim().slice(0, 40)}..."`);
