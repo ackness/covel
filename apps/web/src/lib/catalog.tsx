@@ -1517,6 +1517,72 @@ const SubmitButton: ComponentRenderer = ({ element, emit }) => {
   );
 };
 
+/**
+ * Image — renders a remote or inlined image.
+ *
+ * Props:
+ *   src:      URL or `data:` URI (falls back to base64 + mimeType when URL absent).
+ *   base64:   raw base64 (no prefix); combined with `mimeType` into a data URI.
+ *   mimeType: e.g. "image/png"; defaults to "image/png".
+ *   alt:      accessibility fallback.
+ *   aspectRatio: "1/1" | "16/9" | "3/4" | string — CSS aspect-ratio.
+ *   rounded:  "none" | "sm" | "md" | "lg" — border-radius scale.
+ *   fit:      "cover" | "contain" — object-fit behaviour (default "cover").
+ *
+ * When both `src` and `base64` are empty, renders a muted placeholder so the
+ * layout does not collapse. Pure-text fallback avoids any broken-image glyph.
+ */
+const ImageComponent: ComponentRenderer = ({ element }) => {
+  const rawSrc = element.props?.src as string | undefined;
+  const base64 = element.props?.base64 as string | undefined;
+  const mimeType = (element.props?.mimeType as string | undefined) ?? "image/png";
+  const alt = (element.props?.alt as string | undefined) ?? "";
+  const aspectRatio = (element.props?.aspectRatio as string | undefined) ?? "1/1";
+  const rounded = (element.props?.rounded as string | undefined) ?? "md";
+  const fit = (element.props?.fit as string | undefined) ?? "cover";
+
+  const src = rawSrc && rawSrc.length > 0
+    ? rawSrc
+    : base64 && base64.length > 0
+    ? `data:${mimeType};base64,${base64}`
+    : null;
+
+  const radiusCls =
+    rounded === "none" ? "rounded-none" :
+    rounded === "sm" ? "rounded-sm" :
+    rounded === "lg" ? "rounded-lg" :
+    "rounded-[var(--radius-card)]";
+
+  if (!src) {
+    return (
+      <div
+        className={clsx(
+          "bg-muted border border-border flex items-center justify-center",
+          radiusCls,
+        )}
+        style={{ aspectRatio }}
+        aria-label={alt || "image placeholder"}
+      >
+        <span className="text-[10px] text-muted-foreground/70 font-mono">no image</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      className={clsx(
+        "w-full block",
+        radiusCls,
+        fit === "contain" ? "object-contain" : "object-cover",
+      )}
+      style={{ aspectRatio }}
+    />
+  );
+};
+
 /** Source — subtle source attribution label. */
 const Source: ComponentRenderer = ({ element }) => {
   const label = element.props?.label as string ?? "";
@@ -1587,6 +1653,7 @@ export const covelRegistry: Record<string, ComponentRenderer> = {
   Icon,
   TagList,
   Source,
+  Image: ImageComponent,
   // Data
   Card,
   CardList,

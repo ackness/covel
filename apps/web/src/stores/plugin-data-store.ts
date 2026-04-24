@@ -151,6 +151,75 @@ export function usePluginNamespace(
   return all[pluginId]?.[namespace] ?? EMPTY_NAMESPACE;
 }
 
+// ── Background job (`_jobs`) namespace helpers ──────────────────
+//
+// Background runtimes (plugin-rpc with `execution: 'background'`) write
+// progress records to `(pluginId, '_jobs', jobId)`. The server emits the
+// same `plugin-data.changed` events for them, so the generic store above
+// already caches them — these helpers are purely for typed consumption.
+
+export type PluginJobStatus = "pending" | "done" | "failed";
+
+export interface PluginJobRecord {
+  readonly jobId: string;
+  readonly status: PluginJobStatus;
+  readonly runtimeId?: string;
+  readonly turnId?: string;
+  readonly startedAt?: string;
+  readonly completedAt?: string;
+  readonly durationMs?: number;
+  readonly error?: string;
+  readonly runtimeResults?: readonly {
+    readonly runtimeId: string;
+    readonly pluginId: string;
+    readonly status: string;
+    readonly durationMs: number;
+    readonly error?: string;
+    readonly output: unknown;
+  }[];
+  readonly abortReason?: string;
+}
+
+function asJobRecord(jobId: string, value: unknown): PluginJobRecord | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Record<string, unknown>;
+  const status = v["status"];
+  if (status !== "pending" && status !== "done" && status !== "failed") {
+    return null;
+  }
+  return { ...v, jobId, status } as PluginJobRecord;
+}
+
+/**
+ * React hook — returns every background-job record for a plugin, newest
+ * first. Keyed by jobId. Updates automatically when the server writes
+ * new status records into `_jobs`.
+ */
+export function usePluginJobs(pluginId: string): readonly PluginJobRecord[] {
+  const all = useSyncExternalStore(subscribe, getSnapshot);
+  const ns = all[pluginId]?.["_jobs"];
+  if (!ns) return EMPTY_JOBS;
+  const jobs: PluginJobRecord[] = [];
+  for (const jobId of Object.keys(ns)) {
+    const record = asJobRecord(jobId, ns[jobId]);
+    if (record) jobs.push(record);
+  }
+  jobs.sort((a, b) => (b.startedAt ?? "").localeCompare(a.startedAt ?? ""));
+  return jobs;
+}
+
+/** React hook — returns a single job record by id. */
+export function usePluginJob(
+  pluginId: string,
+  jobId: string,
+): PluginJobRecord | null {
+  const all = useSyncExternalStore(subscribe, getSnapshot);
+  const value = all[pluginId]?.["_jobs"]?.[jobId];
+  return value === undefined ? null : asJobRecord(jobId, value);
+}
+
+const EMPTY_JOBS: readonly PluginJobRecord[] = Object.freeze([]);
+
 /**
  * React hook — discovers the character-attribute schema written by whichever
  * plugin declares `capabilities: [world-data-provider]`. The schema lives

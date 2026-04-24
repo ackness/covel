@@ -148,9 +148,15 @@ const AI_ROUTES = ["/api/actions", "/api/ai/", "/api/kernel/"];
  * requires provider API keys just like a regular turn (see resume.ts). */
 const RESUME_ROUTE_REGEX = /^\/api\/sessions\/[^/]+\/resume(?:\?|$)/;
 
+/** `POST /api/sessions/:id/plugin-rpc` runs the manual-trigger pipeline,
+ * which may invoke LLM / image generation via the plugin runtime gateway
+ * and needs both provider keys and player-authored plugin settings. */
+const PLUGIN_RPC_ROUTE_REGEX = /^\/api\/sessions\/[^/]+\/plugin-rpc(?:\?|$)/;
+
 function needsProviderKeys(url: string): boolean {
   if (AI_ROUTES.some((prefix) => url.startsWith(prefix))) return true;
-  return RESUME_ROUTE_REGEX.test(url);
+  if (RESUME_ROUTE_REGEX.test(url)) return true;
+  return PLUGIN_RPC_ROUTE_REGEX.test(url);
 }
 
 function buildProviderKeysHeader(): Record<string, string> {
@@ -173,10 +179,39 @@ function buildProviderKeysHeader(): Record<string, string> {
   return headers;
 }
 
+/**
+ * Build the `X-Plugin-User-Settings` header from SettingsStore entries
+ * keyed `plugin.<pluginId>.<setting>`. Groups by plugin id so the server
+ * can route each bucket to the matching runtime (audit F7). Returns an
+ * empty object when the player hasn't saved any plugin-scoped settings —
+ * the server falls back to manifest defaults in that case.
+ */
+function buildPluginUserSettingsHeader(): Record<string, string> {
+  const store = getSettings() as unknown as {
+    listEntries(): readonly { key: string }[];
+    get<T>(key: string): T;
+  };
+  const buckets: Record<string, Record<string, unknown>> = {};
+  for (const entry of store.listEntries()) {
+    if (!entry.key.startsWith("plugin.")) continue;
+    const parts = entry.key.split(".");
+    if (parts.length < 3) continue;
+    const pluginId = parts[1];
+    const settingKey = parts.slice(2).join(".");
+    const value = store.get<unknown>(entry.key);
+    (buckets[pluginId] ??= {})[settingKey] = value;
+  }
+  if (Object.keys(buckets).length === 0) return {};
+  return {
+    "X-Plugin-User-Settings": btoa(JSON.stringify(buckets)),
+  };
+}
+
 function buildAiHeaders(): Record<string, string> {
   return {
     ...buildProviderKeysHeader(),
     ...buildSlotConfigHeaderInternal(),
+    ...buildPluginUserSettingsHeader(),
   };
 }
 
@@ -1325,15 +1360,88 @@ export async function deleteLorebookEntry(
 }
 
 // ── Plugin RPC ──────────────────────────────────────────────────
+//
+// The server accepts two mutually exclusive dispatch modes:
+//
+//   Action-level:  { pluginId, action, payload }
+//   Runtime-level: { pluginId, runtimeId, payload }
+//
+// Responses carry a `status` discriminator:
+//   - 'ok'                — sync result or action-level completion
+//   - 'accepted'          — background runtime queued; poll _jobs/{jobId}
+//                           via plugin-data.changed SSE
+//   - 'approval-required' — community plugin needs user approval
+//   - 'error'             — dispatch or execution failure
+
+export interface PluginRpcActionRequest {
+  readonly pluginId: string;
+  readonly action: string;
+  readonly payload?: unknown;
+}
+
+export interface PluginRpcRuntimeRequest {
+  readonly pluginId: string;
+  readonly runtimeId: string;
+  readonly payload?: unknown;
+}
+
+export type PluginRpcRequest = PluginRpcActionRequest | PluginRpcRuntimeRequest;
+
+export interface PluginRpcRuntimeResultSummary {
+  readonly runtimeId: string;
+  readonly pluginId: string;
+  readonly status: string;
+  readonly durationMs: number;
+  readonly error?: string;
+  readonly output: unknown;
+}
+
+export type PluginRpcResponse =
+  | {
+      readonly status: "ok";
+      readonly result?: unknown;
+      readonly turnId?: string;
+      readonly runtimeResults?: readonly PluginRpcRuntimeResultSummary[];
+      readonly durationMs?: number;
+      readonly abortReason?: string;
+      /**
+       * Event-chain followers that declare `execution: 'background'` are
+       * not awaited in the sync response — the framework writes one
+       * `_jobs/<jobId>` pending row per follower and continues them
+       * off-cycle. UIs can subscribe to `plugin-data.changed` on the
+       * `_jobs` namespace to reflect progress. Absent when no background
+       * follower was triggered (audit F1).
+       */
+      readonly deferredJobs?: readonly {
+        readonly jobId: string;
+        readonly runtimeId: string;
+      }[];
+    }
+  | {
+      readonly status: "accepted";
+      readonly jobId: string;
+      readonly pending: true;
+      readonly turnId: string;
+      readonly runtimeId: string;
+    }
+  | {
+      readonly status: "approval-required";
+      readonly approvalId: string;
+      readonly pending: unknown;
+    }
+  | {
+      readonly status: "error";
+      readonly error: string;
+      readonly code?: string;
+    };
 
 export async function postPluginRpc(
   sessionId: string,
-  action: string,
-  params?: Record<string, unknown>,
-): Promise<Record<string, unknown>> {
-  return request<Record<string, unknown>>(
+  req: PluginRpcRequest,
+): Promise<PluginRpcResponse> {
+  return request<PluginRpcResponse>(
     `/api/sessions/${encodeURIComponent(sessionId)}/plugin-rpc`,
-    { method: "POST", body: JSON.stringify({ action, ...params }) },
+    { method: "POST", body: JSON.stringify(req) },
   );
 }
 

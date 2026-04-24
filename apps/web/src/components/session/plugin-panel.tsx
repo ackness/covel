@@ -12,6 +12,10 @@ import { nestedToFlat } from "@json-render/core";
 import type { Spec } from "@json-render/core";
 import { covelRegistry } from "@/lib/catalog.js";
 import { usePluginNamespace } from "@/stores/plugin-data-store.js";
+import { useSession } from "@/stores/session-store.js";
+import { postPluginRpc, resolveApproval } from "@/services/api.js";
+import type { PluginRpcRequest, PluginRpcResponse } from "@/services/api.js";
+import { emitToast } from "@/lib/toast-channel.js";
 
 export interface PluginPanelProps {
   pluginId: string;
@@ -96,14 +100,135 @@ export function PluginPanel({
 
   const flatSpec = useMemo(() => convertToSpec(spec.view), [spec.view]);
 
-  const handlers = explicitHandlers ?? (
-    onAction
-      ? {
-        apiCall: async (params: Record<string, unknown>) => { onAction("apiCall", params); },
-        emitEvent: async (params: Record<string, unknown>) => { onAction("emitEvent", params); },
+  // `useSession` is safe here — PluginPanel only renders inside a loaded
+  // SessionProvider (right panel / plugin-message block). When the panel
+  // is hoisted into a non-session context in future, guard with a null check.
+  const { state: sessionState } = useSession();
+  const sessionId = sessionState.session?.id;
+
+  // Framework-provided default handlers wire plugin buttons to plugin-rpc.
+  //
+  //   invokeRuntime({ runtimeId, payload? })
+  //     Fires one specific runtime via POST /api/sessions/:id/plugin-rpc.
+  //     The current spec's pluginId is injected automatically, so spec
+  //     authors only declare the runtime name.
+  //
+  //   invokePluginAction({ action, payload? })
+  //     Plugin-declared `rpc` action handler (for custom server-side logic
+  //     beyond runtime triggering).
+  //
+  // Both forms emit a toast on error so the player never gets a silent
+  // failure when their click went nowhere.
+  //
+  // Audit F3: when `postPluginRpc` returns `approval-required`, the panel
+  // must guide the user through the approval flow instead of silently
+  // dropping the click. Community-trust plugins (including every third-party
+  // plugin under `~/.covel/plugins/`) hit this path on first click.
+  const defaultHandlers = useMemo<
+    Record<string, (params: Record<string, unknown>) => Promise<void> | void>
+  >(() => {
+    async function handleApprovalRequired(
+      approvalId: string,
+      humanLabel: string,
+      retry: () => Promise<PluginRpcResponse>,
+    ): Promise<void> {
+      // TODO: replace with a proper approval dialog component. `confirm()` is
+      // a stopgap that unblocks third-party plugins without introducing new
+      // modal infrastructure. `session` scope means later clicks during the
+      // same session skip the prompt.
+      const proceed = window.confirm(
+        `插件 ${pluginId} 请求执行 ${humanLabel}。是否授权本次会话内的所有相同调用?`,
+      );
+      try {
+        await resolveApproval(approvalId, proceed ? "allow" : "deny", "session");
+      } catch (err) {
+        emitToast("error", `审批提交失败: ${err instanceof Error ? err.message : String(err)}`);
+        return;
       }
-      : undefined
-  );
+      if (!proceed) {
+        emitToast("info", `已拒绝 ${humanLabel}`);
+        return;
+      }
+      // Retry the original RPC now that the gate has a session-scoped grant.
+      try {
+        const next = await retry();
+        if (next.status === "error") {
+          emitToast("error", next.error);
+        } else if (next.status === "approval-required") {
+          // Shouldn't happen — the gate just cached the allow. Surface so we
+          // notice if it ever does.
+          emitToast("error", "审批通过后仍返回 approval-required,请检查审批后端");
+        }
+      } catch (err) {
+        emitToast("error", err instanceof Error ? err.message : String(err));
+      }
+    }
+
+    const handlers: Record<
+      string,
+      (params: Record<string, unknown>) => Promise<void> | void
+    > = {
+      invokeRuntime: async (params: Record<string, unknown>) => {
+        if (!sessionId) return;
+        const runtimeId = typeof params.runtimeId === "string" ? params.runtimeId : undefined;
+        if (!runtimeId) {
+          console.warn("[PluginPanel] invokeRuntime requires params.runtimeId");
+          return;
+        }
+        const req: PluginRpcRequest = {
+          pluginId,
+          runtimeId,
+          payload: params.payload as unknown,
+        };
+        try {
+          const res = await postPluginRpc(sessionId, req);
+          if (res.status === "error") {
+            emitToast("error", res.error);
+          } else if (res.status === "approval-required") {
+            await handleApprovalRequired(res.approvalId, `runtime ${runtimeId}`, () =>
+              postPluginRpc(sessionId, req),
+            );
+          }
+        } catch (err) {
+          emitToast("error", err instanceof Error ? err.message : String(err));
+        }
+      },
+      invokePluginAction: async (params: Record<string, unknown>) => {
+        if (!sessionId) return;
+        const action = typeof params.action === "string" ? params.action : undefined;
+        if (!action) {
+          console.warn("[PluginPanel] invokePluginAction requires params.action");
+          return;
+        }
+        const req: PluginRpcRequest = {
+          pluginId,
+          action,
+          payload: params.payload as unknown,
+        };
+        try {
+          const res = await postPluginRpc(sessionId, req);
+          if (res.status === "error") {
+            emitToast("error", res.error);
+          } else if (res.status === "approval-required") {
+            await handleApprovalRequired(res.approvalId, `action ${action}`, () =>
+              postPluginRpc(sessionId, req),
+            );
+          }
+        } catch (err) {
+          emitToast("error", err instanceof Error ? err.message : String(err));
+        }
+      },
+    };
+    if (onAction) {
+      handlers.apiCall = async (params) => { onAction("apiCall", params); };
+      handlers.emitEvent = async (params) => { onAction("emitEvent", params); };
+    }
+    return handlers;
+  }, [pluginId, sessionId, onAction]);
+
+  const handlers = explicitHandlers
+    ? { ...defaultHandlers, ...explicitHandlers }
+    : defaultHandlers;
 
   if (!flatSpec) {
     return <p className="text-xs text-muted-foreground italic">Invalid panel spec</p>;
