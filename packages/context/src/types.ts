@@ -161,6 +161,16 @@ export interface ContextBuildParams {
    * removes the legacy channel and this field becomes required.
    */
   readonly sessionContext?: SessionContextSnapshot;
+  /**
+   * Player-authored settings for *this* runtime's plugin, already merged with
+   * the manifest's `userSettings[].default` values (see `resolveUserSettings`
+   * in `@covel/runtime`). Exposed to agent prompts as `{{ userSettings.<key> }}`
+   * so templates can branch on player choices (e.g. promptMode, model preset)
+   * without needing a guard handler. Function runtimes receive the same bucket
+   * via `ctx.userSettings`. Undefined when the manifest declares no
+   * `userSettings` specs — template lookups resolve to empty strings then.
+   */
+  readonly userSettings?: Readonly<Record<string, unknown>>;
 }
 
 // ── Session Context Snapshot (Sprint 1) ──────────────────────────

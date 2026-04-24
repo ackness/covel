@@ -15,7 +15,19 @@
  */
 
 import type { PluginRuntimeGateway } from '@covel/plugin-loader';
-import type { GatewayAdapterConfig } from './gateway-llm-adapter.js';
+import type { GatewayAdapterConfig, SlotOverridesInput } from './gateway-llm-adapter.js';
+
+/**
+ * Common request-shaping options accepted by the full ai-provider gateway.
+ * Mirrors `GatewayOptions` (apiKeys / traceId / signal / slotOverrides) via
+ * a structural type so `@covel/runtime` stays decoupled from ai-provider.
+ */
+interface FullGatewayOptions {
+  apiKeys?: Record<string, string>;
+  traceId?: string;
+  signal?: AbortSignal;
+  slotOverrides?: SlotOverridesInput;
+}
 
 /**
  * Narrow structural projection of the full ai-provider `Gateway` shape —
@@ -28,11 +40,7 @@ export interface FullGatewayLike {
       messages: Array<{ role: string; content: string | null }>;
       providerRequestMetadata?: Record<string, unknown>;
     },
-    options?: {
-      apiKeys?: Record<string, string>;
-      traceId?: string;
-      signal?: AbortSignal;
-    },
+    options?: FullGatewayOptions,
   ): Promise<{
     text: string;
     finishReason: string;
@@ -46,11 +54,7 @@ export interface FullGatewayLike {
       messages: Array<{ role: string; content: string | null }>;
       providerRequestMetadata?: Record<string, unknown>;
     },
-    options?: {
-      apiKeys?: Record<string, string>;
-      traceId?: string;
-      signal?: AbortSignal;
-    },
+    options?: FullGatewayOptions,
   ): Promise<{
     object: T;
     finishReason: string;
@@ -63,11 +67,7 @@ export interface FullGatewayLike {
       prompt: string;
       providerRequestMetadata?: Record<string, unknown>;
     },
-    options?: {
-      apiKeys?: Record<string, string>;
-      traceId?: string;
-      signal?: AbortSignal;
-    },
+    options?: FullGatewayOptions,
   ): Promise<{
     images: Array<{ mimeType: string; url?: string; dataBase64?: string }>;
     usage: { inputTokens: number; outputTokens: number } | null;
@@ -104,6 +104,7 @@ export function createPluginRuntimeGateway(
   const commonOptions = () => ({
     ...(config?.apiKeys ? { apiKeys: config.apiKeys } : {}),
     ...(config?.traceId ? { traceId: config.traceId } : {}),
+    ...(config?.slotOverrides ? { slotOverrides: config.slotOverrides } : {}),
   });
 
   return {

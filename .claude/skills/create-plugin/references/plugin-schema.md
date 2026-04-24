@@ -139,7 +139,18 @@ userSettings:
     step: 1
 ```
 
-前端会自动生成设置面板,值通过 `/api/sessions/:id/plugin-settings/:pluginId` 读写。
+前端自动生成设置面板,值通过统一的 **SettingsStore**(`apps/web/src/settings/registry/plugin.ts`)持久化——桌面端写 `~/.covel/settings.json`,纯 Web 端写 `localStorage: covel:settings`。**没有** `/plugin-settings` REST 端点。
+
+浏览器发起任何需要 userSettings 的请求(例如 `POST /api/sessions/:id/plugin-rpc`)时,前端把整个 `plugin.*` 分支做成 `X-Plugin-User-Settings: base64(JSON)` 头。服务端 `apps/server/src/routes/api/plugin-rpc.ts` 解码后:
+
+1. 塞进 `TurnInput.userSettings`(map<pluginId, map<key, value>>)。
+2. 经 `resolveUserSettings`(`packages/runtime/src/turn-executor-helpers.ts`)与 `manifest.userSettings[].default` 合并——缺失键总是填回默认值,handler 可以依赖所有声明键都有值。
+3. 同时暴露到两条通道:
+   - **function runtime**: 作为 `ctx.userSettings`——handler 读 `ctx.userSettings.<key>` 即可;
+   - **agent runtime prompt**: 作为 `{{ userSettings.<key> }}` 模板变量——PLUGIN.md 直接插值;
+   - **agent runtime `guard`**(仅限声明了 `guard`/`authModule` 的 runtime): 作为 `ctx.userSettings`——`guard` 可决定 `skip` / `preGameDone`。
+
+Agent runtime 的 **LLM 工具调用** 不会自动看到 userSettings——如果 agent 需要把用户设置传给工具,要么在 PLUGIN.md 里用 `{{ userSettings.* }}` 把值塞进 prompt,要么用 `guard` 把值塞进 `completedResults.output`。
 
 ## `hooks`
 

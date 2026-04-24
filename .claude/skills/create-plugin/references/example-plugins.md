@@ -258,10 +258,12 @@ export default async function handler(ctx) {
     };
   }
 
-  // NOTE: 玩家级 userSettings 的服务端注入点仍在设计中(审计 F7)。
-  // 在那之前,用 manifest 默认值或 ctx.manualPayload 里透传的字段。
-  const model = ctx.manualPayload?.model ?? 'wan2.7-image-pro';
-  const imageSize = ctx.manualPayload?.imageSize ?? '1024*1024';
+  // 玩家可调设置通过 ctx.userSettings 注入(框架 resolveUserSettings
+  // 已把 manifest 默认和玩家值合并好)。按钮透传 ctx.manualPayload
+  // 作为临时覆盖。
+  const settings = ctx.userSettings ?? {};
+  const model = ctx.manualPayload?.model ?? settings.model ?? 'wan2.7-image-pro';
+  const imageSize = ctx.manualPayload?.imageSize ?? settings.imageSize ?? '1024*1024';
   const startedAt = new Date().toISOString();
 
   try {
@@ -359,7 +361,7 @@ export default async function handler(ctx) {
 
 - 按钮点击 → `POST /api/sessions/:id/plugin-rpc` `{ pluginId, runtimeId: ".../prompt-generator" }`（框架 `invokeRuntime` handler）
 - agent runtime 成功后通过 `output.events` 发出 `image.generate.requested`
-- event trigger 拉起 image-generator,`execution: background` → 202 立即返回,`setImmediate` 后台跑
+- event trigger 拉起 image-generator,`execution: background` → HTTP 立即返回 jobId(框架内部 `_jobs/<jobId>` 记录),handler 在后台跑
 - handler 写 `plugin-data[images][turnId] = {status: 'done', url, ...}`
 - store-proxy 自动广播 `plugin-data.changed` SSE
 - 前端 `PluginPanel` 重新渲染 `gallery.json`
@@ -370,8 +372,9 @@ export default async function handler(ctx) {
 
 ```toml
 [covel.image]
-provider = "openai"          # 兼容 OpenAI Responses API 形态即可
-base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+provider = "openai"          # 适配器选择 openai-chat 家族
+baseUrl = "https://dashscope.aliyuncs.com"
+imageApi = "dashscope-wan"   # 走 DashScope 原生 wan2.x 异步文生图
 model = "wan2.7-image-pro"
 tag = "image"
 ```

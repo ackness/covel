@@ -179,7 +179,7 @@ console.log('OK');
 2. Runtime A（agent, manual, sync）生成 prompt —— agent 在 **runtime output** 里返回 `events: [{topic: 'image.generate.requested', data: {prompt}}]`（frontmatter 不能声明事件，`outputConfigSchema` 是 strict 的，只允许 `schema`/`recordAs`）。
 3. Runtime B（function, event, background）消费事件，`ctx.gateway.generateImage({ presetId: 'image', prompt, ... })`，结果通过 `pluginData: [{namespace:'images', key, value}]` 写到 `images` namespace。
 4. UI spec：按钮 spec（`invokeRuntime`）+ 画廊 spec（`dataSource.namespace: 'images'`，用 `Image` 组件 + `$item` 绑定 `value/url`/`value/base64`）。
-5. 玩家设置通过 `userSettings` 在 frontmatter 声明后，**前端表单自动注册**；服务端注入 handler 的通道仍在设计中（审计 F7）。写 handler 时在那之前：要么通过按钮点击的 `ctx.manualPayload` 传选项，要么读 manifest 默认。
+5. 玩家设置通过 `userSettings` 在 frontmatter 声明后，**前端表单自动注册**；服务端有三条注入通道可直接使用：function handler 收到 `ctx.userSettings`、agent `guard` 收到 `ctx.userSettings`、agent 系统 prompt 可用 `{{ userSettings.<key> }}` 模板变量（框架 `resolveUserSettings` 已合并 manifest 默认和玩家值）。按钮点击时也可通过 `ctx.manualPayload` 传一次性覆盖。
 6. API key 用 slot：在 `llm.toml` 里配 `[covel.image]` section，插件通过 `presetId: 'image'` 自动路由，**不要**让插件读 `.env` / `process.env`。
 
 ### Plugin-data 注入到 prompt（避免工具调用回合）

@@ -401,6 +401,10 @@ export function assemblePromptVariables(
       lastFormValues: lastFormValuesStr,
       lastFormValuesRaw,
     },
+    // Player-authored plugin settings, merged with manifest.userSettings[].default.
+    // Undefined when the manifest declares none — dot-path lookups then return
+    // empty strings, matching the behaviour of any other missing variable.
+    userSettings: params.userSettings ?? {},
   };
 }
 

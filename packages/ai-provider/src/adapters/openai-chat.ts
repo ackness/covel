@@ -135,12 +135,39 @@ function asArray<T = unknown>(value: unknown): T[] | undefined {
 const DASHSCOPE_POLL_INTERVAL_MS = 2000;
 const DASHSCOPE_POLL_MAX_ATTEMPTS = 30; // ~60s
 
+/**
+ * Per the DashScope text-to-image docs
+ * (https://help.aliyun.com/zh/model-studio/text-to-image), the
+ * `wan2.7-image` / `wan2.7-image-pro` models do NOT accept the
+ * `negative_prompt` parameter — negative guidance must be woven into the
+ * positive prompt instead. Forwarding the field anyway causes the service
+ * to return a parameter-validation error (audit F5). We therefore strip
+ * it only for the wan2.7-image family; older wan2.5 / wan2.2-t2i-* models
+ * accept the field and keep their existing behaviour.
+ */
+function modelRejectsNegativePrompt(model: string): boolean {
+  return model.startsWith("wan2.7-image");
+}
+
 async function generateImageDashscopeWan(
   config: import("../types.js").ProviderConfig,
   params: import("../types.js").ImageGenerationParams,
 ): Promise<import("../types.js").ImageGenerationResult> {
   const meta = params.providerRequestMetadata ?? {};
-  const { imageFormat: _drop, size, n, watermark, thinking_mode, ...restMeta } = meta as Record<string, unknown>;
+  const {
+    imageFormat: _drop,
+    size,
+    n,
+    watermark,
+    thinking_mode,
+    negative_prompt,
+    ...restMeta
+  } = meta as Record<string, unknown>;
+
+  const keepNegativePrompt =
+    typeof negative_prompt === "string" &&
+    negative_prompt.length > 0 &&
+    !modelRejectsNegativePrompt(params.model);
 
   // Step 1: Submit async task (pass signal so it can be cancelled)
   const submitResponse = await postJson(
@@ -158,6 +185,7 @@ async function generateImageDashscopeWan(
         n: n ?? 1,
         watermark: watermark ?? false,
         ...(thinking_mode !== undefined ? { thinking_mode } : {}),
+        ...(keepNegativePrompt ? { negative_prompt } : {}),
         ...sanitizeOpenAiMetadata(restMeta),
       },
     },

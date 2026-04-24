@@ -205,6 +205,7 @@ const perRequestLlm = createPerRequestLlmMiddleware({
   ai,
   envApiKeys: apiKeys,
   defaultLlmAdapter: llmAdapter,
+  defaultPluginGateway: pluginGateway,
 });
 const api = await bootstrapApi({
   pluginsDir: bundledPluginsDir,

@@ -77,6 +77,96 @@ describe("generateImage - dashscope-wan format", () => {
     expect(result.images[0].url).toBe("https://cdn.example.com/image.png");
   });
 
+  it("strips negative_prompt for wan2.7-image-pro (audit F5: parameter unsupported by model)", async () => {
+    let submittedBody: Record<string, unknown> | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const urlStr = String(url);
+        if (
+          urlStr.includes("/image-generation/generation") &&
+          init?.method === "POST"
+        ) {
+          submittedBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+          return new Response(
+            JSON.stringify({ output: { task_id: "t1", task_status: "PENDING" } }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (urlStr.includes("/tasks/t1")) {
+          return new Response(
+            JSON.stringify({
+              output: {
+                task_id: "t1",
+                task_status: "SUCCEEDED",
+                results: [{ url: "https://cdn.example.com/x.png" }],
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        throw new Error(`Unexpected: ${urlStr}`);
+      }),
+    );
+
+    await openaiChatAdapter.generateImage(mockConfig, {
+      model: "wan2.7-image-pro",
+      prompt: "花店",
+      providerRequestMetadata: {
+        imageFormat: "dashscope-wan",
+        negative_prompt: "低质量, 模糊",
+      },
+    });
+
+    const params = (submittedBody?.parameters ?? {}) as Record<string, unknown>;
+    expect(params.negative_prompt).toBeUndefined();
+  });
+
+  it("forwards negative_prompt for older models that still accept it", async () => {
+    let submittedBody: Record<string, unknown> | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const urlStr = String(url);
+        if (
+          urlStr.includes("/image-generation/generation") &&
+          init?.method === "POST"
+        ) {
+          submittedBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+          return new Response(
+            JSON.stringify({ output: { task_id: "t2", task_status: "PENDING" } }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (urlStr.includes("/tasks/t2")) {
+          return new Response(
+            JSON.stringify({
+              output: {
+                task_id: "t2",
+                task_status: "SUCCEEDED",
+                results: [{ url: "https://cdn.example.com/y.png" }],
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        throw new Error(`Unexpected: ${urlStr}`);
+      }),
+    );
+
+    await openaiChatAdapter.generateImage(mockConfig, {
+      model: "wan2.5-t2i-turbo",
+      prompt: "花店",
+      providerRequestMetadata: {
+        imageFormat: "dashscope-wan",
+        negative_prompt: "低质量",
+      },
+    });
+
+    const params = (submittedBody?.parameters ?? {}) as Record<string, unknown>;
+    expect(params.negative_prompt).toBe("低质量");
+  });
+
   it("should throw if DashScope task fails", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       const urlStr = String(url);

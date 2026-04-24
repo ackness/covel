@@ -15,6 +15,7 @@
 import { describe, it, expect } from 'vitest';
 import { Hono } from 'hono';
 import type { LLMAdapter } from '@covel/runtime';
+import type { PluginRuntimeGateway } from '@covel/plugin-loader';
 import type { AiStack } from '../../src/ai-setup.js';
 import { createPerRequestLlmMiddleware } from '../../src/middleware/per-request-llm.js';
 
@@ -26,14 +27,44 @@ interface RecordedCall {
   slotOverrides: GenerateOptions extends { slotOverrides?: infer S } ? S : never;
 }
 
+interface RecordedImageCall {
+  presetId: string | undefined;
+  prompt: string;
+  apiKeys: Record<string, string> | undefined;
+  slotOverrides: GenerateOptions extends { slotOverrides?: infer S } ? S : never;
+}
+
+function stubDefaultPluginGateway(): PluginRuntimeGateway {
+  return {
+    async generateText() {
+      throw new Error(
+        'default pluginGateway should NOT be invoked when request overrides are present',
+      );
+    },
+    async generateObject() {
+      throw new Error('default pluginGateway.generateObject: unused');
+    },
+    async generateImage() {
+      throw new Error(
+        'default pluginGateway should NOT be invoked when request overrides are present',
+      );
+    },
+  };
+}
+
 /**
  * Minimal AiStack-shaped mock. Only the surface consumed by
  * `createGatewayAdapter` + the middleware matters, so the rest is
  * intentionally unimplemented — any call that does not route through
  * the middleware-path-under-test will throw.
  */
-function createMockAi(): { ai: AiStack; calls: RecordedCall[] } {
+function createMockAi(): {
+  ai: AiStack;
+  calls: RecordedCall[];
+  imageCalls: RecordedImageCall[];
+} {
   const calls: RecordedCall[] = [];
+  const imageCalls: RecordedImageCall[] = [];
 
   const gateway: AiStack['gateway'] = {
     async generateText(input, options) {
@@ -58,8 +89,17 @@ function createMockAi(): { ai: AiStack; calls: RecordedCall[] } {
     async embed() {
       throw new Error('embed: not used in this test');
     },
-    async generateImage() {
-      throw new Error('generateImage: not used in this test');
+    async generateImage(input, options) {
+      imageCalls.push({
+        presetId: input.presetId,
+        prompt: input.prompt,
+        apiKeys: options?.apiKeys,
+        slotOverrides: options?.slotOverrides,
+      });
+      return {
+        images: [{ mimeType: 'image/png', url: 'https://example.com/x.png' }],
+        usage: { inputTokens: 0, outputTokens: 0 },
+      };
     },
     async synthesizeSpeech() {
       throw new Error('synthesizeSpeech: not used in this test');
@@ -79,25 +119,34 @@ function createMockAi(): { ai: AiStack; calls: RecordedCall[] } {
     gateway,
   } as unknown as AiStack;
 
-  return { ai, calls };
+  return { ai, calls, imageCalls };
 }
 
 function buildTestApp(opts: {
   ai: AiStack;
   envApiKeys: Record<string, string>;
   defaultAdapter: LLMAdapter;
+  defaultPluginGateway?: PluginRuntimeGateway;
 }) {
+  const defaultPluginGateway = opts.defaultPluginGateway ?? stubDefaultPluginGateway();
   const mw = createPerRequestLlmMiddleware({
     ai: opts.ai,
     envApiKeys: opts.envApiKeys,
     defaultLlmAdapter: opts.defaultAdapter,
+    defaultPluginGateway,
   });
 
-  const app = new Hono<{ Variables: { llmAdapter: LLMAdapter } }>();
+  const app = new Hono<{
+    Variables: {
+      llmAdapter: LLMAdapter;
+      pluginGateway?: PluginRuntimeGateway;
+    };
+  }>();
 
-  // Initialize the default adapter just like the real bootstrap does.
+  // Initialize the default adapter + gateway just like the real bootstrap does.
   app.use('*', async (c, next) => {
     c.set('llmAdapter', opts.defaultAdapter);
+    c.set('pluginGateway', defaultPluginGateway);
     await next();
   });
   app.use('*', mw);
@@ -110,6 +159,22 @@ function buildTestApp(opts: {
       messages: [{ role: 'user', content: 'hi' }],
     });
     return c.json({ text: result.content });
+  });
+
+  // Image route — exercises the pluginGateway path so we can assert that
+  // request-scoped provider keys + slot overrides propagate into
+  // function-runtime image calls (audit F2).
+  app.post('/image', async (c) => {
+    const gateway = c.get('pluginGateway');
+    if (!gateway) {
+      return c.json({ error: 'pluginGateway missing' }, 500);
+    }
+    const body = await c.req.json<{ presetId?: string }>();
+    const result = await gateway.generateImage({
+      presetId: body.presetId,
+      prompt: 'a test',
+    });
+    return c.json({ count: result.images.length });
   });
 
   return app;
@@ -253,6 +318,102 @@ describe('per-request LLM middleware', () => {
     expect(res.status).toBe(200);
     // No slot overrides detected → default adapter used, mock gateway not hit.
     expect(calls).toHaveLength(0);
+  });
+
+  it('rebuilds pluginGateway with merged apiKeys and slotOverrides when headers are present (audit F2)', async () => {
+    const { ai, imageCalls } = createMockAi();
+    const defaultAdapter: LLMAdapter = {
+      async generate() {
+        throw new Error('llmAdapter unused by the /image route');
+      },
+    };
+    const app = buildTestApp({
+      ai,
+      envApiKeys: { deepseek: 'env-key' },
+      defaultAdapter,
+    });
+
+    const slotConfig = {
+      slotPresetOverrides: { image: 'custom_dashscope' },
+      customPresets: [
+        {
+          id: 'custom_dashscope',
+          name: 'User DashScope',
+          provider: 'qwen',
+          baseUrl: 'https://dashscope.aliyuncs.com',
+          model: 'wan2.7-image-pro',
+        },
+      ],
+    };
+    const providerKeys = { qwen: 'sk-user-live' };
+
+    const res = await app.request('/image', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'X-Provider-Keys': b64(providerKeys),
+        'X-Slot-Config': b64(slotConfig),
+      },
+      body: JSON.stringify({ presetId: 'image' }),
+    });
+    expect(res.status).toBe(200);
+
+    expect(imageCalls).toHaveLength(1);
+    expect(imageCalls[0].presetId).toBe('image');
+    expect(imageCalls[0].apiKeys).toEqual({
+      deepseek: 'env-key',
+      qwen: 'sk-user-live',
+    });
+    expect(imageCalls[0].slotOverrides).toMatchObject({
+      slotPresetOverrides: { image: 'custom_dashscope' },
+      customPresets: [
+        expect.objectContaining({
+          id: 'custom_dashscope',
+          provider: 'qwen',
+          model: 'wan2.7-image-pro',
+        }),
+      ],
+    });
+  });
+
+  it('leaves the default pluginGateway in place when no headers are present', async () => {
+    const { ai, imageCalls } = createMockAi();
+    let defaultPluginInvoked = false;
+    const defaultPluginGateway: PluginRuntimeGateway = {
+      async generateText() {
+        throw new Error('unused');
+      },
+      async generateObject() {
+        throw new Error('unused');
+      },
+      async generateImage() {
+        defaultPluginInvoked = true;
+        return {
+          images: [{ mimeType: 'image/png', url: 'https://default.example/img.png' }],
+        };
+      },
+    };
+    const defaultAdapter: LLMAdapter = {
+      async generate() {
+        throw new Error('unused');
+      },
+    };
+
+    const app = buildTestApp({
+      ai,
+      envApiKeys: {},
+      defaultAdapter,
+      defaultPluginGateway,
+    });
+
+    const res = await app.request('/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ presetId: 'image' }),
+    });
+    expect(res.status).toBe(200);
+    expect(defaultPluginInvoked).toBe(true);
+    expect(imageCalls).toHaveLength(0);
   });
 
   it('drops custom preset entries missing required fields', async () => {

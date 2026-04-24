@@ -2124,6 +2124,13 @@ async function executeOneRuntime(
       });
     }
 
+    // Surface player-authored plugin settings to agent prompts as
+    // `{{ userSettings.<key> }}`. Merge with manifest defaults so templates
+    // can rely on declared keys being present; returns undefined when the
+    // manifest declares no userSettings specs, which keeps the flag-off
+    // branch byte-identical to the pre-ticket variables object.
+    const agentUserSettings = resolveUserSettings(manifest, input.userSettings);
+
     const buildParams = {
       promptTemplate: loaded.promptTemplate,
       manifest,
@@ -2140,6 +2147,7 @@ async function executeOneRuntime(
       // `sessionContext.legacyConfigView` over `config.__session_config__`.
       // Present only when COVEL_SESSION_CONTEXT=1 (flag-off path is undefined).
       ...(sessionContext ? { sessionContext } : {}),
+      ...(agentUserSettings ? { userSettings: agentUserSettings } : {}),
       ...(budgetEligible
         ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
         : {}),

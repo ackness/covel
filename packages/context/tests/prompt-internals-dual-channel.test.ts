@@ -201,6 +201,41 @@ describe('assemblePromptVariables — dual-channel', () => {
     expect((vars.session as Record<string, unknown>).phase).toBe('pre-game');
   });
 
+  // userSettings exposure — audit F1.
+  it('exposes userSettings as a top-level variable when the manifest provides a resolved bucket', () => {
+    const params: ContextBuildParams = {
+      promptTemplate: '',
+      manifest: makeManifest(),
+      turnInput: makeTurnInput(),
+      completedResults: new Map(),
+      config: {},
+      sessionMeta: { turnNumber: 0, characters: [] },
+      userSettings: { promptMode: 'image-json', modelPresetId: 'image' },
+    };
+
+    const vars = assemblePromptVariables(params);
+
+    expect(vars.userSettings).toEqual({
+      promptMode: 'image-json',
+      modelPresetId: 'image',
+    });
+  });
+
+  it('defaults userSettings to an empty object when no bucket is supplied', () => {
+    const params: ContextBuildParams = {
+      promptTemplate: '',
+      manifest: makeManifest(),
+      turnInput: makeTurnInput(),
+      completedResults: new Map(),
+      config: {},
+      sessionMeta: { turnNumber: 0, characters: [] },
+    };
+
+    const vars = assemblePromptVariables(params);
+
+    expect(vars.userSettings).toEqual({});
+  });
+
   // Test 5: Parity sweep across a richer config + session shape.
   it('parity holds for a rich config + session shape (multi-field sweep)', () => {
     const richConfig: Readonly<Record<string, unknown>> = {

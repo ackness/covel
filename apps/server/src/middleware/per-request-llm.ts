@@ -22,9 +22,10 @@
  */
 
 import type { MiddlewareHandler } from 'hono';
-import { createGatewayAdapter } from '@covel/runtime';
+import { createGatewayAdapter, createPluginRuntimeGateway } from '@covel/runtime';
 import type { AiStack } from '../ai-setup.js';
 import type { SlotOverridesInput } from '@covel/ai-provider';
+import type { PluginRuntimeGateway } from '@covel/plugin-loader';
 
 export interface PerRequestLlmOptions {
   readonly ai: AiStack;
@@ -36,6 +37,16 @@ export interface PerRequestLlmOptions {
    * `c.get('llmAdapter')` without null checks.
    */
   readonly defaultLlmAdapter: import('@covel/runtime').LLMAdapter;
+  /**
+   * The plugin-runtime gateway facade produced at server startup. When the
+   * request carries overriding headers the middleware rebuilds a request-
+   * scoped facade so function-runtime `ctx.gateway.generateImage(...)` calls
+   * honour the same browser-supplied provider keys / custom presets / slot
+   * overrides as the agent-runtime LLM adapter. Without this rebuild the
+   * function-runtime path silently uses the startup env keys and the
+   * server-side llm.toml, defeating per-session UI settings (audit F2).
+   */
+  readonly defaultPluginGateway: PluginRuntimeGateway;
 }
 
 const MAX_HEADER_BYTES = 64 * 1024; // sanity cap — browsers rarely send bigger
@@ -70,7 +81,19 @@ export function createPerRequestLlmMiddleware(
       ...(slotOverrides ? { slotOverrides } : {}),
     });
 
+    // Audit F2: keep the function-runtime gateway in lock-step with the
+    // agent-runtime LLM adapter. Both are rebuilt from the same merged
+    // keys / slot overrides so `ctx.gateway.generateImage(...)` inside a
+    // function handler resolves the same browser-declared custom presets
+    // (e.g. `covel.image` override to a user-added DashScope preset) as
+    // the agent-runtime side sees via `llmAdapter`.
+    const perRequestPluginGateway = createPluginRuntimeGateway(opts.ai.gateway, {
+      apiKeys: mergedApiKeys,
+      ...(slotOverrides ? { slotOverrides } : {}),
+    });
+
     c.set('llmAdapter', perRequestAdapter);
+    c.set('pluginGateway', perRequestPluginGateway);
     await next();
   };
 }
