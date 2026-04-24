@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Package, Upload, Globe, Puzzle } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
@@ -9,7 +9,6 @@ interface InstallResult {
   ok: boolean;
   kind: InstallKind;
   id: string;
-  path: string;
   restartRequired: boolean;
 }
 
@@ -29,6 +28,14 @@ export function PackagesPane() {
   const [busy, setBusy] = useState<InstallKind | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [lastResult, setLastResult] = useState<InstallResult | null>(null);
+  const toastTimer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
+    },
+    [],
+  );
 
   async function uploadZip(kind: InstallKind, file: File) {
     if (!file.name.toLowerCase().endsWith(".zip")) {
@@ -71,8 +78,12 @@ export function PackagesPane() {
   }
 
   function flash(state: ToastState) {
+    if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
     setToast(state);
-    setTimeout(() => setToast(null), 4000);
+    toastTimer.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimer.current = null;
+    }, 4000);
   }
 
   return (
@@ -127,7 +138,6 @@ export function PackagesPane() {
       {lastResult && (
         <div className="text-xs font-mono text-muted-foreground border border-border rounded p-2 space-y-0.5">
           <div>id: {lastResult.id}</div>
-          <div className="truncate" title={lastResult.path}>path: {lastResult.path}</div>
           <div>kind: {lastResult.kind}</div>
         </div>
       )}

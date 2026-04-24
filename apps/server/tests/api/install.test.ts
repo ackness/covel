@@ -10,7 +10,7 @@
  *   - multi-runtime plugin layout (runtimes/<sub>/PLUGIN.md)
  */
 
-import { mkdtemp, mkdir, access, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, access, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Hono } from 'hono';
@@ -194,10 +194,17 @@ describe('POST /api/install/plugin', () => {
     });
     const res = await postZip(app, '/api/install/plugin', zip);
     expect(res.status).toBe(200);
-    const body = await res.json() as { ok: boolean; id: string; restartRequired: boolean; path: string };
+    const body = await res.json() as {
+      ok: boolean;
+      id: string;
+      restartRequired: boolean;
+      path?: unknown;
+    };
     expect(body.ok).toBe(true);
     expect(body.id).toBe('plugin-test-plugin');
     expect(body.restartRequired).toBe(true);
+    // Absolute filesystem path must not leak to the client.
+    expect(body.path).toBeUndefined();
 
     const installedPlugin = path.join(pluginsDir, 'plugin-test-plugin', 'PLUGIN.md');
     await expect(readFile(installedPlugin, 'utf-8')).resolves.toContain('name: test-plugin');
@@ -265,7 +272,11 @@ describe('POST /api/install/plugin', () => {
 
   it('rejects overwrite (target exists)', async () => {
     const app = createTestApp();
-    await mkdir(path.join(pluginsDir, 'plugin-test-plugin'), { recursive: true });
+    // Simulate a previously-installed plugin: the dir is non-empty.
+    const existingDir = path.join(pluginsDir, 'plugin-test-plugin');
+    await mkdir(existingDir, { recursive: true });
+    await writeFile(path.join(existingDir, 'marker.txt'), 'existing-install');
+
     const zip = await buildZip({
       'PLUGIN.md': VALID_PLUGIN_MD,
       'package.json': VALID_PACKAGE_JSON,
@@ -274,12 +285,117 @@ describe('POST /api/install/plugin', () => {
     expect(res.status).toBe(409);
     const body = await res.json() as { error: string };
     expect(body.error).toMatch(/already exists/);
+
+    // Existing install must still be intact (not stomped by a failed rename).
+    await expect(readFile(path.join(existingDir, 'marker.txt'), 'utf-8'))
+      .resolves.toBe('existing-install');
   });
 
   it('rejects request without multipart file', async () => {
     const app = createTestApp();
     const res = await app.request('/api/install/plugin', { method: 'POST', body: new FormData() });
     expect(res.status).toBe(400);
+  });
+
+  it('rejects oversized Content-Length before parsing body (413)', async () => {
+    const app = createTestApp();
+    const res = await app.request('/api/install/plugin', {
+      method: 'POST',
+      headers: {
+        // 100 MB — above the 20 MB cap.
+        'content-length': String(100 * 1024 * 1024),
+        'content-type': 'multipart/form-data; boundary=----covel-test',
+      },
+      // An empty body is fine; the handler should reject before reading it.
+      body: '------covel-test--\r\n',
+    });
+    expect(res.status).toBe(413);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/exceeds/);
+  });
+
+  it('rejects mismatched plugin id (package.json name ≠ PLUGIN.md name)', async () => {
+    const app = createTestApp();
+    const mismatched = VALID_PLUGIN_MD.replace('name: test-plugin', 'name: other-plugin');
+    const zip = await buildZip({
+      'PLUGIN.md': mismatched,
+      'package.json': VALID_PACKAGE_JSON,
+    });
+    const res = await postZip(app, '/api/install/plugin', zip);
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/mismatch|plugin id/i);
+  });
+
+  it('rejects symlink entries', async () => {
+    const app = createTestApp();
+    // yazl doesn't expose `mode`, so we craft a symlink entry using addReadStream-style
+    // metadata. Easiest path: encode Unix mode bits directly via the low-level API by
+    // mutating externalFileAttributes after the fact is tricky; instead, we round-trip
+    // through the yazl AST using the `mode` option on addBuffer (undocumented).
+    const zip = new yazl.ZipFile();
+    zip.addBuffer(Buffer.from(VALID_PACKAGE_JSON, 'utf-8'), 'package.json');
+    zip.addBuffer(Buffer.from(VALID_PLUGIN_MD, 'utf-8'), 'PLUGIN.md');
+    // Unix symlink: st_mode = 0o120000 | 0o644 = 0o120644 → externalFileAttributes = mode << 16.
+    // yazl will set versionMadeBy to Unix (3) only when `mode` option is passed.
+    zip.addBuffer(
+      Buffer.from('/etc/passwd', 'utf-8'),
+      'evil-link',
+      { mode: 0o120644 } as unknown as { mode: number; mtime?: Date },
+    );
+    const zipBuf = await zipToBuffer(zip);
+
+    const res = await postZip(app, '/api/install/plugin', zipBuf);
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/unsupported entry type/);
+  });
+
+  it('rejects high-ratio zip bombs (uncompressed/compressed > 100x)', async () => {
+    const app = createTestApp();
+    // 2 MB of zeros compresses to < 10 KB with deflate — ratio ≫ 100x.
+    const bombPayload = Buffer.alloc(2 * 1024 * 1024, 0);
+    const zip = new yazl.ZipFile();
+    zip.addBuffer(Buffer.from(VALID_PACKAGE_JSON, 'utf-8'), 'package.json');
+    zip.addBuffer(Buffer.from(VALID_PLUGIN_MD, 'utf-8'), 'PLUGIN.md');
+    zip.addBuffer(bombPayload, 'payload.bin');
+    const zipBuf = await zipToBuffer(zip);
+
+    const res = await postZip(app, '/api/install/plugin', zipBuf);
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/ratio|expansion/i);
+  });
+
+  it('rejects non-zip uploads', async () => {
+    const app = createTestApp();
+    const notZip = Buffer.from('this is plainly not a zip file', 'utf-8');
+    const res = await postZip(app, '/api/install/plugin', notZip);
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBeLessThan(500);
+  });
+
+  it('serialises concurrent installs of the same id (one 200, one 409)', async () => {
+    const app = createTestApp();
+    const zipA = await buildZip({
+      'PLUGIN.md': VALID_PLUGIN_MD,
+      'package.json': VALID_PACKAGE_JSON,
+    });
+    const zipB = await buildZip({
+      'PLUGIN.md': VALID_PLUGIN_MD,
+      'package.json': VALID_PACKAGE_JSON,
+    });
+
+    const [resA, resB] = await Promise.all([
+      postZip(app, '/api/install/plugin', zipA),
+      postZip(app, '/api/install/plugin', zipB),
+    ]);
+    const statuses = [resA.status, resB.status].sort();
+    expect(statuses).toEqual([200, 409]);
+
+    // The winning install must leave a valid plugin on disk.
+    const installed = path.join(pluginsDir, 'plugin-test-plugin', 'PLUGIN.md');
+    await expect(readFile(installed, 'utf-8')).resolves.toContain('name: test-plugin');
   });
 });
 
@@ -324,13 +440,18 @@ describe('POST /api/install/world', () => {
 
   it('rejects overwrite', async () => {
     const app = createTestApp();
-    await mkdir(path.join(worldsDir, 'test-world'), { recursive: true });
+    const existingDir = path.join(worldsDir, 'test-world');
+    await mkdir(existingDir, { recursive: true });
+    await writeFile(path.join(existingDir, 'marker.txt'), 'existing-world');
+
     const zip = await buildZip({
       'world.yaml': VALID_WORLD_YAML,
       'WORLD.md': VALID_WORLD_MD,
     });
     const res = await postZip(app, '/api/install/world', zip);
     expect(res.status).toBe(409);
+    await expect(readFile(path.join(existingDir, 'marker.txt'), 'utf-8'))
+      .resolves.toBe('existing-world');
   });
 
   it('rejects zip-slip', async () => {
