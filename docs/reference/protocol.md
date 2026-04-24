@@ -82,6 +82,18 @@
 
 `plugin-data-set` / `plugin-data-set-batch` / DELETE `/plugin-data/...` 等所有写路径均会触发此事件。`operation` 字段为 `'set'` 或 `'delete'`（删除时 `value` 为 `null`），由 `wrapStoreWithPluginDataEvents` 在 store 层统一拦截，前端可实时响应插件状态变更。
 
+**保留命名空间 `_jobs`（后台任务协议）:**
+
+`POST /api/sessions/:id/plugin-rpc` 的 runtime 级 + `execution: background` 分支使用 `_jobs` 命名空间写回任务进度：
+
+| `value.status` | 语义 | 前端行为 |
+|--------------|------|----------|
+| `pending` | 任务已受理,runtime 尚未完成 | 渲染 loading 占位 |
+| `done` | 成功完成,`value.runtimeResults` 为 `executeTurn` 汇总 | 把结果合并回业务命名空间或直接显示 |
+| `failed` | runtime 抛错,`value.error` 为消息 | 展示错误并让用户重试 |
+
+所有 `_jobs/<jobId>` 的写入都是普通 `setPluginData` 调用，因此都会通过标准 `plugin-data.changed` 频道广播。插件**禁止**直接写入 `_jobs` —— 框架独占该命名空间。业务数据请使用自定义命名空间（如 `images`、`prompts`）。
+
 ### Suspend / Resume 事件（S4-T4）
 
 需要环境变量 `COVEL_SUSPEND_V1=1`。关闭时 suspend 路径不会触发。
@@ -159,32 +171,32 @@
 
 ### 插件 RPC(PR-3)
 
-统一的"结构化插件指令"通道。同时承载 action 级与 runtime 级调用,默认 sync 模式,SSE 流式预留给后续 PR。
+统一的"结构化插件指令"通道。同时承载 action 级与 runtime 级调用。Action 级单次 JSON,runtime 级按 `manifest.execution` 分 sync / background 两种响应。
 
 | 命令 | 方法 | 端点 | 响应 |
 |------|------|------|------|
-| `plugin.rpc` | POST | `/api/sessions/:id/plugin-rpc` | JSON: `{ status: "ok", result }` 或 202 `{ status: "approval-required", approvalId, pending }` |
+| `plugin.rpc` | POST | `/api/sessions/:id/plugin-rpc` | JSON 变体,见下 |
 
-**请求体:**
+**请求体(action 级或 runtime 级 二选一):**
 
 ```json
-{
-  "pluginId": "framework",          // 框架默认用 "framework" sentinel
-  "action": "submit-form",          // action 级 (与 runtimeId 互斥)
-  "payload": { /* 任意 JSON */ }
-}
+{ "pluginId": "framework", "action": "submit-form", "payload": { /* ... */ } }
+```
+```json
+{ "pluginId": "my-plugin", "runtimeId": "my-plugin/my-runtime", "payload": { /* ... */ } }
 ```
 
 **响应分支:**
 
 | 状态码 | status | 触发 |
 |-------|--------|------|
-| 200 | `ok` | 直接执行(builtin / official / 已缓存的 community) |
-| 202 | `approval-required` | 第一次调用 community-trust 插件 action |
-| 400 | `error` | 缺字段 / action+runtimeId 互斥违反 / payload 校验失败 |
-| 404 | `error` (`code: "unknown-action"`) | action 未注册 |
-| 429 | `error` (`code: "queue-full"`) | 排队的 pending approvals 超过 cap |
-| 501 | `error` | runtime 级触发(留给 PR-3.b) |
+| 200 | `ok` | action 级成功 / runtime 级 sync 模式成功 |
+| 202 | `approval-required` | community-trust 首次调用(action 或 runtime 级) |
+| 202 | `accepted` | runtime 级 `execution: background`,payload 里含 `jobId` + `turnId`。进度走 `plugin-data.changed` + `_jobs` 命名空间 |
+| 400 | `error` | 缺字段 / action+runtimeId 互斥违反 / payload 校验失败 / `plugin-mismatch` |
+| 404 | `error` (`code: "unknown-action"` / `"runtime-not-active"`) | action 未注册 / runtimeId 未加载到该 session |
+| 429 | `error` (`code: "queue-full"`) | pending approvals 超过 cap |
+| 500 | `error` (`code: "runtime-execution-failed"` / `"background-enqueue-failed"`) | sync 执行异常 / 入队失败(background 模式下 runtime 内部异常走 SSE,不进 HTTP) |
 
 **框架默认 action:** 见 [api.md](api.md#post-apisessionsidplugin-rpc) 的"框架默认 action"小节。
 

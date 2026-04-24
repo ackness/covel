@@ -51,6 +51,7 @@ Reference for the json-render components available to plugin UI specs. This page
 | `TagList` | Flat list of string tags. | `tags` (string[]) |
 | `Prose` | Narrative paragraphs with `**bold**` support, split on double newline. | `content` (string) |
 | `Source` | Small attribution label. | `label` (string) |
+| `Image` | Renders an image from either a URL or a base64 data payload. Falls back to a placeholder tile when no source is bound. | `src` (string URL, preferred), `base64` (raw base64 with no prefix), `mimeType` (default `image/png`, only used with `base64`), `alt` (string), `aspectRatio` (CSS ratio, default `"1/1"`), `rounded` (`none` / `sm` / `md` / `lg`), `fit` (`cover` / `contain`) |
 
 ### Data
 
@@ -103,7 +104,7 @@ Reference for the json-render components available to plugin UI specs. This page
 
 ## Summary
 
-35 components total as of this writing. Authoritative inventory: the exported `covelRegistry` in `apps/web/src/lib/catalog.tsx`. If you add a new component:
+36 components total as of this writing. Authoritative inventory: the exported `covelRegistry` in `apps/web/src/lib/catalog.tsx`. If you add a new component:
 
 1. Register it in `covelRegistry` with a short doc comment above the renderer.
 2. Add a row here in the matching section.

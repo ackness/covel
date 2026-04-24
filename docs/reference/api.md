@@ -1054,15 +1054,16 @@ curl "http://localhost:3001/api/sessions/<sessionId>/turns?limit=5"
 
 统一的"结构化插件指令"通道。同时支持:
 
-1. **Action 级**: `{ pluginId, action, payload }` — 调用插件在 PLUGIN.md `rpc` 字段中声明的 RPC handler,或框架默认 handler(如 `submit-form`)
-2. **Runtime 级**: `{ pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行(目前返回 501,留给 PR-3.b)
+1. **Action 级**: `{ pluginId, action, payload }` — 调用插件在 PLUGIN.md `rpc` 字段中声明的 RPC handler,或框架默认 handler(如 `submit-form`)。返回单次 JSON。
+2. **Runtime 级**: `{ pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行。通过完整 Turn pipeline(prompt 组装、工具循环、proposal 提交)跑一次目标 runtime,事件触发的下游 runtime 会按 priority 自动 chain。执行子模式由 `manifest.execution` 决定:
+   - `'sync'`(默认): 同步等待 runtime 完成,commit proposals 后返回汇总 JSON。
+   - `'background'`: 立即返回 202 + `jobId`,后台通过 `setImmediate` 继续执行。进度/结果通过 `plugin_data` 表 `_jobs` 保留命名空间写回,前端经 `plugin-data.changed` SSE 感知变化。
 
 **参数:**
 
 | 参数 | 位置 | 说明 |
 |------|------|------|
 | `id` | 路径 | 会话 ID |
-| `mode` | 查询(可选) | `sync`(默认,单次 JSON 响应)。SSE 流式预留给后续 PR |
 
 **请求体:**
 
@@ -1079,7 +1080,7 @@ curl "http://localhost:3001/api/sessions/<sessionId>/turns?limit=5"
 }
 ```
 
-或者:
+或 action 级:
 
 ```json
 {
@@ -1089,12 +1090,22 @@ curl "http://localhost:3001/api/sessions/<sessionId>/turns?limit=5"
 }
 ```
 
+或 runtime 级:
+
+```json
+{
+  "pluginId": "dashscope-image-gen",
+  "runtimeId": "dashscope-image-gen/prompt-generator",
+  "payload": { "style": "cinematic" }
+}
+```
+
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `pluginId` | string | 插件 ID(框架默认 handler 用 `framework` 占位即可) |
 | `action` | string(可选) | RPC action 名,kebab-case。与 `runtimeId` 互斥 |
-| `runtimeId` | string(可选) | runtime 全名,用于手动触发。与 `action` 互斥 |
-| `payload` | unknown | handler 的输入数据 |
+| `runtimeId` | string(可选) | runtime 全名(如 `my-plugin/my-runtime`)。与 `action` 互斥 |
+| `payload` | unknown | handler 的输入数据 / agent runtime 的 manualPayload / function runtime 的 `ctx.manualPayload` |
 
 **解析顺序(action 级):**
 
@@ -1107,7 +1118,7 @@ curl "http://localhost:3001/api/sessions/<sessionId>/turns?limit=5"
 |--------|------|
 | `submit-form` | 等同于 submit-inputs:持久化玩家输入、找模板消息、按 `{{字段}}` 填充自然语言 |
 
-**响应 200(sync 模式):**
+**响应 200 — action 级:**
 
 ```json
 {
@@ -1116,14 +1127,71 @@ curl "http://localhost:3001/api/sessions/<sessionId>/turns?limit=5"
 }
 ```
 
+**响应 200 — runtime 级,sync 模式:**
+
+```json
+{
+  "status": "ok",
+  "turnId": "7f3e-...",
+  "runtimeResults": [
+    {
+      "runtimeId": "dashscope-image-gen/prompt-generator",
+      "pluginId": "dashscope-image-gen",
+      "status": "ok",
+      "durationMs": 3421,
+      "output": { /* runtime final output (parsed envelope) */ }
+    }
+  ],
+  "durationMs": 3480
+}
+```
+
+**响应 202 — runtime 级,background 模式:**
+
+```json
+{
+  "status": "accepted",
+  "jobId": "a3c9-...",
+  "pending": true,
+  "turnId": "7f3e-...",
+  "runtimeId": "dashscope-image-gen/image-generator"
+}
+```
+
+**`_jobs` 命名空间协议(background 模式):**
+
+框架在 `plugin_data` 表中为每个后台任务保留以下 row,插件 **禁止**直接写该命名空间,但可订阅 SSE 读取:
+
+```
+sessionId     : <session>
+pluginId      : <触发插件>
+namespace     : "_jobs"
+key           : <jobId>
+value         : {
+  status: "pending" | "done" | "failed",
+  runtimeId: string,
+  turnId: string,
+  startedAt: ISO8601,
+  completedAt?: ISO8601,
+  durationMs?: number,
+  runtimeResults?: RuntimeResultSummary[],   // status=done
+  error?: string,                             // status=failed
+  abortReason?: string
+}
+```
+
+每次写入都会通过 store-proxy 发出 `plugin-data.changed` SSE 事件(见 [protocol.md](./protocol.md)),前端据此刷新 loading / final UI。
+
 **错误响应:**
 
 | 状态码 | 触发条件 |
 |-------|---------|
-| 400 | `pluginId` 缺失 / `action` 与 `runtimeId` 同时设置 / `RpcValidationError` |
-| 404 | 会话不存在 / `unknown-action`(action 未注册) |
-| 500 | handler 抛出未处理异常 / handler 模块加载失败 |
-| 501 | runtime 级 RPC(留给 PR-3.b) |
+| 400 | `pluginId` 缺失 / `action` 与 `runtimeId` 同时设置或同时缺失 / `RpcValidationError` / `plugin-mismatch`(runtimeId 不属于 pluginId) |
+| 404 | 会话不存在 / `unknown-action`(action 未注册) / `runtime-not-active`(runtimeId 未加载到该 session) |
+| 429 | `queue-full`(community trust 的待批准队列满) |
+| 500 | handler 抛出未处理异常 / handler 模块加载失败 / `runtime-execution-failed` / `background-enqueue-failed` |
+
+> 注意: background 模式下 runtime 内部异常 **不会**映射为 5xx HTTP 状态 —— 202 已经发出,失败信息写入 `_jobs/{jobId}.value.error`,前端通过 SSE 感知。
 
 **插件 PLUGIN.md 中声明 RPC action:**
 

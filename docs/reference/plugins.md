@@ -449,6 +449,29 @@ Guard 适用于"先检查再决定是否需要 LLM"的场景，替代了之前�
 outputKind: story
 ```
 
+### execution（手动触发执行模式）
+
+仅在通过 `POST /api/sessions/:id/plugin-rpc` 的 `runtimeId` 分支手动触发时生效；调度器驱动的 runtime 忽略此字段。
+
+| 值 | 含义 |
+|----|------|
+| `sync`（默认） | 同步执行:HTTP 请求阻塞到 runtime 完成,返回 `runtimeResults` 汇总 JSON。适合可以秒级完成的 runtime(prompt 生成、状态校验等) |
+| `background` | 后台执行:立即返回 202 + `jobId`,通过 `setImmediate` 脱离请求继续跑。框架在 `plugin_data` 表 `_jobs/{jobId}` 记录任务生命周期(`pending` → `done` / `failed`),前端通过 `plugin-data.changed` SSE 感知并渲染 loading/final UI |
+
+**使用规则:**
+
+- `_jobs` 是框架保留命名空间,插件**禁止**直接写入;框架自动维护 row 生命周期
+- background 模式下,事件链 chain 仍然生效 —— 手动触发的 runtime emit 的 `event.emit` proposals 会在同一后台任务里按 priority 执行下游 runtime
+- 如果 runtime 通过 `input.inject` 向下游传递结构化数据,background 模式下下游 runtime 会看到最终态(不是增量),就像在 sync 模式下一样
+
+示例:
+
+```yaml
+execution: background  # wan2.x 文生图需要几十秒,不阻塞 UI
+```
+
+详细 RPC 流程见 [api.md #post-apisessionsidplugin-rpc](api.md#post-apisessionsidplugin-rpc)。
+
 ### capabilities
 
 能力标签数组，框架通过能力标签发现插件，**而非硬编码插件 ID**。

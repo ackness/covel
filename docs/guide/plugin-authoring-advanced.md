@@ -214,6 +214,163 @@ interface PluginManifest {
 }
 ```
 
+## 4.1 函数 Runtime、手动触发与后台执行
+
+`runtimeType: function` 表示"跳过 LLM,直接执行 JS 模块"。用于调用外部 API、做纯计算、写 plugin-data 等不需要 LLM 推理的场景。
+
+### 函数 Runtime 的 Handler 签名
+
+`handler` 字段指向一个 ESM 模块,必须 default-export 一个**单参**异步函数。运行时只传 `ctx`:
+
+```ts
+export default async function handler(
+  ctx: FunctionHandlerContext,
+): Promise<Record<string, unknown>> {
+  return {
+    // 任意 JSON 字段都会作为 runtime final output 持久化(供下游 runtime
+    // 通过 ctx.completedResults 读到)。下面这几个字段是框架识别的"指令",
+    // 由 normalizeOutput 转成 Proposal 走标准 commit pipeline:
+    narrativeOutput: '...',                       // → narrative.append
+    events: [{ topic: '...', data: {...} }],      // → event.emit
+    statePatches: [{ table, field, value }],      // → state.patch
+    pluginData: [{ namespace, key, value }],      // → plugin.data / plugin.data.batch
+    interactions: [{ type: 'form', ... }],        // → interaction.request
+    notifications: [{ title, message }],          // → narrative.append(kind='system')
+    // 其它字段保持为 output JSON
+  };
+}
+```
+
+> **注意**: 函数 runtime **不能**返回顶层 `proposals: [...]` 数组 —— 那是工具层
+> 通过非可枚举 Symbol 在内部传递的 channel,不在 handler 公开 API 里。要写入
+> 插件命名空间数据,用上面的 `pluginData[]` 简写。
+
+`FunctionHandlerContext` 暴露的字段(仅列和插件作者最相关的):
+
+| 字段 | 类型 | 用途 |
+|------|------|------|
+| `sessionId` | `string` | 当前 session ID |
+| `turnId` | `string` | 当前 turn ID(触发该 runtime 的 turn) |
+| `pluginId` / `runtimeId` | `string` | 本 runtime 的身份(和 manifest 里一致) |
+| `locale` | `string` | `zh-CN` / `en` / ...,来自 session / 请求 |
+| `store` | `FunctionStoreView` | 窄封装的 DataStore:`getPluginData` / `listPluginData` / `getState` / `getSession` / `listTurnMessages`。**不是**完整 `DataStore`,不能 commit proposals(通过 return 值声明即可) |
+| `gateway` | `PluginRuntimeGateway?` | 调用 LLM / 图像 / 嵌入等 provider 的唯一通道。签名见下 |
+| `manualPayload` | `unknown?` | 仅在 `POST /plugin-rpc` 手动触发时注入,为请求体的 `payload` 字段 |
+| `triggerEvent` | `{ topic, data }?` | 仅 event 触发时存在,包含触发该 runtime 的事件 |
+
+**`ctx.gateway`:** function runtime 调用 LLM / 图像的唯一合法入口。绝不允许直接 `fetch` provider URL 或导入 provider SDK —— 这样会跳过 slot 解析、密钥管理、SSRF 防护和 replay cache。
+
+```ts
+// 文本补全
+const res = await ctx.gateway.generateText({
+  presetId: 'fast',                                // 可选;缺省走 manifest.model / default slot
+  messages: [{ role: 'user', content: '...' }],
+});
+
+// 图像生成(wan2.x / DALL-E / SD)
+const { images } = await ctx.gateway.generateImage({
+  presetId: 'image',
+  prompt: 'a moonlit castle',
+});
+// images[i] = { url?, base64?, mimeType? }
+```
+
+> **结构化 JSON 输出(未在函数 runtime 中可用,审计 F9):** `ctx.gateway.generateObject`
+> 需要宿主向 gateway 注入 JSON Schema → Zod 的转换器,目前组合根未接入。若需要
+> 结构化输出,请用 **agent runtime** 的 `output.schema` / `responseFormat` 路径 ——
+> 框架在那里自动处理 schema → provider-specific grammar。
+> 待某个插件真正需要 function-runtime 下的 `generateObject` 时,再引入转换器。
+
+### 手动触发: 前端 → RPC → 函数 Runtime
+
+典型的"玩家点按钮 → 触发插件 runtime"链路:
+
+1. 插件在 `ui/xxx.json` 里声明一个按钮,`on.click.action: "invokeRuntime"`,`params.runtimeId: "my-plugin/worker"`。**不需要**写任何 React 代码 —— `PluginPanel` 框架已经注册了 `invokeRuntime` 默认 handler。
+2. 用户点击后,前端发 `POST /api/sessions/:id/plugin-rpc` `{ pluginId, runtimeId, payload }`。
+3. 框架把 `payload` 注入到 `TurnInput.manualTrigger`,`executeTurn` 只跑目标 runtime 及其事件下游。
+4. 目标 runtime 的 handler 收到 `ctx.manualPayload = payload`。
+
+示例 UI spec(会自然被 `invokeRuntime` 默认 handler 处理):
+
+```json
+{
+  "component": "Button",
+  "props": { "label": "Generate" },
+  "on": {
+    "click": {
+      "action": "invokeRuntime",
+      "params": {
+        "runtimeId": "my-plugin/prompt-generator",
+        "payload": { "style": "cinematic" }
+      }
+    }
+  }
+}
+```
+
+### `execution: sync` vs `execution: background`
+
+```yaml
+runtimeType: function
+execution: background    # 默认 sync
+trigger: { type: manual }
+handler: ./handler.js
+```
+
+- `sync`(默认):HTTP 响应阻塞到 runtime 完成。适合能秒级返回的任务。
+- `background`:立即返回 202 + `jobId`,任务在 `setImmediate` 后台跑。框架在 `plugin_data` 表下 `_jobs/<jobId>` 写入 `{status: 'pending' → 'done' | 'failed', ...}` 三态,每次写入都通过 `plugin-data.changed` SSE 广播,前端通过订阅 `_jobs` 命名空间或你自己的业务命名空间(如 `images`)拿到最终态。
+
+**background 下的两个强约束:**
+
+1. 插件**禁止**直接写 `_jobs` 命名空间 —— 框架独占。业务状态请写到自己的命名空间(如 `images/{jobId}` `{status: 'pending'}` → `{status: 'ready', url: ...}`)。
+2. `setImmediate` 中抛出的异常**不会**映射为 5xx —— 响应已发。失败信息会被框架写入 `_jobs/<jobId>.value.error`,前端通过 SSE 感知。
+
+**事件链 chain:** 无论 sync 还是 background,runtime emit 的 `event.emit` proposal 都会按 priority 触发同一 turn 内的下游 runtime,不需要额外协调。这让"按钮 → prompt-generator (agent) → image-generator (function, background)"这种多步 pipeline 完全声明式。
+
+### 完整示例: 两段式图像生成插件
+
+```yaml
+# runtimes/prompt-generator/PLUGIN.md
+name: my-image-gen/prompt-generator
+priority: 600
+runtimeType: agent                     # 用 LLM 生成 prompt
+trigger: { type: manual }
+# frontmatter 的 output 只接受 { schema, recordAs }(outputConfigSchema 是 strict)。
+# 事件由 agent 在 runtime output JSON 里输出 events[] 数组,normalizeOutput
+# 会转成 event.emit proposal。在 prompt 正文里要求模型输出:
+#   { "prompt": "...", "events": [{"topic": "image.generate.requested", "data": {"prompt": "..."}}] }
+```
+
+```yaml
+# runtimes/image-generator/PLUGIN.md
+name: my-image-gen/image-generator
+priority: 610
+runtimeType: function                  # 纯 JS,直接调 provider
+execution: background                  # 不阻塞 turn
+trigger:
+  type: event
+  topic: image.generate.requested
+handler: ./image-handler.js
+```
+
+```ts
+// runtimes/image-generator/image-handler.js
+export default async function handler(ctx) {
+  const prompt = ctx.triggerEvent?.data?.prompt;
+  const { images } = await ctx.gateway.generateImage({ presetId: 'image', prompt });
+  const image = images[0];
+  return {
+    // output JSON for downstream runtimes / trace
+    url: image?.url,
+    base64: image?.base64,
+    // framework picks this up → commits one plugin.data proposal
+    pluginData: [
+      { namespace: 'images', key: ctx.turnId, value: image },
+    ],
+  };
+}
+```
+
 ## 5. 发布和分享
 
 ### 插件信任等级
