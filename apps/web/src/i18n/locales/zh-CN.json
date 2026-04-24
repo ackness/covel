@@ -518,7 +518,8 @@
       "invalidFileType": "请选择 .zip 文件",
       "installed": "已安装 {{id}}",
       "installedRestart": "已安装 {{id}}（需重启服务生效）",
-      "restartHint": "新插件已写入用户插件目录。请重启服务端 / 桌面应用以加载。"
+      "restartHint": "新插件已写入用户插件目录。请重启服务端 / 桌面应用以加载。",
+      "restartNow": "立即重启"
     },
     "desktopDataLocations": "数据位置",
     "desktopDataConfig": "配置",
@@ -536,6 +537,8 @@
     "desktopServer": "后端服务器",
     "desktopServerPort": "本地 API 服务器运行于端口 ",
     "desktopRestart": "重启服务器",
+    "desktopRestartHint": "重启后会重新扫描插件、世界包与 llm.toml；正在进行的回合会断开，建议先完成当前叙事。",
+    "desktopRestartWebHint": "当前非桌面端运行。请刷新浏览器手动重载。",
     "desktopRefresh": "刷新信息",
     "desktopTutorial": "教程",
     "desktopResetOnboardingHint": "下次启动 Covel 时重新进入引导。",
@@ -774,5 +777,10 @@
       "block": "块",
       "state": "状态"
     }
+  },
+  "reload": {
+    "reloading": "正在重启服务…",
+    "reloadingServer": "正在重启后端…",
+    "reloadingHint": "通常耗时几秒。"
   }
 }

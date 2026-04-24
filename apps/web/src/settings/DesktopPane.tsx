@@ -31,7 +31,7 @@ import {
   openLlmToml,
   openKeysEnv,
   pickDataDir,
-  restartServer,
+  reloadServerAndWait,
 } from "@/lib/desktop-bridge.js";
 import { resetOnboarding } from "@/components/onboarding-wizard.js";
 import { useSession } from "@/stores/session-store.js";
@@ -84,14 +84,17 @@ export function DesktopPane() {
   async function handleRestart() {
     setBusy("restart");
     try {
-      const result = await restartServer();
-      if (result?.port) setToast(`Server restarted on port ${result.port}`);
+      const ok = await reloadServerAndWait({
+        message: t("reload.reloadingServer", "Restarting backend…"),
+      });
+      if (!ok) setToast(t("settings.desktopRestartWebHint"));
     } catch (err) {
       setToast(err instanceof Error ? err.message : "Restart failed");
-    } finally {
       setBusy(null);
       setTimeout(() => setToast(null), 3000);
     }
+    // On success the helper calls window.location.reload(); any code path
+    // that reaches here means we need to leave `busy` cleared.
   }
 
   async function handlePickDataDir() {
@@ -251,6 +254,9 @@ export function DesktopPane() {
             {info?.serverPort ?? "?"}
           </span>
           .
+        </div>
+        <div className="text-[11px] text-muted-foreground leading-relaxed">
+          {t("settings.desktopRestartHint")}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button

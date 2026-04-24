@@ -271,6 +271,41 @@ export async function restartServer(): Promise<{ port: number } | null> {
 }
 
 /**
+ * Desktop-only: restart the backend sidecar and then hard-reload the
+ * renderer so every stateful client (SSE subscriptions, TanStack Query
+ * caches, plugin UI specs, session-store, Error banners) rebuilds against
+ * the fresh process.
+ *
+ * Shows the global `<ReloadOverlay />` for the duration (main-process
+ * IPC blocks until the sidecar's /api/health passes, typically 2–5s).
+ *
+ * Returns `false` if not running inside a desktop shell — callers can
+ * fall back to instructing the user to refresh manually.
+ */
+export async function reloadServerAndWait(opts?: {
+  message?: string;
+}): Promise<boolean> {
+  const ipc = getCovelIpc();
+  if (!ipc) return false;
+
+  const { showReloadOverlay, hideReloadOverlay } = await import(
+    "@/components/reload-overlay.js"
+  );
+
+  showReloadOverlay(opts?.message);
+  try {
+    await ipc.invoke<{ port: number }>("covel:restart-server");
+    // Sidecar is healthy again; reload the page so all clients rebuild
+    // cleanly. The overlay stays visible through the navigation.
+    window.location.reload();
+    return true;
+  } catch (err) {
+    hideReloadOverlay();
+    throw err;
+  }
+}
+
+/**
  * Retrieve runtime info. Electron returns the full set via IPC; REST-mode
  * desktop falls back to `/api/config/info` which returns the paths but not
  * the Electron-only fields (version, platform, serverPort).

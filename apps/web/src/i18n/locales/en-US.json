@@ -518,7 +518,8 @@
       "invalidFileType": "Please choose a .zip file",
       "installed": "Installed {{id}}",
       "installedRestart": "Installed {{id}} — restart required",
-      "restartHint": "The new plugin was written to the user plugins directory. Restart the server/desktop app to load it."
+      "restartHint": "The new plugin was written to the user plugins directory. Restart the server/desktop app to load it.",
+      "restartNow": "Restart now"
     },
     "desktopDataLocations": "Data Locations",
     "desktopDataConfig": "Config",
@@ -536,6 +537,8 @@
     "desktopServer": "Backend Server",
     "desktopServerPort": "Local API server running on port ",
     "desktopRestart": "Restart server",
+    "desktopRestartHint": "Restarting rescans plugins, world packs and llm.toml. In-flight turns will disconnect — finish any ongoing narrative first.",
+    "desktopRestartWebHint": "Not running in desktop — refresh your browser to reload manually.",
     "desktopRefresh": "Refresh info",
     "desktopTutorial": "Tutorial",
     "desktopResetOnboardingHint": "Re-run the onboarding wizard the next time Covel launches.",
@@ -774,5 +777,10 @@
       "block": "Block",
       "state": "State"
     }
+  },
+  "reload": {
+    "reloading": "Restarting server…",
+    "reloadingServer": "Restarting backend…",
+    "reloadingHint": "Usually takes a few seconds."
   }
 }

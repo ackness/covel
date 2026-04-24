@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ReloadOverlay } from "@/components/reload-overlay";
 import { SessionProvider } from "@/stores/session-store";
 import { setStorageMode } from "@/services/data-service";
 import { loadProviderKeysFromStorage } from "@/services/api";
@@ -85,6 +86,7 @@ initSettings()
           <SessionProvider>
             <RouterProvider router={router} />
           </SessionProvider>
+          <ReloadOverlay />
         </ThemeProvider>
       </StrictMode>,
     );
