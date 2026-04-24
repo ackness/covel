@@ -18,6 +18,8 @@ export interface ResolvedSlot {
   tag: string;
   /** Server-configured model for this slot (from llm.toml). */
   serverModel?: string;
+  /** Server-configured provider for this slot (from llm.toml). */
+  serverProvider?: string;
 }
 
 function inferClientSlotTag(slotId: string): string {
@@ -122,6 +124,7 @@ export function useSlotConfig(
           label: slotId,
           tag: slotInfo.tag ?? "text",
           serverModel: slotInfo.model,
+          serverProvider: slotInfo.provider,
         });
         seen.add(slotId);
       }
@@ -138,6 +141,7 @@ export function useSlotConfig(
           label: slotId,
           tag: inferClientSlotTag(slotId),
           serverModel: preset?.model,
+          serverProvider: preset?.provider,
         });
         seen.add(slotId);
     }
@@ -153,6 +157,7 @@ export function useSlotConfig(
           label: "default",
           tag: inferClientSlotTag("default"),
           serverModel: defaultPreset.model,
+          serverProvider: defaultPreset.provider,
         });
       }
     }

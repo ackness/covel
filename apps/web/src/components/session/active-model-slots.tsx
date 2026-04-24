@@ -35,7 +35,7 @@ export function ActiveModelSlots({
       <div className="space-y-1">
         {slots.map((slot) => {
           const modelName = slot.preset?.model ?? slot.serverModel ?? "unknown";
-          const provider = slot.preset?.provider ?? "";
+          const provider = slot.preset?.provider ?? slot.serverProvider ?? "";
           return (
             <div key={slot.slotId} className="flex items-center justify-between py-1.5 px-2 bg-muted/30 text-xs">
               <div className="flex items-center gap-1.5 min-w-0">
@@ -56,7 +56,6 @@ export function ActiveModelSlots({
                   target={{ kind: "slot", slotId: slot.slotId }}
                   variant="icon"
                   size="xs"
-                  hideResult
                 />
               </div>
             </div>
