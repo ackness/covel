@@ -23,6 +23,7 @@ import {
   type PluginDiscoveryResult,
   type ParsedPluginMd,
   type PluginLlmConfig,
+  type PluginRuntimeGateway,
 } from '@covel/plugin-loader';
 import { createStateManager, type StateManager } from '@covel/state';
 import { createEventBus, type EventBus } from '@covel/events';
@@ -106,6 +107,13 @@ export interface ApiBootstrapConfig {
   readonly pluginsDirs?: readonly string[];
   /** LLM adapter (real or mock). */
   readonly llmAdapter: LLMAdapter;
+  /**
+   * Optional narrow gateway facade exposed to function-runtime handlers
+   * via `FunctionHandlerContext.gateway`. The server composition root
+   * builds this from `createAiStack().gateway`; tests that don't need
+   * LLM access from function runtimes can leave it out.
+   */
+  readonly pluginGateway?: PluginRuntimeGateway;
   /** DataStore for all persistence. */
   readonly store: DataStore;
   /**
@@ -239,7 +247,11 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
         }
       }
 
-      // Register with all manifests (first is primary for getActiveRuntimes)
+      // Register with all manifests (first is primary for getActiveRuntimes).
+      // `source` comes from `discoverPluginsMulti`: bundled first-dir plugins
+      // keep their prefix-derived trust, everything else is clamped to
+      // `'community'` — so a third-party plugin can't self-assign a higher
+      // trust level by forging `pluginType: core-plugin` in its frontmatter.
       registry.register({
         id: discovery.id,
         summary,
@@ -247,6 +259,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
         manifests,
         loadedRuntimes: new Map(),
         status: 'registered',
+        ...(discovery.source ? { source: discovery.source } : {}),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -259,6 +272,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
         loadedRuntimes: new Map(),
         status: 'error',
         error: message,
+        ...(discovery.source ? { source: discovery.source } : {}),
       });
     }
   }
@@ -784,6 +798,9 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     c.set('eventBus', eventBus);
     c.set('pluginRegistry', registry);
     c.set('llmAdapter', config.llmAdapter);
+    if (config.pluginGateway) {
+      c.set('pluginGateway', config.pluginGateway);
+    }
     c.set('loadRuntimeFn', loadRuntimeFn);
     c.set('toolExecutor', toolExecutor);
     c.set('getConfigFn', getConfigFn);

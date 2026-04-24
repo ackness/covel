@@ -17,7 +17,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { createAiStack } from "./ai-setup.js";
 import { createStoreFromEnv, resolveBackendFromEnv } from "@covel/store";
 import { createEmbeddingLockHelper } from "./embedding-lock.js";
-import { createGatewayAdapter } from "@covel/runtime";
+import { createGatewayAdapter, createPluginRuntimeGateway } from "@covel/runtime";
 import { bootstrapApi } from "./routes/api/bootstrap.js";
 import {
   createInProcessSessionLock,
@@ -175,6 +175,16 @@ if (storeBackend === "pg" && env.databaseUrl) {
 // to llm.toml without requiring code changes here.
 const apiKeys = providerApiKeysFromEnv(process.env);
 const llmAdapter = createGatewayAdapter(ai.gateway, { apiKeys });
+// Function-runtime gateway facade — shares the same preset/provider
+// registry and env apiKeys as the agent-runtime LLM adapter. Plugins
+// that need generateImage / generateText / generateObject reach it via
+// `FunctionHandlerContext.gateway`. `toZodSchema` is left off at
+// startup: the framework's agent runtimes already cover structured
+// output via responseFormat, and plugin-data calls use tool schemas —
+// exposing `generateObject` would require importing zod into the
+// app.ts composition root. A future PR can supply a converter if a
+// plugin genuinely needs it.
+const pluginGateway = createPluginRuntimeGateway(ai.gateway, { apiKeys });
 const preferredMemorySlot = resolvePreferredMemorySlot(ai.slotRegistry);
 
 // ── Bootstrap API ───────────────────────────────────────────────
@@ -200,6 +210,7 @@ const api = await bootstrapApi({
   pluginsDir: bundledPluginsDir,
   pluginsDirs,
   llmAdapter,
+  pluginGateway,
   store,
   storeBackend,
   ensureEmbeddingLock,

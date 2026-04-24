@@ -1,5 +1,5 @@
 import type { DataStore } from '@covel/store';
-import type { PluginRegistry, LoadedRuntime } from '@covel/plugin-loader';
+import type { PluginRegistry, LoadedRuntime, PluginRuntimeGateway } from '@covel/plugin-loader';
 import type { StateManager } from '@covel/state';
 import type { EventBus } from '@covel/events';
 import type { LLMAdapter, ToolExecutor, RpcExecutor, PluginRpcRegistry, HookPipeline } from '@covel/runtime';
@@ -23,6 +23,13 @@ declare module 'hono' {
     eventBus: EventBus;
     pluginRegistry: PluginRegistry;
     llmAdapter: LLMAdapter;
+    /**
+     * Narrow gateway facade exposed to function-runtime handlers via
+     * `FunctionHandlerContext.gateway`. Set by `bootstrapApi()` when the
+     * caller provides a `pluginGateway`; absent when running with the
+     * minimal test-harness LLMAdapter only.
+     */
+    pluginGateway?: PluginRuntimeGateway;
     loadRuntimeFn: LoadRuntimeFn;
     toolExecutor: ToolExecutor;
     getConfigFn: GetConfigFn;
