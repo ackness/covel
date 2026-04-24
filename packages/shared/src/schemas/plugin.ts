@@ -360,6 +360,12 @@ export const runtimeManifestSchema = z
      */
     upstreamRequired: z.array(z.string().min(1)).optional(),
     trigger: triggerConfigSchema.optional(),
+    /**
+     * Execution mode when activated via manual plugin-rpc (`sync` awaits,
+     * `background` returns a jobId and streams progress via `_jobs`
+     * plugin-data). Ignored for scheduler-driven runtimes.
+     */
+    execution: z.enum(['sync', 'background']).optional(),
     tools: toolsConfigSchema.optional(),
     input: inputConfigSchema.optional(),
     output: outputConfigSchema.optional(),

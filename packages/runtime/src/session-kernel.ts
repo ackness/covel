@@ -113,6 +113,44 @@ export function normalizeOutput(
     }
   }
 
+  // plugin.data / plugin.data.batch — from pluginData[]. Each entry is
+  // `{ namespace, key, value }`. Single entry → plugin.data, multiple → a
+  // batched plugin.data.batch so commits happen in one store call. Function
+  // runtimes need this to write their own namespace (e.g. image galleries,
+  // job state, per-session caches) without reaching into DataStore directly.
+  const pluginData = output.pluginData as Array<{
+    namespace?: unknown;
+    key?: unknown;
+    value?: unknown;
+  }> | undefined;
+  if (Array.isArray(pluginData) && pluginData.length > 0) {
+    const items = pluginData
+      .filter(
+        (item): item is { namespace: string; key: string; value: unknown } =>
+          !!item
+          && typeof item === 'object'
+          && typeof item.namespace === 'string'
+          && item.namespace.length > 0
+          && typeof item.key === 'string'
+          && item.key.length > 0
+          && 'value' in item,
+      )
+      .map((item) => ({
+        namespace: item.namespace,
+        key: item.key,
+        value: item.value,
+      }));
+    if (items.length === 1) {
+      proposals.push(
+        makeProposal('plugin.data', source, turnId, sessionId, items[0]),
+      );
+    } else if (items.length > 1) {
+      proposals.push(
+        makeProposal('plugin.data.batch', source, turnId, sessionId, { items }),
+      );
+    }
+  }
+
   // notifications[] — system-level messages surfaced to the chat feed.
   // Each notification is normalised into a narrative.append proposal with
   // kind='system' so it flows through the same commit path as any assistant

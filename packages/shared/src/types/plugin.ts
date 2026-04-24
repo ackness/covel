@@ -340,6 +340,19 @@ export interface RuntimeManifest {
    */
   readonly upstreamRequired?: readonly string[];
   readonly trigger?: TriggerConfig;
+  /**
+   * Execution mode when this runtime is activated via a manual plugin-rpc call
+   * (or later, through background-capable event chains).
+   *
+   * - `'sync'` (default): caller awaits runtime completion; proposals commit
+   *   inside the request/response cycle.
+   * - `'background'`: server schedules the runtime, returns immediately with
+   *   a `jobId`, and pushes progress / result over the `_jobs` plugin-data
+   *   namespace (SSE `plugin-data.changed`).
+   *
+   * Ignored for runtimes triggered by the normal per-turn scheduler.
+   */
+  readonly execution?: 'sync' | 'background';
   readonly tools?: ToolsConfig;
   readonly input?: InputConfig;
   readonly output?: OutputConfig;

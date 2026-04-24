@@ -69,6 +69,26 @@ export interface TurnInput {
    * name. Looked up by the resolver before falling back to `manifest.model`.
    */
   readonly runtimeModelOverrides?: Readonly<Record<string, string>>;
+  /**
+   * Manual trigger descriptor. When set, the turn executor runs only the
+   * targeted runtime (bypassing scheduling of auto/event runtimes), then
+   * processes any events the runtime emitted as a chained mini-pipeline.
+   * Used by `POST /api/sessions/:id/plugin-rpc` with a `runtimeId` body.
+   */
+  readonly manualTrigger?: {
+    readonly runtimeId: string;
+    readonly payload?: Readonly<Record<string, unknown>>;
+  };
+  /**
+   * Player-authored plugin settings, keyed by pluginId. Each plugin's bucket
+   * holds the values the user has saved under `plugin.<pluginId>.<key>` in
+   * the unified SettingsStore; the server merges these with the per-runtime
+   * `manifest.userSettings[].default` before invoking function handlers so
+   * plugins can rely on every declared key being present (audit F7).
+   *
+   * Absent on programmatic / test callers that don't carry player context.
+   */
+  readonly userSettings?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 }
 
 export interface TurnResult {
@@ -86,6 +106,20 @@ export interface TurnResult {
    * Callers should surface this reason to the player / client.
    */
   readonly abortReason?: string;
+  /**
+   * Event-chain followers with `manifest.execution === 'background'` that
+   * were matched in this turn but intentionally NOT executed, so the sync
+   * caller can schedule them as `_jobs` and return immediately (audit F1).
+   *
+   * Each entry carries the triggering event so the caller can re-enter the
+   * runtime without reconstructing it. Empty / absent when no background
+   * follower was in scope.
+   */
+  readonly deferredFollowers?: readonly {
+    readonly runtimeId: string;
+    readonly pluginId: string;
+    readonly triggerEvent: { readonly topic: string; readonly data: Readonly<Record<string, unknown>> };
+  }[];
 }
 
 // ── Interaction protocol ────────────────────────────────────────

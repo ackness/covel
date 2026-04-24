@@ -81,3 +81,36 @@ export function makeFailedResult(
     timestamp: new Date().toISOString(),
   };
 }
+
+/**
+ * Resolve the player-authored settings bucket for a runtime, merging the
+ * per-key defaults declared in `manifest.userSettings` with the values the
+ * player has saved (delivered by the caller via `TurnInput.userSettings`).
+ *
+ * Behaviour:
+ *   - Returns `undefined` when the manifest declares no `userSettings` —
+ *     callers should not put an empty `userSettings` field onto the handler
+ *     ctx in that case (avoids lying about a feature the plugin never
+ *     opted into).
+ *   - Always includes every declared key: player value wins, default fills
+ *     in missing keys. Handlers can therefore rely on
+ *     `ctx.userSettings[spec.key]` being defined when the spec exists.
+ *   - Scoped to the manifest's own `pluginId` — a runtime never sees
+ *     another plugin's bucket.
+ */
+export function resolveUserSettings(
+  manifest: RuntimeManifest,
+  allUserSettings: TurnInput['userSettings'],
+): Readonly<Record<string, unknown>> | undefined {
+  const specs = manifest.userSettings;
+  if (!specs || specs.length === 0) return undefined;
+
+  const playerValues = allUserSettings?.[manifest.pluginId] ?? {};
+  const merged: Record<string, unknown> = {};
+  for (const spec of specs) {
+    merged[spec.key] = Object.prototype.hasOwnProperty.call(playerValues, spec.key)
+      ? playerValues[spec.key]
+      : spec.default;
+  }
+  return merged;
+}

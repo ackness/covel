@@ -49,6 +49,13 @@ export { submitFormHandler, RpcValidationError } from './rpc-defaults/submit-for
 export { createGatewayAdapter } from './gateway-llm-adapter.js';
 export type { GatewayLike, GatewayAdapterConfig } from './gateway-llm-adapter.js';
 
+// ── Plugin-facing Gateway Facade (function runtimes) ───────────
+export { createPluginRuntimeGateway } from './plugin-runtime-gateway.js';
+export type {
+  FullGatewayLike,
+  PluginRuntimeGatewayConfig,
+} from './plugin-runtime-gateway.js';
+
 // ── Session Kernel ──────────────────────────────────────────────
 export { normalizeOutput, createCommitPipeline, processRuntimeResult, createTraceRecorder } from './session-kernel.js';
 export type { KernelStore, CommitPipeline, TraceRecorder, ProcessRuntimeResultOutput } from './session-kernel.js';

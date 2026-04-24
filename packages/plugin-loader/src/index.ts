@@ -35,4 +35,5 @@ export type {
   PluginTrustInfo,
   FunctionHandler,
   FunctionHandlerContext,
+  PluginRuntimeGateway,
 } from './types.js';

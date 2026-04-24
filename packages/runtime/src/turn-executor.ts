@@ -16,7 +16,7 @@ import type {
   TurnResult,
 } from '@covel/shared';
 import { isEnvEnabled } from '@covel/shared';
-import type { LoadedRuntime } from '@covel/plugin-loader';
+import type { LoadedRuntime, PluginRuntimeGateway } from '@covel/plugin-loader';
 import type {
   DataStore,
   TurnMessageRecord,
@@ -49,7 +49,7 @@ import type { TriggerContext, ScheduledGroup } from './types.js';
 import type { LLMAdapter, LLMMessage } from './llm-adapter.js';
 import type { ToolExecutor } from './tool-executor.js';
 import type { HookPipeline } from './hooks/pipeline.js';
-import { buildToolDefinitions, makeFailedResult } from './turn-executor-helpers.js';
+import { buildToolDefinitions, makeFailedResult, resolveUserSettings } from './turn-executor-helpers.js';
 import {
   buildRetryPolicy,
   callLLMWithRetry,
@@ -92,6 +92,15 @@ export interface TurnExecutorDeps {
   readonly loadRuntime: (manifest: RuntimeManifest, locale?: string) => Promise<LoadedRuntime | undefined>;
   /** LLM adapter for making model calls. */
   readonly llm: LLMAdapter;
+  /**
+   * Optional narrow gateway facade forwarded to function-runtime handlers
+   * and guards via `FunctionHandlerContext.gateway`. Agent runtimes go
+   * through `deps.llm` as before — this is purely for `runtimeType:
+   * 'function'` handlers that want to call `generateImage` /
+   * `generateObject` / `generateText` directly. Absent in test harnesses
+   * that don't wire up the ai-provider gateway; handlers must null-check.
+   */
+  readonly gateway?: PluginRuntimeGateway;
   /** Get effective config for a plugin/runtime. */
   readonly getConfig: (pluginId: string, runtimeId: string) => Readonly<Record<string, unknown>>;
   /** Optional DataStore for persisting results. */
@@ -534,8 +543,10 @@ export async function executeTurn(
   // that interval-based triggers depend on (e.g. interval:2 fires at 0,2,4…).
   const turnNumber = messageHistory.filter((m) => m.sourceType === 'player').length;
 
-  // Save player message to the append-only history
-  if (deps.store) {
+  // Save player message to the append-only history.
+  // Skip for manual-trigger turns — plugin-rpc invocations are not player
+  // chat messages and must not pollute history or bump turnsSinceLastTrigger.
+  if (deps.store && !input.manualTrigger) {
     await deps.store.appendTurnMessage({
       id: crypto.randomUUID(),
       sessionId: input.sessionId,
@@ -557,7 +568,9 @@ export async function executeTurn(
   // 0b. Compaction (S2-T2): run before buildContext so summaries are stored
   //     before the turn's context assembly reads them.
   //     Only runs when COVEL_COMPACTOR_V1=1 AND a compactor is injected.
-  if (isEnvEnabled('COVEL_COMPACTOR_V1') && deps.compactor && deps.store) {
+  //     Skipped for manual triggers — they don't add player messages, so
+  //     there's nothing new to compact.
+  if (isEnvEnabled('COVEL_COMPACTOR_V1') && deps.compactor && deps.store && !input.manualTrigger) {
     // Reload messages after appending the player message so the compactor
     // sees the full updated history (including the just-appended player msg).
     const freshMessages = await deps.store.listTurnMessages(input.sessionId);
@@ -630,32 +643,51 @@ export async function executeTurn(
     (msg) => !(msg.turnId === input.turnId && msg.sourceType === 'player'),
   );
 
-  const triggered = activeRuntimes.filter((rt) => {
-    // Compute turnsSinceLastTrigger: count player messages after this runtime's last message
-    let lastRuntimeMsgIdx = -1;
-    for (let i = messageHistory.length - 1; i >= 0; i--) {
-      const m = messageHistory[i];
-      if (m.sourceType === 'runtime' && m.sourceRuntimeId === rt.name) {
-        lastRuntimeMsgIdx = i;
-        break;
-      }
-    }
-    const turnsSinceLastTrigger = lastRuntimeMsgIdx >= 0
-      ? messageHistory.slice(lastRuntimeMsgIdx).filter((m) => m.sourceType === 'player').length
-      : 999;
-
-    const triggerContext: TriggerContext = {
+  // Manual trigger short-circuit: plugin-rpc targeted one specific runtime,
+  // so bypass the per-runtime shouldTrigger check and only run that runtime
+  // plus any event-chain it produces (handled after the groups loop).
+  const manualTarget = input.manualTrigger
+    ? activeRuntimes.find((rt) => rt.name === input.manualTrigger!.runtimeId)
+    : undefined;
+  if (input.manualTrigger && !manualTarget) {
+    return {
+      turnId: input.turnId,
       sessionId: input.sessionId,
-      turnNumber,
-      triggerCount: runtimeTriggerCounts.get(rt.name) ?? 0,
-      turnsSinceLastTrigger,
-      pendingEventTopics: [],
-      hasUpstreamFailure: false,
-      isManualTrigger: false,
-      preGameCompleted,
+      runtimeResults: [],
+      durationMs: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+      abortReason: `manual-trigger: runtime not found or inactive: ${input.manualTrigger.runtimeId}`,
     };
-    return shouldTrigger(rt, triggerContext);
-  });
+  }
+
+  const triggered = manualTarget
+    ? [manualTarget]
+    : activeRuntimes.filter((rt) => {
+      // Compute turnsSinceLastTrigger: count player messages after this runtime's last message
+      let lastRuntimeMsgIdx = -1;
+      for (let i = messageHistory.length - 1; i >= 0; i--) {
+        const m = messageHistory[i];
+        if (m.sourceType === 'runtime' && m.sourceRuntimeId === rt.name) {
+          lastRuntimeMsgIdx = i;
+          break;
+        }
+      }
+      const turnsSinceLastTrigger = lastRuntimeMsgIdx >= 0
+        ? messageHistory.slice(lastRuntimeMsgIdx).filter((m) => m.sourceType === 'player').length
+        : 999;
+
+      const triggerContext: TriggerContext = {
+        sessionId: input.sessionId,
+        turnNumber,
+        triggerCount: runtimeTriggerCounts.get(rt.name) ?? 0,
+        turnsSinceLastTrigger,
+        pendingEventTopics: [],
+        hasUpstreamFailure: false,
+        isManualTrigger: false,
+        preGameCompleted,
+      };
+      return shouldTrigger(rt, triggerContext);
+    });
 
   // 2. Schedule runtimes.
   //
@@ -673,7 +705,15 @@ export async function executeTurn(
   //
   // See packages/runtime/src/dag-scheduler.ts for the algorithm.
   let groups: readonly ScheduledGroup[];
-  if (turnNumber === 0) {
+  if (manualTarget) {
+    // Manual trigger: one-runtime group. Event-chain resolution happens in the
+    // post-group loop below, so any event-triggered downstreams fire in
+    // priority order without going through the DAG scheduler.
+    groups = [{
+      priority: manualTarget.priority ?? 500,
+      runtimes: [manualTarget],
+    }];
+  } else if (turnNumber === 0) {
     groups = scheduleByPriority(triggered, turnNumber);
   } else {
     const mainLoop = triggered.filter(
@@ -768,6 +808,24 @@ export async function executeTurn(
 
   // 3. Execute each group
   const completedResults = new Map<string, RuntimeResult>();
+  // Collect emitted events as a topic → payload map. First emission wins if
+  // multiple runtimes publish the same topic in a single depth — keeps the
+  // chain deterministic and avoids one runtime silently overriding another.
+  const collectEventsFrom = (
+    result: RuntimeResult,
+    sink: Map<string, Record<string, unknown>>,
+  ): void => {
+    const output = result.output as Record<string, unknown> | null | undefined;
+    const events = output?.events as Array<Record<string, unknown>> | undefined;
+    if (!events) return;
+    for (const evt of events) {
+      const topic = evt?.topic;
+      if (typeof topic !== 'string' || topic.length === 0) continue;
+      if (sink.has(topic)) continue;
+      const data = (evt?.data as Record<string, unknown> | undefined) ?? {};
+      sink.set(topic, data);
+    }
+  };
 
   for (const group of groups) {
     const results = await executeParallel(group.runtimes, async (manifest) => {
@@ -778,6 +836,116 @@ export async function executeTurn(
     for (const [name, result] of results) {
       completedResults.set(name, result);
     }
+  }
+
+  // 3b. Event-chain resolution.
+  //
+  // Any runtime may emit `output.events: [{ topic, data }]`; those topics are
+  // collected here and used to schedule *unfinished* runtimes whose
+  // `trigger.type === 'event'` and `trigger.topic` matches. The matched event
+  // (topic + data) is forwarded to the downstream handler via
+  // `ctx.triggerEvent`, so a function runtime can read the payload directly
+  // without a separate store round-trip. This powers:
+  //
+  //   a. Manual-trigger chains — `plugin-rpc` runs a target runtime, and any
+  //      event-triggered followers (e.g. image generator listening on
+  //      `image.prompt.ready`) fire inside the same turn.
+  //   b. Mid-turn event fan-out — a regular auto-triggered runtime can wake
+  //      up an event-subscriber in the same turn (previously impossible
+  //      because pendingEventTopics was always empty).
+  //
+  // Depth-bounded loop (MAX_EVENT_CHAIN_DEPTH) protects against plugins that
+  // emit events in a cycle. Priority ordering inside each depth keeps
+  // behaviour deterministic.
+  const MAX_EVENT_CHAIN_DEPTH = 8;
+  const emittedEvents = new Map<string, Record<string, unknown>>();
+  for (const [, result] of completedResults) {
+    collectEventsFrom(result, emittedEvents);
+  }
+
+  // Audit F1: followers declaring `execution: 'background'` are pulled out
+  // of the sync chain and returned to the caller so it can schedule them
+  // as independent `_jobs`. The sync response thus completes as soon as
+  // the sync-mode runtimes finish; the caller (typically plugin-rpc) runs
+  // the background followers off-cycle and the frontend picks up progress
+  // via `plugin-data.changed` SSE on `_jobs/<jobId>`.
+  const deferredFollowers: {
+    runtimeId: string;
+    pluginId: string;
+    triggerEvent: { topic: string; data: Readonly<Record<string, unknown>> };
+  }[] = [];
+
+  let chainDepth = 0;
+  while (emittedEvents.size > 0 && chainDepth < MAX_EVENT_CHAIN_DEPTH) {
+    chainDepth += 1;
+    const nextBatch = activeRuntimes.filter((rt) => {
+      if (completedResults.has(rt.name)) return false;
+      if (rt.trigger?.type !== 'event') return false;
+      return rt.trigger.topic !== undefined && emittedEvents.has(rt.trigger.topic);
+    });
+    if (nextBatch.length === 0) break;
+
+    const ordered = [...nextBatch].sort(
+      (a, b) => (a.priority ?? 500) - (b.priority ?? 500),
+    );
+
+    // Snapshot the event map *before* executing this depth — new events
+    // produced by this batch must only wake the next depth, not the current.
+    const currentDepthEvents = new Map(emittedEvents);
+    const newEvents = new Map<string, Record<string, unknown>>();
+
+    // Split this depth into sync-executed runtimes and deferred
+    // (background) ones. Deferred runtimes don't block the turn, don't
+    // contribute to completedResults, and don't wake downstream event
+    // followers in THIS turn — the caller owns their fan-out.
+    const syncBatch: RuntimeManifest[] = [];
+    for (const manifest of ordered) {
+      const topic = manifest.trigger?.topic;
+      const matchedEvent = topic !== undefined ? currentDepthEvents.get(topic) : undefined;
+      if (manifest.execution === 'background' && topic !== undefined && matchedEvent !== undefined) {
+        deferredFollowers.push({
+          runtimeId: manifest.name,
+          pluginId: manifest.pluginId,
+          triggerEvent: { topic, data: matchedEvent },
+        });
+        continue;
+      }
+      syncBatch.push(manifest);
+    }
+
+    if (syncBatch.length === 0) break;
+
+    const results = await executeParallel(syncBatch, async (manifest) => {
+      const topic = manifest.trigger?.topic;
+      const matchedEvent = topic !== undefined ? currentDepthEvents.get(topic) : undefined;
+      const triggerEvent = topic !== undefined && matchedEvent !== undefined
+        ? { topic, data: matchedEvent }
+        : undefined;
+      return executeOneRuntime(
+        manifest,
+        input,
+        completedResults,
+        deps,
+        maxSteps,
+        defaultTimeoutMs,
+        promptHistory,
+        sessionMeta,
+        deps.hookPipeline,
+        sessionSummaries,
+        workingMemory,
+        coreMemoryBlocks,
+        sessionContext,
+        triggerEvent,
+      );
+    });
+    for (const [name, result] of results) {
+      completedResults.set(name, result);
+      collectEventsFrom(result, newEvents);
+    }
+    // Reset event window to just newly-produced events so stale topics from
+    // earlier depths don't keep re-matching the same runtimes.
+    emittedEvents.clear();
+    for (const [topic, data] of newEvents) emittedEvents.set(topic, data);
   }
 
   // ── Pre-Game completion tracking (Turn 0 only) ───────────────────
@@ -816,7 +984,7 @@ export async function executeTurn(
   // player-init) MUST NOT report `preGameDone: true` in the "form shown"
   // turn — they report it only after the player submits the form. This
   // keeps the user interactable while Pre-Game is still progressing.
-  if (turnNumber === 0 && deps.store) {
+  if (turnNumber === 0 && deps.store && !input.manualTrigger) {
     const newlyDone: string[] = [];
     for (const [name, result] of completedResults) {
       if (preGameCompleted.includes(name)) continue;
@@ -900,6 +1068,7 @@ export async function executeTurn(
     pendingInputs: pendingInputs.length > 0 ? pendingInputs : undefined,
     durationMs: Date.now() - startTime,
     timestamp: new Date().toISOString(),
+    ...(deferredFollowers.length > 0 ? { deferredFollowers } : {}),
   };
 
   // Persist results to store if available
@@ -1538,6 +1707,7 @@ async function executeOneRuntime(
   workingMemory?: readonly import('@covel/context').WorkingMemoryEntry[],
   coreMemoryBlocks?: readonly { label: string; content: string; updatedAt: string }[],
   sessionContext?: SessionContextSnapshot,
+  triggerEvent?: { readonly topic: string; readonly data: Readonly<Record<string, unknown>> },
 ): Promise<RuntimeResult> {
   const startTime = Date.now();
   const runId = crypto.randomUUID();
@@ -1625,6 +1795,11 @@ async function executeOneRuntime(
         return makeFailedResult(manifest, input, runId, startTime, 'Function runtime missing handler');
       }
       const config = deps.getConfig(manifest.pluginId, manifest.name);
+      const manualPayloadForRuntime =
+        input.manualTrigger?.runtimeId === manifest.name
+          ? input.manualTrigger.payload
+          : undefined;
+      const userSettingsForRuntime = resolveUserSettings(manifest, input.userSettings);
       const output = await loaded.handler({
         sessionId: input.sessionId,
         turnId: input.turnId,
@@ -1634,6 +1809,10 @@ async function executeOneRuntime(
         store: deps.store,
         completedResults,
         config,
+        ...(deps.gateway ? { gateway: deps.gateway } : {}),
+        ...(manualPayloadForRuntime ? { manualPayload: manualPayloadForRuntime } : {}),
+        ...(triggerEvent ? { triggerEvent } : {}),
+        ...(userSettingsForRuntime ? { userSettings: userSettingsForRuntime } : {}),
       });
 
       // ── Suspend detection for function runtimes (S4-T4) ────────────
@@ -1776,6 +1955,11 @@ async function executeOneRuntime(
     // ── Guard: pre-execution gate for agent runtimes ────────────
     if (loaded.guard) {
       const guardConfig = deps.getConfig(manifest.pluginId, manifest.name);
+      const guardManualPayload =
+        input.manualTrigger?.runtimeId === manifest.name
+          ? input.manualTrigger.payload
+          : undefined;
+      const guardUserSettings = resolveUserSettings(manifest, input.userSettings);
       const guardOutput = await loaded.guard({
         sessionId: input.sessionId,
         turnId: input.turnId,
@@ -1785,6 +1969,10 @@ async function executeOneRuntime(
         store: deps.store,
         completedResults,
         config: guardConfig,
+        ...(deps.gateway ? { gateway: deps.gateway } : {}),
+        ...(guardManualPayload ? { manualPayload: guardManualPayload } : {}),
+        ...(triggerEvent ? { triggerEvent } : {}),
+        ...(guardUserSettings ? { userSettings: guardUserSettings } : {}),
       });
 
       if (guardOutput.skip === true) {

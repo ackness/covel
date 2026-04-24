@@ -175,6 +175,87 @@ describe('normalizeOutput', () => {
     });
   });
 
+  describe('pluginData', () => {
+    // Function runtimes return `pluginData: [{namespace, key, value}]` to
+    // instruct the kernel to persist into their own plugin_data namespace.
+    // The normaliser picks this up the same way it does `events[]` /
+    // `statePatches[]`: a shape on the runtime output that turns into
+    // typed Proposals, committed through the standard commit pipeline.
+    it('emits a single plugin.data proposal for one entry', () => {
+      const output = {
+        pluginData: [
+          { namespace: 'images', key: 'job-1', value: { url: 'https://cdn/x.png' } },
+        ],
+      };
+      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+
+      const dataProposals = proposals.filter(p => p.type === 'plugin.data');
+      expect(dataProposals).toHaveLength(1);
+      expect(dataProposals[0].payload).toEqual({
+        namespace: 'images',
+        key: 'job-1',
+        value: { url: 'https://cdn/x.png' },
+      });
+    });
+
+    it('batches multiple entries into a single plugin.data.batch proposal', () => {
+      const output = {
+        pluginData: [
+          { namespace: 'images', key: 'job-1', value: { url: 'a' } },
+          { namespace: 'images', key: 'job-2', value: { url: 'b' } },
+          { namespace: '_jobs', key: 'j1', value: { status: 'done' } },
+        ],
+      };
+      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+
+      const batches = proposals.filter(p => p.type === 'plugin.data.batch');
+      expect(batches).toHaveLength(1);
+      const payload = batches[0].payload as { items: ReadonlyArray<Record<string, unknown>> };
+      expect(payload.items).toHaveLength(3);
+      expect(payload.items[0]).toEqual({ namespace: 'images', key: 'job-1', value: { url: 'a' } });
+      expect(payload.items[2]).toEqual({ namespace: '_jobs', key: 'j1', value: { status: 'done' } });
+    });
+
+    it('silently drops malformed entries and keeps valid ones', () => {
+      const output = {
+        pluginData: [
+          { namespace: 'good', key: 'k1', value: 1 },
+          { namespace: '', key: 'k2', value: 2 },           // empty namespace
+          { namespace: 'good', key: '', value: 3 },         // empty key
+          { namespace: 'good', value: 4 },                  // missing key
+          { namespace: 'good', key: 'k3' },                 // missing value key entirely → dropped
+          { namespace: 'good', key: 'k4', value: null },    // null value is valid
+        ],
+      };
+      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+
+      const batches = proposals.filter(p => p.type === 'plugin.data.batch');
+      expect(batches).toHaveLength(1);
+      const payload = batches[0].payload as { items: ReadonlyArray<Record<string, unknown>> };
+      // Only `good/k1` and `good/k4` survive — the rest fail the shape guard.
+      expect(payload.items).toHaveLength(2);
+      expect(payload.items[0]).toEqual({ namespace: 'good', key: 'k1', value: 1 });
+      expect(payload.items[1]).toEqual({ namespace: 'good', key: 'k4', value: null });
+    });
+
+    it('produces no proposal when pluginData is absent, empty, or entirely invalid', () => {
+      expect(normalizeOutput({}, SOURCE, TURN_ID, SESSION_ID).filter(p =>
+        p.type === 'plugin.data' || p.type === 'plugin.data.batch'
+      )).toHaveLength(0);
+
+      expect(normalizeOutput({ pluginData: [] }, SOURCE, TURN_ID, SESSION_ID).filter(p =>
+        p.type === 'plugin.data' || p.type === 'plugin.data.batch'
+      )).toHaveLength(0);
+
+      expect(normalizeOutput(
+        { pluginData: [{ namespace: '', key: '', value: null }] },
+        SOURCE, TURN_ID, SESSION_ID,
+      ).filter(p =>
+        p.type === 'plugin.data' || p.type === 'plugin.data.batch'
+      )).toHaveLength(0);
+    });
+  });
+
   describe('notifications', () => {
     // core-pregame and similar plugins return a `notifications[]` array of
     // { level, title, message } objects to surface system-level messages to
