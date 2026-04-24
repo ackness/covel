@@ -24,6 +24,9 @@ const GROUP_ORDER: SettingGroup[] = [
   "data",
 ];
 
+const PACKAGES_NODE_ID = "packages";
+const PACKAGES_LABEL = { "zh-CN": "导入包", "en-US": "Import Packages" };
+
 const GROUP_LABELS: Record<SettingGroup, { "zh-CN": string; "en-US": string }> =
   {
     general: { "zh-CN": "通用", "en-US": "General" },
@@ -157,8 +160,17 @@ export function buildNavTree(
       });
     }
   }
+  // Virtual node for package import (UI-only, no registered SettingEntry).
+  nodes.push({
+    id: PACKAGES_NODE_ID,
+    label: locale.startsWith("en") ? PACKAGES_LABEL["en-US"] : PACKAGES_LABEL["zh-CN"],
+    kind: "group",
+    children: [],
+  });
   return nodes;
 }
+
+export { PACKAGES_NODE_ID };
 
 export function filterNav(
   nodes: NavNode[],

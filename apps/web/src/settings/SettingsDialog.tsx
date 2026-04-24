@@ -9,7 +9,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { isDesktopApp } from "@/lib/desktop-bridge.js";
-import { buildNavTree, filterNav, type NavNode } from "./navigation.js";
+import {
+  buildNavTree,
+  filterNav,
+  PACKAGES_NODE_ID,
+  type NavNode,
+} from "./navigation.js";
 import { SettingWidget } from "./widgets/index.js";
 import { useSettingsStore } from "./use-settings.js";
 import { DataPane } from "./DataPane.js";
@@ -18,6 +23,7 @@ import { LlmSlotsPane } from "./panes/LlmSlotsPane.js";
 import { LlmKeysPane } from "./panes/LlmKeysPane.js";
 import { LlmAdvancedPane } from "./panes/LlmAdvancedPane.js";
 import { LlmPresetsPane } from "./panes/LlmPresetsPane.js";
+import { PackagesPane } from "./panes/PackagesPane.js";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -174,6 +180,7 @@ function renderPane(
   if (node.id === "llm.advanced") return <LlmAdvancedPane />;
   if (node.id === "data") return <DataPane />;
   if (node.id === "desktop") return <DesktopPane />;
+  if (node.id === PACKAGES_NODE_ID) return <PackagesPane />;
 
   if (node.children.length === 0) {
     return (

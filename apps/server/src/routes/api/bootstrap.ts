@@ -83,6 +83,7 @@ import { subscribeRoutes } from './subscribe.js';
 import { pluginDataRoutes } from './plugin-data.js';
 import { workingMemoryRoutes } from './working-memory.js';
 import { createRoutes } from './create.js';
+import { installRoutes } from './install.js';
 import { aiRoutes } from './ai.js';
 import { traceRoutes } from './traces.js';
 import { resumeRoutes } from './resume.js';
@@ -852,6 +853,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   app.route('/api/worlds', worldRoutes);
   app.route('/api/health', createHealthRoutes(store, config.storeBackend));
   app.route('/api/create', createRoutes);
+  app.route('/api/install', installRoutes);
   app.route('/api/ai', aiRoutes);
   app.route('/api/actions', actionRoutes);
   app.route('/api/traces', traceRoutes);
