@@ -149,12 +149,21 @@
 
 ### 回合执行（SSE 流式响应）
 
+`/api/actions` 接受的 `type` 字段（实际由 `apps/server/src/routes/api/actions.ts:79` 的 `SUPPORTED_ACTIONS` 数组定义）：
+
 | 命令 | 方法 | 端点 | 响应 |
 |------|------|------|------|
-| `turn.submit` | POST | `/api/actions` `type: "player_action"` | SSE: ProtocolEvent 流 |
+| `turn.submit` | POST | `/api/actions` `type: "send_message"` | SSE: ProtocolEvent 流 |
+| `turn.cmd` | POST | `/api/actions` `type: "execute_command"` | SSE: ProtocolEvent 流 |
 | `turn.start` | POST | `/api/actions` `type: "start_session"` | SSE: ProtocolEvent 流 |
 | `turn.retry` | POST | `/api/actions` `type: "retry_runtime"` | SSE: ProtocolEvent 流 |
 | `event.trigger` | POST | `/api/actions` `type: "trigger_event"` | SSE: ProtocolEvent 流 |
+
+> **注意（audit P2-10）**：旧文档曾写 `type: "player_action"`，那是早期原型，当前实现已用 `send_message` 取代。若客户端仍发送 `player_action`，actions 路由会以 `unknown action type` 返回错误。
+>
+> 区分 chat turn 与 plugin runtime 调用：
+> - 玩家发送的自然语言走 `/api/actions` `send_message`，触发 narrator 主链。
+> - 插件 UI 上的按钮走 `/api/sessions/:id/plugin-rpc`（见下方"插件 RPC"段），单次结构化调用，不会经过 narrator。
 
 ### 交互响应
 

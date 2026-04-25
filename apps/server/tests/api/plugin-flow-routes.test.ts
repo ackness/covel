@@ -37,7 +37,8 @@ describe("plugin flow routes", () => {
       "narrator",
       "post-narrator",
     ]);
-    expect(body.segments[1]?.rangeLabel).toBe("1-100");
+    // audit P0-1: Pre-Game band aligned to 1-99 to match scheduler edges.
+    expect(body.segments[1]?.rangeLabel).toBe("1-99");
     expect(body.steps.some((step) => step.runtimeId === "core-narrator" && step.isStoryRuntime)).toBe(true);
     expect(body.steps.some((step) => step.runtimeId === "core-pregame" && step.segmentId === "pre-game")).toBe(true);
     expect(body.steps.some((step) => step.priority === 500 && step.segmentId === "narrator")).toBe(true);

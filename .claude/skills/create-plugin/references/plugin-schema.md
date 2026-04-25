@@ -38,15 +38,16 @@ Schema 使用 Zod **strict** 模式（`runtimeManifestSchema`）— 不允许未
 
 ```yaml
 trigger:
-  type: auto|manual|scheduled|conditional|event|error-retry   # 必需
+  type: auto|manual|scheduled|event|error-retry   # 必需
   interval: <int>              # scheduled 时每隔 N 轮(正整数)
   maxTriggerCount: <int>       # 整个 session 最多触发次数
   startTurn: <int>             # 从第 N 主循环 turn 起介入(0-based)
-  condition: <string>          # conditional 时的表达式
   topic: <string>              # event 时订阅的事件 topic
   maxRetryCount: <int>         # error-retry 时
   cooldownTurns: <int>         # 上次触发后多少轮内不再触发
 ```
+
+> **`conditional` is reserved (audit P2-9)**: schema 仍接受这个值，但 `packages/runtime/src/trigger.ts` 不解析任何条件表达式，runtime 永远不会被触发，并会在 console 打印一次性 warning。在条件表达式引擎落地前请使用 `auto`/`scheduled`/`event` 等替代。
 
 **手动触发常用组合:**
 
@@ -140,6 +141,13 @@ userSettings:
 ```
 
 前端自动生成设置面板,值通过统一的 **SettingsStore**(`apps/web/src/settings/registry/plugin.ts`)持久化——桌面端写 `~/.covel/settings.json`,纯 Web 端写 `localStorage: covel:settings`。**没有** `/plugin-settings` REST 端点。
+
+> **第三方插件的 `ctx.store` 是窄接口（audit P0-3）**：`pluginType: plugin`（社区/第三方）的 function runtime 收到的 `ctx.store` 是 `FunctionStoreView`（仅 `getPluginData / listPluginData / getSession / listTurnMessages`），调用 `setPluginData` 等写入方法会得到 `undefined` 并立即 TypeError。要写数据请用：
+> - `ctx.pluginData.set(namespace, key, value)`：作用域绑定 sessionId+pluginId 的 placeholder 写入。
+> - 在 handler 返回值的 `pluginData: [{ namespace, key, value }]`：走 proposal/commit pipeline。
+> - `ctx.logger.info / warn / error`：写入插件 `_logs` 命名空间，UI/调试可消费。
+>
+> `pluginType: core-plugin` 才会拿到完整 `DataStore`，社区插件请勿尝试声明 `core-plugin`，bootstrap 会按 `getPluginTrustInfo` 重新分类。
 
 浏览器发起任何需要 userSettings 的请求(例如 `POST /api/sessions/:id/plugin-rpc`)时,前端把整个 `plugin.*` 分支做成 `X-Plugin-User-Settings: base64(JSON)` 头。服务端 `apps/server/src/routes/api/plugin-rpc.ts` 解码后:
 

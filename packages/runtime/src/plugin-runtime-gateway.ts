@@ -65,6 +65,13 @@ export interface FullGatewayLike {
     input: {
       presetId?: string;
       prompt: string;
+      /**
+       * Per-call model override. Forwarded to the provider in place of the
+       * preset's resolved model. Lets plugin `userSettings` expose a model
+       * picker without requiring a dedicated llm.toml slot per variant
+       * (audit F4).
+       */
+      model?: string;
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: FullGatewayOptions,
@@ -195,6 +202,11 @@ export function createPluginRuntimeGateway(
         {
           ...(input.presetId ? { presetId: input.presetId } : {}),
           prompt: input.prompt,
+          // Audit F4: forward per-call model override to the underlying
+          // gateway so the plugin can let `userSettings` pick a model
+          // (e.g. wan2.7-image-pro vs wan2.7-image) without requiring a
+          // separate llm.toml slot per variant.
+          ...(input.model ? { model: input.model } : {}),
           ...(input.providerRequestMetadata
             ? { providerRequestMetadata: { ...input.providerRequestMetadata } }
             : {}),

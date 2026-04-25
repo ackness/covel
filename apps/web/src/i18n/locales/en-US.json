@@ -577,7 +577,39 @@
     "useDefaultWith": "Use default ({{value}})",
     "modelBindingAria": "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.",
     "modelBindingSource": "Model binding — edit in Session Prep",
-    "modelBindingFallback": "Model binding: see Session Prep"
+    "modelBindingFallback": "Model binding: see Session Prep",
+    "source": {
+      "builtin": {
+        "label": "Core",
+        "tooltip": "Builtin core plugin shipped with Covel"
+      },
+      "official": {
+        "label": "Official",
+        "tooltip": "Official plugin curated by Covel"
+      },
+      "community": {
+        "label": "Third-party",
+        "tooltip": "Third-party plugin installed under ~/.covel/plugins"
+      }
+    },
+    "approval": {
+      "title": "Authorize plugin action",
+      "confirmMessage": "Plugin {{pluginId}} requests permission to run {{action}}. Authorize all matching calls for this session?",
+      "allow": "Authorize",
+      "deny": "Deny",
+      "denied": "Denied {{action}}",
+      "submitFailed": "Approval submission failed: {{error}}",
+      "unexpectedRequired": "Still got approval-required after grant — please check the approval backend"
+    },
+    "invokeRuntime": {
+      "submitted": "Submitted {{count}} background job(s): {{ids}}. Waiting for completion…",
+      "noFollowerEvents": "{{runtimeId}} finished but emitted no background follower (missing matching events[]). Check that the model output a valid JSON envelope."
+    }
+  },
+  "pluginJob": {
+    "completed": "{{target}} completed in {{duration}}",
+    "failed": "{{target}} failed: {{error}}",
+    "unknownError": "unknown error"
   },
   "coreImage": {
     "generateButton": "Generate Illustration",
@@ -737,6 +769,7 @@
     "eventsWillAppear": "Events will appear here as turns execute",
     "turn": "Turn {{count}}",
     "turn_one": "Turn {{count}}",
+    "pluginInvocation": "Plugin invocation",
     "nRuntimes": "{{count}} runtimes",
     "nRuntimes_one": "{{count}} runtime",
     "error": "ERROR",

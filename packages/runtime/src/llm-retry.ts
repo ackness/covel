@@ -28,6 +28,7 @@
 import type {
   LLMAdapter,
   LLMMessage,
+  LLMResponseFormat,
   LLMResponse,
   LLMStreamEvent,
   LLMToolCall,
@@ -224,6 +225,7 @@ export interface CallLLMWithRetryParams {
   readonly model?: string;
   readonly messages: readonly LLMMessage[];
   readonly tools?: readonly LLMToolDefinition[];
+  readonly responseFormat?: LLMResponseFormat;
   readonly policy: RetryPolicy;
   /**
    * Absolute runtime deadline (ms since epoch). The retry loop aborts once
@@ -287,6 +289,7 @@ export async function callLLMWithRetry(params: CallLLMWithRetryParams): Promise<
         model,
         messages: attemptMessages,
         tools,
+        responseFormat: params.responseFormat,
         signal,
       });
       if (params.emitter) {
@@ -401,6 +404,7 @@ export async function streamLLMWithRetry(
     let firstTokenSeen = false;
     const streamedToolCalls: LLMToolCall[] = [];
     let streamedContent = '';
+    let streamedReasoningContent = '';
     let streamFinishReason: 'stop' | 'tool_calls' | 'length' | 'error' = 'stop';
     const attemptMessages = perturbMessages(messages, attempt, lastReason);
     const forwardDeltas = attempt === 0; // avoid duplicate text on retry
@@ -435,6 +439,7 @@ export async function streamLLMWithRetry(
           streamedToolCalls.push({ id: event.id, name: event.name, arguments: event.arguments });
         } else if (event.type === 'done') {
           streamFinishReason = event.finishReason as 'stop' | 'tool_calls' | 'length' | 'error';
+          if (event.reasoningContent) streamedReasoningContent = event.reasoningContent;
         }
       }
 
@@ -446,6 +451,7 @@ export async function streamLLMWithRetry(
         toolCalls: streamedToolCalls,
         finishReason: streamFinishReason,
         usage: { inputTokens: 0, outputTokens: 0 },
+        ...(streamedReasoningContent ? { reasoningContent: streamedReasoningContent } : {}),
       };
       if (params.emitter) {
         await params.emitter.emit('llm.responded', buildLlmRespondedSuccessPayload({
@@ -492,6 +498,7 @@ export async function streamLLMWithRetry(
             toolCalls: streamedToolCalls,
             finishReason: 'error',
             usage: { inputTokens: 0, outputTokens: 0 },
+            ...(streamedReasoningContent ? { reasoningContent: streamedReasoningContent } : {}),
           },
           attempt,
         };

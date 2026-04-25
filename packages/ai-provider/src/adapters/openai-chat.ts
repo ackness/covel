@@ -12,6 +12,7 @@ import {
   readOpenAiChatFinishReason,
   readOpenAiChatUsage,
   readOpenAiChatToolCalls,
+  readOpenAiChatReasoningContent,
   readOpenAiChatStreamDelta,
   readOpenAiChatStreamReasoningDelta,
   readOpenAiChatStreamFinishReason,
@@ -102,6 +103,7 @@ function serializeMessages(
       return {
         role: "assistant",
         content: msg.content || null,
+        ...(msg.reasoningContent ? { reasoning_content: msg.reasoningContent } : {}),
         tool_calls: msg.toolCalls.map((tc) => ({
           id: tc.id,
           type: "function",
@@ -114,6 +116,13 @@ function serializeMessages(
         role: "tool",
         content: msg.content,
         tool_call_id: msg.toolCallId,
+      };
+    }
+    if (msg.role === "assistant" && msg.reasoningContent) {
+      return {
+        role: "assistant",
+        content: msg.content,
+        reasoning_content: msg.reasoningContent,
       };
     }
     return { role: msg.role, content: msg.content };
@@ -226,11 +235,34 @@ async function generateImageDashscopeWan(
       : undefined;
 
     if (status === "SUCCEEDED") {
-      const results = asArray<{ url?: string }>(pollOutput?.results) ?? [];
+      // DashScope wan series returns image URLs in two shapes depending on
+      // the model family:
+      //   - Legacy wanx / wan2.5: output.results[].url
+      //   - wan2.7 (current):     output.choices[].message.content[].image
+      // Read both so the adapter doesn't silently strip URLs as the
+      // provider rolls new model versions forward.
+      const legacyResults =
+        asArray<{ url?: string }>(pollOutput?.results) ?? [];
+      const legacyUrls = legacyResults
+        .filter((r) => typeof r.url === "string" && r.url.length > 0)
+        .map((r) => r.url!);
+
+      const choiceUrls: string[] = [];
+      const choices = asArray<Record<string, unknown>>(pollOutput?.choices) ?? [];
+      for (const choice of choices) {
+        const message = asRecord(choice?.message);
+        const content = asArray<Record<string, unknown>>(message?.content) ?? [];
+        for (const part of content) {
+          const image = part?.image;
+          if (typeof image === "string" && image.length > 0) {
+            choiceUrls.push(image);
+          }
+        }
+      }
+
+      const allUrls = [...legacyUrls, ...choiceUrls];
       return {
-        images: results
-          .filter((r) => r.url)
-          .map((r) => ({ mimeType: "image/png", url: r.url! })),
+        images: allUrls.map((url) => ({ mimeType: "image/png", url })),
         usage: null,
       };
     }
@@ -321,11 +353,13 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       assertSuccess(response, payload, "openai-chat");
 
       const toolCalls = readOpenAiChatToolCalls(payload);
+      const reasoningContent = readOpenAiChatReasoningContent(payload);
       return {
         text: readOpenAiChatText(payload),
         finishReason: readOpenAiChatFinishReason(payload),
         usage: readOpenAiChatUsage(payload),
         ...(toolCalls ? { toolCalls } : {}),
+        ...(reasoningContent ? { reasoningContent } : {}),
       };
     },
 
@@ -380,6 +414,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
 
       let usage: UsageSummary = { inputTokens: 0, outputTokens: 0 };
       let finishReason = "stop";
+      let reasoningAcc = "";
       // Accumulate tool_call deltas by index across chunks.
       const toolCallAcc = new Map<
         number,
@@ -389,6 +424,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       for await (const payload of iterateSsePayloads(response)) {
         const reasoningDelta = readOpenAiChatStreamReasoningDelta(payload);
         if (reasoningDelta) {
+          reasoningAcc += reasoningDelta;
           yield { type: "reasoning-delta", reasoningDelta };
         }
 
@@ -438,7 +474,12 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         }
       }
 
-      yield { type: "done", finishReason, usage };
+      yield {
+        type: "done",
+        finishReason,
+        usage,
+        ...(reasoningAcc ? { reasoningContent: reasoningAcc } : {}),
+      };
     },
 
     async embed(config, params) {

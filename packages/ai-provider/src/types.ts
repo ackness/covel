@@ -261,6 +261,13 @@ export interface TextMessage {
   toolCalls?: ToolCallPart[];
   /** Tool call ID this message responds to (present when role === "tool"). */
   toolCallId?: string;
+  /**
+   * Thinking-mode reasoning captured on a prior assistant turn. Must be
+   * echoed back verbatim on the next request for providers that enforce
+   * reasoning round-trip (e.g. DashScope Qwen, DeepSeek v4 thinking). The
+   * openai-chat adapter maps this to the `reasoning_content` wire field.
+   */
+  reasoningContent?: string;
 }
 
 export interface UsageSummary {
@@ -274,6 +281,13 @@ export interface TextGenerationResult {
   usage: UsageSummary;
   /** Tool calls requested by the model (present when finishReason involves tool use). */
   toolCalls?: ToolCallPart[];
+  /**
+   * Raw reasoning text emitted by the model in thinking mode. Present only
+   * when the provider exposes `reasoning_content` (DashScope Qwen, DeepSeek
+   * v4 thinking, etc.). Callers must carry this back on the assistant
+   * message of the next request when composing a multi-turn tool loop.
+   */
+  reasoningContent?: string;
 }
 
 // ── Object Generation ──────────────────────────────────────────────
@@ -295,7 +309,18 @@ export type StreamEvent =
   | { type: "text-delta"; textDelta: string }
   | { type: "reasoning-delta"; reasoningDelta: string }
   | { type: "tool-call"; id: string; name: string; arguments: string }
-  | { type: "done"; finishReason: string; usage: UsageSummary };
+  | {
+      type: "done";
+      finishReason: string;
+      usage: UsageSummary;
+      /**
+       * Full reasoning_content accumulated over the stream. Exposed on
+       * `done` so downstream callers that stitch a follow-up assistant
+       * turn (e.g. streaming → non-stream tool loop fallback) can echo it
+       * back per the provider's thinking-mode contract.
+       */
+      reasoningContent?: string;
+    };
 
 // ── Embedding ──────────────────────────────────────────────────────
 

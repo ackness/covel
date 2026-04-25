@@ -161,12 +161,18 @@ function needsProviderKeys(url: string): boolean {
 
 function buildProviderKeysHeader(): Record<string, string> {
   const headers: Record<string, string> = {};
-  // Pull every secret the store knows about (registered or not).
-  const keys: Record<string, string> = {
-    ...((getSettings() as unknown as {
+  // Pull every secret the store knows about (registered or not). The
+  // `preset:<id>` namespace is only meaningful client-side — strip it
+  // before building the provider-keyed header the server expects.
+  const allSecrets = (
+    getSettings() as unknown as {
       snapshotSecrets(): Record<string, string>;
-    }).snapshotSecrets()),
-  };
+    }
+  ).snapshotSecrets();
+  const keys: Record<string, string> = {};
+  for (const [name, value] of Object.entries(allSecrets)) {
+    if (!name.startsWith("preset:")) keys[name] = value;
+  }
   // Custom preset keys override globals for the same provider.
   for (const preset of getCustomPresets()) {
     if (preset.apiKey?.trim() && preset.provider) {
@@ -493,6 +499,16 @@ export interface SessionPluginInfo {
   /** Core plugins that are always required and cannot be disabled. */
   locked?: boolean;
   pluginType?: string;
+  /**
+   * Authoritative trust tier resolved by the kernel from the plugin's
+   * discovery path: `builtin` (shipped under `plugins/`), `official`
+   * (whitelisted), or `community` (everything else, e.g. user-installed
+   * under `~/.covel/plugins/`). Use this — not `pluginType` — when the UI
+   * needs to mark "core" vs "third-party"; plugin authors can forge
+   * `pluginType` but cannot forge the directory the framework loaded them
+   * from.
+   */
+  source?: 'builtin' | 'official' | 'community';
   /** Plugin load status: 'registered' = ok, 'error' = failed to load. */
   status?: string;
   /** Error message when status is 'error'. */
@@ -507,6 +523,18 @@ export interface SessionPluginInfo {
   trigger?: { type: string; interval?: number; maxTriggerCount?: number; cooldownTurns?: number };
   tools?: { builtin: string[]; local: string[] };
   config?: Record<string, { type: string; default?: unknown; label?: string; description?: string; options?: string[] }>;
+  /**
+   * Per-runtime breakdown so framework UI surfaces (e.g. inline action buttons
+   * in the chat stream) can discover which runtime to invoke via plugin-rpc by
+   * matching `capabilities` + `trigger.type`, instead of hardcoding plugin or
+   * runtime IDs (forbidden by the framework-plugin isolation rule).
+   */
+  runtimes?: Array<{
+    id: string;
+    runtimeType?: string;
+    trigger?: { type: string; topic?: string };
+    capabilities?: string[];
+  }>;
 }
 
 export interface SessionPluginsResponse {
@@ -527,6 +555,8 @@ export async function listSessionPlugins(sessionId: string): Promise<SessionPlug
     isActive: Boolean(p.active),
     capabilities: p.capabilities as string[] | undefined,
     pluginType: p.pluginType as string | undefined,
+    source: p.source as SessionPluginInfo['source'],
+    runtimes: p.runtimes as SessionPluginInfo['runtimes'],
   })) as SessionPluginInfo[];
   return { active: raw.active, available };
 }
@@ -1131,17 +1161,50 @@ export function setSlotConfig(config: Record<string, SlotConfigEntry>): void {
   void getSettings().set("llm.slotConfig", config);
 }
 
+/**
+ * Secret channel key used to persist a custom preset's API key. Kept out
+ * of `llm.customPresets` so the JSON settings file never records a raw
+ * `sk-...` string — the secret lives in keys.env (desktop) or the
+ * `covel:keys` localStorage namespace (web) instead.
+ */
+function presetSecretKey(id: string): string {
+  return `keys.preset:${id}`;
+}
+
 export function getCustomPresets(): CustomPreset[] {
   const raw = getSettings().get<CustomPreset[]>("llm.customPresets") ?? [];
-  return raw
+  const secrets = (
+    getSettings() as unknown as { snapshotSecrets(): Record<string, string> }
+  ).snapshotSecrets();
+
+  // Legacy migration: any inline `apiKey` left over from an earlier version
+  // of this pane gets promoted to the keys channel and stripped from the
+  // persisted settings blob on the next setCustomPresets() call below.
+  const legacyLeak = raw.some(
+    (p) => !!p && typeof p === "object" && typeof p.apiKey === "string" && p.apiKey.length > 0,
+  );
+
+  const merged = raw
     .filter((preset): preset is CustomPreset => !!preset && typeof preset === "object")
-    .map((preset) => ({
-      ...preset,
-      provider:
+    .map((preset) => {
+      const provider =
         providerKeyToId(preset.provider) ??
-        String(preset.provider ?? "").trim(),
-    }))
+        String(preset.provider ?? "").trim();
+      const secretFromChannel = secrets[`preset:${preset.id}`];
+      const apiKey =
+        (secretFromChannel && secretFromChannel.length > 0
+          ? secretFromChannel
+          : preset.apiKey) ?? undefined;
+      return { ...preset, provider, ...(apiKey ? { apiKey } : {}) };
+    })
     .filter((preset) => preset.provider.length > 0);
+
+  if (legacyLeak) {
+    // Re-persist without inline apiKeys; routes each to the secret channel.
+    setCustomPresets(merged);
+  }
+
+  return merged;
 }
 
 export function setCustomPresets(presets: CustomPreset[]): void {
@@ -1151,7 +1214,20 @@ export function setCustomPresets(presets: CustomPreset[]): void {
       provider: providerKeyToId(preset.provider) ?? preset.provider.trim(),
     }))
     .filter((preset) => preset.provider.length > 0);
-  void getSettings().set("llm.customPresets", normalized);
+
+  const store = getSettings();
+
+  // Route each API key into the secret channel, then strip it before
+  // writing the presets blob so `settings.json` never sees `sk-...`.
+  const sanitized = normalized.map((preset) => {
+    const { apiKey, ...rest } = preset;
+    if (typeof apiKey === "string") {
+      void store.set(presetSecretKey(preset.id), apiKey.trim());
+    }
+    return rest;
+  });
+
+  void store.set("llm.customPresets", sanitized);
 }
 
 export function addCustomPreset(preset: CustomPreset): void {
@@ -1159,6 +1235,7 @@ export function addCustomPreset(preset: CustomPreset): void {
 }
 
 export function removeCustomPreset(id: string): void {
+  void getSettings().clear(presetSecretKey(id));
   setCustomPresets(getCustomPresets().filter((p) => p.id !== id));
 }
 

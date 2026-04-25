@@ -1,0 +1,33 @@
+{
+  "name": "@covel/test-runtime",
+  "version": "0.0.1-beta",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "covel-test-runtime": "./src/cli.ts",
+    "test-runtime": "./src/cli.ts",
+    "test_runtime": "./src/cli.ts"
+  },
+  "exports": {
+    ".": {
+      "import": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@covel/ai-provider": "workspace:*",
+    "@covel/plugin-loader": "workspace:*",
+    "@covel/runtime": "workspace:*",
+    "@covel/shared": "workspace:*",
+    "@covel/store": "workspace:*",
+    "@covel/tools": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.4"
+  }
+}

@@ -8,7 +8,7 @@
 
 ### Pre-Game（priority 0–99）
 - [`core-pregame`](#core-pregame) — 游戏初始化 function runtime
-- [`core-char-creator/player-init`](#core-char-creatorplayer-init) — 玩家建角 function runtime
+- [`core-char-creator/player-init`](#core-char-creatorplayer-init) — 玩家建角 agent runtime
 - [`core-world-init/schema-gen`](#core-world-initschema-gen) — 世界维度 agent runtime（guard 门控）
 
 ### Narrator-prep（priority 400）
@@ -45,7 +45,7 @@
 | Narrator | 500 | `core-narrator` | 主叙事生成器 |
 | Narrator-downstream | 600 | `core-guide` · `core-codex` · `core-npc-graph/extractor` · `core-char-creator/character-tracker` | 四者都只依赖 narrator，彼此独立 → **同层并行执行** |
 
-Pre-Game band（priority < 100）仍走 priority 串行：`core-pregame(10) → core-char-creator/player-init(50) → core-world-init/schema-gen(85)`。Pre-Game 插件之间存在隐式 config 依赖（player-init 读取 world-init 写的 `plugin_data[schema]` 经由 `loadSessionConfig` 注入），目前不在 DAG 里表达，所以保留串行兜底。
+Pre-Game band（priority `0-99`，由 `packages/runtime/src/scheduler.ts` 强制）仍走 priority 串行：`core-pregame(10) → core-world-init/schema-gen(40) → core-char-creator/player-init(50)`。Pre-Game 插件之间存在隐式 config 依赖（player-init 读取 world-init 写的 `plugin_data[schema]` 经由 `loadSessionConfig` 注入）；目前在 DAG 里不表达，所以靠 priority 顺序确保 schema 先生成、再让 player-init 读到。
 
 ---
 
@@ -54,8 +54,8 @@ Pre-Game band（priority < 100）仍走 priority 串行：`core-pregame(10) → 
 | ID | 类型 | 优先级 | 触发方式 | 模型 slot | 描述 |
 |----|------|--------|----------|-----------|------|
 | core-pregame | core-plugin | 10 | scheduled（仅首轮） | — | 游戏初始化（function runtime） |
-| core-world-init/schema-gen | core-plugin | 85 | scheduled（仅首轮） | `plugin` | 世界维度初始化（guard + agent） |
-| core-char-creator/player-init | core-plugin | 50 | scheduled（maxTriggerCount=2, guard, function runtime） | `plugin` | 玩家角色创建（deterministic handler；Pre-Game 阶段） |
+| core-world-init/schema-gen | core-plugin | 40 | scheduled（仅首轮） | `plugin` | 世界维度初始化（guard + agent，Pre-Game 第二步） |
+| core-char-creator/player-init | core-plugin | 50 | auto（guard 门控） | `plugin` | 玩家角色创建（agent runtime；依赖 schema-gen 写出的 worldSchema） |
 | core-npc-graph/rag-retriever | plugin | 400 | scheduled（interval=1，function runtime） | — | Narrator-prep 层：NPC 图谱结构化检索器，向 narrator 注入相关关系事实 |
 | core-narrator | core-plugin | 500 | auto | `story` | Narrator 层：主叙事生成器 |
 | core-guide | plugin | 600 | scheduled（interval=1, cooldown=1） | `plugin` | Narrator-downstream 层：行动引导 + 聊天内建议面 |
@@ -85,7 +85,7 @@ Pre-Game band（priority < 100）仍走 priority 串行：`core-pregame(10) → 
 
 **职责**: 游戏开始时第一个执行的插件。读取世界观设定，发送欢迎通知，输出世界观摘要供后续叙事插件（narrator、codex、char-creator）作为上下文引导。
 
-**Pre-Game 契约**: 位于 Pre-Game 区段（priority < 100），`maxTriggerCount: 1` 保证仅在 session 首轮执行。完成后可在 `RuntimeOutput` 中声明 `preGameDone: true`，框架据此在 `session.preGameCompleted` 集合中记录本 runtime 已完成 Pre-Game 初始化。
+**Pre-Game 契约**: 位于 Pre-Game 区段（priority `0-99`），`maxTriggerCount: 1` 保证仅在 session 首轮执行。完成后可在 `RuntimeOutput` 中声明 `preGameDone: true`，框架据此在 `session.preGameCompleted` 集合中记录本 runtime 已完成 Pre-Game 初始化。
 
 ---
 
@@ -104,7 +104,7 @@ Pre-Game band（priority < 100）仍走 priority 串行：`core-pregame(10) → 
 | 字段 | 值 |
 |------|----|
 | pluginType | `core-plugin`（不可禁用） |
-| priority | 85（Pre-Game 阶段） |
+| priority | 40（Pre-Game 阶段，先于 player-init） |
 | trigger | `scheduled`，`interval: 1`，`maxTriggerCount: 1` — 仅首轮触发 |
 | model | `plugin` |
 | guard | `../../guard.js` |
@@ -729,7 +729,7 @@ input:
 | `auto` | 每个 Turn 自动触发 |
 | `manual` | 仅玩家手动触发 |
 | `scheduled` | 每 N 轮触发一次（配合 `interval` + `maxTriggerCount`） |
-| `conditional` | 满足条件时触发 |
+| `conditional` | reserved：未来条件触发能力 |
 | `event` | 监听特定事件触发 |
 | `error-retry` | 前序 Runtime 出错时触发 |
 
@@ -751,7 +751,7 @@ trigger:
   startTurn: 3        # 前三轮让玩家适应，第四轮起开始检查
 ```
 
-这条配置表达"前三轮玩家先熟悉环境，从第四轮起插件才开始介入"。Pre-Game 段落（priority < 100）由框架按 `session.preGameCompleted` 集合决定是否再次触发，与 `startTurn` 解耦。
+这条配置表达"前三轮玩家先熟悉环境，从第四轮起插件才开始介入"。Pre-Game 段落（priority `0-99`）由框架按 `session.preGameCompleted` 集合决定是否再次触发，与 `startTurn` 解耦。
 
 ---
 
@@ -783,7 +783,7 @@ Covel 的核心设计原则是**插件承载游戏逻辑，框架提供原语和
 
 ### Runtime 输出字段：`preGameDone`
 
-Pre-Game 段 runtime（priority < 100）可在 `RuntimeOutput` 中声明：
+Pre-Game 段 runtime（priority `0-99`）可在 `RuntimeOutput` 中声明：
 
 ```json
 { "preGameDone": true }

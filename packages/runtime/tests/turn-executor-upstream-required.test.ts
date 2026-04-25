@@ -129,6 +129,48 @@ describe('executeTurn: manifest.upstreamRequired', () => {
     expect(byId.get('core-guide')?.status).toBe('success');
   });
 
+  it('treats a guard-skipped initialization upstream as satisfied', async () => {
+    const upstream = manifest('core-world-init/schema-gen', {
+      priority: 100,
+      runtimeType: 'agent',
+      guard: './guard.js',
+    });
+    const downstream = manifest('core-char-creator/player-init', {
+      priority: 150,
+      upstreamRequired: ['core-world-init/schema-gen'],
+    });
+    let downstreamRan = false;
+    const input: TurnInput = { sessionId: 'sess-1', turnId: 'turn-1', playerMessage: 'x' };
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async (m) => ({
+        manifest: m,
+        promptTemplate: '',
+        references: [],
+        ...(m.name === 'core-world-init/schema-gen'
+          ? { guard: async () => ({ skip: true, initialized: true, preGameDone: true }) }
+          : {}),
+        ...(m.name === 'core-char-creator/player-init'
+          ? {
+              handler: async () => {
+                downstreamRan = true;
+                return { ok: true };
+              },
+            }
+          : {}),
+      }),
+      llm: new NoopLLM(),
+      getConfig: () => ({}),
+      store: await mainLoopStore('sess-1'),
+    };
+
+    const result = await executeTurn(input, [upstream, downstream], deps);
+
+    expect(downstreamRan).toBe(true);
+    const byId = new Map(result.runtimeResults.map((r) => [r.runtimeId, r]));
+    expect(byId.get('core-world-init/schema-gen')?.status).toBe('skipped');
+    expect(byId.get('core-char-creator/player-init')?.status).toBe('success');
+  });
+
   it('skips when ANY declared upstream is missing (not scheduled)', async () => {
     // core-narrator is declared as required but not in the activeRuntimes
     // list (e.g. disabled for this session). Framework must still skip

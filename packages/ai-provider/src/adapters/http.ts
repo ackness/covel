@@ -301,6 +301,14 @@ export function buildProviderUrl(baseUrl: string, path: string): string {
   let base = baseUrl.replace(/\/+$/, "");
   let p = path.startsWith("/") ? path : `/${path}`;
 
+  // Rule 0: Treat paths that already carry an absolute API prefix
+  // (e.g. DashScope `/api/v1/services/...`) as-is. The version-injection
+  // rules below assume an OpenAI-style path layout and break absolute
+  // SaaS routes that happen to embed their own version segment.
+  if (p.startsWith("/api/")) {
+    return `${base}${p}`;
+  }
+
   // Rule 1: Does baseUrl already carry an explicit version segment?
   const baseVersionMatch = base.match(TRAILING_VERSION_RE);
   const effectiveVersion = baseVersionMatch?.[1] ?? "v1";
@@ -525,6 +533,22 @@ export function readOpenAiChatStreamReasoningDelta(
 ): string | null {
   const delta = asAny(payload).choices?.[0]?.delta?.reasoning_content;
   return typeof delta === "string" && delta.length > 0 ? delta : null;
+}
+
+/**
+ * Read the full `reasoning_content` block from a non-streaming
+ * chat-completions response. Providers that implement thinking mode
+ * (DashScope Qwen, DeepSeek v4, etc.) return the model's internal
+ * reasoning here and typically require it to be echoed back on the next
+ * request in multi-turn conversations.
+ */
+export function readOpenAiChatReasoningContent(
+  payload: Record<string, unknown>
+): string | null {
+  const reasoning = asAny(payload).choices?.[0]?.message?.reasoning_content;
+  return typeof reasoning === "string" && reasoning.length > 0
+    ? reasoning
+    : null;
 }
 
 export function readOpenAiChatStreamFinishReason(

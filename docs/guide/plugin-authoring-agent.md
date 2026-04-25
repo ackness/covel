@@ -243,7 +243,7 @@ handler 是一个 ES module,默认导出一个函数:
  */
 export default async function regenerate(payload, ctx) {
   // 直接读 store / 触发 RPC / 写 plugin_data
-  const messages = await ctx.store.listTurnMessages(ctx.sessionId);
+  const messages = await ctx.store.listTurnMessages();
   // ...
   return { ok: true, regeneratedAt: new Date().toISOString() };
 }

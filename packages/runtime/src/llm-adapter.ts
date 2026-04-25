@@ -12,6 +12,13 @@ export interface LLMMessage {
   readonly name?: string;
   /** For assistant messages that include tool calls (OpenAI protocol requires this). */
   readonly toolCalls?: readonly LLMToolCall[];
+  /**
+   * Thinking-mode reasoning returned on a prior assistant turn. Must be
+   * carried back on the follow-up request for providers that enforce
+   * round-trip (DashScope Qwen, DeepSeek v4 thinking). See the
+   * openai-chat adapter's `serializeMessages` for the wire mapping.
+   */
+  readonly reasoningContent?: string;
 }
 
 export interface LLMToolCall {
@@ -25,6 +32,12 @@ export interface LLMResponse {
   readonly toolCalls: readonly LLMToolCall[];
   readonly finishReason: 'stop' | 'tool_calls' | 'length' | 'error';
   readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
+  /**
+   * Reasoning text emitted by providers in thinking mode. When present it
+   * must be carried back on the assistant message for the next request in
+   * a multi-turn tool loop.
+   */
+  readonly reasoningContent?: string;
 }
 
 export interface LLMToolDefinition {
@@ -33,10 +46,20 @@ export interface LLMToolDefinition {
   readonly parameters: Readonly<Record<string, unknown>>; // JSON Schema
 }
 
+export interface LLMResponseFormat {
+  readonly type: 'json_schema';
+  readonly schema: Readonly<Record<string, unknown>>;
+}
+
 export type LLMStreamEvent =
   | { readonly type: 'text-delta'; readonly textDelta: string }
   | { readonly type: 'tool-call'; readonly id: string; readonly name: string; readonly arguments: string }
-  | { readonly type: 'done'; readonly finishReason: string };
+  | {
+      readonly type: 'done';
+      readonly finishReason: string;
+      /** Accumulated reasoning_content emitted during the stream. */
+      readonly reasoningContent?: string;
+    };
 
 export interface LLMAdapter {
   /**
@@ -47,10 +70,7 @@ export interface LLMAdapter {
     readonly model?: string;
     readonly messages: readonly LLMMessage[];
     readonly tools?: readonly LLMToolDefinition[];
-    readonly responseFormat?: {
-      readonly type: 'json_schema';
-      readonly schema: Readonly<Record<string, unknown>>;
-    };
+    readonly responseFormat?: LLMResponseFormat;
     /**
      * Abort the HTTP call when the signal fires. Required for timeouts —
      * turn-executor's `timeoutMs` is a loop guard; without this signal a

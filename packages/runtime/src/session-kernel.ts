@@ -47,11 +47,22 @@ export function normalizeOutput(
   const proposals: Proposal[] = [];
   const kind = outputKind ?? 'plugin';
 
-  // narrative.append — from narrativeOutput or content (fallback)
+  // narrative.append — from narrativeOutput or content (fallback).
+  //
+  // Only `story` runtimes may append to the narrative feed. `system` and
+  // `plugin` runtimes that happen to return `narrativeOutput` (e.g. a
+  // tool-less LLM response on a non-story plugin) must NOT pollute the
+  // chat stream — their text is still available via RuntimeResult.output
+  // for trace and debug consumers. This blocks the core-guide failure
+  // mode where the LLM ignored `generate-guide` and wrote a narrative
+  // continuation that the framework silently committed alongside
+  // narrator's real output.
   const narrativeText =
-    (typeof output.narrativeOutput === 'string' && output.narrativeOutput) ||
-    (typeof output.content === 'string' && output.content) ||
-    '';
+    kind === 'story'
+      ? (typeof output.narrativeOutput === 'string' && output.narrativeOutput) ||
+        (typeof output.content === 'string' && output.content) ||
+        ''
+      : '';
 
   if (narrativeText) {
     proposals.push(makeProposal('narrative.append', source, turnId, sessionId, {

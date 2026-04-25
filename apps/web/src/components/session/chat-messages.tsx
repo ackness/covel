@@ -15,6 +15,13 @@ import { JSONUIProvider, Renderer } from "@json-render/react";
 import { nestedToFlat } from "@json-render/core";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Button } from "@/components/ui/button.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.js";
 import { Markdown } from "@/components/ui/markdown.js";
 import { covelRegistry } from "@/lib/catalog.js";
 import { messageToSpec, messageToSpecDisabled } from "@/lib/message-to-spec.js";
@@ -22,7 +29,10 @@ import { PluginPanel } from "./plugin-panel.js";
 import { ExecutionTimeline } from "./execution-timeline.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import { useSession } from "@/stores/session-store.js";
+import { postPluginRpc, resolveApproval } from "@/services/api.js";
+import { emitToast } from "@/lib/toast-channel.js";
 import type {
+  PluginRpcResponse,
   WorldRecord,
   PackageSummary,
   SessionPluginInfo,
@@ -86,25 +96,156 @@ export function ChatMessages({
   messagesEndRef,
 }: ChatMessagesProps) {
   const { t } = useTranslation();
-
-  // Whether any plugin with image-generation capability is active in this session
-  const isImageGenActive = sessionPlugins.some(
-    (p) => p.isActive && p.capabilities?.includes("image-generation"),
+  const { state: sessionState } = useSession();
+  const sessionId = sessionState.session?.id;
+  const [generatingImage, setGeneratingImage] = useState(false);
+  interface ConfirmRequest {
+    readonly title: string;
+    readonly message: string;
+    readonly confirmLabel: string;
+    readonly cancelLabel: string;
+    readonly resolve: (value: boolean) => void;
+  }
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
+  const confirmRequestRef = useRef<ConfirmRequest | null>(null);
+  confirmRequestRef.current = confirmRequest;
+  const confirmAsync = useCallback(
+    (params: Omit<ConfirmRequest, "resolve">) =>
+      new Promise<boolean>((resolve) => {
+        setConfirmRequest({ ...params, resolve });
+      }),
+    [],
   );
+  const handleConfirmResult = useCallback((value: boolean) => {
+    const current = confirmRequestRef.current;
+    if (!current) return;
+    current.resolve(value);
+    setConfirmRequest(null);
+  }, []);
 
-  function handleGenerateImage(messageContent: string) {
-    if (!onTriggerEvent) return;
-    // Truncate to avoid exhausting the enhancement LLM's token budget.
-    // The kernel will inject full world + character context automatically.
-    const scenePrompt = messageContent.slice(0, 800);
-    onTriggerEvent("image.generation.requested", {
-      scenePrompt,
-      storyBackground: world?.description
-        ? (typeof world.description === "string"
-          ? world.description
-          : Object.values(world.description as Record<string, string>)[0] ?? "")
-        : "",
-    });
+  // Discover the image-gen entry runtime by capability + trigger so this
+  // framework code never names a specific plugin or runtime. An entry runtime
+  // is one with capability `image-prompt` and a manual trigger — that's the
+  // contract authors follow when wiring a multi-step image plugin (prompt
+  // generator → image generator chained via background follower).
+  const imageGenEntry = useMemo<{ pluginId: string; runtimeId: string } | null>(() => {
+    for (const p of sessionPlugins) {
+      if (!p.isActive) continue;
+      if (!p.capabilities?.includes("image-generation")) continue;
+      const entry = p.runtimes?.find(
+        (r) => r.trigger?.type === "manual" && r.capabilities?.includes("image-prompt"),
+      );
+      if (entry) return { pluginId: p.id, runtimeId: entry.id };
+    }
+    return null;
+  }, [sessionPlugins]);
+
+  const isImageGenActive = imageGenEntry !== null;
+
+  // Use plugin-rpc rather than `triggerEvent`. Firing a kernel event would
+  // create a fresh turn just to route the topic; plugin-rpc invokes the entry
+  // runtime in-place and lets the framework dispatch its background follower
+  // (image generator) without inflating the turn counter. The plugin's right-
+  // panel button uses the same pattern — keep them aligned.
+  async function handleGenerateImage() {
+    if (!sessionId || !imageGenEntry || generatingImage) return;
+    const req = {
+      pluginId: imageGenEntry.pluginId,
+      runtimeId: imageGenEntry.runtimeId,
+    };
+    const handleResponse = async (res: PluginRpcResponse): Promise<void> => {
+      if (res.status === "error") {
+        emitToast("error", res.error);
+        return;
+      }
+      if (res.status === "approval-required") {
+        const actionLabel = `runtime ${imageGenEntry.runtimeId}`;
+        const proceed = await confirmAsync({
+          title: t("plugin.approval.title", {
+            defaultValue: "Authorize plugin action",
+          }),
+          message: t("plugin.approval.confirmMessage", {
+            pluginId: imageGenEntry.pluginId,
+            action: actionLabel,
+            defaultValue:
+              "Plugin {{pluginId}} requests permission to run {{action}}. Authorize all matching calls for this session?",
+          }),
+          confirmLabel: t("plugin.approval.allow", {
+            defaultValue: "Authorize",
+          }),
+          cancelLabel: t("plugin.approval.deny", {
+            defaultValue: "Deny",
+          }),
+        });
+        try {
+          await resolveApproval(res.approvalId, proceed ? "allow" : "deny", "session");
+        } catch (err) {
+          emitToast(
+            "error",
+            t("plugin.approval.submitFailed", {
+              error: err instanceof Error ? err.message : String(err),
+              defaultValue: "Approval submission failed: {{error}}",
+            }),
+          );
+          return;
+        }
+        if (!proceed) {
+          emitToast(
+            "info",
+            t("plugin.approval.denied", {
+              action: actionLabel,
+              defaultValue: "Denied {{action}}",
+            }),
+          );
+          return;
+        }
+        await handleResponse(await postPluginRpc(sessionId, req));
+        return;
+      }
+      if (res.status === "accepted") {
+        emitToast(
+          "info",
+          t("plugin.invokeRuntime.submitted", {
+            count: 1,
+            ids: res.jobId,
+            defaultValue:
+              "Submitted {{count}} background job(s): {{ids}}. Waiting for completion...",
+          }),
+        );
+        return;
+      }
+      if ((res.deferredJobs ?? []).length === 0) {
+        // Same UX guard as the right-panel button: when the entry runtime
+        // succeeds but emits no `events[]` to wake the image generator, the
+        // gallery would silently stay empty.
+        emitToast(
+          "error",
+          `${imageGenEntry.runtimeId} 完成，但未触发任何 background 任务（缺少匹配的 events[]）。请检查模型是否输出正确的 JSON 包络。`,
+        );
+        return;
+      }
+      const jobIds = (res.deferredJobs ?? [])
+        .map((j) => j.jobId)
+        .filter(Boolean);
+      const idList = jobIds.slice(0, 3).join(", ") + (jobIds.length > 3 ? ` (+${jobIds.length - 3})` : "");
+      emitToast(
+        "info",
+        t("plugin.invokeRuntime.submitted", {
+          count: jobIds.length,
+          ids: idList,
+          defaultValue:
+            "Submitted {{count}} background job(s): {{ids}}. Waiting for completion...",
+        }),
+      );
+    };
+    setGeneratingImage(true);
+    try {
+      await handleResponse(await postPluginRpc(sessionId, req));
+    } catch (err) {
+      emitToast("error", err instanceof Error ? err.message : String(err));
+    } finally {
+      setGeneratingImage(false);
+    }
   }
 
   /**
@@ -146,19 +287,36 @@ export function ChatMessages({
       if (viewMode !== "detailed") return null;
       return <SystemMessageLine key={msg.id} msg={msg} />;
     }
-    // Assistant messages: only show narrative (story) and plugin inline output.
-    // Other kinds (e.g. raw "plugin" debug traces) stay hidden in detailed mode too
-    // — detailed surfaces the *fact* that a runtime ran via system messages, not its guts.
-    if (msg.role === "assistant" && msg.kind && msg.kind !== "story" && msg.kind !== "plugin-message") return null;
+    // Non-story assistant kinds (plugin debug traces, intermediate runtime
+    // chatter) stay hidden in parsed mode — the player only wants narrative.
+    // Detailed mode surfaces them with a runtime badge so the author can see
+    // which runtime emitted what without leaving the chat surface.
+    const isAssistant = msg.role === "assistant";
+    const isHiddenAssistantKind =
+      isAssistant && msg.kind && msg.kind !== "story" && msg.kind !== "plugin-message";
+    if (isHiddenAssistantKind && viewMode !== "detailed") return null;
 
     const isUser = msg.role === "user";
-    const showImageButton = !isUser && isImageGenActive && msg.content && onTriggerEvent;
+    const showImageButton =
+      !isUser && isImageGenActive && msg.kind === "story" && msg.content && sessionId;
+    // Detailed view affordance: show the runtime/plugin source above each
+    // assistant message so the author knows which runtime produced it. Hidden
+    // in parsed mode to keep the narrative immersive.
+    const showSourceBadge = viewMode === "detailed" && isAssistant && (msg.runtimeId || msg.kind);
 
     return (
       <div
         key={msg.id}
         className={`ui-message-row flex flex-col gap-1.5 w-full ${isUser ? "items-end" : "items-start"}`}
       >
+        {showSourceBadge && (
+          <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
+            {msg.runtimeId ?? "assistant"}
+            {msg.kind && msg.kind !== "story" && (
+              <span className="ml-1.5 opacity-60">· {msg.kind}</span>
+            )}
+          </span>
+        )}
         <span
           className={`ui-eyebrow text-xs ${isUser ? "text-primary" : "text-muted-foreground"}`}
         >
@@ -174,13 +332,20 @@ export function ChatMessages({
           className={`text-sm wrap-break-words w-full ${
             isUser
               ? "ui-message-player max-w-[90%] md:max-w-[85%] border border-border p-4"
-              : "ui-message-assistant ui-narrative prose prose-sm max-w-none border-0 p-0"
+              : isHiddenAssistantKind
+                ? "ui-message-assistant max-w-none border-l-2 border-border/40 pl-3 py-1 font-mono text-[12px] text-muted-foreground/80 whitespace-pre-wrap"
+                : "ui-message-assistant ui-narrative prose prose-sm max-w-none border-0 p-0"
           }`}
         >
           {isUser ? (
             <p className="m-0 text-[14px] leading-[1.6]">
               {msg.content}
             </p>
+          ) : isHiddenAssistantKind ? (
+            // Plugin/debug kinds in detailed view — preserve the raw text so
+            // the structure of what the runtime emitted is visible, but skip
+            // the narrative-prose styling to signal "this is not story".
+            msg.content
           ) : (
             <Markdown>{msg.content}</Markdown>
           )}
@@ -192,12 +357,16 @@ export function ChatMessages({
               variant="ghost"
               size="sm"
               className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1 ui-eyebrow"
-              disabled={executing}
-              onClick={() => handleGenerateImage(msg.content)}
+              disabled={executing || generatingImage}
+              onClick={() => void handleGenerateImage()}
               title={t("coreImage.generateButton")}
             >
-              <ImageIcon className="h-3 w-3" />
-              {t("coreImage.generateButton")}
+              <ImageIcon
+                className={`h-3 w-3 ${generatingImage ? "animate-pulse" : ""}`}
+              />
+              {generatingImage
+                ? t("session.stateStreaming")
+                : t("coreImage.generateButton")}
             </Button>
           </div>
         )}
@@ -228,8 +397,16 @@ export function ChatMessages({
     // and state via plugin-data namespace=message. Each spec runs through
     // PluginPanel, which reads the live plugin-data store for reactive state.
     if (blockType === "plugin_message") {
+      const pluginId =
+        ((block.data as Record<string, unknown> | undefined)?.pluginId as string | undefined) ??
+        msg.runtimeId;
       return (
         <div key={msg.id} className="flex flex-col gap-1.5">
+          {viewMode === "detailed" && pluginId && (
+            <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
+              plugin · {pluginId}
+            </span>
+          )}
           <PluginMessageBlock
             block={block}
             sourceBlockId={msg.id}
@@ -244,6 +421,12 @@ export function ChatMessages({
     // through messageToSpec and json-render.
     return (
       <div key={msg.id} className="flex flex-col gap-1.5">
+        {viewMode === "detailed" && (msg.runtimeId || blockType) && (
+          <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
+            {blockType ? `block · ${blockType}` : "block"}
+            {msg.runtimeId && <span className="ml-1.5 opacity-60">· {msg.runtimeId}</span>}
+          </span>
+        )}
         <MessageBlockRenderer
           msg={msg}
           block={block}
@@ -260,6 +443,7 @@ export function ChatMessages({
   }
 
   return (
+    <>
     <ScrollArea className="flex-1 min-h-0">
       <div className="ui-session-column p-4 md:p-6 space-y-6 md:space-y-7 mx-auto w-full">
         {messages.length === 0 && !executing && (
@@ -386,6 +570,34 @@ export function ChatMessages({
         <div ref={messagesEndRef} />
       </div>
     </ScrollArea>
+    <Dialog
+      open={confirmRequest !== null}
+      onOpenChange={(open) => {
+        if (!open) handleConfirmResult(false);
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{confirmRequest?.title}</DialogTitle>
+          <DialogDescription className="whitespace-pre-line pt-1">
+            {confirmRequest?.message}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleConfirmResult(false)}
+          >
+            {confirmRequest?.cancelLabel}
+          </Button>
+          <Button size="sm" onClick={() => handleConfirmResult(true)}>
+            {confirmRequest?.confirmLabel}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 

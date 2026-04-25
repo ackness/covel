@@ -154,6 +154,26 @@ describe('executeTurn: manual trigger', () => {
     expect(messages.some((m) => m.content === 'this should NOT be appended')).toBe(false);
   });
 
+  it('does not append manual runtime output to conversation history', async () => {
+    const target = fnManifest('plug/target', { trigger: { type: 'manual' } });
+
+    const { store, result } = await runTurn(
+      [target],
+      { 'plug/target': async () => ({ prompt: 'image prompt', ok: true }) },
+      {
+        sessionId: 'sess-1',
+        turnId: 'turn-1',
+        playerMessage: '',
+        manualTrigger: { runtimeId: 'plug/target' },
+      },
+    );
+
+    expect(result.runtimeResults).toHaveLength(1);
+    const messages = await store.listTurnMessages('sess-1');
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.id).toBe('seed');
+  });
+
   it('forwards manualPayload only to the targeted function handler', async () => {
     const target = fnManifest('plug/target', { trigger: { type: 'manual' } });
     const chained = fnManifest('plug/chained', {

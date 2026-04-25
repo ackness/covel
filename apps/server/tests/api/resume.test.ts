@@ -129,6 +129,11 @@ const TEST_MANIFEST: RuntimeManifest = {
   priority: 500,
   trigger: { mode: 'always' as const },
   model: 'gpt-4o-mini',
+  // This fixture emulates a narrator-style runtime that appends to the
+  // main feed on resume. After 2026-04-24, only `outputKind: 'story'`
+  // runtimes produce `narrative.append` proposals — other kinds keep
+  // their text internal to the RuntimeResult.
+  outputKind: 'story' as const,
 };
 
 function makeDefaultDeps(store: DataStore, overrides?: Partial<Deps>): Deps {
@@ -538,13 +543,19 @@ describe('Resume Routes — flag off (COVEL_SUSPEND_V1 != 1)', () => {
     expect(res.status).toBe(503);
   });
 
-  it('GET /suspensions returns 503 when flag is off', async () => {
+  it('GET /suspensions returns 200 + empty list when flag is off', async () => {
+    // The list endpoint is read-only hydration that runs on every session
+    // restore. Returning 503 there pollutes the browser network panel even
+    // though the web client treats failures as "no active suspensions".
+    // A disabled flag means "no suspensions exist", which is functionally
+    // correct as an empty list. Write paths (POST /resume, DELETE) keep
+    // their 503 gate above.
     const app = createTestApp(makeDefaultDeps(store));
 
     const res = await app.request('/api/sessions/sess-1/suspensions');
 
-    expect(res.status).toBe(503);
-    const body = await res.json() as Record<string, unknown>;
-    expect(body.error).toMatch(/COVEL_SUSPEND_V1/);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { suspensions: unknown[] };
+    expect(body.suspensions).toEqual([]);
   });
 });

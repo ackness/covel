@@ -39,6 +39,7 @@ export interface GatewayLike {
         content: string | null;
         toolCalls?: Array<{ id: string; name: string; arguments: string }>;
         toolCallId?: string;
+        reasoningContent?: string;
       }>;
       tools?: Array<{
         type: 'function';
@@ -52,6 +53,7 @@ export interface GatewayLike {
     finishReason: string;
     usage: { inputTokens: number; outputTokens: number };
     toolCalls?: Array<{ id: string; name: string; arguments: string }>;
+    reasoningContent?: string;
   }>;
 
   streamText?(
@@ -62,6 +64,7 @@ export interface GatewayLike {
         content: string | null;
         toolCalls?: Array<{ id: string; name: string; arguments: string }>;
         toolCallId?: string;
+        reasoningContent?: string;
       }>;
       tools?: Array<{
         type: 'function';
@@ -77,6 +80,7 @@ export interface GatewayLike {
     id?: string;
     name?: string;
     arguments?: string;
+    reasoningContent?: string;
   }>;
 }
 
@@ -142,6 +146,7 @@ export function createGatewayAdapter(
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
         },
+        ...(result.reasoningContent ? { reasoningContent: result.reasoningContent } : {}),
       };
     },
 
@@ -176,7 +181,11 @@ export function createGatewayAdapter(
             arguments: event.arguments ?? '{}',
           };
         } else if (event.type === 'done') {
-          yield { type: 'done' as const, finishReason: event.finishReason ?? 'stop' };
+          yield {
+            type: 'done' as const,
+            finishReason: event.finishReason ?? 'stop',
+            ...(event.reasoningContent ? { reasoningContent: event.reasoningContent } : {}),
+          };
         }
       }
     },
@@ -190,6 +199,7 @@ function toGatewayMessages(messages: readonly import('./llm-adapter.js').LLMMess
     ...(msg.name ? { name: msg.name } : {}),
     ...(msg.toolCallId ? { toolCallId: msg.toolCallId } : {}),
     ...(msg.toolCalls?.length ? { toolCalls: [...msg.toolCalls] } : {}),
+    ...(msg.reasoningContent ? { reasoningContent: msg.reasoningContent } : {}),
   }));
 }
 

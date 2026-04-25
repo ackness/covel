@@ -4,7 +4,7 @@
 
 > **读完你能做到**
 > - 写一个只靠 `PLUGIN.md` 就能运行的插件
-> - 根据场景选对触发类型（`auto` / `scheduled` / `event` / `manual` / `conditional`）
+> - 根据场景选对触发类型（`auto` / `scheduled` / `event` / `manual`）
 > - 用框架内置的三个 UI 工具（`create-form` / `create-choices` / `create-notification`）产生玩家可交互块
 > - 通过 `references/` 目录按关键词按需注入参考资料，避免每轮烧 token
 > - 用 `config` 字段暴露玩家可调参数
@@ -92,16 +92,16 @@ trigger:
 - 重试总数不会让整个 runtime 超过 `timeoutMs`。
 - `llm.toml` 中的 `fallback = "story"` 仍然生效：同 preset 重试完再沿 gateway fallback chain 尝试。
 
-**优先级参考区间：**
+**优先级参考区间（与 `packages/runtime/src/scheduler.ts` 实际边界一致）：**
 
 | 区间 | 用途 | 示例 |
 |------|------|------|
-| 0-199 | 系统初始化 | core-persona (100) |
-| 200-399 | 预处理 | — |
-| 400-599 | 核心叙事 | core-narrator (500) |
-| 600-799 | 后处理/追踪 | core-codex (650), core-char-creator (700) |
-| 800-999 | 后台任务 | core-image (800), core-memory (900) |
-| 1000 | 清理 | — |
+| 0-99 | Pre-Game 初始化（首轮 turnNumber=0 才会被调度） | core-pregame (10), core-world-init/schema-gen (40), core-char-creator/player-init (50) |
+| 100-499 | pre-narrator / 本轮只读准备 | core-persona (100), core-codex (450) |
+| 500 | narrator | core-narrator (500) |
+| 501-1000 | post-narrator / 状态写入与后台任务 | core-codex/post (650), core-image (800), core-memory (900) |
+
+> **band 边界由 scheduler 强制**：`turnNumber === 0` 只调度 priority `<= 99`，`turnNumber >= 1` 只调度 priority `> 99`。把初始化插件放到 100-199 会让它们在主循环里运行，而不是 Pre-Game。500 前后只读/写入是推荐的语义约定，由插件作者遵守，框架不做强制检查。
 
 ## 3. 提示词编写技巧
 
@@ -209,7 +209,7 @@ trigger:
 
 适用于：玩家主动点击按钮触发的功能（如查看角色面板）。
 
-### conditional — 条件触发
+### conditional — reserved
 
 ```yaml
 trigger:
@@ -217,7 +217,7 @@ trigger:
   condition: "turnNumber > 10"
 ```
 
-适用于：到特定条件才激活的插件。
+当前框架把 `conditional` 保留为未来能力。已声明的 conditional runtime 会被调度器跳过，并在控制台输出一次 warning。插件作者应使用 `auto` + guard、`scheduled`、`event` 或 `manual` 表达当前运行条件。
 
 ### 冷却和重试
 

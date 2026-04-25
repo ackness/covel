@@ -11,7 +11,7 @@ import { readEnvString, readRuntimeEnv } from '@covel/shared';
 import type { AiStack } from '../ai-setup.js';
 import { applySlotOverlay, type SlotOverridesInput } from '@covel/ai-provider';
 import {
-  discoverPlugins,
+  discoverPluginsMulti,
   loadPluginManifest,
   loadRuntime,
   loadPluginSummary,
@@ -34,9 +34,23 @@ const UI_NAMESPACE_BY_SLOT: Record<UiSlotName, string> = {
   left: '__ui_left__',
 };
 
-function resolvePluginsDir(): string {
-  return readRuntimeEnv().pluginsDir
+/**
+ * All plugin directories the server should scan — bundled first, user
+ * install dir second. Mirrors `apps/server/src/app.ts:199` so `/api/ui-specs`
+ * and sibling endpoints see the same plugin set the kernel bootstrapped
+ * against. Without this, user-installed plugins (e.g. ~/.covel/plugins/*)
+ * never get their UI specs materialised into `plugin_data.__ui_right__`
+ * and the frontend right panel silently drops their buttons.
+ */
+function resolvePluginsDirs(): readonly string[] {
+  const env = readRuntimeEnv();
+  const bundled = env.pluginsDir
     ?? resolve(import.meta.dirname, '../../../../plugins');
+  const dirs = [bundled];
+  if (env.userPluginsDir && env.userPluginsDir !== bundled) {
+    dirs.push(env.userPluginsDir);
+  }
+  return dirs;
 }
 
 function textValue(value: unknown, locale = 'zh-CN'): string {
@@ -49,8 +63,12 @@ function textValue(value: unknown, locale = 'zh-CN'): string {
 }
 
 function segmentForPriority(priority: number): FlowSegmentId {
+  // audit P0-1: align with packages/runtime/src/scheduler.ts band edges.
+  // Pre-Game is `0-99` (turn 0 only), main loop is `100-1000`. Treating
+  // `priority === 100` as Pre-Game would put it in the wrong band on the
+  // flow viz — same drift the audit calls out.
   if (priority <= 0) return 'start';
-  if (priority <= 100) return 'pre-game';
+  if (priority <= 99) return 'pre-game';
   if (priority < 500) return 'pre-narrator';
   if (priority === 500) return 'narrator';
   return 'post-narrator';
@@ -82,14 +100,12 @@ function isStoryRuntime(manifest: {
 }
 
 async function loadPluginDiscovery(pluginId: string): Promise<PluginDiscoveryResult | undefined> {
-  const pluginsDir = resolvePluginsDir();
-  const discoveries = await discoverPlugins(pluginsDir);
+  const discoveries = await discoverPluginsMulti(resolvePluginsDirs());
   return discoveries.find((item) => item.id === pluginId);
 }
 
 async function buildPluginFlowResponse() {
-  const pluginsDir = resolvePluginsDir();
-  const discoveries = await discoverPlugins(pluginsDir);
+  const discoveries = await discoverPluginsMulti(resolvePluginsDirs());
 
   const plugins: Array<{
     id: string;
@@ -149,7 +165,8 @@ async function buildPluginFlowResponse() {
       const runtimeName = runtimeId.includes('/') ? runtimeId.split('/').at(-1) ?? runtimeId : runtimeId;
       const priority = manifest.priority ?? 500;
       const mdPath = discovery.pluginMdPaths[index] ?? discovery.pluginMdPaths[0];
-      const docPath = mdPath ? docPathFromAbsolute(pluginsDir, mdPath) : ''
+      const discoveryRoot = resolve(discovery.rootPath, '..');
+      const docPath = mdPath ? docPathFromAbsolute(discoveryRoot, mdPath) : ''
 
       steps.push({
         id: runtimeId,
@@ -200,8 +217,8 @@ async function buildPluginFlowResponse() {
     generatedAt: new Date().toISOString(),
     segments: [
       { id: 'start', label: '开始游戏', rangeLabel: '0', minPriority: 0, maxPriority: 0 },
-      { id: 'pre-game', label: 'Pre-Game', rangeLabel: '1-100', minPriority: 1, maxPriority: 100 },
-      { id: 'pre-narrator', label: 'Pre-Narrator', rangeLabel: '101-499', minPriority: 101, maxPriority: 499 },
+      { id: 'pre-game', label: 'Pre-Game', rangeLabel: '1-99', minPriority: 1, maxPriority: 99 },
+      { id: 'pre-narrator', label: 'Pre-Narrator', rangeLabel: '100-499', minPriority: 100, maxPriority: 499 },
       { id: 'narrator', label: 'Narrator', rangeLabel: '500', minPriority: 500, maxPriority: 500 },
       { id: 'post-narrator', label: 'Post-Narrator', rangeLabel: '501-1000', minPriority: 501, maxPriority: 1000 },
     ],
@@ -211,8 +228,7 @@ async function buildPluginFlowResponse() {
 }
 
 async function loadLivePluginMaps() {
-  const pluginsDir = resolvePluginsDir();
-  const discoveries = await discoverPlugins(pluginsDir);
+  const discoveries = await discoverPluginsMulti(resolvePluginsDirs());
   const summaryMap = new Map<string, Awaited<ReturnType<typeof loadPluginSummary>>>();
   const manifestMap = new Map<string, Awaited<ReturnType<typeof loadPluginManifest>>>();
 
@@ -235,8 +251,7 @@ async function syncUiSpecsToStore(
   activePluginIds: ReadonlySet<string>,
   store: DataStore,
 ): Promise<void> {
-  const pluginsDir = resolvePluginsDir();
-  const discoveries = await discoverPlugins(pluginsDir);
+  const discoveries = await discoverPluginsMulti(resolvePluginsDirs());
   const now = new Date().toISOString();
   const writes: Array<{
     id: string;
@@ -410,7 +425,10 @@ export function createMiscApiRoutes(
       return c.json({ error: `Plugin "${pluginId}" not found` }, 404);
     }
 
-    const pluginsDir = resolvePluginsDir();
+    // Root-of-origin is the plugin's own discovered root, not the bundled
+    // plugins dir — this keeps relative paths correct for user-installed
+    // plugins that live under ~/.covel/plugins rather than the app bundle.
+    const pluginsDir = resolve(discovery.rootPath, '..');
     const [summary, manifests] = await Promise.all([
       loadPluginSummary(discovery),
       loadPluginManifest(discovery),

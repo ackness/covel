@@ -577,7 +577,39 @@
     "useDefaultWith": "使用默认（{{value}}）",
     "modelBindingAria": "该插件运行时将使用的模型 Slot，除非需要特别覆盖否则保持默认即可。",
     "modelBindingSource": "模型绑定 — 在「会话准备」中修改",
-    "modelBindingFallback": "模型绑定：前往「会话准备」查看"
+    "modelBindingFallback": "模型绑定：前往「会话准备」查看",
+    "source": {
+      "builtin": {
+        "label": "核心",
+        "tooltip": "Covel 框架内置的核心插件"
+      },
+      "official": {
+        "label": "官方",
+        "tooltip": "Covel 官方收录的插件"
+      },
+      "community": {
+        "label": "第三方",
+        "tooltip": "安装在 ~/.covel/plugins 下的第三方插件"
+      }
+    },
+    "approval": {
+      "title": "授权插件操作",
+      "confirmMessage": "插件 {{pluginId}} 请求执行 {{action}}。是否在本次会话内授权所有同类调用？",
+      "allow": "授权",
+      "deny": "拒绝",
+      "denied": "已拒绝 {{action}}",
+      "submitFailed": "审批提交失败：{{error}}",
+      "unexpectedRequired": "授权后仍返回 approval-required，请检查审批后端"
+    },
+    "invokeRuntime": {
+      "submitted": "已提交 {{count}} 个后台任务：{{ids}}，等待返回…",
+      "noFollowerEvents": "{{runtimeId}} 已完成，但未触发任何后台任务（缺少匹配的 events[]）。请检查模型是否输出了正确的 JSON 包络。"
+    }
+  },
+  "pluginJob": {
+    "completed": "{{target}} 已完成（耗时 {{duration}}）",
+    "failed": "{{target}} 失败：{{error}}",
+    "unknownError": "未知错误"
   },
   "coreImage": {
     "generateButton": "生成插画",
@@ -736,6 +768,7 @@
     "noTraceEvents": "尚未记录追踪事件",
     "eventsWillAppear": "回合执行后事件将在此处显示",
     "turn": "回合 {{count}}",
+    "pluginInvocation": "插件调用",
     "turn_one": "回合 {{count}}",
     "nRuntimes": "{{count}} 个运行时",
     "nRuntimes_one": "{{count}} 个运行时",

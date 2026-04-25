@@ -4,7 +4,11 @@ description:
   zh: 世界维度 Schema 生成器。读取世界观文档，通过专用工具批量创建角色属性维度和世界词条。
   en: World dimension schema generator. Reads the worldlore document and uses dedicated tools to bulk-create character attribute dimensions and world entries.
 pluginType: core-plugin
-priority: 85
+# audit P0-2: schema-gen must run BEFORE core-char-creator/player-init (50)
+# so the player-init agent can read `{{ config.worldSchema }}` populated by
+# this runtime's set-world-schema tool. Pre-Game band is 0-99 and uses
+# priority-based serial ordering.
+priority: 40
 model: plugin
 outputKind: system
 timeoutMs: 180000

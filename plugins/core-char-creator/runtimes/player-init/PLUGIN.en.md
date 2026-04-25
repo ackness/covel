@@ -12,6 +12,12 @@ promptVersion: 2
 guard: ./guard.js
 trigger:
   type: auto
+upstreamRequired:
+  # Pre-Game band: schema-gen (priority 40) populates plugin_data.schema,
+  # which loadSessionConfig surfaces as `{{ config.worldSchema }}`. Without
+  # it the form would either be skipped or fall back to defaults (audit P0-2).
+  - core-pregame
+  - core-world-init/schema-gen
 input:
   inject:
     - from: core-narrator

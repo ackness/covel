@@ -26,7 +26,7 @@ import type {
   RuntimeManifest,      // 运行时清单（PLUGIN.md frontmatter 的解析结果）
 
   // 触发系统
-  TriggerType,          // 'auto' | 'manual' | 'scheduled' | 'conditional' | 'event' | 'error-retry'
+  TriggerType,          // 'auto' | 'manual' | 'scheduled' | 'event' | 'error-retry'（conditional 为 reserved）
   TriggerConfig,        // { type, interval?, condition?, topic?, maxTriggerCount?, cooldownTurns? }
 
   // 输入/输出
@@ -253,7 +253,7 @@ export default async function handler(
 | `turnId` | `string` | 当前 turn ID(触发该 runtime 的 turn) |
 | `pluginId` / `runtimeId` | `string` | 本 runtime 的身份(和 manifest 里一致) |
 | `locale` | `string` | `zh-CN` / `en` / ...,来自 session / 请求 |
-| `store` | `FunctionStoreView` | 窄封装的 DataStore:`getPluginData` / `listPluginData` / `getState` / `getSession` / `listTurnMessages`。**不是**完整 `DataStore`,不能 commit proposals(通过 return 值声明即可) |
+| `store` | `FunctionStoreView` | 绑定当前 session/plugin 的只读 DataStore 视图：`getPluginData(namespace, key)` / `listPluginData(namespace)` / `getSession()` / `listTurnMessages(limit?)`。写入使用 `ctx.pluginData` 或 handler return 值 |
 | `gateway` | `PluginRuntimeGateway?` | 调用 LLM / 图像 / 嵌入等 provider 的唯一通道。签名见下 |
 | `manualPayload` | `unknown?` | 仅在 `POST /plugin-rpc` 手动触发时注入,为请求体的 `payload` 字段 |
 | `triggerEvent` | `{ topic, data }?` | 仅 event 触发时存在,包含触发该 runtime 的事件 |

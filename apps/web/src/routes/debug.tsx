@@ -225,6 +225,22 @@ function DebugPage() {
   };
 
   const totalEvents = useMemo(() => turns.reduce((acc, t) => acc + t.eventCount, 0), [turns]);
+  // Header counter mirrors session.turnCount semantics — manual plugin-rpc
+  // invocations don't advance the main loop, so don't inflate the badge.
+  const storyTurnCount = useMemo(
+    () =>
+      turns.reduce((acc, t) => {
+        const isManual = t.events.some(
+          (e) =>
+            e.type === "turn.started" &&
+            e.payload &&
+            typeof e.payload === "object" &&
+            (e.payload as Record<string, unknown>).manualTrigger,
+        );
+        return acc + (isManual ? 0 : 1);
+      }, 0),
+    [turns],
+  );
 
   return (
     <div className="flex h-full w-full flex-col border-t border-border overflow-hidden">
@@ -236,7 +252,7 @@ function DebugPage() {
           </h1>
           {selectedSessionId && (
             <Badge variant="outline" className="font-mono text-[10px]">
-              {t("debugger.turn", { count: turns.length })} · {totalEvents} {t("session.events")}
+              {t("debugger.turn", { count: storyTurnCount })} · {totalEvents} {t("session.events")}
             </Badge>
           )}
         </div>
@@ -485,20 +501,40 @@ function DebugPage() {
                       </div>
                     )}
 
-                    {turns.map((turn, turnIndex) => (
-                      <TurnCard
-                        key={turn.turnId}
-                        turn={turn}
-                        turnIndex={turnIndex + 1}
-                        expanded={expandedTurns.has(turn.turnId)}
-                        onToggle={() => toggleTurn(turn.turnId)}
-                        expandedRuntimes={expandedRuntimes}
-                        onToggleRuntime={toggleRuntime}
-                        filterCategory={filterCategory}
-                        onSelectEvent={setSelectedEvent}
-                        selectedEventSeq={selectedEvent?.seq}
-                      />
-                    ))}
+                    {(() => {
+                      // Player-facing turn numbering should reflect the
+                      // session's `turnCount` — i.e. only main-loop turns,
+                      // not manual plugin-rpc invocations that share the
+                      // trace stream. Walk in display order and increment
+                      // only when the turn doesn't carry a manualTrigger
+                      // marker; manual-trigger rows render as a labelled
+                      // plugin invocation row inside `TurnCard` instead.
+                      let storyIndex = 0;
+                      return turns.map((turn) => {
+                        const isManual = turn.events.some(
+                          (e) =>
+                            e.type === "turn.started" &&
+                            e.payload &&
+                            typeof e.payload === "object" &&
+                            (e.payload as Record<string, unknown>).manualTrigger,
+                        );
+                        if (!isManual) storyIndex++;
+                        return (
+                          <TurnCard
+                            key={turn.turnId}
+                            turn={turn}
+                            turnIndex={storyIndex}
+                            expanded={expandedTurns.has(turn.turnId)}
+                            onToggle={() => toggleTurn(turn.turnId)}
+                            expandedRuntimes={expandedRuntimes}
+                            onToggleRuntime={toggleRuntime}
+                            filterCategory={filterCategory}
+                            onSelectEvent={setSelectedEvent}
+                            selectedEventSeq={selectedEvent?.seq}
+                          />
+                        );
+                      });
+                    })()}
                   </div>
                 </ScrollArea>
 
@@ -557,11 +593,40 @@ function TurnCard({
   const runtimes = useMemo(() => deriveRuntimesFromTurn(turn.events), [turn.events]);
 
   const hasError = turn.events.some(
-    (e) => e.type === "flow.failed" || (e.payload.type as string) === "runtime.failed"
+    (e) =>
+      e.type === "flow.failed" ||
+      e.type === "turn.failed" ||
+      (e.payload.type as string) === "runtime.failed",
   );
 
-  const isCompleted = turn.events.some((e) => e.type === "flow.completed");
+  // The kernel emits `turn.completed` (not `flow.completed`) at the end of
+  // every turn, including manual-trigger plugin-rpc turns. Looking for the
+  // wrong event name made every turn appear stuck on "running" even when it
+  // had finished successfully — keep the legacy name as a fallback for any
+  // older trace dumps a user might still be viewing.
+  const isCompleted = turn.events.some(
+    (e) => e.type === "turn.completed" || e.type === "flow.completed",
+  );
   const duration = fmtDuration(turn.startedAt, turn.completedAt);
+
+  // Manual-trigger turns (plugin-rpc invocations like a "generate image"
+  // button click) don't advance the session.turnCount but still appear in
+  // the trace stream because they share the same emitter pipeline. The
+  // kernel tags `turn.started` with `manualTrigger.{pluginId,runtimeId}`
+  // so we can label these rows distinctly instead of confusing the player
+  // with an extra "回合 N" entry next to real story turns.
+  const manualTrigger = useMemo(() => {
+    for (const e of turn.events) {
+      if (e.type !== "turn.started") continue;
+      const m = e.payload?.manualTrigger as
+        | { runtimeId?: string; pluginId?: string }
+        | undefined;
+      if (m && typeof m.runtimeId === "string") {
+        return { runtimeId: m.runtimeId, pluginId: m.pluginId };
+      }
+    }
+    return null;
+  }, [turn.events]);
 
   // Collect runtimeIds that are already shown in the RUNTIMES section
   const runtimeEventSeqs = useMemo(() => {
@@ -596,12 +661,28 @@ function TurnCard({
         }
 
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          <span className="font-display font-bold text-xs uppercase tracking-wider shrink-0">
-            {t("debugger.turn", { count: turnIndex })}
-          </span>
-          <span className="font-mono text-[10px] text-muted-foreground truncate">
-            {turn.turnId}
-          </span>
+          {manualTrigger ? (
+            <>
+              <span className="font-display font-bold text-xs uppercase tracking-wider shrink-0 text-violet-500">
+                {t("debugger.pluginInvocation", { defaultValue: "插件调用" })}
+              </span>
+              <span className="font-mono text-[10px] text-violet-500/80 shrink-0 truncate">
+                {manualTrigger.runtimeId}
+              </span>
+              <span className="font-mono text-[10px] text-muted-foreground/60 truncate">
+                {turn.turnId}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="font-display font-bold text-xs uppercase tracking-wider shrink-0">
+                {t("debugger.turn", { count: turnIndex })}
+              </span>
+              <span className="font-mono text-[10px] text-muted-foreground truncate">
+                {turn.turnId}
+              </span>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">

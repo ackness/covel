@@ -102,6 +102,8 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
     // First slot in llm.toml is the default — mark it as isDefault
     const isFirstSlot = presets.length === 0;
 
+    const providerRequestMetadata = buildProviderRequestMetadata(def);
+
     presets.push({
       id: presetId,
       name: formatPresetName(slotName, def),
@@ -119,6 +121,7 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
       tag,
       ...(def.imageApi !== undefined ? { imageApi: def.imageApi } : {}),
       ...(def.embeddingFormat !== undefined ? { embeddingFormat: def.embeddingFormat } : {}),
+      ...(providerRequestMetadata !== undefined ? { providerRequestMetadata } : {}),
     });
 
     // Synthesize the "embed-default" profile on the first slot that declares
@@ -179,6 +182,25 @@ function deriveSupportedModes(outputModalities: readonly string[]): OperationMod
 function inferTag(outputModalities: readonly string[]): string {
   if (outputModalities.includes("image")) return "image";
   return "text";
+}
+
+/**
+ * Fold the slot-level thinking-mode controls into a single
+ * providerRequestMetadata bag. Explicit `thinking` / `reasoning_effort`
+ * fields are promoted for ergonomic TOML authoring; users can still
+ * drop arbitrary keys into `providerRequestMetadata` for provider
+ * extensions that don't have a dedicated slot in the schema yet.
+ *
+ * Later entries win: per-call metadata at request time always beats
+ * the slot-wide defaults.
+ */
+function buildProviderRequestMetadata(
+  def: SlotDefinition,
+): Record<string, unknown> | undefined {
+  const merged: Record<string, unknown> = { ...(def.providerRequestMetadata ?? {}) };
+  if (def.thinking !== undefined) merged.thinking = def.thinking;
+  if (def.reasoning_effort !== undefined) merged.reasoning_effort = def.reasoning_effort;
+  return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
 function formatPresetName(slotName: string, def: SlotDefinition): string {

@@ -15,8 +15,12 @@ trigger:
 upstreamRequired:
   # Pre-Game band: without a successful pregame run there is no world
   # summary to seed the opening form on. Skip rather than ask the LLM
-  # to invent a form without context.
+  # to invent a form without context. world-init/schema-gen (priority 40)
+  # is also a hard upstream — its set-world-schema tool populates
+  # `plugin_data.schema`, which this runtime's prompt reads as
+  # `{{ config.worldSchema }}` via loadSessionConfig (audit P0-2).
   - core-pregame
+  - core-world-init/schema-gen
 input:
   inject:
     # Pre-Game band: core-narrator is NOT scheduled in turn 0, so we inject

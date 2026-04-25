@@ -5,7 +5,7 @@
  * and injects pluginData as initial state.
  */
 
-import { useMemo } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import { nestedToFlat } from "@json-render/core";
@@ -16,6 +16,14 @@ import { useSession } from "@/stores/session-store.js";
 import { postPluginRpc, resolveApproval } from "@/services/api.js";
 import type { PluginRpcRequest, PluginRpcResponse } from "@/services/api.js";
 import { emitToast } from "@/lib/toast-channel.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.js";
+import { Button as UIButton } from "@/components/ui/button.js";
 
 export interface PluginPanelProps {
   pluginId: string;
@@ -93,10 +101,57 @@ export function PluginPanel({
   const liveData = usePluginNamespace(pluginId, namespace);
   const data = stateOverride ?? liveData;
 
+  // Per-action in-flight tracking — surfaced to json-render state under
+  // `/_invoking/<key>` so the catalog Button can show a loading spinner while
+  // a plugin-rpc call is pending. Without this affordance the player clicks
+  // "generate image" and stares at a static button for ~30 s while the LLM
+  // chain runs, with no signal that anything is happening. StateProvider does
+  // a flat-pointer diff each time `initialState` changes (see @json-render/
+  // react StateProvider) so flipping a key here propagates through.
+  const [invokingMap, setInvokingMap] = useState<Record<string, true>>({});
+  const markInvoking = useCallback((key: string, on: boolean) => {
+    setInvokingMap((prev) => {
+      if (on) {
+        if (prev[key]) return prev;
+        return { ...prev, [key]: true };
+      }
+      if (!prev[key]) return prev;
+      const { [key]: _, ...rest } = prev;
+      return rest;
+    });
+  }, []);
+
+  // Custom confirm dialog state — replaces `window.confirm` so the approval
+  // prompt is themed, localised, and non-blocking. The promise pattern mirrors
+  // the native API the call site already used so the handler stays linear.
+  interface ConfirmRequest {
+    readonly title: string;
+    readonly message: string;
+    readonly confirmLabel: string;
+    readonly cancelLabel: string;
+    readonly resolve: (value: boolean) => void;
+  }
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
+  const confirmRequestRef = useRef<ConfirmRequest | null>(null);
+  confirmRequestRef.current = confirmRequest;
+  const confirmAsync = useCallback(
+    (params: Omit<ConfirmRequest, "resolve">) =>
+      new Promise<boolean>((resolve) => {
+        setConfirmRequest({ ...params, resolve });
+      }),
+    [],
+  );
+  const handleConfirmResult = useCallback((value: boolean) => {
+    const current = confirmRequestRef.current;
+    if (!current) return;
+    current.resolve(value);
+    setConfirmRequest(null);
+  }, []);
+
   const initialState = useMemo(() => {
     const entries = Object.entries(data).map(([key, value]) => ({ key, value }));
-    return { ...expandIndexedState(data), entries };
-  }, [data]);
+    return { ...expandIndexedState(data), entries, _invoking: invokingMap };
+  }, [data, invokingMap]);
 
   const flatSpec = useMemo(() => convertToSpec(spec.view), [spec.view]);
 
@@ -127,26 +182,80 @@ export function PluginPanel({
   const defaultHandlers = useMemo<
     Record<string, (params: Record<string, unknown>) => Promise<void> | void>
   >(() => {
+    function emitAcceptedJob(jobId: string): void {
+      emitToast(
+        "info",
+        t("plugin.invokeRuntime.submitted", {
+          count: 1,
+          ids: jobId,
+          defaultValue:
+            "Submitted {{count}} background job(s): {{ids}}. Waiting for completion...",
+        }),
+      );
+    }
+
+    function emitDeferredJobs(
+      jobs: readonly { readonly jobId?: string; readonly runtimeId?: string }[],
+    ): void {
+      const jobIds = jobs.map((j) => j.jobId).filter(Boolean) as string[];
+      const idList = jobIds.slice(0, 3).join(", ") + (jobIds.length > 3 ? ` (+${jobIds.length - 3})` : "");
+      emitToast(
+        "info",
+        t("plugin.invokeRuntime.submitted", {
+          count: jobIds.length,
+          ids: idList,
+          defaultValue:
+            "Submitted {{count}} background job(s): {{ids}}. Waiting for completion...",
+        }),
+      );
+    }
+
     async function handleApprovalRequired(
       approvalId: string,
       humanLabel: string,
       retry: () => Promise<PluginRpcResponse>,
     ): Promise<void> {
-      // TODO: replace with a proper approval dialog component. `confirm()` is
-      // a stopgap that unblocks third-party plugins without introducing new
-      // modal infrastructure. `session` scope means later clicks during the
-      // same session skip the prompt.
-      const proceed = window.confirm(
-        `插件 ${pluginId} 请求执行 ${humanLabel}。是否授权本次会话内的所有相同调用?`,
-      );
+      // Themed React dialog instead of the browser's native confirm prompt:
+      // respects the active locale, doesn't block the JS thread, and matches
+      // the rest of the panel chrome. `session` scope means subsequent clicks
+      // during this session skip the prompt entirely.
+      const proceed = await confirmAsync({
+        title: t("plugin.approval.title", {
+          defaultValue: "Authorize plugin action",
+        }),
+        message: t("plugin.approval.confirmMessage", {
+          pluginId,
+          action: humanLabel,
+          defaultValue:
+            "Plugin {{pluginId}} requests permission to run {{action}}. Authorize all matching calls for this session?",
+        }),
+        confirmLabel: t("plugin.approval.allow", {
+          defaultValue: "Authorize",
+        }),
+        cancelLabel: t("plugin.approval.deny", {
+          defaultValue: "Deny",
+        }),
+      });
       try {
         await resolveApproval(approvalId, proceed ? "allow" : "deny", "session");
       } catch (err) {
-        emitToast("error", `审批提交失败: ${err instanceof Error ? err.message : String(err)}`);
+        emitToast(
+          "error",
+          t("plugin.approval.submitFailed", {
+            error: err instanceof Error ? err.message : String(err),
+            defaultValue: "Approval submission failed: {{error}}",
+          }),
+        );
         return;
       }
       if (!proceed) {
-        emitToast("info", `已拒绝 ${humanLabel}`);
+        emitToast(
+          "info",
+          t("plugin.approval.denied", {
+            action: humanLabel,
+            defaultValue: "Denied {{action}}",
+          }),
+        );
         return;
       }
       // Retry the original RPC now that the gate has a session-scoped grant.
@@ -157,7 +266,17 @@ export function PluginPanel({
         } else if (next.status === "approval-required") {
           // Shouldn't happen — the gate just cached the allow. Surface so we
           // notice if it ever does.
-          emitToast("error", "审批通过后仍返回 approval-required,请检查审批后端");
+          emitToast(
+            "error",
+            t("plugin.approval.unexpectedRequired", {
+              defaultValue:
+                "Still got approval-required after grant — please check the approval backend",
+              }),
+          );
+        } else if (next.status === "accepted") {
+          emitAcceptedJob(next.jobId);
+        } else if (next.status === "ok" && (next.deferredJobs ?? []).length > 0) {
+          emitDeferredJobs(next.deferredJobs ?? []);
         }
       } catch (err) {
         emitToast("error", err instanceof Error ? err.message : String(err));
@@ -180,6 +299,7 @@ export function PluginPanel({
           runtimeId,
           payload: params.payload as unknown,
         };
+        markInvoking(`runtime:${runtimeId}`, true);
         try {
           const res = await postPluginRpc(sessionId, req);
           if (res.status === "error") {
@@ -188,9 +308,40 @@ export function PluginPanel({
             await handleApprovalRequired(res.approvalId, `runtime ${runtimeId}`, () =>
               postPluginRpc(sessionId, req),
             );
+          } else if (res.status === "ok") {
+            // Audit P1-8: when a sync runtime declares an event-chain
+            // contract (e.g. prompt-generator → image-generator) but the
+            // LLM emitted no events[].topic that matches a follower, the
+            // response carries `runtimeResults` but no `deferredJobs`.
+            // Surface a warning so the player isn't left staring at a
+            // panel that "did nothing" — common failure mode when the
+            // model drops the JSON envelope.
+            const expectsFollower = params.expectsBackgroundFollower === true;
+            const deferred = res.deferredJobs ?? [];
+            if (expectsFollower && deferred.length === 0) {
+              emitToast(
+                "error",
+                t("plugin.invokeRuntime.noFollowerEvents", {
+                  runtimeId,
+                  defaultValue:
+                    "{{runtimeId}} finished but emitted no background follower (missing matching events[]). Check that the model output a valid JSON envelope.",
+                }),
+              );
+            } else if (deferred.length > 0) {
+              // Background follower(s) queued — emit a submission toast with
+              // the framework-assigned jobIds so the player knows their click
+              // landed and which jobs to watch in the gallery / _jobs surface.
+              // The terminal "completed" / "failed" toast is fired by the
+              // generic _jobs status-transition listener in session-store.
+              emitDeferredJobs(deferred);
+            }
+          } else if (res.status === "accepted") {
+            emitAcceptedJob(res.jobId);
           }
         } catch (err) {
           emitToast("error", err instanceof Error ? err.message : String(err));
+        } finally {
+          markInvoking(`runtime:${runtimeId}`, false);
         }
       },
       invokePluginAction: async (params: Record<string, unknown>) => {
@@ -205,6 +356,7 @@ export function PluginPanel({
           action,
           payload: params.payload as unknown,
         };
+        markInvoking(`action:${action}`, true);
         try {
           const res = await postPluginRpc(sessionId, req);
           if (res.status === "error") {
@@ -216,6 +368,8 @@ export function PluginPanel({
           }
         } catch (err) {
           emitToast("error", err instanceof Error ? err.message : String(err));
+        } finally {
+          markInvoking(`action:${action}`, false);
         }
       },
     };
@@ -224,7 +378,7 @@ export function PluginPanel({
       handlers.emitEvent = async (params) => { onAction("emitEvent", params); };
     }
     return handlers;
-  }, [pluginId, sessionId, onAction]);
+  }, [pluginId, sessionId, onAction, markInvoking, confirmAsync, t]);
 
   const handlers = explicitHandlers
     ? { ...defaultHandlers, ...explicitHandlers }
@@ -261,6 +415,33 @@ export function PluginPanel({
       >
         <Renderer spec={flatSpec} registry={covelRegistry} />
       </JSONUIProvider>
+      <Dialog
+        open={confirmRequest !== null}
+        onOpenChange={(open) => {
+          if (!open) handleConfirmResult(false);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{confirmRequest?.title}</DialogTitle>
+            <DialogDescription className="whitespace-pre-line pt-1">
+              {confirmRequest?.message}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <UIButton
+              variant="outline"
+              size="sm"
+              onClick={() => handleConfirmResult(false)}
+            >
+              {confirmRequest?.cancelLabel}
+            </UIButton>
+            <UIButton size="sm" onClick={() => handleConfirmResult(true)}>
+              {confirmRequest?.confirmLabel}
+            </UIButton>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

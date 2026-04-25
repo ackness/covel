@@ -90,6 +90,45 @@ export const slotDefinitionSchema = z.object({
   maxOutputTokens: z.number().int().nonnegative().optional(),
   /** Pricing info */
   pricing: pricingSchema,
+
+  // ── Thinking-mode controls (optional) ────────────────────────────
+
+  /**
+   * Thinking-mode toggle for reasoning models that expose an explicit
+   * on/off control (DeepSeek v4, certain Anthropic profiles, etc.).
+   * Forwarded to the provider request body under the `thinking` key.
+   *
+   * ```toml
+   * [covel.story.thinking]
+   * type = "enabled"
+   * ```
+   */
+  thinking: z
+    .object({ type: z.enum(["enabled", "disabled"]) })
+    .passthrough()
+    .optional(),
+  /**
+   * Reasoning effort level. Forwarded as `reasoning_effort`.
+   *
+   * ```toml
+   * [covel.story]
+   * reasoning_effort = "high"
+   * ```
+   */
+  reasoning_effort: z.enum(["low", "medium", "high"]).optional(),
+  /**
+   * Freeform provider request metadata. Merged into every LLM call's
+   * body for this slot (with per-call metadata taking precedence). Use
+   * for provider-specific flags that don't have a dedicated schema
+   * field yet (DashScope `enable_thinking`, OpenRouter routing hints,
+   * etc.).
+   *
+   * ```toml
+   * [covel.story.providerRequestMetadata]
+   * enable_thinking = true
+   * ```
+   */
+  providerRequestMetadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type SlotDefinition = z.infer<typeof slotDefinitionSchema>;

@@ -51,6 +51,11 @@ import type { ToolExecutor } from './tool-executor.js';
 import type { HookPipeline } from './hooks/pipeline.js';
 import { buildToolDefinitions, makeFailedResult, resolveUserSettings } from './turn-executor-helpers.js';
 import {
+  createPluginDataWriter,
+  createPluginLogger,
+  createFunctionStoreView,
+} from './plugin-handler-helpers.js';
+import {
   buildRetryPolicy,
   callLLMWithRetry,
   streamLLMWithRetry,
@@ -289,22 +294,105 @@ function parseFinalOutput(finalContent: string): Record<string, unknown> {
   }
 }
 
+/**
+ * Test-only export. Used by `tests/parse-final-output-envelope.test.ts` to
+ * exercise the lenient-fallback contract documented in the body. Production
+ * callers stay inside this module.
+ */
+export function __testOnly_parseFinalOutputEnvelope(
+  finalContent: string,
+): ReturnType<typeof parseFinalOutputEnvelope> {
+  return parseFinalOutputEnvelope(finalContent);
+}
+
 function parseFinalOutputEnvelope(finalContent: string): {
   readonly output: Record<string, unknown>;
   readonly parsedAsJson: boolean;
 } {
   const stripped = finalContent.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+  // Fast path: the model obeyed and produced a clean JSON object.
   try {
-    return {
-      output: JSON.parse(stripped) as Record<string, unknown>,
-      parsedAsJson: true,
-    };
+    const direct = JSON.parse(stripped);
+    if (direct && typeof direct === 'object' && !Array.isArray(direct)) {
+      return { output: direct as Record<string, unknown>, parsedAsJson: true };
+    }
   } catch {
-    return {
-      output: { narrativeOutput: finalContent },
-      parsedAsJson: false,
-    };
+    // fall through to lenient extraction below
   }
+
+  // Lenient path: the model violated the "pure JSON only" contract and
+  // emitted prose followed by a trailing JSON envelope. This is the typical
+  // failure mode of plugin runtimes that share a system prompt with the
+  // narrator (the model's training nudges it to keep telling the story
+  // before reaching the JSON envelope it was actually asked to output). If
+  // the trailing object is the canonical envelope the runtime declared, we
+  // would rather salvage it than drop the whole event chain — without this
+  // fallback, e.g. an image-prompt runtime's `events[].topic` envelope is
+  // lost, the follower runtime never fires, and any background gallery
+  // silently stays empty for the player.
+  const salvaged = extractLastBalancedJsonObject(stripped);
+  if (salvaged) {
+    return { output: salvaged, parsedAsJson: true };
+  }
+
+  return { output: { narrativeOutput: finalContent }, parsedAsJson: false };
+}
+
+/**
+ * Find the last balanced JSON object embedded in `text` and parse it.
+ *
+ * Scans forward tracking brace depth and string state so braces inside JSON
+ * string literals don't unbalance the count. Whenever depth returns to zero
+ * the spanning slice is parsed; the latest successful parse wins. Returns
+ * null when no balanced object parses cleanly.
+ *
+ * Restricted to plain objects (not arrays / primitives) because every plugin
+ * runtime envelope this fallback exists for is an object — accepting arrays
+ * would risk swallowing prose that happens to end in `[1,2,3]`.
+ */
+function extractLastBalancedJsonObject(text: string): Record<string, unknown> | null {
+  let lastValid: Record<string, unknown> | null = null;
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escape) {
+        escape = false;
+      } else if (ch === '\\') {
+        escape = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '{') {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === '}') {
+      if (depth === 0) continue;
+      depth--;
+      if (depth === 0 && start >= 0) {
+        const candidate = text.slice(start, i + 1);
+        try {
+          const parsed = JSON.parse(candidate);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            lastValid = parsed as Record<string, unknown>;
+          }
+        } catch {
+          // not a complete JSON object yet — keep scanning
+        }
+        start = -1;
+      }
+    }
+  }
+  return lastValid;
 }
 
 function shouldSuppressToolLoopNarrative(args: {
@@ -372,6 +460,14 @@ function formatToolLoopFailure(args: {
 function shouldRetryMalformedToolArguments(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes('function.arguments') && message.includes('JSON format');
+}
+
+function isRequiredUpstreamSatisfied(upstream: RuntimeResult | undefined): boolean {
+  if (!upstream) return false;
+  if (upstream.status === 'success') return true;
+  if (upstream.status !== 'skipped') return false;
+  const output = upstream.output ?? {};
+  return output.preGameDone === true || output.initialized === true;
 }
 
 function isMetaChoiceParagraph(paragraph: string): boolean {
@@ -498,10 +594,24 @@ export async function executeTurn(
   const maxSteps = options?.maxSteps ?? 10;
   const defaultTimeoutMs = options?.timeoutMs ?? 60000;
 
-  // Emit turn.started
+  // Emit turn.started — when a manual trigger drove this turn we tag the
+  // event with the runtime + plugin id so observability surfaces (the
+  // /debug page in particular) can distinguish a player-driven story turn
+  // from an out-of-band plugin-rpc invocation that happens to share the
+  // same event pipeline.
   emitSubEvent(deps.eventBus, 'game', 'turn.started', input.sessionId, {
     turnId: input.turnId,
     sessionId: input.sessionId,
+    ...(input.manualTrigger
+      ? {
+          manualTrigger: {
+            runtimeId: input.manualTrigger.runtimeId,
+            ...(input.manualTrigger.runtimeId.includes('/')
+              ? { pluginId: input.manualTrigger.runtimeId.split('/')[0] }
+              : { pluginId: input.manualTrigger.runtimeId }),
+          },
+        }
+      : {}),
   });
 
   // ── TurnStart hook (S4-T3) ───────────────────────────────────
@@ -692,9 +802,11 @@ export async function executeTurn(
   // 2. Schedule runtimes.
   //
   // Pre-Game band (turn 0) uses strict priority ordering: pregame plugins
-  // have implicit write-ordering (pregame → player-init → world-init) that
-  // is NOT captured in manifest inject declarations, so falling back to
-  // priority is the right semantic.
+  // have implicit write-ordering (pregame → world-init/schema-gen → player-init,
+  // audit P0-2) that is NOT captured in manifest inject declarations, so
+  // falling back to priority is the right semantic. player-init's prompt
+  // reads `{{ config.worldSchema }}` populated by schema-gen via
+  // loadSessionConfig — schema-gen MUST land first in the same turn 0.
   //
   // Main-loop band (turn >= 1) uses the DAG scheduler: it parallelises any
   // runtimes whose declared upstreams (input.inject + upstreamRequired) have
@@ -1456,6 +1568,7 @@ export async function resumeSuspendedRuntime(
         role: 'assistant',
         content: response.content ?? '',
         toolCalls: response.toolCalls,
+        ...(response.reasoningContent ? { reasoningContent: response.reasoningContent } : {}),
       });
 
       for (const tc of response.toolCalls) {
@@ -1723,7 +1836,7 @@ async function executeOneRuntime(
     if (required.length > 0) {
       const missing = required.filter((id) => {
         const up = completedResults.get(id);
-        return !up || up.status !== 'success';
+        return !isRequiredUpstreamSatisfied(up);
       });
       if (missing.length > 0) {
         const reason = `upstream not success: ${missing.join(', ')}`;
@@ -1800,19 +1913,46 @@ async function executeOneRuntime(
           ? input.manualTrigger.payload
           : undefined;
       const userSettingsForRuntime = resolveUserSettings(manifest, input.userSettings);
+      const helperCtx = {
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        pluginId: manifest.pluginId,
+        runtimeId: manifest.name,
+      };
+      const pluginDataHandle = deps.store
+        ? createPluginDataWriter(deps.store, helperCtx)
+        : undefined;
+      const loggerHandle = deps.store
+        ? createPluginLogger(deps.store, helperCtx)
+        : undefined;
+      // Audit P0-3: third-party (community) function runtimes get a
+      // narrowed `FunctionStoreView` so they can't quietly call
+      // `setPluginData` / `upsertCharacter` / `setPluginDataBatch` to
+      // bypass the proposal pipeline and tool approval. Core plugins
+      // keep the full DataStore — their guards / handlers implement
+      // framework primitives (e.g. world-init reusing historical
+      // sessions) that genuinely need the wider surface.
+      const isCorePlugin = manifest.pluginType === 'core-plugin';
+      const handlerStore = deps.store
+        ? isCorePlugin
+          ? deps.store
+          : createFunctionStoreView(deps.store, helperCtx)
+        : undefined;
       const output = await loaded.handler({
         sessionId: input.sessionId,
         turnId: input.turnId,
         pluginId: manifest.pluginId,
         playerMessage: input.playerMessage,
         locale: input.locale,
-        store: deps.store,
+        store: handlerStore,
         completedResults,
         config,
         ...(deps.gateway ? { gateway: deps.gateway } : {}),
         ...(manualPayloadForRuntime ? { manualPayload: manualPayloadForRuntime } : {}),
         ...(triggerEvent ? { triggerEvent } : {}),
         ...(userSettingsForRuntime ? { userSettings: userSettingsForRuntime } : {}),
+        ...(pluginDataHandle ? { pluginData: pluginDataHandle } : {}),
+        ...(loggerHandle ? { logger: loggerHandle } : {}),
       });
 
       // ── Suspend detection for function runtimes (S4-T4) ────────────
@@ -1907,8 +2047,10 @@ async function executeOneRuntime(
         timestamp: new Date().toISOString(),
       };
 
-      // Save function output as TurnMessage (same as agent runtimes)
-      if (deps.store) {
+      // Save function output as TurnMessage (same as agent runtimes).
+      // Manual plugin-rpc calls return their output to the caller and commit
+      // proposals through plugin-rpc, so they stay out of conversation history.
+      if (deps.store && !input.manualTrigger) {
         const narrativeContent =
           typeof output.narrativeOutput === 'string' ? output.narrativeOutput :
             typeof output.content === 'string' ? output.content :
@@ -2190,6 +2332,9 @@ async function executeOneRuntime(
     const toolDefs = deps.toolExecutor
       ? buildToolDefinitions(manifest, deps.toolExecutor, toolContext)
       : undefined;
+    const responseFormat = loaded.outputSchema
+      ? { type: 'json_schema' as const, schema: loaded.outputSchema }
+      : undefined;
     // PR-6: per-session per-runtime slot override snapshot. Applies to all
     // runtime kinds (story + plugin), unlike the legacy story-only API
     // override below.
@@ -2268,6 +2413,7 @@ async function executeOneRuntime(
             model: effectiveModel,
             messages,
             tools: toolDefs,
+            responseFormat,
             policy: retryPolicy,
             deadline,
             onDelta: async (textDelta) => {
@@ -2298,6 +2444,7 @@ async function executeOneRuntime(
               model: effectiveModel,
               messages,
               tools: toolDefs,
+              responseFormat,
               policy: retryPolicy,
               deadline,
               onRetry: reportRetry,
@@ -2324,6 +2471,7 @@ async function executeOneRuntime(
             model: effectiveModel,
             messages,
             tools: toolDefs,
+            responseFormat,
             policy: retryPolicy,
             deadline,
             onRetry: reportRetry,
@@ -2343,6 +2491,7 @@ async function executeOneRuntime(
             model: effectiveModel,
             messages,
             tools: toolDefs,
+            responseFormat,
             policy: retryPolicy,
             deadline,
             onRetry: reportRetry,
@@ -2378,6 +2527,7 @@ async function executeOneRuntime(
               model: effectiveModel,
               messages,
               tools: toolDefs,
+              responseFormat,
               signal: AbortSignal.timeout(
                 Math.max(1000, Math.min(retryPolicy.callTimeoutMs, deadline - Date.now())),
               ),
@@ -2419,10 +2569,13 @@ async function executeOneRuntime(
         // Push assistant message with tool_calls (required by OpenAI protocol).
         // Without this, the next LLM call fails because tool-role messages
         // reference tool_call_ids that don't appear in any assistant message.
+        // reasoningContent is carried back verbatim so thinking-mode
+        // providers (DashScope Qwen, DeepSeek v4) accept the follow-up turn.
         messages.push({
           role: 'assistant',
           content: response.content ?? '',
           toolCalls: response.toolCalls,
+          ...(response.reasoningContent ? { reasoningContent: response.reasoningContent } : {}),
         });
 
         for (const tc of response.toolCalls) {
@@ -2700,6 +2853,46 @@ async function executeOneRuntime(
     const structuredToolOutput = findLastStructuredToolOutput(executedToolCalls);
     if (finalContent) {
       const parsed = parseFinalOutputEnvelope(finalContent);
+      // Schema-declared runtimes (manifest.output.schema → loaded.outputSchema)
+      // promised the framework a structured envelope. When the LLM ignores the
+      // contract and produces unparseable prose, the silent narrativeOutput
+      // fallback below would mask the failure: downstream event-chain followers
+      // would never wake (no events[] array), and the player would see a stuck
+      // job with no signal. Surface a real `failed` result with a diagnostic
+      // pointing at the prose preamble — the toast / debug timeline can then
+      // tell the user the model went off-script instead of timing out.
+      if (
+        loaded.outputSchema &&
+        !parsed.parsedAsJson &&
+        manifest.outputKind !== 'story'
+      ) {
+        const preview = finalContent.slice(0, 220).replace(/\s+/g, ' ').trim();
+        const failedResult: RuntimeResult = {
+          pluginId: manifest.pluginId,
+          runtimeId: manifest.name,
+          runId,
+          turnId: input.turnId,
+          status: 'failed',
+          output: { narrativeOutput: finalContent },
+          toolCalls: collectedToolCalls,
+          durationMs: Date.now() - startTime,
+          error:
+            `Runtime "${manifest.name}" declares output.schema but the model emitted unparseable prose ` +
+            `instead of the required JSON envelope. Preview: "${preview}${finalContent.length > 220 ? '…' : ''}"`,
+          timestamp: new Date().toISOString(),
+        };
+        emitSubEvent(deps.eventBus, 'runtime', 'runtime.failed', input.sessionId, {
+          runtimeId: manifest.name,
+          pluginId: manifest.pluginId,
+          status: failedResult.status,
+          durationMs: failedResult.durationMs,
+          error: failedResult.error,
+        });
+        return runPostRuntimeHook(
+          { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus, emitter: deps.emitter },
+          failedResult,
+        );
+      }
       output = shouldSuppressToolLoopNarrative({
         outputKind: manifest.outputKind,
         executedToolCalls,
@@ -2798,8 +2991,10 @@ async function executeOneRuntime(
       timestamp: new Date().toISOString(),
     };
 
-    // Save runtime output as an append-only TurnMessage
-    if (deps.store) {
+    // Save runtime output as an append-only TurnMessage. Manual plugin-rpc
+    // calls return their output to the caller and commit proposals through
+    // plugin-rpc, so they stay out of conversation history.
+    if (deps.store && !input.manualTrigger) {
       // Extract narrative content: try narrativeTemplate (for form-based plugins), then narrativeOutput, then stringify
       const narrativeContent =
         typeof output.narrativeTemplate === 'string' ? output.narrativeTemplate :

@@ -574,6 +574,22 @@ Bootstrap 时自动分类：
 - 插件 `tools/` 目录加载的工具 → `local`
 - 其他 → `third-party`（当前不存在，预留给社区插件）
 
+### 第三方插件 local tool 现状（audit P0-4 gap）
+
+社区插件（位于 `~/.covel/plugins/` 或后续添加的非 first-dir 来源）会被 `getPluginTrustInfo` 标记为 `community`，bootstrap 在 `discovery → import` 阶段**跳过这些插件的 `tools.local` 加载**（见 `apps/server/src/routes/api/bootstrap.ts` 中 `if (!trust.autoLoad) continue;` 的注释）。完整的"approval 后再 import"生命周期（discovered → approved → import → active → revoked）目前**尚未实现**。
+
+实际影响：
+- 第三方插件可以通过 `/api/sessions/:id/plugin-rpc` 触发 runtime 调用（HITL 审批 OK）。
+- 第三方插件声明的 `tools.local` 在 toolMap 中找不到，runtime 内 `findTool` 返回 `undefined`，工具调用会失败。
+- 第三方插件目前可用的工具集 = `tools.builtin` 列表交集 + 该 runtime 自身的 `pluginToolAccess` 白名单。
+
+撰写第三方插件时的当前规约：
+- 仅依赖 `tools.builtin`（`plugin-data-*`、`create-form`、`create-character` 等）。
+- 真正的私有逻辑放进 function runtime 的 `handler.js`（见 `~/.covel/plugins/dashscope-image-gen` 的写法）。
+- 等到框架完成 community local-tool 的审批后加载，再考虑迁回 `tools.local`。
+
+跟踪修复条目：`audits/2026-04-25-docs-code-framework-alignment/RECOMMENDATIONS.md` §P0-4。
+
 ### 新增插件的工具
 
 新插件只需在 `PLUGIN.md` frontmatter 中声明 `tools.local` 或 `tools.builtin`，bootstrap 会自动发现、注册并归类为对应来源，无需手动修改白名单。

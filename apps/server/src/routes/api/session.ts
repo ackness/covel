@@ -15,6 +15,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
+import { getPluginTrustInfo } from '@covel/plugin-loader';
 import type { PluginRegistry } from '@covel/plugin-loader';
 import type { DataStore, SessionRecord } from '@covel/store';
 import { supportsVector } from '@covel/store';
@@ -294,25 +295,62 @@ sessionRoutes.get('/:id/plugins', async (c) => {
   const active = [...(session.activePlugins ?? [])];
   const all = pluginRegistry.getAll();
   const available = Array.from(all.values()).map((entry) => {
-    // Collect capabilities from all loaded runtimes (multi-runtime plugins have sub-entries)
+    // Aggregated capabilities (plugin-level + runtime-level union) keep the
+    // existing UI surface working — `isImageGenActive` and similar gates only
+    // need to know "does this plugin do X".
     const caps: string[] = [];
     if (entry.manifest?.manifest.capabilities) {
       caps.push(...entry.manifest.manifest.capabilities);
     }
+    // Per-runtime breakdown lets framework code discover the *right* entry
+    // runtime without hardcoding plugin/runtime names. Inline buttons (e.g.
+    // the narrative "generate illustration" affordance) match by capability +
+    // trigger to find which runtime to invoke through plugin-rpc.
+    const runtimes: Array<{
+      id: string;
+      runtimeType?: string;
+      trigger?: { type: string; topic?: string };
+      capabilities?: string[];
+    }> = [];
     for (const [, loaded] of entry.loadedRuntimes) {
-      if (loaded.manifest.capabilities) {
-        for (const c of loaded.manifest.capabilities) {
+      const m = loaded.manifest;
+      if (m.capabilities) {
+        for (const c of m.capabilities) {
           if (!caps.includes(c)) caps.push(c);
         }
       }
+      runtimes.push({
+        id: m.name,
+        ...(m.runtimeType ? { runtimeType: m.runtimeType } : {}),
+        ...(m.trigger
+          ? {
+              trigger: {
+                type: m.trigger.type,
+                ...(m.trigger.topic ? { topic: m.trigger.topic } : {}),
+              },
+            }
+          : {}),
+        ...(m.capabilities && m.capabilities.length > 0
+          ? { capabilities: [...m.capabilities] }
+          : {}),
+      });
     }
+    // Authoritative trust source — derived from the discovery directory,
+    // not the plugin's own `pluginType` field (which third-party authors
+    // can forge by declaring `pluginType: core-plugin`). When the registry
+    // didn't stamp a source (older entries), fall back to the same prefix
+    // heuristic the trust gate uses, so the UI sees the value the kernel
+    // would enforce.
+    const trust = getPluginTrustInfo(entry.id, entry.source);
     return {
       id: entry.id,
       name: entry.summary.name,
       description: entry.summary.description,
       pluginType: entry.summary.pluginType,
+      source: trust.source,
       active: active.includes(entry.id),
       ...(caps.length > 0 ? { capabilities: caps } : {}),
+      ...(runtimes.length > 0 ? { runtimes } : {}),
     };
   });
 

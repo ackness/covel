@@ -76,8 +76,11 @@ describe('core-char-creator plugin', () => {
       expect(inject.as).toBe('<pregame-opening>');
     });
 
-    it('declares upstreamRequired so it is skipped when pregame failed', () => {
-      expect(manifest.upstreamRequired).toEqual(['core-pregame']);
+    it('declares upstreamRequired so it waits for pregame and schema init', () => {
+      expect(manifest.upstreamRequired).toEqual([
+        'core-pregame',
+        'core-world-init/schema-gen',
+      ]);
     });
 
     it('uses an auto trigger with a guard to gate re-runs', () => {

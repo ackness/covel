@@ -288,18 +288,24 @@ resumeRoutes.delete('/:id/suspensions/:suspensionId', async (c) => {
 });
 
 // ── GET list ─────────────────────────────────────────────────────
-
+//
+// The flag still gates write paths (POST /resume, DELETE /:id) — those create
+// or destroy state and need the explicit opt-in. The list endpoint is read-only
+// hydration that runs on every session restore, so a 503 there pollutes the
+// browser network panel even though the web client treats failures as "no
+// active suspensions". Return an empty list instead so a disabled flag means
+// "no suspensions exist", which is functionally correct.
 resumeRoutes.get('/:id/suspensions', async (c) => {
-  if (!isEnvEnabled('COVEL_SUSPEND_V1')) {
-    return c.json({ error: 'Suspend/resume feature is not enabled (COVEL_SUSPEND_V1)' }, 503);
-  }
-
   const sessionId = c.req.param('id');
   const store = c.get('store');
 
   const session = await store.getSession(sessionId);
   if (!session) {
     return c.json({ error: 'Session not found' }, 404);
+  }
+
+  if (!isEnvEnabled('COVEL_SUSPEND_V1')) {
+    return c.json({ suspensions: [] });
   }
 
   const suspensions = await store.listSuspensions(sessionId);

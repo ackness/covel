@@ -118,6 +118,15 @@ export interface PluginRuntimeGateway {
   generateImage(input: {
     readonly presetId?: string;
     readonly prompt: string;
+    /**
+     * Per-call model override. When set, replaces the model resolved from
+     * `presetId` for this single call (audit F4). Use to let plugin
+     * `userSettings` expose a model picker without forcing the player to
+     * configure a dedicated `llm.toml` slot per model variant. The host
+     * still validates the model against the resolved provider — providers
+     * that don't recognize the id will surface their normal error.
+     */
+    readonly model?: string;
     readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
     readonly signal?: AbortSignal;
   }): Promise<{
@@ -141,7 +150,16 @@ export interface FunctionHandlerContext {
   readonly pluginId: string;
   readonly playerMessage: string;
   readonly locale?: string;
-  readonly store: unknown;
+  /**
+   * Store handle exposed to the runtime. Community plugins receive a
+   * narrow `FunctionStoreView` that only allows scoped reads — broader
+   * mutations must go through `ctx.pluginData` or the handler's return
+   * value (proposal pipeline). Core plugins receive the full `DataStore`
+   * (typed as `unknown` here to keep this package free of a
+   * @covel/store import) because they implement framework primitives.
+   * The runtime decides which to inject based on `manifest.pluginType`.
+   */
+  readonly store: FunctionStoreView | unknown;
   readonly completedResults: ReadonlyMap<string, unknown>;
   readonly config: Readonly<Record<string, unknown>>;
   /**
@@ -182,6 +200,88 @@ export interface FunctionHandlerContext {
    * another plugin's settings through this channel.
    */
   readonly userSettings?: Readonly<Record<string, unknown>>;
+  /**
+   * Scoped plugin-data writer. Writes bypass the proposal system and land
+   * directly in `plugin_data` rows under the runtime's own `pluginId`, so
+   * handlers can publish interim placeholders (e.g. a pending image frame
+   * before DashScope responds) that the frontend can observe via SSE
+   * `plugin-data.changed`. Absent when the executor was constructed
+   * without a `store` dep (test harnesses).
+   */
+  readonly pluginData?: PluginDataWriter;
+  /**
+   * Per-runtime logger. Every call appends a row in the plugin's `_logs`
+   * namespace so plugin-authored diagnostics survive restarts and can be
+   * inspected from `/api/sessions/:id/plugin-data/:pluginId/_logs`.
+   * Absent in test harnesses without a store.
+   */
+  readonly logger?: PluginLogger;
+}
+
+/**
+ * Narrow read-only view of `DataStore` exposed to community function
+ * runtimes via `FunctionHandlerContext.store` (audit P0-3). Replaces the
+ * historical "the-whole-DataStore" exposure which let third-party
+ * plugins bypass proposal/tool governance and write into any other
+ * plugin's data through `setPluginData(...)`.
+ *
+ * Core / official plugins (`pluginType: 'core-plugin'`) keep the full
+ * `DataStore` because they implement framework primitives that need it
+ * (e.g. `core-world-init`'s guard imports historic sessions, `core-
+ * char-creator`'s guard upserts the player Character record). The
+ * runtime decides which surface to inject based on the manifest's
+ * trust signal.
+ *
+ * Plugins that want to write data should use `ctx.pluginData.set(...)`
+ * (placeholders) or return `{ pluginData: [...] }` from the handler so
+ * the proposal / commit pipeline runs.
+ */
+export interface FunctionStoreView {
+  /** Read a single plugin_data row scoped to the calling plugin. */
+  getPluginData(
+    namespace: string,
+    key: string,
+  ): Promise<{ readonly key: string; readonly value: unknown } | null>;
+  /** List every plugin_data row in a namespace scoped to the calling plugin. */
+  listPluginData(
+    namespace: string,
+  ): Promise<ReadonlyArray<{ readonly key: string; readonly value: unknown }>>;
+  /** Read the canonical session record. */
+  getSession(): Promise<unknown>;
+  /** List recent turn messages for the session (read-only timeline access). */
+  listTurnMessages(limit?: number): Promise<unknown[]>;
+}
+
+/**
+ * Handler-facing wrapper over `DataStore.setPluginData` scoped to the
+ * active session + plugin. Callers cannot write to another plugin's
+ * namespace through this handle — the kernel binds `pluginId`.
+ */
+export interface PluginDataWriter {
+  /**
+   * Upsert a single plugin_data row. When `value === null`, the row is
+   * deleted — matches the generic "set-or-delete" pattern other kernel
+   * writers use.
+   */
+  set(namespace: string, key: string, value: unknown): Promise<void>;
+  /** Read the current value for a key (returns `null` when absent). */
+  get(namespace: string, key: string): Promise<unknown>;
+  /** List every entry in a namespace, newest first per store ordering. */
+  list(namespace: string): Promise<ReadonlyArray<{ readonly key: string; readonly value: unknown }>>;
+  /** Delete a row explicitly. */
+  delete(namespace: string, key: string): Promise<void>;
+}
+
+/**
+ * Structured logger exposed to plugin handlers. Each call appends a new
+ * row under the plugin's `_logs` namespace keyed by timestamp+uuid so
+ * entries are append-only and naturally ordered.
+ */
+export interface PluginLogger {
+  debug(message: string, meta?: Record<string, unknown>): Promise<void>;
+  info(message: string, meta?: Record<string, unknown>): Promise<void>;
+  warn(message: string, meta?: Record<string, unknown>): Promise<void>;
+  error(message: string, meta?: Record<string, unknown>): Promise<void>;
 }
 
 /** Function handler signature for `runtimeType: 'function'` runtimes. */

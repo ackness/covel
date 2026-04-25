@@ -180,6 +180,98 @@ it('persists the current stage to plugin_data', async () => {
 
 Read back with `store.getPluginData(sessionId, pluginId, namespace, key)` when you want a single entry.
 
+## CLI: plugin-owned runtime cases
+
+Use `@covel/test-runtime` when you want to debug a third-party plugin from `~/.covel/plugins`. Passing a plugin id runs the plugin's own declared cases; passing a runtime id keeps the direct one-off debug flow.
+
+Put cases in `tests/runtime-cases.json` under the plugin root:
+
+```json
+{
+  "cases": [
+    {
+      "name": "generate-image-json",
+      "runtimeId": "dashscope-image-gen/prompt-generator",
+      "userSettings": {
+        "promptMode": "image-json",
+        "modelPresetId": "image",
+        "model": "wan2.7-image-pro",
+        "imageSize": "1440*720",
+        "negativePrompt": "low quality, blurry, watermark, text"
+      },
+      "expect": {
+        "events": ["image.generate.requested"],
+        "pluginData": [
+          { "namespace": "images", "status": "done", "field": "url" }
+        ],
+        "logs": [
+          "image.generate.started",
+          "image.generate.completed"
+        ]
+      }
+    }
+  ]
+}
+```
+
+Run all declared cases:
+
+```bash
+pnpm test:runtime -- dashscope-image-gen --plugins-dir ~/.covel/plugins --pretty
+```
+
+Run one case against real providers:
+
+```bash
+pnpm test:runtime -- \
+  dashscope-image-gen \
+  --plugins-dir ~/.covel/plugins \
+  --case generate-image-json \
+  --mode live \
+  --pretty
+```
+
+`--mode mock` is the default. It uses a fake LLM and fake `ctx.gateway.generateImage()` URL, which is good for fast CI and handler debugging. `--mode live` builds the real provider gateway from `llm.toml` plus `~/.covel/keys.env`, runs the same in-process runtime kernel, executes deferred background followers, writes `_jobs`, `_logs`, and `plugin_data`, then prints the final rows including generated image URLs.
+
+## CLI: run one runtime from `~/.covel/plugins`
+
+Runtime-id mode activates only the target plugin, invokes the runtime through `manualTrigger`, commits emitted proposals, runs deferred followers, then prints runtime results, plugin-data rows, logs, jobs, deferred followers, and captured mock LLM call metadata.
+
+```bash
+pnpm test:runtime -- \
+  dashscope-image-gen/prompt-generator \
+  --plugins-dir ~/.covel/plugins \
+  --payload '{"prompt":"画一张奇幻城市插画"}' \
+  --pretty
+```
+
+The package also exposes `covel-test-runtime` and `test_runtime` bins for published package usage:
+
+```bash
+npx @covel/test-runtime my-plugin/my-runtime --payload '{"debug":true}'
+npx -p @covel/test-runtime test_runtime my-plugin/my-runtime --payload '{"debug":true}'
+```
+
+Useful options:
+
+| Option | Purpose |
+|--------|---------|
+| `--plugins-dir <path>` | Plugin root directory. Defaults to `~/.covel/plugins` or `COVEL_USER_PLUGINS_DIR`. |
+| `--plugin <id>` | Plugin id. Defaults to the runtime id prefix before `/`. |
+| `--case <name>` | Runs one plugin-defined case when the target is a plugin id. |
+| `--mode <mock\|live>` | Chooses fake local providers or real `llm.toml`/API provider calls. |
+| `--live` | Shortcut for `--mode live`. |
+| `--payload <json>` | Injects `ctx.manualPayload` / `manualTrigger.payload`. |
+| `--config <json>` | Returns this object from `getConfig()`. Useful for world schema/config dependent prompts. |
+| `--user-settings <json>` | Supplies this plugin's `userSettings` bucket, with manifest defaults applied by the runtime. |
+| `--llm-content <text>` | Mock LLM final text for agent runtimes. |
+| `--llm-response <json>` | Full mock LLM response, including `toolCalls`. |
+| `--mock-image-url <url>` | Mock `ctx.gateway.generateImage()` result URL for image plugins. |
+| `--show-prompts` | Include captured LLM messages in JSON output. |
+| `--ignore-upstreams` | Clears `upstreamRequired` for this debug run, useful when isolating a downstream runtime. |
+
+The CLI imports `tools.local` files from the target plugin root and registers framework builtin tools (`plugin-data-*`, UI tools, character tools, `runtime-done`, `suspend`). In live mode, provider calls use the same gateway stack as the server composition root.
+
 ### 4. Test trigger behaviour (scheduled / interval)
 
 Triggers are pure functions — you do not need the harness to exercise them. Import the runtime's `shouldTrigger` (or replicate the manifest check) and feed it `makeTriggerContext(...)`.

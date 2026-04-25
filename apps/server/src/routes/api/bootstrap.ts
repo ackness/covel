@@ -422,6 +422,19 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   // SECURITY: Only auto-load tools from trusted plugins (builtin/official).
   // Community plugins register metadata only; their tools are deferred until
   // explicit approval via the plugin management API.
+  //
+  // STATUS (audit P0-4): the post-approval import path is NOT yet wired —
+  // approving a community plugin currently allows runtime invocation but
+  // does not register its `tools.local` modules into `toolMap`. That means
+  // a community runtime that declares local tools will see them resolved
+  // by `findTool` to `undefined` and the tool call will fail at execution
+  // time. Until the dedicated lifecycle (discovered → approved → import →
+  // active → revoked) lands, third-party plugins MUST stick to
+  // `tools.builtin` only. The intentional lifecycle plan lives in
+  // `audits/2026-04-25-docs-code-framework-alignment/RECOMMENDATIONS.md`
+  // §P0-4. See also `pluginToolAccess` below — that map IS populated for
+  // community plugins from manifest metadata, so when import lands the
+  // executor scoping will already work.
   for (const [pluginId, discovery] of discoveryMap) {
     const trust = getPluginTrustInfo(pluginId, discovery.source);
     if (!trust.autoLoad) {

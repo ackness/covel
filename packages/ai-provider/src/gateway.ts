@@ -162,7 +162,8 @@ export function createGateway(deps: GatewayDependencies) {
             model: targetModel(target),
             messages: input.messages,
             tools: input.tools,
-            providerRequestMetadata: withParameterOverrides(
+            providerRequestMetadata: withPresetMetadata(
+              target,
               input.providerRequestMetadata,
               input.presetId,
               options,
@@ -194,7 +195,8 @@ export function createGateway(deps: GatewayDependencies) {
             model: targetModel(target),
             schema: input.schema,
             messages: input.messages,
-            providerRequestMetadata: withParameterOverrides(
+            providerRequestMetadata: withPresetMetadata(
+              target,
               input.providerRequestMetadata,
               input.presetId,
               options,
@@ -270,7 +272,8 @@ export function createGateway(deps: GatewayDependencies) {
             model: targetModel(target),
             messages: input.messages,
             tools: input.tools,
-            providerRequestMetadata: withParameterOverrides(
+            providerRequestMetadata: withPresetMetadata(
+              target,
               input.providerRequestMetadata,
               input.presetId,
               options,
@@ -393,6 +396,15 @@ export function createGateway(deps: GatewayDependencies) {
     input: {
       presetId?: string;
       prompt: string;
+      /**
+       * Per-call model override. When set, replaces the model resolved
+       * from the preset for this single invocation. Lets a plugin
+       * `userSettings` field expose a model picker (e.g. wan2.7-image vs
+       * wan2.7-image-pro) without forcing a dedicated `llm.toml` slot
+       * per variant (audit F4). The provider/baseUrl still come from the
+       * resolved preset, so cross-provider misuse stays bounded.
+       */
+      model?: string;
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: GatewayOptions
@@ -401,16 +413,28 @@ export function createGateway(deps: GatewayDependencies) {
       input.presetId,
       "image",
       options,
-      (target, resolved) =>
-        resolved.adapter.generateImage(
+      (target, resolved) => {
+        const presetImageApi = target.preset?.imageApi;
+        const mergedMetadata = withPresetMetadata(
+          target,
+          input.providerRequestMetadata,
+          input.presetId,
+          options,
+        );
+        const metadataWithImageFormat: Record<string, unknown> | undefined =
+          presetImageApi
+            ? { ...(mergedMetadata ?? {}), imageFormat: presetImageApi }
+            : mergedMetadata;
+        return resolved.adapter.generateImage(
           configWithSignal(resolved.config, options),
           {
-            model: targetModel(target),
+            model: input.model ?? targetModel(target),
             prompt: input.prompt,
-            providerRequestMetadata: input.providerRequestMetadata,
+            providerRequestMetadata: metadataWithImageFormat,
           },
           { profile: target.profile, preset: target.preset, mode: "image" }
-        )
+        );
+      }
     );
   }
 
@@ -509,6 +533,27 @@ export function createGateway(deps: GatewayDependencies) {
       ...(metadata ?? {}),
       ...(parameterOverrides ? { parameterOverrides } : {}),
     };
+  }
+
+  /**
+   * Fold the preset's slot-wide `providerRequestMetadata` (thinking mode,
+   * reasoning_effort, freeform provider flags) into the per-call metadata.
+   *
+   * Precedence: preset defaults < per-call metadata < parameterOverrides.
+   * Per-call values always win so callers can override the TOML defaults.
+   */
+  function withPresetMetadata(
+    target: ResolvedTarget,
+    metadata: Record<string, unknown> | undefined,
+    presetId: string | undefined,
+    options: GatewayOptions | undefined,
+  ): Record<string, unknown> | undefined {
+    const presetMeta = target.preset?.providerRequestMetadata;
+    const merged =
+      presetMeta || metadata
+        ? { ...(presetMeta ?? {}), ...(metadata ?? {}) }
+        : undefined;
+    return withParameterOverrides(merged, presetId, options);
   }
 
   return {

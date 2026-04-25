@@ -835,31 +835,64 @@ const Button: ComponentRenderer = ({ element, emit }) => {
     return false;
   }, [element.on, pendingDrafts, getState]);
 
+  // ── In-flight feedback for plugin-rpc dispatch ─────────────────────
+  //
+  // PluginPanel writes `/_invoking/<key>` whenever an `invokeRuntime` /
+  // `invokePluginAction` click is mid-flight. The button's click binding
+  // tells us which key it would set, so we can show a spinner exactly on
+  // the button that fired the action — no risk of dimming the whole panel.
+  const invokingMap = (getState("/_invoking") as Record<string, boolean> | undefined) ?? {};
+  const isPending = useMemo(() => {
+    const click = element.on?.click;
+    if (!click) return false;
+    const bindings = Array.isArray(click) ? click : [click];
+    for (const binding of bindings) {
+      const resolved = resolveActionParams(
+        binding.params as Record<string, unknown> | undefined,
+        getState,
+      );
+      if (binding.action === "invokeRuntime" && typeof resolved.runtimeId === "string") {
+        if (invokingMap[`runtime:${resolved.runtimeId}`]) return true;
+      }
+      if (binding.action === "invokePluginAction" && typeof resolved.action === "string") {
+        if (invokingMap[`action:${resolved.action}`]) return true;
+      }
+    }
+    return false;
+  }, [element.on, invokingMap, getState]);
+
+  const Loader = Icons.Loader2;
+
   return (
     <button
       type="button"
       onClick={() => emit("click")}
+      disabled={isPending || undefined}
       aria-pressed={isSelected || undefined}
+      aria-busy={isPending || undefined}
       data-selected={isSelected ? "true" : undefined}
+      data-pending={isPending ? "true" : undefined}
       className={clsx(
-        "font-medium rounded-[var(--radius-control)] transition-all text-left relative",
+        "font-medium rounded-[var(--radius-control)] transition-all text-left relative inline-flex items-center gap-1.5",
         size === "compact" ? "px-2.5 py-1 text-[11px]" : "px-3.5 py-1.5 text-xs",
         !isSelected && variant === "primary" && "bg-primary text-primary-foreground hover:opacity-90",
         !isSelected && variant === "default" && "bg-card text-foreground border border-border hover:border-primary/40",
         !isSelected && variant === "ghost" && "bg-card/60 border border-border border-dashed hover:border-primary/60",
         !isSelected && variant === "danger" && "bg-red-600 text-white hover:bg-red-700",
         isSelected && "bg-primary/10 text-primary border border-primary ring-2 ring-primary/30 shadow-sm",
+        isPending && "opacity-70 cursor-progress",
       )}
     >
-      {isSelected && (
+      {isPending && <Loader aria-hidden="true" className="w-3 h-3 animate-spin" />}
+      {!isPending && isSelected && (
         <span
           aria-hidden="true"
-          className="inline-block mr-1.5 text-primary"
+          className="inline-block text-primary"
         >
           ✓
         </span>
       )}
-      {label}
+      <span>{label}</span>
     </button>
   );
 };

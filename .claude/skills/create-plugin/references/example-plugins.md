@@ -267,12 +267,28 @@ export default async function handler(ctx) {
   const startedAt = new Date().toISOString();
 
   try {
+    // audit F4: PluginRuntimeGateway.generateImage 接受 model per-call
+    // 覆盖。优先用顶层 `model` 字段而不是塞进 providerRequestMetadata,
+    // 这样 wan2.7-image-pro / wan2.5-image-turbo 等同 provider 变体
+    // 不需要新建 preset 就能切换。
     const { images } = await ctx.gateway.generateImage({
       presetId: 'image',
       prompt,
-      providerRequestMetadata: { model, size: imageSize },
+      ...(model ? { model } : {}),
+      providerRequestMetadata: {
+        size: imageSize,
+        // wan2.7-image / wan2.7-image-pro 不接受 negative_prompt,
+        // 适配器会按模型 id 自动剥离;其他 wan2.x 透传(audit F5)。
+      },
     });
     const first = images?.[0];
+    // audit F7: DashScope 异步任务的结果 URL 24 小时后会失效。把
+    // expiresAt 一并写入记录,UI 可以基于该时间戳显示「需要重新生成」。
+    const completedAt = new Date().toISOString();
+    const hasRemoteUrl = typeof first?.url === 'string' && first.url.length > 0;
+    const expiresAt = hasRemoteUrl
+      ? new Date(Date.parse(completedAt) + 24 * 60 * 60 * 1000).toISOString()
+      : null;
     return {
       url: first?.url ?? null,
       mimeType: first?.mimeType ?? 'image/png',
@@ -285,10 +301,11 @@ export default async function handler(ctx) {
             prompt,
             imageSize,
             startedAt,
-            completedAt: new Date().toISOString(),
+            completedAt,
             url: first?.url ?? null,
             base64: first?.base64 ?? null,
             mimeType: first?.mimeType ?? 'image/png',
+            ...(expiresAt ? { expiresAt } : {}),
           },
         },
       ],

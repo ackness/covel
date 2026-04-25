@@ -34,7 +34,14 @@
  */
 
 import { Hono } from 'hono';
-import { executeTurn, processRuntimeResult, createTurnEmitter } from '@covel/runtime';
+import {
+  executeTurn,
+  processRuntimeResult,
+  createTurnEmitter,
+  createPluginDataWriter,
+  createPluginLogger,
+  createFunctionStoreView,
+} from '@covel/runtime';
 import { RpcDispatchError, RpcValidationError } from '@covel/runtime';
 import { getPluginTrustInfo } from '@covel/plugin-loader';
 import type { RuntimeManifest, TurnInput } from '@covel/shared';
@@ -308,6 +315,13 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
           toolExecutor,
           resolveModel,
           emitter,
+          // Without eventBus the executor's emitSubEvent calls (turn.started,
+          // runtime.started/completed, turn.completed, …) silently no-op,
+          // leaving the trace timeline with only the two LLM lifecycle events
+          // that flow through the parallel `emitter` channel. The /debug page
+          // then can't tell the runtime ever finished. Wire it through so
+          // manual-trigger turns produce the same trace surface as auto turns.
+          eventBus,
           compactor: compactorRunner,
           worldDataPluginId,
           ...(hookPipeline ? { hookPipeline } : {}),
@@ -370,8 +384,10 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
           key: args.jobId,
           value: {
             status: 'failed',
+            progress: 100,
             runtimeId: args.runtimeId,
             turnId: args.followerTurnId,
+            triggerEvent: args.triggerEvent,
             startedAt: args.startedAt,
             completedAt: new Date().toISOString(),
             error: 'follower manifest not found in active set',
@@ -392,8 +408,10 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
           key: args.jobId,
           value: {
             status: 'failed',
+            progress: 100,
             runtimeId: args.runtimeId,
             turnId: args.followerTurnId,
+            triggerEvent: args.triggerEvent,
             startedAt: args.startedAt,
             completedAt: new Date().toISOString(),
             error: 'follower runtime missing handler',
@@ -405,35 +423,76 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
       }
 
       const followerStart = Date.now();
+      // Audit P1-6: derive job status from the handler's own `output.status`
+      // / `output.error` rather than always reporting `success` once the
+      // promise resolved. A handler can return `{ status: 'failed', error }`
+      // for a recoverable business failure (e.g. DashScope returned 5xx) —
+      // surfacing that as `job done + runtime success` made the gallery
+      // render a broken image as if generation succeeded.
       try {
         const config = turnGetConfig();
         const followerUserSettings = resolveFollowerUserSettings(
           followerManifest,
           userSettingsMap,
         );
+        const helperCtx = {
+          sessionId,
+          turnId: args.followerTurnId,
+          pluginId: args.pluginId,
+          runtimeId: args.runtimeId,
+        };
+        const pluginDataHandle = createPluginDataWriter(store, helperCtx);
+        const loggerHandle = createPluginLogger(store, helperCtx);
+        // Audit P0-3: same narrowing rule as the in-turn path
+        // (turn-executor.ts). Background followers are usually
+        // community plugins (image generators, async fetchers) so the
+        // narrow `FunctionStoreView` is the common case here.
+        const isCorePlugin = followerManifest.pluginType === 'core-plugin';
+        const handlerStore = isCorePlugin
+          ? store
+          : createFunctionStoreView(store, helperCtx);
         const output = await loaded.handler({
           sessionId,
           turnId: args.followerTurnId,
           pluginId: args.pluginId,
           playerMessage: '',
           locale: session.locale ?? 'zh-CN',
-          store,
+          store: handlerStore,
           completedResults: new Map(),
           config,
           ...(pluginGateway ? { gateway: pluginGateway } : {}),
           triggerEvent: args.triggerEvent,
           ...(followerUserSettings ? { userSettings: followerUserSettings } : {}),
+          pluginData: pluginDataHandle,
+          logger: loggerHandle,
         });
 
+        // Audit P1-6: business failure detection. When the handler
+        // explicitly reports failure, surface that on both
+        // `runtimeResult.status` (so trace consumers see `failed`) and
+        // the persisted `_jobs/<jobId>.value.status` (so the UI's
+        // pending → done/failed transition is correct).
+        const outputRecord = (output ?? {}) as Record<string, unknown>;
+        const handlerSaysFailed =
+          outputRecord.status === 'failed' ||
+          (typeof outputRecord.error === 'string' && outputRecord.error.length > 0);
+        const runtimeStatus: 'success' | 'failed' = handlerSaysFailed ? 'failed' : 'success';
+        const runtimeError =
+          handlerSaysFailed && typeof outputRecord.error === 'string'
+            ? outputRecord.error
+            : handlerSaysFailed
+              ? 'runtime reported failure'
+              : undefined;
         const runtimeResult = {
           runtimeId: args.runtimeId,
           pluginId: args.pluginId,
           turnId: args.followerTurnId,
-          status: 'success' as const,
+          status: runtimeStatus,
           durationMs: Date.now() - followerStart,
-          output: output as Record<string, unknown>,
+          output: outputRecord,
           startedAt: args.startedAt,
           completedAt: new Date().toISOString(),
+          ...(runtimeError ? { error: runtimeError } : {}),
         };
 
         // Commit proposals (pluginData, events, etc.) via the standard pipeline.
@@ -443,6 +502,11 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
           eventBus,
         });
 
+        // Audit P1-6: persist the derived job status so a UI watching
+        // `_jobs/<jobId>` doesn't see stale `pending` after a business
+        // failure, and so the runtimeResults entry inside the job
+        // matches what the trace pipeline records above.
+        const jobStatus: 'done' | 'failed' = handlerSaysFailed ? 'failed' : 'done';
         await store.setPluginData({
           id: `${sessionId}:${args.pluginId}:_jobs:${args.jobId}`,
           sessionId,
@@ -450,18 +514,22 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
           namespace: '_jobs',
           key: args.jobId,
           value: {
-            status: 'done',
+            status: jobStatus,
+            progress: 100,
             runtimeId: args.runtimeId,
             turnId: args.followerTurnId,
+            triggerEvent: args.triggerEvent,
             startedAt: args.startedAt,
             completedAt: new Date().toISOString(),
             durationMs: runtimeResult.durationMs,
+            ...(runtimeError ? { error: runtimeError } : {}),
             runtimeResults: [
               {
                 runtimeId: args.runtimeId,
                 pluginId: args.pluginId,
-                status: 'success',
+                status: runtimeStatus,
                 durationMs: runtimeResult.durationMs,
+                ...(runtimeError ? { error: runtimeError } : {}),
                 output,
               },
             ],
@@ -478,8 +546,10 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
           key: args.jobId,
           value: {
             status: 'failed',
+            progress: 100,
             runtimeId: args.runtimeId,
             turnId: args.followerTurnId,
+            triggerEvent: args.triggerEvent,
             startedAt: args.startedAt,
             completedAt: new Date().toISOString(),
             error: err instanceof Error ? err.message : String(err),
@@ -518,8 +588,10 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
           key: jobId,
           value: {
             status: 'pending',
+            progress: 5,
             runtimeId: follower.runtimeId,
             turnId: followerTurnId,
+            triggerEvent: follower.triggerEvent,
             startedAt,
           },
           createdAt: startedAt,
@@ -568,8 +640,10 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
           key: jobId,
           value: {
             status: 'pending',
+            progress: 5,
             runtimeId: body.runtimeId,
             turnId,
+            ...(body.payload !== undefined ? { payload: body.payload } : {}),
             startedAt,
           },
           createdAt: startedAt,
@@ -618,8 +692,10 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
               key: jobId,
               value: {
                 status: topLevelStatus,
+                progress: 100,
                 runtimeId: body.runtimeId,
                 turnId: summary.turnId,
+                ...(body.payload !== undefined ? { payload: body.payload } : {}),
                 startedAt,
                 completedAt,
                 durationMs: summary.durationMs,
@@ -640,8 +716,10 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
               key: jobId,
               value: {
                 status: 'failed',
+                progress: 100,
                 runtimeId: body.runtimeId,
                 turnId,
+                ...(body.payload !== undefined ? { payload: body.payload } : {}),
                 startedAt,
                 completedAt,
                 error: err instanceof Error ? err.message : 'runtime execution failed',

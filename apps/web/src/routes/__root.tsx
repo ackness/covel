@@ -9,6 +9,7 @@ import { ToastHost } from "@/components/ui/toast-host";
 import { AppErrorBoundary } from "@/components/error-boundary";
 import { useLocalePreference } from "@/hooks/useLocalePreference";
 import { getCovelIpc } from "@/lib/desktop-bridge";
+import { useSession } from "@/stores/session-store";
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -23,6 +24,30 @@ function RootLayout() {
   const location = useLocation();
   const isSession = location.pathname.startsWith('/session') || location.pathname.startsWith('/debug');
   const isHome = location.pathname === '/';
+
+  // Carry the active session id between Studio (/session) and Debugger (/debug)
+  // so flipping tabs preserves what the user is inspecting. /session has stale-
+  // session logic that drops state when it loads without a sid; without this,
+  // clicking Studio from /debug would always boot the user back to world-select.
+  //
+  // /debug doesn't restore the session into SessionProvider, so we must also
+  // honour `?sid=` already in the URL. The session-store value takes priority
+  // (matches the Studio's authoritative state); the URL is a read-only fallback.
+  const { state: sessionState } = useSession();
+  const urlSid = (() => {
+    const search = location.search as unknown;
+    if (typeof search === "string") {
+      const v = new URLSearchParams(search).get("sid");
+      return v && v.length > 0 ? v : null;
+    }
+    if (search && typeof search === "object") {
+      const v = (search as Record<string, unknown>).sid;
+      return typeof v === "string" && v.length > 0 ? v : null;
+    }
+    return null;
+  })();
+  const activeSid = sessionState.session?.id ?? urlSid;
+  const navSearch = activeSid ? { sid: activeSid } : {};
 
   // Electron / Tauri both hide the native title bar so the in-app header can
   // follow the active theme. Electron uses `-webkit-app-region: drag`; Tauri
@@ -79,12 +104,14 @@ function RootLayout() {
             >
               <Link
                 to="/session"
+                search={navSearch}
                 className="text-muted-foreground hover:text-primary transition-colors [&.active]:text-primary"
               >
                 {t("nav.studio", "Studio")}
               </Link>
               <Link
                 to="/debug"
+                search={navSearch}
                 className="text-muted-foreground hover:text-primary transition-colors [&.active]:text-primary"
               >
                 {t("nav.debug", "Debugger")}

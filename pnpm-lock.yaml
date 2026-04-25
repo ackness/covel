@@ -29,6 +29,9 @@ importers:
       sqlite-vec:
         specifier: ^0.1.9
         version: 0.1.9
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
       turbo:
         specifier: ^2.9.6
         version: 2.9.6
@@ -531,6 +534,34 @@ importers:
       fake-indexeddb:
         specifier: ^6.2.5
         version: 6.2.5
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.4
+        version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+
+  packages/test-runtime:
+    dependencies:
+      '@covel/ai-provider':
+        specifier: workspace:*
+        version: link:../ai-provider
+      '@covel/plugin-loader':
+        specifier: workspace:*
+        version: link:../plugin-loader
+      '@covel/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@covel/store':
+        specifier: workspace:*
+        version: link:../store
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../tools
+    devDependencies:
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

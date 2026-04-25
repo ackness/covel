@@ -31,17 +31,22 @@ describe('normalizeOutput', () => {
       });
     });
 
-    it('should use "plugin" as default kind when outputKind not specified', () => {
-      const output = { narrativeOutput: 'System message.' };
+    it('does NOT emit narrative.append for non-story runtimes (kind defaults to "plugin")', () => {
+      // Regression (2026-04-24): core-guide runtimes whose LLM forgot to call
+      // the mandatory tool and instead wrote prose were silently polluting the
+      // narrator feed. Only `outputKind: "story"` may append narrative.
+      const output = { narrativeOutput: 'Hallucinated plugin prose.' };
       const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
-
-      expect(proposals[0].payload).toEqual({
-        content: 'System message.',
-        kind: 'plugin',
-      });
+      expect(proposals.filter((p) => p.type === 'narrative.append')).toHaveLength(0);
     });
 
-    it('should fall back to content field when narrativeOutput is absent', () => {
+    it('does NOT emit narrative.append for outputKind=system even if narrativeOutput is set', () => {
+      const output = { narrativeOutput: 'System drift.' };
+      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID, 'system');
+      expect(proposals.filter((p) => p.type === 'narrative.append')).toHaveLength(0);
+    });
+
+    it('should fall back to content field when narrativeOutput is absent (story only)', () => {
       const output = { content: 'Fallback content.' };
       const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID, 'story');
 
@@ -309,18 +314,21 @@ describe('normalizeOutput', () => {
       expect(proposals).toHaveLength(0);
     });
 
-    it('produces notifications in addition to narrativeOutput', () => {
+    it('produces notifications in addition to narrativeOutput (story only)', () => {
       const output = {
         narrativeOutput: 'World intro text.',
         notifications: [{ level: 'info', title: '欢迎', message: '开始冒险' }],
       };
-      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+      // narrativeOutput + notifications both surface as narrative.append, but
+      // only when the runtime's outputKind is "story" — otherwise the prose
+      // doesn't flow to the chat stream (see "non-story" regression above).
+      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID, 'story');
 
       expect(proposals).toHaveLength(2);
       const kinds = proposals.map((p) => ({ type: p.type, kind: (p.payload as { kind?: string }).kind }));
       expect(kinds).toEqual(
         expect.arrayContaining([
-          { type: 'narrative.append', kind: 'plugin' },
+          { type: 'narrative.append', kind: 'story' },
           { type: 'narrative.append', kind: 'system' },
         ]),
       );
@@ -762,7 +770,10 @@ describe('processRuntimeResult', () => {
       ],
     });
 
-    const { events } = await processRuntimeResult(result, store as any, SESSION_ID, 'plugin');
+    // Use "story" outputKind so narrative.append fires alongside the form
+    // interaction — matches the previous contract where both events were
+    // expected together. Non-story kinds intentionally skip narrative.
+    const { events } = await processRuntimeResult(result, store as any, SESSION_ID, 'story');
 
     expect(events).toHaveLength(2);
     expect(events.map(e => e.type).sort()).toEqual(['interaction.requested', 'narrative.completed']);
@@ -803,10 +814,13 @@ describe('processRuntimeResult', () => {
 
     const { events } = await processRuntimeResult(result, store as any, SESSION_ID, 'system');
 
-    expect(events.map((e) => e.type).sort()).toEqual(['interaction.requested', 'narrative.completed']);
-    expect(store.addMessage).toHaveBeenCalledTimes(2);
-    expect(store.addMessage.mock.calls[0][0].role).toBe('system');
-    expect(store.addMessage.mock.calls[1][0].metadata.block.type).toBe('action-guide');
+    // outputKind "system" intentionally suppresses narrative.append even when
+    // narrativeOutput is populated — the text is hallucinated prose, not a
+    // user-facing story beat. Only the ui block survives; addMessage fires
+    // once (for the block), not twice.
+    expect(events.map((e) => e.type).sort()).toEqual(['interaction.requested']);
+    expect(store.addMessage).toHaveBeenCalledTimes(1);
+    expect(store.addMessage.mock.calls[0][0].metadata.block.type).toBe('action-guide');
   });
 
   it('should append pending proposals from runtime output and commit them', async () => {

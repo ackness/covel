@@ -36,4 +36,7 @@ export type {
   FunctionHandler,
   FunctionHandlerContext,
   PluginRuntimeGateway,
+  PluginDataWriter,
+  PluginLogger,
+  FunctionStoreView,
 } from './types.js';
