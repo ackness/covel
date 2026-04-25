@@ -10,6 +10,14 @@ directories:
 # (e.g. Covel_0.0.1-beta_aarch64.dmg) never get confused in release/.
 artifactName: ${productName}-electron-${version}-${os}-${arch}.${ext}
 
+# 我们不发布到 GitHub Release / S3，禁用 publish 即可避免 latest-*.yml
+# 这种 auto-update 元数据被生成。
+publish: null
+
+# 打包结束后清理 release/ 下的中间产物（blockmap、解包目录、调试 yml），
+# 让 release/electron/ 只剩 dmg / zip / exe / AppImage 等可分发安装包。
+afterAllArtifactBuild: scripts/cleanup-artifacts.mjs
+
 files:
   - dist/**/*
   - "!dist/**/*.map"

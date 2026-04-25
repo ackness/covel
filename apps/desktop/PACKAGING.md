@@ -99,12 +99,17 @@ dpkg-sig --sign builder release/*.deb
 
 ## Verifying a build locally
 
-Before uploading:
+Run signing checks **immediately after `electron-builder` finishes** — the
+`afterAllArtifactBuild` cleanup hook (`scripts/cleanup-artifacts.mjs`) wipes the
+`mac-arm64/` unpacked directory once the dmg/zip are produced, so the
+`Covel.app` directory only exists for that brief window. To re-verify later,
+expand the zip first:
 
 ```bash
-# macOS
-codesign --verify --deep --strict --verbose=2 "release/mac-arm64/Covel.app"
-spctl --assess --verbose "release/mac-arm64/Covel.app"
+# macOS — re-extract the .app from the shipped zip first
+unzip -q release/electron/Covel-electron-*-mac-arm64.zip -d /tmp/covel-verify
+codesign --verify --deep --strict --verbose=2 "/tmp/covel-verify/Covel.app"
+spctl --assess --verbose "/tmp/covel-verify/Covel.app"
 
 # Windows (PowerShell)
 Get-AuthenticodeSignature release\Covel-Setup-*.exe
@@ -112,7 +117,19 @@ Get-AuthenticodeSignature release\Covel-Setup-*.exe
 
 ## Auto-update publishing
 
-Once a release pipeline is ready, uncomment the `publish:` block in `electron-builder.yml` and pass `GH_TOKEN` in CI. electron-builder will upload artifacts plus the `latest-*.yml` update manifests to the target GitHub release.
+Auto-update is **off** by default. `electron-builder.yml` ships with
+`publish: null` and the `cleanup-artifacts.mjs` hook strips `latest-*.yml` /
+`*.blockmap`. The intentional output is two files only: the `.dmg` installer
+and the `.zip` containing the `.app`.
+
+To enable auto-update later:
+
+1. Remove (or override to a real provider config) `publish: null` in
+   `electron-builder.yml`.
+2. Update `scripts/cleanup-artifacts.mjs` to keep `latest-*.yml` and
+   `*.blockmap` (currently part of the drop list).
+3. Pass `GH_TOKEN` (or the matching provider credential) in CI. The Release
+   workflow's `--publish=never` flag will need to flip to `--publish=always`.
 
 To enable in-app update checks, add `electron-updater` as a dependency and wire it up in `apps/desktop/src/main.ts`:
 
