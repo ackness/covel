@@ -66,17 +66,28 @@ function mustHaveBundledPlugins(resourcesDir) {
   if (pluginDirs.length === 0) {
     throw new Error(`No bundled plugins present under ${pluginsDir} `);
   }
+  const isPluginManifest = (f) => /^PLUGIN(\.[a-z-]+)?\.md$/i.test(f);
   for (const entry of pluginDirs) {
     const dir = path.join(pluginsDir, entry.name);
     if (!fs.existsSync(path.join(dir, "package.json"))) {
       throw new Error(`Bundled plugin ${entry.name} is missing package.json`);
     }
-    const hasManifest = directoryHasFile(dir, (f) =>
-      /^PLUGIN(\.[a-z-]+)?\.md$/i.test(f),
-    );
-    if (!hasManifest) {
+    // Single-runtime layout: PLUGIN.md at the root.
+    // Multi-runtime layout: PLUGIN.md under runtimes/<sub>/ instead.
+    const hasRootManifest = directoryHasFile(dir, isPluginManifest);
+    let hasNestedManifest = false;
+    const runtimesDir = path.join(dir, "runtimes");
+    if (fs.existsSync(runtimesDir)) {
+      const subs = fs
+        .readdirSync(runtimesDir, { withFileTypes: true })
+        .filter((e) => e.isDirectory());
+      hasNestedManifest = subs.some((sub) =>
+        directoryHasFile(path.join(runtimesDir, sub.name), isPluginManifest),
+      );
+    }
+    if (!hasRootManifest && !hasNestedManifest) {
       throw new Error(
-        `Bundled plugin ${entry.name} is missing PLUGIN *.md(likely stripped by a too - broad electron - builder filter)`,
+        `Bundled plugin ${entry.name} is missing PLUGIN.md (looked at ${dir}/PLUGIN.md and ${dir}/runtimes/<sub>/PLUGIN.md — likely stripped by a too-broad electron-builder filter)`,
       );
     }
   }
