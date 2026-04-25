@@ -526,6 +526,51 @@ describe('POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)', () => {
     expect(jobs).toHaveLength(0);
   });
 
+  it('writes a failed _jobs row when an expected background follower is missing', async () => {
+    const { app, store } = setupRuntimeTestEnv({
+      pluginId: PLUGIN_ID,
+      runtimeId: SYNC_RUNTIME,
+      execution: 'sync',
+      handler: async () => ({
+        ok: true,
+        prompt: 'a foggy harbor',
+      }),
+    });
+    await seedRuntimeSession(store, PLUGIN_ID, SESSION_ID);
+
+    const res = await app.request(`/api/sessions/${SESSION_ID}/plugin-rpc`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        pluginId: PLUGIN_ID,
+        runtimeId: SYNC_RUNTIME,
+        expectsBackgroundFollower: true,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      status: string;
+      failedJobs?: ReadonlyArray<{ jobId: string; runtimeId: string }>;
+    };
+    expect(body.status).toBe('ok');
+    expect(body.failedJobs).toHaveLength(1);
+    expect(body.failedJobs?.[0]?.runtimeId).toBe(SYNC_RUNTIME);
+
+    const jobs = await store.listPluginData(SESSION_ID, PLUGIN_ID, '_jobs');
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]?.key).toBe(body.failedJobs?.[0]?.jobId);
+    expect(jobs[0]?.value).toMatchObject({
+      status: 'failed',
+      progress: 100,
+      runtimeId: SYNC_RUNTIME,
+      reason: 'expected-background-follower-missing',
+    });
+    expect(String((jobs[0]?.value as { error?: string }).error)).toContain(
+      'completed without emitting',
+    );
+  });
+
   // ── Audit F7: X-Plugin-User-Settings header → ctx.userSettings ──
   //
   // Player-authored plugin settings travel from the web client's

@@ -1,3 +1,7 @@
+import { mirrorCharacterToPluginData } from '@covel/tools';
+
+const CHARACTER_PLUGIN_ID = 'core-char-creator';
+
 /**
  * guard.js — Pre-execution gate for player-init runtime.
  *
@@ -30,6 +34,7 @@ export default async function guard(ctx) {
 
     // ── Branch 1: player already created — skip
     if (player) {
+      await mirrorPlayer(s, sessionId, player);
       console.log(`[player-init/guard] SKIP — player already exists id=${player.id} name=${player.name}`);
       return {
         skip: true,
@@ -49,7 +54,7 @@ export default async function guard(ctx) {
         const now = new Date().toISOString();
         const id = `char-${crypto.randomUUID()}`;
         try {
-          await s.upsertCharacter({
+          const character = {
             id,
             sessionId,
             name,
@@ -59,7 +64,9 @@ export default async function guard(ctx) {
             version: 1,
             createdAt: now,
             updatedAt: now,
-          });
+          };
+          await s.upsertCharacter(character);
+          await mirrorPlayer(s, sessionId, character);
           console.log(`[player-init/guard] deterministic create-character succeeded: id=${id} name=${name}`);
           return {
             skip: true,
@@ -143,4 +150,32 @@ function pickDescription(values) {
 function stripNameKeys(values) {
   const { characterName, name, 姓名, playerName, ...rest } = /** @type {any} */ (values);
   return rest;
+}
+
+/**
+ * Mirror the player into plugin_data so the character panel can read it.
+ * @param {any} store
+ * @param {string} sessionId
+ * @param {{
+ *   id: string;
+ *   name: string;
+ *   type: string;
+ *   description?: string;
+ *   fields?: unknown;
+ *   version: number;
+ *   createdAt: string;
+ *   updatedAt: string;
+ * }} character
+ */
+async function mirrorPlayer(store, sessionId, character) {
+  await mirrorCharacterToPluginData(store, sessionId, CHARACTER_PLUGIN_ID, {
+    id: character.id,
+    name: character.name,
+    type: character.type,
+    description: character.description,
+    fields: character.fields,
+    version: character.version,
+    createdAt: character.createdAt,
+    updatedAt: character.updatedAt,
+  });
 }

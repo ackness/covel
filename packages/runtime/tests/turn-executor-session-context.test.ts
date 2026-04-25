@@ -275,4 +275,109 @@ describe('turn-executor → SessionContextSnapshot wiring', () => {
     expect(result.runtimeResults[0]!.status).toBe('success');
     warnSpy.mockRestore();
   });
+
+  it('refreshes snapshot before same-turn main-loop runtimes after player creation', async () => {
+    process.env.COVEL_SESSION_CONTEXT = '1';
+
+    const store = createMemoryStore();
+    const sessionId = 'sess-sc-refresh';
+    const worldId = 'w-sc-refresh';
+    await store.upsertWorld({
+      id: worldId,
+      name: 'Refreshworld',
+      description: 'test',
+      lore: 'The Glass District',
+      createdAt: ts(),
+    });
+    await store.createSession({
+      id: sessionId,
+      worldId,
+      status: 'active',
+      turnCount: 0,
+      preGameCompleted: ['core-pregame', 'core-world-init/schema-gen'],
+      locale: 'zh-CN',
+      activePlugins: [],
+      createdAt: ts(),
+      updatedAt: ts(),
+    });
+    await store.savePlayerInput({
+      id: 'input-sc-refresh',
+      sessionId,
+      turnId: 'turn-form',
+      formId: 'form-char-creation',
+      values: { name: 'Aria', concept: 'cartographer' },
+      createdAt: ts(1),
+    });
+
+    const playerInit: RuntimeManifest = {
+      name: 'core-char-creator/player-init',
+      pluginId: 'core-char-creator',
+      description: 'create player',
+      priority: 90,
+      runtimeType: 'function',
+      handler: './handler.js',
+      trigger: { type: 'auto' },
+      upstreamRequired: ['core-pregame', 'core-world-init/schema-gen'],
+    } as RuntimeManifest;
+    const narrator = makeManifest({
+      name: 'core-narrator',
+      pluginId: 'core-narrator',
+      priority: 500,
+      promptVersion: 1,
+      trigger: { type: 'auto' },
+    });
+
+    const llm = makeCapturingLLM();
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async (manifest) => {
+        if (manifest.name === playerInit.name) {
+          return {
+            manifest,
+            promptTemplate: '',
+            references: [],
+            handler: async () => {
+              const now = ts(2);
+              await store.upsertCharacter({
+                id: 'player-sc-refresh',
+                sessionId,
+                name: 'Aria',
+                type: 'player',
+                description: 'cartographer',
+                fields: { concept: 'cartographer' },
+                version: 1,
+                createdAt: now,
+                updatedAt: now,
+              });
+              return { narrativeOutput: 'player ready', preGameDone: true };
+            },
+          };
+        }
+        return {
+          manifest,
+          promptTemplate: 'Player: {{ player.character.name }}.',
+          references: [],
+        };
+      },
+      llm,
+      getConfig: () => ({}),
+      store,
+    };
+
+    const result = await executeTurn(
+      makeTurnInput(sessionId, {
+        turnId: 'turn-form',
+        playerMessage: 'Player Aria enters as cartographer.',
+      }),
+      [playerInit, narrator],
+      deps,
+    );
+
+    expect(result.runtimeResults.map((runtime) => runtime.runtimeId)).toEqual([
+      'core-char-creator/player-init',
+      'core-narrator',
+    ]);
+    expect(llm.captured.systemPrompts[0]).toContain('Player: Aria.');
+    const session = await store.getSession(sessionId);
+    expect(session?.turnCount).toBe(1);
+  });
 });

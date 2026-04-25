@@ -146,6 +146,120 @@ describe('Pre-Game completion contract', () => {
     expect(session?.turnCount).toBe(0);
   });
 
+  it('keeps bootstrap outside player history while setup is unfinished', async () => {
+    const pregame = pregameManifest('core-pregame', { priority: 10 });
+    const playerInit = pregameManifest('core-char-creator/player-init', { priority: 50 });
+    const store = await freshStore('sess-bootstrap');
+    const input = {
+      sessionId: 'sess-bootstrap',
+      turnId: 'turn-0',
+      playerMessage: '',
+      suppressPlayerMessage: true,
+    };
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async (m) => ({
+        manifest: m,
+        promptTemplate: '',
+        references: [],
+        handler: async () => (
+          m.name === 'core-pregame'
+            ? { preGameDone: true }
+            : { form: { formId: 'character-form' } }
+        ),
+      }),
+      llm: new NoopLLM(),
+      getConfig: () => ({}),
+      store,
+    };
+
+    await executeTurn(input, [pregame, playerInit], deps);
+
+    const playerMessages = (await store.listTurnMessages('sess-bootstrap')).filter(
+      (msg) => msg.sourceType === 'player',
+    );
+    const session = await store.getSession('sess-bootstrap');
+    expect(playerMessages).toHaveLength(0);
+    expect(session?.preGameCompleted).toEqual(['core-pregame']);
+    expect(session?.turnCount).toBe(0);
+  });
+
+  it('continues pending setup scheduling after player history exists', async () => {
+    const pregame = pregameManifest('core-pregame', { priority: 10 });
+    const playerInit = pregameManifest('core-char-creator/player-init', { priority: 50 });
+    const narrator = pregameManifest('core-narrator', { priority: 500 });
+    const store = await freshStore('sess-resume');
+    await store.updateSession('sess-resume', {
+      preGameCompleted: ['core-pregame'],
+      updatedAt: new Date().toISOString(),
+    });
+    await store.appendTurnMessage({
+      id: 'prior-player',
+      sessionId: 'sess-resume',
+      turnId: 'prior-turn',
+      sourceType: 'player',
+      role: 'user',
+      content: 'saved form values',
+      order: 0,
+      createdAt: new Date().toISOString(),
+    });
+
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async (m) => ({
+        manifest: m,
+        promptTemplate: '',
+        references: [],
+        handler: async () => {
+          if (m.name === 'core-narrator') {
+            return { narrativeOutput: 'main loop started' };
+          }
+          return { preGameDone: true };
+        },
+      }),
+      llm: new NoopLLM(),
+      getConfig: () => ({}),
+      store,
+    };
+
+    const result = await executeTurn(
+      { sessionId: 'sess-resume', turnId: 'turn-1', playerMessage: 'continue setup' },
+      [pregame, playerInit, narrator],
+      deps,
+    );
+
+    const session = await store.getSession('sess-resume');
+    expect(result.runtimeResults.map((r) => r.runtimeId)).toEqual([
+      'core-char-creator/player-init',
+      'core-narrator',
+    ]);
+    expect(session?.preGameCompleted?.slice().sort()).toEqual(
+      ['core-pregame', 'core-char-creator/player-init'].sort(),
+    );
+    expect(session?.turnCount).toBe(1);
+  });
+
+  it('does not mark framework upstream skips as Pre-Game completion', async () => {
+    const playerInit = pregameManifest('core-char-creator/player-init', {
+      priority: 50,
+      upstreamRequired: ['core-pregame'],
+    });
+
+    const { store, result } = await runPregameTurn(
+      'sess-upstream-skip',
+      [playerInit],
+      {
+        'core-char-creator/player-init': async () => ({ preGameDone: true }),
+      },
+    );
+
+    expect(result.runtimeResults[0]?.status).toBe('skipped');
+    expect(result.runtimeResults[0]?.output).toMatchObject({
+      skippedBy: 'framework:upstreamRequired',
+    });
+    const session = await store.getSession('sess-upstream-skip');
+    expect(session?.preGameCompleted).toEqual([]);
+    expect(session?.turnCount).toBe(0);
+  });
+
   it('advances turnCount when EVERY Pre-Game runtime reports done in the same turn', async () => {
     // When both plugins complete in turn 0 (e.g. pregame completes on first
     // hit, schema-gen guard skips because schema already exists), the kernel

@@ -298,6 +298,9 @@ export function PluginPanel({
           pluginId,
           runtimeId,
           payload: params.payload as unknown,
+          ...(params.expectsBackgroundFollower === true
+            ? { expectsBackgroundFollower: true }
+            : {}),
         };
         markInvoking(`runtime:${runtimeId}`, true);
         try {

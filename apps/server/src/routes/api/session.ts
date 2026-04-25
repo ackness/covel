@@ -16,7 +16,7 @@
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { getPluginTrustInfo } from '@covel/plugin-loader';
-import type { PluginRegistry } from '@covel/plugin-loader';
+import type { PluginRegistry, PluginRegistryEntry } from '@covel/plugin-loader';
 import type { DataStore, SessionRecord } from '@covel/store';
 import { supportsVector } from '@covel/store';
 import { buildSessionSnapshot } from '@covel/runtime';
@@ -32,6 +32,17 @@ type Env = {
 };
 
 export const sessionRoutes = new Hono<Env>();
+
+function isRequiredCorePlugin(entry: PluginRegistryEntry): boolean {
+  const trust = getPluginTrustInfo(entry.id, entry.source);
+  return entry.summary.pluginType === 'core-plugin' && trust.source === 'builtin';
+}
+
+function requiredCorePluginIds(pluginRegistry: PluginRegistry): string[] {
+  return [...pluginRegistry.getAll().values()]
+    .filter(isRequiredCorePlugin)
+    .map((entry) => entry.id);
+}
 
 /**
  * Decorate a SessionRecord with the embedding model lock metadata.
@@ -156,13 +167,17 @@ sessionRoutes.post('/', async (c) => {
   const suffix = randomUUID().slice(0, 8);
   const id = rawId ?? `${prefix}-${suffix}`;
 
-  const plugins = (Array.isArray(body.plugins) ? body.plugins : []) as string[];
+  const requestedPlugins = Array.isArray(body.plugins)
+    ? body.plugins.filter((pluginId): pluginId is string => typeof pluginId === 'string')
+    : [];
 
   // Validate that every requested plugin ID exists in the global registry
-  const unknownPlugins = plugins.filter((pid) => typeof pid === 'string' && !pluginRegistry.get(pid));
+  const unknownPlugins = requestedPlugins.filter((pid) => !pluginRegistry.get(pid));
   if (unknownPlugins.length > 0) {
     return c.json({ error: `Unknown plugin IDs: ${unknownPlugins.join(', ')}` }, 400);
   }
+
+  const plugins = [...new Set([...requestedPlugins, ...requiredCorePluginIds(pluginRegistry)])];
 
   const now = new Date().toISOString();
   const session: SessionRecord = {
@@ -393,11 +408,11 @@ sessionRoutes.post('/:id/plugins/disable', async (c) => {
     return c.json({ error: 'pluginId is required' }, 400);
   }
 
-  // Core plugins cannot be disabled — enforced at the framework level via
-  // manifest.pluginType. Never hardcode specific plugin IDs here (see
-  // CLAUDE.md "Framework–Plugin Isolation Rule"). Audit Finding 5.
+  // Core plugin protection combines framework-owned trust source metadata
+  // with manifest.pluginType. Keep IDs data-driven per the framework-plugin
+  // isolation rule.
   const entry = pluginRegistry.get(body.pluginId);
-  if (entry && entry.summary.pluginType === 'core-plugin') {
+  if (entry && isRequiredCorePlugin(entry)) {
     return c.json({ error: `Cannot disable core plugin "${body.pluginId}"` }, 403);
   }
 

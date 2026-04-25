@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createCharacterTools } from '../src/builtin/character-tools.js';
+import { createCharacterTools, mirrorCharacterToPluginData } from '../src/builtin/character-tools.js';
 import type { ToolModule, ToolExecutionContext } from '../src/types.js';
 
 interface CharacterLike {
@@ -115,6 +115,43 @@ describe('builtin character tools', () => {
       'list-characters',
       'update-character',
     ]);
+  });
+
+  it('mirror helper upserts one plugin-data row keyed by character id', async () => {
+    const character = {
+      id: 'char-player-1',
+      name: '柳无痕',
+      type: 'player',
+      description: '外门弟子',
+      fields: { hp: 100 },
+      version: 1,
+      createdAt: '2026-04-25T00:00:00.000Z',
+      updatedAt: '2026-04-25T00:00:00.000Z',
+    };
+
+    await mirrorCharacterToPluginData(store, 'sess-1', 'core-char-creator', character);
+    await mirrorCharacterToPluginData(store, 'sess-1', 'core-char-creator', {
+      ...character,
+      fields: { hp: 90 },
+      version: 2,
+      updatedAt: '2026-04-25T00:01:00.000Z',
+    });
+
+    expect(store.pluginData).toHaveLength(1);
+    expect(store.pluginData[0]).toMatchObject({
+      id: 'char-mirror-char-player-1',
+      sessionId: 'sess-1',
+      pluginId: 'core-char-creator',
+      namespace: 'characters',
+      key: 'char-player-1',
+    });
+    expect(store.pluginData[0].value).toMatchObject({
+      id: 'char-player-1',
+      name: '柳无痕',
+      type: 'player',
+      fields: { hp: 90 },
+      version: 2,
+    });
   });
 
   describe('create-character', () => {

@@ -14,11 +14,13 @@ interface CliOptions {
   config?: Record<string, unknown>;
   userSettings?: Record<string, unknown>;
   llmResponse?: Record<string, unknown>;
+  llmResponses?: readonly Record<string, unknown>[];
   llmContent?: string;
   llmObject?: Record<string, unknown>;
   mockImageUrl?: string;
   showPrompts?: boolean;
   ignoreUpstreams?: boolean;
+  expectsBackgroundFollower?: boolean;
   mode?: 'mock' | 'live';
   caseName?: string;
   pretty?: boolean;
@@ -43,7 +45,10 @@ Options:
   --llm-content <text>       Mock LLM content for agent runtimes.
   --llm-object <json>        Mock LLM JSON object content (auto stringified — easier than --llm-content for JSON envelopes).
   --llm-response <json>      Full mock LLM response JSON.
+  --llm-responses <json>     Array of mock LLM responses, consumed one per model call.
   --mock-image-url <url>     Mock gateway image URL.
+  --expects-background-follower
+                             Write a failed _jobs row when no deferred follower is emitted.
   --show-prompts             Include captured LLM messages in output.
   --ignore-upstreams         Clear upstreamRequired during this debug run.
   --pretty                   Pretty-print JSON output.
@@ -124,6 +129,14 @@ function parseArgs(argv: readonly string[]): CliOptions {
       case '--llm-response':
         options.llmResponse = parseJsonObject(next(), '--llm-response');
         break;
+      case '--llm-responses': {
+        const parsed = JSON.parse(next()) as unknown;
+        if (!Array.isArray(parsed) || parsed.some((item) => !item || typeof item !== 'object' || Array.isArray(item))) {
+          throw new Error('--llm-responses must be a JSON array of objects');
+        }
+        options.llmResponses = parsed as readonly Record<string, unknown>[];
+        break;
+      }
       case '--llm-content':
         options.llmContent = next();
         break;
@@ -135,6 +148,9 @@ function parseArgs(argv: readonly string[]): CliOptions {
         break;
       case '--show-prompts':
         options.showPrompts = true;
+        break;
+      case '--expects-background-follower':
+        options.expectsBackgroundFollower = true;
         break;
       case '--ignore-upstreams':
         options.ignoreUpstreams = true;
@@ -172,7 +188,9 @@ try {
     ? result.runtimeResults
     : result.cases.flatMap((item) => item.result.runtimeResults);
   const caseFailed = 'cases' in result && result.cases.some((item) => item.status === 'failed');
-  const failed = caseFailed || runtimeResults.some((r) => r.status === 'failed');
+  const failed = 'cases' in result
+    ? caseFailed
+    : runtimeResults.some((r) => r.status === 'failed');
   process.exitCode = failed ? 1 : 0;
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);

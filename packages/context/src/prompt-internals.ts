@@ -416,13 +416,22 @@ export function assemblePromptVariables(
  * stay inside the runtime task instead of drifting into assistant small talk.
  */
 export function buildCurrentTurnUserMessage(
-  turnInput: Pick<ContextBuildParams['turnInput'], 'playerMessage' | 'locale'>,
+  turnInput: Pick<ContextBuildParams['turnInput'], 'playerMessage' | 'locale' | 'manualTrigger'>,
 ): string {
   if (turnInput.playerMessage.trim().length > 0) {
     return turnInput.playerMessage;
   }
 
   const locale = turnInput.locale ?? '';
+  if (turnInput.manualTrigger) {
+    const runtimeId = turnInput.manualTrigger.runtimeId;
+    if (locale === 'zh' || locale.startsWith('zh-')) {
+      return `执行当前手动触发的 runtime：${runtimeId}。严格遵循系统提示中的输出格式，产出该 runtime 的结果。`;
+    }
+
+    return `Execute the current manually triggered runtime: ${runtimeId}. Follow the output format in the system prompt exactly and produce this runtime's result.`;
+  }
+
   if (locale === 'zh' || locale.startsWith('zh-')) {
     return '开始当前游戏回合，并按照系统设定直接给出游戏内结果。';
   }

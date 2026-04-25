@@ -31,6 +31,10 @@ interface SessionPrepScreenProps {
   onSettingsOpenChange: (v: boolean) => void;
 }
 
+export function isLockedCorePackage(pkg: Pick<api.PackageSummary, "pluginType" | "source">): boolean {
+  return pkg.pluginType === "core-plugin" && (pkg.source === undefined || pkg.source === "builtin");
+}
+
 // Reusable collapsible card header
 function CollapsibleCardHeader({
   expanded,
@@ -76,13 +80,19 @@ export function SessionPrepScreen({
   const { t } = useTranslation();
   const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(presets, llmConfig);
 
+  // Determine core plugins that cannot be deselected
+  const corePluginIds = useMemo(
+    () => new Set(packages.filter(isLockedCorePackage).map((p) => p.name)),
+    [packages],
+  );
+
   // Plugin selection state — default all enabled
   const [selectedPlugins, setSelectedPlugins] = useState<Set<string>>(() =>
-    new Set(packages.filter((p) => p.enabled).map((p) => p.name)),
+    new Set(packages.filter((p) => p.enabled || isLockedCorePackage(p)).map((p) => p.name)),
   );
   const selectedPackages = useMemo(
-    () => packages.filter((p) => selectedPlugins.has(p.name)),
-    [packages, selectedPlugins],
+    () => packages.filter((p) => selectedPlugins.has(p.name) || corePluginIds.has(p.name)),
+    [packages, selectedPlugins, corePluginIds],
   );
   // Prep bindings live in the SettingsStore under llm.prepRuntimeBindings
   // keyed by worldId. The hook keeps them in sync via `onPersist`.
@@ -107,20 +117,23 @@ export function SessionPrepScreen({
     api.fetchPluginFlows().then(setFlowData).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    setSelectedPlugins((prev) => {
+      const next = new Set(prev);
+      for (const id of corePluginIds) next.add(id);
+      return next.size === prev.size ? prev : next;
+    });
+  }, [corePluginIds]);
+
   const togglePlugin = useCallback((name: string) => {
+    if (corePluginIds.has(name)) return;
     setSelectedPlugins((prev) => {
       const next = new Set(prev);
       if (next.has(name)) next.delete(name);
       else next.add(name);
       return next;
     });
-  }, []);
-
-  // Determine core plugins that cannot be deselected
-  const corePluginIds = useMemo(
-    () => new Set(packages.filter((p) => p.pluginType === "builtin").map((p) => p.name)),
-    [packages],
-  );
+  }, [corePluginIds]);
 
   // Section expand state — all collapsed by default except plugins
   const [worldInfoExpanded, setWorldInfoExpanded] = useState(false);
@@ -215,9 +228,9 @@ export function SessionPrepScreen({
   }, [flowData, selectedPlugins]);
 
   const handleStart = useCallback(() => {
-    const pluginIds = [...selectedPlugins];
+    const pluginIds = [...new Set([...selectedPlugins, ...corePluginIds])];
     onStart(pluginIds.length > 0 ? pluginIds : undefined);
-  }, [selectedPlugins, onStart]);
+  }, [selectedPlugins, corePluginIds, onStart]);
 
   return (
     <div className="flex h-full w-full overflow-hidden">

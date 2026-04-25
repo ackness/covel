@@ -152,6 +152,7 @@ export function ChatMessages({
     const req = {
       pluginId: imageGenEntry.pluginId,
       runtimeId: imageGenEntry.runtimeId,
+      expectsBackgroundFollower: true,
     };
     const handleResponse = async (res: PluginRpcResponse): Promise<void> => {
       if (res.status === "error") {

@@ -93,6 +93,7 @@ describe('POST /api/actions — phase.changed hygiene (Finding 4 regression)', (
   let store: DataStore;
   let registry: PluginRegistry;
   let app: Hono;
+  let loadedByName: Map<string, LoadedRuntime>;
   const sessionId = 'sess-1';
   const RUNTIME_ID = 'fake-narrator';
 
@@ -105,6 +106,7 @@ describe('POST /api/actions — phase.changed hygiene (Finding 4 regression)', (
       pluginId: RUNTIME_ID,
       outputKind: 'story',
     });
+    loadedByName = new Map([[RUNTIME_ID, loaded]]);
     registry.register(makeEntry({ id: RUNTIME_ID, loaded }));
 
     // Session starts in pre-game (turnCount: 0) — the broken behavior would
@@ -130,7 +132,7 @@ describe('POST /api/actions — phase.changed hygiene (Finding 4 regression)', (
       c.set('pluginRegistry', registry);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       c.set('llmAdapter', llm as any);
-      c.set('loadRuntimeFn', async (m) => (m.name === RUNTIME_ID ? loaded : undefined));
+      c.set('loadRuntimeFn', async (m) => loadedByName.get(m.name));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       c.set('toolExecutor', undefined as any);
       c.set('getConfigFn', () => ({}));
@@ -181,5 +183,58 @@ describe('POST /api/actions — phase.changed hygiene (Finding 4 regression)', (
 
     const types = await drainActionStream(res);
     expect(types).not.toContain('phase.changed');
+  });
+
+  it('keeps turnCount at setup value when start_session leaves Pre-Game pending', async () => {
+    const PREGAME_ID = 'core-char-creator/player-init';
+    const loaded = makeFakeLoadedRuntime({
+      name: PREGAME_ID,
+      pluginId: 'core-char-creator',
+      outputKind: 'plugin',
+      pluginType: 'core-plugin',
+    });
+    const pregameLoaded: LoadedRuntime = {
+      ...loaded,
+      manifest: {
+        ...loaded.manifest,
+        priority: 50,
+      },
+    };
+    loadedByName.set(PREGAME_ID, pregameLoaded);
+    registry.register(makeEntry({ id: 'core-char-creator', loaded: pregameLoaded }));
+
+    const pendingSessionId = 'sess-pending-pregame';
+    await store.createSession({
+      id: pendingSessionId,
+      worldId: null,
+      status: 'active',
+      presetId: null,
+      activePlugins: ['core-char-creator'],
+      turnCount: 0,
+      preGameCompleted: [],
+      createdAt: new Date().toISOString(),
+    });
+
+    const res = await app.request('/api/actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requestId: 'req-pending',
+        type: 'start_session',
+        sessionId: pendingSessionId,
+        payload: {},
+      }),
+    });
+    expect(res.status).toBe(200);
+    await drainActionStream(res);
+
+    const session = await store.getSession(pendingSessionId);
+    const turnResults = await store.listTurnResults(pendingSessionId);
+    const playerMessages = (await store.listTurnMessages(pendingSessionId)).filter(
+      (msg) => msg.sourceType === 'player',
+    );
+    expect(turnResults).toHaveLength(1);
+    expect(playerMessages).toHaveLength(0);
+    expect(session?.turnCount).toBe(0);
   });
 });

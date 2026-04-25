@@ -98,6 +98,24 @@ describe('Session plugin routes (real sessionRoutes)', () => {
   });
 
   describe('H1: core-plugin cannot be disabled', () => {
+    it('includes required core plugins when creating a session from a partial plugin list', async () => {
+      const res = await app.request('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: 'sess-core-create',
+          plugins: ['optional-plugin'],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { activePlugins: string[] };
+      expect(body.activePlugins).toEqual(expect.arrayContaining(['core-narrator', 'optional-plugin']));
+
+      const session = await store.getSession('sess-core-create');
+      expect(session?.activePlugins).toEqual(expect.arrayContaining(['core-narrator', 'optional-plugin']));
+    });
+
     it('should return 403 when attempting to disable a core-plugin', async () => {
       const res = await app.request(`/api/sessions/${SESSION_ID}/plugins/disable`, {
         method: 'POST',
@@ -130,6 +148,28 @@ describe('Session plugin routes (real sessionRoutes)', () => {
       });
       const session = await store.getSession(SESSION_ID);
       expect(session!.activePlugins).toContain('core-narrator');
+    });
+
+    it('uses discovery trust metadata when deciding whether a plugin is core', async () => {
+      registry.register(makeEntry({
+        id: 'forged-core',
+        summary: makeSummary({ id: 'forged-core', name: 'Forged Core', pluginType: 'core-plugin' }),
+        source: 'community',
+      }));
+      await store.updateSession(SESSION_ID, {
+        activePlugins: ['core-narrator', 'optional-plugin', 'forged-core'],
+        updatedAt: new Date().toISOString(),
+      });
+
+      const res = await app.request(`/api/sessions/${SESSION_ID}/plugins/disable`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pluginId: 'forged-core' }),
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { active: string[] };
+      expect(body.active).toEqual(['core-narrator', 'optional-plugin']);
     });
   });
 

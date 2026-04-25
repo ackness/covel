@@ -237,6 +237,30 @@ describe('buildContext', () => {
     ]);
   });
 
+  it('uses a manual runtime cue when a manual trigger has no player message', () => {
+    const params: ContextBuildParams = {
+      promptTemplate: 'Plain instructions.',
+      manifest: makeManifest(),
+      turnInput: makeTurnInput({
+        locale: 'zh-CN',
+        playerMessage: '',
+        manualTrigger: { runtimeId: 'dashscope-image-gen/prompt-generator' },
+      }),
+      completedResults: new Map(),
+      config: {},
+    };
+
+    const ctx = buildContext(params);
+
+    expect(ctx.messages).toEqual([
+      {
+        role: 'user',
+        content:
+          '执行当前手动触发的 runtime：dashscope-image-gen/prompt-generator。严格遵循系统提示中的输出格式，产出该 runtime 的结果。',
+      },
+    ]);
+  });
+
   it('should include message history before current user message', () => {
     const history: MessageHistoryRecord[] = [
       { role: 'user', content: 'I enter the cave' },

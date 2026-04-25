@@ -21,7 +21,7 @@ Object.defineProperty(globalThis, "localStorage", { value: localStorageMock, wri
 
 // Must import AFTER localStorage mock is installed
 const apiModule = await import("../api.js");
-const { listSessionPlugins, enableSessionPlugin, disableSessionPlugin } = apiModule;
+const { listSessionPlugins, enableSessionPlugin, disableSessionPlugin, listPackages } = apiModule;
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -171,5 +171,42 @@ describe("disableSessionPlugin", () => {
 
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/sessions/session%20with%20spaces/plugins/disable");
+  });
+});
+
+describe("listPackages", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorageMock.clear();
+  });
+
+  it("normalizes runtime trigger.type into trigger.mode", async () => {
+    mockFetchOnce({
+      packages: [
+        {
+          name: "core-narrator",
+          enabled: true,
+          pluginType: "core-plugin",
+          source: "builtin",
+          runtimes: [
+            {
+              id: "core-narrator",
+              kind: "agent",
+              priority: 500,
+              trigger: { type: "event", topic: "story.ready" },
+            },
+          ],
+        },
+      ],
+      loadErrors: [],
+    });
+
+    const result = await listPackages();
+
+    expect(result.packages[0]?.source).toBe("builtin");
+    expect(result.packages[0]?.runtimes?.[0]?.trigger).toEqual({
+      mode: "event",
+      topic: "story.ready",
+    });
   });
 });

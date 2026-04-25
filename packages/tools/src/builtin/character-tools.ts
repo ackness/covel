@@ -117,7 +117,7 @@ const characterTypeSchema = z
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-interface CharacterSnapshot {
+export interface CharacterSnapshot {
   readonly id: string;
   readonly name: string;
   readonly type: string;
@@ -182,7 +182,7 @@ async function loadCharacterSchema(
   }
 }
 
-async function mirrorToPluginData(
+export async function mirrorCharacterToPluginData(
   store: CharacterStore,
   sessionId: string,
   pluginId: string,
@@ -338,7 +338,7 @@ function createCreateCharacterTool(
         createdAt: now,
         updatedAt: now,
       };
-      await mirrorToPluginData(store, context.sessionId, context.pluginId, snapshot);
+      await mirrorCharacterToPluginData(store, context.sessionId, context.pluginId, snapshot);
 
       // Soft schema validation — runs AFTER the write so the LLM still gets
       // the character into state even when fields drift off-schema. Warnings
@@ -423,7 +423,7 @@ function createUpdateCharacterTool(
         createdAt: existing.createdAt,
         updatedAt: now,
       };
-      await mirrorToPluginData(store, context.sessionId, context.pluginId, snapshot);
+      await mirrorCharacterToPluginData(store, context.sessionId, context.pluginId, snapshot);
 
       // Build a short human-readable diff summary.
       const changeLines: string[] = [];

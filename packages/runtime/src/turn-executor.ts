@@ -26,6 +26,7 @@ import type {
 import {
   isSuspendSentinel,
   isRuntimeDoneSentinel,
+  validateOutput,
   withPendingProposals,
 } from '@covel/tools';
 import type { EventBus } from '@covel/events';
@@ -215,6 +216,10 @@ export interface TurnExecutorOptions {
   readonly maxSteps?: number;
   /** Timeout per runtime in ms. Default: 60000. */
   readonly timeoutMs?: number;
+}
+
+interface TurnInputExecutionFlags {
+  readonly suppressPlayerMessage?: boolean;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -593,6 +598,10 @@ export async function executeTurn(
   const startTime = Date.now();
   const maxSteps = options?.maxSteps ?? 10;
   const defaultTimeoutMs = options?.timeoutMs ?? 60000;
+  const executionFlags = input as TurnInput & TurnInputExecutionFlags;
+  const shouldAppendPlayerMessage = !input.manualTrigger
+    && !executionFlags.suppressPlayerMessage
+    && input.playerMessage.length > 0;
 
   // Emit turn.started — when a manual trigger drove this turn we tag the
   // event with the runtime + plugin id so observability surfaces (the
@@ -656,7 +665,7 @@ export async function executeTurn(
   // Save player message to the append-only history.
   // Skip for manual-trigger turns — plugin-rpc invocations are not player
   // chat messages and must not pollute history or bump turnsSinceLastTrigger.
-  if (deps.store && !input.manualTrigger) {
+  if (deps.store && shouldAppendPlayerMessage) {
     await deps.store.appendTurnMessage({
       id: crypto.randomUUID(),
       sessionId: input.sessionId,
@@ -680,7 +689,7 @@ export async function executeTurn(
   //     Only runs when COVEL_COMPACTOR_V1=1 AND a compactor is injected.
   //     Skipped for manual triggers — they don't add player messages, so
   //     there's nothing new to compact.
-  if (isEnvEnabled('COVEL_COMPACTOR_V1') && deps.compactor && deps.store && !input.manualTrigger) {
+  if (isEnvEnabled('COVEL_COMPACTOR_V1') && deps.compactor && deps.store && shouldAppendPlayerMessage) {
     // Reload messages after appending the player message so the compactor
     // sees the full updated history (including the just-appended player msg).
     const freshMessages = await deps.store.listTurnMessages(input.sessionId);
@@ -748,10 +757,14 @@ export async function executeTurn(
       timestamp: new Date().toISOString(),
     };
   }
-  const sessionMeta = { turnNumber, characters: sessionCharacters, lastFormValues };
+  let sessionMeta = { turnNumber, characters: sessionCharacters, lastFormValues, preGameCompleted };
   const promptHistory = messageHistory.filter(
     (msg) => !(msg.turnId === input.turnId && msg.sourceType === 'player'),
   );
+  const preGameRuntimes = activeRuntimes.filter(
+    (rt) => rt.priority !== undefined && rt.priority <= 99,
+  );
+  const isPreGamePending = preGameRuntimes.some((rt) => !preGameCompleted.includes(rt.name));
 
   // Manual trigger short-circuit: plugin-rpc targeted one specific runtime,
   // so bypass the per-runtime shouldTrigger check and only run that runtime
@@ -801,14 +814,15 @@ export async function executeTurn(
 
   // 2. Schedule runtimes.
   //
-  // Pre-Game band (turn 0) uses strict priority ordering: pregame plugins
+  // Pre-Game band uses strict priority ordering while setup runtimes are
+  // pending: pregame plugins
   // have implicit write-ordering (pregame → world-init/schema-gen → player-init,
   // audit P0-2) that is NOT captured in manifest inject declarations, so
   // falling back to priority is the right semantic. player-init's prompt
   // reads `{{ config.worldSchema }}` populated by schema-gen via
-  // loadSessionConfig — schema-gen MUST land first in the same turn 0.
+  // loadSessionConfig — schema-gen MUST land first in the same setup pass.
   //
-  // Main-loop band (turn >= 1) uses the DAG scheduler: it parallelises any
+  // Main-loop band uses the DAG scheduler after setup completes: it parallelises any
   // runtimes whose declared upstreams (input.inject + upstreamRequired) have
   // already completed. Independent branches (narrator's four downstream
   // plugins — guide/codex/extractor/char-tracker) run concurrently instead
@@ -825,8 +839,11 @@ export async function executeTurn(
       priority: manualTarget.priority ?? 500,
       runtimes: [manualTarget],
     }];
-  } else if (turnNumber === 0) {
-    groups = scheduleByPriority(triggered, turnNumber);
+  } else if (isPreGamePending) {
+    const preGameTriggered = triggered.filter(
+      (rt) => rt.priority !== undefined && rt.priority <= 99,
+    );
+    groups = scheduleByPriority(preGameTriggered, 0);
   } else {
     const mainLoop = triggered.filter(
       (rt) => rt.priority !== undefined && rt.priority > 99,
@@ -897,7 +914,8 @@ export async function executeTurn(
   // flag-on turns for Sprint 1: Sprint 2 (Lorebook) removes the duplicates by
   // deleting the legacy reads once all consumers migrate to the snapshot.
   let sessionContext: SessionContextSnapshot | undefined;
-  if (isEnvEnabled('COVEL_SESSION_CONTEXT') && deps.store) {
+  const refreshSessionContext = async (): Promise<void> => {
+    if (!isEnvEnabled('COVEL_SESSION_CONTEXT') || !deps.store) return;
     try {
       const sessionRecord = await deps.store.getSession(input.sessionId);
       sessionContext = await buildSessionContextSnapshot(deps.store, input.sessionId, {
@@ -916,7 +934,8 @@ export async function executeTurn(
         err instanceof Error ? err.message : String(err),
       );
     }
-  }
+  };
+  await refreshSessionContext();
 
   // 3. Execute each group
   const completedResults = new Map<string, RuntimeResult>();
@@ -939,6 +958,62 @@ export async function executeTurn(
     }
   };
 
+  const markPreGameCompletion = async (): Promise<boolean> => {
+    if (!isPreGamePending || !deps.store || input.manualTrigger) {
+      return !isPreGamePending;
+    }
+    const newlyDone: string[] = [];
+    for (const [name, result] of completedResults) {
+      if (preGameCompleted.includes(name)) continue;
+      const output = result.output as Record<string, unknown> | undefined;
+      const preGameDone = output?.preGameDone === true;
+      const guardSkipped = result.status === 'skipped' && output?.skip === true;
+      if (preGameDone || guardSkipped) {
+        newlyDone.push(name);
+      }
+    }
+
+    // Mark runtimes that hit maxTriggerCount as done — they were never
+    // scheduled but shouldn't hold up Pre-Game forever.
+    for (const rt of activeRuntimes) {
+      if (rt.priority === undefined || rt.priority > 99) continue;
+      if (preGameCompleted.includes(rt.name)) continue;
+      if (newlyDone.includes(rt.name)) continue;
+      const max = rt.trigger?.maxTriggerCount;
+      if (max !== undefined && (runtimeTriggerCounts.get(rt.name) ?? 0) >= max) {
+        newlyDone.push(rt.name);
+      }
+    }
+
+    const updated = newlyDone.length > 0
+      ? [...preGameCompleted, ...newlyDone]
+      : preGameCompleted;
+    const allDone = preGameRuntimes.every((rt) => updated.includes(rt.name));
+
+    if (newlyDone.length > 0) {
+      preGameCompleted = updated;
+      await deps.store.updateSession(input.sessionId, {
+        preGameCompleted: updated,
+        ...(allDone ? { turnCount: 1 } : {}),
+        updatedAt: new Date().toISOString(),
+      });
+      const refreshedCharacters = await deps.store.listCharacters(input.sessionId);
+      sessionMeta = {
+        ...sessionMeta,
+        preGameCompleted,
+        characters: refreshedCharacters.map(c => ({
+          name: c.name,
+          type: c.type,
+          description: c.description,
+          fields: c.fields as Record<string, unknown>,
+        })),
+      };
+      await refreshSessionContext();
+    }
+
+    return allDone;
+  };
+
   for (const group of groups) {
     const results = await executeParallel(group.runtimes, async (manifest) => {
       return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, defaultTimeoutMs, promptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory, coreMemoryBlocks, sessionContext);
@@ -947,6 +1022,25 @@ export async function executeTurn(
     // Merge results
     for (const [name, result] of results) {
       completedResults.set(name, result);
+    }
+  }
+
+  const completedPreGameThisTurn = isPreGamePending
+    ? await markPreGameCompletion()
+    : false;
+  if (completedPreGameThisTurn && !manualTarget) {
+    const mainLoop = triggered.filter(
+      (rt) => rt.priority !== undefined && rt.priority > 99 && !completedResults.has(rt.name),
+    );
+    const dag = scheduleByDag(mainLoop);
+    const followupGroups = dag.error ? scheduleByPriority(mainLoop, turnNumber) : dag.groups;
+    for (const group of followupGroups) {
+      const results = await executeParallel(group.runtimes, async (manifest) => {
+        return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, defaultTimeoutMs, promptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory, coreMemoryBlocks, sessionContext);
+      });
+      for (const [name, result] of results) {
+        completedResults.set(name, result);
+      }
     }
   }
 
@@ -1060,12 +1154,12 @@ export async function executeTurn(
     for (const [topic, data] of newEvents) emittedEvents.set(topic, data);
   }
 
-  // ── Pre-Game completion tracking (Turn 0 only) ───────────────────
+  // ── Pre-Game completion tracking ────────────────────────────────
   //
-  // The Pre-Game band (priority 0–99) runs in turn 0 and is responsible for
-  // one-off initialisation: welcome text, world schema generation, opening
-  // character form, etc. A Pre-Game runtime is considered "done" when ANY
-  // of the following hold:
+  // The Pre-Game band (priority 0–99) runs while setup is pending and is
+  // responsible for one-off initialisation: welcome text, world schema
+  // generation, opening character form, etc. A Pre-Game runtime is considered
+  // "done" when ANY of the following hold:
   //
   //   1. Its output reports `preGameDone: true`
   //        - Used by runtimes that complete deterministically in one turn
@@ -1096,44 +1190,7 @@ export async function executeTurn(
   // player-init) MUST NOT report `preGameDone: true` in the "form shown"
   // turn — they report it only after the player submits the form. This
   // keeps the user interactable while Pre-Game is still progressing.
-  if (turnNumber === 0 && deps.store && !input.manualTrigger) {
-    const newlyDone: string[] = [];
-    for (const [name, result] of completedResults) {
-      if (preGameCompleted.includes(name)) continue;
-      const output = result.output as Record<string, unknown> | undefined;
-      const preGameDone = output?.preGameDone === true;
-      const guardSkipped = result.status === 'skipped';
-      if (preGameDone || guardSkipped) {
-        newlyDone.push(name);
-      }
-    }
-
-    // Mark runtimes that hit maxTriggerCount as done — they were never
-    // scheduled but shouldn't hold up Pre-Game forever.
-    for (const rt of activeRuntimes) {
-      if (rt.priority === undefined || rt.priority > 99) continue;
-      if (preGameCompleted.includes(rt.name)) continue;
-      if (newlyDone.includes(rt.name)) continue;
-      const max = rt.trigger?.maxTriggerCount;
-      if (max !== undefined && (runtimeTriggerCounts.get(rt.name) ?? 0) >= max) {
-        newlyDone.push(rt.name);
-      }
-    }
-
-    if (newlyDone.length > 0) {
-      const updated = [...preGameCompleted, ...newlyDone];
-      const preGameRuntimes = activeRuntimes.filter(
-        (rt) => rt.priority !== undefined && rt.priority <= 99,
-      );
-      const allDone = preGameRuntimes.every((rt) => updated.includes(rt.name));
-
-      await deps.store.updateSession(input.sessionId, {
-        preGameCompleted: updated,
-        ...(allDone ? { turnCount: 1 } : {}),
-        updatedAt: new Date().toISOString(),
-      });
-    }
-  }
+  await markPreGameCompletion();
 
   // Collect pending inputs from completed RuntimeResults (avoids redundant DB reload)
   const pendingInputs: import('@covel/shared').PendingInputInfo[] = [];
@@ -1814,7 +1871,12 @@ async function executeOneRuntime(
   maxSteps: number,
   defaultTimeoutMs: number,
   messageHistory: readonly TurnMessageRecord[],
-  sessionMeta?: { turnNumber: number; characters: readonly { name: string; type: string; description?: string; fields?: Record<string, unknown> }[]; lastFormValues?: Record<string, unknown> },
+  sessionMeta?: {
+    turnNumber: number;
+    characters: readonly { name: string; type: string; description?: string; fields?: Record<string, unknown> }[];
+    lastFormValues?: Record<string, unknown>;
+    preGameCompleted?: readonly string[];
+  },
   hookPipeline?: HookPipeline,
   sessionSummaries?: readonly import('@covel/store').SessionSummaryRecord[],
   workingMemory?: readonly import('@covel/context').WorkingMemoryEntry[],
@@ -1836,6 +1898,7 @@ async function executeOneRuntime(
     if (required.length > 0) {
       const missing = required.filter((id) => {
         const up = completedResults.get(id);
+        if (!up && sessionMeta?.preGameCompleted?.includes(id)) return false;
         return !isRequiredUpstreamSatisfied(up);
       });
       if (missing.length > 0) {
@@ -2900,6 +2963,37 @@ async function executeOneRuntime(
       })
         ? (structuredToolOutput ?? presentableToolOutput ?? { narrativeOutput: '' })
         : parsed.output;
+      if (loaded.outputSchema && manifest.outputKind !== 'story') {
+        const validation = validateOutput(output, loaded.outputSchema);
+        if (!validation.valid) {
+          const validationErrors = validation.errors ?? ['unknown schema validation error'];
+          const failedResult: RuntimeResult = {
+            pluginId: manifest.pluginId,
+            runtimeId: manifest.name,
+            runId,
+            turnId: input.turnId,
+            status: 'failed',
+            output,
+            toolCalls: collectedToolCalls,
+            durationMs: Date.now() - startTime,
+            error:
+              `Runtime "${manifest.name}" output did not match output.schema: ` +
+              validationErrors.slice(0, 5).join('; '),
+            timestamp: new Date().toISOString(),
+          };
+          emitSubEvent(deps.eventBus, 'runtime', 'runtime.failed', input.sessionId, {
+            runtimeId: manifest.name,
+            pluginId: manifest.pluginId,
+            status: failedResult.status,
+            durationMs: failedResult.durationMs,
+            error: failedResult.error,
+          });
+          return runPostRuntimeHook(
+            { pipeline: hookPipeline, sessionId: input.sessionId, turnId: input.turnId, pluginId: manifest.pluginId, runtimeId: manifest.name, eventBus: deps.eventBus, emitter: deps.emitter },
+            failedResult,
+          );
+        }
+      }
     } else if (failedToolCalls.length > 0) {
       const result: RuntimeResult = {
         pluginId: manifest.pluginId,

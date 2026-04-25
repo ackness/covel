@@ -266,9 +266,64 @@ Useful options:
 | `--user-settings <json>` | Supplies this plugin's `userSettings` bucket, with manifest defaults applied by the runtime. |
 | `--llm-content <text>` | Mock LLM final text for agent runtimes. |
 | `--llm-response <json>` | Full mock LLM response, including `toolCalls`. |
+| `--llm-responses <json>` | Array of full mock LLM responses, consumed one per model call. Useful for `tool_calls → tool_calls → final JSON` scripts. |
 | `--mock-image-url <url>` | Mock `ctx.gateway.generateImage()` result URL for image plugins. |
 | `--show-prompts` | Include captured LLM messages in JSON output. |
 | `--ignore-upstreams` | Clears `upstreamRequired` for this debug run, useful when isolating a downstream runtime. |
+| `--expects-background-follower` | Writes a failed `_jobs` row when the entry runtime emits no deferred follower. Useful for testing UI-visible image-generation failures. |
+
+Plugin case files support the same knobs as CLI options. For agent runtimes that use tools before final output, script the model with `llmResponses`:
+
+```json
+{
+  "name": "tool-chain-recovers-before-maxsteps",
+  "runtimeId": "dashscope-image-gen/prompt-generator",
+  "expectsBackgroundFollower": true,
+  "llmResponses": [
+    {
+      "content": null,
+      "finishReason": "tool_calls",
+      "toolCalls": [
+        { "id": "list", "name": "plugin-data-list", "arguments": "{\"namespace\":\"prompts\"}" }
+      ]
+    },
+    {
+      "content": "{\"prompt\":\"A misty harbor stairway\",\"promptMode\":\"text\",\"events\":[{\"topic\":\"image.generate.requested\",\"data\":{\"prompt\":\"A misty harbor stairway\",\"promptMode\":\"text\"}}]}",
+      "finishReason": "stop",
+      "toolCalls": []
+    }
+  ],
+  "expect": {
+    "runtimeResults": [
+      { "runtimeId": "dashscope-image-gen/prompt-generator", "status": "success" }
+    ],
+    "events": ["image.generate.requested"]
+  }
+}
+```
+
+Expected failure paths can stay green by asserting the runtime status:
+
+```json
+{
+  "name": "prose-output-fails-visible",
+  "runtimeId": "dashscope-image-gen/prompt-generator",
+  "expectsBackgroundFollower": true,
+  "llmContent": "I prepared the prompt...",
+  "expect": {
+    "runtimeResults": [
+      {
+        "runtimeId": "dashscope-image-gen/prompt-generator",
+        "status": "failed",
+        "errorIncludes": "unparseable prose"
+      }
+    ],
+    "pluginData": [
+      { "namespace": "_jobs", "status": "failed" }
+    ]
+  }
+}
+```
 
 The CLI imports `tools.local` files from the target plugin root and registers framework builtin tools (`plugin-data-*`, UI tools, character tools, `runtime-done`, `suspend`). In live mode, provider calls use the same gateway stack as the server composition root.
 

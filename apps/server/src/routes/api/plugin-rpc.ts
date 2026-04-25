@@ -75,6 +75,7 @@ interface PluginRpcBody {
   readonly action?: string;
   readonly runtimeId?: string;
   readonly payload?: unknown;
+  readonly expectsBackgroundFollower?: boolean;
 }
 
 /**
@@ -612,6 +613,43 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
       return scheduled;
     };
 
+    const writeExpectedFollowerFailureJob = async (args: {
+      readonly turnId: string;
+      readonly error: string;
+      readonly runtimeResults?: ReadonlyArray<{
+        readonly runtimeId: string;
+        readonly pluginId: string;
+        readonly status: string;
+        readonly durationMs: number;
+        readonly error?: string;
+        readonly output: unknown;
+      }>;
+    }): Promise<{ readonly jobId: string; readonly runtimeId: string }> => {
+      const jobId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      await store.setPluginData({
+        id: `${sessionId}:${body.pluginId}:_jobs:${jobId}`,
+        sessionId,
+        pluginId: body.pluginId!,
+        namespace: '_jobs',
+        key: jobId,
+        value: {
+          status: 'failed',
+          progress: 100,
+          runtimeId: body.runtimeId,
+          turnId: args.turnId,
+          startedAt: now,
+          completedAt: now,
+          error: args.error,
+          ...(args.runtimeResults ? { runtimeResults: args.runtimeResults } : {}),
+          reason: 'expected-background-follower-missing',
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+      return { jobId, runtimeId: body.runtimeId! };
+    };
+
     const mode: 'sync' | 'background' = target.execution ?? 'sync';
 
     // ── Background mode ────────────────────────────────────────────
@@ -761,6 +799,16 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
         summary.deferredFollowers.length > 0
           ? await scheduleDeferredFollowers(summary.deferredFollowers)
           : [];
+      const failedJobs =
+        body.expectsBackgroundFollower === true && deferredJobs.length === 0
+          ? [await writeExpectedFollowerFailureJob({
+              turnId: summary.turnId,
+              error:
+                summary.runtimeResults.find((r) => r.status === 'failed')?.error ??
+                `runtime "${body.runtimeId}" completed without emitting a matching background follower event`,
+              runtimeResults: summary.runtimeResults,
+            })]
+          : [];
       return c.json({
         status: 'ok',
         turnId: summary.turnId,
@@ -768,8 +816,15 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
         durationMs: summary.durationMs,
         ...(summary.abortReason ? { abortReason: summary.abortReason } : {}),
         ...(deferredJobs.length > 0 ? { deferredJobs } : {}),
+        ...(failedJobs.length > 0 ? { failedJobs } : {}),
       });
     } catch (err) {
+      if (body.expectsBackgroundFollower === true) {
+        await writeExpectedFollowerFailureJob({
+          turnId,
+          error: err instanceof Error ? err.message : 'runtime execution failed',
+        }).catch(() => undefined);
+      }
       return c.json(
         {
           status: 'error',

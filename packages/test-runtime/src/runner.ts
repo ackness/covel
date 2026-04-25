@@ -66,11 +66,13 @@ export interface RunRuntimeDebugOptions {
   readonly config?: Record<string, unknown>;
   readonly userSettings?: Record<string, unknown>;
   readonly llmResponse?: Record<string, unknown>;
+  readonly llmResponses?: readonly Record<string, unknown>[];
   readonly llmContent?: string;
   readonly llmObject?: Record<string, unknown>;
   readonly mockImageUrl?: string;
   readonly showPrompts?: boolean;
   readonly ignoreUpstreams?: boolean;
+  readonly expectsBackgroundFollower?: boolean;
   readonly mode?: 'mock' | 'live';
   readonly caseName?: string;
 }
@@ -126,16 +128,23 @@ interface RuntimeCase {
   readonly config?: Record<string, unknown>;
   readonly userSettings?: Record<string, unknown>;
   readonly llmResponse?: Record<string, unknown>;
+  readonly llmResponses?: readonly Record<string, unknown>[];
   readonly llmContent?: string;
   readonly llmObject?: Record<string, unknown>;
   readonly mockImageUrl?: string;
   readonly ignoreUpstreams?: boolean;
+  readonly expectsBackgroundFollower?: boolean;
   readonly mode?: 'mock' | 'live' | 'both';
   readonly expect?: CaseExpectations;
   readonly artifacts?: CaseArtifactConfig;
 }
 
 interface CaseExpectations {
+  readonly runtimeResults?: readonly {
+    readonly runtimeId?: string;
+    readonly status: RuntimeResult['status'];
+    readonly errorIncludes?: string;
+  }[];
   readonly events?: readonly string[];
   readonly logs?: readonly string[];
   readonly pluginData?: readonly {
@@ -178,36 +187,41 @@ protocol = "openai-chat-v1"
 
 class DebugLLM implements LLMAdapter {
   readonly calls: unknown[] = [];
-  private readonly response: LLMResponse;
+  private readonly responses: readonly LLMResponse[];
+  private nextResponseIndex = 0;
   private readonly showPrompts: boolean;
 
   constructor(options: RunRuntimeDebugOptions) {
     this.showPrompts = options.showPrompts === true;
-    this.response = normalizeLlmResponse(options);
+    this.responses = normalizeLlmResponses(options);
   }
 
   async generate(params: Parameters<LLMAdapter['generate']>[0]): Promise<LLMResponse> {
+    const callIndex = this.nextResponseIndex;
     this.calls.push({
+      callIndex,
       model: params.model,
       toolNames: params.tools?.map((t) => t.name) ?? [],
       responseFormat: params.responseFormat,
       ...(this.showPrompts ? { messages: params.messages } : {}),
     });
-    return this.response;
+    const response = this.responses[Math.min(this.nextResponseIndex, this.responses.length - 1)]!;
+    this.nextResponseIndex += 1;
+    return response;
   }
+}
+
+function normalizeLlmResponses(options: RunRuntimeDebugOptions): readonly LLMResponse[] {
+  if (options.llmResponses && options.llmResponses.length > 0) {
+    return options.llmResponses.map((raw) => normalizeRawLlmResponse(raw));
+  }
+  return [normalizeLlmResponse(options)];
 }
 
 function normalizeLlmResponse(options: RunRuntimeDebugOptions): LLMResponse {
   const raw = options.llmResponse;
   if (raw) {
-    return {
-      content: typeof raw.content === 'string' || raw.content === null ? raw.content : '',
-      toolCalls: Array.isArray(raw.toolCalls) ? raw.toolCalls as LLMResponse['toolCalls'] : [],
-      finishReason: raw.finishReason === 'tool_calls' || raw.finishReason === 'length' || raw.finishReason === 'error'
-        ? raw.finishReason
-        : 'stop',
-      usage: isUsage(raw.usage) ? raw.usage : { inputTokens: 1, outputTokens: 1 },
-    };
+    return normalizeRawLlmResponse(raw);
   }
   const content = options.llmObject
     ? JSON.stringify(options.llmObject)
@@ -217,6 +231,17 @@ function normalizeLlmResponse(options: RunRuntimeDebugOptions): LLMResponse {
     toolCalls: [],
     finishReason: 'stop',
     usage: { inputTokens: 1, outputTokens: 1 },
+  };
+}
+
+function normalizeRawLlmResponse(raw: Record<string, unknown>): LLMResponse {
+  return {
+    content: typeof raw.content === 'string' || raw.content === null ? raw.content : '',
+    toolCalls: Array.isArray(raw.toolCalls) ? raw.toolCalls as LLMResponse['toolCalls'] : [],
+    finishReason: raw.finishReason === 'tool_calls' || raw.finishReason === 'length' || raw.finishReason === 'error'
+      ? raw.finishReason
+      : 'stop',
+    usage: isUsage(raw.usage) ? raw.usage : { inputTokens: 1, outputTokens: 1 },
   };
 }
 
@@ -434,6 +459,20 @@ function evaluateExpectations(
 ): readonly CaseAssertion[] {
   if (!expect) return [];
   const assertions: CaseAssertion[] = [];
+  for (const expected of expect.runtimeResults ?? []) {
+    const matched = result.runtimeResults.some((runtimeResult) => {
+      if (expected.runtimeId && runtimeResult.runtimeId !== expected.runtimeId) return false;
+      if (runtimeResult.status !== expected.status) return false;
+      if (expected.errorIncludes) {
+        return typeof runtimeResult.error === 'string' && runtimeResult.error.includes(expected.errorIncludes);
+      }
+      return true;
+    });
+    assertions.push({
+      status: matched ? 'passed' : 'failed',
+      message: `runtime:${expected.runtimeId ?? '*'}:${expected.status}`,
+    });
+  }
   const eventTopics = collectEventTopics(result.runtimeResults);
   for (const topic of expect.events ?? []) {
     assertions.push({
@@ -473,6 +512,21 @@ function evaluateExpectations(
   return assertions;
 }
 
+function isExpectedRuntimeFailure(
+  runtimeResult: RuntimeResult,
+  expect: CaseExpectations | undefined,
+): boolean {
+  if (runtimeResult.status !== 'failed') return false;
+  return (expect?.runtimeResults ?? []).some((expected) => {
+    if (expected.status !== 'failed') return false;
+    if (expected.runtimeId && expected.runtimeId !== runtimeResult.runtimeId) return false;
+    if (expected.errorIncludes) {
+      return typeof runtimeResult.error === 'string' && runtimeResult.error.includes(expected.errorIncludes);
+    }
+    return true;
+  });
+}
+
 function extensionFromMime(mimeType: unknown): string {
   if (mimeType === 'image/jpeg') return '.jpg';
   if (mimeType === 'image/webp') return '.webp';
@@ -483,6 +537,50 @@ function extensionFromMime(mimeType: unknown): string {
 
 function safeFilePart(input: string): string {
   return input.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'artifact';
+}
+
+function makeJobId(): string {
+  return `job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function writeExpectedFollowerFailureJob(args: {
+  readonly store: DataStore;
+  readonly sessionId: string;
+  readonly pluginId: string;
+  readonly runtimeId: string;
+  readonly turnId: string;
+  readonly runtimeResults: readonly RuntimeResult[];
+}): Promise<{ jobId: string; runtimeId: string; pluginId: string; status: 'failed' }> {
+  const jobId = makeJobId();
+  const timestamp = new Date().toISOString();
+  const error =
+    args.runtimeResults.find((item) => item.status === 'failed')?.error ??
+    `runtime "${args.runtimeId}" completed without emitting a matching background follower event`;
+  await args.store.setPluginData({
+    id: `${args.sessionId}:${args.pluginId}:_jobs:${jobId}`,
+    sessionId: args.sessionId,
+    pluginId: args.pluginId,
+    namespace: '_jobs',
+    key: jobId,
+    value: {
+      status: 'failed',
+      runtimeId: args.runtimeId,
+      turnId: args.turnId,
+      startedAt: timestamp,
+      completedAt: timestamp,
+      error,
+      runtimeResults: args.runtimeResults,
+      reason: 'expected-background-follower-missing',
+    },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+  return {
+    jobId,
+    runtimeId: args.runtimeId,
+    pluginId: args.pluginId,
+    status: 'failed',
+  };
 }
 
 async function saveImageArtifacts(args: {
@@ -563,7 +661,7 @@ async function runDeferredFollower(args: {
   const loaded = args.loadedCache.get(manifest.name);
   if (!loaded?.handler) throw new Error(`deferred follower has no handler: ${args.follower.runtimeId}`);
 
-  const jobId = `job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const jobId = makeJobId();
   const turnId = `turn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const startedAt = new Date().toISOString();
   await args.store.setPluginData({
@@ -817,6 +915,17 @@ export async function runRuntimeDebug(
     followerResults.push(job.result);
   }
 
+  if (options.expectsBackgroundFollower === true && (result.deferredFollowers ?? []).length === 0) {
+    jobs.push(await writeExpectedFollowerFailureJob({
+      store,
+      sessionId,
+      pluginId,
+      runtimeId,
+      turnId,
+      runtimeResults: result.runtimeResults,
+    }));
+  }
+
   const pluginData = await listPluginDataByNamespace(store, sessionId, pluginId);
   const logs = pluginData._logs ?? [];
   const allRuntimeResults = [...result.runtimeResults, ...followerResults];
@@ -912,10 +1021,12 @@ export async function runRuntimeCases(
       config: testCase.config ?? options.config,
       userSettings: testCase.userSettings ?? options.userSettings,
       llmResponse: testCase.llmResponse ?? options.llmResponse,
+      llmResponses: testCase.llmResponses ?? options.llmResponses,
       llmContent: testCase.llmContent ?? options.llmContent,
       llmObject: testCase.llmObject ?? options.llmObject,
       mockImageUrl: testCase.mockImageUrl ?? options.mockImageUrl,
       ignoreUpstreams: testCase.ignoreUpstreams ?? options.ignoreUpstreams,
+      expectsBackgroundFollower: testCase.expectsBackgroundFollower ?? options.expectsBackgroundFollower,
     });
     const assertions = evaluateExpectations(testCase.expect, result);
     const artifacts = await saveImageArtifacts({
@@ -924,7 +1035,9 @@ export async function runRuntimeCases(
       config: testCase.artifacts,
     });
     const withAssertions = { ...result, artifacts, assertions };
-    const runtimeFailed = withAssertions.runtimeResults.some((item) => item.status === 'failed');
+    const runtimeFailed = withAssertions.runtimeResults.some(
+      (item) => item.status === 'failed' && !isExpectedRuntimeFailure(item, testCase.expect),
+    );
     const assertionFailed = assertions.some((item) => item.status === 'failed');
     results.push({
       name: testCase.name,

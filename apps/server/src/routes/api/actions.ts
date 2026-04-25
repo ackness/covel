@@ -136,6 +136,11 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
 
   // Get active runtimes for this session (sorted by priority)
   const activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
+  const preGamePendingBeforeExecution = activeRuntimes.some(
+    (rt) => rt.priority !== undefined
+      && rt.priority <= 99
+      && !(session.preGameCompleted ?? []).includes(rt.name),
+  );
 
   // Build outputKind lookup from manifest declarations (framework never hardcodes plugin IDs).
   // Key = manifest.name, which the executor uses as both runtimeId and pluginId.
@@ -289,8 +294,7 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
       // is backed by `pg_advisory_lock` so mutual exclusion extends across
       // Node pods; memory/sqlite use the in-process chain lock (audit
       // 2026-04-21 F5).
-      const result = await sessionLock.withLock(sessionId, () => executeTurn(
-        {
+      const turnInput = {
           sessionId,
           turnId,
           playerMessage,
@@ -302,7 +306,10 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
           ...(session?.runtimeModelOverrides
             ? { runtimeModelOverrides: session.runtimeModelOverrides }
             : {}),
-        },
+          ...(type === 'start_session' ? { suppressPlayerMessage: true } : {}),
+        };
+      const result = await sessionLock.withLock(sessionId, () => executeTurn(
+        turnInput,
         activeRuntimes,
         {
           loadRuntime: loadRuntimeFn,
@@ -360,27 +367,21 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
         },
       ));
 
-      // Update session turn count — derive from actual turn results to avoid
-      // concurrent read-modify-write races (two parallel turns reading the same
-      // stale `session.turnCount` and overwriting each other).
-      //
-      // Semantic note: `session.turnCount` measures completed turns
-      // (including Pre-Game turn 0), which differs from `turnNumber` inside
-      // `executeTurn` (which counts PLAYER messages). After the pre-game turn,
-      // `session.turnCount === 1` but the next executeTurn's `turnNumber`
-      // is still 0 (no player message has been appended yet). The two are
-      // intentionally distinct — `turnCount` drives UI labels; `turnNumber`
-      // drives trigger math. See turn-executor.ts for the turnNumber formula.
-      //
-      // Invariant we rely on: `executeTurn` always calls `store.saveTurnResult`
-      // before returning, otherwise `listTurnResults` here would miss the
-      // current turn and `turnCount` would drift behind. Locked in by
-      // tests/turn-executor-turn-result-always-saved.test.ts.
-      const turnResults = await store.listTurnResults(sessionId);
-      await store.updateSession(sessionId, {
-        turnCount: turnResults.length,
-        updatedAt: new Date().toISOString(),
-      });
+      // Gameplay turns keep the existing count-from-results behavior. Pending
+      // Pre-Game turns keep the lifecycle state written by the executor, so
+      // setup forms can remain in the setup phase across saved turn results.
+      const sessionAfterExecution = await store.getSession(sessionId);
+      const completedPreGame = sessionAfterExecution?.preGameCompleted ?? [];
+      const preGamePending = activeRuntimes.some(
+        (rt) => rt.priority !== undefined && rt.priority <= 99 && !completedPreGame.includes(rt.name),
+      );
+      if (!preGamePendingBeforeExecution && !preGamePending) {
+        const turnResults = await store.listTurnResults(sessionId);
+        await store.updateSession(sessionId, {
+          turnCount: turnResults.length,
+          updatedAt: new Date().toISOString(),
+        });
+      }
 
       // Process all runtime results through Session Kernel:
       // normalize output → commit to Store → emit SessionEvents as SSE.

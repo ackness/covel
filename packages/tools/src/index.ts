@@ -20,8 +20,8 @@ export type { SchemaValidationResult, SchemaValidationIssue } from './schema-val
 // ── Built-in tools ───────────────────────────────────────────────
 export { createFormTool, createChoicesTool, createNotificationTool, builtinUITools } from './builtin/ui-tools.js';
 export { createPluginDataTools } from './builtin/plugin-data-tools.js';
-export { createCharacterTools, buildSessionCharacterWriteTools } from './builtin/character-tools.js';
-export type { CharacterStore, CharacterToolDeps } from './builtin/character-tools.js';
+export { createCharacterTools, buildSessionCharacterWriteTools, mirrorCharacterToPluginData } from './builtin/character-tools.js';
+export type { CharacterStore, CharacterToolDeps, CharacterSnapshot } from './builtin/character-tools.js';
 export { buildFieldsZodFromSchema } from './schema-to-zod.js';
 export { createWorldDimensionTools } from './builtin/world-dimension-tools.js';
 export type { WorldDimensionToolDeps } from './builtin/world-dimension-tools.js';

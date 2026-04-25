@@ -20,12 +20,14 @@ import { bootstrapApi } from '../../src/routes/api/bootstrap.js';
 class MockNarratorLLM implements LLMAdapter {
   callCount = 0;
   lastMessages: Array<{ role: string; content: string }> = [];
+  allMessages: Array<readonly { role: string; content: string }[]> = [];
 
   async generate(params: {
     messages: readonly { role: string; content: string }[];
   }): Promise<LLMResponse> {
     this.callCount++;
     this.lastMessages = [...params.messages];
+    this.allMessages.push([...params.messages]);
 
     // Find the player message to echo back — use the LAST user turn so
     // seed messages from the turn-band bootstrap don't shadow the current
@@ -70,23 +72,15 @@ describe('E2E: Narrator game flow', () => {
     result.registry.activate('core-narrator', '__global__');
   });
 
-  /**
-   * Turn-band refactor helper: priority-500 narrator only runs when
-   * `turnNumber >= 1` (main loop band). A freshly created session has no
-   * player messages and turnNumber starts at 0 (Pre-Game band), so tests
-   * must seed one prior player message to push the scheduler into the
-   * main band.
-   */
-  async function seedPriorPlayerMessage(sessionId: string) {
-    await store.appendTurnMessage({
-      id: crypto.randomUUID(),
-      sessionId,
-      turnId: 'pre-turn',
-      sourceType: 'player',
-      role: 'user',
-      content: 'session opener',
-      order: 0,
-      createdAt: new Date().toISOString(),
+  async function markPreGameComplete(sessionId: string) {
+    await store.updateSession(sessionId, {
+      preGameCompleted: [
+        'core-pregame',
+        'core-world-init/schema-gen',
+        'core-char-creator/player-init',
+      ],
+      turnCount: 1,
+      updatedAt: new Date().toISOString(),
     });
   }
 
@@ -106,8 +100,7 @@ describe('E2E: Narrator game flow', () => {
 
     const sessionId = session.id;
 
-    // Push the scheduler into the main loop band before the player turn.
-    await seedPriorPlayerMessage(sessionId);
+    await markPreGameComplete(sessionId);
 
     // 2. Execute a turn
     const turnRes = await app.request(`/api/sessions/${sessionId}/turn`, {
@@ -127,13 +120,13 @@ describe('E2E: Narrator game flow', () => {
     };
 
     expect(turnBody.turnId).toBeDefined();
-    expect(turnBody.runtimeResults).toHaveLength(1);
 
-    const narratorResult = turnBody.runtimeResults[0];
-    expect(narratorResult.pluginId).toBe('core-narrator');
-    expect(narratorResult.status).toBe('success');
-    expect(narratorResult.output.narrativeOutput).toContain('走进了黑暗的森林');
-    expect(narratorResult.output.narrativeOutput).toContain('泥土气息');
+    const narratorResult = turnBody.runtimeResults.find((result) => result.pluginId === 'core-narrator');
+    expect(narratorResult).toBeDefined();
+    expect(narratorResult!.pluginId).toBe('core-narrator');
+    expect(narratorResult!.status).toBe('success');
+    expect(narratorResult!.output.narrativeOutput).toContain('走进了黑暗的森林');
+    expect(narratorResult!.output.narrativeOutput).toContain('泥土气息');
 
     // 3. Get results
     const resultsRes = await app.request(`/api/sessions/${sessionId}/results`);
@@ -143,8 +136,11 @@ describe('E2E: Narrator game flow', () => {
     expect(resultsBody.turnId).toBe(turnBody.turnId);
 
     // 4. Verify LLM was called with correct context
-    expect(mockLLM.callCount).toBe(1);
-    const systemMsg = mockLLM.lastMessages.find((m) => m.role === 'system');
+    expect(mockLLM.callCount).toBeGreaterThanOrEqual(1);
+    const narratorMessages = mockLLM.allMessages.find((messages) =>
+      messages.some((m) => m.role === 'system' && m.content.includes('叙述者')),
+    );
+    const systemMsg = narratorMessages?.find((m) => m.role === 'system');
     expect(systemMsg).toBeDefined();
     // System prompt should contain the PLUGIN.md template with player message interpolated
     expect(systemMsg!.content).toContain('叙述者');
@@ -160,8 +156,7 @@ describe('E2E: Narrator game flow', () => {
     });
     const session = await startRes.json() as { id: string };
 
-    // Push the scheduler into the main loop band before running turns.
-    await seedPriorPlayerMessage(session.id);
+    await markPreGameComplete(session.id);
 
     // Turn 1
     const turn1Res = await app.request(`/api/sessions/${session.id}/turn`, {

@@ -36,8 +36,10 @@ export interface SessionRecord {
   turnCount: number;
   /** Runtime IDs whose Pre-Game (band 0-99) runs have completed. */
   preGameCompleted?: readonly string[];
+  activePlugins?: readonly string[];
   presetId?: string;
   taskBindings?: Record<string, string>;
+  runtimeModelOverrides?: Record<string, string>;
   createdAt: string;
 }
 
@@ -83,7 +85,17 @@ export interface RuntimeSummary {
   id: string;
   kind: string;
   priority: number;
-  trigger: { mode: string; onEvents?: string[] };
+  trigger: {
+    mode: string;
+    onEvents?: string[];
+    interval?: number;
+    cooldownTurns?: number;
+    maxTriggerCount?: number;
+    startTurn?: number;
+    topic?: string;
+    condition?: string;
+    maxRetryCount?: number;
+  };
   providerTag?: string;
 }
 
@@ -97,6 +109,7 @@ export interface PackageSummary {
   displayName?: string | Record<string, string>;
   description?: string | Record<string, string>;
   pluginType?: string;
+  source?: "builtin" | "official" | "community";
   enabled: boolean;
   runtimes?: RuntimeSummary[];
   tools?: ToolSummary[];
@@ -755,13 +768,42 @@ interface PackagesResponse {
   loadErrors: PluginLoadError[];
 }
 
+type RawRuntimeSummary = Omit<RuntimeSummary, "trigger"> & {
+  trigger?: Partial<RuntimeSummary["trigger"]> & { type?: string };
+};
+
+type RawPackageSummary = Omit<PackageSummary, "runtimes"> & {
+  runtimes?: RawRuntimeSummary[];
+};
+
+function normalizePackageSummary(pkg: RawPackageSummary): PackageSummary {
+  return {
+    ...pkg,
+    runtimes: (pkg.runtimes ?? []).map((runtime) => {
+      const { type: triggerType, ...trigger } = runtime.trigger ?? {};
+      return {
+        ...runtime,
+        trigger: {
+          ...trigger,
+          mode: trigger.mode ?? triggerType ?? "always",
+        },
+      };
+    }),
+  };
+}
+
 export async function listPackages(): Promise<PackagesResponse> {
-  const res = await request<PackagesResponse | PackageSummary[]>("/api/packages");
+  const res = await request<
+    { packages: RawPackageSummary[]; loadErrors: PluginLoadError[] } | RawPackageSummary[]
+  >("/api/packages");
   // Backward compat: old servers return a plain array
   if (Array.isArray(res)) {
-    return { packages: res, loadErrors: [] };
+    return { packages: res.map(normalizePackageSummary), loadErrors: [] };
   }
-  return res;
+  return {
+    packages: res.packages.map(normalizePackageSummary),
+    loadErrors: res.loadErrors,
+  };
 }
 
 export async function listCommands(): Promise<CommandSummary[]> {
@@ -1460,6 +1502,7 @@ export interface PluginRpcRuntimeRequest {
   readonly pluginId: string;
   readonly runtimeId: string;
   readonly payload?: unknown;
+  readonly expectsBackgroundFollower?: boolean;
 }
 
 export type PluginRpcRequest = PluginRpcActionRequest | PluginRpcRuntimeRequest;
@@ -1490,6 +1533,10 @@ export type PluginRpcResponse =
        * follower was triggered (audit F1).
        */
       readonly deferredJobs?: readonly {
+        readonly jobId: string;
+        readonly runtimeId: string;
+      }[];
+      readonly failedJobs?: readonly {
         readonly jobId: string;
         readonly runtimeId: string;
       }[];

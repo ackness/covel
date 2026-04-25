@@ -15,6 +15,7 @@ import {
   loadPluginManifest,
   loadRuntime,
   loadPluginSummary,
+  getPluginTrustInfo,
   type PluginRegistry,
   type PluginDiscoveryResult,
 } from '@covel/plugin-loader';
@@ -97,6 +98,37 @@ function isStoryRuntime(manifest: {
   capabilities?: readonly string[];
 }): boolean {
   return manifest.outputKind === 'story' || manifest.capabilities?.includes('narrative') === true;
+}
+
+function normalizeRuntimeTrigger(trigger?: {
+  type?: string;
+  interval?: number;
+  cooldownTurns?: number;
+  maxTriggerCount?: number;
+  startTurn?: number;
+  topic?: string;
+  condition?: string;
+  maxRetryCount?: number;
+}): {
+  mode: string;
+  interval?: number;
+  cooldownTurns?: number;
+  maxTriggerCount?: number;
+  startTurn?: number;
+  topic?: string;
+  condition?: string;
+  maxRetryCount?: number;
+} {
+  return {
+    mode: trigger?.type ?? 'always',
+    ...(trigger?.interval !== undefined ? { interval: trigger.interval } : {}),
+    ...(trigger?.cooldownTurns !== undefined ? { cooldownTurns: trigger.cooldownTurns } : {}),
+    ...(trigger?.maxTriggerCount !== undefined ? { maxTriggerCount: trigger.maxTriggerCount } : {}),
+    ...(trigger?.startTurn !== undefined ? { startTurn: trigger.startTurn } : {}),
+    ...(trigger?.topic !== undefined ? { topic: trigger.topic } : {}),
+    ...(trigger?.condition !== undefined ? { condition: trigger.condition } : {}),
+    ...(trigger?.maxRetryCount !== undefined ? { maxRetryCount: trigger.maxRetryCount } : {}),
+  };
 }
 
 async function loadPluginDiscovery(pluginId: string): Promise<PluginDiscoveryResult | undefined> {
@@ -378,7 +410,7 @@ export function createMiscApiRoutes(
         id: m.manifest.name,
         kind: m.manifest.runtimeType ?? 'agent',
         priority: m.manifest.priority ?? 500,
-        trigger: m.manifest.trigger ?? { mode: 'always' },
+        trigger: normalizeRuntimeTrigger(m.manifest.trigger),
       }));
 
       const tools = liveManifests
@@ -401,6 +433,7 @@ export function createMiscApiRoutes(
         displayName: textValue(liveSummary.name),
         description: textValue(liveSummary.description),
         pluginType: liveSummary.pluginType,
+        source: getPluginTrustInfo(entry.id, entry.source).source,
         enabled: true,
         runtimes,
         tools,

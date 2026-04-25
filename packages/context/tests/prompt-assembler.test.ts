@@ -171,6 +171,26 @@ describe('prompt-assembler V2', () => {
     ]);
   });
 
+  it('uses a manual runtime cue for empty manual-trigger input', () => {
+    const params = baselineParams({
+      turnInput: makeTurnInput({
+        locale: 'zh-CN',
+        playerMessage: '',
+        manualTrigger: { runtimeId: 'dashscope-image-gen/prompt-generator' },
+      }),
+    });
+
+    const v2 = buildContextV2(params);
+
+    expect(v2.messages).toEqual([
+      {
+        role: 'user',
+        content:
+          '执行当前手动触发的 runtime：dashscope-image-gen/prompt-generator。严格遵循系统提示中的输出格式，产出该 runtime 的结果。',
+      },
+    ]);
+  });
+
   it('respects the budget-pruning pass when estimator + contextBudget + COVEL_CONTEXT_BUDGET_V1=1 are provided', () => {
     process.env.COVEL_CONTEXT_BUDGET_V1 = '1';
 

@@ -25,10 +25,14 @@ interface PluginListPanelProps {
 }
 
 const TRIGGER_LABELS: Record<string, { key: string; fallback: string }> = {
+  auto: { key: "plugin.triggerAuto", fallback: "Every turn" },
   always: { key: "plugin.triggerAlways", fallback: "Always" },
+  scheduled: { key: "plugin.triggerScheduled", fallback: "Scheduled" },
   interval: { key: "plugin.triggerInterval", fallback: "Interval" },
   manual: { key: "plugin.triggerManual", fallback: "Manual" },
   event: { key: "plugin.triggerEvent", fallback: "Event" },
+  conditional: { key: "plugin.triggerConditional", fallback: "Conditional" },
+  "error-retry": { key: "plugin.triggerErrorRetry", fallback: "Error retry" },
 };
 
 interface PluginItemProps {
