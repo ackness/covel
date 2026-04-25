@@ -130,7 +130,7 @@ export default async function handler(ctx) {
 > channel，不是 handler 公开 API；外层 JSON 的 `proposals` 字段会被 normalizeOutput
 > 忽略，等于没写。
 
-### 4. 验证
+### 4. 验证 schema(必做)
 
 写完后必须跑 schema 校验（校验失败即修复重写）：
 
@@ -165,7 +165,26 @@ console.log('OK');
 
 **多 runtime**：对每个 `runtimes/<sub>/PLUGIN.md` 分别跑一次。
 
-### 5. 展示结果
+### 5. 测试（按复杂度分层选）
+
+参考 `references/plugin-testing.md`(必读) — 给出三层模板和决策树，照抄即可。简版决策：
+
+| 你写了什么 | 至少要写哪些测试 |
+|------------|------------------|
+| 只有 PLUGIN.md（agent runtime + builtin tools） | 只跑 schema 校验（step 4）即可 |
+| 有 `tools/*.js` / `handler.js` / `hooks/*.js` | + L2 单元测试（vitest，mock store） |
+| 有 `input.inject` / 多 runtime / event 链 | + L3 集成测试（`createTestHarness` + `MockLLM`） |
+| 准备发布对外（社区插件） | + L4 真实 LLM E2E（`scripts/e2e-plugin-verify.ts`，**不要进 CI**） |
+
+测试文件放 `plugins/<id>/tests/*.test.{js,ts}`，跑：
+
+```bash
+pnpm --filter @covel/plugin-<id> test
+```
+
+> 仓库外插件（`~/.covel/plugins/`）目前不强制测试，但写了同样能跑（在该插件目录下 `pnpm install vitest @covel/plugin-test-utils @covel/tools @covel/plugin-loader` 即可）。
+
+### 6. 展示结果
 
 给用户摘要：插件名 / runtime 列表（及各自优先级、触发方式、类型）/ 使用的工具 / UI 入口 / 玩家可调设置 / slot 依赖（如 `covel.image`）。问是否需要调整。
 
@@ -216,5 +235,8 @@ upstreamRequired: [core-narrator]   # 上游本 turn 非 success → 本 runtime
 - `references/plugin-schema.md` — 全量 frontmatter schema（strict）
 - `references/example-plugins.md` — 现有插件 + 多 runtime / 手动 / 后台 / 图像 综合样例
 - `references/tool-factory.md` — 自定义本地工具的工厂模式
+- `references/plugin-testing.md` — 4 层测试指引（schema / 单元 / harness 集成 / 真实 LLM E2E），含 vitest + MockLLM + createTestHarness 模板
 
 **当用户需求超过基础 auto-trigger agent 插件（例如手动按钮、多 runtime、后台任务、function runtime、图像生成、复杂 UI）时，一定要先读 `references/example-plugins.md` 的 dashscope-image-gen 小节再动手。**
+
+**当插件含本地 JS（`tools/*.js` / `handler.js` / `hooks/*.js`）或多 runtime 协作时，写完后必读 `references/plugin-testing.md`，按决策树补一层测试。**

@@ -38,13 +38,24 @@
 
 ### B. 现有插件参考
 
-| 插件 | 优先级 | 触发 | 工具 | 复杂度 |
-|------|--------|------|------|--------|
-| core-narrator | 500 | auto | 无 | 零代码 |
-| core-codex | 650 | auto | local + builtin | JS 工具 |
-| core-char-creator | 700 | scheduled(1次) | builtin (create-form) | inject + 内置工具 |
+来源：`plugins/**/PLUGIN.md` 的 frontmatter（截至 v0.0.1）。
 
-完整注册表（含 `core-pregame` / `core-world-init` / `core-npc-graph` / `core-guide` 等）见 [docs/reference/plugins.md](../reference/plugins.md)。
+| Runtime | 优先级 | 触发 | 类型 | 工具 / 关键能力 | 学习价值 |
+|---------|--------|------|------|----------------|---------|
+| `core-pregame` | 10 | scheduled(首轮) | function | 无 | 最简 function runtime,纯初始化 |
+| `core-world-init/schema-gen` | 40 | scheduled(首轮) | agent + guard | local 工具 | guard 在 LLM 前跳过门控,零开销 |
+| `core-char-creator/player-init` | 50 | scheduled(首轮) | agent | builtin (create-form) | 首轮表单 + Pre-Game 闸门 |
+| `core-npc-graph/rag-retriever` | 400 | auto | function | — | 给 narrator 预拉结构化检索 |
+| `core-narrator` | 500 | auto | agent | 无 | 零代码主叙事 |
+| `core-codex` | 600 | auto | agent | local + builtin | JS 工具 + plugin-data inject |
+| `core-guide` | 600 | auto | agent | builtin | inject narrator output 生成选项 |
+| `core-npc-graph/extractor` | 600 | auto | agent | local | NPC 关系抽取 + 写入图谱 |
+| `core-char-creator/character-tracker` | 600 | auto | agent | local | 跟踪 NPC 状态变化 |
+| `core-memory` | — | UI only | UI | — | 纯前端面板,不占调度槽 |
+
+完整注册表（含 priority bands、capabilities、frontmatter 全字段）见 [docs/reference/plugins.md](../reference/plugins.md)。
+
+> **要做手动按钮 / 后台任务 / 多 runtime 协作 / 图像生成**？这些范式没有内置插件作为模板,直接看 [`.claude/skills/create-plugin/references/example-plugins.md`](../../.claude/skills/create-plugin/references/example-plugins.md) 的 dashscope-image-gen 综合样例。
 
 ### C. 文件结构速查
 

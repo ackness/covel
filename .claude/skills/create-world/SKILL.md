@@ -31,9 +31,17 @@ user_invocable: true
 - 所有 ID 字段（world id, faction id）使用 kebab-case 英文
 - 其余内容使用用户的语言（默认中文）
 
-### 3. 验证
+### 3. 验证（按需分层）
 
-写完后运行验证：
+参考 `references/world-validation.md`(必读) — 给出三层校验脚本和决策树。简版决策：
+
+| 你写了什么 | 至少要跑哪几层 |
+|------------|----------------|
+| 最小 world.yaml + WORLD.md | **L1 schema**(必做) |
+| factions 含 `relations[]` | + **L2 引用一致性** |
+| 准备对外发布 | + **L3 lore 覆盖度** + **L4 真实游戏跑一回合** |
+
+L1 一行命令(必做):
 
 ```bash
 node --input-type=module -e "
@@ -43,17 +51,18 @@ import { validateWorldManifest, formatValidationErrors } from '@covel/shared';
 const y = parse(readFileSync('worlds/<id>/world.yaml','utf-8'));
 const r = validateWorldManifest(y);
 if(!r.valid){console.error(formatValidationErrors(r.errors));process.exit(1)}
-console.log('OK');
+console.log('schema OK');
 "
 ```
 
-验证失败则修复后重新写入。
+校验失败则修复后重新写入。L2/L3/L4 见 `references/world-validation.md`。
 
 ### 4. 展示结果
 
-给用户一个简洁摘要：世界名称、地区数、阵营数、力量体系、开场场景。问是否需要调整。
+给用户一个简洁摘要：世界名称、地区数、阵营数、力量体系、开场场景、跑了哪几层校验。问是否需要调整。
 
 ## References
 
 - 生成 world.yaml 前，读取 `references/world-yaml-schema.md` 了解完整字段结构和枚举值
 - 需要格式参考时，读取 `references/example-world.md` 查看现有世界的 world.yaml 样例
+- 验证阶段（特别是带 relations 或准备发布时），读取 `references/world-validation.md` 拿现成的校验脚本

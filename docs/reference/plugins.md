@@ -392,17 +392,18 @@ plugins/<plugin-id>/
 plugins/<plugin-id>/
 ├── package.json
 ├── runtimes/
-│   ├── check-existing/
-│   │   ├── PLUGIN.md      # name: plugin-id/check-existing
+│   ├── runtime-a/
+│   │   ├── PLUGIN.md      # name: plugin-id/runtime-a
 │   │   └── PLUGIN.en.md   # 可选：英文版
-│   └── schema-gen/
-│       ├── PLUGIN.md      # name: plugin-id/schema-gen
-│       └── PLUGIN.en.md
-├── tools/                 # 可选：所有子运行时共享的工具
-└── check-existing.js      # function runtime 的 handler
+│   └── runtime-b/
+│       ├── PLUGIN.md      # name: plugin-id/runtime-b
+│       └── handler.js     # function runtime 的 handler
+└── tools/                 # 可选：所有子运行时共享的工具
 ```
 
-子运行时之间可通过 `input.inject` 传递数据（如 check-existing 的输出注入到 schema-gen）。
+> 真实多 runtime 范例见 `plugins/core-npc-graph/`（`extractor` agent + `rag-retriever` function）和 `plugins/core-char-creator/`（`player-init` 首轮 agent + `character-tracker` 持续 agent）。`core-world-init` 当前是单 runtime（`schema-gen`）+ 一个 `guard` 文件，不算多 runtime。
+
+子运行时之间可通过 `input.inject` 传递数据（上游输出 → 下游 prompt 注入）。
 
 ### pluginType
 

@@ -10,7 +10,7 @@ name: core-narrator
 description: 主叙事生成器，负责根据玩家输入和世界观设定生成故事内容。每个 Turn 自动执行。
 pluginType: core-plugin
 priority: 500
-model: ds
+model: story
 outputKind: story
 capabilities: [narrative]
 trigger:
@@ -65,7 +65,7 @@ name: core-char-creator
 description: 角色创建引导。在游戏首轮生成角色创建表单，玩家填写后生成个性化角色引入叙事。
 pluginType: core-plugin
 priority: 700
-model: ds
+model: story
 trigger:
   type: scheduled
   interval: 1
@@ -400,15 +400,21 @@ tag = "image"
 
 ---
 
-## 现有插件一览
+## 现有插件一览（截至 v0.0.1）
 
-| ID | 优先级 | 触发 | 类型 | 说明 |
-|----|--------|------|------|------|
+来源:`plugins/**/PLUGIN.md` 真实 frontmatter。priority 数字若与本表对不上,以仓库实际为准。
+
+| Runtime | 优先级 | 触发 | 类型 | 说明 |
+|---------|--------|------|------|------|
 | core-pregame | 10 | scheduled(首轮) | function | 游戏初始化 |
-| core-world-init/check-existing | 80 | scheduled(首轮) | function | 世界维度门控 |
-| core-world-init/schema-gen | 85 | scheduled(首轮) | agent | 世界维度生成 |
+| core-world-init/schema-gen | 40 | scheduled(首轮) | agent + guard | 世界维度生成,guard 已存在则跳过 |
+| core-char-creator/player-init | 50 | scheduled(首轮) | agent | 玩家建角表单 |
+| core-npc-graph/rag-retriever | 400 | auto | function | 给 narrator 拉 NPC 结构化检索 |
 | core-narrator | 500 | auto | agent | 主叙事 |
-| core-codex | 650 | auto | agent | 知识图鉴 |
-| core-char-creator | 700 | scheduled(首轮) | agent | 角色创建 |
-| dashscope-image-gen/prompt-generator | 600 | manual | agent | 手动触发 prompt 生成 |
-| dashscope-image-gen/image-generator | 610 | event | function (background) | 调 DashScope wan2.x 生图 |
+| core-codex | 600 | auto | agent | 知识图鉴 |
+| core-guide | 600 | auto | agent | 行动引导 |
+| core-npc-graph/extractor | 600 | auto | agent | NPC 关系抽取 |
+| core-char-creator/character-tracker | 600 | auto | agent | 角色状态跟踪 |
+| core-memory | — | UI only | UI | 仅前端面板 |
+| dashscope-image-gen/prompt-generator | 600 | manual | agent | 手动触发 prompt 生成(未在仓库内,样例) |
+| dashscope-image-gen/image-generator | 610 | event | function (background) | 调 DashScope wan2.x 生图(未在仓库内,样例) |
