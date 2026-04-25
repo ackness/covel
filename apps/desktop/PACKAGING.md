@@ -99,17 +99,32 @@ dpkg-sig --sign builder release/*.deb
 
 ## Verifying a build locally
 
-Run signing checks **immediately after `electron-builder` finishes** — the
-`afterAllArtifactBuild` cleanup hook (`scripts/cleanup-artifacts.mjs`) wipes the
-`mac-arm64/` unpacked directory once the dmg/zip are produced, so the
-`Covel.app` directory only exists for that brief window. To re-verify later,
-expand the zip first:
+The cleanup story is **two-phase** so the unpacked tree stays available
+for verification during a CI build but the user-facing `pnpm build:electron`
+still lands on two files:
+
+1. **Phase 1** — the `afterAllArtifactBuild` hook
+   (`scripts/cleanup-artifacts.mjs`) drops only the auto-update metadata
+   (`*.blockmap`, `latest-*.yml`, `builder-*.yml`). The `mac-arm64/`
+   unpacked dir survives so `verify-release.mjs` (and any local
+   `codesign`) can inspect `Covel.app/Contents/Resources/...`.
+2. **Phase 2** — `node apps/desktop/scripts/cleanup-artifacts.mjs
+   --strip-unpacked`, chained onto the root `build:electron` script
+   *after* `electron-builder` returns. This wipes `mac-arm64/` and the
+   `*-unpacked/` siblings so the local user is left with the `.dmg`
+   and the `.zip` only. CI does **not** call this script — it runs
+   `electron-builder` directly so the unpacked tree persists for the
+   `Verify unpacked release resources` step before `actions/upload-artifact`
+   picks just the `.dmg` + `.zip`.
 
 ```bash
-# macOS — re-extract the .app from the shipped zip first
+# macOS — between phase 1 and phase 2 the unpacked .app is still on disk:
+codesign --verify --deep --strict --verbose=2 "release/electron/mac-arm64/Covel.app"
+spctl --assess --verbose "release/electron/mac-arm64/Covel.app"
+
+# After `pnpm build:electron` (phase 2 has run), expand the zip first:
 unzip -q release/electron/Covel-electron-*-mac-arm64.zip -d /tmp/covel-verify
 codesign --verify --deep --strict --verbose=2 "/tmp/covel-verify/Covel.app"
-spctl --assess --verbose "/tmp/covel-verify/Covel.app"
 
 # Windows (PowerShell)
 Get-AuthenticodeSignature release\Covel-Setup-*.exe
@@ -118,9 +133,9 @@ Get-AuthenticodeSignature release\Covel-Setup-*.exe
 ## Auto-update publishing
 
 Auto-update is **off** by default. `electron-builder.yml` ships with
-`publish: null` and the `cleanup-artifacts.mjs` hook strips `latest-*.yml` /
-`*.blockmap`. The intentional output is two files only: the `.dmg` installer
-and the `.zip` containing the `.app`.
+`publish: null` and `cleanup-artifacts.mjs` strips `latest-*.yml` /
+`*.blockmap`. The intentional output is two files only: the `.dmg`
+installer and the `.zip` containing the `.app`.
 
 To enable auto-update later:
 

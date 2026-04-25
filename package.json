@@ -36,7 +36,7 @@
     "e2e:docker:down": "node ./scripts/e2e-docker.mjs down",
     "dev:electron": "pnpm --filter @covel/desktop dev",
     "dev:tauri": "pnpm --filter @covel/desktop-tauri dev",
-    "build:electron": "pnpm --filter @covel/desktop dist",
+    "build:electron": "pnpm --filter @covel/desktop dist && node apps/desktop/scripts/cleanup-artifacts.mjs --strip-unpacked",
     "build:tauri": "pnpm --filter @covel/desktop-tauri build:mac:arm64",
     "build:desktop": "pnpm run build:electron && pnpm run build:tauri",
     "e2e:verify": "tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts",
