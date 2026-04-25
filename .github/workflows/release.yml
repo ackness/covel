@@ -1,18 +1,20 @@
 name: Build Desktop (macOS)
 
-# Manual-only to keep GitHub Actions usage low. Primary distribution path
-# is local builds (`pnpm build:electron`).
-# This workflow just produces the same artefacts on a clean macOS runner
-# when you want an independent reproduction, or to publish a signed
-# release with the `publish_release` input set.
+# Triggers:
+#   - push to a `v*` tag → build & publish a Release automatically.
+#   - manual dispatch     → optional tag/publish for ad-hoc reproductions.
 #
-# macOS arm64 only. Windows/Linux are intentionally dropped — build them
-# locally on their native OS as needed.
+# Primary distribution path is local builds (`pnpm build:electron`); CI is
+# the reproducible / signed path. macOS arm64 only — Windows/Linux build
+# locally on their native OS.
 #
 # Tauri shell is temporarily disabled (toolchain/compile issues). The
 # `build-tauri` job and its release hooks below are commented out rather
 # than removed so we can turn it back on easily later.
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -29,7 +31,9 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  # On tag push the ref is `refs/tags/vX.Y.Z`; on dispatch fall back to the
+  # supplied tag or the workflow ref. Either way one tag at a time.
+  group: release-${{ github.event_name == 'push' && github.ref_name || inputs.tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -42,6 +46,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
+          # On tag push the runner already checks out the tag; on dispatch
+          # honour the optional input. Empty string falls back to default.
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Setup pnpm
@@ -76,11 +82,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: covel-electron-mac-arm64
+          # cleanup-artifacts.mjs strips blockmaps and update-info yml so the
+          # release dir only ever contains the two distributable bundles.
           path: |
             release/electron/*.dmg
             release/electron/*.zip
-            release/electron/*.blockmap
-            release/electron/latest*.yml
           if-no-files-found: error
           retention-days: 7
 
@@ -146,12 +152,19 @@ jobs:
   #         if-no-files-found: error
   #         retention-days: 7
 
-  # ── Publish GitHub Release (optional, gated by inputs.publish_release) ─
+  # ── Publish GitHub Release ─────────────────────────────────────
+  # Auto-publishes when a `v*` tag is pushed. On manual dispatch the
+  # `publish_release` toggle still gates publication.
   release:
     name: Publish GitHub Release
     needs: [ build-electron ]
     runs-on: ubuntu-latest
-    if: ${{ inputs.publish_release && inputs.tag != '' }}
+    if: |
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_release && inputs.tag != '')
+
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
 
     steps:
       - name: Download Electron artifacts
@@ -179,9 +192,9 @@ jobs:
       - name: Remove stale releases for this tag
         run: |
           gh api /repos/${{ github.repository }}/releases \
-            --jq '.[] | select(.tag_name == "${{ inputs.tag }}") | .id' |
+            --jq '.[] | select(.tag_name == "'"$RELEASE_TAG"'") | .id' |
           while read -r id; do
-            echo "Deleting stale release $id for tag ${{ inputs.tag }}"
+            echo "Deleting stale release $id for tag $RELEASE_TAG"
             gh api -X DELETE "/repos/${{ github.repository }}/releases/$id"
           done
         env:
@@ -190,15 +203,14 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Covel ${{ inputs.tag }}
-          tag_name: ${{ inputs.tag }}
+          name: Covel ${{ env.RELEASE_TAG }}
+          tag_name: ${{ env.RELEASE_TAG }}
           draft: false
-          prerelease: ${{ contains(inputs.tag, '-') }}
+          # `-rc1`, `-beta` etc. are pre-releases. Plain `v0.0.1` is stable.
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
           generate_release_notes: true
           fail_on_unmatched_files: true
-          # Tauri dmg intentionally omitted — build-tauri is disabled above.
+          # cleanup-artifacts.mjs leaves only the two distributables behind.
           files: |
             release/electron/*.dmg
             release/electron/*.zip
-            release/electron/*.blockmap
-            release/electron/latest*.yml
