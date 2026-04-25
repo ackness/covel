@@ -34,6 +34,21 @@ Trigger → Priority Schedule → [Agent₁ → Agent₂ → … → Agentₙ] �
 
 Grab `Covel-electron-<version>-mac-arm64.dmg` from [Releases](https://github.com/AcKnEsS/covel/releases). After installing, open Settings and paste an LLM API key.
 
+**Config files** (auto-created on first launch):
+
+```
+~/.covel/
+├── config.toml      ← data dir pointer + log rotation
+├── llm.toml         ← model / provider / baseUrl
+├── keys.env         ← API keys (one KEY=VALUE per line, mode 0600)
+└── data/
+    ├── covel.db     ← SQLite
+    ├── worlds/      ← custom worlds
+    └── logs/        ← electron / server logs
+```
+
+The in-app Settings panel and these files stay in sync — pick whichever you prefer. Full schema → [`docs/guide/desktop-config.en.md`](./docs/guide/desktop-config.en.md).
+
 ### B. Run from source (Node ≥ 22, pnpm 10+)
 
 ```bash
@@ -45,13 +60,17 @@ pnpm dev                            # web :5173 + server :3001 (SQLite)
 
 Open http://localhost:5173; debug page at `/debug`.
 
+**Config locations** (**different** from the desktop build — don't mix them up):
+
+| File | Location | Purpose |
+|------|----------|---------|
+| `llm.toml` | repo root | model slot config |
+| `.env.llm` | repo root | provider API keys (loaded by the dev server) |
+| Web LLM keys | `localStorage: covel:keys` | written from the browser Settings panel |
+| Web user prefs | `localStorage: covel:settings` | same |
+| SQLite | `./data/covel.db` | set `STORE_BACKEND=memory` for an in-memory store |
+
 > Windows / Intel Mac / Linux are not officially shipped — build from source. The Tauri shell is on hold for now.
-
-## Screenshots
-
-| World picker | Main narrative + plugin messages | Debug: Turn / Prompt / Trace |
-|:-:|:-:|:-:|
-| ![](./.assets/images/select.png) | ![](./.assets/images/session.jpg) | ![](./.assets/images/debugger.png) |
 
 ## Bundled plugins
 

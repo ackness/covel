@@ -34,6 +34,21 @@ Trigger → Priority Schedule → [Agent₁ → Agent₂ → … → Agentₙ] �
 
 到 [Releases](https://github.com/AcKnEsS/covel/releases) 下载 `Covel-electron-<version>-mac-arm64.dmg`，安装后进 Settings 填一个 LLM API Key 即可。
 
+**配置文件位置**（首次启动自动创建）：
+
+```
+~/.covel/
+├── config.toml      ← 数据目录指针 + 日志轮转
+├── llm.toml         ← 模型 / provider / baseUrl
+├── keys.env         ← API Key（一行一个 KEY=VALUE，权限 0600）
+└── data/
+    ├── covel.db     ← SQLite
+    ├── worlds/      ← 自定义世界
+    └── logs/        ← electron / server 日志
+```
+
+应用内 Settings 面板和这些文件双向同步，喜欢哪种用哪种。完整字段参考 → [`docs/guide/desktop-config.md`](./docs/guide/desktop-config.md)。
+
 ### B. 从源码跑（Node ≥ 22, pnpm 10+）
 
 ```bash
@@ -43,15 +58,19 @@ cp .env.llm.example .env.llm        # provider API Key
 pnpm dev                            # web :5173 + server :3001 (SQLite)
 ```
 
-打开 http://localhost:5173,调试页在 `/debug`。
+打开 http://localhost:5173，调试页在 `/debug`。
 
-> Windows / Intel Mac / Linux 暂无官方包,需要自行构建。Tauri 壳暂时搁置。
+**配置文件位置**（与桌面版**不同**，不要混淆）：
 
-## 界面
+| 文件 | 位置 | 作用 |
+|------|------|------|
+| `llm.toml` | 仓库根 | 模型 slot 配置 |
+| `.env.llm` | 仓库根 | provider API Key（dev server 启动时加载） |
+| Web 端 LLM Key | `localStorage: covel:keys` | 浏览器内 Settings 面板写入 |
+| Web 端用户偏好 | `localStorage: covel:settings` | 同上 |
+| SQLite | `./data/covel.db` | 设 `STORE_BACKEND=memory` 可用纯内存 |
 
-| 选择世界 | 主叙事 + 插件消息 | 调试页：Turn / Prompt / Trace |
-|:-:|:-:|:-:|
-| ![](./.assets/images/select.png) | ![](./.assets/images/session.jpg) | ![](./.assets/images/debugger.png) |
+> Windows / Intel Mac / Linux 暂无官方包，需要自行构建。Tauri 壳暂时搁置。
 
 ## 内置插件
 
