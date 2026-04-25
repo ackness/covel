@@ -1,7 +1,10 @@
 # ── AI / IDE tools ──────────────────────────────────────────────
 .codex/
+# .claude/ is ignored by default but `skills/` is project-owned and tracked.
 .claude/*
 !.claude/skills/
+# .agents/ is for personal/IDE-global skills (not project-specific).
+.agents/
 .windsurf/
 .omx/
 skills-lock.json
