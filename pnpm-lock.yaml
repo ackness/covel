@@ -411,6 +411,9 @@ importers:
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       typescript:
         specifier: ^6.0.3

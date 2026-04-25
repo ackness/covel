@@ -18,7 +18,8 @@
   "dependencies": {
     "@covel/events": "workspace:*",
     "@covel/shared": "workspace:*",
-    "gray-matter": "^4.0.3"
+    "gray-matter": "^4.0.3",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "typescript": "^6.0.3",
