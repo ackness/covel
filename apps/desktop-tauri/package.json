@@ -1,6 +1,6 @@
 {
   "name": "@covel/desktop-tauri",
-  "version": "0.0.1-beta",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "description": "Tauri-based desktop shell for Covel (experimental, sits next to @covel/desktop).",
