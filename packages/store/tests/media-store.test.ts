@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import 'fake-indexeddb/auto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { runMediaStoreContractTests } from '../src/contract/media-store-contract.js';
 import { createIndexedDbMediaStore } from '../src/indexeddb/idb-media-store.js';
 import {
@@ -14,6 +14,7 @@ import {
   type S3CompatibleObject,
   type S3CompatibleObjectInfo,
 } from '../src/media-store.js';
+import { createSqliteS3MetadataAdapter } from '../src/sqlite/sqlite-s3-metadata-adapter.js';
 
 runMediaStoreContractTests('MemoryMediaStore', () => createMemoryMediaStore());
 
@@ -67,12 +68,78 @@ class FakeS3Client implements S3CompatibleMediaClient {
   }
 }
 
-runMediaStoreContractTests('S3MediaStore', () =>
-  createS3MediaStore(new FakeS3Client(), {
+// Run the contract suite with the durable SQLite adapter so we exercise the
+// production-grade wiring rather than the in-memory fallback (which logs a
+// warn and is only intended for dev). A fresh tmp DB per test keeps state
+// isolated.
+runMediaStoreContractTests('S3MediaStore', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'covel-s3-meta-test-'));
+  return createS3MediaStore(new FakeS3Client(), {
     bucket: 'covel-test',
     keyPrefix: 'media',
-  }),
-);
+    metadataAdapter: createSqliteS3MetadataAdapter(path.join(tmpDir, 'meta.db')),
+  });
+});
+
+describe('createS3MediaStore metadata durability', () => {
+  it('survives store re-creation when a SQLite metadata adapter is shared', async () => {
+    // Same client + same adapter mirror a "process restarts but bucket and
+    // metadata DB persist" scenario. Without metadataAdapter the in-memory
+    // fallback would lose ownership and the second store's lookup would
+    // report ownerSessionId: null (the original P2 finding).
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'covel-s3-meta-persist-'));
+    const client = new FakeS3Client();
+    const adapter = createSqliteS3MetadataAdapter(path.join(tmpDir, 'meta.db'));
+
+    const storeA = createS3MediaStore(client, { metadataAdapter: adapter });
+    const ref = await storeA.put(new Uint8Array([7, 7, 7, 7]), 'application/octet-stream', {
+      label: 'persist',
+    });
+    await storeA.recordOwnership(ref.id, 'sess-OWN', 'plugin-OWN');
+    await storeA.addRef(ref.id, 'sess-VIEWER', 'plugin-VIEW');
+
+    // Simulate restart: brand-new MediaStore instance pointed at the same
+    // bucket and the same adapter.
+    const storeB = createS3MediaStore(client, { metadataAdapter: adapter });
+
+    const lookup = await storeB.lookup(ref.id);
+    expect(lookup).not.toBeNull();
+    expect(lookup?.ownerSessionId).toBe('sess-OWN');
+    expect(lookup?.ownerPluginId).toBe('plugin-OWN');
+    expect(lookup?.size).toBe(4);
+
+    expect(await storeB.isReferencedBy(ref.id, 'sess-OWN')).toBe(true);
+    expect(await storeB.isReferencedBy(ref.id, 'sess-VIEWER')).toBe(true);
+    expect(await storeB.isReferencedBy(ref.id, 'sess-OUTSIDER')).toBe(false);
+
+    const refs = await storeB.listRefs();
+    expect(refs).toContainEqual(
+      expect.objectContaining({
+        sessionId: 'sess-VIEWER',
+        mediaId: ref.id,
+        pluginId: 'plugin-VIEW',
+      }),
+    );
+
+    const assets = await storeB.listAssets();
+    expect(assets.find((a) => a.id === ref.id)).toMatchObject({
+      ownerSessionId: 'sess-OWN',
+      mime: 'application/octet-stream',
+      size: 4,
+    });
+  });
+
+  it('warns once when no metadataAdapter is supplied (in-memory fallback)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      createS3MediaStore(new FakeS3Client());
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]?.[0]).toContain('no metadataAdapter supplied');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
 
 const DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgresql://covel:covel_dev@localhost:5432/covel';

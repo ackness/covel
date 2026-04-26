@@ -191,9 +191,24 @@ trace does not currently distinguish the two code paths — if you need to
 tell them apart during a gradual rollout, check whether
 `COVEL_COMMIT_TXN_V1` is set in the process env.
 
+## Schema migrations
+
+Schema changes in `packages/store/src/{sqlite,postgres}/*-store-mappers.ts` use
+`CREATE TABLE IF NOT EXISTS` and additive `ALTER TABLE ... ADD COLUMN IF NOT
+EXISTS` so fresh installs and existing databases both boot. The store
+package does **not** ship destructive auto-migrations — when a constraint
+becomes stricter (e.g. `media_refs UNIQUE` was widened from
+`(session_id, media_id, plugin_id)` to `(session_id, media_id)` to fix
+NULL-pluginId duplicate rows; see [`media-store.md`](./media-store.md#ownership)),
+the DDL still creates the new index, but operators with legacy duplicates
+must run a one-off cleanup SQL before the new index can be applied. Each
+such migration is documented next to the affected table in the relevant
+reference doc.
+
 ## References
 
 - Contract type: `packages/store/src/types.ts` (`DataStore` interface)
 - Contract tests: `packages/store/src/contract/store-contract.ts`
 - PgStore adapter: `packages/store/src/postgres/pg-store-tx.ts`
 - Kernel commit path: `packages/runtime/src/session-kernel.ts`
+- MediaStore schema + S3 metadata adapter: [`media-store.md`](./media-store.md)

@@ -125,8 +125,11 @@ function toAssetRecord(record: IdbMediaAssetRecord): MediaAssetRecord {
   };
 }
 
-function refKey(mediaId: string, sessionId: string, pluginId?: string): string {
-  return `${sessionId}\u0000${mediaId}\u0000${pluginId ?? ''}`;
+// First writer wins — keyed only on (sessionId, mediaId). Mirrors the SQL
+// backends' UNIQUE (session_id, media_id) constraint so addRef is idempotent
+// regardless of pluginId. The first stored row's pluginId is preserved.
+function refKey(mediaId: string, sessionId: string): string {
+  return `${sessionId}\u0000${mediaId}`;
 }
 
 function cloneMeta(meta?: object): Readonly<Record<string, unknown>> | undefined {
@@ -269,8 +272,12 @@ export async function createIndexedDbMediaStore(
     async addRef(id, sessionId, pluginId) {
       const exists = await db.getKey(STORE_ASSETS, id);
       if (exists === undefined) return;
+      const key = refKey(id, sessionId);
+      // First-writer wins on plugin_id: skip the put if a row already exists.
+      const existingRef = await db.get(STORE_REFS, key);
+      if (existingRef) return;
       await db.put(STORE_REFS, {
-        key: refKey(id, sessionId, pluginId),
+        key,
         mediaId: id,
         sessionId,
         pluginId: pluginId ?? null,

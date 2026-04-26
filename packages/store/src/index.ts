@@ -10,6 +10,7 @@ export {
   createS3MediaStore,
   createSqliteMediaStore,
 } from './media-store.js';
+export { createSqliteS3MetadataAdapter } from './sqlite/sqlite-s3-metadata-adapter.js';
 export { supportsVector } from './vector-store.js';
 export type {
   MediaAssetLookup,
@@ -22,6 +23,7 @@ export type {
   S3CompatibleMediaClient,
   S3CompatibleObject,
   S3CompatibleObjectInfo,
+  S3MediaMetadataAdapter,
   S3MediaStoreOptions,
   SqliteMediaStoreOptions,
 } from './media-store.js';

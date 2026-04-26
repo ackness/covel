@@ -55,13 +55,34 @@ export const CREATE_MEDIA_TABLES_SQL = `
   CREATE UNIQUE INDEX IF NOT EXISTS pg_media_assets_sha256_idx ON media_assets(sha256);
   CREATE INDEX IF NOT EXISTS pg_media_assets_owner_idx ON media_assets(owner_session_id, owner_plugin_id);
 
+  -- media_refs: cross-session/plugin asset references for fork & inherit.
+  --
+  -- The UNIQUE constraint is on (session_id, media_id) only — plugin_id is
+  -- recorded as "first-source metadata" but does NOT participate in the
+  -- key. Rationale: PostgreSQL (and SQLite) treat each NULL as distinct in
+  -- a UNIQUE column, which made the previous (session_id, media_id,
+  -- plugin_id) constraint silently allow unbounded duplicate rows when
+  -- callers passed undefined / NULL pluginId. addRef() is idempotent per
+  -- (session_id, media_id) and the first writer's plugin_id is preserved.
+  --
+  -- Fresh installs: the inline UNIQUE below is created and the table starts
+  -- correct. Existing databases get a NEW unique index added by name; any
+  -- pre-existing (session_id, media_id, plugin_id) index is left alone (it
+  -- becomes a redundant looser constraint and never blocks). Sites with
+  -- legacy duplicate rows (same session_id + media_id, different plugin_id)
+  -- MUST run a one-off migration before adding the new index:
+  --   DELETE FROM media_refs a USING media_refs b
+  --     WHERE a.ctid > b.ctid AND a.session_id = b.session_id AND a.media_id = b.media_id;
+  -- See docs/reference/media-store.md for details.
   CREATE TABLE IF NOT EXISTS media_refs (
     session_id TEXT NOT NULL,
     media_id TEXT NOT NULL,
     plugin_id TEXT,
     created_at TEXT NOT NULL,
-    UNIQUE (session_id, media_id, plugin_id)
+    UNIQUE (session_id, media_id)
   );
+  CREATE UNIQUE INDEX IF NOT EXISTS pg_media_refs_unique_session_media_idx
+    ON media_refs(session_id, media_id);
   CREATE INDEX IF NOT EXISTS pg_media_refs_session_id_idx ON media_refs(session_id);
   CREATE INDEX IF NOT EXISTS pg_media_refs_media_id_idx ON media_refs(media_id);
 `;

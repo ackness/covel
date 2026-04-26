@@ -353,13 +353,39 @@ export function createTables(sqlite: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS media_assets_owner_idx ON media_assets(owner_session_id, owner_plugin_id);
 
+    -- media_refs: cross-session/plugin asset references for fork & inherit.
+    --
+    -- The UNIQUE constraint is on (session_id, media_id) only — plugin_id is
+    -- recorded as "first-source metadata" but does NOT participate in the
+    -- key. Rationale: SQLite (and PostgreSQL) treat each NULL as distinct in
+    -- a UNIQUE column, which made the previous (session_id, media_id,
+    -- plugin_id) constraint silently allow unbounded duplicate rows when
+    -- callers passed undefined / NULL pluginId. addRef() is idempotent per
+    -- (session_id, media_id) and the first writer's plugin_id is preserved.
+    --
+    -- Fresh installs: the new UNIQUE below is created and the table starts
+    -- correct. Existing databases keep any pre-existing UNIQUE
+    -- (session_id, media_id, plugin_id) index — that older index is strictly
+    -- looser than the new one, so the stricter constraint still wins. Sites
+    -- with legacy duplicate rows (same session_id + media_id, different
+    -- plugin_id) MUST run a one-off migration before this DDL succeeds:
+    --   DELETE FROM media_refs a USING media_refs b
+    --     WHERE a.rowid > b.rowid AND a.session_id = b.session_id AND a.media_id = b.media_id;
+    -- See docs/reference/media-store.md for details.
     CREATE TABLE IF NOT EXISTS media_refs (
       session_id TEXT NOT NULL,
       media_id TEXT NOT NULL,
       plugin_id TEXT,
       created_at TEXT NOT NULL,
-      UNIQUE (session_id, media_id, plugin_id)
+      UNIQUE (session_id, media_id)
     );
+    -- Standalone CREATE UNIQUE INDEX so existing SQLite databases (where
+    -- CREATE TABLE IF NOT EXISTS is a no-op) also get the (session_id,
+    -- media_id) constraint via plain re-boot. Sites with legacy duplicate
+    -- rows must dedupe first; this index simply errors during creation,
+    -- surfacing the migration requirement loudly instead of silently.
+    CREATE UNIQUE INDEX IF NOT EXISTS media_refs_unique_session_media_idx
+      ON media_refs(session_id, media_id);
     CREATE INDEX IF NOT EXISTS media_refs_session_id_idx ON media_refs(session_id);
     CREATE INDEX IF NOT EXISTS media_refs_media_id_idx ON media_refs(media_id);
 
