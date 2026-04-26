@@ -60,7 +60,7 @@ export function runMediaStoreContractTests(
       const ref = await store.put(PNG, 'image/png');
 
       const url = await store.resolveUrl(ref);
-      expect(url).toMatch(/^(memory:\/\/media\/|file:\/\/)/);
+      expect(url).toMatch(/^(memory:\/\/media\/|file:\/\/|pg:\/\/media\/|s3:\/\/|https?:\/\/)/);
       expect(url).toContain(ref.id);
     });
 
@@ -70,6 +70,17 @@ export function runMediaStoreContractTests(
       const url = 'https://example.test/signed';
 
       await expect(store.resolveUrl({ ...ref, url })).resolves.toBe(url);
+    });
+
+    it('accepts Blob input and returns content-addressed bytes', async () => {
+      const store = await createStore();
+      const blob = new Blob([PNG], { type: 'image/png' });
+
+      const ref = await store.put(blob, 'image/png');
+
+      expect(ref.size).toBe(PNG.byteLength);
+      expect(await store.exists(ref.id)).toBe(true);
+      expect([...(await toUint8Array(await store.get(ref)))]).toEqual([...PNG]);
     });
 
     it('deletes stored media by id', async () => {

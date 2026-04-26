@@ -34,6 +34,7 @@ Covel 框架能力注册表与 API 参考。内容与 `@covel/shared`、`@covel/
 | 文档 | 描述 |
 |------|------|
 | [transactions.md](transactions.md) | `DataStore` 事务契约（begin/commit/rollback）、四种后端的实现策略、`COVEL_COMMIT_TXN_V1` flag |
+| [media-store.md](media-store.md) | `MediaStore` 契约、Memory/SQLite/PG/S3 后端、ownership/ref 规则 |
 
 ## 注册表
 
