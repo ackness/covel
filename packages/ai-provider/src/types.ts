@@ -1,3 +1,4 @@
+import type { MediaRef } from "@covel/shared";
 import type { ZodType } from "zod";
 
 // ── Provider Protocol ──────────────────────────────────────────────
@@ -236,6 +237,23 @@ export interface ToolCallPart {
   arguments: string;
 }
 
+export interface TextPart {
+  type: "text";
+  text: string;
+}
+
+export interface ImagePart {
+  type: "image";
+  /**
+   * Provider adapters use image.url for native vision blocks. When URL
+   * resolution is absent, adapters serialize a text `image_ref` payload.
+   */
+  image: MediaRef;
+}
+
+export type TextMessageContentPart = TextPart | ImagePart;
+export type TextMessageContent = string | null | readonly TextMessageContentPart[];
+
 // ── Text Generation ────────────────────────────────────────────────
 
 export interface TextGenerationParams {
@@ -248,7 +266,7 @@ export interface TextGenerationParams {
 
 export interface TextMessage {
   role: string;
-  content: string | null;
+  content: TextMessageContent;
   /** Prompt cache hint for providers that support it (e.g. Anthropic cache_control) */
   cacheControl?: { type: "ephemeral" };
   /** Tool calls made by assistant (present when role === "assistant" and model invoked tools). */

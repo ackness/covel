@@ -9,6 +9,7 @@ import {
   readResponsesOutputText,
 } from "./http.js";
 import { createOpenAiChatAdapter } from "./openai-chat.js";
+import type { ImagePart, TextMessage, TextMessageContent } from "../types.js";
 
 /** Fields that providerRequestMetadata must never override. */
 const RESPONSES_PROTECTED_KEYS = new Set(["model", "input", "stream", "text", "parameterOverrides"]);
@@ -54,6 +55,30 @@ function mapResponseStatus(status: unknown): string {
   }
 }
 
+function mediaRefFallbackText(part: ImagePart): string {
+  return JSON.stringify({
+    type: "image_ref",
+    ref: part.image,
+    note: "MediaRef has no resolved URL; provider vision input requires a retrievable image URL.",
+  });
+}
+
+function serializeResponsesContent(content: TextMessageContent): unknown {
+  if (!Array.isArray(content)) return content;
+  return content.map((part) => {
+    if (part.type === "text") return { type: "input_text", text: part.text };
+    if (part.image.url) return { type: "input_image", image_url: part.image.url };
+    return { type: "input_text", text: mediaRefFallbackText(part) };
+  });
+}
+
+function serializeResponsesInput(messages: TextMessage[]): unknown {
+  return messages.map((msg) => ({
+    role: msg.role,
+    content: serializeResponsesContent(msg.content),
+  }));
+}
+
 /**
  * OpenAI Responses v1 adapter.
  * Uses the /responses endpoint with different streaming format.
@@ -66,7 +91,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
     async generateText(config, params) {
       const response = await postJson(config, "/responses", {
         model: params.model,
-        input: params.messages,
+        input: serializeResponsesInput(params.messages),
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
         ...extractResponsesParameterOverrides(params.providerRequestMetadata),
       });
@@ -87,7 +112,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
     async generateObject(config, params) {
       const response = await postJson(config, "/responses", {
         model: params.model,
-        input: params.messages,
+        input: serializeResponsesInput(params.messages),
         text: { format: { type: "json_schema" } },
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
         ...extractResponsesParameterOverrides(params.providerRequestMetadata),
@@ -120,7 +145,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
     async *streamText(config, params) {
       const response = await postJson(config, "/responses", {
         model: params.model,
-        input: params.messages,
+        input: serializeResponsesInput(params.messages),
         stream: true,
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
         ...extractResponsesParameterOverrides(params.providerRequestMetadata),

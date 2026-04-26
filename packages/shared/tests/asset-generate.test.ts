@@ -47,15 +47,12 @@ describe('asset.generate helpers', () => {
     expect(isAssetGenerateView({ ...view, source: {} })).toBe(false);
   });
 
-  it('returns a typed LLM placeholder while content parts are pending', () => {
+  it('returns LLM content parts for generated image assets', () => {
     const llm = assetGenerateToLLM(makeProposal({ ref: REF, modality: 'image' }));
 
-    expect(llm).toEqual({
-      type: 'asset.generate',
-      supported: false,
-      reason: 'ai-provider-content-parts-pending',
-      ref: REF,
-      modality: 'image',
-    });
+    expect(llm).toEqual([
+      { type: 'text', text: `Generated image asset id=${REF.id} mime=${REF.mime} size=${REF.size}` },
+      { type: 'image', image: REF },
+    ]);
   });
 });

@@ -105,7 +105,10 @@ export {
 } from './proposals/asset-generate.js';
 
 export type {
-  AssetGenerateLLMPlaceholder,
+  AssetGenerateLLMContent,
+  AssetGenerateLLMImagePart,
+  AssetGenerateLLMPart,
+  AssetGenerateLLMTextPart,
   AssetGenerateView,
 } from './proposals/asset-generate.js';
 

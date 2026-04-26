@@ -7,7 +7,7 @@
  * through the unified slot/preset system.
  */
 
-import type { LLMAdapter, LLMResponse, LLMStreamEvent, LLMToolDefinition } from './llm-adapter.js';
+import type { LLMAdapter, LLMMessageContent, LLMResponse, LLMStreamEvent, LLMToolDefinition } from './llm-adapter.js';
 
 /**
  * Minimal structural form of `@covel/ai-provider`'s `SlotOverridesInput`.
@@ -36,7 +36,7 @@ export interface GatewayLike {
       presetId?: string;
       messages: Array<{
         role: string;
-        content: string | null;
+        content: LLMMessageContent | null;
         toolCalls?: Array<{ id: string; name: string; arguments: string }>;
         toolCallId?: string;
         reasoningContent?: string;
@@ -61,7 +61,7 @@ export interface GatewayLike {
       presetId?: string;
       messages: Array<{
         role: string;
-        content: string | null;
+        content: LLMMessageContent | null;
         toolCalls?: Array<{ id: string; name: string; arguments: string }>;
         toolCallId?: string;
         reasoningContent?: string;
