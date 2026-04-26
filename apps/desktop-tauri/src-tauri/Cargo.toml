@@ -19,6 +19,7 @@ log = "0.4"
 tauri-plugin-log = "2"
 toml = "1"
 dirs = "6"
+sha2 = "0.10"
 
 [profile.release]
 panic = "abort"

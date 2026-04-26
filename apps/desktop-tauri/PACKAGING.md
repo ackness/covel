@@ -149,7 +149,7 @@ pnpm --filter @covel/desktop-tauri exec tauri icon path/to/source-1024.png
 
 ## Known platform gotchas
 
-- **`withGlobalTauri: true`** (`tauri.conf.json`) exposes `window.__TAURI__` to the splash page. The main UI is served by the Node sidecar on localhost, so the global is only in scope while the splash is showing.
+- **`withGlobalTauri: true`** (`tauri.conf.json`) exposes `window.__TAURI__`. `src-tauri/capabilities/default.json` allows the main localhost UI to call the native media commands.
 - **Sidecar start-up** (`src-tauri/src/sidecar.rs`) spawns `bin/node server/node_modules/tsx/dist/cli.mjs server/src/index.ts` with the Covel env (`SERVER_PORT`, `STORE_BACKEND=sqlite`, `SQLITE_PATH`, `SERVE_STATIC=true`, `STATIC_DIR`, `COVEL_LLM_TOML`, `COVEL_USER_{PLUGINS,WORLDS,CONFIG}_DIR`, `COVEL_WORLDS_DIR`, `COVEL_MEMORY_V1=1`) and polls `GET /api/health` for up to 30 s before the webview navigates to `http://127.0.0.1:<port>/session`.
 - **ABI rebuild**: `prepare-sidecar.mjs` rebuilds `better-sqlite3` against the bundled Node binary's ABI — Tauri never mutates Electron's `apps/desktop/staging/` directly.
 - **macOS x64**: `tauri build --target x86_64-apple-darwin` on an arm64 host requires the x86_64 Rust target installed (`rustup target add x86_64-apple-darwin`) and Rosetta-aware linker settings. If the build fails with a linker error, confirm the target is installed and try a fresh `cargo clean`.

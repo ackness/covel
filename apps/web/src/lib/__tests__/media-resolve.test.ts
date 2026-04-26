@@ -119,6 +119,11 @@ const realIDB = (globalThis as { indexedDB?: unknown }).indexedDB;
 const realFetch = globalThis.fetch;
 const realCreateObjectURL = globalThis.URL.createObjectURL;
 const realRevokeObjectURL = globalThis.URL.revokeObjectURL;
+const realWindowTauri = window.__TAURI__;
+type TauriInvoke = <T = unknown>(
+  command: string,
+  args?: Record<string, unknown>,
+) => Promise<T>;
 
 let createdUrls: string[] = [];
 
@@ -135,6 +140,7 @@ beforeEach(() => {
     return id;
   }) as unknown as typeof URL.createObjectURL;
   globalThis.URL.revokeObjectURL = vi.fn();
+  delete window.__TAURI__;
 });
 
 afterEach(() => {
@@ -146,6 +152,11 @@ afterEach(() => {
   globalThis.fetch = realFetch;
   globalThis.URL.createObjectURL = realCreateObjectURL;
   globalThis.URL.revokeObjectURL = realRevokeObjectURL;
+  if (realWindowTauri === undefined) {
+    delete window.__TAURI__;
+  } else {
+    window.__TAURI__ = realWindowTauri;
+  }
 });
 
 function pngBlob(): Blob {
@@ -201,6 +212,30 @@ describe("resolveMediaSrc", () => {
     expect(result.ok).toBe(true);
     expect(result.url.startsWith("blob:")).toBe(true);
     expect(result.blob).toBeInstanceOf(Blob);
+  });
+
+  it("uses the Tauri native media bridge before the HTTP path", async () => {
+    const invoke = vi.fn(async (command: string, args?: Record<string, unknown>) => {
+      expect(command).toBe("native_media_read");
+      expect(args).toEqual({ id: "sha256-abc" });
+      return {
+        id: "sha256-abc",
+        size: 14,
+        bytes: Array.from(new TextEncoder().encode("fake-png-bytes")),
+      };
+    });
+    window.__TAURI__ = {
+      core: { invoke: invoke as unknown as TauriInvoke },
+    };
+    globalThis.fetch = vi.fn() as unknown as typeof globalThis.fetch;
+
+    const result = await resolveMediaSrc(baseRef, { sessionId: "s-tauri" });
+
+    expect(result.ok).toBe(true);
+    expect(result.fromCache).toBe(true);
+    expect(result.blob).toBeInstanceOf(Blob);
+    expect(result.url.startsWith("blob:")).toBe(true);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it("falls back to media-token endpoint when ref.url is absent (path 3)", async () => {

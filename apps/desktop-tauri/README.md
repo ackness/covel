@@ -62,6 +62,19 @@ Mirrors `apps/desktop/src/main.ts`:
 - Poll `GET /api/health` up to 30s
 - Webview navigates to `http://127.0.0.1:<port>/session`
 
+## Native Media Bridge
+
+The Tauri shell exposes three custom commands for desktop media access:
+
+- `native_media_read({ id })`
+- `native_media_write({ req: { bytes, mime, meta? } })`
+- `native_media_exists({ id })`
+
+They use the same content-addressed filesystem layout as the SQLite
+`MediaStore`: `<data_root>/media/{ab}/{cd}/{sha256}.bin`. The web renderer
+uses this bridge when `window.__TAURI__.core.invoke` is available, then falls
+back to the browser token + fetch + IndexedDB path.
+
 ## Known gaps (MVP)
 
 - Icons: placeholder — run `pnpm tauri icon <path/to/source.png>` to fill in

@@ -9,6 +9,7 @@
 //!   4. Navigate splash to `http://127.0.0.1:<port>/session`
 //!   5. On exit, kill the child.
 
+mod media;
 mod sidecar;
 
 use std::fs;
@@ -139,7 +140,7 @@ max_files   = 10
 "#;
 
 #[derive(serde::Deserialize, Default)]
-struct UserConfig {
+pub(crate) struct UserConfig {
     paths: Option<PathsSection>,
     logging: Option<LoggingSection>,
 }
@@ -156,7 +157,7 @@ struct LoggingSection {
 }
 
 impl UserConfig {
-    fn load(home: &Path) -> Self {
+    pub(crate) fn load(home: &Path) -> Self {
         let cfg_path = home.join("config.toml");
         let Ok(text) = fs::read_to_string(&cfg_path) else {
             return UserConfig::default();
@@ -170,7 +171,7 @@ impl UserConfig {
         }
     }
 
-    fn resolved_data_root(&self, home: &Path) -> PathBuf {
+    pub(crate) fn resolved_data_root(&self, home: &Path) -> PathBuf {
         if let Some(p) = self
             .paths
             .as_ref()
@@ -188,16 +189,22 @@ impl UserConfig {
     }
 
     fn log_max_size_mb(&self) -> u64 {
-        self.logging.as_ref().and_then(|l| l.max_size_mb).unwrap_or(10)
+        self.logging
+            .as_ref()
+            .and_then(|l| l.max_size_mb)
+            .unwrap_or(10)
     }
 
     fn log_max_files(&self) -> u32 {
-        self.logging.as_ref().and_then(|l| l.max_files).unwrap_or(10)
+        self.logging
+            .as_ref()
+            .and_then(|l| l.max_files)
+            .unwrap_or(10)
     }
 }
 
 /// `~/.covel` — cross-platform config root, overridable via COVEL_HOME.
-fn covel_home() -> PathBuf {
+pub(crate) fn covel_home() -> PathBuf {
     if let Ok(custom) = std::env::var("COVEL_HOME") {
         if !custom.is_empty() {
             return PathBuf::from(custom);
@@ -280,11 +287,14 @@ fn main() {
     tauri::Builder::default()
         .plugin(log_builder.build())
         .manage(SidecarState::default())
+        .invoke_handler(tauri::generate_handler![
+            media::native_media_read,
+            media::native_media_write,
+            media::native_media_exists,
+        ])
         .setup(|app| {
             let handle = app.handle().clone();
-            let window = app
-                .get_webview_window("main")
-                .expect("main window missing");
+            let window = app.get_webview_window("main").expect("main window missing");
             let _ = window.show();
 
             tauri::async_runtime::spawn(async move {
@@ -332,4 +342,3 @@ fn kill_sidecar(app_handle: &AppHandle) {
         let _ = child.start_kill();
     }
 }
-
