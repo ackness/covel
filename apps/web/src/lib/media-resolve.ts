@@ -19,7 +19,7 @@
  * the URL trivially from cache.
  */
 
-import type { MediaRef } from "../_stubs/media-types.js";
+import type { MediaRef } from "@covel/shared";
 import {
   getCachedMedia,
   putCachedMedia,

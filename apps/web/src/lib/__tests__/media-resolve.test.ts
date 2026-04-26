@@ -19,7 +19,7 @@ import {
   MEDIA_TOKEN_ENDPOINT,
   __testing,
 } from "../media-resolve.js";
-import type { MediaRef } from "../../_stubs/media-types.js";
+import type { MediaRef } from "@covel/shared";
 
 // ── Inline minimal IDB shim (same shape as media-cache.test.ts) ────
 

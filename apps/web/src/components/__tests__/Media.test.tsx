@@ -16,7 +16,7 @@ import { render, screen, waitFor, cleanup } from "@testing-library/react";
 
 import { Media } from "../Media.js";
 import { __resetMediaCacheForTests } from "../../lib/media-cache.js";
-import type { MediaRef } from "../../_stubs/media-types.js";
+import type { MediaRef } from "@covel/shared";
 
 // ── Inline minimal IDB shim (same shape as media-cache.test.ts) ────
 

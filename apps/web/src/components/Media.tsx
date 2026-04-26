@@ -20,10 +20,8 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { clsx } from "clsx";
-import {
-  isMediaRef,
-  type MediaRef,
-} from "../_stubs/media-types.js";
+import type { MediaRef } from "@covel/shared";
+import { isMediaRef } from "../lib/media-ref-utils.js";
 import { resolveMediaSrc } from "../lib/media-resolve.js";
 
 export type MediaSrc = MediaRef | string;

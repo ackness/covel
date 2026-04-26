@@ -26,7 +26,8 @@ import { useSession } from "@/stores/session-store.js";
 import { useCharacterAttributeSchema } from "@/stores/plugin-data-store.js";
 import { WorldDimensionsPanel } from "@/components/session/world-dimensions-panel.js";
 import { Media as MediaComponent } from "@/components/Media.js";
-import { isMediaRef, type MediaRef } from "@/_stubs/media-types.js";
+import type { MediaRef } from "@covel/shared";
+import { isMediaRef } from "@/lib/media-ref-utils.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
