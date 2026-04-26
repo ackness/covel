@@ -1301,4 +1301,306 @@ describe('POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)', () => {
     expect(images).toHaveLength(1);
     expect((images[0].value as { url: string }).url).toBe('https://cdn.test/a sunset.png');
   });
+
+  // ── Audit P1: background follower aligned with executeTurn lifecycle. ──
+  //
+  // Before P1, the background follower path manually invoked the handler
+  // with a stubbed `recursiveCall` that always threw, no `assetProgress`
+  // emitter, and no per-turn TurnEmitter for `processRuntimeResult`. The
+  // following three tests verify the post-P1 contract: a deferred follower
+  // sees the same `recursiveCall` / `assetProgress` / `asset.generated`
+  // surfaces a manual-trigger turn does.
+
+  // Helper: register a sync target + background follower with the given
+  // follower handler. Mirrors the F1 setup but parameterises the handler
+  // and skips the followerGate/start/finish bookkeeping the F1 case tracks
+  // (we care about emitter/store side effects here, not scheduling order).
+  function setupTargetAndFollower(args: {
+    targetHandler?: FunctionHandler;
+    followerHandler: FunctionHandler;
+    followerSource?: PluginSource;
+  }): {
+    app: Hono;
+    store: DataStore;
+    targetRuntimeId: string;
+    followerRuntimeId: string;
+  } {
+    const TARGET = 'test-p1/target';
+    const FOLLOWER = 'test-p1/follower';
+    const store = createMemoryStore();
+    const pluginRegistry = createPluginRegistry();
+
+    const targetHandler =
+      args.targetHandler ??
+      (async () => ({
+        ok: true,
+        events: [{ topic: 'image.prompt.ready', data: { prompt: 'a sunset' } }],
+      }));
+
+    const { loaded: targetLoaded } = makeFunctionEntry({
+      pluginId: PLUGIN_ID,
+      runtimeId: TARGET,
+      priority: 600,
+      execution: 'sync',
+      handler: targetHandler,
+    });
+
+    const { loaded: followerLoaded } = makeFunctionEntry({
+      pluginId: PLUGIN_ID,
+      runtimeId: FOLLOWER,
+      priority: 610,
+      execution: 'background',
+      handler: args.followerHandler,
+      ...(args.followerSource ? { source: args.followerSource } : {}),
+    });
+    (followerLoaded.manifest as { trigger: unknown }).trigger = {
+      type: 'event',
+      topic: 'image.prompt.ready',
+    };
+
+    const parsedTarget = {
+      manifest: targetLoaded.manifest,
+      promptTemplate: '',
+      referenceLinks: [],
+      rawFrontmatter: {},
+    };
+    const parsedFollower = {
+      manifest: followerLoaded.manifest,
+      promptTemplate: '',
+      referenceLinks: [],
+      rawFrontmatter: {},
+    };
+    pluginRegistry.register({
+      id: PLUGIN_ID,
+      summary: makeSummary(PLUGIN_ID),
+      manifest: parsedTarget,
+      manifests: [parsedTarget, parsedFollower],
+      loadedRuntimes: new Map([
+        [TARGET, targetLoaded],
+        [FOLLOWER, followerLoaded],
+      ]),
+      status: 'registered',
+      source: 'builtin',
+    } as PluginRegistryEntry);
+
+    const rpcRegistry = createPluginRpcRegistry();
+    const rpcExecutor = createRpcExecutor({
+      registry: rpcRegistry,
+      loadHandler: async () => async () => ({}),
+    });
+    const gate = createRpcApprovalGate();
+    const eventBus = createEventBus(store);
+    const sessionLock = createInProcessSessionLock();
+    const llm: FakeLlm = {
+      async generate() {
+        return {
+          content: '',
+          toolCalls: [],
+          finishReason: 'stop',
+          usage: { inputTokens: 0, outputTokens: 0 },
+        };
+      },
+    };
+    const loadRuntimeFn = async (m: RuntimeManifest) =>
+      m.name === TARGET ? targetLoaded : m.name === FOLLOWER ? followerLoaded : undefined;
+    const compactorRunner = { async run() {} };
+
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('store', store);
+      c.set('pluginRegistry', pluginRegistry);
+      c.set('rpcExecutor', rpcExecutor);
+      c.set('rpcRegistry', rpcRegistry);
+      c.set('rpcApprovalGate', gate);
+      c.set('llmAdapter', llm);
+      c.set('loadRuntimeFn', loadRuntimeFn);
+      c.set('toolExecutor', undefined);
+      c.set('resolveModel', () => undefined);
+      c.set('eventBus', eventBus);
+      c.set('compactorRunner', compactorRunner);
+      c.set('sessionLock', sessionLock);
+      c.set('prepareToolsForSession', async () => undefined);
+      await next();
+    });
+    app.route('/api/sessions', pluginRpcRoutes);
+
+    return { app, store, targetRuntimeId: TARGET, followerRuntimeId: FOLLOWER };
+  }
+
+  async function dispatchTargetAndAwaitJobs(
+    app: Hono,
+    store: DataStore,
+    targetRuntimeId: string,
+  ): Promise<{ jobId: string }> {
+    const now = new Date().toISOString();
+    await store.createSession({
+      id: SESSION_ID,
+      worldId: 'cloudmere',
+      status: 'active',
+      turnCount: 1,
+      preGameCompleted: [],
+      locale: 'zh-CN',
+      activePlugins: [PLUGIN_ID],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const res = await app.request(`/api/sessions/${SESSION_ID}/plugin-rpc`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        pluginId: PLUGIN_ID,
+        runtimeId: targetRuntimeId,
+        payload: {},
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      deferredJobs?: ReadonlyArray<{ jobId: string; runtimeId: string }>;
+    };
+    expect(body.deferredJobs).toHaveLength(1);
+    const jobId = body.deferredJobs![0]!.jobId;
+
+    await waitFor(async () => {
+      const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, '_jobs');
+      const row = rows.find((r) => r.key === jobId);
+      const v = row?.value as { status?: string } | undefined;
+      return v?.status === 'done' || v?.status === 'failed';
+    });
+
+    return { jobId };
+  }
+
+  it('background follower can call ctx.recursiveCall without throwing the unavailable stub', async () => {
+    let recursiveCallObserved: 'invoked' | 'threw' | 'unavailable' | 'absent' = 'absent';
+    let observedDepth: number | undefined;
+
+    const { app, store, targetRuntimeId } = setupTargetAndFollower({
+      followerHandler: async (ctx) => {
+        if (typeof ctx.recursiveCall !== 'function') {
+          recursiveCallObserved = 'absent';
+          return { ok: true };
+        }
+        try {
+          // We don't actually need to recurse — calling with a delta that
+          // points at a non-existent runtime resolves to a TurnResult with
+          // an `abortReason`; that still proves the function is wired.
+          const nested = await ctx.recursiveCall(
+            { manualTrigger: { runtimeId: 'nonexistent/leaf' } },
+            { reason: 'p1-recursive-smoke-test' },
+          );
+          recursiveCallObserved = 'invoked';
+          observedDepth = ctx.recursionDepth;
+          return {
+            ok: true,
+            nestedAbort: nested.abortReason ?? null,
+          };
+        } catch (err) {
+          if (
+            err instanceof Error
+            && err.message.includes('recursiveCall is unavailable')
+          ) {
+            recursiveCallObserved = 'unavailable';
+          } else {
+            recursiveCallObserved = 'threw';
+          }
+          throw err;
+        }
+      },
+    });
+
+    const { jobId } = await dispatchTargetAndAwaitJobs(app, store, targetRuntimeId);
+
+    // recursiveCall must be a real function and must NOT throw the
+    // pre-P1 "unavailable" sentinel.
+    expect(recursiveCallObserved).toBe('invoked');
+    expect(observedDepth).toBe(0);
+
+    const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, '_jobs');
+    const row = rows.find((r) => r.key === jobId);
+    const value = row?.value as { status?: string };
+    expect(value?.status).toBe('done');
+  });
+
+  it('background follower emits asset.progress through the per-turn TurnEmitter', async () => {
+    const { app, store, targetRuntimeId } = setupTargetAndFollower({
+      followerHandler: async (ctx) => {
+        await ctx.assetProgress?.({
+          assetId: 'job-bg-1',
+          phase: 'generating',
+          percent: 25,
+          modality: 'image',
+          message: 'queued by deferred follower',
+        });
+        await ctx.assetProgress?.({
+          assetId: 'job-bg-1',
+          phase: 'generating',
+          percent: 75,
+          modality: 'image',
+        });
+        return { ok: true, assetId: 'job-bg-1' };
+      },
+    });
+
+    await dispatchTargetAndAwaitJobs(app, store, targetRuntimeId);
+
+    const traceEvents = await store.listTraceEvents(SESSION_ID);
+    const progressEvents = traceEvents.filter((e) => e.type === 'asset.progress');
+    expect(progressEvents.length).toBeGreaterThanOrEqual(2);
+    const payloads = progressEvents.map(
+      (e) => e.payload as { assetId?: string; percent?: number; runtimeId?: string },
+    );
+    const ours = payloads.filter((p) => p.assetId === 'job-bg-1');
+    expect(ours).toHaveLength(2);
+    expect(ours.every((p) => p.runtimeId === 'test-p1/follower')).toBe(true);
+    expect(ours.map((p) => p.percent).sort()).toEqual([25, 75]);
+  });
+
+  it('background follower asset.generate proposal flows asset.generated through emitter and processRuntimeResult', async () => {
+    // 64-char hex MediaRef id (sha256 shape) so the asset.generate proposal
+    // passes mediaRefSchema validation and reaches the commit fan-out.
+    const ASSET_REF_ID = 'a'.repeat(64);
+
+    const { app, store, targetRuntimeId } = setupTargetAndFollower({
+      followerHandler: async (ctx) => {
+        const event = ctx.triggerEvent as
+          | { topic: string; data: { prompt?: string } }
+          | undefined;
+        return {
+          ok: true,
+          assetGenerations: [
+            {
+              ref: {
+                id: ASSET_REF_ID,
+                mime: 'image/png',
+                size: 1234,
+                url: 'https://cdn.test/bg-image.png',
+              },
+              modality: 'image',
+              meta: { prompt: event?.data?.prompt ?? 'unknown' },
+            },
+          ],
+        };
+      },
+    });
+
+    await dispatchTargetAndAwaitJobs(app, store, targetRuntimeId);
+
+    // asset.generated trace event must have been emitted by the
+    // CommitPipeline (session-kernel) when the follower's asset.generate
+    // proposal was committed. Pre-P1 plugin-rpc passed no emitter into
+    // processRuntimeResult so this fan-out silently no-op'd.
+    const traceEvents = await store.listTraceEvents(SESSION_ID);
+    const generated = traceEvents.filter((e) => e.type === 'asset.generated');
+    expect(generated.length).toBeGreaterThanOrEqual(1);
+    const payload = generated[0]!.payload as {
+      runtimeId?: string;
+      pluginId?: string;
+      asset?: { ref?: { id?: string }; modality?: string };
+    };
+    expect(payload.runtimeId).toBe('test-p1/follower');
+    expect(payload.pluginId).toBe(PLUGIN_ID);
+    expect(payload.asset?.modality).toBe('image');
+    expect(payload.asset?.ref?.id).toBe(ASSET_REF_ID);
+  });
 });
