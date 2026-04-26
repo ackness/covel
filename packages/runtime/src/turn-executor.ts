@@ -2006,7 +2006,10 @@ async function executeOneRuntime(
         ? createPluginLogger(deps.store, helperCtx)
         : undefined;
       const mediaHandle = deps.mediaStore
-        ? createRuntimeMediaContext(deps.mediaStore, deps.utils)
+        ? createRuntimeMediaContext(deps.mediaStore, deps.utils, {
+            sessionId: input.sessionId,
+            pluginId: manifest.pluginId,
+          })
         : undefined;
       // Audit P0-3: third-party (community) function runtimes get a
       // narrowed `FunctionStoreView` so they can't quietly call
@@ -2198,7 +2201,7 @@ async function executeOneRuntime(
         config: guardConfig,
         ...(deps.gateway ? { gateway: deps.gateway } : {}),
         ...(deps.utils ? { utils: deps.utils } : {}),
-        ...(deps.mediaStore ? { media: createRuntimeMediaContext(deps.mediaStore, deps.utils) } : {}),
+        ...(deps.mediaStore ? { media: createRuntimeMediaContext(deps.mediaStore, deps.utils, { sessionId: input.sessionId, pluginId: manifest.pluginId }) } : {}),
         ...(guardManualPayload ? { manualPayload: guardManualPayload } : {}),
         ...(triggerEvent ? { triggerEvent } : {}),
         ...(guardUserSettings ? { userSettings: guardUserSettings } : {}),
