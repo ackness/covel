@@ -198,9 +198,9 @@ describe('normalizeOutput', () => {
   });
 
   describe('asset.generate', () => {
-    it('emits asset.generate proposals from assets[]', () => {
+    it('emits asset.generate proposals from assetGenerations[]', () => {
       const output = {
-        assets: [
+        assetGenerations: [
           { ref: MEDIA_REF, modality: 'image', meta: { prompt: 'forest' } },
         ],
       };
@@ -242,7 +242,7 @@ describe('normalizeOutput', () => {
     it('emits a single plugin.data proposal for one entry', () => {
       const output = {
         pluginData: [
-          { namespace: 'images', key: 'job-1', value: { url: 'https://cdn/x.png' } },
+          { namespace: 'images', key: 'job-1', value: { ref: MEDIA_REF } },
         ],
       };
       const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
@@ -252,15 +252,15 @@ describe('normalizeOutput', () => {
       expect(dataProposals[0].payload).toEqual({
         namespace: 'images',
         key: 'job-1',
-        value: { url: 'https://cdn/x.png' },
+        value: { ref: MEDIA_REF },
       });
     });
 
     it('batches multiple entries into a single plugin.data.batch proposal', () => {
       const output = {
         pluginData: [
-          { namespace: 'images', key: 'job-1', value: { url: 'a' } },
-          { namespace: 'images', key: 'job-2', value: { url: 'b' } },
+          { namespace: 'images', key: 'job-1', value: { ref: MEDIA_REF } },
+          { namespace: 'images', key: 'job-2', value: { ref: MEDIA_REF } },
           { namespace: '_jobs', key: 'j1', value: { status: 'done' } },
         ],
       };
@@ -270,7 +270,7 @@ describe('normalizeOutput', () => {
       expect(batches).toHaveLength(1);
       const payload = batches[0].payload as { items: ReadonlyArray<Record<string, unknown>> };
       expect(payload.items).toHaveLength(3);
-      expect(payload.items[0]).toEqual({ namespace: 'images', key: 'job-1', value: { url: 'a' } });
+      expect(payload.items[0]).toEqual({ namespace: 'images', key: 'job-1', value: { ref: MEDIA_REF } });
       expect(payload.items[2]).toEqual({ namespace: '_jobs', key: 'j1', value: { status: 'done' } });
     });
 
@@ -1045,7 +1045,7 @@ describe('processRuntimeResult', () => {
     const emitter = makeEmitterSpy(SESSION_ID, TURN_ID);
     const store = createMockStore();
     const result = makeRuntimeResult({
-      assets: [
+      assetGenerations: [
         { ref: MEDIA_REF, modality: 'image', meta: { prompt: 'forest' } },
       ],
     });
@@ -1072,7 +1072,7 @@ describe('processRuntimeResult', () => {
     expect(emitter.events.find((e) => e.type === 'asset.generated')).toBeDefined();
   });
 
-  it('records a warning when image generation finishes without a valid asset proposal', async () => {
+  it('reports an error when image generation finishes without a valid asset proposal', async () => {
     const store = createMockStore();
     const result = makeRuntimeResult({
       assetGenerations: [
@@ -1085,14 +1085,30 @@ describe('processRuntimeResult', () => {
     });
 
     expect(events).toHaveLength(0);
-    expect(failedProposals).toHaveLength(0);
+    expect(failedProposals).toHaveLength(1);
+    expect(failedProposals[0]).toMatchObject({
+      error: 'image.generate.asset_missing',
+      proposal: {
+        type: 'asset.generate',
+        source: {
+          pluginId: 'test-plugin',
+          runtimeId: 'test-runtime',
+        },
+        turnId: TURN_ID,
+        sessionId: SESSION_ID,
+        payload: {
+          error: 'image.generate.asset_missing',
+          proposalCount: 0,
+        },
+      },
+    });
     expect(store.setPluginData).toHaveBeenCalledOnce();
     expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
       sessionId: SESSION_ID,
       pluginId: 'test-plugin',
       namespace: '_logs',
       value: {
-        level: 'warn',
+        level: 'error',
         message: 'image.generate.asset_missing',
         meta: {
           pluginId: 'test-plugin',
@@ -1109,7 +1125,7 @@ describe('processRuntimeResult', () => {
   it('keeps image generation logs empty when a valid asset proposal commits', async () => {
     const store = createMockStore();
     const result = makeRuntimeResult({
-      assets: [
+      assetGenerations: [
         { ref: MEDIA_REF, modality: 'image', meta: { prompt: 'forest' } },
       ],
     });
@@ -1121,6 +1137,54 @@ describe('processRuntimeResult', () => {
     expect(events).toHaveLength(1);
     expect(failedProposals).toHaveLength(0);
     expect(store.setPluginData).not.toHaveBeenCalled();
+  });
+
+  it('reports an error when image generation writes inline media into pluginData.images', async () => {
+    const store = createMockStore();
+    const result = makeRuntimeResult({
+      assetGenerations: [
+        { ref: MEDIA_REF, modality: 'image', meta: { prompt: 'forest' } },
+      ],
+      pluginData: [
+        { namespace: 'images', key: 'job-1', value: { status: 'done', url: 'https://cdn/x.png' } },
+      ],
+    });
+
+    const { events, failedProposals } = await processRuntimeResult(result, store as any, SESSION_ID, 'plugin', {
+      capabilities: ['image-generation'],
+    });
+
+    expect(events).toHaveLength(0);
+    expect(failedProposals).toHaveLength(1);
+    expect(failedProposals[0]).toMatchObject({
+      error: 'image.generate.plugin_data_inline_media',
+      proposal: {
+        type: 'plugin.data',
+        payload: {
+          namespace: 'images',
+          key: 'job-1',
+          value: { status: 'done', url: 'https://cdn/x.png' },
+        },
+      },
+    });
+    expect(store.addMessage).not.toHaveBeenCalled();
+    expect(store.setPluginData).toHaveBeenCalledOnce();
+    expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
+      sessionId: SESSION_ID,
+      pluginId: 'test-plugin',
+      namespace: '_logs',
+      value: {
+        level: 'error',
+        message: 'image.generate.plugin_data_inline_media',
+        meta: {
+          pluginId: 'test-plugin',
+          runtimeId: 'test-runtime',
+          turnId: TURN_ID,
+        },
+        turnId: TURN_ID,
+        runtimeId: 'test-runtime',
+      },
+    });
   });
 
   it('keeps image generation logs empty for pending async asset outputs', async () => {

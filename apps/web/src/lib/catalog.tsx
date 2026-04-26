@@ -1558,23 +1558,21 @@ const SubmitButton: ComponentRenderer = ({ element, emit }) => {
 };
 
 /**
- * Image — renders a remote or inlined image.
+ * Image — renders an image asset through MediaRef resolution.
  *
  * Props:
- *   src:      URL or `data:` URI (falls back to base64 + mimeType when URL absent).
- *   base64:   raw base64 (no prefix); combined with `mimeType` into a data URI.
- *   mimeType: e.g. "image/png"; defaults to "image/png".
+ *   ref:      MediaRef object returned by an asset.generate proposal.
+ *   src:      MediaRef object accepted for early plugin specs.
  *   alt:      accessibility fallback.
  *   aspectRatio: "1/1" | "16/9" | "3/4" | string — CSS aspect-ratio.
  *   rounded:  "none" | "sm" | "md" | "lg" — border-radius scale.
  *   fit:      "cover" | "contain" — object-fit behaviour (default "cover").
  *
- * When both `src` and `base64` are empty, renders a muted placeholder so the
- * layout does not collapse. Pure-text fallback avoids any broken-image glyph.
+ * When no MediaRef is bound, renders a muted placeholder so the layout stays
+ * stable and no broken-image glyph appears.
  */
 /**
- * Pick the appropriate radius utility class. Kept local so both the
- * legacy base64/url path and the new MediaRef path share the same scale.
+ * Pick the appropriate radius utility class for Image and Media placeholders.
  */
 function imageRadiusCls(rounded: string): string {
   if (rounded === "none") return "rounded-none";
@@ -1625,7 +1623,6 @@ const ImageComponent: ComponentRenderer = ({ element }) => {
   const rounded = (props.rounded as string | undefined) ?? "md";
   const fit = (props.fit as "cover" | "contain" | undefined) ?? "cover";
 
-  // ── Path 1: MediaRef (new) — delegate to <Media> for cache + token resolve.
   const ref = extractMediaRef(props);
   if (ref) {
     const overrideSession =
@@ -1645,46 +1642,18 @@ const ImageComponent: ComponentRenderer = ({ element }) => {
     );
   }
 
-  // ── Path 2: legacy base64 / url — preserved verbatim for back-compat.
-  const rawSrc = typeof props.src === "string" ? (props.src as string) : undefined;
-  const base64 = props.base64 as string | undefined;
-  const mimeType = (props.mimeType as string | undefined) ?? "image/png";
   const radiusCls = imageRadiusCls(rounded);
-
-  const src =
-    rawSrc && rawSrc.length > 0
-      ? rawSrc
-      : base64 && base64.length > 0
-      ? `data:${mimeType};base64,${base64}`
-      : null;
-
-  if (!src) {
-    return (
-      <div
-        className={clsx(
-          "bg-muted border border-border flex items-center justify-center",
-          radiusCls,
-        )}
-        style={{ aspectRatio }}
-        aria-label={alt || "image placeholder"}
-      >
-        <span className="text-[10px] text-muted-foreground/70 font-mono">no image</span>
-      </div>
-    );
-  }
-
   return (
-    <img
-      src={src}
-      alt={alt}
-      loading="lazy"
+    <div
       className={clsx(
-        "w-full block",
+        "bg-muted border border-border flex items-center justify-center",
         radiusCls,
-        fit === "contain" ? "object-contain" : "object-cover",
       )}
       style={{ aspectRatio }}
-    />
+      aria-label={alt || "image placeholder"}
+    >
+      <span className="text-[10px] text-muted-foreground/70 font-mono">no image</span>
+    </div>
   );
 };
 
@@ -1699,7 +1668,6 @@ const MediaCatalogComponent: ComponentRenderer = ({ element }) => {
   const sessionId = useActiveSessionId();
   const props = element.props ?? {};
   const ref = extractMediaRef(props);
-  const stringSrc = typeof props.src === "string" ? (props.src as string) : null;
 
   const overrideSession =
     typeof props.sessionId === "string" && props.sessionId.length > 0
@@ -1712,7 +1680,7 @@ const MediaCatalogComponent: ComponentRenderer = ({ element }) => {
   const fit = (props.fit as "cover" | "contain" | undefined) ?? "cover";
   const as = (props.as as "image" | "audio" | "video" | "auto" | undefined) ?? "auto";
 
-  if (!ref && !stringSrc) {
+  if (!ref) {
     return (
       <div
         className={clsx(
@@ -1729,7 +1697,7 @@ const MediaCatalogComponent: ComponentRenderer = ({ element }) => {
 
   return (
     <MediaComponent
-      src={ref ?? (stringSrc as string)}
+      src={ref}
       sessionId={overrideSession}
       alt={alt}
       aspectRatio={aspectRatio}

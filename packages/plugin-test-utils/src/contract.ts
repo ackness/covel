@@ -21,8 +21,8 @@ interface AssetCandidate {
 /**
  * Assert that a runtime result or turn result emitted an `asset.generate` payload.
  *
- * Accepts the same output shapes that the runtime normalizer consumes:
- * `output.assets[]` and `output.assetGenerations[]`.
+ * Accepts the output shape consumed by the runtime normalizer:
+ * `output.assetGenerations[]`.
  *
  * @returns The first matching asset payload.
  *
@@ -41,7 +41,7 @@ export function expectAssetGenerated(
   const candidates = collectAssetCandidates(source);
 
   if (candidates.length === 0) {
-    throw new Error('Expected asset.generate output in output.assets[] or output.assetGenerations[]');
+    throw new Error('Expected asset.generate output in output.assetGenerations[]');
   }
 
   const validAssets = candidates
@@ -89,10 +89,7 @@ function collectFromRuntimeResult(result: RuntimeResult, path: string): AssetCan
 }
 
 function collectFromOutput(output: RuntimeOutput, path: string): AssetCandidate[] {
-  return [
-    ...collectArray(output.assets, `${path}.assets`),
-    ...collectArray(output.assetGenerations, `${path}.assetGenerations`),
-  ];
+  return collectArray(output.assetGenerations, `${path}.assetGenerations`);
 }
 
 function collectArray(value: unknown, path: string): AssetCandidate[] {

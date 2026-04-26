@@ -19,6 +19,7 @@
 | 看所有已实现插件的 frontmatter、调度层级、capabilities 标签 | [docs/reference/plugins.md](../reference/plugins.md) |
 | 写 json-render UI 面板（`ui.right` / `ui.message`） | [docs/guide/plugin-ui-runtime-guidelines.md](./plugin-ui-runtime-guidelines.md) |
 | 写生命周期 hook（工具调用前校验、commit 前审批、审计日志） | [docs/reference/plugins.md#hooks](../reference/plugins.md#hooks) |
+| 写图像生成 / 媒体资产插件 | [docs/guide/plugin-authoring-advanced.md#图像生成的设计](./plugin-authoring-advanced.md#图像生成的设计) · [docs/reference/media-store.md](../reference/media-store.md) |
 | 写单元 / 集成 / 真实 LLM E2E 测试 | [docs/guide/plugin-testing.md](./plugin-testing.md) · [docs/guide/e2e-plugin-verify.md](./e2e-plugin-verify.md) |
 | 看内置工具完整清单 + 审批策略 | [docs/reference/tools.md](../reference/tools.md) |
 | 看 prompt 如何组装（10 段 + cache_control） | [docs/reference/prompt-structure.md](../reference/prompt-structure.md) |

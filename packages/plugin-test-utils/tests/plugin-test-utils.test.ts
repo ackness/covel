@@ -67,11 +67,11 @@ const MEDIA_REF = {
 };
 
 describe('expectAssetGenerated', () => {
-  it('accepts output.assets[] with MediaRef payload', () => {
+  it('accepts output.assetGenerations[] with MediaRef payload', () => {
     const asset = expectAssetGenerated(
       makeRuntimeResult({
         output: {
-          assets: [{ ref: MEDIA_REF, modality: 'image', meta: { prompt: 'mountain' } }],
+          assetGenerations: [{ ref: MEDIA_REF, modality: 'image', meta: { prompt: 'mountain' } }],
         },
       }),
       { modality: 'image' },
@@ -102,18 +102,18 @@ describe('expectAssetGenerated', () => {
 
   it('fails when no asset was emitted', () => {
     expect(() => expectAssetGenerated(makeRuntimeResult())).toThrow(
-      'Expected asset.generate output in output.assets[] or output.assetGenerations[]',
+      'Expected asset.generate output in output.assetGenerations[]',
     );
   });
 
   it('fails when the MediaRef shape is invalid', () => {
-    expect(() => expectAssetGenerated({ assets: [{ ref: { id: 'short' }, modality: 'image' }] })).toThrow(
+    expect(() => expectAssetGenerated({ assetGenerations: [{ ref: { id: 'short' }, modality: 'image' }] })).toThrow(
       'Expected asset.generate payload with MediaRef shape',
     );
   });
 
   it('fails when expected modality is absent', () => {
-    expect(() => expectAssetGenerated({ assets: [{ ref: MEDIA_REF, modality: 'audio' }] }, 'image')).toThrow(
+    expect(() => expectAssetGenerated({ assetGenerations: [{ ref: MEDIA_REF, modality: 'audio' }] }, 'image')).toThrow(
       'Expected asset.generate modality "image", received audio',
     );
   });

@@ -133,7 +133,7 @@ export function normalizeOutput(
     }
   }
 
-  // asset.generate — from output.assets[] and output.assetGenerations[].
+  // asset.generate — from output.assetGenerations[].
   // Accepted entry shape: { ref: MediaRef, modality: string, meta?: object }.
   for (const asset of collectAssetGenerations(output)) {
     proposals.push(makeProposal('asset.generate', source, turnId, sessionId, {
@@ -864,7 +864,28 @@ export async function processRuntimeResult(
   );
   proposals.push(...getPendingProposals(result.output));
 
-  await warnOnMissingImageAsset(result, store, sessionId, proposals, opts?.capabilities);
+  const imageGenerationFailures: Array<{ proposal: Proposal; error: string }> = [];
+  const missingAssetFailure = await enforceImageAssetOutput(
+    result,
+    store,
+    sessionId,
+    proposals,
+    opts?.capabilities,
+  );
+  if (missingAssetFailure) {
+    imageGenerationFailures.push(missingAssetFailure);
+  }
+  const inlineMediaFailures = await enforceImagePluginDataRefs(
+    result,
+    store,
+    sessionId,
+    proposals,
+    opts?.capabilities,
+  );
+  imageGenerationFailures.push(...inlineMediaFailures);
+  if (imageGenerationFailures.length > 0) {
+    return { events: [], failedProposals: imageGenerationFailures };
+  }
 
   if (proposals.length === 0) {
     return empty;
@@ -913,7 +934,7 @@ export async function processRuntimeResult(
   return { events, failedProposals };
 }
 
-async function warnOnMissingImageAsset(
+async function enforceImageAssetOutput(
   result: {
     pluginId: string;
     runtimeId: string;
@@ -925,27 +946,83 @@ async function warnOnMissingImageAsset(
   sessionId: string,
   proposals: readonly Proposal[],
   capabilities: readonly string[] | undefined,
-): Promise<void> {
-  if (!capabilities?.includes('image-generation')) return;
-  if (isPendingAssetOutput(result.output)) return;
+): Promise<{ proposal: Proposal; error: string } | null> {
+  if (!capabilities?.includes('image-generation')) return null;
+  if (isPendingAssetOutput(result.output)) return null;
 
   const hasAssetGenerate = proposals.some(
     (proposal) => proposal.type === 'asset.generate' && isAssetGeneratePayload(proposal.payload),
   );
-  if (hasAssetGenerate) return;
+  if (hasAssetGenerate) return null;
 
+  const message = 'image.generate.asset_missing';
+  await writeImageGenerationErrorLog(store, sessionId, result, message, {
+    proposalCount: proposals.length,
+  });
+
+  return {
+    proposal: makeProposal(
+      'asset.generate',
+      { pluginId: result.pluginId, runtimeId: result.runtimeId },
+      result.turnId,
+      sessionId,
+      { error: message, proposalCount: proposals.length },
+    ),
+    error: message,
+  };
+}
+
+async function enforceImagePluginDataRefs(
+  result: {
+    pluginId: string;
+    runtimeId: string;
+    turnId: string;
+    status: string;
+    output: Record<string, unknown> | null;
+  },
+  store: KernelStore,
+  sessionId: string,
+  proposals: readonly Proposal[],
+  capabilities: readonly string[] | undefined,
+): Promise<Array<{ proposal: Proposal; error: string }>> {
+  if (!capabilities?.includes('image-generation')) return [];
+
+  const offenders = proposals.filter(hasInlineImagePluginData);
+  if (offenders.length === 0) return [];
+
+  const message = 'image.generate.plugin_data_inline_media';
+  await writeImageGenerationErrorLog(store, sessionId, result, message, {
+    proposalIds: offenders.map((proposal) => proposal.id),
+  });
+
+  return offenders.map((proposal) => ({
+    proposal,
+    error: message,
+  }));
+}
+
+async function writeImageGenerationErrorLog(
+  store: KernelStore,
+  sessionId: string,
+  result: {
+    pluginId: string;
+    runtimeId: string;
+    turnId: string;
+  },
+  message: string,
+  extraMeta: Record<string, unknown>,
+): Promise<void> {
   const now = new Date();
   const nowIso = now.toISOString();
   const key = `${now.getTime().toString(36).padStart(9, '0')}-${crypto.randomUUID().slice(0, 8)}`;
-  const message = 'image.generate.asset_missing';
   const value = {
-    level: 'warn',
+    level: 'error',
     message,
     meta: {
       pluginId: result.pluginId,
       runtimeId: result.runtimeId,
       turnId: result.turnId,
-      proposalCount: proposals.length,
+      ...extraMeta,
     },
     turnId: result.turnId,
     runtimeId: result.runtimeId,
@@ -966,11 +1043,11 @@ async function warnOnMissingImageAsset(
       });
       return;
     } catch {
-      // Fall through to console warning so the missing asset remains visible.
+      // Fall through to console error so the failed output remains visible.
     }
   }
 
-  console.warn(
+  console.error(
     '[session-kernel] %s for runtime %s (session %s, turn %s)',
     message,
     result.runtimeId,
@@ -986,6 +1063,55 @@ function isPendingAssetOutput(output: Record<string, unknown> | null): boolean {
     || status === 'running'
     || status === 'processing'
     || status === 'in_progress';
+}
+
+function hasInlineImagePluginData(proposal: Proposal): boolean {
+  if (proposal.type === 'plugin.data') {
+    return isInlineImagePluginDataItem(proposal.payload);
+  }
+  if (proposal.type !== 'plugin.data.batch') return false;
+
+  const payload = proposal.payload as { items?: unknown };
+  if (!Array.isArray(payload.items)) return false;
+  return payload.items.some((item) => isInlineImagePluginDataItem(item));
+}
+
+function isInlineImagePluginDataItem(item: unknown): boolean {
+  if (!item || typeof item !== 'object') return false;
+  const payload = item as { namespace?: unknown; value?: unknown };
+  if (payload.namespace !== 'images') return false;
+  return containsInlineMediaField(payload.value);
+}
+
+function containsInlineMediaField(value: unknown, seen = new Set<object>()): boolean {
+  if (!value || typeof value !== 'object') return false;
+  if (seen.has(value)) return false;
+  seen.add(value);
+  if (looksLikeMediaRef(value)) return false;
+
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (key === 'ref' && looksLikeMediaRef(child)) continue;
+    if (
+      (key === 'base64' || key === 'dataUrl' || key === 'url')
+      && typeof child === 'string'
+      && child.length > 0
+    ) {
+      return true;
+    }
+    if (containsInlineMediaField(child, seen)) return true;
+  }
+  return false;
+}
+
+function looksLikeMediaRef(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const ref = value as Record<string, unknown>;
+  return typeof ref.id === 'string'
+    && ref.id.length > 0
+    && typeof ref.mime === 'string'
+    && ref.mime.length > 0
+    && typeof ref.size === 'number'
+    && Number.isFinite(ref.size);
 }
 
 // ── Trace Recorder ──────────────────────────────────────────────
@@ -1074,7 +1200,6 @@ function collectUiBlocks(
 
 function collectAssetGenerations(output: Record<string, unknown>): AssetGeneratePayload[] {
   const assets: AssetGeneratePayload[] = [];
-  appendAssets(output.assets, assets);
   appendAssets(output.assetGenerations, assets);
   return assets;
 }

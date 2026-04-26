@@ -1146,6 +1146,44 @@ curl "http://localhost:3001/api/sessions/<sessionId>/turns?limit=5"
 }
 ```
 
+**图像/媒体生成输出:**
+
+Function runtime 的完成态可返回 `assetGenerations[]`。每一项会被提交为 `asset.generate` proposal,并以 MediaRef 形式进入 trace / SSE / 视图层。
+
+```json
+{
+  "assetGenerations": [
+    {
+      "ref": {
+        "id": "media_01HX...",
+        "mime": "image/png",
+        "sha256": "..."
+      },
+      "modality": "image",
+      "meta": {
+        "prompt": "A misty harbor stairway",
+        "provider": "openai",
+        "model": "gpt-image-1"
+      }
+    }
+  ],
+  "pluginData": [
+    {
+      "namespace": "images",
+      "key": "img_01HX...",
+      "value": {
+        "status": "done",
+        "ref": { "id": "media_01HX...", "mime": "image/png", "sha256": "..." }
+      }
+    }
+  ]
+}
+```
+
+Provider-specific wire responses such as OpenAI `b64_json`, SDK `base64`, or expiring remote image URLs are transient handler inputs. The handler must call `ctx.media.put()` for bytes/base64 or `ctx.media.ingestUrl()` for remote URLs before returning, then expose the generated media through `assetGenerations[].ref` and ref-only business records.
+
+For plugins with `capabilities: ["image-generation"]`, a successful completed runtime must return at least one valid `assetGenerations[]` entry. `pluginData` records in the `images` namespace must store `ref` records; completed outputs with old `url`, `base64`, or `dataUrl` image fields are reported as runtime errors.
+
 **响应 202 — runtime 级,background 模式:**
 
 ```json

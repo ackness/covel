@@ -202,7 +202,10 @@ Put cases in `tests/runtime-cases.json` under the plugin root:
       "expect": {
         "events": ["image.generate.requested"],
         "pluginData": [
-          { "namespace": "images", "status": "done", "field": "url" }
+          { "namespace": "images", "status": "done", "field": "ref" }
+        ],
+        "assetGenerations": [
+          { "modality": "image", "field": "ref" }
         ],
         "logs": [
           "image.generate.started",
@@ -231,7 +234,7 @@ pnpm test:runtime -- \
   --pretty
 ```
 
-`--mode mock` is the default. It uses a fake LLM and a synthetic `ctx.gateway.resolveSlot()` config, good for fast CI and handler debugging. Since image-generation wire is plugin-owned (no framework `generateImage`), image plugins typically reach the SSRF guard or HTTP layer in mock mode and surface a `failed` runtime status with a useful error — declare that as the expected outcome via `expect.runtimeResults[].status: "failed"`. `--mode live` builds the real provider gateway from `llm.toml` plus `~/.covel/keys.env`, runs the same in-process runtime kernel, executes deferred background followers, writes `_jobs`, `_logs`, and `plugin_data`, then prints the final rows including generated image URLs / base64.
+`--mode mock` is the default. It uses a fake LLM and a synthetic `ctx.gateway.resolveSlot()` config, good for fast CI and handler debugging. Since image-generation wire is plugin-owned (no framework `generateImage`), image plugins typically reach the SSRF guard or HTTP layer in mock mode and surface a `failed` runtime status with a useful error — declare that as the expected outcome via `expect.runtimeResults[].status: "failed"`. `--mode live` builds the real provider gateway from `llm.toml` plus `~/.covel/keys.env`, runs the same in-process runtime kernel, executes deferred background followers, writes `_jobs`, `_logs`, and `plugin_data`, then prints final rows with MediaRef-backed image records and `assetGenerations`.
 
 ## CLI: run one runtime from `~/.covel/plugins`
 

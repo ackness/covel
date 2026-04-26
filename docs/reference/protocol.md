@@ -82,6 +82,24 @@
 
 `plugin-data-set` / `plugin-data-set-batch` / DELETE `/plugin-data/...` 等所有写路径均会触发此事件。`operation` 字段为 `'set'` 或 `'delete'`（删除时 `value` 为 `null`），由 `wrapStoreWithPluginDataEvents` 在 store 层统一拦截，前端可实时响应插件状态变更。
 
+### 媒体资产事件
+
+图像生成插件的完成态输出使用 `assetGenerations[]`。runtime normalizer 会把每一项转成 `asset.generate` proposal,并在 commit 后写入 trace / SSE 视图。
+
+```ts
+type AssetGeneration = {
+  ref: MediaRef;
+  modality: string;      // e.g. "image", "audio", "video", "file"
+  meta?: Record<string, unknown>;
+};
+```
+
+`ref` 必须来自 `ctx.media.put()` 或 `ctx.media.ingestUrl()`。provider wire 层可短暂收到 `b64_json`、远程临时 URL 或 SDK 字节结果；handler 在返回前完成 MediaStore ingest,然后只通过 `assetGenerations[]` 和业务索引记录暴露 `MediaRef`。
+
+图像画廊类插件仍可用 `plugin_data.images` 保存查询索引,索引值保存 `{ status, ref, prompt, ... }`。`Image` / `Media` 组件消费 `MediaRef`,由框架解析为展示 URL。
+
+声明 `image-generation` capability 的插件在完成态缺少 `assetGenerations[]` 时会产生 `image.generate.asset_missing` error。`plugin_data.images` 中出现旧 `url` / `base64` / `dataUrl` 字段时会产生 `image.generate.plugin_data_inline_media` error。
+
 **保留命名空间 `_jobs`（后台任务协议）:**
 
 `POST /api/sessions/:id/plugin-rpc` 的 runtime 级 + `execution: background` 分支使用 `_jobs` 命名空间写回任务进度：

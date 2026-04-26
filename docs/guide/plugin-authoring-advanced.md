@@ -276,7 +276,7 @@ if (slot) {
 }
 ```
 
-> **图像生成的设计:** 框架**不**提供 `gateway.generateImage`。图像 wire(OpenAI Images / DashScope wan2.x 异步轮询 / Replicate / fal 队列 / Midjourney)各家差异极大,集中适配器收益小、维护成本高。插件通过 `resolveSlot` 拿凭据后**自管** HTTP 形态:可以用 Vercel AI SDK、`openai` SDK、原生 fetch、自写状态机。新增图像格式 = ship 一个插件,框架不动。参考 `dashscope-image-gen` / `openai-image-gen` 两个内置实现。
+> **图像生成的设计:** 框架提供 `resolveSlot` / `ctx.media` / `asset.generate` 三个稳定原语。图像 wire(OpenAI Images / DashScope wan2.x 异步轮询 / Replicate / fal 队列 / Midjourney)由插件自管:可以用 Vercel AI SDK、`openai` SDK、原生 fetch、自写状态机。provider 返回的 `b64_json` 或临时 URL 只作为 wire 层响应处理,handler 必须立即写入 `ctx.media.put()` 或 `ctx.media.ingestUrl()`,完成态返回 `assetGenerations[]`。参考 `dashscope-image-gen` / `openai-image-gen` 两个内置实现。
 
 > **结构化 JSON 输出(未在函数 runtime 中可用,审计 F9):** `ctx.gateway.generateObject`
 > 需要宿主向 gateway 注入 JSON Schema → Zod 的转换器,目前组合根未接入。若需要
@@ -341,7 +341,7 @@ handler: ./handler.js
 
 **background 下的两个强约束:**
 
-1. 插件**禁止**直接写 `_jobs` 命名空间 —— 框架独占。业务状态请写到自己的命名空间(如 `images/{jobId}` `{status: 'pending'}` → `{status: 'ready', url: ...}`)。
+1. 插件**禁止**直接写 `_jobs` 命名空间 —— 框架独占。业务状态请写到自己的命名空间(如 `images/{jobId}` `{status: 'pending'}` → `{status: 'ready', ref: ...}`)。
 2. `setImmediate` 中抛出的异常**不会**映射为 5xx —— 响应已发。失败信息会被框架写入 `_jobs/<jobId>.value.error`,前端通过 SSE 感知。
 
 **事件链 chain:** 无论 sync 还是 background,runtime emit 的 `event.emit` proposal 都会按 priority 触发同一 turn 内的下游 runtime,不需要额外协调。这让"按钮 → prompt-generator (agent) → image-generator (function, background)"这种多步 pipeline 完全声明式。
@@ -401,14 +401,36 @@ export default async function handler(ctx) {
   const payload = await response.json();
   const first = payload.data?.[0] ?? {};
   const mimeType = 'image/png';
+  let ref = null;
+  if (typeof first.b64_json === 'string') {
+    ref = await ctx.media.put(Buffer.from(first.b64_json, 'base64'), mimeType, {
+      prompt,
+      provider: slot.provider,
+      model: slot.model,
+    });
+  } else if (typeof first.url === 'string') {
+    ref = await ctx.media.ingestUrl(first.url, {
+      allowedMimes: ['image/png', 'image/jpeg', 'image/webp'],
+      meta: { prompt, provider: slot.provider, model: slot.model },
+    });
+  }
+  if (!ref) throw new Error('image provider returned no usable media');
 
   return {
-    // output JSON for downstream runtimes / trace
-    url: first.url ?? (first.b64_json ? `data:${mimeType};base64,${first.b64_json}` : null),
-    base64: first.b64_json ?? null,
-    // framework picks this up → commits one plugin.data proposal
+    imageId: ctx.turnId,
+    status: 'done',
+    ref,
+    // framework picks this up → commits one plugin.data proposal for gallery indexing
     pluginData: [
-      { namespace: 'images', key: ctx.turnId, value: { ...first, mimeType } },
+      { namespace: 'images', key: ctx.turnId, value: { status: 'done', ref, prompt, mimeType } },
+    ],
+    // framework normalizes this to Proposal{ type: 'asset.generate' }
+    assetGenerations: [
+      {
+        ref,
+        modality: 'image',
+        meta: { prompt, provider: slot.provider, model: slot.model },
+      },
     ],
   };
 }

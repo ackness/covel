@@ -1,10 +1,8 @@
 /**
  * `<Media>` — generic frontend renderer for SPEC §5.1 (g) MediaRef payloads.
  *
- * Routes a `MediaRef | string` source into one of `<img>`, `<audio>`,
- * `<video>`, or a download `<a>` based on MIME.  String `src` is treated
- * as a literal URL for backward compatibility with existing plugin specs
- * that pre-date the MediaRef migration.
+ * Routes a `MediaRef` source into one of `<img>`, `<audio>`, `<video>`,
+ * or a download `<a>` based on MIME.
  *
  * - Resolves through `resolveMediaSrc` (IDB cache → ref.url → token endpoint
  *   → 1x1 PNG sentinel).
@@ -24,7 +22,7 @@ import type { MediaRef } from "@covel/shared";
 import { isMediaRef } from "../lib/media-ref-utils.js";
 import { resolveMediaSrc } from "../lib/media-resolve.js";
 
-export type MediaSrc = MediaRef | string;
+export type MediaSrc = MediaRef;
 
 export interface MediaProps {
   readonly src: MediaSrc;
@@ -88,29 +86,15 @@ export function Media(props: MediaProps): ReactElement {
     as = "auto",
   } = props;
 
-  // Normalise input. `string` src skips resolution entirely (backward
-  // compat with the legacy <Image> spec).
-  const isRef = typeof src !== "string" && isMediaRef(src);
-  const refMime = isRef ? (src as MediaRef).mime : "";
-  const refForResolve = isRef ? (src as MediaRef) : null;
+  const refForResolve = isMediaRef(src) ? src : null;
+  const refMime = refForResolve?.mime ?? "";
 
-  const [state, setState] = useState<ResolvedState>(() => {
-    if (typeof src === "string") {
-      return { url: src, fromCache: true, status: "ready" };
-    }
-    return INITIAL_STATE;
-  });
+  const [state, setState] = useState<ResolvedState>(INITIAL_STATE);
 
   // Track last revoke target so we don't revoke the URL for the next render.
   const revokeRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // String src: nothing to fetch.
-    if (typeof src === "string") {
-      setState({ url: src, fromCache: true, status: "ready" });
-      return;
-    }
-
     if (!refForResolve) {
       setState({ url: "", fromCache: false, status: "error" });
       return;
@@ -147,11 +131,11 @@ export function Media(props: MediaProps): ReactElement {
       }
     };
     // sessionId rarely changes, but it does affect token scoping.
-  }, [refForResolve, sessionId, src]);
+  }, [refForResolve, sessionId]);
 
   const kind: RenderKind = useMemo(
-    () => pickRenderKind(refMime || guessMimeFromUrl(state.url), as),
-    [refMime, state.url, as],
+    () => pickRenderKind(refMime, as),
+    [refMime, as],
   );
 
   const radius = radiusClass(rounded);
@@ -246,23 +230,4 @@ export function Media(props: MediaProps): ReactElement {
       {alt || "Download"}
     </a>
   );
-}
-
-/**
- * Best-effort mime sniff from a URL when we only have a string source.
- * Used for the legacy string-src path so the component still routes to
- * the right element (<audio>/<video>) when the plugin spec passes a CDN
- * URL with a useful extension.
- */
-function guessMimeFromUrl(url: string): string {
-  if (!url) return "";
-  const lower = url.toLowerCase().split("?")[0];
-  if (/\.(png|jpe?g|gif|webp|avif|bmp|svg)$/.test(lower)) return "image/*";
-  if (/\.(mp3|wav|ogg|m4a|flac)$/.test(lower)) return "audio/*";
-  if (/\.(mp4|webm|mov|m4v)$/.test(lower)) return "video/*";
-  if (lower.startsWith("data:")) {
-    const semi = url.indexOf(";");
-    if (semi > 5) return url.slice(5, semi);
-  }
-  return "";
 }

@@ -159,6 +159,10 @@ interface CaseExpectations {
     readonly status?: string;
     readonly field?: string;
   }[];
+  readonly assetGenerations?: readonly {
+    readonly modality?: string;
+    readonly field?: string;
+  }[];
 }
 
 interface CaseAssertion {
@@ -179,7 +183,7 @@ interface CaseArtifact {
   readonly namespace: string;
   readonly key: string;
   readonly path: string;
-  readonly source: 'url' | 'base64' | 'media';
+  readonly source: 'media';
   readonly mimeType?: string;
 }
 
@@ -528,7 +532,34 @@ function evaluateExpectations(
       message: `pluginData:${expected.namespace}`,
     });
   }
+  for (const expected of expect.assetGenerations ?? []) {
+    const matched = collectAssetGenerations(result.runtimeResults).some((asset) => {
+      if (expected.modality && asset.modality !== expected.modality) return false;
+      if (expected.field && !(expected.field in asset)) return false;
+      return true;
+    });
+    assertions.push({
+      status: matched ? 'passed' : 'failed',
+      message: `assetGenerations:${expected.modality ?? '*'}`,
+    });
+  }
   return assertions;
+}
+
+function collectAssetGenerations(runtimeResults: readonly RuntimeResult[]): ReadonlyArray<Record<string, unknown>> {
+  const assets: Record<string, unknown>[] = [];
+  for (const runtimeResult of runtimeResults) {
+    const output = runtimeResult.output;
+    if (!output || typeof output !== 'object') continue;
+    const assetGenerations = (output as Record<string, unknown>).assetGenerations;
+    if (!Array.isArray(assetGenerations)) continue;
+    for (const asset of assetGenerations) {
+      if (asset && typeof asset === 'object') {
+        assets.push(asset as Record<string, unknown>);
+      }
+    }
+  }
+  return assets;
 }
 
 function isExpectedRuntimeFailure(
@@ -611,7 +642,7 @@ async function saveImageArtifacts(args: {
   const saveImages = args.config?.saveImages;
   if (!saveImages) return [];
   const namespace = saveImages.namespace ?? 'images';
-  const field = saveImages.field ?? 'url';
+  const field = saveImages.field ?? 'ref';
   const rows = args.result.pluginData[namespace] ?? [];
   const outDir = path.resolve(args.pluginRoot, saveImages.dir ?? 'tests/tmp');
   fs.mkdirSync(outDir, { recursive: true });
@@ -643,38 +674,6 @@ async function saveImageArtifacts(args: {
         mimeType: maybeRef.mime,
       });
       continue;
-    }
-
-    const url = maybeRef;
-    if (typeof url === 'string' && /^https?:\/\//.test(url)) {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`failed to download image artifact ${url}: ${response.status} ${response.statusText}`);
-      }
-      const bytes = Buffer.from(await response.arrayBuffer());
-      fs.writeFileSync(filePath, bytes);
-      artifacts.push({
-        type: 'image',
-        namespace,
-        key: row.key,
-        path: filePath,
-        source: 'url',
-        ...(mimeType ? { mimeType } : {}),
-      });
-      continue;
-    }
-
-    const base64 = record.base64;
-    if (typeof base64 === 'string' && base64.length > 0) {
-      fs.writeFileSync(filePath, Buffer.from(base64, 'base64'));
-      artifacts.push({
-        type: 'image',
-        namespace,
-        key: row.key,
-        path: filePath,
-        source: 'base64',
-        ...(mimeType ? { mimeType } : {}),
-      });
     }
   }
   return artifacts;

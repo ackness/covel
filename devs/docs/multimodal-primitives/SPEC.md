@@ -24,13 +24,13 @@
 
 - `ctx.media` 注入方式贴合现有 `FunctionHandlerContext`：`ctx.gateway`、`ctx.utils`、`ctx.pluginData` 已经是同一风格，落点是 `packages/plugin-loader/src/types.ts`、`packages/runtime/src/plugin-handler-helpers.ts`、`packages/runtime/src/turn-executor.ts`。
 - `MediaStore` 适合沿用 store 层 contract-test 模式：`packages/store/src/contract/*` 已有 store/vector 合约，新增 `media-store-contract.ts` 即可复用测试结构。
-- 前端当前是 json-render catalog，`Image` 组件已支持 `src/base64`；`Media` 组件或 `Image` 的 `{ ref }` 支持都贴合现有 UI 模型。
+- 前端当前是 json-render catalog，`Image` 组件以 `MediaRef` 为主输入；`Media` 组件与 `Image` 的 `{ ref }` 输入都贴合现有 UI 模型。
 - commit `d9caf04` 的方向已和当前代码一致：高层 `generateImage` adapter 已移除，插件通过 `ctx.gateway.resolveSlot()` 自管 wire，框架提供 slot / SSRF / retry 原语。
 
 **推荐推进顺序**
 
 1. P0-a：`MediaRef`、`MediaStore` 最小版、`ctx.media.put/get/resolveUrl/ingestUrl`、`/api/media/:id`、`Image/Media` 组件支持 ref。
-2. P0-b：`asset.generate` 接入 kernel：normalizer 接收 `output.assets[]`，commit handler 落 trace/SSE，web 按 `modality` 渲染。
+2. P0-b：`asset.generate` 接入 kernel：normalizer 接收 `output.assetGenerations[]`，commit handler 落 trace/SSE，web 按 `modality` 渲染。
 3. P0-c：迁移两个图像插件：handler 写 `ctx.media.put/ingestUrl`，`plugin_data.images` 保留索引记录，UI 读 `ref`。
 4. P0-d：确认本地旧 DB 已重置，补 snapshot/fork 媒体引用，完成端到端回归。
 5. P1：Hook 语义、`asset.generate` 局部 view/LLM helper、ToolClient 统一。
@@ -273,7 +273,7 @@ interface FunctionHandlerContext {
 具体接入点：
 
 ```
-runtime handler `output.assets[]`  →  normalizeOutput()  →  Proposal{ type: 'asset.generate' }
+runtime handler `output.assetGenerations[]`  →  normalizeOutput()  →  Proposal{ type: 'asset.generate' }
   →  PreStateCommit hook chain  →  commit handler 持久化  →  trace_events
   →  SessionEvent  →  SSE 推前端  →  按 modality 渲染
 ```
@@ -352,7 +352,7 @@ Fork session 时由 commit handler 扫描 snapshot 内容（深度遍历找 `{ i
 - `MemoryStore` —— 测试 / 默认 dev 跑 in-memory Map
 - `SqliteStore + local-fs` —— 桌面默认（`<covelHome>/media/{ab}/{cd}/<sha256>.bin`）
 - `/api/media/:id` 服务端读
-- 前端 `<Media src={ref}>` + IDB blob 缓存层
+- 前端 `<Media ref={ref}>` / `<Image ref={ref}>` + IDB blob 缓存层
 
 PG+S3 / IdbStore / Tauri 命令路径作为后续后端适配（Phase 2），按需补全。
 
@@ -370,13 +370,13 @@ PG+S3 / IdbStore / Tauri 命令路径作为后续后端适配（Phase 2），按
 | `packages/runtime/src/session-kernel.ts` | `normalizeOutput()` 加 `asset.generate` 路径；commit handler 加 `asset.generate` 处理 |
 | `apps/server/src/routes/api/media.ts`（新） | `GET /api/media/:id?token=...` 流式输出（含签名校验） |
 | `apps/server/src/middleware/media-token.ts`（新） | HMAC-SHA256 签名 + 5 分钟 TTL |
-| `apps/web/src/components/Media.tsx`（新） | 通用 `<Media src={ref}>` 组件 + IDB blob 缓存 |
+| `apps/web/src/components/Media.tsx`（新） | 通用 `<Media ref={ref}>` / `<Image ref={ref}>` 组件 + IDB blob 缓存 |
 | `packages/runtime/src/snapshot-payload-builder.ts` + `apps/server/src/routes/api/snapshots.ts` | `SnapshotPayload` 加 `mediaRefs`；fork 时复制 `media_refs` 行 |
-| `packages/runtime/src/turn-emitter.ts` | trace 写入检测 base64 字段超过 8KB 自动转 ref（兜底） |
+| `packages/runtime/src/turn-emitter.ts` | trace 写入按 `asset.generate` 视图输出 `MediaRef` |
 
 #### 旧代码可清理（具体迁移步骤）
 
-两个图像插件目前都把字节当 base64 写进 `plugin-data.images`，可以**一次性迁到 MediaStore**。具体改动（每个 handler ~10 行）：
+P0-c 前两个图像插件把字节当 base64 写进 `plugin-data.images`，迁移后统一写入 MediaStore。具体改动（每个 handler ~10 行）：
 
 **openai-image-gen/runtimes/image-generator/handler.js**
 
@@ -823,7 +823,7 @@ capabilities:
 | `packages/shared/src/types/proposal.ts` | `AssetGeneratePayload` 收紧为强制 `ref: MediaRef` + `modality: string` |
 | `packages/shared/src/schemas/proposal.ts`（如有） | Zod schema 拒绝 inline base64/blob 字段 |
 | `apps/web/src/components/asset-render/` | 按 `modality` 路由：image→gallery、audio→player、其他→generic-link |
-| `packages/runtime/src/session-kernel.ts` | **运行期** warning：插件声明 `capabilities: ['image-generation']` 且完成态输出没 emit `asset.generate`，在插件 `_logs` 写 `image.generate.asset_missing` warn；异步 `pending/queued/running/processing` 中间态跳过 warning。Codex 评审 #8 指出加载期无法静态判断 emit 行为，必须移到运行期 |
+| `packages/runtime/src/session-kernel.ts` | **运行期** error：插件声明 `capabilities: ['image-generation']` 且完成态输出没 emit `asset.generate`，在插件 `_logs` 写 `image.generate.asset_missing` error；`pluginData.images` 出现旧 `url` / `base64` / `dataUrl` 字段时写 `image.generate.plugin_data_inline_media` error；异步 `pending/queued/running/processing` 中间态跳过缺失资产检查。Codex 评审 #8 指出加载期无法静态判断 emit 行为，必须移到运行期 |
 | `packages/plugin-test-utils/src/contract.ts`（新） | 插件作者写 harness test 时可调 `expectAssetGenerated()` 断言，发布前在 CI 跑 |
 
 #### 现有图像插件迁移清单
@@ -832,7 +832,7 @@ capabilities:
 
 **1. handler 层**：见 § 5.1 P0-a 旧代码清理段——`base64`/`url`/`dataUrl` 字段全部换成 `ref: MediaRef`。
 
-**2. 输出 proposal 层**：当前 handler 通过 `pluginData: [...]` 字段把 `images` namespace 的记录写入 plugin-data，**保留这条路径**（画廊查询索引），**额外**emit 一条 `asset.generate` proposal：
+**2. 输出 proposal 层**：当前 handler 通过 `pluginData: [...]` 字段把 `images` namespace 的记录写入 plugin-data，**保留这条路径**（画廊查询索引），同时返回 `assetGenerations[]`，由 normalizer 生成 `asset.generate` proposal：
 
 ```js
 return {
@@ -846,18 +846,15 @@ return {
     key: imageId,
     value: { ...record, ref: primaryRef },  // ref-only record
   }],
-  proposals: [{
-    type: 'asset.generate',
-    payload: {
-      ref: primaryRef,
-      modality: 'image',
-      meta: { prompt, model: resolvedModel, provider: slot.provider, imageId },
-    },
+  assetGenerations: [{
+    ref: primaryRef,
+    modality: 'image',
+    meta: { prompt, model: resolvedModel, provider: slot.provider, imageId },
   }],
 };
 ```
 
-**3. UI 层**：当前两个插件各画了一份 `gallery.json` / `jobs.json` / `generate-button.json`。三个 spec 都引用 `plugin-data.images.<imageId>.url`（旧字段），需要改成 `plugin-data.images.<imageId>.ref` 然后由框架的 `<Media src={ref}>` 组件解析（解析逻辑在 P0-a 提供的通用组件里）。
+**3. UI 层**：当前两个插件各画了一份 `gallery.json` / `jobs.json` / `generate-button.json`。三个 spec 都引用 `plugin-data.images.<imageId>.ref`，由框架的 `<Image ref={ref}>` / `<Media ref={ref}>` 组件解析（解析逻辑在 P0-a 提供的通用组件里）。
 
 **4. 重复 UI 收敛**：dashscope 和 openai 两个插件 UI 高度雷同（gallery 列表、jobs 队列、generate 按钮）。P0 允许两个插件继续保留各自 UI；等两个插件都迁完后，把 `gallery.json` / `jobs.json` 提取成框架级 spec（放 `packages/shared/json-render-presets/`），插件只声明引用。这是 P2 级清理，P0-a/P0-b/P0-c 可先推进。
 
@@ -898,7 +895,7 @@ return {
 - `media_assets` + `media_refs` 两张表 schema
 - `ctx.media.put` / `get` / `resolveUrl` / `ingestUrl` 注入到 `FunctionHandlerContext`
 - `GET /api/media/:id?token=...` 流式输出 + HMAC 签名校验中间件（Codex 评审 #9）
-- 前端 `<Media src={ref}>` 组件 + IDB blob 缓存层
+- 前端 `<Media ref={ref}>` / `<Image ref={ref}>` 组件 + IDB blob 缓存层
 - contract test：`packages/store/src/contract/media-store-contract.ts`
 - 这一阶段只新增能力；插件迁移从 P0-c 开始。
 
@@ -906,7 +903,7 @@ return {
 
 > Codex 评审 #1 指出当前 `session-kernel.normalizeOutput()` 还缺 `asset.generate` 路径，必须先把这条路径打通才能让 P0-c 的插件迁移有意义。
 
-- `session-kernel.ts` 的 `normalizeOutput()` 接收 runtime handler 的 `output.assets[]` / `output.assetGenerations[]`，转成 `Proposal{ type: 'asset.generate' }`
+- `session-kernel.ts` 的 `normalizeOutput()` 接收 runtime handler 的 `output.assetGenerations[]`，转成 `Proposal{ type: 'asset.generate' }`
 - commit handler 落 `asset.generate`（持久化、写 `trace_events`、emit `SessionEvent`、推 SSE）
 - `ui.render` / `record.upsert` 作为后续独立任务登记在 P2/P3
 - 写 `assetGenerateToView()` helper（§ 5.2）
@@ -917,7 +914,7 @@ return {
 ### P0-c：图像插件迁移到 MediaStore（1 周）
 
 - 按 § 5.1 P0-a 的具体 diff 改 dashscope-image-gen / openai-image-gen handler（每个 ~10 行）
-- 两个插件改成额外 emit `asset.generate` proposal（payload `{ ref, modality: 'image', meta }`）
+- 两个插件返回 `assetGenerations[]`，由 normalizer emit `asset.generate` proposal（payload `{ ref, modality: 'image', meta }`）
 - DashScope 把 OSS URL 改用 `ctx.media.ingestUrl(first.url)`，顺便修掉 24h 过期问题
 - `plugin_data.images` 保留作为画廊查询索引，`value` 里只存 ref；新生成图片进入 MediaStore，本地旧 DB 已按 P0-d 重置
 
@@ -935,7 +932,7 @@ return {
 - [x] 文档（`docs/reference/plugins.md` + `docs/guide/plugin-authoring.md`）补充 hook 语义表
 - [x] `assetGenerateToLLM()` 真正生效：`@covel/ai-provider` 已支持 `TextMessage.content` content parts 联合，OpenAI / Anthropic adapter 各自按 provider 编码（Codex 评审 #10）
 - [x] ToolClient 接口落地（builtin / local 工具统一走 `InMemoryToolClient`）
-- [x] 运行期 warning：插件声明 `capabilities: ['image-generation']` 且完成态输出没 emit `asset.generate` → `_logs/image.generate.asset_missing` warn（Codex 评审 #8）
+- [x] 运行期 error：插件声明 `capabilities: ['image-generation']` 且完成态输出没 emit `asset.generate` → `_logs/image.generate.asset_missing` error（Codex 评审 #8）
 - [x] plugin-test-utils 新增 `expectAssetGenerated()` 合约断言
 - [x] P1 类型收尾：`MockLLM` 跟随多模态 `LLMAdapter.generate` 签名，`FullGatewayLike.generateObject` 与 ai-provider Zod schema 签名对齐
 
@@ -955,10 +952,11 @@ P2 集成备注：
 
 ### P3：清理 + 强制约束（1 周）
 
-- 删除 `MessageBlock` / `proposal.payload` 里所有兼容 base64 字段的 shim
-- 运行期 warning 升级为 error
-- 文档全量更新（`docs/reference/plugins.md`、`docs/guide/plugin-authoring.md`、`docs/reference/protocol.md`）
-- 删除旧 inline 媒体兼容分支
+- [x] 删除 `MessageBlock` / `proposal.payload` 里所有兼容 base64 字段的 shim
+- [x] 运行期 `image.generate.asset_missing` warning 升级为 error
+- [x] 文档全量更新：`Image` 组件、插件高级编写、插件测试、protocol/API 参考统一到 `MediaRef` / `assetGenerations[]`
+- [x] 删除旧 inline 媒体兼容分支
+- [x] `image-generation` 插件的 `pluginData.images` 运行期拒绝旧 `url` / `base64` / `dataUrl` 字段
 
 ---
 
@@ -1002,7 +1000,7 @@ P2 集成备注：
 | **半年后启动** | 已有 5-10 个插件按旧模式写，迁移成本可能是现在的 3 倍 |
 | **现在启动** | 7 阶段共 9-13 周（详见 § 6 迁移计划修订版），从 P0-a 基础设施一直到 P3 强制约束。两个图像插件的 handler 改动量仍小（每个 ~10 行），但 `asset.generate` 端到端接入 kernel 是新增的真实工作量（P0-b 1-2 周） |
 
-**建议先完成 P0-a/b/c/d**：MediaRef 基础设施、`asset.generate` kernel 接入、两个图像插件迁移、旧 DB 重置与 snapshot/fork 收尾。这条链路完成后，当前图像插件就能从 base64 存储切换到 ref 存储。
+**建议推进 P1/P2 后续能力**：P0-a/b/c/d 已完成 MediaRef 基础设施、`asset.generate` kernel 接入、两个图像插件迁移、旧 DB 重置与 snapshot/fork 收尾。当前图像插件已从 base64 存储切换到 ref 存储。
 
 P1/P2（Hook 语义、LLM content parts、ToolClient、recursiveCall、ui.render parts）可以在 P0 稳定后按真实插件需求推进。
 
@@ -1017,7 +1015,7 @@ P1/P2（Hook 语义、LLM content parts、ToolClient、recursiveCall、ui.render
 - [ ] HMAC 签名 token 的 TTL 设多久？5 分钟够前端展示，但批量画廊翻页可能需要更长
 
 **`asset.generate` 端到端（P0-b）**
-- [ ] runtime 输出 schema 用 `output.assets[]` 还是 `output.assetGenerations[]`？（命名一致性）
+- [x] runtime 输出 schema 统一使用 `output.assetGenerations[]`
 - [ ] 一个 turn 里同一插件 emit 多个 asset.generate 时，commit 顺序是否需要保证？
 
 **LLM content parts（P1 阻塞 P0-b 完整实现）**
@@ -1040,7 +1038,7 @@ P1/P2（Hook 语义、LLM content parts、ToolClient、recursiveCall、ui.render
 2. 如果决定推进 → 按 § 6 修订后的 P0-a/b/c/d + P1/P2/P3 阶段落地：
    - **P0-a**（1 周）：MediaRef 最小基础设施（Memory + SQLite/local-fs 两后端 + 签名 token + `<Media>` 组件）
    - **P0-b**（1-2 周）：`asset.generate` 端到端接入 kernel（normalizer + commit handler + SSE + web renderer）
-   - **P0-c**（1 周）：两个图像插件迁移到 `ctx.media.put` + emit `asset.generate`
+   - **P0-c**（1 周）：两个图像插件迁移到 `ctx.media.put` / `ctx.media.ingestUrl()` + 返回 `assetGenerations[]`
    - **P0-d**（1 周）：本地旧 DB 重置 + snapshot/fork 媒体引用收尾
    - **P1**（2-3 周）：Hook 语义、`assetGenerateToLLM` 落地（依赖 ai-provider content parts）、ToolClient 统一
    - **P2**（2-3 周）：扩展后端（PG/S3/IDB/Tauri）+ recursiveCall + ui.render parts
@@ -1113,8 +1111,8 @@ packages/tools/src/client.ts                   ← ToolClient 接口
 #### Finding 3: 图像插件用 `event` + `background` 模拟 hook 行为
 两个图像插件都是 "agent prompt-generator emit event → function image-generator 监听执行" 的两段式。这本质上是**用事件机制做了 hook 该做的事**——P1 Hook 语义 + P2 `recursiveCall` 可以让这种模式更轻量。
 
-#### Finding 4: 图像插件全部用 base64 入 plugin-data ⚠️（commit d9caf04 后仍然如此）
-两个图像插件的 `image-generator` handler 把 base64 直接写到 `plugin-data.images` namespace：
+#### Finding 4: 图像插件 base64 入 plugin-data 的历史问题 ✅
+P0-c 之前,两个图像插件的 `image-generator` handler 把 base64 直接写到 `plugin-data.images` namespace：
 
 ```js
 // dashscope-image-gen/runtimes/image-generator/handler.js
@@ -1129,9 +1127,9 @@ const mimeType = typeof first.mediaType === 'string' ? first.mediaType : 'image/
 const dataUrl = base64 ? `data:${mimeType};base64,${base64}` : null;
 ```
 
-一张 1024×1024 PNG 的 base64 ≈ 1.5 MB。如果一个 session 生成 50 张图，`plugin_data` 表的 jsonb 字段会膨胀到 75 MB。**这正是 P0-a MediaRef 要解决的痛点**。
+一张 1024×1024 PNG 的 base64 ≈ 1.5 MB。如果一个 session 生成 50 张图，`plugin_data` 表的 jsonb 字段会膨胀到 75 MB。**这正是 P0-a MediaRef 已解决的痛点**。
 
-> **commit `d9caf04` 后的现状**：wire 层已完美拆出（dashscope 自己包 wan2.x 异步轮询、openai 用 Vercel AI SDK v6），但**存储层仍是 base64 入 jsonb**。这是 P0-a 的剩余空间——把 base64 → MediaRef，让 `plugin_data.images` 只存引用。
+> **P3 后现状**：wire 层保持插件自管（dashscope 自己包 wan2.x 异步轮询、openai 用 Vercel AI SDK v6），存储层统一通过 `ctx.media.put()` / `ctx.media.ingestUrl()` 进入 MediaStore，`plugin_data.images` 只存 `MediaRef` 索引。
 
 #### Finding 4b: 框架已有部分原语（d9caf04 引入）✅
 新 commit 已经把这些原语放进 `ctx`：
@@ -1142,7 +1140,7 @@ const dataUrl = base64 ? `data:${mimeType};base64,${base64}` : null;
 | `ctx.utils.validateBaseUrl(url)` | `@covel/ai-provider/plugin-utils.ts` | SSRF guard（RFC1918 + cloud metadata） |
 | `ctx.utils.fetchWithRetry(url, init)` | 同上 | 指数退避 + Retry-After 处理 |
 
-**这意味着 P0-a MediaStore 是这套原语集合里"最后一个缺的"**——存储原语缺位，所以插件还在用 plugin-data 当存储兜底。补上 MediaStore 后，`ctx.media.put(...)` 与上述三个原语并列，插件就有完整的"L1 Media 原语集"。
+**P0-a MediaStore 已补齐 L1 Media 原语集**：`ctx.media.put(...)` 与上述三个原语并列，插件拥有完整的 wire / fetch / storage 路径。
 
 #### Finding 5: 全部 UI 是 JSON spec，无 React .tsx
 这意味着采用 § 5.5 的 `UIRenderPart` 部分类型化路径**无需迁移自定义 React 组件**——只需升级 json-render 的 schema 即可。

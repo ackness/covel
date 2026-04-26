@@ -2,7 +2,6 @@
  * Behavioural tests for `<Media>`.
  *
  * Covers:
- *   - string src (back-compat) renders <img> directly
  *   - MediaRef → image / audio / video routing by mime
  *   - sentinel placeholder when resolution fails
  *   - blob URL revoked on unmount
@@ -171,15 +170,6 @@ function setFetchAlwaysFails(): void {
 // ── Tests ──────────────────────────────────────────────────────────
 
 describe("<Media>", () => {
-  it("renders a plain <img> for string src (back-compat path)", () => {
-    render(
-      <Media src="https://example.com/a.png" sessionId="s" alt="hello" />,
-    );
-    const img = screen.getByAltText("hello") as HTMLImageElement;
-    expect(img.tagName).toBe("IMG");
-    expect(img.src).toBe("https://example.com/a.png");
-  });
-
   it("renders <img> for MediaRef with image mime", async () => {
     const ref: MediaRef = {
       id: "img-1",

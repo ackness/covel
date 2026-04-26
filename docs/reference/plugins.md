@@ -542,6 +542,8 @@ execution: background  # wan2.x 文生图需要几十秒,不阻塞 UI
 | `image-generation` | 图像生成 | 前端展示「生成配图」按钮 |
 | `memory-panel` | 核心记忆面板宿主 | 记忆系统将核心记忆块镜像到该插件的 plugin-data，用于实时 UI 面板更新 |
 
+声明 `image-generation` 的 runtime 在完成态返回 `assetGenerations[]`，每一项包含 `{ ref: MediaRef, modality: "image", meta? }`。图像画廊索引写入 `plugin_data.images` 时保存 `{ status, ref, prompt, ... }`，运行时会把旧 `url` / `base64` / `dataUrl` 字段记录为 `image.generate.plugin_data_inline_media` error。
+
 插件可以声明任意自定义能力标签。框架仅依赖上述已定义标签。
 
 **API 暴露**: Session plugins API（`GET /api/sessions/:id/plugins`）在响应中返回每个插件的 `capabilities` 字段（从所有子 runtime 的 manifest 中聚合），前端可据此发现插件能力。示例响应片段：
