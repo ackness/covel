@@ -142,6 +142,7 @@ const lenientHookDeclarationSchema = z.object({
   handler: z.string().min(1),
   match: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
   timeoutMs: z.number().int().positive().optional(),
+  enforce: z.enum(['pre', 'normal', 'post']).optional(),
 });
 
 /** Regex to extract markdown links pointing to `references/` paths. */

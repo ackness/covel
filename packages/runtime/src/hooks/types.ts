@@ -19,6 +19,21 @@ export type HookEvent =
   | 'PostStateCommit'
   | 'TurnStop';
 
+export type HookSemantic = 'first' | 'sequential' | 'parallel' | 'stream';
+
+export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
+  TurnStart: 'parallel',
+  PreRuntime: 'sequential',
+  PostRuntime: 'parallel',
+  PreToolUse: 'sequential',
+  PostToolUse: 'parallel',
+  PreStateCommit: 'sequential',
+  PostStateCommit: 'parallel',
+  TurnStop: 'parallel',
+};
+
+export type HookEnforce = 'pre' | 'normal' | 'post';
+
 // ── Hook context (read-only metadata about the current hook site) ──
 
 export interface HookContext {
@@ -36,9 +51,9 @@ export interface HookContext {
 /**
  * Result returned by a hook handler.
  *
- * - `continue` — pipeline proceeds; optional `replace` is shallow-merged into the payload.
- * - `abort` — pipeline stops; for Pre* hooks the operation is prevented.
- *   For Post* hooks the abort is logged only (operation already happened).
+ * - `continue` — pipeline proceeds.
+ * - `continue` + `replace` — sequential hooks shallow-merge into the next payload.
+ * - `abort` — sequential hooks stop the pipeline; parallel hooks record the abort.
  */
 export type HookResult<P> =
   | { readonly action: 'continue' }
@@ -65,20 +80,22 @@ export interface HookRegistration<P = unknown> {
   readonly handler: HookHandler<P>;
   /** Per-handler timeout in ms. Default 5000. */
   readonly timeoutMs?: number;
+  /** Ordering group. Default normal. */
+  readonly enforce?: HookEnforce;
 }
 
 // ── Hook pipeline interface ──────────────────────────────────────
 
 export interface HookPipelineRun<P> {
   /**
-   * Run all registered handlers for the given event in order.
-   * Returns the final HookResult (with accumulated `replace` payload).
+   * Run all registered handlers for the given event using HOOK_SEMANTICS.
+   * Sequential hooks return accumulated `replace`; parallel hooks return continue.
    */
   run<Q extends P>(
     event: HookEvent,
     ctx: HookContext,
     payload: Q,
-    opts?: { readonly eventBus?: EventBus },
+    opts?: { readonly eventBus?: EventBus; readonly emitter?: unknown },
   ): Promise<HookResult<Q>>;
 }
 
@@ -96,4 +113,6 @@ export interface HookDeclaration {
   readonly match?: Readonly<Record<string, string | number>>;
   /** Per-handler timeout in ms. Default 5000. */
   readonly timeoutMs?: number;
+  /** Ordering group. Default normal. */
+  readonly enforce?: HookEnforce;
 }

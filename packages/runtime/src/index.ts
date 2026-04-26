@@ -84,9 +84,12 @@ export type { PromptMessage } from './prompt-delta.js';
 
 // ── Hook Pipeline ────────────────────────────────────────────────
 export { HookPipeline, createHookPipeline, registerPluginHooks } from './hooks/index.js';
+export { HOOK_SEMANTICS } from './hooks/index.js';
 export type { PluginHookSource, RegisterPluginHooksOptions } from './hooks/index.js';
 export type {
   HookEvent,
+  HookSemantic,
+  HookEnforce,
   HookContext,
   HookResult,
   HookHandler,

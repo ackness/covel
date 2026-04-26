@@ -125,7 +125,7 @@ describe('Turn executor hook wire-in', () => {
       expect(result.abortReason).toBeUndefined();
     });
 
-    it('returns minimal TurnResult with abortReason when TurnStart hook aborts', async () => {
+    it('keeps executing when TurnStart observer hook returns abort', async () => {
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();
       pipeline.register({
@@ -137,10 +137,9 @@ describe('Turn executor hook wire-in', () => {
       const deps = await makeDeps(llm, pipeline);
       const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
 
-      expect(result.runtimeResults).toHaveLength(0);
-      expect(result.abortReason).toBe('access denied');
-      // LLM was never called
-      expect(llm.calls).toHaveLength(0);
+      expect(result.runtimeResults).toHaveLength(1);
+      expect(result.abortReason).toBeUndefined();
+      expect(llm.calls).toHaveLength(1);
     });
   });
 
@@ -240,7 +239,7 @@ describe('Turn executor hook wire-in', () => {
   });
 
   describe('PostRuntime hook replace', () => {
-    it('rewrites RuntimeResult when PostRuntime returns replace', async () => {
+    it('keeps RuntimeResult unchanged when PostRuntime observer returns replace', async () => {
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();
 
@@ -263,7 +262,7 @@ describe('Turn executor hook wire-in', () => {
       const deps = await makeDeps(llm, pipeline);
       const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
 
-      expect(result.runtimeResults[0].output).toMatchObject({ _hookModified: true });
+      expect(result.runtimeResults[0].output).toMatchObject({ narrativeOutput: 'default response' });
     });
   });
 

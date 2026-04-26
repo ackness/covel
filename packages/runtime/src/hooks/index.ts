@@ -3,6 +3,7 @@
  */
 
 export { HookPipeline, createHookPipeline } from './pipeline.js';
+export { HOOK_SEMANTICS } from './types.js';
 export {
   registerPluginHooks,
   type PluginHookSource,
@@ -10,6 +11,8 @@ export {
 } from './register-plugin-hooks.js';
 export type {
   HookEvent,
+  HookSemantic,
+  HookEnforce,
   HookContext,
   HookResult,
   HookHandler,

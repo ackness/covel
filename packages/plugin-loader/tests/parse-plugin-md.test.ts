@@ -451,6 +451,7 @@ describe('parsePluginMd', () => {
           '  - event: PreToolUse',
           '    handler: ./hooks/validate.ts',
           '    timeoutMs: 3000',
+          '    enforce: pre',
           '    match:',
           '      tool: create-character',
           '  - event: PostStateCommit',
@@ -466,6 +467,7 @@ describe('parsePluginMd', () => {
         event: 'PreToolUse',
         handler: './hooks/validate.ts',
         timeoutMs: 3000,
+        enforce: 'pre',
         match: { tool: 'create-character' },
       });
       expect(result.manifest.hooks![1]).toMatchObject({
