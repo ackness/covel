@@ -1,0 +1,112 @@
+diff --color -ruN /Users/wuyong/.covel/plugins/openai-image-gen.bak-p0c-20260426-185742/runtimes/image-generator/handler.js /Users/wuyong/.covel/plugins/openai-image-gen/runtimes/image-generator/handler.js
+--- /Users/wuyong/.covel/plugins/openai-image-gen.bak-p0c-20260426-185742/runtimes/image-generator/handler.js	2026-04-26 18:57:42
++++ /Users/wuyong/.covel/plugins/openai-image-gen/runtimes/image-generator/handler.js	2026-04-26 19:01:33
+@@ -150,7 +150,7 @@
+ 
+ /** @type {import('@covel/plugin-loader').FunctionHandler} */
+ export default async function imageGeneratorHandler(ctx) {
+-  const { turnId, gateway, utils, userSettings, pluginData, logger } = ctx;
++  const { turnId, gateway, utils, userSettings, pluginData, logger, media } = ctx;
+ 
+   if (!gateway || typeof gateway.resolveSlot !== 'function') {
+     return {
+@@ -162,6 +162,15 @@
+     };
+   }
+ 
++  if (!media || typeof media.put !== 'function') {
++    return {
++      status: 'failed',
++      error:
++        'ctx.media.put is unavailable. This plugin requires Covel framework ' +
++        'with the MediaStore primitives (P0-a). Upgrade @covel/server / @covel/runtime.',
++    };
++  }
++
+   const extracted = extractPrompt(ctx);
+   if (!extracted) {
+     await logger?.warn?.('no-prompt-found', {
+@@ -325,20 +334,28 @@
+       );
+     }
+ 
+-    const base64 = typeof first.base64 === 'string' ? first.base64 : null;
+-    const mimeType = typeof first.mediaType === 'string' ? first.mediaType : 'image/png';
+-    const dataUrl = base64 ? `data:${mimeType};base64,${base64}` : null;
+-
++    // Put each image into MediaStore — content-addressable, dedup-friendly,
++    // never inline base64 in plugin_data again. ctx.media.put auto-records
++    // ownership against this runtime, so snapshots / forks pick them up.
++    const refs = await Promise.all(
++      images.map(async (img) => {
++        const bytes = img.uint8Array ?? Buffer.from(img.base64, 'base64');
++        const mime = typeof img.mediaType === 'string' ? img.mediaType : 'image/png';
++        return media.put(bytes, mime, {
++          prompt,
++          model: resolvedModel,
++          n,
++          imageSize,
++          provider: slot.provider,
++        });
++      }),
++    );
++    const primaryRef = refs[0];
+     const record = {
+       ...baseRecord,
+       status: 'done',
+-      url: dataUrl,
+-      base64,
+-      mimeType,
+-      all: images.map((img) => ({
+-        base64: typeof img.base64 === 'string' ? img.base64 : null,
+-        mimeType: typeof img.mediaType === 'string' ? img.mediaType : 'image/png',
+-      })),
++      ref: primaryRef,
++      ...(refs.length > 1 ? { refs } : {}),
+       completedAt,
+       durationMs: Date.parse(completedAt) - Date.parse(startedAt),
+     };
+@@ -350,10 +367,25 @@
+     return {
+       imageId,
+       status: 'done',
+-      url: dataUrl,
++      ref: primaryRef,
+       prompt,
+       promptMode,
+       pluginData: [{ namespace: IMAGES_NAMESPACE, key: imageId, value: record }],
++      // Kernel `normalizeOutput()` (P0-b) collects `output.assets[]` and
++      // turns each into a `Proposal{ type: 'asset.generate' }`.
++      // Per-image entry so the gallery / SSE renders each image independently.
++      assets: refs.map((ref, idx) => ({
++        ref,
++        modality: 'image',
++        meta: {
++          prompt,
++          model: resolvedModel,
++          provider: slot.provider,
++          imageSize,
++          imageId,
++          ...(refs.length > 1 ? { imageIndex: idx } : {}),
++        },
++      })),
+     };
+   } catch (err) {
+     return failureRecord(
+diff --color -ruN /Users/wuyong/.covel/plugins/openai-image-gen.bak-p0c-20260426-185742/runtimes/image-generator/ui/gallery.json /Users/wuyong/.covel/plugins/openai-image-gen/runtimes/image-generator/ui/gallery.json
+--- /Users/wuyong/.covel/plugins/openai-image-gen.bak-p0c-20260426-185742/runtimes/image-generator/ui/gallery.json	2026-04-26 18:57:42
++++ /Users/wuyong/.covel/plugins/openai-image-gen/runtimes/image-generator/ui/gallery.json	2026-04-26 18:59:23
+@@ -56,11 +56,9 @@
+                 ]
+               },
+               {
+-                "component": "Image",
++                "component": "Media",
+                 "props": {
+-                  "src": { "$item": "value/url" },
+-                  "base64": { "$item": "value/base64" },
+-                  "mimeType": { "$item": "value/mimeType" },
++                  "src": { "$item": "value/ref" },
+                   "alt": { "$item": "value/prompt" },
+                   "aspectRatio": "1/1",
+                   "rounded": "md"
