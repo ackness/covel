@@ -13,7 +13,13 @@
  */
 
 import { getPendingProposals } from '@covel/tools';
-import { assetGenerateToView, isAssetGeneratePayload, isEnvDefaultOn, isEnvEnabled } from '@covel/shared';
+import {
+  assetGenerateToView,
+  isAssetGeneratePayload,
+  isEnvDefaultOn,
+  isEnvEnabled,
+  normalizeUIRenderInstruction,
+} from '@covel/shared';
 import type {
   AssetGeneratePayload,
   CommitResult,
@@ -23,6 +29,8 @@ import type {
   ProposalSource,
   ProposalType,
   SessionEvent,
+  UIRenderInstruction,
+  UIRenderPayload,
 } from '@covel/shared';
 import type { EventBus } from '@covel/events';
 import type { HookPipeline } from './hooks/pipeline.js';
@@ -94,12 +102,12 @@ export function normalizeOutput(
   // ui blocks — from runtime output or tool-call parsed results
   const uiBlocks = collectUiBlocks(output, toolCalls);
   for (const [index, block] of uiBlocks.entries()) {
-    proposals.push(makeProposal('interaction.request', source, turnId, sessionId, {
-      interactionId:
-        (typeof block.interactionId === 'string' && block.interactionId) ||
-        (typeof block.id === 'string' && block.id) ||
-        `ui-${index + 1}`,
-      ...block,
+    const fallbackId =
+      (typeof block.interactionId === 'string' && block.interactionId) ||
+      (typeof block.id === 'string' && block.id) ||
+      `ui-${index + 1}`;
+    proposals.push(makeProposal('ui.render', source, turnId, sessionId, {
+      ...normalizeUIRenderInstruction(block as unknown as UIRenderInstruction, fallbackId),
     }));
   }
 
@@ -288,6 +296,7 @@ export function createCommitPipeline(
   const handlers: Record<string, (p: Proposal) => Promise<CommitResult>> = {
     'narrative.append': commitNarrative,
     'interaction.request': commitInteraction,
+    'ui.render': commitUIRender,
     'state.patch': commitStatePatch,
     'event.emit': commitEvent,
     'plugin.data': commitPluginData,
@@ -367,6 +376,23 @@ export function createCommitPipeline(
             data: payloadAny,
           },
         });
+      } else if (effectiveProposal.type === 'ui.render') {
+        const payload = effectiveProposal.payload as unknown as UIRenderPayload;
+        await emitter.emit('ui.rendered', {
+          runtimeId: effectiveProposal.source.runtimeId,
+          pluginId: effectiveProposal.source.pluginId,
+          proposalId: effectiveProposal.id,
+          source: effectiveProposal.source,
+          render: payload,
+        });
+        for (const part of payload.parts) {
+          await emitter.emit('ui.part.update', {
+            runtimeId: effectiveProposal.source.runtimeId,
+            pluginId: effectiveProposal.source.pluginId,
+            proposalId: effectiveProposal.id,
+            part,
+          });
+        }
       } else if (effectiveProposal.type === 'state.patch') {
         const p = effectiveProposal.payload as Record<string, unknown>;
         await emitter.emit('state.patch.applied', {
@@ -499,6 +525,34 @@ export function createCommitPipeline(
     return {
       committed: true,
       event: makeEvent('interaction.requested', proposal, { ...payload, block }),
+    };
+  }
+
+  async function commitUIRender(proposal: Proposal): Promise<CommitResult> {
+    const payload = proposal.payload as unknown as UIRenderPayload;
+    if (!Array.isArray(payload.parts) || payload.parts.length === 0) {
+      return { committed: false, error: 'ui.render: parts must be a non-empty array' };
+    }
+
+    const block = {
+      id: proposal.id,
+      type: 'ui.render',
+      data: payload,
+      meta: { runtimeId: proposal.source.runtimeId, pluginId: proposal.source.pluginId, turnId: proposal.turnId },
+    };
+
+    await store.addMessage({
+      id: proposal.id,
+      sessionId: proposal.sessionId,
+      role: 'assistant',
+      content: '',
+      metadata: { turnId: proposal.turnId, runtimeId: proposal.source.runtimeId, kind: 'plugin', block },
+      createdAt: proposal.timestamp,
+    });
+
+    return {
+      committed: true,
+      event: makeEvent('ui.rendered', proposal, { render: payload, block }),
     };
   }
 

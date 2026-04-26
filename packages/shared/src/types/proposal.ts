@@ -9,6 +9,7 @@
  */
 
 import type { MediaRef } from './media.js';
+import type { UIRenderPartsInstruction } from './ui.js';
 
 // ── Proposal Type Enum ──────────────────────────────────────────
 
@@ -75,6 +76,8 @@ export interface RecordUpsertPayload {
   readonly id: string;
   readonly data: Readonly<Record<string, unknown>>;
 }
+
+export type UIRenderPayload = UIRenderPartsInstruction;
 
 export interface AssetGeneratePayload {
   readonly ref: MediaRef;

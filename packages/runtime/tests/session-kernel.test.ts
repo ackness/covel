@@ -101,7 +101,7 @@ describe('normalizeOutput', () => {
       expect(interactionProposals[0].payload.interactionId).toBe('legacy-form');
     });
 
-    it('should extract ui blocks from tool-call outputs as interaction proposals', () => {
+    it('should extract ui blocks from tool-call outputs as ui.render proposals', () => {
       const output = { narrativeOutput: 'Guide updated.' };
       const proposals = normalizeOutput(
         output,
@@ -135,10 +135,22 @@ describe('normalizeOutput', () => {
         ],
       );
 
-      const interactionProposals = proposals.filter((p) => p.type === 'interaction.request');
-      expect(interactionProposals).toHaveLength(1);
-      expect(interactionProposals[0].payload.type).toBe('action-guide');
-      expect(interactionProposals[0].payload.interactionId).toBe('ui-1');
+      const renderProposals = proposals.filter((p) => p.type === 'ui.render');
+      expect(renderProposals).toHaveLength(1);
+      expect(renderProposals[0].payload).toMatchObject({
+        status: 'success',
+        parts: [
+          {
+            id: 'ui-1',
+            type: 'action-guide',
+            status: 'success',
+            content: {
+              topic: 'Next move',
+              categories: [{ style: 'safe', suggestions: ['先观察周围环境'] }],
+            },
+          },
+        ],
+      });
     });
   });
 
@@ -532,6 +544,33 @@ describe('createCommitPipeline', () => {
     });
   });
 
+  describe('ui.render commit', () => {
+    it('persists typed render parts and emits ui.rendered', async () => {
+      const store = createMockStore();
+      const pipeline = createCommitPipeline(store as any);
+      const proposal = makeProposal('ui.render', {
+        status: 'pending',
+        parts: [
+          { id: 'text', type: 'text', status: 'success', content: 'Ready' },
+          { id: 'image', type: 'image', status: 'pending', content: { prompt: 'forest' } },
+        ],
+      });
+
+      const result = await pipeline.commit(proposal);
+
+      expect(result.committed).toBe(true);
+      expect(result.event!.type).toBe('ui.rendered');
+      expect(result.event!.payload.render).toMatchObject({
+        status: 'pending',
+        parts: [
+          { id: 'text', type: 'text', status: 'success', content: 'Ready' },
+          { id: 'image', type: 'image', status: 'pending', content: { prompt: 'forest' } },
+        ],
+      });
+      expect(store.addMessage.mock.calls[0][0].metadata.block.type).toBe('ui.render');
+    });
+  });
+
   describe('phase.transition commit (removed post turn-band migration)', () => {
     it('should return committed: false because phase.transition is no longer a known proposal type', async () => {
       const store = createMockStore();
@@ -732,6 +771,27 @@ describe('createCommitPipeline', () => {
       expect((blockEvent!.payload.block as Record<string, unknown>).type).toBe('interactive_form');
     });
 
+    it('emits ui.rendered and ui.part.update when a ui.render proposal commits', async () => {
+      const emitter = makeEmitterSpy();
+      const store = createMockStore();
+      const pipeline = createCommitPipeline(store as any, undefined, undefined, emitter);
+      const proposal = makeProposal('ui.render', {
+        status: 'streaming',
+        parts: [
+          { id: 'p1', type: 'text', status: 'streaming', content: 'Loading' },
+        ],
+      });
+
+      const result = await pipeline.commit(proposal);
+
+      expect(result.committed).toBe(true);
+      expect(emitter.events.find((e) => e.type === 'ui.rendered')).toBeDefined();
+      expect(emitter.events.find((e) => e.type === 'ui.part.update')?.payload.part).toMatchObject({
+        id: 'p1',
+        status: 'streaming',
+      });
+    });
+
     it('emits state.patch.applied when a state.patch proposal commits', async () => {
       const emitter = makeEmitterSpy();
       const store = createMockStore();
@@ -925,9 +985,13 @@ describe('processRuntimeResult', () => {
     // narrativeOutput is populated — the text is hallucinated prose, not a
     // user-facing story beat. Only the ui block survives; addMessage fires
     // once (for the block), not twice.
-    expect(events.map((e) => e.type).sort()).toEqual(['interaction.requested']);
+    expect(events.map((e) => e.type).sort()).toEqual(['ui.rendered']);
     expect(store.addMessage).toHaveBeenCalledTimes(1);
-    expect(store.addMessage.mock.calls[0][0].metadata.block.type).toBe('action-guide');
+    expect(store.addMessage.mock.calls[0][0].metadata.block.type).toBe('ui.render');
+    expect(store.addMessage.mock.calls[0][0].metadata.block.data.parts[0]).toMatchObject({
+      type: 'action-guide',
+      status: 'success',
+    });
   });
 
   it('should append pending proposals from runtime output and commit them', async () => {

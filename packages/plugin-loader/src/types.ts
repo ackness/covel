@@ -2,7 +2,7 @@
  * Plugin loader types — parsed results of PLUGIN.md files and references.
  */
 
-import type { MediaRef, PluginType, RuntimeManifest } from '@covel/shared';
+import type { MediaRef, PluginType, RuntimeManifest, TurnInput, TurnResult } from '@covel/shared';
 
 // ── Parsed PLUGIN.md ─────────────────────────────────────────────
 
@@ -255,6 +255,10 @@ export interface FunctionHandlerContext {
    * persisting bytes.
    */
   readonly media?: MediaContext;
+  /** Run a nested turn with a partial input override. Depth is bounded by runtime governance. */
+  readonly recursiveCall: (delta: Partial<TurnInput>) => Promise<TurnResult>;
+  /** Current recursiveCall depth. Top-level runtime executions start at 0. */
+  readonly recursionDepth: number;
   /**
    * Optional manual-trigger payload — only populated when the turn was
    * initiated via `POST /api/sessions/:id/plugin-rpc` with a `runtimeId`

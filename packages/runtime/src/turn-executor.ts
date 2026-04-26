@@ -233,10 +233,29 @@ export interface TurnExecutorOptions {
   readonly maxSteps?: number;
   /** Timeout per runtime in ms. Default: 60000. */
   readonly timeoutMs?: number;
+  /** Default maximum nested ctx.recursiveCall() depth. Default: 10. */
+  readonly maxRecursionDepth?: number;
+  /** Internal current recursion depth. Top-level callers should omit it. */
+  readonly recursionDepth?: number;
 }
 
 interface TurnInputExecutionFlags {
   readonly suppressPlayerMessage?: boolean;
+}
+
+export class MaxRecursionExceeded extends Error {
+  readonly code = 'MAX_RECURSION_EXCEEDED' as const;
+  readonly depth: number;
+  readonly maxDepth: number;
+  readonly runtimeId: string;
+
+  constructor(args: { runtimeId: string; depth: number; maxDepth: number }) {
+    super(`recursiveCall exceeded max depth ${args.maxDepth} for runtime "${args.runtimeId}"`);
+    this.name = 'MaxRecursionExceeded';
+    this.runtimeId = args.runtimeId;
+    this.depth = args.depth;
+    this.maxDepth = args.maxDepth;
+  }
 }
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -615,6 +634,7 @@ export async function executeTurn(
   const startTime = Date.now();
   const maxSteps = options?.maxSteps ?? 10;
   const defaultTimeoutMs = options?.timeoutMs ?? 60000;
+  const recursionDepth = options?.recursionDepth ?? 0;
   const executionFlags = input as TurnInput & TurnInputExecutionFlags;
   const shouldAppendPlayerMessage = !input.manualTrigger
     && !executionFlags.suppressPlayerMessage
@@ -1033,7 +1053,7 @@ export async function executeTurn(
 
   for (const group of groups) {
     const results = await executeParallel(group.runtimes, async (manifest) => {
-      return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, defaultTimeoutMs, promptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory, coreMemoryBlocks, sessionContext);
+      return executeOneRuntime(manifest, input, activeRuntimes, completedResults, deps, maxSteps, defaultTimeoutMs, promptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory, coreMemoryBlocks, sessionContext, undefined, options, recursionDepth);
     });
 
     // Merge results
@@ -1053,7 +1073,7 @@ export async function executeTurn(
     const followupGroups = dag.error ? scheduleByPriority(mainLoop, turnNumber) : dag.groups;
     for (const group of followupGroups) {
       const results = await executeParallel(group.runtimes, async (manifest) => {
-        return executeOneRuntime(manifest, input, completedResults, deps, maxSteps, defaultTimeoutMs, promptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory, coreMemoryBlocks, sessionContext);
+        return executeOneRuntime(manifest, input, activeRuntimes, completedResults, deps, maxSteps, defaultTimeoutMs, promptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory, coreMemoryBlocks, sessionContext, undefined, options, recursionDepth);
       });
       for (const [name, result] of results) {
         completedResults.set(name, result);
@@ -1147,6 +1167,7 @@ export async function executeTurn(
       return executeOneRuntime(
         manifest,
         input,
+        activeRuntimes,
         completedResults,
         deps,
         maxSteps,
@@ -1159,6 +1180,8 @@ export async function executeTurn(
         coreMemoryBlocks,
         sessionContext,
         triggerEvent,
+        options,
+        recursionDepth,
       );
     });
     for (const [name, result] of results) {
@@ -1883,6 +1906,7 @@ export async function resumeSuspendedRuntime(
 async function executeOneRuntime(
   manifest: RuntimeManifest,
   input: TurnInput,
+  activeRuntimes: readonly RuntimeManifest[],
   completedResults: ReadonlyMap<string, RuntimeResult>,
   deps: TurnExecutorDeps,
   maxSteps: number,
@@ -1900,10 +1924,77 @@ async function executeOneRuntime(
   coreMemoryBlocks?: readonly { label: string; content: string; updatedAt: string }[],
   sessionContext?: SessionContextSnapshot,
   triggerEvent?: { readonly topic: string; readonly data: Readonly<Record<string, unknown>> },
+  turnOptions?: TurnExecutorOptions,
+  recursionDepth = 0,
 ): Promise<RuntimeResult> {
   const startTime = Date.now();
   const runId = crypto.randomUUID();
   const timeoutMs = manifest.timeoutMs ?? defaultTimeoutMs;
+  const createRecursiveCall = () => {
+    return async (delta: Partial<TurnInput>): Promise<TurnResult> => {
+      const maxDepth = manifest.maxRecursionDepth ?? turnOptions?.maxRecursionDepth ?? 10;
+      const nextDepth = recursionDepth + 1;
+
+      const nestedInput: TurnInput & TurnInputExecutionFlags = {
+        ...input,
+        ...delta,
+        sessionId: delta.sessionId ?? input.sessionId,
+        turnId: delta.turnId ?? input.turnId,
+        playerMessage: delta.playerMessage ?? input.playerMessage,
+        suppressPlayerMessage: true,
+      };
+
+      const tracePayload = {
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        depth: recursionDepth,
+        nextDepth,
+        maxDepth,
+        turnId: nestedInput.turnId,
+        sessionId: nestedInput.sessionId,
+      };
+
+      if (nextDepth > maxDepth) {
+        const err = new MaxRecursionExceeded({
+          runtimeId: manifest.name,
+          depth: nextDepth,
+          maxDepth,
+        });
+        await deps.emitter?.emit('recursive.failed', {
+          ...tracePayload,
+          error: err.message,
+        });
+        throw err;
+      }
+
+      await deps.emitter?.emit('recursive.calling', tracePayload);
+      try {
+        const nestedResult = await executeTurn(
+          nestedInput,
+          activeRuntimes,
+          deps,
+          {
+            ...turnOptions,
+            maxSteps,
+            timeoutMs: defaultTimeoutMs,
+            recursionDepth: nextDepth,
+          },
+        );
+        await deps.emitter?.emit('recursive.completed', {
+          ...tracePayload,
+          resultCount: nestedResult.runtimeResults.length,
+          durationMs: nestedResult.durationMs,
+        });
+        return nestedResult;
+      } catch (err) {
+        await deps.emitter?.emit('recursive.failed', {
+          ...tracePayload,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      }
+    };
+  };
 
   try {
     // ── Upstream gate (manifest.upstreamRequired) ─────────────────
@@ -2033,6 +2124,8 @@ async function executeOneRuntime(
         store: handlerStore,
         completedResults,
         config,
+        recursiveCall: createRecursiveCall(),
+        recursionDepth,
         ...(deps.gateway ? { gateway: deps.gateway } : {}),
         ...(deps.utils ? { utils: deps.utils } : {}),
         ...(mediaHandle ? { media: mediaHandle } : {}),
@@ -2199,6 +2292,8 @@ async function executeOneRuntime(
         store: deps.store,
         completedResults,
         config: guardConfig,
+        recursiveCall: createRecursiveCall(),
+        recursionDepth,
         ...(deps.gateway ? { gateway: deps.gateway } : {}),
         ...(deps.utils ? { utils: deps.utils } : {}),
         ...(deps.mediaStore ? { media: createRuntimeMediaContext(deps.mediaStore, deps.utils, { sessionId: input.sessionId, pluginId: manifest.pluginId }) } : {}),

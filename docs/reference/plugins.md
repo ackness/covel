@@ -421,6 +421,27 @@ plugins/<plugin-id>/
 
 `function` 类型 runtime 需要额外声明 `handler` 字段指向 JS 模块路径。
 
+### recursiveCall
+
+Function runtime 和 guard 的 `FunctionHandlerContext` 暴露：
+
+```typescript
+interface FunctionHandlerContext {
+  recursiveCall(delta: Partial<TurnInput>): Promise<TurnResult>;
+  recursionDepth: number;
+}
+```
+
+`recursiveCall()` 会用当前 turn 输入作为基底，合并 `delta` 后重新进入 turn executor。嵌套调用默认深度上限为 `10`，manifest 可用 `maxRecursionDepth` 覆盖：
+
+```yaml
+runtimeType: function
+handler: ./handler.js
+maxRecursionDepth: 5
+```
+
+超过上限会抛出 `MaxRecursionExceeded`，并进入 runtime 的失败路径。trace 会记录 `recursive.calling`、`recursive.completed`、`recursive.failed`。
+
 ### guard
 
 Agent runtime 的前置门控函数。在 LLM 调用前执行（纯函数，零 token 开销），可用于检查前置条件、导入数据等��

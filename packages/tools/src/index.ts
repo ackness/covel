@@ -27,7 +27,7 @@ export { validateFieldsAgainstSchema } from './schema-validator.js';
 export type { SchemaValidationResult, SchemaValidationIssue } from './schema-validator.js';
 
 // ── Built-in tools ───────────────────────────────────────────────
-export { createFormTool, createChoicesTool, createNotificationTool, builtinUITools } from './builtin/ui-tools.js';
+export { renderUITool, createFormTool, createChoicesTool, createNotificationTool, builtinUITools } from './builtin/ui-tools.js';
 export { createPluginDataTools } from './builtin/plugin-data-tools.js';
 export { createCharacterTools, buildSessionCharacterWriteTools, mirrorCharacterToPluginData } from './builtin/character-tools.js';
 export type { CharacterStore, CharacterToolDeps, CharacterSnapshot } from './builtin/character-tools.js';

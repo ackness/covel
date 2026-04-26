@@ -11,6 +11,7 @@
 | create-form | builtin | — | auto-allow | 创建玩家表单 |
 | create-choices | builtin | — | auto-allow | 创建选项列表 |
 | create-notification | builtin | — | auto-allow | 显示通知消息 |
+| render-ui | builtin | — | auto-allow | 渲染带独立 part 状态的 UI 块 |
 | plugin-data-set | builtin | — | auto-allow | 写入插件持久化数据（单条） |
 | plugin-data-set-batch | builtin | — | auto-allow | 批量写入插件持久化数据 |
 | plugin-data-get | builtin | — | auto-allow | 读取当前插件持久化数据 |
@@ -42,6 +43,7 @@
 Builtin 工具承接系统级 building blocks，例如：
 
 - `plugin-data-*`
+- `render-ui`
 - `create-form`
 - `create-choices`
 - `create-character`
@@ -125,6 +127,33 @@ Local 工具承接插件自己的业务封装，例如：
 | icon | string | | 图标名称 |
 
 **使用者**: core-codex
+
+---
+
+### render-ui
+
+渲染一个 `ui.render` 块。每个 part 独立携带状态，适合叙事文本、图片、卡片、音频等混排输出。
+
+| 参数 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| parts | UIRenderPart[] | ✓ | UI part 列表 |
+| layout | enum | | `stream` / `split` / `overlay` |
+
+**UIRenderPart**:
+
+```typescript
+type UIPartStatus = 'pending' | 'streaming' | 'success' | 'error' | 'paused';
+
+interface UIRenderPart {
+  id: string;
+  type: string;
+  status: UIPartStatus;
+  content: unknown;
+  retry?: { count: number; lastError?: string };
+}
+```
+
+工具返回 `{ ui: [{ parts, layout? }] }`，runtime normalizer 会生成 `ui.render` proposal。旧形态 `{ ui: [{ type, ...content }] }` 会自动包装成一个 `success` part。
 
 ---
 
@@ -777,6 +806,20 @@ tools:
 ## Proposal 类型
 
 Runtime 输出最终都被规范化为 `Proposal[]`（定义见 `packages/shared/src/types/proposal.ts`），由 commit chain 顺序提交、写入 store、再以 SessionEvent 形式广播。已注册的 `ProposalType` 包括：`narrative.append`、`narrative.template`、`state.patch`、`event.emit`、`record.upsert`、`interaction.request`、`ui.render`、`asset.generate`、`plugin.data`、`working_memory.set`、`lorebook.upsert`。（历史上的 `phase.transition` 已随 turn-band 迁移移除；状态机改由 `status + turnCount + preGameCompleted` 描述。）
+
+### `ui.render`
+
+写入聊天消息中的通用 UI block，并发出 `ui.rendered` 事件。payload 使用 parts 模型：
+
+```typescript
+interface UIRenderInstruction {
+  parts: readonly UIRenderPart[];
+  layout?: 'stream' | 'split' | 'overlay';
+  status?: UIPartStatus;
+}
+```
+
+commit trace 会记录 `ui.rendered`，并为每个 part 记录 `ui.part.update` trace。`status` 是 UI 展示状态，独立于 runtime 的 `success` / `failed` 执行状态。
 
 ### `working_memory.set`（S3-T3）
 
