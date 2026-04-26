@@ -1090,9 +1090,21 @@ export async function executeTurn(
     return allDone;
   };
 
+  // Manual-trigger turns can carry an optional `triggerEvent` payload — used
+  // by the plugin-rpc background follower path so a deferred follower runtime
+  // receives the same `ctx.triggerEvent` shape it would have seen during the
+  // synchronous event-chain fan-out. Undefined for everyone else.
+  const manualTriggerEventPayload = manualTarget
+    ? input.manualTrigger?.triggerEvent
+    : undefined;
+
   for (const group of groups) {
     const results = await executeParallel(group.runtimes, async (manifest) => {
-      return executeOneRuntime(manifest, input, activeRuntimes, completedResults, deps, maxSteps, defaultTimeoutMs, promptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory, coreMemoryBlocks, sessionContext, undefined, options, recursionDepth);
+      const triggerEventForRuntime =
+        manualTarget && manualTriggerEventPayload && manifest.name === manualTarget.name
+          ? manualTriggerEventPayload
+          : undefined;
+      return executeOneRuntime(manifest, input, activeRuntimes, completedResults, deps, maxSteps, defaultTimeoutMs, promptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory, coreMemoryBlocks, sessionContext, triggerEventForRuntime, options, recursionDepth);
     });
 
     // Merge results

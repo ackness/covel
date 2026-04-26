@@ -38,38 +38,11 @@ import {
   executeTurn,
   processRuntimeResult,
   createTurnEmitter,
-  createPluginDataWriter,
-  createPluginLogger,
-  createFunctionStoreView,
-  createRuntimeMediaContext,
 } from '@covel/runtime';
 import { RpcDispatchError, RpcValidationError } from '@covel/runtime';
 import { getPluginTrustInfo } from '@covel/plugin-loader';
-import type { RuntimeManifest, TurnInput } from '@covel/shared';
+import type { TurnInput } from '@covel/shared';
 import { loadSessionConfig } from './load-session-config.js';
-
-/**
- * Apply a runtime's declared userSettings defaults on top of the player's
- * bucket so function handlers can rely on every declared key being present.
- * Mirrors `resolveUserSettings` in `@covel/runtime/turn-executor-helpers`
- * but doesn't import from there to keep the server route free of internal
- * executor helper dependencies.
- */
-function resolveFollowerUserSettings(
-  manifest: RuntimeManifest,
-  allUserSettings: Readonly<Record<string, Readonly<Record<string, unknown>>>> | undefined,
-): Readonly<Record<string, unknown>> | undefined {
-  const specs = manifest.userSettings;
-  if (!specs || specs.length === 0) return undefined;
-  const playerValues = allUserSettings?.[manifest.pluginId] ?? {};
-  const merged: Record<string, unknown> = {};
-  for (const spec of specs) {
-    merged[spec.key] = Object.prototype.hasOwnProperty.call(playerValues, spec.key)
-      ? playerValues[spec.key]
-      : spec.default;
-  }
-  return merged;
-}
 
 interface PluginRpcBody {
   readonly pluginId?: string;
@@ -365,14 +338,18 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
       };
     };
 
-    // Audit F1: run ONE background follower off-cycle and write its result
-    // back into `_jobs/<jobId>`. Reuses the same executeTurn machinery but
-    // with a single active runtime and a synthetic seed so the follower's
-    // own event chain can still fire in its isolated turn (downstream
-    // runtimes in the same plugin will be picked up if they also subscribe
-    // to events the follower emits). Running each follower in its own turn
-    // keeps job ids 1:1 with followers — simpler to surface in the UI than
-    // a tree of nested jobs.
+    // Audit P1: run ONE background follower off-cycle and write its result
+    // back into `_jobs/<jobId>`. Routes the follower through the same
+    // `executeTurn(...)` pipeline as a manual-trigger turn so the handler
+    // gets a real `recursiveCall`, a real `assetProgress` emitter, hook
+    // firing, deferredFollower fan-out, and `asset.generated` events on
+    // the SSE stream — instead of the bespoke handler invocation that
+    // hard-stubbed `recursiveCall` to throw and dropped `assetProgress` /
+    // `asset.generated` entirely.
+    //
+    // Running each follower in its own isolated turn keeps job ids 1:1
+    // with followers — simpler to surface in the UI than a tree of nested
+    // jobs.
     const runDeferredFollower = async (args: {
       readonly jobId: string;
       readonly runtimeId: string;
@@ -408,129 +385,106 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
         return;
       }
 
-      const loaded = await loadRuntimeFn(followerManifest);
-      if (!loaded || !loaded.handler) {
-        await store.setPluginData({
-          id: `${sessionId}:${args.pluginId}:_jobs:${args.jobId}`,
-          sessionId,
-          pluginId: args.pluginId,
-          namespace: '_jobs',
-          key: args.jobId,
-          value: {
-            status: 'failed',
-            progress: 100,
-            runtimeId: args.runtimeId,
-            turnId: args.followerTurnId,
-            triggerEvent: args.triggerEvent,
-            startedAt: args.startedAt,
-            completedAt: new Date().toISOString(),
-            error: 'follower runtime missing handler',
-          },
-          createdAt: args.startedAt,
-          updatedAt: new Date().toISOString(),
-        });
-        return;
-      }
-
-      const followerStart = Date.now();
-      // Audit P1-6: derive job status from the handler's own `output.status`
-      // / `output.error` rather than always reporting `success` once the
-      // promise resolved. A handler can return `{ status: 'failed', error }`
-      // for a recoverable business failure (e.g. DashScope returned 5xx) —
-      // surfacing that as `job done + runtime success` made the gallery
-      // render a broken image as if generation succeeded.
       try {
-        const config = turnGetConfig();
-        const followerUserSettings = resolveFollowerUserSettings(
-          followerManifest,
-          userSettingsMap,
-        );
-        const helperCtx = {
+        const followerEmitter = createTurnEmitter({
+          store,
+          eventBus,
           sessionId,
           turnId: args.followerTurnId,
-          pluginId: args.pluginId,
-          runtimeId: args.runtimeId,
-        };
-        const pluginDataHandle = createPluginDataWriter(store, helperCtx);
-        const loggerHandle = createPluginLogger(store, helperCtx);
-        // Audit P0-3: same narrowing rule as the in-turn path
-        // (turn-executor.ts). Background followers are usually
-        // community plugins (image generators, async fetchers) so the
-        // narrow `FunctionStoreView` is the common case here.
-        const isCorePlugin = followerManifest.pluginType === 'core-plugin';
-        const handlerStore = isCorePlugin
-          ? store
-          : createFunctionStoreView(store, helperCtx);
-        const mediaHandle = mediaStore
-          ? createRuntimeMediaContext(mediaStore, pluginUtils, {
-              sessionId,
-              pluginId: args.pluginId,
-            })
-          : undefined;
-        const output = await loaded.handler({
+        });
+        const followerInput: TurnInput = {
           sessionId,
           turnId: args.followerTurnId,
-          pluginId: args.pluginId,
           playerMessage: '',
           locale: session.locale ?? 'zh-CN',
-          store: handlerStore,
-          completedResults: new Map(),
-          config,
-          recursiveCall: async () => {
-            throw new Error('recursiveCall is unavailable for background plugin-rpc followers');
+          manualTrigger: {
+            runtimeId: args.runtimeId,
+            triggerEvent: args.triggerEvent,
           },
-          recursionDepth: 0,
-          ...(pluginGateway ? { gateway: pluginGateway } : {}),
-          ...(pluginUtils ? { utils: pluginUtils } : {}),
-          ...(mediaHandle ? { media: mediaHandle } : {}),
-          triggerEvent: args.triggerEvent,
-          ...(followerUserSettings ? { userSettings: followerUserSettings } : {}),
-          pluginData: pluginDataHandle,
-          logger: loggerHandle,
-        });
+          ...(session.runtimeModelOverrides
+            ? { runtimeModelOverrides: session.runtimeModelOverrides }
+            : {}),
+          ...(userSettingsMap && Object.keys(userSettingsMap).length > 0
+            ? { userSettings: userSettingsMap }
+            : {}),
+        };
+
+        const turnResult = await executeTurn(
+          followerInput,
+          activeRuntimes,
+          {
+            loadRuntime: loadRuntimeFn,
+            llm: llmAdapter,
+            ...(pluginGateway ? { gateway: pluginGateway } : {}),
+            ...(pluginUtils ? { utils: pluginUtils } : {}),
+            getConfig: turnGetConfig,
+            store,
+            ...(mediaStore ? { mediaStore } : {}),
+            toolExecutor,
+            resolveModel,
+            emitter: followerEmitter,
+            eventBus,
+            compactor: compactorRunner,
+            worldDataPluginId,
+            ...(hookPipeline ? { hookPipeline } : {}),
+          },
+        );
+
+        const followerResult = turnResult.runtimeResults.find(
+          (rr) => rr.runtimeId === args.runtimeId,
+        );
+
+        // Commit proposals for every runtime the follower turn produced
+        // (the targeted follower plus any sync event-chained downstream
+        // runtimes that fired in its mini-pipeline). asset.generated /
+        // ui.rendered / state.patch.applied flow through the per-turn
+        // emitter so the SSE stream reaches the chat UI in real time.
+        for (const rr of turnResult.runtimeResults) {
+          const kind = outputKindMap.get(rr.runtimeId) ?? 'plugin';
+          const processOpts = {
+            ...(hookPipeline ? { hookPipeline } : {}),
+            eventBus,
+            emitter: followerEmitter,
+            capabilities: runtimeCapabilitiesMap.get(rr.runtimeId) ?? [],
+          };
+          await processRuntimeResult(rr, store, sessionId, kind, processOpts);
+        }
+
+        // The follower turn may itself surface deferredFollowers — schedule
+        // them as their own `_jobs/<jobId>` so a chain of background
+        // followers stays observable to the UI.
+        if (turnResult.deferredFollowers && turnResult.deferredFollowers.length > 0) {
+          await scheduleDeferredFollowers(turnResult.deferredFollowers);
+        }
 
         // Audit P1-6: business failure detection. When the handler
-        // explicitly reports failure, surface that on both
-        // `runtimeResult.status` (so trace consumers see `failed`) and
-        // the persisted `_jobs/<jobId>.value.status` (so the UI's
-        // pending → done/failed transition is correct).
-        const outputRecord = (output ?? {}) as Record<string, unknown>;
+        // explicitly reports failure (status: 'failed' / non-empty error),
+        // surface that on both `runtimeResult.status` and the persisted
+        // `_jobs/<jobId>.value.status` so the UI transitions pending →
+        // failed correctly. We also treat an executor-reported `failed` /
+        // `skipped` runtime as a job-level failure.
+        const outputRecord = (followerResult?.output ?? {}) as Record<string, unknown>;
+        const executorReportedFailure =
+          followerResult?.status === 'failed' || followerResult?.status === 'skipped';
         const handlerSaysFailed =
           outputRecord.status === 'failed' ||
           (typeof outputRecord.error === 'string' && outputRecord.error.length > 0);
-        const runtimeStatus: 'success' | 'failed' = handlerSaysFailed ? 'failed' : 'success';
+        const isFailure = executorReportedFailure || handlerSaysFailed;
+        const runtimeStatus: 'success' | 'failed' = isFailure ? 'failed' : 'success';
         const runtimeError =
-          handlerSaysFailed && typeof outputRecord.error === 'string'
+          followerResult?.error
+          ?? (handlerSaysFailed && typeof outputRecord.error === 'string'
             ? outputRecord.error
-            : handlerSaysFailed
+            : isFailure
               ? 'runtime reported failure'
-              : undefined;
-        const runtimeResult = {
-          runtimeId: args.runtimeId,
-          pluginId: args.pluginId,
-          turnId: args.followerTurnId,
-          status: runtimeStatus,
-          durationMs: Date.now() - followerStart,
-          output: outputRecord,
-          startedAt: args.startedAt,
-          completedAt: new Date().toISOString(),
-          ...(runtimeError ? { error: runtimeError } : {}),
-        };
-
-        // Commit proposals (pluginData, events, etc.) via the standard pipeline.
-        const kind = outputKindMap.get(args.runtimeId) ?? 'plugin';
-        const processOpts = {
-          ...(hookPipeline ? { hookPipeline } : {}),
-          eventBus,
-          capabilities: followerManifest.capabilities ?? [],
-        };
-        await processRuntimeResult(runtimeResult, store, sessionId, kind, processOpts);
+              : undefined);
 
         // Audit P1-6: persist the derived job status so a UI watching
         // `_jobs/<jobId>` doesn't see stale `pending` after a business
         // failure, and so the runtimeResults entry inside the job
         // matches what the trace pipeline records above.
-        const jobStatus: 'done' | 'failed' = handlerSaysFailed ? 'failed' : 'done';
+        const jobStatus: 'done' | 'failed' = isFailure ? 'failed' : 'done';
+        const completedAt = new Date().toISOString();
         await store.setPluginData({
           id: `${sessionId}:${args.pluginId}:_jobs:${args.jobId}`,
           sessionId,
@@ -544,22 +498,22 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
             turnId: args.followerTurnId,
             triggerEvent: args.triggerEvent,
             startedAt: args.startedAt,
-            completedAt: new Date().toISOString(),
-            durationMs: runtimeResult.durationMs,
+            completedAt,
+            durationMs: followerResult?.durationMs ?? turnResult.durationMs,
             ...(runtimeError ? { error: runtimeError } : {}),
             runtimeResults: [
               {
                 runtimeId: args.runtimeId,
                 pluginId: args.pluginId,
                 status: runtimeStatus,
-                durationMs: runtimeResult.durationMs,
+                durationMs: followerResult?.durationMs ?? turnResult.durationMs,
                 ...(runtimeError ? { error: runtimeError } : {}),
-                output,
+                output: followerResult?.output ?? outputRecord,
               },
             ],
           },
           createdAt: args.startedAt,
-          updatedAt: new Date().toISOString(),
+          updatedAt: completedAt,
         });
       } catch (err) {
         await store.setPluginData({
