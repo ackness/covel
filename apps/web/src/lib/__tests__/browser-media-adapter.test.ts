@@ -1,0 +1,76 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { MediaRef } from "@covel/shared";
+import type { MediaStore } from "@covel/store";
+import {
+  __resetBrowserMediaStoreForTests,
+  deleteBrowserMedia,
+  getBrowserMedia,
+  getBrowserMediaStore,
+  putBrowserMedia,
+  resolveBrowserMediaUrl,
+} from "../browser-media-adapter.js";
+
+const put = vi.fn<MediaStore["put"]>();
+const get = vi.fn<MediaStore["get"]>();
+const resolveUrl = vi.fn<MediaStore["resolveUrl"]>();
+const deleteById = vi.fn<MediaStore["delete"]>();
+const createIndexedDbMediaStore = vi.fn();
+
+vi.mock("@covel/store/idb", () => ({
+  createIndexedDbMediaStore,
+}));
+
+const ref: MediaRef = {
+  id: "sha256-abc",
+  mime: "image/png",
+  size: 3,
+};
+
+function makeStore(): MediaStore {
+  return {
+    put,
+    get,
+    exists: vi.fn(),
+    resolveUrl,
+    delete: deleteById,
+    lookup: vi.fn(),
+    recordOwnership: vi.fn(),
+    addRef: vi.fn(),
+    isReferencedBy: vi.fn(),
+  };
+}
+
+describe("browser-media-adapter", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetBrowserMediaStoreForTests();
+    createIndexedDbMediaStore.mockResolvedValue(makeStore());
+    put.mockResolvedValue(ref);
+    get.mockResolvedValue(new Blob(["abc"], { type: "image/png" }));
+    resolveUrl.mockResolvedValue("blob:https://app.example/1");
+    deleteById.mockResolvedValue(undefined);
+  });
+
+  it("opens the shared browser media database once", async () => {
+    const first = await getBrowserMediaStore();
+    const second = await getBrowserMediaStore();
+
+    expect(first).toBe(second);
+    expect(createIndexedDbMediaStore).toHaveBeenCalledTimes(1);
+    expect(createIndexedDbMediaStore).toHaveBeenCalledWith({ dbName: "covel-media-store" });
+  });
+
+  it("forwards media operations to the IndexedDB media store", async () => {
+    const blob = new Blob(["abc"], { type: "image/png" });
+
+    await expect(putBrowserMedia(blob, "image/png", { width: 1 })).resolves.toEqual(ref);
+    await expect(getBrowserMedia(ref)).resolves.toBeInstanceOf(Blob);
+    await expect(resolveBrowserMediaUrl(ref)).resolves.toBe("blob:https://app.example/1");
+    await expect(deleteBrowserMedia(ref.id)).resolves.toBeUndefined();
+
+    expect(put).toHaveBeenCalledWith(blob, "image/png", { width: 1 });
+    expect(get).toHaveBeenCalledWith(ref);
+    expect(resolveUrl).toHaveBeenCalledWith(ref);
+    expect(deleteById).toHaveBeenCalledWith(ref.id);
+  });
+});

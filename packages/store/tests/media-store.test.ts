@@ -1,8 +1,10 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { runMediaStoreContractTests } from '../src/contract/media-store-contract.js';
+import { createIndexedDbMediaStore } from '../src/indexeddb/idb-media-store.js';
 import {
   createMemoryMediaStore,
   createPgMediaStore,
@@ -97,3 +99,9 @@ if (pgAvailable) {
     });
   });
 }
+
+let idbCounter = 0;
+runMediaStoreContractTests('IndexedDbMediaStore', async () => {
+  idbCounter += 1;
+  return createIndexedDbMediaStore({ dbName: `covel-media-store-test-${idbCounter}` });
+});
