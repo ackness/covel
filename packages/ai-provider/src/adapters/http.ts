@@ -1,4 +1,4 @@
-import type { ProviderConfig, UsageSummary } from "../types.js";
+import type { ImagePart, ProviderConfig, TextMessage, TextMessageContent, UsageSummary } from "../types.js";
 import { isEnvEnabled } from "@covel/shared";
 
 /** Maximum characters to include in error message previews. */
@@ -634,11 +634,11 @@ export function readAnthropicText(payload: Record<string, unknown>): string {
 let _toolDropWarned = false;
 
 export function toAnthropicMessages(
-  messages: Array<{ role: string; content: string | null }>
-): { system: string; messages: Array<{ role: string; content: string }> } {
+  messages: TextMessage[]
+): { system: string; messages: Array<{ role: string; content: string | readonly unknown[] }> } {
   const system = messages
     .filter((m) => m.role === "system")
-    .map((m) => m.content ?? "")
+    .map((m) => anthropicSystemText(m.content))
     .filter(Boolean)
     .join("\n\n");
   const toolMessages = messages.filter((m) => m.role === "tool");
@@ -650,6 +650,34 @@ export function toAnthropicMessages(
   }
   const filtered = messages
     .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => ({ role: m.role, content: m.content ?? "" }));
+    .map((m) => ({ role: m.role, content: serializeAnthropicContent(m.content) }));
   return { system, messages: filtered };
+}
+
+function mediaRefFallbackText(part: ImagePart): string {
+  return JSON.stringify({
+    type: "image_ref",
+    ref: part.image,
+    note: "MediaRef has no resolved URL; provider vision input requires a retrievable image URL.",
+  });
+}
+
+function anthropicSystemText(content: TextMessageContent): string {
+  if (typeof content === "string") return content;
+  if (content === null) return "";
+  return content
+    .map((part) => part.type === "text" ? part.text : mediaRefFallbackText(part))
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function serializeAnthropicContent(content: TextMessageContent): string | readonly unknown[] {
+  if (!Array.isArray(content)) return content ?? "";
+  return content.map((part) => {
+    if (part.type === "text") return { type: "text", text: part.text };
+    if (part.image.url) {
+      return { type: "image", source: { type: "url", url: part.image.url } };
+    }
+    return { type: "text", text: mediaRefFallbackText(part) };
+  });
 }

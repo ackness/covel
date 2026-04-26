@@ -5,9 +5,24 @@
  * @covel/ai-provider's gateway or provide mock responses for testing.
  */
 
+import type { MediaRef } from '@covel/shared';
+
+export interface LLMTextPart {
+  readonly type: 'text';
+  readonly text: string;
+}
+
+export interface LLMImagePart {
+  readonly type: 'image';
+  readonly image: MediaRef;
+}
+
+export type LLMContentPart = LLMTextPart | LLMImagePart;
+export type LLMMessageContent = string | readonly LLMContentPart[];
+
 export interface LLMMessage {
   readonly role: 'system' | 'user' | 'assistant' | 'tool';
-  readonly content: string;
+  readonly content: LLMMessageContent;
   readonly toolCallId?: string;
   readonly name?: string;
   /** For assistant messages that include tool calls (OpenAI protocol requires this). */

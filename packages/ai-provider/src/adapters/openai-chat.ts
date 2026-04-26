@@ -19,7 +19,7 @@ import {
   readOpenAiChatStreamToolCallDeltas,
 } from "./http.js";
 
-import type { TextMessage } from "../types.js";
+import type { ImagePart, TextMessage, TextMessageContent } from "../types.js";
 
 /** Fields that providerRequestMetadata must never override. */
 const OPENAI_PROTECTED_KEYS = new Set([
@@ -89,6 +89,25 @@ function buildEmbeddingInput(
   return values;
 }
 
+function mediaRefFallbackText(part: ImagePart): string {
+  return JSON.stringify({
+    type: "image_ref",
+    ref: part.image,
+    note: "MediaRef has no resolved URL; provider vision input requires a retrievable image URL.",
+  });
+}
+
+function serializeOpenAiChatContent(content: TextMessageContent): unknown {
+  if (!Array.isArray(content)) return content;
+  return content.map((part) => {
+    if (part.type === "text") return { type: "text", text: part.text };
+    if (part.image.url) {
+      return { type: "image_url", image_url: { url: part.image.url } };
+    }
+    return { type: "text", text: mediaRefFallbackText(part) };
+  });
+}
+
 /**
  * Serialize TextMessage[] to OpenAI wire format.
  * Handles assistant messages with tool_calls and tool role messages.
@@ -100,7 +119,7 @@ function serializeMessages(
     if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
       return {
         role: "assistant",
-        content: msg.content || null,
+        content: serializeOpenAiChatContent(msg.content) || null,
         ...(msg.reasoningContent ? { reasoning_content: msg.reasoningContent } : {}),
         tool_calls: msg.toolCalls.map((tc) => ({
           id: tc.id,
@@ -112,18 +131,18 @@ function serializeMessages(
     if (msg.role === "tool" && msg.toolCallId) {
       return {
         role: "tool",
-        content: msg.content,
+        content: serializeOpenAiChatContent(msg.content),
         tool_call_id: msg.toolCallId,
       };
     }
     if (msg.role === "assistant" && msg.reasoningContent) {
       return {
         role: "assistant",
-        content: msg.content,
+        content: serializeOpenAiChatContent(msg.content),
         reasoning_content: msg.reasoningContent,
       };
     }
-    return { role: msg.role, content: msg.content };
+    return { role: msg.role, content: serializeOpenAiChatContent(msg.content) };
   });
 }
 

@@ -1,0 +1,151 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createAnthropicMessagesAdapter } from "../src/adapters/anthropic-messages.js";
+import { createOpenAiChatAdapter } from "../src/adapters/openai-chat.js";
+import { createOpenAiResponsesAdapter } from "../src/adapters/openai-responses.js";
+import type { TextMessage } from "../src/types.js";
+
+const IMAGE_REF = {
+  id: "a".repeat(64),
+  mime: "image/png",
+  size: 1234,
+  url: "https://cdn.example.test/image.png",
+};
+
+const IMAGE_REF_WITHOUT_URL = {
+  id: "b".repeat(64),
+  mime: "image/png",
+  size: 456,
+};
+
+const MULTIMODAL_MESSAGE: TextMessage = {
+  role: "user",
+  content: [
+    { type: "text", text: "Inspect this image." },
+    { type: "image", image: IMAGE_REF },
+  ],
+};
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+function stubFetch(payload: unknown): void {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      text: async () => JSON.stringify(payload),
+    }),
+  );
+}
+
+function readRequestBody(): Record<string, unknown> {
+  const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit | undefined;
+  expect(init).toBeDefined();
+  return JSON.parse(String(init?.body)) as Record<string, unknown>;
+}
+
+describe("content part serialization", () => {
+  it("serializes image parts for OpenAI Chat", async () => {
+    stubFetch({
+      choices: [{ message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+
+    await createOpenAiChatAdapter().generateText(
+      { baseUrl: "https://api.openai.com/v1", apiKey: "test" },
+      { model: "gpt-4.1-mini", messages: [MULTIMODAL_MESSAGE] },
+      { profile: {} as never, preset: undefined, mode: "text" },
+    );
+
+    expect(readRequestBody().messages).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Inspect this image." },
+          { type: "image_url", image_url: { url: IMAGE_REF.url } },
+        ],
+      },
+    ]);
+  });
+
+  it("serializes image parts for OpenAI Responses", async () => {
+    stubFetch({
+      output_text: "ok",
+      status: "completed",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+
+    await createOpenAiResponsesAdapter().generateText(
+      { baseUrl: "https://api.openai.com/v1", apiKey: "test" },
+      { model: "gpt-4.1-mini", messages: [MULTIMODAL_MESSAGE] },
+      { profile: {} as never, preset: undefined, mode: "text" },
+    );
+
+    expect(readRequestBody().input).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: "Inspect this image." },
+          { type: "input_image", image_url: IMAGE_REF.url },
+        ],
+      },
+    ]);
+  });
+
+  it("serializes image parts for Anthropic Messages", async () => {
+    stubFetch({
+      content: [{ type: "text", text: "ok" }],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+
+    await createAnthropicMessagesAdapter().generateText(
+      { baseUrl: "https://api.anthropic.com/v1", apiKey: "test" },
+      { model: "claude-3-5-sonnet-latest", messages: [MULTIMODAL_MESSAGE] },
+      { profile: {} as never, preset: undefined, mode: "text" },
+    );
+
+    expect(readRequestBody().messages).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Inspect this image." },
+          { type: "image", source: { type: "url", url: IMAGE_REF.url } },
+        ],
+      },
+    ]);
+  });
+
+  it("keeps string messages unchanged and uses text references for unresolved MediaRef images", async () => {
+    stubFetch({
+      choices: [{ message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+
+    await createOpenAiChatAdapter().generateText(
+      { baseUrl: "https://api.openai.com/v1", apiKey: "test" },
+      {
+        model: "gpt-4.1-mini",
+        messages: [
+          { role: "system", content: "You inspect assets." },
+          { role: "user", content: [{ type: "image", image: IMAGE_REF_WITHOUT_URL }] },
+        ],
+      },
+      { profile: {} as never, preset: undefined, mode: "text" },
+    );
+
+    const body = readRequestBody();
+    expect(body.messages).toMatchObject([
+      { role: "system", content: "You inspect assets." },
+      { role: "user", content: [{ type: "text" }] },
+    ]);
+    const unresolvedText = (body.messages as Array<{ content: Array<{ text: string }> }>)[1]?.content[0]?.text;
+    expect(JSON.parse(unresolvedText)).toMatchObject({
+      type: "image_ref",
+      ref: IMAGE_REF_WITHOUT_URL,
+    });
+  });
+});

@@ -21,9 +21,11 @@
  * (e.g. compaction).
  */
 
+import type { LLMMessageContent } from './llm-adapter.js';
+
 export interface PromptMessage {
   readonly role: 'system' | 'user' | 'assistant' | 'tool';
-  readonly content: string;
+  readonly content: LLMMessageContent;
 }
 
 /**
@@ -81,5 +83,14 @@ export function applyPromptDelta(
 }
 
 function messagesEqual(a: PromptMessage, b: PromptMessage): boolean {
-  return a.role === b.role && a.content === b.content;
+  return a.role === b.role && contentEqual(a.content, b.content);
+}
+
+function contentEqual(a: LLMMessageContent, b: LLMMessageContent): boolean {
+  if (typeof a === 'string' || typeof b === 'string') return a === b;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (JSON.stringify(a[i]) !== JSON.stringify(b[i])) return false;
+  }
+  return true;
 }

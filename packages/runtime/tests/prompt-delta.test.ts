@@ -48,6 +48,34 @@ describe('computePromptDelta', () => {
     const previous = [sys, user1, asst1];
     expect(computePromptDelta(previous, previous)).toEqual([]);
   });
+
+  it('compares content parts structurally', () => {
+    const ref = { id: 'a'.repeat(64), mime: 'image/png', size: 12 };
+    const withImage: PromptMessage = {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Look.' },
+        { type: 'image', image: ref },
+      ],
+    };
+    const sameImage: PromptMessage = {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Look.' },
+        { type: 'image', image: ref },
+      ],
+    };
+    const editedImage: PromptMessage = {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Look closer.' },
+        { type: 'image', image: ref },
+      ],
+    };
+
+    expect(computePromptDelta([sys, withImage], [sys, sameImage])).toEqual([]);
+    expect(computePromptDelta([sys, withImage], [sys, editedImage])).toEqual([editedImage]);
+  });
 });
 
 describe('applyPromptDelta', () => {

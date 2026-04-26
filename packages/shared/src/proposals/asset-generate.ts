@@ -13,14 +13,18 @@ export interface AssetGenerateView {
   readonly createdAt: string;
 }
 
-export interface AssetGenerateLLMPlaceholder {
-  readonly type: 'asset.generate';
-  readonly supported: false;
-  readonly reason: 'ai-provider-content-parts-pending';
-  readonly ref: MediaRef;
-  readonly modality: string;
-  readonly meta?: Readonly<Record<string, unknown>>;
+export interface AssetGenerateLLMTextPart {
+  readonly type: 'text';
+  readonly text: string;
 }
+
+export interface AssetGenerateLLMImagePart {
+  readonly type: 'image';
+  readonly image: MediaRef;
+}
+
+export type AssetGenerateLLMPart = AssetGenerateLLMTextPart | AssetGenerateLLMImagePart;
+export type AssetGenerateLLMContent = readonly AssetGenerateLLMPart[];
 
 export function isAssetGeneratePayload(value: unknown): value is AssetGeneratePayload {
   if (!value || typeof value !== 'object') return false;
@@ -68,16 +72,20 @@ export function assetGenerateToView(proposal: Proposal): AssetGenerateView {
   };
 }
 
-export function assetGenerateToLLM(proposal: Proposal): AssetGenerateLLMPlaceholder {
+export function assetGenerateToLLM(proposal: Proposal): AssetGenerateLLMContent {
   const view = assetGenerateToView(proposal);
-  return {
-    type: 'asset.generate',
-    supported: false,
-    reason: 'ai-provider-content-parts-pending',
-    ref: view.ref,
-    modality: view.modality,
-    ...(view.meta ? { meta: view.meta } : {}),
-  };
+  const summary = [
+    `Generated ${view.modality} asset`,
+    `id=${view.ref.id}`,
+    `mime=${view.ref.mime}`,
+    `size=${view.ref.size}`,
+  ].join(' ');
+
+  const parts: AssetGenerateLLMPart[] = [{ type: 'text', text: summary }];
+  if (view.modality === 'image' || view.ref.mime.startsWith('image/')) {
+    parts.push({ type: 'image', image: view.ref });
+  }
+  return parts;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
