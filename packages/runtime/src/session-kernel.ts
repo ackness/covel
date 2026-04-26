@@ -13,8 +13,9 @@
  */
 
 import { getPendingProposals } from '@covel/tools';
-import { isEnvDefaultOn, isEnvEnabled } from '@covel/shared';
+import { assetGenerateToView, isAssetGeneratePayload, isEnvDefaultOn, isEnvEnabled } from '@covel/shared';
 import type {
+  AssetGeneratePayload,
   CommitResult,
   PluginDataBatchPayload,
   PluginDataPayload,
@@ -122,6 +123,16 @@ export function normalizeOutput(
     for (const evt of events) {
       proposals.push(makeProposal('event.emit', source, turnId, sessionId, evt));
     }
+  }
+
+  // asset.generate — from output.assets[] and output.assetGenerations[].
+  // Accepted entry shape: { ref: MediaRef, modality: string, meta?: object }.
+  for (const asset of collectAssetGenerations(output)) {
+    proposals.push(makeProposal('asset.generate', source, turnId, sessionId, {
+      ref: asset.ref,
+      modality: asset.modality,
+      ...(asset.meta ? { meta: asset.meta } : {}),
+    }));
   }
 
   // plugin.data / plugin.data.batch — from pluginData[]. Each entry is
@@ -283,6 +294,7 @@ export function createCommitPipeline(
     'plugin.data.batch': commitPluginDataBatch,
     'working_memory.set': commitWorkingMemory,
     'lorebook.upsert': commitLorebookUpsert,
+    'asset.generate': commitAssetGenerate,
   };
 
   async function commit(proposal: Proposal): Promise<CommitResult> {
@@ -367,6 +379,14 @@ export function createCommitPipeline(
             summary: typeof p.field === 'string' ? p.field : undefined,
             ops: p,
           },
+        });
+      } else if (effectiveProposal.type === 'asset.generate') {
+        const view = assetGenerateToView(effectiveProposal);
+        await emitter.emit('asset.generated', {
+          runtimeId: effectiveProposal.source.runtimeId,
+          pluginId: effectiveProposal.source.pluginId,
+          proposalId: effectiveProposal.id,
+          asset: view,
         });
       }
     }
@@ -513,6 +533,34 @@ export function createCommitPipeline(
     return {
       committed: true,
       event: makeEvent('event.emitted', proposal, proposal.payload),
+    };
+  }
+
+  async function commitAssetGenerate(proposal: Proposal): Promise<CommitResult> {
+    if (!isAssetGeneratePayload(proposal.payload)) {
+      return { committed: false, error: 'asset.generate: payload must be { ref: MediaRef, modality: string, meta?: object }' };
+    }
+
+    const view = assetGenerateToView(proposal);
+    const block = {
+      id: proposal.id,
+      type: 'asset.generate',
+      data: view,
+      meta: { runtimeId: proposal.source.runtimeId, pluginId: proposal.source.pluginId, turnId: proposal.turnId },
+    };
+
+    await store.addMessage({
+      id: proposal.id,
+      sessionId: proposal.sessionId,
+      role: 'assistant',
+      content: '',
+      metadata: { turnId: proposal.turnId, runtimeId: proposal.source.runtimeId, kind: 'plugin', block },
+      createdAt: proposal.timestamp,
+    });
+
+    return {
+      committed: true,
+      event: makeEvent('asset.generated', proposal, { asset: view, block }),
     };
   }
 
@@ -890,6 +938,22 @@ function collectUiBlocks(
   }
 
   return blocks;
+}
+
+function collectAssetGenerations(output: Record<string, unknown>): AssetGeneratePayload[] {
+  const assets: AssetGeneratePayload[] = [];
+  appendAssets(output.assets, assets);
+  appendAssets(output.assetGenerations, assets);
+  return assets;
+}
+
+function appendAssets(value: unknown, assets: AssetGeneratePayload[]): void {
+  if (!Array.isArray(value)) return;
+  for (const item of value) {
+    if (isAssetGeneratePayload(item)) {
+      assets.push(item);
+    }
+  }
 }
 
 function resolveBlockType(payload: Record<string, unknown>): string {

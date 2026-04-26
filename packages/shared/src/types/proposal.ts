@@ -8,6 +8,8 @@
  * Bevy ECS (deferred Commands), Bukkit (priority event chain).
  */
 
+import type { MediaRef } from './media.js';
+
 // ── Proposal Type Enum ──────────────────────────────────────────
 
 export type ProposalType =
@@ -72,6 +74,12 @@ export interface RecordUpsertPayload {
   readonly recordType: 'character' | 'quest' | 'item' | 'location';
   readonly id: string;
   readonly data: Readonly<Record<string, unknown>>;
+}
+
+export interface AssetGeneratePayload {
+  readonly ref: MediaRef;
+  readonly modality: string;
+  readonly meta?: Readonly<Record<string, unknown>>;
 }
 
 export interface PluginDataPayload {
