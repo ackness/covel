@@ -1008,6 +1008,80 @@ describe('processRuntimeResult', () => {
     expect(emitter.events.find((e) => e.type === 'asset.generated')).toBeDefined();
   });
 
+  it('records a warning when image generation finishes without a valid asset proposal', async () => {
+    const store = createMockStore();
+    const result = makeRuntimeResult({
+      assetGenerations: [
+        { base64: 'abc', modality: 'image' },
+      ],
+    });
+
+    const { events, failedProposals } = await processRuntimeResult(result, store as any, SESSION_ID, 'plugin', {
+      capabilities: ['image-generation'],
+    });
+
+    expect(events).toHaveLength(0);
+    expect(failedProposals).toHaveLength(0);
+    expect(store.setPluginData).toHaveBeenCalledOnce();
+    expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
+      sessionId: SESSION_ID,
+      pluginId: 'test-plugin',
+      namespace: '_logs',
+      value: {
+        level: 'warn',
+        message: 'image.generate.asset_missing',
+        meta: {
+          pluginId: 'test-plugin',
+          runtimeId: 'test-runtime',
+          turnId: TURN_ID,
+          proposalCount: 0,
+        },
+        turnId: TURN_ID,
+        runtimeId: 'test-runtime',
+      },
+    });
+  });
+
+  it('keeps image generation logs empty when a valid asset proposal commits', async () => {
+    const store = createMockStore();
+    const result = makeRuntimeResult({
+      assets: [
+        { ref: MEDIA_REF, modality: 'image', meta: { prompt: 'forest' } },
+      ],
+    });
+
+    const { events, failedProposals } = await processRuntimeResult(result, store as any, SESSION_ID, 'plugin', {
+      capabilities: ['image-generation'],
+    });
+
+    expect(events).toHaveLength(1);
+    expect(failedProposals).toHaveLength(0);
+    expect(store.setPluginData).not.toHaveBeenCalled();
+  });
+
+  it('keeps image generation logs empty for pending async asset outputs', async () => {
+    const store = createMockStore();
+    const result = makeRuntimeResult({
+      status: 'pending',
+      pluginData: [
+        { namespace: '_jobs', key: 'job-1', value: { status: 'pending' } },
+      ],
+    });
+
+    const { events, failedProposals } = await processRuntimeResult(result, store as any, SESSION_ID, 'plugin', {
+      capabilities: ['image-generation'],
+    });
+
+    expect(events).toHaveLength(0);
+    expect(failedProposals).toHaveLength(0);
+    expect(store.setPluginData).toHaveBeenCalledOnce();
+    expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
+      namespace: '_jobs',
+      key: 'job-1',
+      value: { status: 'pending' },
+    });
+  });
+
   it('should surface failed proposals when commit returns committed:false', async () => {
     const store = createMockStore();
     // Use working_memory.set which returns committed:false when feature flag is off

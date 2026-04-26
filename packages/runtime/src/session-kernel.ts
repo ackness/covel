@@ -789,6 +789,7 @@ export async function processRuntimeResult(
     readonly hookPipeline?: HookPipeline;
     readonly eventBus?: EventBus;
     readonly emitter?: import('./turn-emitter.js').TurnEmitter;
+    readonly capabilities?: readonly string[];
   },
 ): Promise<ProcessRuntimeResultOutput> {
   const empty: ProcessRuntimeResultOutput = { events: [], failedProposals: [] };
@@ -808,6 +809,8 @@ export async function processRuntimeResult(
     result.toolCalls,
   );
   proposals.push(...getPendingProposals(result.output));
+
+  await warnOnMissingImageAsset(result, store, sessionId, proposals, opts?.capabilities);
 
   if (proposals.length === 0) {
     return empty;
@@ -854,6 +857,81 @@ export async function processRuntimeResult(
   }
 
   return { events, failedProposals };
+}
+
+async function warnOnMissingImageAsset(
+  result: {
+    pluginId: string;
+    runtimeId: string;
+    turnId: string;
+    status: string;
+    output: Record<string, unknown> | null;
+  },
+  store: KernelStore,
+  sessionId: string,
+  proposals: readonly Proposal[],
+  capabilities: readonly string[] | undefined,
+): Promise<void> {
+  if (!capabilities?.includes('image-generation')) return;
+  if (isPendingAssetOutput(result.output)) return;
+
+  const hasAssetGenerate = proposals.some(
+    (proposal) => proposal.type === 'asset.generate' && isAssetGeneratePayload(proposal.payload),
+  );
+  if (hasAssetGenerate) return;
+
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const key = `${now.getTime().toString(36).padStart(9, '0')}-${crypto.randomUUID().slice(0, 8)}`;
+  const message = 'image.generate.asset_missing';
+  const value = {
+    level: 'warn',
+    message,
+    meta: {
+      pluginId: result.pluginId,
+      runtimeId: result.runtimeId,
+      turnId: result.turnId,
+      proposalCount: proposals.length,
+    },
+    turnId: result.turnId,
+    runtimeId: result.runtimeId,
+    timestamp: nowIso,
+  };
+
+  if (store.setPluginData) {
+    try {
+      await store.setPluginData({
+        id: `${sessionId}:${result.pluginId}:_logs:${key}`,
+        sessionId,
+        pluginId: result.pluginId,
+        namespace: '_logs',
+        key,
+        value,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      });
+      return;
+    } catch {
+      // Fall through to console warning so the missing asset remains visible.
+    }
+  }
+
+  console.warn(
+    '[session-kernel] %s for runtime %s (session %s, turn %s)',
+    message,
+    result.runtimeId,
+    sessionId,
+    result.turnId,
+  );
+}
+
+function isPendingAssetOutput(output: Record<string, unknown> | null): boolean {
+  const status = typeof output?.status === 'string' ? output.status.toLowerCase() : '';
+  return status === 'pending'
+    || status === 'queued'
+    || status === 'running'
+    || status === 'processing'
+    || status === 'in_progress';
 }
 
 // ── Trace Recorder ──────────────────────────────────────────────

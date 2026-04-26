@@ -148,8 +148,10 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
   // Build outputKind lookup from manifest declarations (framework never hardcodes plugin IDs).
   // Key = manifest.name, which the executor uses as both runtimeId and pluginId.
   const outputKindMap = new Map<string, string>();
+  const runtimeCapabilitiesMap = new Map<string, readonly string[]>();
   for (const rt of activeRuntimes) {
     outputKindMap.set(rt.name, rt.outputKind ?? 'plugin');
+    runtimeCapabilitiesMap.set(rt.name, rt.capabilities ?? []);
   }
 
   // Discover the world data provider plugin by capability (framework never hardcodes plugin IDs)
@@ -397,11 +399,13 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
       const hookPipeline = c.get('hookPipeline');
       for (const rr of result.runtimeResults) {
         const kind = outputKindMap.get(rr.runtimeId) ?? 'plugin';
-        const { events } = await processRuntimeResult(rr, store, sessionId, kind, {
+        const processOpts = {
           ...(hookPipeline ? { hookPipeline } : {}),
           eventBus,
           emitter,
-        });
+          capabilities: runtimeCapabilitiesMap.get(rr.runtimeId) ?? [],
+        };
+        const { events } = await processRuntimeResult(rr, store, sessionId, kind, processOpts);
 
         for (const evt of events) {
           // Emit using ProtocolEventType directly — no legacy mapping

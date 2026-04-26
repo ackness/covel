@@ -5,7 +5,7 @@
  * and per-call response overrides via `nextResponses` queue.
  */
 
-import type { LLMAdapter, LLMResponse } from '@covel/runtime';
+import type { LLMAdapter, LLMAdapterMessage, LLMResponse } from '@covel/runtime';
 
 /**
  * Configurable mock LLM adapter for plugin testing.
@@ -32,7 +32,7 @@ import type { LLMAdapter, LLMResponse } from '@covel/runtime';
  * ```
  */
 export class MockLLM implements LLMAdapter {
-  calls: Array<{ messages: readonly { role: string; content: string; name?: string }[] }> = [];
+  calls: Array<{ messages: readonly LLMAdapterMessage[] }> = [];
   defaultResponse: LLMResponse;
 
   /**
@@ -50,7 +50,7 @@ export class MockLLM implements LLMAdapter {
   }
 
   async generate(
-    params: { messages: readonly { role: string; content: string; name?: string }[] },
+    params: Parameters<LLMAdapter['generate']>[0],
   ): Promise<LLMResponse> {
     this.calls.push({ messages: params.messages });
     return this.defaultResponse;

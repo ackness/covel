@@ -258,8 +258,10 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
 
     // Build outputKind lookup once — shared between sync and background paths.
     const outputKindMap = new Map<string, string>();
+    const runtimeCapabilitiesMap = new Map<string, readonly string[]>();
     for (const rt of activeRuntimes) {
       outputKindMap.set(rt.name, rt.outputKind ?? 'plugin');
+      runtimeCapabilitiesMap.set(rt.name, rt.capabilities ?? []);
     }
 
     // Executes the manual-trigger turn end-to-end: run through the turn
@@ -336,11 +338,13 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
 
       for (const rr of result.runtimeResults) {
         const kind = outputKindMap.get(rr.runtimeId) ?? 'plugin';
-        await processRuntimeResult(rr, store, sessionId, kind, {
+        const processOpts = {
           ...(hookPipeline ? { hookPipeline } : {}),
           eventBus,
           emitter,
-        });
+          capabilities: runtimeCapabilitiesMap.get(rr.runtimeId) ?? [],
+        };
+        await processRuntimeResult(rr, store, sessionId, kind, processOpts);
       }
 
       const summary = result.runtimeResults.map((rr) => ({
@@ -511,10 +515,12 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
 
         // Commit proposals (pluginData, events, etc.) via the standard pipeline.
         const kind = outputKindMap.get(args.runtimeId) ?? 'plugin';
-        await processRuntimeResult(runtimeResult, store, sessionId, kind, {
+        const processOpts = {
           ...(hookPipeline ? { hookPipeline } : {}),
           eventBus,
-        });
+          capabilities: followerManifest.capabilities ?? [],
+        };
+        await processRuntimeResult(runtimeResult, store, sessionId, kind, processOpts);
 
         // Audit P1-6: persist the derived job status so a UI watching
         // `_jobs/<jobId>` doesn't see stale `pending` after a business

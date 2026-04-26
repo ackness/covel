@@ -251,11 +251,13 @@ resumeRoutes.post('/:id/resume', async (c) => {
     }
 
     const outputKind = effectiveManifest.outputKind ?? 'plugin';
-    const { events } = await processRuntimeResult(result, store, sessionId, outputKind, {
+    const processOpts = {
       ...(hookPipeline ? { hookPipeline } : {}),
       ...(eventBus ? { eventBus } : {}),
       emitter,
-    });
+      capabilities: effectiveManifest.capabilities ?? [],
+    };
+    const { events } = await processRuntimeResult(result, store, sessionId, outputKind, processOpts);
 
     return c.json({ result, events });
   } catch (err: unknown) {

@@ -15,6 +15,7 @@
  */
 
 import type { PluginRuntimeGateway, ResolvedSlotForPlugin } from '@covel/plugin-loader';
+import type { ZodType } from 'zod';
 import type { GatewayAdapterConfig, SlotOverridesInput } from './gateway-llm-adapter.js';
 
 /**
@@ -50,7 +51,7 @@ export interface FullGatewayLike {
   generateObject<T>(
     input: {
       presetId?: string;
-      schema: unknown;
+      schema: ZodType<T>;
       messages: Array<{ role: string; content: string | null }>;
       providerRequestMetadata?: Record<string, unknown>;
     },
@@ -93,7 +94,7 @@ export interface PluginRuntimeGatewayConfig extends GatewayAdapterConfig {
    * When omitted, the adapter rejects `generateObject` calls — agent
    * runtimes should be used instead.
    */
-  readonly toZodSchema?: (jsonSchema: Readonly<Record<string, unknown>>) => unknown;
+  readonly toZodSchema?: (jsonSchema: Readonly<Record<string, unknown>>) => ZodType<unknown>;
 }
 
 /**
@@ -175,7 +176,7 @@ export function createPluginRuntimeGateway(
       const result = await gateway.generateObject<T>(
         {
           ...(input.presetId ? { presetId: input.presetId } : {}),
-          schema: zodSchema,
+          schema: zodSchema as ZodType<T>,
           messages,
           ...(input.providerRequestMetadata
             ? { providerRequestMetadata: { ...input.providerRequestMetadata } }

@@ -517,7 +517,7 @@ export function assetGenerateToLLM(
 ): ProviderImageContent { ... }
 ```
 
-> ⚠️ **依赖警告（Codex 评审 #10）**：当前 `@covel/ai-provider` 的 `TextMessage.content` 仍是 `string | null`，OpenAI / Anthropic adapter 只发纯文本。`assetGenerateToLLM()` 真正生效之前，必须先在 ai-provider 设计 content parts（`TextPart | ImagePart | ToolCallPart` 联合）。P0-a/P0-b 可先落地 `assetGenerateToView()`，LLM 多模态消费放到 P1。
+> ✅ **P1 落地状态（2026-04-26）**：`@covel/ai-provider` 的 `TextMessage.content` 已扩展为 content parts 联合，OpenAI Chat / OpenAI Responses / Anthropic adapters 已按 provider 协议序列化文本与图片块，`assetGenerateToLLM()` 已进入真实 LLM content 路径。
 
 #### 框架其他部分需要适配
 
@@ -587,7 +587,7 @@ export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
 - `first`：遍历到首个返回非 `continue` 的 handler 即停
 - `sequential`：链式合并 `replace` 进 payload
 - `parallel`：`Promise.allSettled`，只收集错误不影响 payload
-- `stream`：复用 AI SDK 的 `experimental_transform`（留给 P1）
+- `stream`：P1 保留语义标签与 fallback；真实流式 transform 在新增 stream hook 时接入
 
 排序仍按 `enforce: 'pre' | 'normal' | 'post'`（Vite/Rollup 风格），同 enforce 内按注册顺序。
 
@@ -823,7 +823,7 @@ capabilities:
 | `packages/shared/src/types/proposal.ts` | `AssetGeneratePayload` 收紧为强制 `ref: MediaRef` + `modality: string` |
 | `packages/shared/src/schemas/proposal.ts`（如有） | Zod schema 拒绝 inline base64/blob 字段 |
 | `apps/web/src/components/asset-render/` | 按 `modality` 路由：image→gallery、audio→player、其他→generic-link |
-| `packages/runtime/src/turn-emitter.ts` | **运行期** warning：插件声明 `capabilities: ['image-generation']` 但本 turn 没 emit `asset.generate`，记一行 warn（不阻断）。Codex 评审 #8 指出加载期无法静态判断 emit 行为，必须移到运行期 |
+| `packages/runtime/src/session-kernel.ts` | **运行期** warning：插件声明 `capabilities: ['image-generation']` 且完成态输出没 emit `asset.generate`，在插件 `_logs` 写 `image.generate.asset_missing` warn；异步 `pending/queued/running/processing` 中间态跳过 warning。Codex 评审 #8 指出加载期无法静态判断 emit 行为，必须移到运行期 |
 | `packages/plugin-test-utils/src/contract.ts`（新） | 插件作者写 harness test 时可调 `expectAssetGenerated()` 断言，发布前在 CI 跑 |
 
 #### 现有图像插件迁移清单
@@ -931,12 +931,13 @@ return {
 
 ### P1：Hook 语义 + 局部 view/LLM helper 收尾 + ToolClient 统一（2-3 周）
 
-- Hook 语义标签 + pipeline 按语义分支重构（§ 5.3，零现存 hook 已确认零破坏）
-- 文档（`docs/reference/plugins.md` + `docs/guide/plugin-authoring.md`）补充 hook 语义表
-- `assetGenerateToLLM()` 真正生效：先在 `@covel/ai-provider` 设计 `TextMessage.content` 的 content parts 联合（`TextPart | ImagePart | ToolCallPart`），OpenAI / Anthropic adapter 各自按 provider 编码（Codex 评审 #10）
-- ToolClient 接口落地（builtin / local 工具统一走 `InMemoryToolClient`）
-- 运行期 warning：插件声明 `capabilities: ['image-generation']` 但本 turn 没 emit `asset.generate` → warn（Codex 评审 #8）
-- plugin-test-utils 新增 `expectAssetGenerated()` 合约断言
+- [x] Hook 语义标签 + pipeline 按语义分支重构（§ 5.3，零现存 hook 已确认零破坏）
+- [x] 文档（`docs/reference/plugins.md` + `docs/guide/plugin-authoring.md`）补充 hook 语义表
+- [x] `assetGenerateToLLM()` 真正生效：`@covel/ai-provider` 已支持 `TextMessage.content` content parts 联合，OpenAI / Anthropic adapter 各自按 provider 编码（Codex 评审 #10）
+- [x] ToolClient 接口落地（builtin / local 工具统一走 `InMemoryToolClient`）
+- [x] 运行期 warning：插件声明 `capabilities: ['image-generation']` 且完成态输出没 emit `asset.generate` → `_logs/image.generate.asset_missing` warn（Codex 评审 #8）
+- [x] plugin-test-utils 新增 `expectAssetGenerated()` 合约断言
+- [x] P1 类型收尾：`MockLLM` 跟随多模态 `LLMAdapter.generate` 签名，`FullGatewayLike.generateObject` 与 ai-provider Zod schema 签名对齐
 
 ### P2：扩展后端 + 高层抽象（2-3 周）
 

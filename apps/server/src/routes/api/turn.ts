@@ -151,16 +151,20 @@ turnRoutes.post('/:id/turn', rateLimiter({ max: 30 }), async (c) => {
     // hooks registered by plugins fire on this route too, matching
     // /api/actions.
     const outputKindMap = new Map<string, string>();
+    const runtimeCapabilitiesMap = new Map<string, readonly string[]>();
     for (const rt of activeRuntimes) {
       outputKindMap.set(rt.name, rt.outputKind ?? 'plugin');
+      runtimeCapabilitiesMap.set(rt.name, rt.capabilities ?? []);
     }
     for (const rr of executed.runtimeResults) {
       const kind = outputKindMap.get(rr.runtimeId) ?? 'plugin';
-      await processRuntimeResult(rr, store, sessionId, kind, {
+      const processOpts = {
         ...(hookPipeline ? { hookPipeline } : {}),
         ...(eventBus ? { eventBus } : {}),
         emitter,
-      });
+        capabilities: runtimeCapabilitiesMap.get(rr.runtimeId) ?? [],
+      };
+      await processRuntimeResult(rr, store, sessionId, kind, processOpts);
     }
 
     return executed;

@@ -778,11 +778,15 @@ async function runDeferredFollower(args: {
       timestamp: completedAt,
       ...(failed ? { error: typeof outputRecord.error === 'string' ? outputRecord.error : 'runtime reported failure' } : {}),
     };
+    const processOpts = {
+      capabilities: manifest.capabilities ?? [],
+    };
     await processRuntimeResult(
       runtimeResult,
       args.store,
       args.sessionId,
       manifest.outputKind ?? 'plugin',
+      processOpts,
     );
     await args.store.setPluginData({
       id: `${args.sessionId}:${args.follower.pluginId}:_jobs:${jobId}`,
@@ -943,12 +947,19 @@ export async function runRuntimeDebug(
   );
 
   const outputKindMap = new Map(manifests.map((m) => [m.name, m.outputKind ?? 'plugin']));
+  const runtimeCapabilitiesMap = new Map(
+    manifests.map((m): [string, readonly string[]] => [m.name, m.capabilities ?? []]),
+  );
   for (const runtimeResult of result.runtimeResults) {
+    const processOpts = {
+      capabilities: runtimeCapabilitiesMap.get(runtimeResult.runtimeId) ?? [],
+    };
     await processRuntimeResult(
       runtimeResult,
       store,
       sessionId,
       outputKindMap.get(runtimeResult.runtimeId) ?? 'plugin',
+      processOpts,
     );
   }
 
