@@ -5,9 +5,25 @@ import type { FunctionHandlerContext, PluginRuntimeUtils } from '@covel/plugin-l
 type MediaContext = NonNullable<FunctionHandlerContext['media']>;
 type IngestUrlOptions = Parameters<MediaContext['ingestUrl']>[1];
 
-export type MediaStoreLike = Pick<MediaStore, 'put' | 'get' | 'resolveUrl'>;
+export type MediaStoreLike = Pick<
+  MediaStore,
+  'put' | 'get' | 'resolveUrl' | 'recordOwnership'
+>;
 
 interface CreateRuntimeMediaContextOptions {
+  /**
+   * Identifies which session writes assets through this context. Required so
+   * every `put` / `ingestUrl` call records ownership and the `/api/media/:id`
+   * route can authorise dereferencing. Kernel-level callers that genuinely
+   * need an owner-less path should use a dedicated helper instead of this
+   * runtime context.
+   */
+  readonly sessionId: string;
+  /**
+   * Identifies which plugin writes the asset. Optional because the kernel
+   * itself may write through the same context without a plugin scope.
+   */
+  readonly pluginId?: string;
   readonly maxRedirects?: number;
   readonly defaultMaxBytes?: number;
   readonly defaultTimeoutMs?: number;
@@ -20,12 +36,21 @@ const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308]);
 
 export function createRuntimeMediaContext(
   mediaStore: MediaStoreLike,
-  utils?: PluginRuntimeUtils,
-  options: CreateRuntimeMediaContextOptions = {},
+  utils: PluginRuntimeUtils | undefined,
+  options: CreateRuntimeMediaContextOptions,
 ): MediaContext {
+  const { sessionId, pluginId } = options;
   return {
-    put(blob, mime, meta) {
-      return mediaStore.put(blob, mime, meta);
+    async put(blob, mime, meta) {
+      const ref = await mediaStore.put(blob, mime, meta);
+      // First-writer-wins inside MediaStore.recordOwnership: a duplicate
+      // (same SHA-256) put from a second session reuses the existing row
+      // without overwriting the original owner. That's intentional —
+      // content-addressable dedup means the earliest writer keeps
+      // ownership and follow-up sessions take a reference via
+      // commit-time `addRef` (P0-d).
+      await mediaStore.recordOwnership(ref.id, sessionId, pluginId);
+      return ref;
     },
     get(ref) {
       return mediaStore.get(ref);
@@ -33,11 +58,13 @@ export function createRuntimeMediaContext(
     resolveUrl(ref) {
       return mediaStore.resolveUrl(ref);
     },
-    ingestUrl(url, opts) {
+    async ingestUrl(url, opts) {
       if (!utils) {
         throw new Error('ctx.media.ingestUrl requires runtime utils');
       }
-      return ingestUrlIntoStore(mediaStore, utils, url, opts, options);
+      const ref = await ingestUrlIntoStore(mediaStore, utils, url, opts, options);
+      await mediaStore.recordOwnership(ref.id, sessionId, pluginId);
+      return ref;
     },
   };
 }

@@ -123,21 +123,6 @@ mediaRoutes.get('/:id', async (c) => {
       return jsonError('internal', 'media reference check failed', 500);
     }
   }
-  if (!allowed && lookup.ownerSessionId === null) {
-    // P0-a transitional: runtime ctx.media.put() does not yet thread
-    // sessionId/pluginId into recordOwnership(), so freshly-ingested assets
-    // appear with ownerSessionId === null and no media_refs row. Without
-    // this fallback every freshly-generated image would 403 when the front
-    // end tried to display it. The follow-up ticket (see SPEC §5.1 (h)
-    // and the agent worktree notes) will thread sessionId through the
-    // runtime media context; once that lands, the conditional below
-    // becomes dead code and should be removed.
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[api/media] ownership not recorded for ${id}; allowing access pending runtime wiring (session=${verdict.sessionId})`,
-    );
-    allowed = true;
-  }
   if (!allowed) {
     return jsonError('forbidden', 'session does not reference this media', 403);
   }

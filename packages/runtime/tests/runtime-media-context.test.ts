@@ -12,10 +12,13 @@ function pngBytes(extra = 0): Uint8Array {
 
 function createStore(): MediaStoreLike & {
   readonly puts: Array<{ bytes: Uint8Array | Blob; mime: string; meta: unknown }>;
+  readonly ownerships: Array<{ id: string; sessionId: string; pluginId?: string }>;
 } {
   const puts: Array<{ bytes: Uint8Array | Blob; mime: string; meta: unknown }> = [];
+  const ownerships: Array<{ id: string; sessionId: string; pluginId?: string }> = [];
   return {
     puts,
+    ownerships,
     async put(bytes, mime, meta) {
       puts.push({ bytes, mime, meta });
       const size = bytes instanceof Uint8Array ? bytes.byteLength : bytes.size;
@@ -27,8 +30,13 @@ function createStore(): MediaStoreLike & {
     async resolveUrl(ref) {
       return `https://media.example.test/${ref.id}`;
     },
+    async recordOwnership(id, sessionId, pluginId) {
+      ownerships.push({ id, sessionId, ...(pluginId === undefined ? {} : { pluginId }) });
+    },
   };
 }
+
+const TEST_OWNER = { sessionId: 'sess-test', pluginId: 'plugin-test' } as const;
 
 function createUtils(
   responses: Record<string, Response>,
@@ -52,18 +60,50 @@ function createUtils(
 describe('createRuntimeMediaContext', () => {
   it('forwards put/get/resolveUrl to the media store', async () => {
     const store = createStore();
-    const media = createRuntimeMediaContext(store);
+    const media = createRuntimeMediaContext(store, undefined, TEST_OWNER);
     const ref = await media.put(new Uint8Array([1, 2, 3]), 'application/octet-stream');
 
     expect(ref).toEqual({ id: 'media-1', mime: 'application/octet-stream', size: 3 });
     expect(await media.get(ref)).toEqual(new Uint8Array(3));
     expect(await media.resolveUrl(ref)).toBe('https://media.example.test/media-1');
+    expect(store.ownerships).toEqual([
+      { id: 'media-1', sessionId: TEST_OWNER.sessionId, pluginId: TEST_OWNER.pluginId },
+    ]);
+  });
+
+  it('records ownership after a successful ingestUrl', async () => {
+    const store = createStore();
+    const utils = createUtils({
+      'https://ok.example.test/image': new Response(pngBytes(), {
+        headers: { 'content-type': 'image/png' },
+      }),
+    });
+    const media = createRuntimeMediaContext(store, utils, TEST_OWNER);
+
+    const ref = await media.ingestUrl('https://ok.example.test/image');
+
+    expect(store.puts).toHaveLength(1);
+    expect(store.ownerships).toEqual([
+      { id: ref.id, sessionId: TEST_OWNER.sessionId, pluginId: TEST_OWNER.pluginId },
+    ]);
+  });
+
+  it('does not record ownership if ingestUrl fails before put', async () => {
+    const store = createStore();
+    const utils = createUtils({}, ['https://blocked.example.test/image.png']);
+    const media = createRuntimeMediaContext(store, utils, TEST_OWNER);
+
+    await expect(
+      media.ingestUrl('https://blocked.example.test/image.png'),
+    ).rejects.toThrow();
+    expect(store.puts).toHaveLength(0);
+    expect(store.ownerships).toHaveLength(0);
   });
 
   it('validates the original ingest URL before fetching', async () => {
     const store = createStore();
     const utils = createUtils({}, ['https://blocked.example.test/image.png']);
-    const media = createRuntimeMediaContext(store, utils);
+    const media = createRuntimeMediaContext(store, utils, TEST_OWNER);
 
     await expect(media.ingestUrl('https://blocked.example.test/image.png')).rejects.toThrow(
       /URL rejected/,
@@ -82,7 +122,7 @@ describe('createRuntimeMediaContext', () => {
       },
       ['https://blocked.example.test/image.png'],
     );
-    const media = createRuntimeMediaContext(store, utils);
+    const media = createRuntimeMediaContext(store, utils, TEST_OWNER);
 
     await expect(media.ingestUrl('https://ok.example.test/start')).rejects.toThrow(
       /URL rejected/,
@@ -98,7 +138,7 @@ describe('createRuntimeMediaContext', () => {
         headers: { 'content-type': 'image/png' },
       }),
     });
-    const media = createRuntimeMediaContext(store, utils);
+    const media = createRuntimeMediaContext(store, utils, TEST_OWNER);
 
     await expect(
       media.ingestUrl('https://ok.example.test/big.png', { maxBytes: 8 }),
@@ -113,7 +153,7 @@ describe('createRuntimeMediaContext', () => {
         headers: { 'content-type': 'text/plain' },
       }),
     });
-    const media = createRuntimeMediaContext(store, utils);
+    const media = createRuntimeMediaContext(store, utils, TEST_OWNER);
 
     const ref = await media.ingestUrl('https://ok.example.test/image', {
       allowedMimes: ['image/png'],

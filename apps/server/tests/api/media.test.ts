@@ -229,12 +229,10 @@ describe('GET /api/media/:id', () => {
     expect(body.code).toBe('forbidden');
   });
 
-  it('200 (transitional) when ownership has not been recorded yet', async () => {
-    // Simulates the current runtime ctx.media path: put() without
-    // recordOwnership() — owner is null and there are no media_refs rows.
-    // The route logs a warning but allows the read so freshly-generated
-    // images do not 403 in the UI. Drop this test once runtime wiring
-    // calls recordOwnership() on every put.
+  it('403 when ownership was never recorded (ownerSessionId === null and no media_refs row)', async () => {
+    // After P0-a runtime wiring lands, every ctx.media.put() must call
+    // recordOwnership(); an asset with ownerSessionId === null and no
+    // media_refs row is now an integrity bug, not a permission bypass.
     const mock = createMockMediaStore();
     const bytes = new Uint8Array([9, 9, 9]);
     const ref = mock.put({
@@ -247,7 +245,7 @@ describe('GET /api/media/:id', () => {
     const token = signMediaTokenForSession(ref.id, 'sess-anyone');
     const app = createTestApp(mock.store);
     const res = await app.request(`/api/media/${ref.id}?token=${encodeURIComponent(token)}`);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
   });
 
   it('200 when ownership is via media_refs (not direct owner)', async () => {
