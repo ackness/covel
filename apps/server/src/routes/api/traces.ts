@@ -15,6 +15,13 @@ import type { DataStore, TraceEventRecord } from '@covel/store';
  *   - Frontend code can do a one-line `id.startsWith('legacy:')` fallback.
  */
 const LEGACY_MEDIA_REF_PREFIX = 'legacy:';
+/**
+ * Maximum decoded data-URL size (bytes) we are willing to inline back into
+ * the legacy trace payload. Anything larger ships only as `mime` + `size`
+ * so the trace REST response cannot blow up with megabyte base64 strings
+ * (P2 audit finding 2).
+ */
+const LEGACY_DATA_URL_MAX_INLINE_BYTES = 64 * 1024;
 
 type Env = {
   Variables: {
@@ -397,9 +404,11 @@ function legacyRefFromRemoteUrl(
 }
 
 /**
- * Build a synthetic MediaRef for a data: URL. Tags the synthetic id with
- * the `legacy:` prefix for the same reason as `legacyRefFromRemoteUrl`.
- * Data-URL byte caps land in a follow-up commit.
+ * Build a synthetic MediaRef for a data: URL. Drops the inline `url`
+ * payload when the decoded byte size exceeds
+ * `LEGACY_DATA_URL_MAX_INLINE_BYTES` so the trace REST response cannot
+ * blow up with megabyte base64 strings. The id is tagged with `legacy:`
+ * for the same reason as `legacyRefFromRemoteUrl`.
  */
 function legacyRefFromDataUrl(
   dataUrl: string,
@@ -407,16 +416,20 @@ function legacyRefFromDataUrl(
   size: number,
   record: Record<string, unknown>,
 ): LegacyRefHit | null {
+  // data: URLs do not parse with `new URL()` reliably across runtimes for
+  // size validation; trust the caller's basic prefix check instead.
   if (!dataUrl.startsWith('data:')) return null;
 
+  const inline = size > 0 && size <= LEGACY_DATA_URL_MAX_INLINE_BYTES;
   const ref: MediaRef = {
     id: `${LEGACY_MEDIA_REF_PREFIX}${hashHex(dataUrl)}`,
     mime,
     size,
-    url: dataUrl,
+    ...(inline ? { url: dataUrl } : {}),
     meta: {
       legacy: true,
       legacyKind: 'data-url',
+      ...(inline ? {} : { dataUrlOmitted: true, dataUrlMaxBytes: LEGACY_DATA_URL_MAX_INLINE_BYTES }),
       ...(recordField(record, 'meta') ?? {}),
     },
   };

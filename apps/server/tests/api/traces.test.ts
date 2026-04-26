@@ -155,4 +155,89 @@ describe('traceRoutes legacy asset adapter', () => {
     expect(ref.id.startsWith('legacy:')).toBe(true);
     expect(mediaRefSchema.safeParse(ref).success).toBe(false);
   });
+
+  it('omits inline data: URL bytes when above the inline size cap', async () => {
+    const store = createMemoryStore();
+    await store.createSession(makeSession('sess-data-url'));
+
+    // Build a base64 string whose decoded byte size exceeds 64 KiB.
+    // 100 000 bytes of 'A' base64-encoded is well above the 64 KiB cap.
+    const big = 'A'.repeat(100_000);
+    const oversizedBase64 = Buffer.from(big).toString('base64');
+    const oversizedDataUrl = `data:image/png;base64,${oversizedBase64}`;
+
+    await store.setPluginData({
+      id: 'pd-big',
+      sessionId: 'sess-data-url',
+      pluginId: 'image-plugin',
+      namespace: 'images',
+      key: 'img-big',
+      value: {
+        turnId: 'turn-1',
+        dataUrl: oversizedDataUrl,
+        mime: 'image/png',
+      },
+      createdAt: '2026-04-26T00:00:00.000Z',
+      updatedAt: '2026-04-26T00:00:00.000Z',
+    });
+
+    const app = makeApp(store);
+    const res = await app.request('/api/traces/sess-data-url');
+    const body = await res.json() as {
+      events: Array<{ type: string; payload: Record<string, unknown> }>;
+    };
+    const legacy = body.events.find((event) => event.type === 'asset.generated');
+    expect(legacy).toBeDefined();
+    expect(legacy?.payload.legacyKind).toBe('data-url');
+
+    const asset = legacy?.payload.asset as Record<string, unknown>;
+    const ref = asset?.ref as { id: string; url?: string; mime: string; size: number; meta?: Record<string, unknown> };
+    // Above-cap data URLs must NOT inline the bytes back into the trace
+    // payload (P2 finding 2 — would otherwise blow up the REST response).
+    expect(ref.url).toBeUndefined();
+    expect(ref.mime).toBe('image/png');
+    expect(ref.size).toBeGreaterThan(64 * 1024);
+    expect(ref.meta?.dataUrlOmitted).toBe(true);
+    // The synthesized id is still tagged so it never impersonates a real
+    // content-addressed ref.
+    expect(ref.id.startsWith('legacy:')).toBe(true);
+    expect(mediaRefSchema.safeParse(ref).success).toBe(false);
+  });
+
+  it('inlines data: URL bytes only when under the inline size cap', async () => {
+    const store = createMemoryStore();
+    await store.createSession(makeSession('sess-small-data-url'));
+
+    // Decoded size ~30 bytes — well under the 64 KiB cap.
+    const tinyBase64 = Buffer.from('hello world tiny image').toString('base64');
+    const smallDataUrl = `data:image/png;base64,${tinyBase64}`;
+
+    await store.setPluginData({
+      id: 'pd-tiny',
+      sessionId: 'sess-small-data-url',
+      pluginId: 'image-plugin',
+      namespace: 'images',
+      key: 'img-tiny',
+      value: {
+        turnId: 'turn-1',
+        dataUrl: smallDataUrl,
+        mime: 'image/png',
+      },
+      createdAt: '2026-04-26T00:00:00.000Z',
+      updatedAt: '2026-04-26T00:00:00.000Z',
+    });
+
+    const app = makeApp(store);
+    const res = await app.request('/api/traces/sess-small-data-url');
+    const body = await res.json() as {
+      events: Array<{ type: string; payload: Record<string, unknown> }>;
+    };
+    const legacy = body.events.find((event) => event.type === 'asset.generated');
+    const asset = legacy?.payload.asset as Record<string, unknown>;
+    const ref = asset?.ref as { id: string; url?: string; meta?: Record<string, unknown> };
+
+    expect(ref.url).toBe(smallDataUrl);
+    expect(ref.meta?.dataUrlOmitted).toBeUndefined();
+    expect(ref.id.startsWith('legacy:')).toBe(true);
+  });
 });
