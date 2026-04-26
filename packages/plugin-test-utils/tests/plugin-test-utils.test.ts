@@ -3,6 +3,7 @@ import path from 'node:path';
 import {
   MockLLM,
   createTestHarness,
+  expectAssetGenerated,
   makeTurnInput,
   makeTriggerContext,
   makeRuntimeResult,
@@ -54,6 +55,67 @@ describe('makeRuntimeResult', () => {
     const result = makeRuntimeResult({ status: 'failed', output: { foo: 'bar' } });
     expect(result.status).toBe('failed');
     expect(result.output).toEqual({ foo: 'bar' });
+  });
+});
+
+// ── Contract assertions ────────────────────────────────────────
+
+const MEDIA_REF = {
+  id: 'a'.repeat(64),
+  mime: 'image/png',
+  size: 123,
+};
+
+describe('expectAssetGenerated', () => {
+  it('accepts output.assets[] with MediaRef payload', () => {
+    const asset = expectAssetGenerated(
+      makeRuntimeResult({
+        output: {
+          assets: [{ ref: MEDIA_REF, modality: 'image', meta: { prompt: 'mountain' } }],
+        },
+      }),
+      { modality: 'image' },
+    );
+
+    expect(asset.ref).toEqual(MEDIA_REF);
+    expect(asset.modality).toBe('image');
+    expect(asset.meta).toEqual({ prompt: 'mountain' });
+  });
+
+  it('accepts output.assetGenerations[] from a turn result', () => {
+    const asset = expectAssetGenerated({
+      turnId: 'turn-1',
+      sessionId: 'sess-test',
+      runtimeResults: [
+        makeRuntimeResult({
+          output: {
+            assetGenerations: [{ ref: MEDIA_REF, modality: 'image' }],
+          },
+        }),
+      ],
+      durationMs: 10,
+      timestamp: new Date().toISOString(),
+    });
+
+    expect(asset.modality).toBe('image');
+  });
+
+  it('fails when no asset was emitted', () => {
+    expect(() => expectAssetGenerated(makeRuntimeResult())).toThrow(
+      'Expected asset.generate output in output.assets[] or output.assetGenerations[]',
+    );
+  });
+
+  it('fails when the MediaRef shape is invalid', () => {
+    expect(() => expectAssetGenerated({ assets: [{ ref: { id: 'short' }, modality: 'image' }] })).toThrow(
+      'Expected asset.generate payload with MediaRef shape',
+    );
+  });
+
+  it('fails when expected modality is absent', () => {
+    expect(() => expectAssetGenerated({ assets: [{ ref: MEDIA_REF, modality: 'audio' }] }, 'image')).toThrow(
+      'Expected asset.generate modality "image", received audio',
+    );
   });
 });
 
