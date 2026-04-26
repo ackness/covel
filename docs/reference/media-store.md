@@ -1,0 +1,43 @@
+# MediaStore
+
+`MediaStore` persists generated images, audio, video, and files behind a content-addressed `MediaRef`.
+
+## Contract
+
+Every backend implements:
+
+```ts
+interface MediaStore {
+  put(blob: Uint8Array | Blob, mime: string, meta?: object): Promise<MediaRef>;
+  get(ref: MediaRef): Promise<Uint8Array | Blob>;
+  exists(id: string): Promise<boolean>;
+  resolveUrl(ref: MediaRef): Promise<string>;
+  delete(id: string, opts?: { force?: boolean }): Promise<void>;
+  lookup(id: string): Promise<MediaAssetLookup | null>;
+  recordOwnership(id: string, ownerSessionId: string, ownerPluginId?: string): Promise<void>;
+  addRef(id: string, sessionId: string, pluginId?: string): Promise<void>;
+  isReferencedBy(id: string, sessionId: string): Promise<boolean>;
+  openReadStream?(ref: MediaRef): Promise<ReadableStream<Uint8Array>>;
+}
+```
+
+`put()` computes a SHA-256 id from the bytes and deduplicates repeated content. The first stored metadata wins for duplicate content.
+
+## Backends
+
+| Backend | Factory | Byte storage |
+|---|---|---|
+| Memory | `createMemoryMediaStore()` | Process memory |
+| SQLite/local-fs | `createSqliteMediaStore(dbPath, { mediaRoot })` | Local files under `{mediaRoot}/{ab}/{cd}/{sha256}.bin` |
+| PostgreSQL | `createPgMediaStore(databaseUrl)` | `media_assets.body` as `bytea` |
+| S3/R2-compatible | `createS3MediaStore(client, options)` | External object storage via `S3CompatibleMediaClient` |
+
+The S3/R2 adapter accepts a small object-client interface. Production deployments can wrap AWS SDK S3, Cloudflare R2, MinIO, or any compatible object store behind that interface.
+
+## Ownership
+
+`recordOwnership()` sets the first owner for an asset. `addRef()` grants another session read access for fork and snapshot flows. `isReferencedBy()` returns true for the owner session and for sessions with an explicit reference row.
+
+## Tests
+
+The shared contract lives in `packages/store/src/contract/media-store-contract.ts`. Current coverage runs against Memory, SQLite/local-fs, S3-compatible fake storage, and PostgreSQL when `DATABASE_URL` points at a reachable database.

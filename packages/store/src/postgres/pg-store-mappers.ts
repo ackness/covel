@@ -38,6 +38,34 @@ import type {
 
 // ── Table creation DDL ─────────────────────────────────────────
 
+export const CREATE_MEDIA_TABLES_SQL = `
+  CREATE TABLE IF NOT EXISTS media_assets (
+    id TEXT PRIMARY KEY,
+    sha256 TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    body BYTEA,
+    path TEXT,
+    object_key TEXT,
+    meta JSONB,
+    owner_session_id TEXT,
+    owner_plugin_id TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS pg_media_assets_sha256_idx ON media_assets(sha256);
+  CREATE INDEX IF NOT EXISTS pg_media_assets_owner_idx ON media_assets(owner_session_id, owner_plugin_id);
+
+  CREATE TABLE IF NOT EXISTS media_refs (
+    session_id TEXT NOT NULL,
+    media_id TEXT NOT NULL,
+    plugin_id TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (session_id, media_id, plugin_id)
+  );
+  CREATE INDEX IF NOT EXISTS pg_media_refs_session_id_idx ON media_refs(session_id);
+  CREATE INDEX IF NOT EXISTS pg_media_refs_media_id_idx ON media_refs(media_id);
+`;
+
 export const CREATE_TABLES_SQL = `
   CREATE TABLE IF NOT EXISTS worlds (
     id TEXT PRIMARY KEY,
@@ -395,6 +423,8 @@ export const CREATE_TABLES_SQL = `
     BEFORE INSERT ON vector_models
     FOR EACH ROW
     EXECUTE FUNCTION vector_models_fill_table_name();
+
+  ${CREATE_MEDIA_TABLES_SQL}
 `;
 
 // ── Table names for cleanup ─────────────────────────────────────
@@ -406,6 +436,7 @@ export const ALL_TABLE_NAMES = [
   'turn_messages', 'player_inputs', 'working_memory', 'lorebook_entries', 'session_summaries', 'suspensions',
   'state_snapshots',
   'runtime_outputs', 'interaction_records',
+  'media_refs', 'media_assets',
 ] as const;
 
 export const DROP_ALL_SQL = ALL_TABLE_NAMES.map(

@@ -12,7 +12,9 @@ import {
 import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
+import postgres, { type JSONValue, type Sql } from 'postgres';
 import { createTables } from './sqlite/sqlite-store-mappers.js';
+import { CREATE_MEDIA_TABLES_SQL } from './postgres/pg-store-mappers.js';
 
 /**
  * Lightweight ownership / metadata view returned by `MediaStore.lookup()`.
@@ -75,6 +77,38 @@ export interface SqliteMediaStoreOptions {
   readonly mediaRoot?: string;
 }
 
+export interface PgMediaStoreOptions {
+  readonly freshSchema?: boolean;
+}
+
+export interface S3CompatibleObject {
+  readonly key: string;
+  readonly bytes: Uint8Array;
+  readonly mime: string;
+  readonly meta?: Readonly<Record<string, unknown>>;
+}
+
+export interface S3CompatibleObjectInfo {
+  readonly key: string;
+  readonly size: number;
+  readonly mime: string;
+  readonly meta?: Readonly<Record<string, unknown>>;
+}
+
+export interface S3CompatibleMediaClient {
+  putObject(input: S3CompatibleObject): Promise<void>;
+  getObject(key: string): Promise<S3CompatibleObject | null>;
+  headObject(key: string): Promise<S3CompatibleObjectInfo | null>;
+  deleteObject(key: string): Promise<void>;
+  createSignedGetUrl?(key: string): Promise<string>;
+}
+
+export interface S3MediaStoreOptions {
+  readonly bucket?: string;
+  readonly keyPrefix?: string;
+  readonly publicBaseUrl?: string;
+}
+
 interface StoredMedia {
   readonly bytes: Uint8Array;
   readonly ref: MediaRef;
@@ -112,6 +146,16 @@ function bytesToReadableStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
       controller.close();
     },
   });
+}
+
+function mediaObjectKey(id: string, prefix?: string): string {
+  const key = `${id.slice(0, 2)}/${id.slice(2, 4)}/${id}.bin`;
+  if (!prefix) return key;
+  return `${prefix.replace(/\/+$/, '')}/${key}`;
+}
+
+function normalizeBytes(value: Uint8Array | Buffer): Uint8Array {
+  return new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
 }
 
 export function createMemoryMediaStore(): MediaStore {
@@ -212,6 +256,305 @@ export function createMemoryMediaStore(): MediaStore {
       const asset = assets.get(ref.id);
       if (!asset) throw new Error(`Media asset not found: ${ref.id}`);
       return bytesToReadableStream(asset.bytes);
+    },
+  };
+}
+
+export async function createPgMediaStore(
+  databaseUrl: string,
+  options?: PgMediaStoreOptions,
+): Promise<MediaStore> {
+  const sql = postgres(databaseUrl);
+
+  if (options?.freshSchema) {
+    await sql`DROP TABLE IF EXISTS media_refs CASCADE`;
+    await sql`DROP TABLE IF EXISTS media_assets CASCADE`;
+  }
+  await sql.unsafe(CREATE_MEDIA_TABLES_SQL);
+
+  return createPgMediaStoreFromClient(sql);
+}
+
+export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
+  async function select(id: string): Promise<{
+    id: string;
+    mime: string;
+    size: number;
+    meta: Record<string, unknown> | null;
+    body: Buffer | Uint8Array | null;
+    owner_session_id: string | null;
+    owner_plugin_id: string | null;
+  } | null> {
+    const rows = await sql<{
+      id: string;
+      mime: string;
+      size: number;
+      meta: Record<string, unknown> | null;
+      body: Buffer | Uint8Array | null;
+      owner_session_id: string | null;
+      owner_plugin_id: string | null;
+    }[]>`
+      SELECT id, mime, size, meta, body, owner_session_id, owner_plugin_id
+      FROM media_assets
+      WHERE id = ${id}
+      LIMIT 1
+    `;
+    return rows[0] ?? null;
+  }
+
+  return {
+    async put(blob, mime, meta) {
+      const bytes = await toBytes(blob);
+      const id = sha256(bytes);
+      const existing = await select(id);
+      if (existing) {
+        return {
+          id: existing.id,
+          mime: existing.mime,
+          size: existing.size,
+          ...(existing.meta == null ? {} : { meta: existing.meta }),
+        };
+      }
+
+      await sql`
+        INSERT INTO media_assets (id, sha256, mime, size, body, meta, created_at)
+        VALUES (
+          ${id},
+          ${id},
+          ${mime},
+          ${bytes.byteLength},
+          ${Buffer.from(bytes)},
+          ${meta === undefined ? null : sql.json(meta as JSONValue)},
+          ${new Date().toISOString()}
+        )
+        ON CONFLICT (id) DO NOTHING
+      `;
+
+      const inserted = await select(id);
+      if (inserted) {
+        return {
+          id: inserted.id,
+          mime: inserted.mime,
+          size: inserted.size,
+          ...(inserted.meta == null ? {} : { meta: inserted.meta }),
+        };
+      }
+
+      return {
+        id,
+        mime,
+        size: bytes.byteLength,
+        ...(meta === undefined ? {} : { meta: toMeta(meta) }),
+      };
+    },
+
+    async get(ref) {
+      const row = await select(ref.id);
+      if (!row?.body) throw new Error(`Media asset not found: ${ref.id}`);
+      return normalizeBytes(row.body);
+    },
+
+    async exists(id) {
+      const row = await select(id);
+      return row?.body != null;
+    },
+
+    async resolveUrl(ref) {
+      if (ref.url) return ref.url;
+      const row = await select(ref.id);
+      if (!row) throw new Error(`Media asset not found: ${ref.id}`);
+      return `pg://media/${ref.id}`;
+    },
+
+    async delete(id) {
+      await sql.begin(async (tx) => {
+        await tx`DELETE FROM media_refs WHERE media_id = ${id}`;
+        await tx`DELETE FROM media_assets WHERE id = ${id}`;
+      });
+    },
+
+    async lookup(id) {
+      const row = await select(id);
+      if (!row) return null;
+      return {
+        id: row.id,
+        mime: row.mime,
+        size: row.size,
+        ownerSessionId: row.owner_session_id,
+        ownerPluginId: row.owner_plugin_id,
+      };
+    },
+
+    async recordOwnership(id, ownerSessionId, ownerPluginId) {
+      await sql`
+        UPDATE media_assets
+        SET owner_session_id = ${ownerSessionId}, owner_plugin_id = ${ownerPluginId ?? null}
+        WHERE id = ${id}
+          AND (owner_session_id IS NULL OR owner_session_id = ${ownerSessionId})
+      `;
+    },
+
+    async addRef(id, sessionId, pluginId) {
+      await sql`
+        INSERT INTO media_refs (session_id, media_id, plugin_id, created_at)
+        SELECT ${sessionId}, ${id}, ${pluginId ?? null}, ${new Date().toISOString()}
+        WHERE EXISTS (SELECT 1 FROM media_assets WHERE id = ${id})
+        ON CONFLICT (session_id, media_id, plugin_id) DO NOTHING
+      `;
+    },
+
+    async isReferencedBy(id, sessionId) {
+      const rows = await sql<{ one: number }[]>`
+        SELECT 1 AS one
+        FROM media_assets
+        WHERE id = ${id}
+          AND (
+            owner_session_id = ${sessionId}
+            OR EXISTS (
+              SELECT 1
+              FROM media_refs
+              WHERE media_refs.media_id = media_assets.id
+                AND media_refs.session_id = ${sessionId}
+              LIMIT 1
+            )
+          )
+        LIMIT 1
+      `;
+      return rows.length > 0;
+    },
+
+    async openReadStream(ref) {
+      const bytes = await this.get(ref);
+      return bytesToReadableStream(await toBytes(bytes));
+    },
+  };
+}
+
+export function createS3MediaStore(
+  client: S3CompatibleMediaClient,
+  options?: S3MediaStoreOptions,
+): MediaStore {
+  const owners = new Map<string, OwnerRecord>();
+  const refs = new Map<string, Set<string>>();
+  const metaById = new Map<string, MediaRef>();
+
+  function addRefInternal(sessionId: string, id: string): void {
+    let set = refs.get(sessionId);
+    if (!set) {
+      set = new Set<string>();
+      refs.set(sessionId, set);
+    }
+    set.add(id);
+  }
+
+  function makeUrl(ref: MediaRef): string {
+    if (options?.publicBaseUrl) {
+      return `${options.publicBaseUrl.replace(/\/+$/, '')}/${mediaObjectKey(ref.id, options.keyPrefix)}`;
+    }
+    const bucket = options?.bucket ?? 'media';
+    return `s3://${bucket}/${mediaObjectKey(ref.id, options?.keyPrefix)}`;
+  }
+
+  return {
+    async put(blob, mime, meta) {
+      const bytes = await toBytes(blob);
+      const id = sha256(bytes);
+      const existing = metaById.get(id);
+      if (existing) return existing;
+
+      const key = mediaObjectKey(id, options?.keyPrefix);
+      const head = await client.headObject(key);
+      if (head) {
+        const ref: MediaRef = {
+          id,
+          mime: head.mime,
+          size: head.size,
+          ...(head.meta === undefined ? {} : { meta: head.meta }),
+        };
+        metaById.set(id, ref);
+        return ref;
+      }
+
+      const ref: MediaRef = {
+        id,
+        mime,
+        size: bytes.byteLength,
+        ...(meta === undefined ? {} : { meta: toMeta(meta) }),
+      };
+      await client.putObject({
+        key,
+        bytes: new Uint8Array(bytes),
+        mime,
+        ...(ref.meta === undefined ? {} : { meta: ref.meta }),
+      });
+      metaById.set(id, ref);
+      return ref;
+    },
+
+    async get(ref) {
+      const object = await client.getObject(mediaObjectKey(ref.id, options?.keyPrefix));
+      if (!object) throw new Error(`Media asset not found: ${ref.id}`);
+      return new Uint8Array(object.bytes);
+    },
+
+    async exists(id) {
+      return (await client.headObject(mediaObjectKey(id, options?.keyPrefix))) != null;
+    },
+
+    async resolveUrl(ref) {
+      if (ref.url) return ref.url;
+      const key = mediaObjectKey(ref.id, options?.keyPrefix);
+      if ((await client.headObject(key)) == null) throw new Error(`Media asset not found: ${ref.id}`);
+      return client.createSignedGetUrl ? client.createSignedGetUrl(key) : makeUrl(ref);
+    },
+
+    async delete(id) {
+      await client.deleteObject(mediaObjectKey(id, options?.keyPrefix));
+      owners.delete(id);
+      metaById.delete(id);
+      for (const set of refs.values()) {
+        set.delete(id);
+      }
+    },
+
+    async lookup(id) {
+      const key = mediaObjectKey(id, options?.keyPrefix);
+      const object = await client.headObject(key);
+      if (!object) return null;
+      const owner = owners.get(id);
+      return {
+        id,
+        mime: object.mime,
+        size: object.size,
+        ownerSessionId: owner?.sessionId ?? null,
+        ownerPluginId: owner?.pluginId ?? null,
+      };
+    },
+
+    async recordOwnership(id, ownerSessionId, ownerPluginId) {
+      if (!(await this.exists(id))) return;
+      const existing = owners.get(id);
+      if (existing && existing.sessionId !== ownerSessionId) return;
+      owners.set(id, {
+        sessionId: ownerSessionId,
+        pluginId: ownerPluginId ?? null,
+      });
+    },
+
+    async addRef(id, sessionId, _pluginId) {
+      if (!(await this.exists(id))) return;
+      addRefInternal(sessionId, id);
+    },
+
+    async isReferencedBy(id, sessionId) {
+      const owner = owners.get(id);
+      if (owner?.sessionId === sessionId) return true;
+      return refs.get(sessionId)?.has(id) ?? false;
+    },
+
+    async openReadStream(ref) {
+      const bytes = await this.get(ref);
+      return bytesToReadableStream(await toBytes(bytes));
     },
   };
 }
