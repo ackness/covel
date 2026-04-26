@@ -14,7 +14,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createEventBus } from '@covel/events';
 import { createHookPipeline } from '../src/hooks/pipeline.js';
-import type { HookContext, HookResult, HookEvent } from '../src/hooks/types.js';
+import { HOOK_SEMANTICS } from '../src/hooks/types.js';
+import type { HookContext, HookResult, HookEvent, HookSemantic } from '../src/hooks/types.js';
 import type { HookPipeline } from '../src/hooks/pipeline.js';
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -32,33 +33,54 @@ describe('HookPipeline', () => {
     pipeline = createHookPipeline();
   });
 
-  describe('global-first ordering', () => {
-    it('runs global hooks before plugin hooks within the same event, preserving insertion order within each group', async () => {
+  afterEach(() => {
+    HOOK_SEMANTICS.TurnStart = 'parallel';
+  });
+
+  describe('ordering', () => {
+    it('runs enforce groups before global/plugin grouping and preserves insertion order within each group', async () => {
       const order: string[] = [];
 
-      // Register order: global-A, plugin-x-B, global-C
       pipeline.register({
-        id: 'global:TurnStart:A',
-        event: 'TurnStart',
-        // no pluginId → global
-        handler: vi.fn().mockImplementation(async () => { order.push('global-A'); return { action: 'continue' }; }),
+        id: 'global:PreRuntime:normal-a',
+        event: 'PreRuntime',
+        handler: vi.fn().mockImplementation(async () => { order.push('global-normal-a'); return { action: 'continue' }; }),
       });
       pipeline.register({
-        id: 'plugin-x:TurnStart:B',
-        event: 'TurnStart',
+        id: 'plugin-x:PreRuntime:pre',
+        event: 'PreRuntime',
         pluginId: 'plugin-x',
-        handler: vi.fn().mockImplementation(async () => { order.push('plugin-x-B'); return { action: 'continue' }; }),
+        enforce: 'pre',
+        handler: vi.fn().mockImplementation(async () => { order.push('plugin-pre'); return { action: 'continue' }; }),
       });
       pipeline.register({
-        id: 'global:TurnStart:C',
-        event: 'TurnStart',
-        // no pluginId → global
-        handler: vi.fn().mockImplementation(async () => { order.push('global-C'); return { action: 'continue' }; }),
+        id: 'global:PreRuntime:pre',
+        event: 'PreRuntime',
+        enforce: 'pre',
+        handler: vi.fn().mockImplementation(async () => { order.push('global-pre'); return { action: 'continue' }; }),
+      });
+      pipeline.register({
+        id: 'plugin-x:PreRuntime:normal',
+        event: 'PreRuntime',
+        pluginId: 'plugin-x',
+        handler: vi.fn().mockImplementation(async () => { order.push('plugin-normal'); return { action: 'continue' }; }),
+      });
+      pipeline.register({
+        id: 'global:PreRuntime:post',
+        event: 'PreRuntime',
+        enforce: 'post',
+        handler: vi.fn().mockImplementation(async () => { order.push('global-post'); return { action: 'continue' }; }),
       });
 
-      await pipeline.run('TurnStart', makeCtx(), {});
+      await pipeline.run('PreRuntime', makeCtx('PreRuntime'), {});
 
-      expect(order).toEqual(['global-A', 'global-C', 'plugin-x-B']);
+      expect(order).toEqual([
+        'global-pre',
+        'plugin-pre',
+        'global-normal-a',
+        'plugin-normal',
+        'global-post',
+      ]);
     });
   });
 
@@ -85,10 +107,10 @@ describe('HookPipeline', () => {
       const h1 = vi.fn().mockImplementation(async () => { order.push('h1'); return { action: 'continue' }; });
       const h2 = vi.fn().mockImplementation(async () => { order.push('h2'); return { action: 'continue' }; });
 
-      pipeline.register({ id: 'test:TurnStart:0', event: 'TurnStart', handler: h1 });
-      pipeline.register({ id: 'test:TurnStart:1', event: 'TurnStart', handler: h2 });
+      pipeline.register({ id: 'test:PreRuntime:0', event: 'PreRuntime', handler: h1 });
+      pipeline.register({ id: 'test:PreRuntime:1', event: 'PreRuntime', handler: h2 });
 
-      await pipeline.run('TurnStart', makeCtx(), {});
+      await pipeline.run('PreRuntime', makeCtx('PreRuntime'), {});
 
       expect(order).toEqual(['h1', 'h2']);
     });
@@ -120,12 +142,79 @@ describe('HookPipeline', () => {
       const h1 = vi.fn().mockResolvedValue({ action: 'continue', replace: { a: 1 } });
       const h2 = vi.fn().mockResolvedValue({ action: 'continue', replace: { b: 2 } });
 
+      pipeline.register({ id: 'test:PreRuntime:0', event: 'PreRuntime', handler: h1 });
+      pipeline.register({ id: 'test:PreRuntime:1', event: 'PreRuntime', handler: h2 });
+
+      const result = await pipeline.run('PreRuntime', makeCtx('PreRuntime'), { a: 0, b: 0 });
+      expect(result.action).toBe('continue');
+      expect((result as { action: 'continue'; replace?: Record<string, unknown> }).replace).toMatchObject({ a: 1, b: 2 });
+    });
+  });
+
+  describe('semantic table', () => {
+    it('declares all event semantics', () => {
+      const expected: Record<HookEvent, HookSemantic> = {
+        TurnStart: 'parallel',
+        PreRuntime: 'sequential',
+        PostRuntime: 'parallel',
+        PreToolUse: 'sequential',
+        PostToolUse: 'parallel',
+        PreStateCommit: 'sequential',
+        PostStateCommit: 'parallel',
+        TurnStop: 'parallel',
+      };
+
+      expect(HOOK_SEMANTICS).toEqual(expected);
+    });
+
+    it('parallel hooks settle all handlers and keep the payload result unchanged', async () => {
+      const h1 = vi.fn().mockResolvedValue({ action: 'continue', replace: { x: 2 } });
+      const h2 = vi.fn().mockRejectedValue(new Error('audit failed'));
+      const h3 = vi.fn().mockResolvedValue({ action: 'abort', reason: 'parallel abort' });
+
+      pipeline.register({ id: 'test:TurnStart:0', event: 'TurnStart', handler: h1 });
+      pipeline.register({ id: 'test:TurnStart:1', event: 'TurnStart', handler: h2 });
+      pipeline.register({ id: 'test:TurnStart:2', event: 'TurnStart', handler: h3 });
+
+      const result = await pipeline.run('TurnStart', makeCtx(), { x: 1 });
+
+      expect(result).toEqual({ action: 'continue' });
+      expect(h1).toHaveBeenCalledOnce();
+      expect(h2).toHaveBeenCalledOnce();
+      expect(h3).toHaveBeenCalledOnce();
+    });
+
+    it('first hooks stop after the first replacement result', async () => {
+      HOOK_SEMANTICS.TurnStart = 'first';
+      const h1 = vi.fn().mockResolvedValue({ action: 'continue' });
+      const h2 = vi.fn().mockResolvedValue({ action: 'continue', replace: { choice: 'a' } });
+      const h3 = vi.fn().mockResolvedValue({ action: 'continue', replace: { choice: 'b' } });
+
+      pipeline.register({ id: 'test:TurnStart:0', event: 'TurnStart', handler: h1 });
+      pipeline.register({ id: 'test:TurnStart:1', event: 'TurnStart', handler: h2 });
+      pipeline.register({ id: 'test:TurnStart:2', event: 'TurnStart', handler: h3 });
+
+      const result = await pipeline.run('TurnStart', makeCtx(), { choice: 'none' });
+
+      expect(result).toEqual({ action: 'continue', replace: { choice: 'a' } });
+      expect(h3).not.toHaveBeenCalled();
+    });
+
+    it('stream hooks currently route through sequential chaining', async () => {
+      HOOK_SEMANTICS.TurnStart = 'stream';
+      const h1 = vi.fn().mockResolvedValue({ action: 'continue', replace: { value: 2 } });
+      const h2 = vi.fn().mockImplementation(async (_ctx, payload: { value: number }) => ({
+        action: 'continue',
+        replace: { value: payload.value + 1 },
+      }));
+
       pipeline.register({ id: 'test:TurnStart:0', event: 'TurnStart', handler: h1 });
       pipeline.register({ id: 'test:TurnStart:1', event: 'TurnStart', handler: h2 });
 
-      const result = await pipeline.run('TurnStart', makeCtx(), { a: 0, b: 0 });
-      expect(result.action).toBe('continue');
-      expect((result as { action: 'continue'; replace?: Record<string, unknown> }).replace).toMatchObject({ a: 1, b: 2 });
+      const result = await pipeline.run('TurnStart', makeCtx(), { value: 1 });
+
+      expect(result).toEqual({ action: 'continue', replace: { value: 3 } });
+      expect(h2).toHaveBeenCalledWith(expect.anything(), { value: 2 });
     });
   });
 
@@ -199,13 +288,13 @@ describe('HookPipeline', () => {
       );
 
       pipeline.register({
-        id: 'test:TurnStart:0',
-        event: 'TurnStart',
+        id: 'test:PreRuntime:0',
+        event: 'PreRuntime',
         handler: slowHandler,
         timeoutMs: 10,
       });
 
-      const result = await pipeline.run('TurnStart', makeCtx(), {});
+      const result = await pipeline.run('PreRuntime', makeCtx('PreRuntime'), {});
       expect(result.action).toBe('abort');
       expect((result as { action: 'abort'; reason: string }).reason).toContain('timed out after');
     });

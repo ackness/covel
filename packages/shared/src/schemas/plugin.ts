@@ -176,6 +176,7 @@ export const hookDeclarationSchema = z
     handler: z.string().min(1),
     match: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
     timeoutMs: z.number().int().positive().optional(),
+    enforce: z.enum(['pre', 'normal', 'post']).optional(),
   })
   .strict();
 

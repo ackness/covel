@@ -18,6 +18,7 @@
 |-----------|-------|
 | 看所有已实现插件的 frontmatter、调度层级、capabilities 标签 | [docs/reference/plugins.md](../reference/plugins.md) |
 | 写 json-render UI 面板（`ui.right` / `ui.message`） | [docs/guide/plugin-ui-runtime-guidelines.md](./plugin-ui-runtime-guidelines.md) |
+| 写生命周期 hook（工具调用前校验、commit 前审批、审计日志） | [docs/reference/plugins.md#hooks](../reference/plugins.md#hooks) |
 | 写单元 / 集成 / 真实 LLM E2E 测试 | [docs/guide/plugin-testing.md](./plugin-testing.md) · [docs/guide/e2e-plugin-verify.md](./e2e-plugin-verify.md) |
 | 看内置工具完整清单 + 审批策略 | [docs/reference/tools.md](../reference/tools.md) |
 | 看 prompt 如何组装（10 段 + cache_control） | [docs/reference/prompt-structure.md](../reference/prompt-structure.md) |
@@ -57,7 +58,25 @@
 
 > **要做手动按钮 / 后台任务 / 多 runtime 协作 / 图像生成**？这些范式没有内置插件作为模板,直接看 [`.claude/skills/create-plugin/references/example-plugins.md`](../../.claude/skills/create-plugin/references/example-plugins.md) 的 dashscope-image-gen 综合样例。
 
-### C. 文件结构速查
+### C. Hook 组合行为
+
+`PLUGIN.md` 可以声明 `hooks`，用于接入工具调用、runtime 执行、状态提交、回合开始和结束等生命周期点。
+
+```yaml
+hooks:
+  - event: PreToolUse
+    handler: ./hooks/validate-tool.ts
+    enforce: pre
+    timeoutMs: 3000
+```
+
+`PreRuntime`、`PreToolUse`、`PreStateCommit` 使用 `sequential` 语义：handler 按顺序执行，`replace` 会成为下一个 handler 的输入，`abort` 会停止该生命周期动作。
+
+`TurnStart`、`PostRuntime`、`PostToolUse`、`PostStateCommit`、`TurnStop` 使用 `parallel` 语义：handler 并发执行，适合审计、日志、指标和通知这类观察型副作用。返回 `replace` 或 `abort` 会进入 hook trace；主 payload 保持原值。
+
+排序先看 `enforce: pre | normal | post`，再看全局 hook 与插件 hook 分组，最后保持声明顺序。完整事件表见 [插件参考 / hooks](../reference/plugins.md#hooks)。
+
+### D. 文件结构速查
 
 ```
 plugins/<plugin-id>/

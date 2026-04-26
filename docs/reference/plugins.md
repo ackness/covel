@@ -435,6 +435,43 @@ Guard 函数接收与 function runtime 相同��� `FunctionHandlerContext`�
 
 Guard 适用于"先检查再决定是否需要 LLM"的场景，替代了之前需要独立 function runtime 做门控的模式。
 
+### hooks
+
+`hooks` 声明生命周期处理器。`handler` 路径相对插件目录解析，首次触发时懒加载。
+
+```yaml
+hooks:
+  - event: PreToolUse
+    handler: ./hooks/validate-tool.ts
+    enforce: pre
+    timeoutMs: 3000
+    match:
+      tool: create-character
+```
+
+| 字段 | 类型 | 默认值 | 含义 |
+|---|---|---|---|
+| `event` | `HookEvent` | 必填 | 生命周期事件名 |
+| `handler` | `string` | 必填 | hook 模块路径，默认导出 async 函数 |
+| `enforce` | `pre \| normal \| post` | `normal` | 排序分组，执行顺序为 `pre → normal → post` |
+| `timeoutMs` | `number` | `5000` | 单个 handler 的超时 |
+| `match` | `Record<string, string \| number>` | 无 | payload 浅层等值过滤 |
+
+同一事件内先按 `enforce` 分组排序；同组内全局 hook 先执行，插件 hook 保持注册顺序。
+
+| Event | Semantic | 行为 |
+|---|---|---|
+| `TurnStart` | `parallel` | 并发观察回合开始；返回值只用于日志和 trace |
+| `PreRuntime` | `sequential` | 链式改写 runtime 输入；`replace` 会传给下一个 handler；`abort` 会停止执行 |
+| `PostRuntime` | `parallel` | 并发观察 runtime 输出；返回值只用于日志和 trace |
+| `PreToolUse` | `sequential` | 链式改写 tool call；`replace` 会传给下一个 handler；`abort` 会跳过 tool |
+| `PostToolUse` | `parallel` | 并发观察 tool result；返回值只用于日志和 trace |
+| `PreStateCommit` | `sequential` | 链式改写 commit payload；任一 handler 可用 `abort` 拒绝 commit |
+| `PostStateCommit` | `parallel` | 并发观察 commit 结果；返回值只用于日志和 trace |
+| `TurnStop` | `parallel` | 并发观察回合结束；返回值只用于日志和 trace |
+
+`first` 和 `stream` 已作为框架语义保留：`first` 用于未来的首个命中选择类 hook，`stream` 用于未来的流式 transform hook。
+
 ### outputKind
 
 声明该 runtime 输出在 UI 中的处理方式。框架根据此字段决定消息展示策略，**而非硬编码插件 ID**。

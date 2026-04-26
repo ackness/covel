@@ -126,6 +126,7 @@ export function registerPluginHooks(
         handler: lazyHandler,
         ...(matchFn ? { match: matchFn } : {}),
         ...(typeof decl.timeoutMs === 'number' ? { timeoutMs: decl.timeoutMs } : {}),
+        ...(decl.enforce ? { enforce: decl.enforce } : {}),
       });
       registered += 1;
     }

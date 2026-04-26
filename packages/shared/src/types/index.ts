@@ -24,6 +24,7 @@ export type {
   UISlotType,
   UISpec,
   HookEventName,
+  HookEnforce,
   HookDeclaration,
   RuntimeManifest,
   PluginManifest,

@@ -1,20 +1,26 @@
 /**
- * HookPipeline — ordered, abort-capable hook execution engine.
+ * HookPipeline — semantic hook execution engine.
  *
  * Semantics:
- * - Global hooks run first; plugin hooks run in declared order after.
+ * - Hook events run with their declared semantic in HOOK_SEMANTICS.
+ * - enforce groups run pre → normal → post.
+ * - Inside each enforce group, global hooks run first; plugin hooks keep declared order after.
  * - Each handler has an individual timeout (default 5000ms).
- * - `continue` → pipeline proceeds; optional `replace` is shallow-merged into payload.
- * - `abort` → pipeline stops immediately. Pre* hooks abort the operation.
- *   Post* hooks' abort is logged only — the operation already completed.
  * - Thrown exceptions are treated as abort with the error message.
  * - All aborts/timeouts/errors emit observability events via the EventBus.
  */
 
 import type { EventBus } from '@covel/events';
+import { HOOK_SEMANTICS } from './types.js';
 import type { HookEvent, HookContext, HookHandler, HookRegistration, HookResult } from './types.js';
 
 const DEFAULT_TIMEOUT_MS = 5000;
+const ENFORCE_ORDER = { pre: 0, normal: 1, post: 2 } as const;
+
+interface HookPipelineRunOptions {
+  readonly eventBus?: EventBus;
+  readonly emitter?: import('../turn-emitter.js').TurnEmitter;
+}
 
 export class HookPipeline {
   private readonly registrations = new Map<HookEvent, Array<HookRegistration<unknown>>>();
@@ -40,127 +46,85 @@ export class HookPipeline {
   }
 
   /**
-   * Run all handlers registered for `event` in order.
-   *
-   * Returns the accumulated HookResult. If any handler aborts, the chain
-   * stops immediately and returns `{ action: 'abort', reason }`.
-   * Otherwise returns `{ action: 'continue' }` with the accumulated `replace`
-   * (if any handler contributed patches).
+   * Run all handlers registered for `event` with the event's semantic.
+   * Sequential hooks can return accumulated `replace` or `abort`;
+   * parallel hooks record handler results and return `continue`.
    */
   async run<P>(
     event: HookEvent,
     ctx: HookContext,
     payload: P,
-    opts?: {
-      readonly eventBus?: EventBus;
-      readonly emitter?: import('../turn-emitter.js').TurnEmitter;
-    },
+    opts?: HookPipelineRunOptions,
   ): Promise<HookResult<P>> {
     const raw = this.registrations.get(event) ?? [];
     if (raw.length === 0) {
       return { action: 'continue' };
     }
 
-    // Spec: global hooks (pluginId === undefined) run before plugin hooks.
-    // Use a stable sort: globals first, plugin hooks preserve insertion order.
-    const handlers = [...raw].sort((a, b) => {
-      const aGlobal = a.pluginId === undefined ? 0 : 1;
-      const bGlobal = b.pluginId === undefined ? 0 : 1;
-      return aGlobal - bGlobal;
-    });
+    const handlers = orderHandlers(raw);
+    const semantic = HOOK_SEMANTICS[event];
 
-    // Running payload accumulates replace patches from handlers
+    if (semantic === 'first') {
+      return this.runFirst(event, ctx, payload, handlers, opts);
+    }
+    if (semantic === 'sequential') {
+      return this.runSequential(event, ctx, payload, handlers, opts);
+    }
+    if (semantic === 'parallel') {
+      return this.runParallel(event, ctx, payload, handlers, opts);
+    }
+
+    // Stream hooks share sequential behavior until a stream transform hook is added.
+    return this.runSequential(event, ctx, payload, handlers, opts);
+  }
+
+  private async runFirst<P>(
+    event: HookEvent,
+    ctx: HookContext,
+    payload: P,
+    handlers: readonly HookRegistration<unknown>[],
+    opts?: HookPipelineRunOptions,
+  ): Promise<HookResult<P>> {
+    for (const reg of handlers) {
+      if (reg.match && !reg.match(payload)) {
+        continue;
+      }
+      const result = await this.invokeHandler(event, ctx, payload, reg, opts);
+      if (result.action === 'abort') {
+        return result;
+      }
+      if ('replace' in result && result.replace !== undefined) {
+        return result;
+      }
+    }
+    return { action: 'continue' };
+  }
+
+  private async runSequential<P>(
+    event: HookEvent,
+    ctx: HookContext,
+    payload: P,
+    handlers: readonly HookRegistration<unknown>[],
+    opts?: HookPipelineRunOptions,
+  ): Promise<HookResult<P>> {
     let currentPayload: P = payload;
     let hasReplace = false;
     const accumulated: Partial<P> = {};
 
     for (const reg of handlers) {
-      // Apply optional match filter
       if (reg.match && !reg.match(currentPayload)) {
         continue;
       }
 
-      const timeoutMs = reg.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-      const handler = reg.handler as HookHandler<P>;
-
-      // Emit `hook.fired` once per invocation attempt — before the handler
-      // runs so consumers still see the record even if the handler throws.
-      if (opts?.emitter) {
-        const proposalType = extractProposalType(event, currentPayload);
-        await opts.emitter.emit('hook.fired', {
-          event,
-          hookName: reg.id,
-          pluginId: reg.pluginId ?? null,
-          runtimeId: ctx.runtimeId,
-          targetId: extractTargetId(event, currentPayload),
-          targetType: extractTargetType(event),
-          ...(proposalType ? { proposalType } : {}),
-        });
-      }
-
-      let result: HookResult<P>;
-      const timeoutMessage = `hook ${reg.id} timed out after ${timeoutMs}ms`;
-
-      try {
-        result = await withTimeout(
-          handler(ctx, currentPayload),
-          timeoutMs,
-          timeoutMessage,
-        );
-      } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err);
-        const isTimeout = reason === timeoutMessage;
-        emitHookEvent(opts?.eventBus, ctx, isTimeout ? 'hook.timeout' : 'hook.error', {
-          hookId: reg.id,
-          hookPluginId: reg.pluginId,
-          reason,
-        });
-        return { action: 'abort', reason };
-      }
+      const result = await this.invokeHandler(event, ctx, currentPayload, reg, opts);
 
       if (result.action === 'abort') {
-        emitHookEvent(opts?.eventBus, ctx, 'hook.aborted', {
-          hookId: reg.id,
-          hookPluginId: reg.pluginId,
-          reason: result.reason,
-        });
-        if (opts?.emitter) {
-          const proposalType = extractProposalType(event, currentPayload);
-          await opts.emitter.emit('hook.aborted', {
-            event,
-            hookName: reg.id,
-            pluginId: reg.pluginId ?? null,
-            runtimeId: ctx.runtimeId,
-            targetId: extractTargetId(event, currentPayload),
-            targetType: extractTargetType(event),
-            reason: result.reason,
-            // Spec schema keeps `proposalType` on hook.aborted. Preserves
-            // the field the pre-refactor inline trace write used to carry.
-            ...(proposalType ? { proposalType } : {}),
-          });
-        }
         return result;
       }
 
-      // action === 'continue' — merge optional replace patch
       if ('replace' in result && result.replace !== undefined) {
-        if (opts?.emitter) {
-          const before = currentPayload;
-          const after = { ...currentPayload, ...result.replace };
-          const proposalType = extractProposalType(event, currentPayload);
-          await opts.emitter.emit('hook.rewrote', {
-            event,
-            hookName: reg.id,
-            pluginId: reg.pluginId ?? null,
-            runtimeId: ctx.runtimeId,
-            targetId: extractTargetId(event, currentPayload),
-            diff: { before, after },
-            ...(proposalType ? { proposalType } : {}),
-          });
-        }
         Object.assign(accumulated, result.replace);
         hasReplace = true;
-        // Apply accumulated patches to the payload for downstream handlers
         currentPayload = { ...currentPayload, ...result.replace };
       }
     }
@@ -170,6 +134,120 @@ export class HookPipeline {
     }
     return { action: 'continue' };
   }
+
+  private async runParallel<P>(
+    event: HookEvent,
+    ctx: HookContext,
+    payload: P,
+    handlers: readonly HookRegistration<unknown>[],
+    opts?: HookPipelineRunOptions,
+  ): Promise<HookResult<P>> {
+    const matching = handlers.filter((reg) => !reg.match || reg.match(payload));
+    const settled = await Promise.allSettled(
+      matching.map((reg) => this.invokeHandler(event, ctx, payload, reg, opts)),
+    );
+
+    for (let i = 0; i < settled.length; i++) {
+      const item = settled[i];
+      if (item.status === 'rejected') {
+        const reg = matching[i];
+        const reason = item.reason instanceof Error ? item.reason.message : String(item.reason);
+        emitHookEvent(opts?.eventBus, ctx, 'hook.error', {
+          hookId: reg.id,
+          hookPluginId: reg.pluginId,
+          reason,
+        });
+      }
+    }
+
+    return { action: 'continue' };
+  }
+
+  private async invokeHandler<P>(
+    event: HookEvent,
+    ctx: HookContext,
+    payload: P,
+    reg: HookRegistration<unknown>,
+    opts?: HookPipelineRunOptions,
+  ): Promise<HookResult<P>> {
+    const timeoutMs = reg.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const handler = reg.handler as HookHandler<P>;
+
+    // Emit `hook.fired` once per invocation attempt, before the handler runs.
+    if (opts?.emitter) {
+      const proposalType = extractProposalType(event, payload);
+      await opts.emitter.emit('hook.fired', {
+        event,
+        hookName: reg.id,
+        pluginId: reg.pluginId ?? null,
+        runtimeId: ctx.runtimeId,
+        targetId: extractTargetId(event, payload),
+        targetType: extractTargetType(event),
+        ...(proposalType ? { proposalType } : {}),
+      });
+    }
+
+    let result: HookResult<P>;
+    const timeoutMessage = `hook ${reg.id} timed out after ${timeoutMs}ms`;
+
+    try {
+      result = await withTimeout(
+        handler(ctx, payload),
+        timeoutMs,
+        timeoutMessage,
+      );
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      const isTimeout = reason === timeoutMessage;
+      emitHookEvent(opts?.eventBus, ctx, isTimeout ? 'hook.timeout' : 'hook.error', {
+        hookId: reg.id,
+        hookPluginId: reg.pluginId,
+        reason,
+      });
+      return { action: 'abort', reason };
+    }
+
+    if (result.action === 'abort') {
+      emitHookEvent(opts?.eventBus, ctx, 'hook.aborted', {
+        hookId: reg.id,
+        hookPluginId: reg.pluginId,
+        reason: result.reason,
+      });
+      if (opts?.emitter) {
+        const proposalType = extractProposalType(event, payload);
+        await opts.emitter.emit('hook.aborted', {
+          event,
+          hookName: reg.id,
+          pluginId: reg.pluginId ?? null,
+          runtimeId: ctx.runtimeId,
+          targetId: extractTargetId(event, payload),
+          targetType: extractTargetType(event),
+          reason: result.reason,
+          // Spec schema keeps `proposalType` on hook.aborted. Preserves
+          // the field the pre-refactor inline trace write used to carry.
+          ...(proposalType ? { proposalType } : {}),
+        });
+      }
+      return result;
+    }
+
+    if ('replace' in result && result.replace !== undefined && opts?.emitter) {
+      const before = payload;
+      const after = { ...payload, ...result.replace };
+      const proposalType = extractProposalType(event, payload);
+      await opts.emitter.emit('hook.rewrote', {
+        event,
+        hookName: reg.id,
+        pluginId: reg.pluginId ?? null,
+        runtimeId: ctx.runtimeId,
+        targetId: extractTargetId(event, payload),
+        diff: { before, after },
+        ...(proposalType ? { proposalType } : {}),
+      });
+    }
+
+    return result;
+  }
 }
 
 export function createHookPipeline(): HookPipeline {
@@ -177,6 +255,25 @@ export function createHookPipeline(): HookPipeline {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
+
+function orderHandlers(
+  handlers: readonly HookRegistration<unknown>[],
+): HookRegistration<unknown>[] {
+  return handlers
+    .map((reg, index) => ({ reg, index }))
+    .sort((a, b) => {
+      const enforceDiff =
+        ENFORCE_ORDER[a.reg.enforce ?? 'normal'] - ENFORCE_ORDER[b.reg.enforce ?? 'normal'];
+      if (enforceDiff !== 0) return enforceDiff;
+
+      const globalDiff =
+        (a.reg.pluginId === undefined ? 0 : 1) - (b.reg.pluginId === undefined ? 0 : 1);
+      if (globalDiff !== 0) return globalDiff;
+
+      return a.index - b.index;
+    })
+    .map(({ reg }) => reg);
+}
 
 /**
  * Race a promise against a timeout.

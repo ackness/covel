@@ -196,6 +196,8 @@ export type HookEventName =
   | 'PostStateCommit'
   | 'TurnStop';
 
+export type HookEnforce = 'pre' | 'normal' | 'post';
+
 /**
  * Single hook declaration in PLUGIN.md frontmatter.
  * Handler files are resolved lazily — no eager import at parse time.
@@ -208,6 +210,8 @@ export interface HookDeclaration {
   readonly match?: Readonly<Record<string, string | number>>;
   /** Per-handler timeout in ms. Default 5000. */
   readonly timeoutMs?: number;
+  /** Ordering group. Default normal. */
+  readonly enforce?: HookEnforce;
 }
 
 // ── UI declarations ─────────────────────────────────────────────
