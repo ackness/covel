@@ -5,9 +5,27 @@ import type { FunctionHandlerContext, PluginRuntimeUtils } from '@covel/plugin-l
 type MediaContext = NonNullable<FunctionHandlerContext['media']>;
 type IngestUrlOptions = Parameters<MediaContext['ingestUrl']>[1];
 
+/**
+ * Narrowed view of `MediaStore` that the plugin-facing media context is
+ * allowed to call. We deliberately expose the read/write surface plus the
+ * authorisation helpers (`lookup` / `isReferencedBy` / `addRef`) so the
+ * context can enforce per-session ownership before returning bytes — the
+ * same gate `/api/media/:id` runs at the HTTP layer.
+ *
+ * `put`/`ingestUrl` perform put-time `addRef` (alongside `recordOwnership`)
+ * so the owner row is always present and the second-writer in a content-
+ * addressed dedup keeps a ref of its own atomically — no commit-time
+ * follow-up is required to make the owner discoverable in `media_refs`.
+ *
+ * `get`/`resolveUrl` reject when the calling session neither owns the asset
+ * nor has an explicit ref. `resolveUrl` further refuses to expose the
+ * backend-native URL (e.g. `file://…` for SQLite) because that would bypass
+ * the HTTP token gate; plugin-facing callers must use the framework's
+ * media-token endpoint to obtain a fetchable URL.
+ */
 export type MediaStoreLike = Pick<
   MediaStore,
-  'put' | 'get' | 'resolveUrl' | 'recordOwnership'
+  'put' | 'get' | 'resolveUrl' | 'recordOwnership' | 'lookup' | 'isReferencedBy' | 'addRef'
 >;
 
 interface CreateRuntimeMediaContextOptions {
@@ -45,18 +63,30 @@ export function createRuntimeMediaContext(
       const ref = await mediaStore.put(blob, mime, meta);
       // First-writer-wins inside MediaStore.recordOwnership: a duplicate
       // (same SHA-256) put from a second session reuses the existing row
-      // without overwriting the original owner. That's intentional —
-      // content-addressable dedup means the earliest writer keeps
-      // ownership and follow-up sessions take a reference via
-      // commit-time `addRef` (P0-d).
+      // without overwriting the original owner. We always pair it with a
+      // put-time addRef so (a) the owner session itself has a ref row
+      // (uniform authorisation lookups, simpler fork/cleanup), and
+      // (b) the second writer of a deduped asset still gains the
+      // explicit reference required by `isReferencedBy()` — without
+      // having to wait for an asset.generate proposal to be committed.
       await mediaStore.recordOwnership(ref.id, sessionId, pluginId);
+      await mediaStore.addRef(ref.id, sessionId, pluginId);
       return ref;
     },
-    get(ref) {
+    async get(ref) {
+      await assertReadable(mediaStore, ref.id, sessionId);
       return mediaStore.get(ref);
     },
-    resolveUrl(ref) {
-      return mediaStore.resolveUrl(ref);
+    async resolveUrl(ref) {
+      await assertReadable(mediaStore, ref.id, sessionId);
+      // Deliberately do NOT return the backend-native URL: `MediaStore`
+      // implementations may hand out `file://…` (SQLite) or other
+      // direct-access URLs that bypass the `/api/media/:id?token=…`
+      // gate. Plugin code that needs a fetchable URL must mint a
+      // session-scoped media token via the framework helper instead;
+      // this opaque placeholder makes the indirection explicit so any
+      // accidental `<img src={…}>` use surfaces immediately.
+      return `media:${ref.id}`;
     },
     async ingestUrl(url, opts) {
       if (!utils) {
@@ -64,9 +94,29 @@ export function createRuntimeMediaContext(
       }
       const ref = await ingestUrlIntoStore(mediaStore, utils, url, opts, options);
       await mediaStore.recordOwnership(ref.id, sessionId, pluginId);
+      await mediaStore.addRef(ref.id, sessionId, pluginId);
       return ref;
     },
   };
+}
+
+async function assertReadable(
+  mediaStore: MediaStoreLike,
+  id: string,
+  sessionId: string,
+): Promise<void> {
+  // Cheap path: lookup() returns owner metadata in a single call; if we
+  // already own it, skip the second round-trip. Otherwise fall back to
+  // isReferencedBy() which also covers fork-style ref rows.
+  const lookup = await mediaStore.lookup(id);
+  if (lookup === null) {
+    throw new Error('media not accessible by this session');
+  }
+  if (lookup.ownerSessionId === sessionId) return;
+  const referenced = await mediaStore.isReferencedBy(id, sessionId);
+  if (!referenced) {
+    throw new Error('media not accessible by this session');
+  }
 }
 
 async function ingestUrlIntoStore(
