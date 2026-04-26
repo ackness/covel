@@ -339,6 +339,8 @@ export interface RuntimeManifest {
    * Examples: `['narrative']`, `['world-data-provider']`, `['image-generation']`.
    */
   readonly capabilities?: readonly string[];
+  /** Enables lifecycle hook declarations for this manifest. */
+  readonly hookManifestVersion?: 1;
   /**
    * Runtime IDs this runtime depends on for a successful upstream output.
    * When any listed upstream ran with `status !== 'success'` in the same

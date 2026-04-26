@@ -174,6 +174,9 @@ interface SessionState {
    */
   readonly assetsByTurn: ReadonlyMap<string, readonly AssetGenerateView[]>;
 
+  /** Progress events emitted before the final asset.generate commit. */
+  readonly assetProgressByTurn: ReadonlyMap<string, readonly AssetProgressEvent[]>;
+
   /** Block IDs that have been submitted by the player (permanently locked). */
   submittedBlockIds: ReadonlySet<string>;
 
@@ -201,6 +204,18 @@ export interface PendingInteractionDraft {
   sourceBlockId?: string;
   selectionGroup?: string;
   submitBehavior?: { echoFilledNarrative?: boolean };
+}
+
+export interface AssetProgressEvent {
+  assetId?: string;
+  phase: string;
+  percent?: number;
+  message?: string;
+  modality?: string;
+  pluginId?: string;
+  runtimeId?: string;
+  meta?: Record<string, unknown>;
+  timestamp: string;
 }
 
 type Action =
@@ -243,7 +258,8 @@ type Action =
   | { type: "SET_SUSPENSIONS"; suspensions: SuspensionRecord[] }
   | { type: "ADD_SUSPENSION"; suspension: SuspensionRecord }
   | { type: "REMOVE_SUSPENSION"; suspensionId: string }
-  | { type: "ASSET_GENERATED"; turnId: string; asset: AssetGenerateView };
+  | { type: "ASSET_GENERATED"; turnId: string; asset: AssetGenerateView }
+  | { type: "ASSET_PROGRESS"; turnId: string; progress: AssetProgressEvent };
 
 const initialState: SessionState = {
   presets: [],
@@ -272,6 +288,7 @@ const initialState: SessionState = {
   pendingInteractionDrafts: [],
   suspensions: [],
   assetsByTurn: new Map<string, readonly AssetGenerateView[]>(),
+  assetProgressByTurn: new Map<string, readonly AssetProgressEvent[]>(),
 };
 
 
@@ -305,6 +322,7 @@ function reducer(state: SessionState, action: Action): SessionState {
         session: action.session,
         phase: toLegacyPhase(action.session),
         assetsByTurn: sameSession ? state.assetsByTurn : new Map<string, readonly AssetGenerateView[]>(),
+        assetProgressByTurn: sameSession ? state.assetProgressByTurn : new Map<string, readonly AssetProgressEvent[]>(),
       };
     }
     case "SET_WORLD_SESSIONS":
@@ -468,9 +486,9 @@ function reducer(state: SessionState, action: Action): SessionState {
           : state.submittedBlockValues,
       };
     case "RESET_SESSION":
-      return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), submittedBlockValues: {}, sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [], suspensions: [], assetsByTurn: new Map<string, readonly AssetGenerateView[]>() };
+      return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), submittedBlockValues: {}, sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [], suspensions: [], assetsByTurn: new Map<string, readonly AssetGenerateView[]>(), assetProgressByTurn: new Map<string, readonly AssetProgressEvent[]>() };
     case "RESET_TO_WORLD_SELECT":
-      return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), submittedBlockValues: {}, sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [], suspensions: [], assetsByTurn: new Map<string, readonly AssetGenerateView[]>() };
+      return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), submittedBlockValues: {}, sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [], suspensions: [], assetsByTurn: new Map<string, readonly AssetGenerateView[]>(), assetProgressByTurn: new Map<string, readonly AssetProgressEvent[]>() };
     case "LOAD_SESSION_PLUGINS":
       return { ...state, sessionPlugins: action.plugins };
     case "TOGGLE_SESSION_PLUGIN":
@@ -561,6 +579,12 @@ function reducer(state: SessionState, action: Action): SessionState {
       const nextMap = new Map(state.assetsByTurn);
       nextMap.set(action.turnId, nextBucket);
       return { ...state, assetsByTurn: nextMap };
+    }
+    case "ASSET_PROGRESS": {
+      const existing = state.assetProgressByTurn.get(action.turnId) ?? [];
+      const nextMap = new Map(state.assetProgressByTurn);
+      nextMap.set(action.turnId, [...existing, action.progress]);
+      return { ...state, assetProgressByTurn: nextMap };
     }
     default:
       return state;
@@ -1276,6 +1300,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const turnIdFromPayload = (payload.turnId as string | undefined) ?? turnId;
         if (!asset || !turnIdFromPayload) break;
         dispatch({ type: "ASSET_GENERATED", turnId: turnIdFromPayload, asset });
+        break;
+      }
+      case "asset.progress": {
+        const phase = payload.phase;
+        const turnIdFromPayload = (payload.turnId as string | undefined) ?? turnId;
+        if (typeof phase !== "string" || phase.length === 0 || !turnIdFromPayload) break;
+        const progress: AssetProgressEvent = {
+          phase,
+          timestamp: envelope.timestamp,
+          ...((typeof payload.assetId === "string" && payload.assetId.length > 0) ? { assetId: payload.assetId } : {}),
+          ...((typeof payload.percent === "number" && Number.isFinite(payload.percent)) ? { percent: payload.percent } : {}),
+          ...((typeof payload.message === "string" && payload.message.length > 0) ? { message: payload.message } : {}),
+          ...((typeof payload.modality === "string" && payload.modality.length > 0) ? { modality: payload.modality } : {}),
+          ...((typeof payload.pluginId === "string" && payload.pluginId.length > 0) ? { pluginId: payload.pluginId } : {}),
+          ...((typeof payload.runtimeId === "string" && payload.runtimeId.length > 0) ? { runtimeId: payload.runtimeId } : {}),
+          ...((payload.meta && typeof payload.meta === "object" && !Array.isArray(payload.meta)) ? { meta: payload.meta as Record<string, unknown> } : {}),
+        };
+        dispatch({ type: "ASSET_PROGRESS", turnId: turnIdFromPayload, progress });
         break;
       }
       // ── Error events ──────────────────────────────────────────

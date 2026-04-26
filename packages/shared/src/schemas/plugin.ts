@@ -327,6 +327,11 @@ export const runtimeManifestSchema = z
      * BOTH the environment flag and this field declare opt-in.
      */
     promptVersion: z.union([z.literal(1), z.literal(2)]).optional(),
+    /**
+     * Hooks are lifecycle-sensitive and version-gated. A manifest must set
+     * `hookManifestVersion: 1` before `hooks:` entries are activated.
+     */
+    hookManifestVersion: z.literal(1).optional(),
     runtimeType: z.enum(['agent', 'function']).optional(),
     handler: z.string().optional(),
     guard: z.string().optional(),

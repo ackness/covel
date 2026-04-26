@@ -970,8 +970,10 @@ P2 集成备注：
 
 **P4b：Media lifecycle**
 
-- [ ] Media GC / quota / retention 策略：框架自动 GC + 用户手动清理入口，覆盖 Memory / SQLite / PG / S3 / IDB / Tauri 后端。
-- [ ] Media ownership refs 扫描和 snapshot/fork 保留策略，防止清理仍被 session 引用的资产。
+- [x] Media GC / quota / retention 策略：框架自动 GC + 用户手动清理入口，覆盖 Memory / SQLite / PG / S3 / IDB / Tauri 后端。
+- [x] Media ownership refs 扫描和 snapshot/fork 保留策略，防止清理仍被 session 引用的资产。
+
+落地文档：`docs/reference/media-store.md#lifecycle-cleanup`。`POST /api/media/cleanup` 默认 dry-run；空 policy 返回 inventory 式结果；`maxAgeMs` / `maxBytes` / `keepRecentBytes` 触发删除候选选择。保护集来自 live sessions、messages、plugin data、runtime outputs、trace events、snapshots、turn results、MediaStore owner/ref rows 的统一扫描。
 
 **P4c：LLM content lifecycle**
 
@@ -982,9 +984,11 @@ P2 集成备注：
 
 **P4d：Compatibility + observability**
 
-- [ ] Hook manifest version gate。
-- [ ] 旧 trace read-time adapter：`plugin.data` / `runtime_results` 历史图像记录标记 legacy，并进入单一路径展示。
-- [ ] `asset.progress` SSE envelope：生成中进度独立事件，最终仍落 `asset.generate`。
+- [x] Hook manifest version gate。
+- [x] 旧 trace read-time adapter：`plugin.data` / `runtime_results` 历史图像记录标记 legacy，并进入单一路径展示。
+- [x] `asset.progress` SSE envelope：生成中进度独立事件，最终仍落 `asset.generate`。
+
+落地文档：`docs/reference/plugins.md#hooks`、`docs/reference/protocol.md#媒体资产事件`。hook 需要 `hookManifestVersion: 1` 才启用；`/api/traces/:sessionId` 读取时合成 legacy `asset.generated`；function runtime 通过 `ctx.assetProgress()` 写入 `asset.progress` trace 并进入 `/actions` SSE。
 
 ---
 
@@ -1042,7 +1046,7 @@ P1/P2（Hook 语义、LLM content parts、ToolClient、recursiveCall、ui.render
 
 **MediaStore / 存储层**
 - [x] `MediaStore` 在 Tauri 桌面端采用 Tauri command；大文件后续补 chunk/streaming
-- [ ] `MediaStore` 的清理策略（GC、quota、retention）由谁触发——框架还是用户手动？
+- [x] `MediaStore` 的清理策略（GC、quota、retention）由框架 API 承载，用户手动入口和未来 scheduler 共用 `POST /api/media/cleanup`
 - [x] `ctx.media.ingestUrl()` 默认 `maxBytes` 保持 50 MB，插件调用可显式覆盖
 - [x] HMAC 签名 token 的 TTL 保持 5 分钟，前端按需重新获取
 
@@ -1055,12 +1059,12 @@ P1/P2（Hook 语义、LLM content parts、ToolClient、recursiveCall、ui.render
 - [x] Provider 图片输入优先级：OpenAI Chat/Responses 走 `image_url` / `input_image.image_url`，Anthropic Messages 走 URL source 并预留 Files/base64，Gemini native 后续走 File API / `inlineData`
 
 **Hook**
-- [ ] Hook 语义改变是否需要 plugin manifest 版本号 bump？（目前零现存 hook，可以延后到 P1）
+- [x] Hook 语义改变使用 `hookManifestVersion: 1` 作为 manifest gate
 - [x] `recursiveCall(delta, { reason })` 写入 recursive trace，方便 debug 阅读
 
 **迁移 / 兼容**
-- [ ] `asset.generate` 接入 kernel commit handler 后，旧 trace（来自 `plugin.data` / `runtime_results` 两条路径）如何呈现？（双显 / lazy migrate / 一次性导出）
-- [ ] 多模态 envelope 是否应该有"流式"概念（图像生成中途的 progress 推送给 SSE）？
+- [x] `asset.generate` 接入 kernel commit handler 后，旧 trace（来自 `plugin.data` / `runtime_results` 两条路径）通过 read-time adapter 合成 legacy `asset.generated`
+- [x] 多模态 envelope 使用 `asset.progress` 表达生成中进度，完成态继续落 `asset.generate`
 
 ---
 

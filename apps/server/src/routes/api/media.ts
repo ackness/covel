@@ -24,8 +24,9 @@
  */
 
 import { Hono } from 'hono';
+import { collectMediaRefIds } from '@covel/shared';
 import type { MediaRef } from '@covel/shared';
-import type { MediaStore } from '@covel/store';
+import type { DataStore, MediaLifecyclePolicy, MediaStore } from '@covel/store';
 import {
   getMediaTokenSecret,
   verifyMediaToken,
@@ -39,6 +40,7 @@ import {
  */
 declare module 'hono' {
   interface ContextVariableMap {
+    store: DataStore;
     mediaStore?: MediaStore;
   }
 }
@@ -71,6 +73,109 @@ function jsonError(
     headers: { 'content-type': 'application/json; charset=utf-8' },
   });
 }
+
+interface CleanupRequestBody {
+  readonly dryRun?: unknown;
+  readonly maxBytes?: unknown;
+  readonly maxAgeMs?: unknown;
+  readonly keepRecentBytes?: unknown;
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'boolean') {
+    throw new Error('expected boolean');
+  }
+  return value;
+}
+
+function optionalNonNegativeNumber(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new Error('expected non-negative number');
+  }
+  return value;
+}
+
+async function buildProtectedMediaIds(
+  store: DataStore,
+  mediaStore: MediaStore,
+): Promise<Set<string>> {
+  const protectedIds = new Set<string>();
+  const sessions = await store.listSessions();
+  const liveSessionIds = new Set(sessions.map((session) => session.id));
+
+  for (const asset of await mediaStore.listAssets()) {
+    if (asset.ownerSessionId && liveSessionIds.has(asset.ownerSessionId)) {
+      protectedIds.add(asset.id);
+    }
+  }
+  for (const ref of await mediaStore.listRefs()) {
+    if (liveSessionIds.has(ref.sessionId)) {
+      protectedIds.add(ref.mediaId);
+    }
+  }
+
+  const scan = (value: unknown): void => {
+    for (const id of collectMediaRefIds(value)) protectedIds.add(id);
+  };
+
+  for (const session of sessions) {
+    scan(await store.listMessages(session.id));
+    scan(await store.listPluginDataSessionScope(session.id));
+    scan(await store.listRuntimeOutputs(session.id));
+    scan(await store.listTraceEvents(session.id));
+    scan(await store.listSnapshots(session.id));
+
+    const turnResults = await store.listTurnResults(session.id);
+    scan(turnResults);
+    for (const turn of turnResults) {
+      scan(await store.listRuntimeResults(session.id, turn.turnId));
+    }
+  }
+
+  return protectedIds;
+}
+
+mediaRoutes.post('/cleanup', async (c) => {
+  const store = c.get('store');
+  const mediaStore = c.get('mediaStore');
+  if (!mediaStore) {
+    return jsonError('unavailable', 'media store not configured', 503);
+  }
+
+  let body: CleanupRequestBody = {};
+  try {
+    const parsed = await c.req.json().catch(() => ({}));
+    if (parsed && typeof parsed === 'object') body = parsed as CleanupRequestBody;
+  } catch {
+    return jsonError('invalid_request', 'invalid cleanup request body', 400);
+  }
+
+  let policy: MediaLifecyclePolicy;
+  try {
+    const dryRun = optionalBoolean(body.dryRun) ?? true;
+    policy = {
+      dryRun,
+      ...(body.maxAgeMs === undefined ? {} : { maxAgeMs: optionalNonNegativeNumber(body.maxAgeMs) }),
+      ...(body.maxBytes === undefined ? {} : { maxBytes: optionalNonNegativeNumber(body.maxBytes) }),
+      ...(body.keepRecentBytes === undefined ? {} : { keepRecentBytes: optionalNonNegativeNumber(body.keepRecentBytes) }),
+    };
+  } catch {
+    return jsonError('invalid_request', 'cleanup policy values must be boolean or non-negative numbers', 400);
+  }
+
+  try {
+    const protectedIds = await buildProtectedMediaIds(store, mediaStore);
+    const result = await mediaStore.cleanup(protectedIds, policy);
+    return new Response(JSON.stringify({ policy, result }), {
+      status: 200,
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+    });
+  } catch {
+    return jsonError('internal', 'media cleanup failed', 500);
+  }
+});
 
 mediaRoutes.get('/:id', async (c) => {
   const id = c.req.param('id');

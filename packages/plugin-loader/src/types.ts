@@ -209,6 +209,21 @@ export interface MediaContext {
   ingestUrl(url: string, opts?: IngestUrlOptions): Promise<MediaRef>;
 }
 
+export interface AssetProgressInput {
+  /** Stable asset/job id when the plugin has one before final MediaRef commit. */
+  readonly assetId?: string;
+  /** Producer-defined phase, e.g. queued, generating, uploading, finalizing. */
+  readonly phase: string;
+  /** Numeric progress percentage from 0 to 100. */
+  readonly percent?: number;
+  /** Optional human-readable status text for debug surfaces. */
+  readonly message?: string;
+  /** Modality tag that will also appear on the final asset.generate payload. */
+  readonly modality?: string;
+  /** Provider/job metadata. Keep this lightweight; final assets still use MediaRef. */
+  readonly meta?: Readonly<Record<string, unknown>>;
+}
+
 /**
  * Function handler context — passed to `runtimeType: 'function'` handlers.
  * The handler receives this context and returns a Record<string, unknown> output.
@@ -255,6 +270,11 @@ export interface FunctionHandlerContext {
    * persisting bytes.
    */
   readonly media?: MediaContext;
+  /**
+   * Emits generation progress as `asset.progress` trace/SSE events. The
+   * final durable output remains `assetGenerations[]` → `asset.generate`.
+   */
+  readonly assetProgress?: (progress: AssetProgressInput) => Promise<void>;
   /** Run a nested turn with a partial input override. Depth is bounded by runtime governance. */
   readonly recursiveCall: (
     delta: Partial<TurnInput>,

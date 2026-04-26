@@ -16,7 +16,12 @@ import type {
   TurnResult,
 } from '@covel/shared';
 import { isEnvEnabled } from '@covel/shared';
-import type { LoadedRuntime, PluginRuntimeGateway, PluginRuntimeUtils } from '@covel/plugin-loader';
+import type {
+  AssetProgressInput,
+  LoadedRuntime,
+  PluginRuntimeGateway,
+  PluginRuntimeUtils,
+} from '@covel/plugin-loader';
 import type {
   DataStore,
   TurnMessageRecord,
@@ -320,6 +325,40 @@ function emitSubEvent(
     timestamp: new Date().toISOString(),
     payload: { ...payload, _subTopic: subTopic, _subType: subType },
   });
+}
+
+function createAssetProgressEmitter(
+  emitter: TurnExecutorDeps['emitter'],
+  identity: {
+    readonly sessionId: string;
+    readonly turnId: string;
+    readonly pluginId: string;
+    readonly runtimeId: string;
+  },
+): ((progress: AssetProgressInput) => Promise<void>) | undefined {
+  if (!emitter) return undefined;
+  return async (progress) => {
+    const phase = progress.phase.trim();
+    if (phase.length === 0) {
+      throw new Error('assetProgress.phase must be a non-empty string');
+    }
+    if (
+      progress.percent !== undefined
+      && (!Number.isFinite(progress.percent) || progress.percent < 0 || progress.percent > 100)
+    ) {
+      throw new Error('assetProgress.percent must be a number from 0 to 100');
+    }
+
+    await emitter.emit('asset.progress', {
+      ...identity,
+      ...(progress.assetId ? { assetId: progress.assetId } : {}),
+      phase,
+      ...(progress.percent === undefined ? {} : { percent: progress.percent }),
+      ...(progress.message ? { message: progress.message } : {}),
+      ...(progress.modality ? { modality: progress.modality } : {}),
+      ...(progress.meta === undefined ? {} : { meta: progress.meta }),
+    });
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -2095,6 +2134,7 @@ async function executeOneRuntime(
         pluginId: manifest.pluginId,
         runtimeId: manifest.name,
       };
+      const assetProgress = createAssetProgressEmitter(deps.emitter, helperCtx);
       const pluginDataHandle = deps.store
         ? createPluginDataWriter(deps.store, helperCtx)
         : undefined;
@@ -2134,6 +2174,7 @@ async function executeOneRuntime(
         ...(deps.gateway ? { gateway: deps.gateway } : {}),
         ...(deps.utils ? { utils: deps.utils } : {}),
         ...(mediaHandle ? { media: mediaHandle } : {}),
+        ...(assetProgress ? { assetProgress } : {}),
         ...(manualPayloadForRuntime ? { manualPayload: manualPayloadForRuntime } : {}),
         ...(triggerEvent ? { triggerEvent } : {}),
         ...(userSettingsForRuntime ? { userSettings: userSettingsForRuntime } : {}),
@@ -2288,6 +2329,12 @@ async function executeOneRuntime(
           ? input.manualTrigger.payload
           : undefined;
       const guardUserSettings = resolveUserSettings(manifest, input.userSettings);
+      const guardAssetProgress = createAssetProgressEmitter(deps.emitter, {
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        pluginId: manifest.pluginId,
+        runtimeId: manifest.name,
+      });
       const guardOutput = await loaded.guard({
         sessionId: input.sessionId,
         turnId: input.turnId,
@@ -2302,6 +2349,7 @@ async function executeOneRuntime(
         ...(deps.gateway ? { gateway: deps.gateway } : {}),
         ...(deps.utils ? { utils: deps.utils } : {}),
         ...(deps.mediaStore ? { media: createRuntimeMediaContext(deps.mediaStore, deps.utils, { sessionId: input.sessionId, pluginId: manifest.pluginId }) } : {}),
+        ...(guardAssetProgress ? { assetProgress: guardAssetProgress } : {}),
         ...(guardManualPayload ? { manualPayload: guardManualPayload } : {}),
         ...(triggerEvent ? { triggerEvent } : {}),
         ...(guardUserSettings ? { userSettings: guardUserSettings } : {}),

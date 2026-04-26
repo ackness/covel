@@ -17,6 +17,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { createAiStack } from "./ai-setup.js";
 import {
   createMemoryMediaStore,
+  createPgMediaStore,
   createSqliteMediaStore,
   createStoreFromEnv,
   resolveBackendFromEnv,
@@ -86,10 +87,10 @@ function resolvePreferredMemorySlot(slotRegistry: {
   return slotRegistry.listSlotsByTag("text")[0]?.slotId ?? "plugin";
 }
 
-function createMediaStoreForBackend(
+async function createMediaStoreForBackend(
   backend: ReturnType<typeof resolveBackendFromEnv>,
   runtimeEnv: ReturnType<typeof readRuntimeEnv>,
-): MediaStore | undefined {
+): Promise<MediaStore | undefined> {
   if (backend === "memory") {
     console.log("[server] media store: memory");
     return createMemoryMediaStore();
@@ -102,9 +103,12 @@ function createMediaStoreForBackend(
     return createSqliteMediaStore(sqlitePath, { mediaRoot });
   }
 
-  console.warn(
-    "[server] media store: pg backend currently requires a future durable media implementation; media endpoints will return 503",
-  );
+  if (backend === "pg" && runtimeEnv.databaseUrl) {
+    console.log("[server] media store: pg");
+    return createPgMediaStore(runtimeEnv.databaseUrl);
+  }
+
+  console.warn("[server] media store: unavailable for pg backend without DATABASE_URL");
   return undefined;
 }
 
@@ -171,7 +175,7 @@ loadKeysEnvInto(process.env);
 const ai = createAiStack();
 const storeBackend = resolveBackendFromEnv();
 const store = await createStoreFromEnv();
-const mediaStore = createMediaStoreForBackend(storeBackend, env);
+const mediaStore = await createMediaStoreForBackend(storeBackend, env);
 
 // ── Session lock ────────────────────────────────────────────────
 //

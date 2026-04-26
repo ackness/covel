@@ -1,6 +1,6 @@
 import type { MediaRef } from '@covel/shared';
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { MediaAssetLookup, MediaStore } from '../media-store.js';
+import type { MediaAssetLookup, MediaAssetRecord, MediaRefRecord, MediaStore } from '../media-store.js';
 
 const DEFAULT_DB_NAME = 'covel-media-store';
 const DB_VERSION = 2;
@@ -117,6 +117,14 @@ function toLookup(record: IdbMediaAssetRecord): MediaAssetLookup {
   };
 }
 
+function toAssetRecord(record: IdbMediaAssetRecord): MediaAssetRecord {
+  return {
+    ...toLookup(record),
+    createdAt: record.createdAt,
+    ...(record.meta === undefined ? {} : { meta: record.meta }),
+  };
+}
+
 function refKey(mediaId: string, sessionId: string, pluginId?: string): string {
   return `${sessionId}\u0000${mediaId}\u0000${pluginId ?? ''}`;
 }
@@ -125,10 +133,80 @@ function cloneMeta(meta?: object): Readonly<Record<string, unknown>> | undefined
   return meta === undefined ? undefined : { ...(meta as Record<string, unknown>) };
 }
 
+function cleanupCandidates(
+  assets: readonly MediaAssetRecord[],
+  protectedIds: ReadonlySet<string>,
+  policy: {
+    readonly maxBytes?: number;
+    readonly maxAgeMs?: number;
+    readonly keepRecentBytes?: number;
+    readonly dryRun?: boolean;
+    readonly now?: Date;
+  } = {},
+): { readonly idsToDelete: readonly string[] } {
+  const nowMs = policy.now?.getTime() ?? Date.now();
+  const protectedSet = new Set(protectedIds);
+  const sorted = [...assets].sort((a, b) =>
+    a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+  );
+  const ids = new Set<string>();
+  let currentBytes = sorted.reduce((sum, asset) => sum + asset.size, 0);
+
+  if (typeof policy.maxAgeMs === 'number' && policy.maxAgeMs >= 0) {
+    const cutoff = nowMs - policy.maxAgeMs;
+    for (const asset of sorted) {
+      if (protectedSet.has(asset.id)) continue;
+      const created = Date.parse(asset.createdAt);
+      if (Number.isFinite(created) && created <= cutoff) {
+        ids.add(asset.id);
+        currentBytes -= asset.size;
+      }
+    }
+  }
+
+  if (typeof policy.keepRecentBytes === 'number' && policy.keepRecentBytes >= 0) {
+    let recentBytes = 0;
+    for (const asset of [...sorted].reverse()) {
+      if (protectedSet.has(asset.id) || ids.has(asset.id)) continue;
+      recentBytes += asset.size;
+      if (recentBytes > policy.keepRecentBytes) {
+        ids.add(asset.id);
+        currentBytes -= asset.size;
+      }
+    }
+  }
+
+  if (typeof policy.maxBytes === 'number' && policy.maxBytes >= 0) {
+    for (const asset of sorted) {
+      if (currentBytes <= policy.maxBytes) break;
+      if (protectedSet.has(asset.id) || ids.has(asset.id)) continue;
+      ids.add(asset.id);
+      currentBytes -= asset.size;
+    }
+  }
+
+  return { idsToDelete: [...ids] };
+}
+
 export async function createIndexedDbMediaStore(
   options?: IndexedDbMediaStoreOptions,
 ): Promise<MediaStore> {
   const db = await openMediaDb(options?.dbName ?? DEFAULT_DB_NAME);
+
+  async function deleteAsset(id: string): Promise<void> {
+    const tx = db.transaction([STORE_ASSETS, STORE_REFS], 'readwrite');
+    await Promise.all([
+      tx.objectStore(STORE_ASSETS).delete(id),
+      (async () => {
+        let cursor = await tx.objectStore(STORE_REFS).index('mediaId').openCursor(id);
+        while (cursor) {
+          await cursor.delete();
+          cursor = await cursor.continue();
+        }
+      })(),
+    ]);
+    await tx.done;
+  }
 
   return {
     async put(value, mime, meta) {
@@ -169,18 +247,7 @@ export async function createIndexedDbMediaStore(
     },
 
     async delete(id) {
-      const tx = db.transaction([STORE_ASSETS, STORE_REFS], 'readwrite');
-      await Promise.all([
-        tx.objectStore(STORE_ASSETS).delete(id),
-        (async () => {
-          let cursor = await tx.objectStore(STORE_REFS).index('mediaId').openCursor(id);
-          while (cursor) {
-            await cursor.delete();
-            cursor = await cursor.continue();
-          }
-        })(),
-      ]);
-      await tx.done;
+      await deleteAsset(id);
     },
 
     async lookup(id) {
@@ -216,6 +283,55 @@ export async function createIndexedDbMediaStore(
       if (record?.ownerSessionId === sessionId) return true;
       const key = await db.getKeyFromIndex(STORE_REFS, 'session_media', [sessionId, id]);
       return key !== undefined;
+    },
+
+    async listAssets() {
+      const rows = await db.getAll(STORE_ASSETS);
+      return rows
+        .map(toAssetRecord)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+    },
+
+    async listRefs() {
+      const rows = await db.getAll(STORE_REFS);
+      return rows
+        .map((row): MediaRefRecord => ({
+          mediaId: row.mediaId,
+          sessionId: row.sessionId,
+          pluginId: row.pluginId,
+          createdAt: row.createdAt,
+        }))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.sessionId.localeCompare(b.sessionId) || a.mediaId.localeCompare(b.mediaId));
+    },
+
+    async cleanup(protectedIds, policy = {}) {
+      const assets = (await db.getAll(STORE_ASSETS))
+        .map(toAssetRecord)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+      const { idsToDelete } = cleanupCandidates(assets, protectedIds, policy);
+      const deletedSet = new Set(idsToDelete);
+      const totalBytes = assets.reduce((sum, asset) => sum + asset.size, 0);
+      const bytesDeleted = assets
+        .filter((asset) => deletedSet.has(asset.id))
+        .reduce((sum, asset) => sum + asset.size, 0);
+
+      if (!policy.dryRun) {
+        for (const id of idsToDelete) {
+          await deleteAsset(id);
+        }
+      }
+
+      return {
+        scanned: assets.length,
+        protected: assets.filter((asset) => protectedIds.has(asset.id)).length,
+        retained: assets.length - idsToDelete.length,
+        deleted: idsToDelete.length,
+        totalBytes,
+        bytesDeleted,
+        bytesRetained: totalBytes - bytesDeleted,
+        protectedIds: [...protectedIds].sort(),
+        deletedIds: idsToDelete,
+      };
     },
 
     async openReadStream(ref) {

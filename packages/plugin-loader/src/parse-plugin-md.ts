@@ -238,11 +238,25 @@ export function parsePluginMd(content: string, filePath: string): ParsedPluginMd
         rawHooks.push(entry as { event: string; handler: string; [k: string]: unknown });
       }
       // Replace hooks in data with the filtered valid ones for strict schema validation.
-      // If none remain, omit the key entirely so strict mode doesn't complain about [].
+      // Hook execution is version-gated: manifests must explicitly opt in with
+      // hookManifestVersion: 1 so future hook semantic changes have a stable
+      // compatibility boundary.
       const { hooks: _omitted, ...dataWithoutHooks } = data as Record<string, unknown>;
-      dataToValidate = rawHooks.length > 0
-        ? { ...dataWithoutHooks, hooks: rawHooks }
-        : dataWithoutHooks;
+      if (rawHooks.length > 0 && (dataWithoutHooks as { hookManifestVersion?: unknown }).hookManifestVersion !== 1) {
+        console.warn(
+          formatLoaderError(
+            filePath,
+            hooksLine,
+            'hooks skipped — set `hookManifestVersion: 1` to enable lifecycle hooks',
+            'Add `hookManifestVersion: 1` next to `hooks:` after verifying docs/reference/plugins.md#hooks.',
+          ),
+        );
+        dataToValidate = dataWithoutHooks;
+      } else {
+        dataToValidate = rawHooks.length > 0
+          ? { ...dataWithoutHooks, hooks: rawHooks }
+          : dataWithoutHooks;
+      }
     }
 
     // S3-T4: author's note / post-history lenient parsing.

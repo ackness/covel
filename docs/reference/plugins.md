@@ -461,6 +461,7 @@ Guard 适用于"先检查再决定是否需要 LLM"的场景，替代了之前�
 `hooks` 声明生命周期处理器。`handler` 路径相对插件目录解析，首次触发时懒加载。
 
 ```yaml
+hookManifestVersion: 1
 hooks:
   - event: PreToolUse
     handler: ./hooks/validate-tool.ts
@@ -469,6 +470,8 @@ hooks:
     match:
       tool: create-character
 ```
+
+`hookManifestVersion: 1` 是 hook 语义版本声明。缺少该字段时，loader 会跳过 `hooks:` 并输出 warning；manifest 其余字段继续按常规解析。
 
 | 字段 | 类型 | 默认值 | 含义 |
 |---|---|---|---|

@@ -13,6 +13,10 @@ export {
 export { supportsVector } from './vector-store.js';
 export type {
   MediaAssetLookup,
+  MediaAssetRecord,
+  MediaCleanupResult,
+  MediaLifecyclePolicy,
+  MediaRefRecord,
   MediaStore,
   PgMediaStoreOptions,
   S3CompatibleMediaClient,

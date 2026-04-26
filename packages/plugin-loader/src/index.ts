@@ -37,6 +37,7 @@ export type {
   FunctionHandlerContext,
   PluginRuntimeGateway,
   PluginRuntimeUtils,
+  AssetProgressInput,
   ResolvedSlotForPlugin,
   PluginDataWriter,
   PluginLogger,

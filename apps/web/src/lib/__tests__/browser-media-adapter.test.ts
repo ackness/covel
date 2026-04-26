@@ -37,6 +37,19 @@ function makeStore(): MediaStore {
     recordOwnership: vi.fn(),
     addRef: vi.fn(),
     isReferencedBy: vi.fn(),
+    listAssets: vi.fn().mockResolvedValue([]),
+    listRefs: vi.fn().mockResolvedValue([]),
+    cleanup: vi.fn().mockResolvedValue({
+      scanned: 0,
+      protected: 0,
+      retained: 0,
+      deleted: 0,
+      totalBytes: 0,
+      bytesDeleted: 0,
+      bytesRetained: 0,
+      protectedIds: [],
+      deletedIds: [],
+    }),
   };
 }
 

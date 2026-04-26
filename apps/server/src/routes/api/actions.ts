@@ -209,6 +209,7 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
       'hook.fired',
       'hook.rewrote',
       'hook.aborted',
+      'asset.progress',
     ]);
     const eventBusUnsubscribe = eventBus.onEmit((ev) => {
       if (ev.sessionId !== sessionId) return;

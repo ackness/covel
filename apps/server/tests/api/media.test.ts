@@ -12,7 +12,16 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import { createHash } from 'node:crypto';
 import type { MediaRef } from '@covel/shared';
-import type { MediaAssetLookup, MediaStore } from '@covel/store';
+import {
+  createMemoryMediaStore,
+  createMemoryStore,
+  type DataStore,
+  type MediaAssetLookup,
+  type MediaAssetRecord,
+  type MediaRefRecord,
+  type MediaStore,
+  type SessionRecord,
+} from '@covel/store';
 import { mediaRoutes } from '../../src/routes/api/media.js';
 import { sessionRoutes } from '../../src/routes/api/session.js';
 import {
@@ -22,10 +31,25 @@ import {
 
 const TEST_SECRET = 'route-test-secret-' + 'x'.repeat(32);
 
+function makeSession(id: string): SessionRecord {
+  const now = new Date().toISOString();
+  return {
+    id,
+    worldId: 'world-1',
+    status: 'active',
+    turnCount: 0,
+    preGameCompleted: [],
+    activePlugins: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 interface StoredAsset {
   readonly bytes: Uint8Array;
   readonly mime: string;
   readonly size: number;
+  readonly createdAt?: string;
   /** `null` models the "ownership not yet recorded" state. */
   readonly ownerSessionId: string | null;
   readonly ownerPluginId?: string;
@@ -55,6 +79,7 @@ function createMockMediaStore(options: MockMediaStoreOptions = {}): {
         size: bytes.byteLength,
         ownerSessionId: 'auto',
         references: new Set(['auto']),
+        createdAt: new Date().toISOString(),
       });
       return { id, mime, size: bytes.byteLength };
     },
@@ -95,6 +120,56 @@ function createMockMediaStore(options: MockMediaStoreOptions = {}): {
       const a = assets.get(id);
       return a ? a.references.has(sessionId) : false;
     },
+    async listAssets(): Promise<readonly MediaAssetRecord[]> {
+      return [...assets.entries()].map(([id, asset]) => ({
+        id,
+        mime: asset.mime,
+        size: asset.size,
+        ownerSessionId: asset.ownerSessionId,
+        ownerPluginId: asset.ownerPluginId ?? null,
+        createdAt: asset.createdAt ?? new Date(0).toISOString(),
+      }));
+    },
+    async listRefs(): Promise<readonly MediaRefRecord[]> {
+      const rows: MediaRefRecord[] = [];
+      for (const [mediaId, asset] of assets) {
+        for (const sessionId of asset.references) {
+          if (sessionId === asset.ownerSessionId) continue;
+          rows.push({
+            mediaId,
+            sessionId,
+            pluginId: null,
+            createdAt: asset.createdAt ?? new Date(0).toISOString(),
+          });
+        }
+      }
+      return rows;
+    },
+    async cleanup(protectedIds, policy = {}) {
+      const rows = await this.listAssets();
+      const deletable = rows.filter((row) => !protectedIds.has(row.id));
+      const idsToDelete = policy.maxBytes === undefined && policy.maxAgeMs === undefined && policy.keepRecentBytes === undefined
+        ? []
+        : deletable.map((row) => row.id);
+      const bytesDeleted = rows
+        .filter((row) => idsToDelete.includes(row.id))
+        .reduce((sum, row) => sum + row.size, 0);
+      if (!policy.dryRun) {
+        for (const id of idsToDelete) assets.delete(id);
+      }
+      const totalBytes = rows.reduce((sum, row) => sum + row.size, 0);
+      return {
+        scanned: rows.length,
+        protected: rows.filter((row) => protectedIds.has(row.id)).length,
+        retained: rows.length - idsToDelete.length,
+        deleted: idsToDelete.length,
+        totalBytes,
+        bytesDeleted,
+        bytesRetained: totalBytes - bytesDeleted,
+        protectedIds: [...protectedIds].sort(),
+        deletedIds: idsToDelete,
+      };
+    },
     async openReadStream(ref) {
       if (counter) counter.count += 1;
       const a = assets.get(ref.id);
@@ -116,15 +191,16 @@ function createMockMediaStore(options: MockMediaStoreOptions = {}): {
     store,
     put(asset) {
       const id = createHash('sha256').update(asset.bytes).digest('hex');
-      assets.set(id, asset);
+      assets.set(id, { ...asset, createdAt: asset.createdAt ?? new Date().toISOString() });
       return { id, mime: asset.mime, size: asset.size };
     },
   };
 }
 
-function createTestApp(store: MediaStore | undefined): Hono {
+function createTestApp(store: MediaStore | undefined, dataStore: DataStore = createMemoryStore()): Hono {
   const app = new Hono();
   app.use('*', async (c, next) => {
+    c.set('store', dataStore);
     if (store) {
       c.set('mediaStore', store);
     }
@@ -469,5 +545,64 @@ describe('GET /api/sessions/:id/media-token', () => {
     expect(res.status).toBe(503);
     const body = await res.json();
     expect(body.code).toBe('media_store_unavailable');
+  });
+});
+
+describe('POST /api/media/cleanup', () => {
+  it('dry-runs cleanup and protects assets referenced by live sessions', async () => {
+    const dataStore = createMemoryStore();
+    await dataStore.createSession(makeSession('sess-A'));
+    const mediaStore = createMemoryMediaStore();
+    const keep = await mediaStore.put(new Uint8Array([1, 2, 3, 4]), 'application/octet-stream');
+    const remove = await mediaStore.put(new Uint8Array([9, 9, 9, 9]), 'application/octet-stream');
+    await mediaStore.recordOwnership(keep.id, 'sess-A', 'plugin-A');
+
+    const app = createTestApp(mediaStore, dataStore);
+    const res = await app.request('/api/media/cleanup', {
+      method: 'POST',
+      body: JSON.stringify({ maxBytes: keep.size, dryRun: true }),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      result: { deletedIds: string[]; protectedIds: string[]; deleted: number };
+    };
+    expect(body.result.protectedIds).toContain(keep.id);
+    expect(body.result.deletedIds).toEqual([remove.id]);
+    expect(body.result.deleted).toBe(1);
+    expect(await mediaStore.exists(remove.id)).toBe(true);
+  });
+
+  it('uses dry-run inventory semantics when no cleanup policy is provided', async () => {
+    const dataStore = createMemoryStore();
+    const mediaStore = createMemoryMediaStore();
+    const ref = await mediaStore.put(new Uint8Array([1, 2, 3]), 'application/octet-stream');
+
+    const app = createTestApp(mediaStore, dataStore);
+    const res = await app.request('/api/media/cleanup', {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { result: { deletedIds: string[]; deleted: number } };
+    expect(body.result.deletedIds).toEqual([]);
+    expect(body.result.deleted).toBe(0);
+    expect(await mediaStore.exists(ref.id)).toBe(true);
+  });
+
+  it('rejects invalid cleanup policy types', async () => {
+    const app = createTestApp(createMemoryMediaStore(), createMemoryStore());
+    const res = await app.request('/api/media/cleanup', {
+      method: 'POST',
+      body: JSON.stringify({ dryRun: 'false' }),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.code).toBe('invalid_request');
   });
 });

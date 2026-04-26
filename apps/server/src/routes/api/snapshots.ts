@@ -22,7 +22,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
-import { isEnvEnabled, mediaRefSchema } from '@covel/shared';
+import { collectMediaRefIds, isEnvEnabled } from '@covel/shared';
 import type {
   DataStore,
   MediaStore,
@@ -56,23 +56,6 @@ const FLAG_OFF_BODY = {
 
 function flagOn(): boolean {
   return isEnvEnabled('COVEL_SNAPSHOTS_V1');
-}
-
-function collectMediaRefIds(value: unknown, out = new Set<string>()): Set<string> {
-  if (!value || typeof value !== 'object') return out;
-  const parsed = mediaRefSchema.safeParse(value);
-  if (parsed.success) {
-    out.add(parsed.data.id);
-    return out;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) collectMediaRefIds(item, out);
-    return out;
-  }
-  for (const item of Object.values(value as Record<string, unknown>)) {
-    collectMediaRefIds(item, out);
-  }
-  return out;
 }
 
 // ── POST /api/sessions/:id/snapshot — manual snapshot ─────────────

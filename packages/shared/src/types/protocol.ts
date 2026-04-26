@@ -103,6 +103,9 @@ export type ProtocolEventType =
   | 'runtime.completed'
   | 'runtime.failed'
   | 'execution.completed'
+  // Asset lifecycle
+  | 'asset.progress'
+  | 'asset.generated'
   // Session lifecycle
   | 'record.updated'
   | 'event.emitted'

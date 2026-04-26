@@ -329,6 +329,61 @@ describe('executeTurn: manual trigger', () => {
     expect(result.runtimeResults[0]!.output).toMatchObject({ ok: true, mediaId: 'media-1' });
   });
 
+  it('exposes assetProgress to function handlers and emits asset.progress', async () => {
+    const target = fnManifest('plug/progress', { trigger: { type: 'manual' } });
+    const emitted: Array<{ type: string; payload: Record<string, unknown> }> = [];
+
+    const { result } = await runTurn(
+      [target],
+      {
+        'plug/progress': async (ctx) => {
+          const assetProgress = ctx.assetProgress as FunctionHandlerContext['assetProgress'];
+          await assetProgress?.({
+            assetId: 'job-1',
+            phase: 'generating',
+            percent: 50,
+            modality: 'image',
+            message: 'halfway',
+          });
+          return { ok: true };
+        },
+      },
+      {
+        sessionId: 'sess-1',
+        turnId: 'turn-1',
+        playerMessage: '',
+        manualTrigger: { runtimeId: 'plug/progress' },
+      },
+      {
+        emitter: {
+          sessionId: 'sess-1',
+          turnId: 'turn-1',
+          async emit(type, payload) {
+            emitted.push({ type, payload });
+          },
+        },
+      },
+    );
+
+    expect(result.runtimeResults[0]!.status).toBe('success');
+    expect(emitted).toEqual([
+      {
+        type: 'asset.progress',
+        payload: {
+          sessionId: 'sess-1',
+          turnId: 'turn-1',
+          pluginId: 'plug',
+          runtimeId: 'plug/progress',
+          assetId: 'job-1',
+          phase: 'generating',
+          percent: 50,
+          modality: 'image',
+          message: 'halfway',
+        },
+      },
+    ]);
+  });
+
   // ── Audit F7: userSettings merging. ────────────────────────────────
   //
   // Function runtimes declare `userSettings: [{key, default, ...}]` in their

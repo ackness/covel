@@ -447,6 +447,7 @@ describe('parsePluginMd', () => {
           'name: test-guard-plugin',
           'description: Plugin with hooks',
           'priority: 500',
+          'hookManifestVersion: 1',
           'hooks:',
           '  - event: PreToolUse',
           '    handler: ./hooks/validate.ts',
@@ -489,6 +490,7 @@ describe('parsePluginMd', () => {
             'name: test-hook-plugin',
             'description: Hook event test',
             'priority: 500',
+            'hookManifestVersion: 1',
             'hooks:',
             `  - event: ${event}`,
             '    handler: ./hooks/handler.ts',
@@ -509,6 +511,7 @@ describe('parsePluginMd', () => {
           'name: test-bad-hook',
           'description: Bad hook event',
           'priority: 500',
+          'hookManifestVersion: 1',
           'hooks:',
           '  - event: InvalidEvent',
           '    handler: ./hooks/bad.ts',
@@ -563,6 +566,7 @@ describe('parsePluginMd', () => {
           'name: test-malformed-hook',
           'description: Mix of valid + malformed entries',
           'priority: 500',
+          'hookManifestVersion: 1',
           'hooks:',
           '  - event: PreToolUse',
           '    handler: ./hooks/ok.ts',
@@ -579,6 +583,30 @@ describe('parsePluginMd', () => {
       expect(warnMsg).toContain('malformed hook entry skipped');
       expect(result.manifest.hooks).toHaveLength(1);
       expect(result.manifest.hooks![0].handler).toBe('./hooks/ok.ts');
+
+      warnSpy.mockRestore();
+    });
+
+    it('skips hooks until hookManifestVersion is declared', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const content = md(
+        [
+          'name: test-ungated-hooks',
+          'description: Hooks without gate',
+          'priority: 500',
+          'hooks:',
+          '  - event: PreToolUse',
+          '    handler: ./hooks/ok.ts',
+        ].join('\n'),
+        '\nBody.\n',
+      );
+
+      const result = parsePluginMd(content, 'plugins/test-ungated-hooks/PLUGIN.md');
+
+      expect(result.manifest.hooks).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(warnSpy.mock.calls[0][0]).toContain('hookManifestVersion: 1');
 
       warnSpy.mockRestore();
     });

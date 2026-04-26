@@ -33,6 +33,38 @@ export interface MediaAssetLookup {
   readonly ownerPluginId: string | null;
 }
 
+export interface MediaAssetRecord extends MediaAssetLookup {
+  readonly createdAt: string;
+  readonly meta?: Readonly<Record<string, unknown>>;
+}
+
+export interface MediaRefRecord {
+  readonly mediaId: string;
+  readonly sessionId: string;
+  readonly pluginId: string | null;
+  readonly createdAt: string;
+}
+
+export interface MediaLifecyclePolicy {
+  readonly maxBytes?: number;
+  readonly maxAgeMs?: number;
+  readonly keepRecentBytes?: number;
+  readonly dryRun?: boolean;
+  readonly now?: Date;
+}
+
+export interface MediaCleanupResult {
+  readonly scanned: number;
+  readonly protected: number;
+  readonly retained: number;
+  readonly deleted: number;
+  readonly totalBytes: number;
+  readonly bytesDeleted: number;
+  readonly bytesRetained: number;
+  readonly protectedIds: readonly string[];
+  readonly deletedIds: readonly string[];
+}
+
 export interface MediaStore {
   put(blob: Uint8Array | Blob, mime: string, meta?: object): Promise<MediaRef>;
   get(ref: MediaRef): Promise<Uint8Array | Blob>;
@@ -66,6 +98,18 @@ export interface MediaStore {
    * The route handler uses this to gate dereferencing.
    */
   isReferencedBy(id: string, sessionId: string): Promise<boolean>;
+  /** List stored assets for GC/quota/retention policy decisions. */
+  listAssets(): Promise<readonly MediaAssetRecord[]>;
+  /** List explicit cross-session refs for fork/snapshot protection. */
+  listRefs(): Promise<readonly MediaRefRecord[]>;
+  /**
+   * Delete unprotected assets according to age/quota policy. Callers provide
+   * protected ids after scanning live sessions, snapshots, and refs.
+   */
+  cleanup(
+    protectedIds: ReadonlySet<string>,
+    policy?: MediaLifecyclePolicy,
+  ): Promise<MediaCleanupResult>;
   /**
    * Optional streaming read for large assets. Callers SHOULD fall back to
    * `get()` when this is undefined (e.g. tests with hand-rolled mocks).
@@ -112,11 +156,85 @@ export interface S3MediaStoreOptions {
 interface StoredMedia {
   readonly bytes: Uint8Array;
   readonly ref: MediaRef;
+  readonly createdAt: string;
 }
 
 interface OwnerRecord {
   readonly sessionId: string;
   readonly pluginId: string | null;
+}
+
+function cleanupCandidates(
+  assets: readonly MediaAssetRecord[],
+  protectedIds: ReadonlySet<string>,
+  policy: MediaLifecyclePolicy = {},
+): {
+  readonly result: MediaCleanupResult;
+  readonly idsToDelete: readonly string[];
+} {
+  const nowMs = policy.now?.getTime() ?? Date.now();
+  const protectedSet = new Set(protectedIds);
+  const sorted = [...assets].sort((a, b) => {
+    const byCreated = a.createdAt.localeCompare(b.createdAt);
+    return byCreated === 0 ? a.id.localeCompare(b.id) : byCreated;
+  });
+  const idsToDelete = new Set<string>();
+  let currentBytes = sorted.reduce((sum, asset) => sum + asset.size, 0);
+
+  if (typeof policy.maxAgeMs === 'number' && policy.maxAgeMs >= 0) {
+    const cutoff = nowMs - policy.maxAgeMs;
+    for (const asset of sorted) {
+      if (protectedSet.has(asset.id)) continue;
+      const created = Date.parse(asset.createdAt);
+      if (Number.isFinite(created) && created <= cutoff) {
+        idsToDelete.add(asset.id);
+        currentBytes -= asset.size;
+      }
+    }
+  }
+
+  if (typeof policy.keepRecentBytes === 'number' && policy.keepRecentBytes >= 0) {
+    let recentBytes = 0;
+    for (const asset of [...sorted].reverse()) {
+      if (protectedSet.has(asset.id) || idsToDelete.has(asset.id)) continue;
+      recentBytes += asset.size;
+      if (recentBytes > policy.keepRecentBytes) {
+        idsToDelete.add(asset.id);
+        currentBytes -= asset.size;
+      }
+    }
+  }
+
+  if (typeof policy.maxBytes === 'number' && policy.maxBytes >= 0) {
+    for (const asset of sorted) {
+      if (currentBytes <= policy.maxBytes) break;
+      if (protectedSet.has(asset.id) || idsToDelete.has(asset.id)) continue;
+      idsToDelete.add(asset.id);
+      currentBytes -= asset.size;
+    }
+  }
+
+  const deletedIds = [...idsToDelete];
+  const deletedSet = new Set(deletedIds);
+  const totalBytes = assets.reduce((sum, asset) => sum + asset.size, 0);
+  const bytesDeleted = assets
+    .filter((asset) => deletedSet.has(asset.id))
+    .reduce((sum, asset) => sum + asset.size, 0);
+
+  return {
+    idsToDelete: deletedIds,
+    result: {
+      scanned: assets.length,
+      protected: assets.filter((asset) => protectedSet.has(asset.id)).length,
+      retained: assets.length - deletedIds.length,
+      deleted: deletedIds.length,
+      totalBytes,
+      bytesDeleted,
+      bytesRetained: totalBytes - bytesDeleted,
+      protectedIds: [...protectedSet].sort(),
+      deletedIds,
+    },
+  };
 }
 
 async function toBytes(blob: Uint8Array | Blob): Promise<Uint8Array> {
@@ -164,6 +282,7 @@ export function createMemoryMediaStore(): MediaStore {
   // Inverted index: sessionId → set of media ids referenced. Mirrors the
   // SQLite media_refs table so isReferencedBy() can stay O(1).
   const refs = new Map<string, Set<string>>();
+  const refRows = new Map<string, MediaRefRecord>();
 
   function addRefInternal(sessionId: string, id: string): void {
     let set = refs.get(sessionId);
@@ -186,7 +305,7 @@ export function createMemoryMediaStore(): MediaStore {
         size: bytes.byteLength,
         ...(meta === undefined ? {} : { meta: toMeta(meta) }),
       };
-      assets.set(id, { bytes: new Uint8Array(bytes), ref });
+      assets.set(id, { bytes: new Uint8Array(bytes), ref, createdAt: new Date().toISOString() });
       return ref;
     },
 
@@ -212,6 +331,9 @@ export function createMemoryMediaStore(): MediaStore {
       // Drop reverse refs so isReferencedBy stays consistent across delete/recreate.
       for (const set of refs.values()) {
         set.delete(id);
+      }
+      for (const [key, row] of refRows) {
+        if (row.mediaId === id) refRows.delete(key);
       }
     },
 
@@ -241,15 +363,50 @@ export function createMemoryMediaStore(): MediaStore {
       });
     },
 
-    async addRef(id, sessionId, _pluginId) {
+    async addRef(id, sessionId, pluginId) {
       if (!assets.has(id)) return;
       addRefInternal(sessionId, id);
+      refRows.set(`${sessionId}\u0000${id}\u0000${pluginId ?? ''}`, {
+        sessionId,
+        mediaId: id,
+        pluginId: pluginId ?? null,
+        createdAt: new Date().toISOString(),
+      });
     },
 
     async isReferencedBy(id, sessionId) {
       const owner = owners.get(id);
       if (owner?.sessionId === sessionId) return true;
       return refs.get(sessionId)?.has(id) ?? false;
+    },
+
+    async listAssets() {
+      return [...assets.values()].map((asset) => {
+        const owner = owners.get(asset.ref.id);
+        return {
+          id: asset.ref.id,
+          mime: asset.ref.mime,
+          size: asset.ref.size,
+          ownerSessionId: owner?.sessionId ?? null,
+          ownerPluginId: owner?.pluginId ?? null,
+          createdAt: asset.createdAt,
+          ...(asset.ref.meta === undefined ? {} : { meta: asset.ref.meta }),
+        };
+      });
+    },
+
+    async listRefs() {
+      return [...refRows.values()];
+    },
+
+    async cleanup(protectedIds, policy) {
+      const { result, idsToDelete } = cleanupCandidates(await this.listAssets(), protectedIds, policy);
+      if (!policy?.dryRun) {
+        for (const id of idsToDelete) {
+          await this.delete(id);
+        }
+      }
+      return result;
     },
 
     async openReadStream(ref) {
@@ -423,6 +580,60 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
       return rows.length > 0;
     },
 
+    async listAssets() {
+      const rows = await sql<{
+        id: string;
+        mime: string;
+        size: number;
+        meta: Record<string, unknown> | null;
+        owner_session_id: string | null;
+        owner_plugin_id: string | null;
+        created_at: string;
+      }[]>`
+        SELECT id, mime, size, meta, owner_session_id, owner_plugin_id, created_at
+        FROM media_assets
+        ORDER BY created_at ASC, id ASC
+      `;
+      return rows.map((row) => ({
+        id: row.id,
+        mime: row.mime,
+        size: row.size,
+        ownerSessionId: row.owner_session_id,
+        ownerPluginId: row.owner_plugin_id,
+        createdAt: row.created_at,
+        ...(row.meta == null ? {} : { meta: row.meta }),
+      }));
+    },
+
+    async listRefs() {
+      const rows = await sql<{
+        media_id: string;
+        session_id: string;
+        plugin_id: string | null;
+        created_at: string;
+      }[]>`
+        SELECT media_id, session_id, plugin_id, created_at
+        FROM media_refs
+        ORDER BY created_at ASC, session_id ASC, media_id ASC
+      `;
+      return rows.map((row) => ({
+        mediaId: row.media_id,
+        sessionId: row.session_id,
+        pluginId: row.plugin_id,
+        createdAt: row.created_at,
+      }));
+    },
+
+    async cleanup(protectedIds, policy) {
+      const { result, idsToDelete } = cleanupCandidates(await this.listAssets(), protectedIds, policy);
+      if (!policy?.dryRun) {
+        for (const id of idsToDelete) {
+          await this.delete(id);
+        }
+      }
+      return result;
+    },
+
     async openReadStream(ref) {
       const bytes = await this.get(ref);
       return bytesToReadableStream(await toBytes(bytes));
@@ -437,6 +648,8 @@ export function createS3MediaStore(
   const owners = new Map<string, OwnerRecord>();
   const refs = new Map<string, Set<string>>();
   const metaById = new Map<string, MediaRef>();
+  const createdAtById = new Map<string, string>();
+  const refRows = new Map<string, MediaRefRecord>();
 
   function addRefInternal(sessionId: string, id: string): void {
     let set = refs.get(sessionId);
@@ -472,6 +685,7 @@ export function createS3MediaStore(
           ...(head.meta === undefined ? {} : { meta: head.meta }),
         };
         metaById.set(id, ref);
+        createdAtById.set(id, new Date().toISOString());
         return ref;
       }
 
@@ -488,6 +702,7 @@ export function createS3MediaStore(
         ...(ref.meta === undefined ? {} : { meta: ref.meta }),
       });
       metaById.set(id, ref);
+      createdAtById.set(id, new Date().toISOString());
       return ref;
     },
 
@@ -512,8 +727,12 @@ export function createS3MediaStore(
       await client.deleteObject(mediaObjectKey(id, options?.keyPrefix));
       owners.delete(id);
       metaById.delete(id);
+      createdAtById.delete(id);
       for (const set of refs.values()) {
         set.delete(id);
+      }
+      for (const [key, row] of refRows) {
+        if (row.mediaId === id) refRows.delete(key);
       }
     },
 
@@ -541,15 +760,54 @@ export function createS3MediaStore(
       });
     },
 
-    async addRef(id, sessionId, _pluginId) {
+    async addRef(id, sessionId, pluginId) {
       if (!(await this.exists(id))) return;
       addRefInternal(sessionId, id);
+      refRows.set(`${sessionId}\u0000${id}\u0000${pluginId ?? ''}`, {
+        sessionId,
+        mediaId: id,
+        pluginId: pluginId ?? null,
+        createdAt: new Date().toISOString(),
+      });
     },
 
     async isReferencedBy(id, sessionId) {
       const owner = owners.get(id);
       if (owner?.sessionId === sessionId) return true;
       return refs.get(sessionId)?.has(id) ?? false;
+    },
+
+    async listAssets() {
+      const rows: MediaAssetRecord[] = [];
+      for (const [id, ref] of metaById) {
+        const object = await client.headObject(mediaObjectKey(id, options?.keyPrefix));
+        if (!object) continue;
+        const owner = owners.get(id);
+        rows.push({
+          id,
+          mime: object.mime,
+          size: object.size,
+          ownerSessionId: owner?.sessionId ?? null,
+          ownerPluginId: owner?.pluginId ?? null,
+          createdAt: createdAtById.get(id) ?? new Date(0).toISOString(),
+          ...(object.meta === undefined ? ref.meta === undefined ? {} : { meta: ref.meta } : { meta: object.meta }),
+        });
+      }
+      return rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+    },
+
+    async listRefs() {
+      return [...refRows.values()];
+    },
+
+    async cleanup(protectedIds, policy) {
+      const { result, idsToDelete } = cleanupCandidates(await this.listAssets(), protectedIds, policy);
+      if (!policy?.dryRun) {
+        for (const id of idsToDelete) {
+          await this.delete(id);
+        }
+      }
+      return result;
     },
 
     async openReadStream(ref) {
@@ -584,6 +842,16 @@ export function createSqliteMediaStore(
   const select = sqlite.prepare(
     'SELECT id, mime, size, path, meta, owner_session_id AS ownerSessionId, owner_plugin_id AS ownerPluginId FROM media_assets WHERE id = ?',
   );
+  const selectAllAssets = sqlite.prepare(`
+    SELECT id, mime, size, meta, owner_session_id AS ownerSessionId, owner_plugin_id AS ownerPluginId, created_at AS createdAt
+    FROM media_assets
+    ORDER BY created_at ASC, id ASC
+  `);
+  const selectAllRefs = sqlite.prepare(`
+    SELECT media_id AS mediaId, session_id AS sessionId, plugin_id AS pluginId, created_at AS createdAt
+    FROM media_refs
+    ORDER BY created_at ASC, session_id ASC, media_id ASC
+  `);
   const remove = sqlite.prepare('DELETE FROM media_assets WHERE id = ?');
   const removeRefs = sqlite.prepare('DELETE FROM media_refs WHERE media_id = ?');
 
@@ -717,6 +985,41 @@ export function createSqliteMediaStore(
       if (ownerRow?.ownerSessionId === sessionId) return true;
       const refRow = checkRef.get(sessionId, id) as { one: number } | undefined;
       return refRow !== undefined;
+    },
+
+    async listAssets() {
+      const rows = selectAllAssets.all() as Array<{
+        id: string;
+        mime: string;
+        size: number;
+        meta: string | null;
+        ownerSessionId: string | null;
+        ownerPluginId: string | null;
+        createdAt: string;
+      }>;
+      return rows.map((row) => ({
+        id: row.id,
+        mime: row.mime,
+        size: row.size,
+        ownerSessionId: row.ownerSessionId ?? null,
+        ownerPluginId: row.ownerPluginId ?? null,
+        createdAt: row.createdAt,
+        ...(row.meta ? { meta: JSON.parse(row.meta) as Readonly<Record<string, unknown>> } : {}),
+      }));
+    },
+
+    async listRefs() {
+      return selectAllRefs.all() as MediaRefRecord[];
+    },
+
+    async cleanup(protectedIds, policy) {
+      const { result, idsToDelete } = cleanupCandidates(await this.listAssets(), protectedIds, policy);
+      if (!policy?.dryRun) {
+        for (const id of idsToDelete) {
+          await this.delete(id);
+        }
+      }
+      return result;
     },
 
     async openReadStream(ref) {

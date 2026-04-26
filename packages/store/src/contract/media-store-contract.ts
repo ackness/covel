@@ -154,6 +154,48 @@ export function runMediaStoreContractTests(
       expect(await store.isReferencedBy(ref.id, 'sess-C')).toBe(false);
     });
 
+    it('lists assets and refs for lifecycle scans', async () => {
+      const store = await createStore();
+      const ref = await store.put(PNG, 'image/png', { label: 'scan' });
+      await store.recordOwnership(ref.id, 'sess-A', 'plugin-X');
+      await store.addRef(ref.id, 'sess-B', 'plugin-Y');
+
+      const assets = await store.listAssets();
+      const asset = assets.find((item) => item.id === ref.id);
+      expect(asset).toMatchObject({
+        id: ref.id,
+        mime: 'image/png',
+        size: PNG.byteLength,
+        ownerSessionId: 'sess-A',
+        ownerPluginId: 'plugin-X',
+      });
+      expect(asset?.createdAt).toEqual(expect.any(String));
+
+      const refs = await store.listRefs();
+      expect(refs).toContainEqual(expect.objectContaining({
+        mediaId: ref.id,
+        sessionId: 'sess-B',
+        pluginId: 'plugin-Y',
+      }));
+    });
+
+    it('cleanup supports dry-run and protected ids', async () => {
+      const store = await createStore();
+      const keep = await store.put(PNG, 'image/png');
+      const remove = await store.put(OTHER, 'application/octet-stream');
+
+      const dryRun = await store.cleanup(new Set([keep.id]), { maxBytes: keep.size, dryRun: true });
+      expect(dryRun.deletedIds).toEqual([remove.id]);
+      expect(dryRun.bytesDeleted).toBe(remove.size);
+      expect(await store.exists(remove.id)).toBe(true);
+
+      const result = await store.cleanup(new Set([keep.id]), { maxBytes: keep.size });
+      expect(result.deletedIds).toEqual([remove.id]);
+      expect(result.protectedIds).toEqual([keep.id]);
+      expect(await store.exists(keep.id)).toBe(true);
+      expect(await store.exists(remove.id)).toBe(false);
+    });
+
     it('isReferencedBy returns true purely from ownership when no addRef ran', async () => {
       const store = await createStore();
       const ref = await store.put(PNG, 'image/png');

@@ -94,11 +94,20 @@ type AssetGeneration = {
 };
 ```
 
+生成中进度使用独立的 `asset.progress` 事件。function runtime 可调用 `ctx.assetProgress({ phase, percent, assetId, modality, message, meta })`；服务端会写入 trace 并经 `/actions` SSE 转发。`percent` 取值为 `0..100`。最终可持久化资产继续通过 `assetGenerations[]` 进入 `asset.generate` commit 路径。
+
+| 事件类型 | 方向 | 描述 | 负载 |
+|----------|------|------|------|
+| `asset.progress` | S→C | 多模态生成进度 | `{ runtimeId, pluginId, turnId, assetId?, phase, percent?, modality?, message?, meta? }` |
+| `asset.generated` | S→C | 资产完成并通过 `asset.generate` commit | `{ proposalId, runtimeId, pluginId, asset: AssetGenerateView }` |
+
 `ref` 必须来自 `ctx.media.put()` 或 `ctx.media.ingestUrl()`。provider wire 层可短暂收到 `b64_json`、远程临时 URL 或 SDK 字节结果；handler 在返回前完成 MediaStore ingest,然后只通过 `assetGenerations[]` 和业务索引记录暴露 `MediaRef`。
 
 图像画廊类插件仍可用 `plugin_data.images` 保存查询索引,索引值保存 `{ status, ref, prompt, ... }`。`Image` / `Media` 组件消费 `MediaRef`,由框架解析为展示 URL。
 
 声明 `image-generation` capability 的插件在完成态缺少 `assetGenerations[]` 时会产生 `image.generate.asset_missing` error。`plugin_data.images` 中出现旧 `url` / `base64` / `dataUrl` 字段时会产生 `image.generate.plugin_data_inline_media` error。
+
+旧 `plugin_data.images` 和 `runtime_results` 中的历史图像记录由 `/api/traces/:sessionId` 在读取时合成 `asset.generated` 事件，并在 payload 上标记 `legacy: true`、`legacySource`。原始数据保持原表形态，debug timeline 使用统一的 asset 事件路径展示。
 
 ### LLM content parts
 
