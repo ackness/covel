@@ -24,13 +24,14 @@
  */
 
 import { Hono } from 'hono';
-import { collectMediaRefIds } from '@covel/shared';
+import { collectMediaRefIds, isEnvTruthy, readEnvString } from '@covel/shared';
 import type { MediaRef } from '@covel/shared';
 import type { DataStore, MediaLifecyclePolicy, MediaStore } from '@covel/store';
 import {
   getMediaTokenSecret,
   verifyMediaToken,
 } from '../../middleware/media-token.js';
+import { singleFlight } from '../../middleware/rate-limit.js';
 
 /**
  * Module augmentation so `c.get('mediaStore')` / `c.set('mediaStore', ...)`
@@ -137,7 +138,38 @@ async function buildProtectedMediaIds(
   return protectedIds;
 }
 
-mediaRoutes.post('/cleanup', async (c) => {
+/**
+ * `POST /api/media/cleanup` — destructive maintenance endpoint.
+ *
+ * Hardening summary (audit P1 follow-up):
+ *
+ *   1. Disabled by default: must set `COVEL_MEDIA_CLEANUP_ENABLED=true`.
+ *   2. Forbidden in `DEPLOYMENT_TIER=commercial` until an admin auth
+ *      middleware is wired (no caller-identifying claim available right
+ *      now, so we refuse to even inspect the body).
+ *   3. `dryRun:false` requires an explicit `X-Confirm-Cleanup: yes`
+ *      header so an automated job or curl typo cannot delete bytes.
+ *   4. Single-flight wrapper prevents two cleanup runs from racing each
+ *      other (the protected-id scan is expensive; concurrent runs would
+ *      double the load and risk inconsistent inventories).
+ */
+mediaRoutes.post('/cleanup', singleFlight(), async (c) => {
+  // Deployment-tier gate first: refuse to even inspect the body in
+  // commercial deployments. There is no admin auth wired yet, and a
+  // 503 makes that disabled-by-policy state explicit to callers.
+  const deploymentTier = readEnvString('DEPLOYMENT_TIER', 'self')?.toLowerCase();
+  if (deploymentTier === 'commercial') {
+    return jsonError(
+      'unavailable',
+      'cleanup endpoint not available in this deployment tier',
+      503,
+    );
+  }
+
+  if (!isEnvTruthy('COVEL_MEDIA_CLEANUP_ENABLED')) {
+    return jsonError('forbidden', 'cleanup endpoint disabled', 403);
+  }
+
   const store = c.get('store');
   const mediaStore = c.get('mediaStore');
   if (!mediaStore) {
@@ -163,6 +195,19 @@ mediaRoutes.post('/cleanup', async (c) => {
     };
   } catch {
     return jsonError('invalid_request', 'cleanup policy values must be boolean or non-negative numbers', 400);
+  }
+
+  // Destructive runs require an explicit out-of-band confirmation so a
+  // misconfigured automation job or accidental curl cannot delete bytes.
+  if (policy.dryRun === false) {
+    const confirm = c.req.header('x-confirm-cleanup');
+    if (confirm !== 'yes') {
+      return jsonError(
+        'invalid_request',
+        'confirmation header missing: set X-Confirm-Cleanup: yes for destructive runs',
+        400,
+      );
+    }
   }
 
   try {

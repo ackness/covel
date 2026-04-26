@@ -549,6 +549,21 @@ describe('GET /api/sessions/:id/media-token', () => {
 });
 
 describe('POST /api/media/cleanup', () => {
+  // The route is gated by COVEL_MEDIA_CLEANUP_ENABLED — these legacy
+  // happy-path tests assume the gate is open. Dedicated gate-behaviour
+  // assertions live in `media-cleanup.test.ts`.
+  const ORIGINAL_FLAG = process.env.COVEL_MEDIA_CLEANUP_ENABLED;
+  beforeEach(() => {
+    process.env.COVEL_MEDIA_CLEANUP_ENABLED = 'true';
+  });
+  afterEach(() => {
+    if (ORIGINAL_FLAG === undefined) {
+      delete process.env.COVEL_MEDIA_CLEANUP_ENABLED;
+    } else {
+      process.env.COVEL_MEDIA_CLEANUP_ENABLED = ORIGINAL_FLAG;
+    }
+  });
+
   it('dry-runs cleanup and protects assets referenced by live sessions', async () => {
     const dataStore = createMemoryStore();
     await dataStore.createSession(makeSession('sess-A'));
