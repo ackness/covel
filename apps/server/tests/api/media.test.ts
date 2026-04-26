@@ -14,6 +14,7 @@ import { createHash } from 'node:crypto';
 import type { MediaRef } from '@covel/shared';
 import type { MediaAssetLookup, MediaStore } from '@covel/store';
 import { mediaRoutes } from '../../src/routes/api/media.js';
+import { sessionRoutes } from '../../src/routes/api/session.js';
 import {
   _resetMediaTokenSecretForTests,
   signMediaTokenForSession,
@@ -129,6 +130,7 @@ function createTestApp(store: MediaStore | undefined): Hono {
     }
     await next();
   });
+  app.route('/api/sessions', sessionRoutes);
   app.route('/api/media', mediaRoutes);
   return app;
 }
@@ -373,5 +375,99 @@ describe('GET /api/media/:id', () => {
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.error).not.toContain('boom');
+  });
+});
+
+describe('GET /api/sessions/:id/media-token', () => {
+  const ORIGINAL = process.env.COVEL_MEDIA_TOKEN_SECRET;
+
+  beforeEach(() => {
+    process.env.COVEL_MEDIA_TOKEN_SECRET = TEST_SECRET;
+    _resetMediaTokenSecretForTests();
+  });
+
+  afterEach(() => {
+    if (ORIGINAL === undefined) {
+      delete process.env.COVEL_MEDIA_TOKEN_SECRET;
+    } else {
+      process.env.COVEL_MEDIA_TOKEN_SECRET = ORIGINAL;
+    }
+    _resetMediaTokenSecretForTests();
+  });
+
+  it('returns a signed URL for an owned asset and that URL serves bytes', async () => {
+    const mock = createMockMediaStore();
+    const bytes = new Uint8Array([9, 8, 7, 6]);
+    const ref = mock.put({
+      bytes,
+      mime: 'image/png',
+      size: bytes.byteLength,
+      ownerSessionId: 'sess-A',
+      references: new Set(['sess-A']),
+    });
+    const app = createTestApp(mock.store);
+
+    const tokenRes = await app.request(`/api/sessions/sess-A/media-token?id=${encodeURIComponent(ref.id)}`);
+    expect(tokenRes.status).toBe(200);
+    const body = await tokenRes.json() as { url: string };
+    expect(body.url).toMatch(new RegExp(`^/api/media/${ref.id}\\?token=`));
+
+    const mediaRes = await app.request(body.url);
+    expect(mediaRes.status).toBe(200);
+    expect(new Uint8Array(await mediaRes.arrayBuffer())).toEqual(bytes);
+  });
+
+  it('returns a signed URL when the session has a media_refs row', async () => {
+    const mock = createMockMediaStore();
+    const bytes = new Uint8Array([1, 1, 2, 3, 5]);
+    const ref = mock.put({
+      bytes,
+      mime: 'application/octet-stream',
+      size: bytes.byteLength,
+      ownerSessionId: 'sess-A',
+      references: new Set(['sess-B']),
+    });
+    const app = createTestApp(mock.store);
+
+    const res = await app.request(`/api/sessions/sess-B/media-token?id=${encodeURIComponent(ref.id)}`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { url: string };
+    expect(body.url).toContain(`/api/media/${ref.id}?token=`);
+  });
+
+  it('403 when the session has no media access', async () => {
+    const mock = createMockMediaStore();
+    const ref = mock.put({
+      bytes: new Uint8Array([1, 2, 3]),
+      mime: 'application/octet-stream',
+      size: 3,
+      ownerSessionId: 'sess-A',
+      references: new Set(['sess-A']),
+    });
+    const app = createTestApp(mock.store);
+
+    const res = await app.request(`/api/sessions/sess-B/media-token?id=${encodeURIComponent(ref.id)}`);
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.code).toBe('media_forbidden');
+  });
+
+  it('404 when the media id is unknown', async () => {
+    const mock = createMockMediaStore();
+    const app = createTestApp(mock.store);
+
+    const res = await app.request('/api/sessions/sess-A/media-token?id=sha-unknown');
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.code).toBe('media_not_found');
+  });
+
+  it('503 when mediaStore is unavailable', async () => {
+    const app = createTestApp(undefined);
+
+    const res = await app.request('/api/sessions/sess-A/media-token?id=sha-x');
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.code).toBe('media_store_unavailable');
   });
 });

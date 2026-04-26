@@ -8,9 +8,8 @@
  *      use returned signed URL, cache, return blob URL
  *   4. any failure                      → 1x1 transparent PNG sentinel data URI
  *
- * The token endpoint is provided by a follow-up backend PR — see
- * `MEDIA_TOKEN_ENDPOINT` below. Until then, the most common path is (2):
- * the image plugins eagerly attach `ref.url` after generation.
+ * The token endpoint provides the framework path for refs that arrive
+ * without an eager `url` from the producer plugin.
  *
  * The returned `url` is a blob URL when `fromCache` is false; the caller
  * is responsible for `URL.revokeObjectURL` on unmount. When `fromCache` is
@@ -34,7 +33,7 @@ export interface ResolveOptions {
 export interface ResolveResult {
   readonly url: string;
   readonly blob?: Blob;
-  /** True when the URL came from IDB; caller can skip eager revoke. */
+  /** True when the URL came from IDB. */
   readonly fromCache: boolean;
 }
 
@@ -46,9 +45,7 @@ const TRANSPARENT_PNG_DATA_URI =
 /**
  * Path of the short-lived media-token endpoint.
  *
- * TODO(P0-a-followup): backend endpoint added in a follow-up PR. Until then
- * the resolver falls back to `ref.url` when present, or the sentinel data
- * URI when both cache and `ref.url` are missing.
+ * Server-issued signed URL endpoint for session-authorized media access.
  */
 export function MEDIA_TOKEN_ENDPOINT(sessionId: string, id: string): string {
   return (

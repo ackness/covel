@@ -5,7 +5,7 @@
  * Route logic lives in routes/ modules.
  */
 
-import { resolve, join } from "node:path";
+import { dirname, resolve, join } from "node:path";
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { Hono } from "hono";
@@ -15,7 +15,13 @@ import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createAiStack } from "./ai-setup.js";
-import { createStoreFromEnv, resolveBackendFromEnv } from "@covel/store";
+import {
+  createMemoryMediaStore,
+  createSqliteMediaStore,
+  createStoreFromEnv,
+  resolveBackendFromEnv,
+  type MediaStore,
+} from "@covel/store";
 import { createEmbeddingLockHelper } from "./embedding-lock.js";
 import { createGatewayAdapter, createPluginRuntimeGateway } from "@covel/runtime";
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
@@ -78,6 +84,28 @@ function resolvePreferredMemorySlot(slotRegistry: {
     if (slotRegistry.resolveSlot(candidate)) return candidate;
   }
   return slotRegistry.listSlotsByTag("text")[0]?.slotId ?? "plugin";
+}
+
+function createMediaStoreForBackend(
+  backend: ReturnType<typeof resolveBackendFromEnv>,
+  runtimeEnv: ReturnType<typeof readRuntimeEnv>,
+): MediaStore | undefined {
+  if (backend === "memory") {
+    console.log("[server] media store: memory");
+    return createMemoryMediaStore();
+  }
+
+  if (backend === "sqlite") {
+    const sqlitePath = resolve(runtimeEnv.sqlitePath);
+    const mediaRoot = join(dirname(sqlitePath), "media");
+    console.log(`[server] media store: sqlite (${mediaRoot})`);
+    return createSqliteMediaStore(sqlitePath, { mediaRoot });
+  }
+
+  console.warn(
+    "[server] media store: pg backend currently requires a future durable media implementation; media endpoints will return 503",
+  );
+  return undefined;
 }
 
 const app = new Hono();
@@ -143,6 +171,7 @@ loadKeysEnvInto(process.env);
 const ai = createAiStack();
 const storeBackend = resolveBackendFromEnv();
 const store = await createStoreFromEnv();
+const mediaStore = createMediaStoreForBackend(storeBackend, env);
 
 // ── Session lock ────────────────────────────────────────────────
 //
@@ -224,6 +253,7 @@ const api = await bootstrapApi({
   pluginUtils,
   store,
   storeBackend,
+  mediaStore,
   ensureEmbeddingLock,
   preferredMemorySlot,
   perRequestMiddleware: [perRequestLlm],

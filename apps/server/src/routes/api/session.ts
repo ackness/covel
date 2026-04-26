@@ -17,9 +17,10 @@ import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { getPluginTrustInfo } from '@covel/plugin-loader';
 import type { PluginRegistry, PluginRegistryEntry } from '@covel/plugin-loader';
-import type { DataStore, SessionRecord } from '@covel/store';
+import type { DataStore, MediaStore, SessionRecord } from '@covel/store';
 import { supportsVector } from '@covel/store';
 import { buildSessionSnapshot } from '@covel/runtime';
+import { signMediaTokenForSession } from '../../middleware/media-token.js';
 
 const SAFE_WORLD_ID_RE = /^[a-z0-9_-]{1,64}$/i;
 const SAFE_SESSION_ID_RE = /^[a-z0-9_-]{1,128}$/i;
@@ -28,6 +29,7 @@ type Env = {
   Variables: {
     store: DataStore;
     pluginRegistry: PluginRegistry;
+    mediaStore?: MediaStore;
   };
 };
 
@@ -205,6 +207,63 @@ sessionRoutes.post('/', async (c) => {
 });
 
 // ── Instance endpoints ──────────────────────────────────────────
+
+// GET /sessions/:id/media-token?id=<mediaId>
+sessionRoutes.get('/:id/media-token', async (c) => {
+  const sessionId = c.req.param('id');
+  const mediaId = c.req.query('id');
+  if (!mediaId) {
+    return c.json(
+      { error: 'id query parameter is required', code: 'invalid_request' },
+      400,
+    );
+  }
+
+  const mediaStore = c.get('mediaStore');
+  if (!mediaStore) {
+    return c.json(
+      { error: 'Media store unavailable', code: 'media_store_unavailable' },
+      503,
+    );
+  }
+
+  let lookup: Awaited<ReturnType<MediaStore['lookup']>>;
+  try {
+    lookup = await mediaStore.lookup(mediaId);
+  } catch (err) {
+    console.error('[sessions/media-token] MediaStore.lookup failed:', err);
+    return c.json(
+      { error: 'Failed to load media metadata', code: 'media_lookup_failed' },
+      500,
+    );
+  }
+
+  if (!lookup) {
+    return c.json({ error: 'Media not found', code: 'media_not_found' }, 404);
+  }
+
+  let allowed = lookup.ownerSessionId === sessionId;
+  if (!allowed) {
+    try {
+      allowed = await mediaStore.isReferencedBy(mediaId, sessionId);
+    } catch (err) {
+      console.error('[sessions/media-token] MediaStore.isReferencedBy failed:', err);
+      return c.json(
+        { error: 'Failed to check media access', code: 'media_access_check_failed' },
+        500,
+      );
+    }
+  }
+
+  if (!allowed) {
+    return c.json({ error: 'Forbidden', code: 'media_forbidden' }, 403);
+  }
+
+  const token = signMediaTokenForSession(mediaId, sessionId);
+  return c.json({
+    url: `/api/media/${encodeURIComponent(mediaId)}?token=${encodeURIComponent(token)}`,
+  });
+});
 
 // GET /sessions/:id
 sessionRoutes.get('/:id', async (c) => {

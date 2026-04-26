@@ -7,7 +7,7 @@
 
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import type { DataStore } from '@covel/store';
+import type { DataStore, MediaStore } from '@covel/store';
 import type { PluginRegistry, LoadedRuntime } from '@covel/plugin-loader';
 import type { LLMAdapter, ToolExecutor, HookPipeline } from '@covel/runtime';
 import type { EventBus } from '@covel/events';
@@ -31,6 +31,7 @@ type Env = {
     resolveModel: (manifest: RuntimeManifest, apiOverride?: string) => string | undefined;
     eventBus: EventBus;
     compactorRunner: CompactorRunner;
+    mediaStore?: MediaStore;
     hookPipeline?: HookPipeline;
     memorySystem?: {
       readonly manager: { loadBlocks(sid: string): Promise<readonly { label: string; content: string; updatedAt: string }[]>; initializeDefaults(sid: string): Promise<void> };
@@ -72,6 +73,7 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
   const eventBus = c.get('eventBus');
   const compactorRunner = c.get('compactorRunner');
   const sessionLock = c.get('sessionLock');
+  const mediaStore = c.get('mediaStore');
   const prepareToolsForSession = c.get('prepareToolsForSession');  // optional — see env.d.ts
 
   const body = await c.req.json<ActionRequest>();
@@ -319,6 +321,7 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
         ...(pluginUtils ? { utils: pluginUtils } : {}),
           getConfig: turnGetConfig,
           store,
+          ...(mediaStore ? { mediaStore } : {}),
           toolExecutor,
           resolveModel,
           emitter,

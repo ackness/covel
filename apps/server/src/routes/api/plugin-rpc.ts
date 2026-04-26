@@ -41,6 +41,7 @@ import {
   createPluginDataWriter,
   createPluginLogger,
   createFunctionStoreView,
+  createRuntimeMediaContext,
 } from '@covel/runtime';
 import { RpcDispatchError, RpcValidationError } from '@covel/runtime';
 import { getPluginTrustInfo } from '@covel/plugin-loader';
@@ -161,6 +162,7 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
     const compactorRunner = c.get('compactorRunner');
     const hookPipeline = c.get('hookPipeline');
     const sessionLock = c.get('sessionLock');
+    const mediaStore = c.get('mediaStore');
     const prepareToolsForSession = c.get('prepareToolsForSession');
 
     // Activate the session's plugins in the registry — idempotent but
@@ -315,6 +317,7 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
         ...(pluginUtils ? { utils: pluginUtils } : {}),
           getConfig: turnGetConfig,
           store,
+          ...(mediaStore ? { mediaStore } : {}),
           toolExecutor,
           resolveModel,
           emitter,
@@ -454,6 +457,12 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
         const handlerStore = isCorePlugin
           ? store
           : createFunctionStoreView(store, helperCtx);
+        const mediaHandle = mediaStore
+          ? createRuntimeMediaContext(mediaStore, pluginUtils, {
+              sessionId,
+              pluginId: args.pluginId,
+            })
+          : undefined;
         const output = await loaded.handler({
           sessionId,
           turnId: args.followerTurnId,
@@ -465,6 +474,7 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
           config,
           ...(pluginGateway ? { gateway: pluginGateway } : {}),
         ...(pluginUtils ? { utils: pluginUtils } : {}),
+          ...(mediaHandle ? { media: mediaHandle } : {}),
           triggerEvent: args.triggerEvent,
           ...(followerUserSettings ? { userSettings: followerUserSettings } : {}),
           pluginData: pluginDataHandle,

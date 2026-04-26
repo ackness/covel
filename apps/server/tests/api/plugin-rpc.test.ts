@@ -4,7 +4,12 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
-import { createMemoryStore, type DataStore } from '@covel/store';
+import {
+  createMemoryMediaStore,
+  createMemoryStore,
+  type DataStore,
+  type MediaStore,
+} from '@covel/store';
 import {
   createPluginRpcRegistry,
   createRpcExecutor,
@@ -367,6 +372,7 @@ function setupRuntimeTestEnv(args: {
   execution?: 'sync' | 'background';
   source?: PluginSource;
   userSettings?: Parameters<typeof makeFunctionEntry>[0]['userSettings'];
+  mediaStore?: MediaStore;
 }): RuntimeTestEnv & { gate: RpcApprovalGate } {
   const store = createMemoryStore();
   const pluginRegistry = createPluginRegistry();
@@ -425,6 +431,9 @@ function setupRuntimeTestEnv(args: {
     c.set('eventBus', eventBus);
     c.set('compactorRunner', compactorRunner);
     c.set('sessionLock', sessionLock);
+    if (args.mediaStore) {
+      c.set('mediaStore', args.mediaStore);
+    }
     c.set('prepareToolsForSession', async () => undefined);
     await next();
   });
@@ -524,6 +533,40 @@ describe('POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)', () => {
     // Sync path must NOT write anything into the reserved _jobs namespace.
     const jobs = await store.listPluginData(SESSION_ID, PLUGIN_ID, '_jobs');
     expect(jobs).toHaveLength(0);
+  });
+
+  it('injects ctx.media into sync runtime-mode handlers', async () => {
+    const mediaStore = createMemoryMediaStore();
+    let mediaId: string | undefined;
+    const { app, store } = setupRuntimeTestEnv({
+      pluginId: PLUGIN_ID,
+      runtimeId: SYNC_RUNTIME,
+      execution: 'sync',
+      mediaStore,
+      handler: async (ctx) => {
+        const ref = await ctx.media!.put(new Uint8Array([1, 2, 3]), 'image/png');
+        mediaId = ref.id;
+        return { ok: true, mediaId: ref.id };
+      },
+    });
+    await seedRuntimeSession(store, PLUGIN_ID, SESSION_ID);
+
+    const res = await app.request(`/api/sessions/${SESSION_ID}/plugin-rpc`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        pluginId: PLUGIN_ID,
+        runtimeId: SYNC_RUNTIME,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mediaId).toBeDefined();
+    const lookup = await mediaStore.lookup(mediaId!);
+    expect(lookup).toMatchObject({
+      ownerSessionId: SESSION_ID,
+      ownerPluginId: PLUGIN_ID,
+    });
   });
 
   it('writes a failed _jobs row when an expected background follower is missing', async () => {
@@ -827,6 +870,41 @@ describe('POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)', () => {
     expect(doneValue.runtimeResults[0]?.output).toMatchObject({
       ok: true,
       stage: 'done',
+    });
+  });
+
+  it('injects ctx.media into background runtime handlers', async () => {
+    const mediaStore = createMemoryMediaStore();
+    let mediaId: string | undefined;
+    const { app, store } = setupRuntimeTestEnv({
+      pluginId: PLUGIN_ID,
+      runtimeId: BG_RUNTIME,
+      execution: 'background',
+      mediaStore,
+      handler: async (ctx) => {
+        const ref = await ctx.media!.put(new Uint8Array([4, 5, 6]), 'image/png');
+        mediaId = ref.id;
+        return { ok: true, mediaId: ref.id };
+      },
+    });
+    await seedRuntimeSession(store, PLUGIN_ID, SESSION_ID);
+
+    const res = await app.request(`/api/sessions/${SESSION_ID}/plugin-rpc`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        pluginId: PLUGIN_ID,
+        runtimeId: BG_RUNTIME,
+      }),
+    });
+
+    expect(res.status).toBe(202);
+    await waitFor(async () => mediaId !== undefined);
+
+    const lookup = await mediaStore.lookup(mediaId!);
+    expect(lookup).toMatchObject({
+      ownerSessionId: SESSION_ID,
+      ownerPluginId: PLUGIN_ID,
     });
   });
 

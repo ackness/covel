@@ -1,4 +1,4 @@
-import type { DataStore } from '@covel/store';
+import type { DataStore, MediaStore } from '@covel/store';
 import type { PluginRegistry, LoadedRuntime, PluginRuntimeGateway, PluginRuntimeUtils } from '@covel/plugin-loader';
 import type { StateManager } from '@covel/state';
 import type { EventBus } from '@covel/events';
@@ -55,6 +55,11 @@ declare module 'hono' {
      * import so PG deployments automatically get cross-pod safety.
      */
     sessionLock: SessionLock;
+    /**
+     * Content-addressable media store used by `/api/media/:id`,
+     * `/api/sessions/:id/media-token`, and runtime `ctx.media`.
+     */
+    mediaStore?: MediaStore;
     ensureEmbeddingLock?: EnsureEmbeddingLockFn;
     hookPipeline?: HookPipeline;
     /**

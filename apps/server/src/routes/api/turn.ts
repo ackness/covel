@@ -10,7 +10,7 @@ import { executeTurn, processRuntimeResult, createTurnEmitter } from '@covel/run
 import type { EventBus } from '@covel/events';
 import { rateLimiter } from '../../middleware/rate-limit.js';
 import { loadSessionConfig } from './load-session-config.js';
-import type { DataStore } from '@covel/store';
+import type { DataStore, MediaStore } from '@covel/store';
 import type { CompactorRunner } from '@covel/context';
 
 type Env = {
@@ -26,6 +26,7 @@ type Env = {
     hookPipeline?: HookPipeline;
     eventBus?: EventBus;
     prepareToolsForSession?: (sessionId: string) => Promise<void>;
+    mediaStore?: MediaStore;
   };
 };
 
@@ -43,6 +44,7 @@ turnRoutes.post('/:id/turn', rateLimiter({ max: 30 }), async (c) => {
   const getConfigFn = c.get('getConfigFn');
   const toolExecutor = c.get('toolExecutor');
   const compactorRunner = c.get('compactorRunner');
+  const mediaStore = c.get('mediaStore');
   const sessionId = c.req.param('id');
 
   const session = await store.getSession(sessionId);
@@ -122,6 +124,7 @@ turnRoutes.post('/:id/turn', rateLimiter({ max: 30 }), async (c) => {
         ...(pluginUtils ? { utils: pluginUtils } : {}),
         getConfig: turnGetConfig,
         store,
+        ...(mediaStore ? { mediaStore } : {}),
         toolExecutor,
         resolveModel,
         compactor: compactorRunner,

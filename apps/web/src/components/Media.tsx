@@ -125,12 +125,12 @@ export function Media(props: MediaProps): ReactElement {
     }).then((result) => {
       if (controller.signal.aborted) {
         // We're about to be re-resolved; release the URL we just made.
-        if (!result.fromCache && result.url.startsWith("blob:")) {
+        if (result.url.startsWith("blob:")) {
           URL.revokeObjectURL(result.url);
         }
         return;
       }
-      revokeRef.current = result.fromCache ? null : result.url;
+      revokeRef.current = result.url.startsWith("blob:") ? result.url : null;
       setState({
         url: result.url,
         fromCache: result.fromCache,
