@@ -1,13 +1,14 @@
 /**
- * Gate behaviour for `POST /api/media/cleanup` (audit P1).
+ * Gate behaviour for `POST /api/media/cleanup` (audit P1/P2).
  *
  * Covers:
- *   1. env flag missing                                → 403 forbidden
- *   2. env flag on, dryRun:false, no confirm header   → 400 invalid_request
- *   3. env flag on, dryRun:true                        → 200 (inventory only)
+ *   1. env flag missing  → 403 forbidden
+ *   2. env flag on, dryRun:false, no confirm header → 400 invalid_request
+ *   3. env flag on, dryRun:true                       → 200 (inventory only)
  *   4. env flag on, dryRun:false + confirm header     → 200 + cleanup ran
- *   5. concurrent runs                                  → second hits singleFlight
- *   6. DEPLOYMENT_TIER=commercial                       → 503 unavailable
+ *   5. scanLimit overflow                              → 400 limit_exceeded
+ *   6. concurrent runs                                 → second hits singleFlight
+ *   7. DEPLOYMENT_TIER=commercial                      → 503 unavailable
  *
  * The happy-path tests in `media.test.ts` assume the gate is open and set
  * `COVEL_MEDIA_CLEANUP_ENABLED=true` themselves. These tests own the gate
@@ -24,6 +25,20 @@ import {
   type SessionRecord,
 } from '@covel/store';
 import { mediaRoutes } from '../../src/routes/api/media.js';
+
+function makeSession(id: string, worldId = 'world-1'): SessionRecord {
+  const now = new Date().toISOString();
+  return {
+    id,
+    worldId,
+    status: 'active',
+    turnCount: 0,
+    preGameCompleted: [],
+    activePlugins: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
 
 function createTestApp(
   mediaStore: MediaStore,
@@ -151,6 +166,47 @@ describe('POST /api/media/cleanup gate', () => {
     expect(body.result.deleted).toBe(1);
     expect(body.result.deletedIds).toEqual([ref.id]);
     expect(await mediaStore.exists(ref.id)).toBe(false);
+  });
+
+  it('returns 400 limit_exceeded when scanLimit is below scanned row count', async () => {
+    process.env.COVEL_MEDIA_CLEANUP_ENABLED = 'true';
+    const dataStore = createMemoryStore();
+    await dataStore.createSession(makeSession('sess-A'));
+    // Pump messages so scanLimit=1 trips on the first scan call.
+    for (let i = 0; i < 5; i += 1) {
+      await dataStore.addMessage({
+        id: `msg-${i}`,
+        sessionId: 'sess-A',
+        role: 'system',
+        content: '',
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    const mediaStore = createMemoryMediaStore();
+    const app = createTestApp(mediaStore, dataStore);
+    const res = await app.request('/api/media/cleanup', {
+      method: 'POST',
+      body: JSON.stringify({ dryRun: true, scanLimit: 1 }),
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { code: string; error: string };
+    expect(body.code).toBe('limit_exceeded');
+    expect(body.error).toContain('sess-A');
+  });
+
+  it('returns 400 invalid_request when scanLimit is not a positive integer', async () => {
+    process.env.COVEL_MEDIA_CLEANUP_ENABLED = 'true';
+    const app = createTestApp(createMemoryMediaStore());
+    const res = await app.request('/api/media/cleanup', {
+      method: 'POST',
+      body: JSON.stringify({ dryRun: true, scanLimit: -1 }),
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { code: string };
+    expect(body.code).toBe('invalid_request');
   });
 
   it('singleFlight: a second concurrent cleanup request is rejected', async () => {

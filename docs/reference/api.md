@@ -2319,6 +2319,7 @@ AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、
 | `DEPLOYMENT_TIER=commercial` | 503 `{ "error": "cleanup endpoint not available in this deployment tier", "code": "unavailable" }` — 在管理员鉴权中间件就绪前永远不在商业部署可用 |
 | `dryRun:false` 且无 `X-Confirm-Cleanup: yes` 请求头 | 400 `{ "error": "confirmation header missing: …", "code": "invalid_request" }` |
 | 同一时刻第二次并发请求 | 429 `{ "error": "Operation already in progress" }` (singleFlight) |
+| 任一会话的扫描行数超过 `scanLimit`（默认 1000） | 400 `{ "error": "scan limit exceeded for session …", "code": "limit_exceeded" }` |
 
 **请求体:**
 
@@ -2327,12 +2328,14 @@ AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、
   "dryRun": true,
   "maxBytes": 0,
   "maxAgeMs": 0,
-  "keepRecentBytes": 0
+  "keepRecentBytes": 0,
+  "scanLimit": 1000
 }
 ```
 
 - `dryRun` (boolean, default `true`) — `true` 仅返回拟删除清单；`false` 真正删除，需配合 `X-Confirm-Cleanup: yes`。
 - `maxBytes` / `maxAgeMs` / `keepRecentBytes` (non-negative number, optional) — 透传 `MediaLifecyclePolicy`。
+- `scanLimit` (positive integer, optional, default 1000) — 单个 session 累计扫描行数上限。超过即拒绝，宁可让运维显式抬高也不静默截断。
 
 **成功响应（200）:**
 
@@ -2369,6 +2372,8 @@ COVEL_MEDIA_CLEANUP_ENABLED=true \
        -H "X-Confirm-Cleanup: yes" \
        -d '{"dryRun": false, "maxBytes": 0}'
 ```
+
+> 大型部署（>100 sessions）会自动按 50 个一批迭代并通过 `console.info` 输出 `[cleanup] scanned X/Y sessions` 进度。
 
 ---
 

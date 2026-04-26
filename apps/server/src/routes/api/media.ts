@@ -63,10 +63,21 @@ interface ErrorBody {
   readonly code: string;
 }
 
+type ErrorCode =
+  | 'invalid_request'
+  | 'invalid_token'
+  | 'forbidden'
+  | 'not_found'
+  | 'internal'
+  | 'unavailable'
+  | 'limit_exceeded';
+
+type ErrorStatus = 400 | 401 | 403 | 404 | 500 | 503;
+
 function jsonError(
-  code: 'invalid_request' | 'invalid_token' | 'forbidden' | 'not_found' | 'internal' | 'unavailable',
+  code: ErrorCode,
   message: string,
-  status: 400 | 401 | 403 | 404 | 500 | 503,
+  status: ErrorStatus,
 ): Response {
   const body: ErrorBody = { error: message, code };
   return new Response(JSON.stringify(body), {
@@ -80,6 +91,7 @@ interface CleanupRequestBody {
   readonly maxBytes?: unknown;
   readonly maxAgeMs?: unknown;
   readonly keepRecentBytes?: unknown;
+  readonly scanLimit?: unknown;
 }
 
 function optionalBoolean(value: unknown): boolean | undefined {
@@ -98,10 +110,48 @@ function optionalNonNegativeNumber(value: unknown): number | undefined {
   return value;
 }
 
-async function buildProtectedMediaIds(
+function optionalPositiveInteger(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    throw new Error('expected positive integer');
+  }
+  return value;
+}
+
+/**
+ * Default per-session row scan ceiling. Each row in {messages, plugin-data,
+ * runtime-outputs, trace-events, snapshots, turn-results, runtime-results}
+ * contributes; once the running total exceeds this, the route refuses to
+ * silently truncate (which would risk deleting still-referenced media) and
+ * surfaces a 400 limit_exceeded so the operator can either narrow the scope
+ * or pass an explicit larger `scanLimit`.
+ */
+const DEFAULT_SCAN_LIMIT_PER_SESSION = 1_000;
+
+/** Maximum sessions per kernel batch when iterating large installs. */
+const SESSION_BATCH_SIZE = 50;
+
+/** Threshold above which we batch + log progress. */
+const LARGE_SESSION_INSTALL = 100;
+
+interface BuildProtectedOptions {
+  readonly maxScanRowsPerSession?: number;
+  readonly maxSessions?: number;
+}
+
+interface BuildProtectedResult {
+  readonly protectedIds: Set<string>;
+  readonly scannedSessions: number;
+  readonly limitExceeded: boolean;
+  readonly limitExceededSessionId?: string;
+  readonly limitExceededRowCount?: number;
+}
+
+export async function buildProtectedMediaIds(
   store: DataStore,
   mediaStore: MediaStore,
-): Promise<Set<string>> {
+  options: BuildProtectedOptions = {},
+): Promise<BuildProtectedResult> {
   const protectedIds = new Set<string>();
   const sessions = await store.listSessions();
   const liveSessionIds = new Set(sessions.map((session) => session.id));
@@ -121,37 +171,146 @@ async function buildProtectedMediaIds(
     for (const id of collectMediaRefIds(value)) protectedIds.add(id);
   };
 
-  for (const session of sessions) {
-    scan(await store.listMessages(session.id));
-    scan(await store.listPluginDataSessionScope(session.id));
-    scan(await store.listRuntimeOutputs(session.id));
-    scan(await store.listTraceEvents(session.id));
-    scan(await store.listSnapshots(session.id));
+  const maxRowsPerSession = options.maxScanRowsPerSession ?? DEFAULT_SCAN_LIMIT_PER_SESSION;
+  const sessionsToScan = options.maxSessions !== undefined
+    ? sessions.slice(0, options.maxSessions)
+    : sessions;
+  const totalSessions = sessionsToScan.length;
+  const shouldBatch = totalSessions > LARGE_SESSION_INSTALL;
 
-    const turnResults = await store.listTurnResults(session.id);
-    scan(turnResults);
-    for (const turn of turnResults) {
-      scan(await store.listRuntimeResults(session.id, turn.turnId));
+  let scannedSessions = 0;
+  for (let batchStart = 0; batchStart < totalSessions; batchStart += SESSION_BATCH_SIZE) {
+    const batch = sessionsToScan.slice(batchStart, batchStart + SESSION_BATCH_SIZE);
+    for (const session of batch) {
+      let rowsForSession = 0;
+      const enforceLimit = (rows: { readonly length: number }): boolean => {
+        rowsForSession += rows.length;
+        return rowsForSession > maxRowsPerSession;
+      };
+
+      const messages = await store.listMessages(session.id);
+      if (enforceLimit(messages)) {
+        return {
+          protectedIds,
+          scannedSessions,
+          limitExceeded: true,
+          limitExceededSessionId: session.id,
+          limitExceededRowCount: rowsForSession,
+        };
+      }
+      scan(messages);
+
+      const pluginData = await store.listPluginDataSessionScope(session.id);
+      if (enforceLimit(pluginData)) {
+        return {
+          protectedIds,
+          scannedSessions,
+          limitExceeded: true,
+          limitExceededSessionId: session.id,
+          limitExceededRowCount: rowsForSession,
+        };
+      }
+      scan(pluginData);
+
+      const runtimeOutputs = await store.listRuntimeOutputs(session.id);
+      if (enforceLimit(runtimeOutputs)) {
+        return {
+          protectedIds,
+          scannedSessions,
+          limitExceeded: true,
+          limitExceededSessionId: session.id,
+          limitExceededRowCount: rowsForSession,
+        };
+      }
+      scan(runtimeOutputs);
+
+      const traceEvents = await store.listTraceEvents(session.id);
+      if (enforceLimit(traceEvents)) {
+        return {
+          protectedIds,
+          scannedSessions,
+          limitExceeded: true,
+          limitExceededSessionId: session.id,
+          limitExceededRowCount: rowsForSession,
+        };
+      }
+      scan(traceEvents);
+
+      const snapshots = await store.listSnapshots(session.id);
+      if (enforceLimit(snapshots)) {
+        return {
+          protectedIds,
+          scannedSessions,
+          limitExceeded: true,
+          limitExceededSessionId: session.id,
+          limitExceededRowCount: rowsForSession,
+        };
+      }
+      scan(snapshots);
+
+      const turnResults = await store.listTurnResults(session.id);
+      if (enforceLimit(turnResults)) {
+        return {
+          protectedIds,
+          scannedSessions,
+          limitExceeded: true,
+          limitExceededSessionId: session.id,
+          limitExceededRowCount: rowsForSession,
+        };
+      }
+      scan(turnResults);
+
+      for (const turn of turnResults) {
+        const runtimeResults = await store.listRuntimeResults(session.id, turn.turnId);
+        if (enforceLimit(runtimeResults)) {
+          return {
+            protectedIds,
+            scannedSessions,
+            limitExceeded: true,
+            limitExceededSessionId: session.id,
+            limitExceededRowCount: rowsForSession,
+          };
+        }
+        scan(runtimeResults);
+      }
+
+      scannedSessions += 1;
+    }
+
+    if (shouldBatch) {
+      // Coarse progress signal for large installs. Stays at console.info so
+      // it surfaces in pino's structured stream without triggering the
+      // production no-console-log rule (this is operational telemetry, not
+      // ad-hoc debugging).
+      console.info(`[cleanup] scanned ${scannedSessions}/${totalSessions} sessions`);
     }
   }
 
-  return protectedIds;
+  return {
+    protectedIds,
+    scannedSessions,
+    limitExceeded: false,
+  };
 }
 
 /**
  * `POST /api/media/cleanup` — destructive maintenance endpoint.
  *
- * Hardening summary (audit P1 follow-up):
+ * Hardening summary (audit P1/P2):
  *
  *   1. Disabled by default: must set `COVEL_MEDIA_CLEANUP_ENABLED=true`.
  *   2. Forbidden in `DEPLOYMENT_TIER=commercial` until an admin auth
- *      middleware is wired (no caller-identifying claim available right
- *      now, so we refuse to even inspect the body).
- *   3. `dryRun:false` requires an explicit `X-Confirm-Cleanup: yes`
- *      header so an automated job or curl typo cannot delete bytes.
+ *      middleware is wired (no caller-identifying claim available right now,
+ *      so we refuse to even inspect the body).
+ *   3. `dryRun:false` requires an explicit `X-Confirm-Cleanup: yes` header
+ *      so an automated job or curl typo cannot delete bytes.
  *   4. Single-flight wrapper prevents two cleanup runs from racing each
  *      other (the protected-id scan is expensive; concurrent runs would
  *      double the load and risk inconsistent inventories).
+ *   5. Per-session row-scan cap (`scanLimit`, default 1_000) refuses to
+ *      silently truncate. Operators may raise it explicitly, but the
+ *      route never quietly skips rows — that would risk deleting still-
+ *      referenced media.
  */
 mediaRoutes.post('/cleanup', singleFlight(), async (c) => {
   // Deployment-tier gate first: refuse to even inspect the body in
@@ -185,6 +344,7 @@ mediaRoutes.post('/cleanup', singleFlight(), async (c) => {
   }
 
   let policy: MediaLifecyclePolicy;
+  let scanLimit: number;
   try {
     const dryRun = optionalBoolean(body.dryRun) ?? true;
     policy = {
@@ -193,8 +353,13 @@ mediaRoutes.post('/cleanup', singleFlight(), async (c) => {
       ...(body.maxBytes === undefined ? {} : { maxBytes: optionalNonNegativeNumber(body.maxBytes) }),
       ...(body.keepRecentBytes === undefined ? {} : { keepRecentBytes: optionalNonNegativeNumber(body.keepRecentBytes) }),
     };
+    scanLimit = optionalPositiveInteger(body.scanLimit) ?? DEFAULT_SCAN_LIMIT_PER_SESSION;
   } catch {
-    return jsonError('invalid_request', 'cleanup policy values must be boolean or non-negative numbers', 400);
+    return jsonError(
+      'invalid_request',
+      'cleanup policy values must be boolean / non-negative numbers / positive integer for scanLimit',
+      400,
+    );
   }
 
   // Destructive runs require an explicit out-of-band confirmation so a
@@ -211,8 +376,18 @@ mediaRoutes.post('/cleanup', singleFlight(), async (c) => {
   }
 
   try {
-    const protectedIds = await buildProtectedMediaIds(store, mediaStore);
-    const result = await mediaStore.cleanup(protectedIds, policy);
+    const scan = await buildProtectedMediaIds(store, mediaStore, {
+      maxScanRowsPerSession: scanLimit,
+    });
+    if (scan.limitExceeded) {
+      return jsonError(
+        'limit_exceeded',
+        `scan limit exceeded for session ${scan.limitExceededSessionId ?? '<unknown>'} ` +
+          `(>${scanLimit} rows); raise scanLimit or shrink scope`,
+        400,
+      );
+    }
+    const result = await mediaStore.cleanup(scan.protectedIds, policy);
     return new Response(JSON.stringify({ policy, result }), {
       status: 200,
       headers: { 'content-type': 'application/json; charset=utf-8' },
