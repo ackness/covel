@@ -73,7 +73,22 @@ export function assetGenerateToView(proposal: Proposal): AssetGenerateView {
 }
 
 export function assetGenerateToLLM(proposal: Proposal): AssetGenerateLLMContent {
-  const view = assetGenerateToView(proposal);
+  return assetGenerateViewToLLM(assetGenerateToView(proposal));
+}
+
+/**
+ * View-based counterpart to {@link assetGenerateToLLM}. Useful when the
+ * view is already in hand (e.g. read back from `MessageRecord.metadata.block.data`
+ * during LLM-history assembly) and reconstructing a full {@link Proposal}
+ * envelope would be wasteful.
+ *
+ * Output shape mirrors {@link assetGenerateToLLM} byte-for-byte: a `text`
+ * summary first, followed by an `image` part for any image-modality
+ * asset. Adapters that cannot accept image parts (text-only models)
+ * collapse the array back to its summary text — see the per-adapter
+ * fallback in `@covel/ai-provider`.
+ */
+export function assetGenerateViewToLLM(view: AssetGenerateView): AssetGenerateLLMContent {
   const summary = [
     `Generated ${view.modality} asset`,
     `id=${view.ref.id}`,

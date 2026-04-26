@@ -18,6 +18,7 @@ import {
   readOpenAiChatStreamFinishReason,
   readOpenAiChatStreamToolCallDeltas,
 } from "./http.js";
+import { applyCapabilityFallback } from "./capability-fallback.js";
 
 import type { ImagePart, TextMessage, TextMessageContent } from "../types.js";
 
@@ -152,10 +153,11 @@ function serializeMessages(
  */
 export function createOpenAiChatAdapter(): ModelProviderAdapter {
   return {
-    async generateText(config, params) {
+    async generateText(config, params, context) {
+      const messages = applyCapabilityFallback(params.messages, context);
       const body: Record<string, unknown> = {
         model: params.model,
-        messages: serializeMessages(params.messages),
+        messages: serializeMessages(messages),
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
         ...extractOpenAiParameterOverrides(params.providerRequestMetadata),
       };
@@ -179,10 +181,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       };
     },
 
-    async generateObject(config, params) {
+    async generateObject(config, params, context) {
+      const messages = applyCapabilityFallback(params.messages, context);
       const response = await postJson(config, "/chat/completions", {
         model: params.model,
-        messages: serializeMessages(params.messages),
+        messages: serializeMessages(messages),
         response_format: { type: "json_object" },
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
         ...extractOpenAiParameterOverrides(params.providerRequestMetadata),
@@ -208,10 +211,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       };
     },
 
-    async *streamText(config, params) {
+    async *streamText(config, params, context) {
+      const messages = applyCapabilityFallback(params.messages, context);
       const body: Record<string, unknown> = {
         model: params.model,
-        messages: serializeMessages(params.messages),
+        messages: serializeMessages(messages),
         stream: true,
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
         ...extractOpenAiParameterOverrides(params.providerRequestMetadata),

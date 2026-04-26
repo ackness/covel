@@ -36,6 +36,7 @@ import type { AuthorsNoteDecl, PostHistoryDecl, RuntimeManifest } from '@covel/s
 import { isEnvEnabled } from '@covel/shared';
 import { PROMPT_CACHE_BREAKPOINT_MARKER } from '@covel/shared';
 import { applyBudget } from './budget.js';
+import { messageContentFromHistoryRecord } from './llm-content-parts.js';
 import {
   assemblePromptVariables,
   buildCurrentTurnUserMessage,
@@ -76,11 +77,7 @@ function buildMessageHistoryWithSummaries(
   const compactorEnabled = isEnvEnabled('COVEL_COMPACTOR_V1');
 
   if (!compactorEnabled || summaries.length === 0) {
-    return messageHistory.map(msg => ({
-      role: msg.role as 'system' | 'user' | 'assistant',
-      content: msg.content,
-      ...(msg.name ? { name: msg.name } : {}),
-    }));
+    return messageHistory.map(toLLMMessage);
   }
 
   const summaryById = new Map(summaries.map(s => [s.id, s]));
@@ -104,14 +101,19 @@ function buildMessageHistoryWithSummaries(
       continue;
     }
 
-    result.push({
-      role: msg.role as 'system' | 'user' | 'assistant',
-      content: msg.content,
-      ...(msg.name ? { name: msg.name } : {}),
-    });
+    result.push(toLLMMessage(msg));
   }
 
   return result;
+}
+
+/** See `context-builder.ts::toLLMMessage` — kept in lock-step. */
+function toLLMMessage(msg: MessageHistoryRecord): LLMMessage {
+  return {
+    role: msg.role as 'system' | 'user' | 'assistant',
+    content: messageContentFromHistoryRecord(msg),
+    ...(msg.name ? { name: msg.name } : {}),
+  };
 }
 
 /**

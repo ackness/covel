@@ -12,6 +12,25 @@
  * - Deterministic: same inputs always yield the same output.
  */
 
+import type { ContentPart } from '@covel/shared';
+
+/**
+ * Convert a message `content` value (string or content-part array) into the
+ * flat text the estimator can consume. Image parts contribute their
+ * MediaRef id so the estimate stays stable across runs without pretending
+ * image bytes have a token cost.
+ */
+function flattenContent(
+  content: string | readonly ContentPart[],
+): string {
+  if (typeof content === 'string') return content;
+  return content
+    .map((part) =>
+      part.type === 'text' ? part.text : `[image:${part.image.id}]`,
+    )
+    .join('\n');
+}
+
 /**
  * Function a caller supplies to estimate the token count of a string. Kept
  * intentionally tiny so `@covel/context` stays free of runtime deps on any
@@ -99,7 +118,10 @@ function computeProtectStartIndex(
  * and the protected tail is left intact (the caller decides how to react).
  */
 export function applyBudget<
-  M extends { readonly role: string; readonly content: string },
+  M extends {
+    readonly role: string;
+    readonly content: string | readonly ContentPart[];
+  },
 >(
   systemPrompt: string,
   messages: readonly M[],
@@ -125,7 +147,7 @@ export function applyBudget<
     };
   }
 
-  const messageTokens: number[] = messages.map(m => estimator(m.content));
+  const messageTokens: number[] = messages.map(m => estimator(flattenContent(m.content)));
   const messageTokensSum = messageTokens.reduce((acc, n) => acc + n, 0);
   let total = systemTokens + messageTokensSum;
 

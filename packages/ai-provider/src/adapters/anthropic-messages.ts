@@ -8,6 +8,7 @@ import {
 
 import type { ModelProviderAdapter } from "./adapter.js";
 import type { ProviderConfig, UsageSummary } from "../types.js";
+import { applyCapabilityFallback } from "./capability-fallback.js";
 import {
   postJson,
   parseJson,
@@ -213,8 +214,8 @@ function hasSystem(value: string | AnthropicSystemBlock[]): boolean {
  */
 export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
   return {
-    async generateText(config, params) {
-      const { system, messages } = toAnthropicMessages(params.messages);
+    async generateText(config, params, context) {
+      const { system, messages } = toAnthropicMessages(applyCapabilityFallback(params.messages, context));
       const systemField = buildAnthropicSystemField(system, config);
       const headers = anthropicHeaders(config.apiKey);
       const configNoKey = { ...config, apiKey: undefined };
@@ -236,8 +237,8 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       };
     },
 
-    async generateObject(config, params) {
-      const { system, messages } = toAnthropicMessages(params.messages);
+    async generateObject(config, params, context) {
+      const { system, messages } = toAnthropicMessages(applyCapabilityFallback(params.messages, context));
       const systemField = buildAnthropicSystemField(
         system,
         config,
@@ -274,8 +275,8 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       };
     },
 
-    async *streamText(config, params) {
-      const { system, messages } = toAnthropicMessages(params.messages);
+    async *streamText(config, params, context) {
+      const { system, messages } = toAnthropicMessages(applyCapabilityFallback(params.messages, context));
       const systemField = buildAnthropicSystemField(system, config);
       const headers = anthropicHeaders(config.apiKey);
       const configNoKey = { ...config, apiKey: undefined };

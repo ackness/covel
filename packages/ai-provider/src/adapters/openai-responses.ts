@@ -8,6 +8,7 @@ import {
   createStructuredOutputError,
   readResponsesOutputText,
 } from "./http.js";
+import { applyCapabilityFallback } from "./capability-fallback.js";
 import { createOpenAiChatAdapter } from "./openai-chat.js";
 import type { ImagePart, TextMessage, TextMessageContent } from "../types.js";
 
@@ -88,10 +89,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
   const chatAdapter = createOpenAiChatAdapter();
 
   return {
-    async generateText(config, params) {
+    async generateText(config, params, context) {
+      const messages = applyCapabilityFallback(params.messages, context);
       const response = await postJson(config, "/responses", {
         model: params.model,
-        input: serializeResponsesInput(params.messages),
+        input: serializeResponsesInput(messages),
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
         ...extractResponsesParameterOverrides(params.providerRequestMetadata),
       });
@@ -109,10 +111,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       };
     },
 
-    async generateObject(config, params) {
+    async generateObject(config, params, context) {
+      const messages = applyCapabilityFallback(params.messages, context);
       const response = await postJson(config, "/responses", {
         model: params.model,
-        input: serializeResponsesInput(params.messages),
+        input: serializeResponsesInput(messages),
         text: { format: { type: "json_schema" } },
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
         ...extractResponsesParameterOverrides(params.providerRequestMetadata),
@@ -142,10 +145,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       };
     },
 
-    async *streamText(config, params) {
+    async *streamText(config, params, context) {
+      const messages = applyCapabilityFallback(params.messages, context);
       const response = await postJson(config, "/responses", {
         model: params.model,
-        input: serializeResponsesInput(params.messages),
+        input: serializeResponsesInput(messages),
         stream: true,
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
         ...extractResponsesParameterOverrides(params.providerRequestMetadata),
