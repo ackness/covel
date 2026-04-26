@@ -8,6 +8,12 @@ export {
 } from './media.js';
 
 export type {
+  ContentPart,
+  TextContentPart,
+  ImageContentPart,
+} from './llm-content-parts.js';
+
+export type {
   PluginType,
   RuntimeType,
   TriggerType,

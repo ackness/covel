@@ -101,6 +101,7 @@ export type { InteractionRecordSchema } from './schemas/interaction-record.js';
 export {
   assetGenerateToLLM,
   assetGenerateToView,
+  assetGenerateViewToLLM,
   isAssetGeneratePayload,
   isAssetGenerateView,
 } from './proposals/asset-generate.js';
