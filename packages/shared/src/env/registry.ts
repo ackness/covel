@@ -177,6 +177,15 @@ export const COVEL_ENV_REGISTRY = [
       'HMAC-SHA256 secret used to sign /api/media/:id short-lived URLs (5min TTL). Required in production; dev generates a per-process random secret if absent.',
   },
   {
+    name: 'COVEL_MEDIA_CLEANUP_ENABLED',
+    group: 'server',
+    type: 'boolean',
+    status: 'active',
+    defaultValue: 'false',
+    description:
+      'Enables the destructive POST /api/media/cleanup endpoint. Off by default; never enable in DEPLOYMENT_TIER=commercial without an admin auth layer (the route forces 503 there).',
+  },
+  {
     name: 'APP_PORT',
     group: 'server',
     type: 'integer',

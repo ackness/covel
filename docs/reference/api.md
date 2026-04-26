@@ -366,6 +366,13 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 | GET | `/api/traces/:sessionId` | 获取会话所有 trace 事件 |
 | GET | `/api/traces/:sessionId/turns` | 按 Turn 分组的 trace 事件 |
 
+### 媒体管理
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/media/:id?token=<signed>` | 内容寻址媒体下载（HMAC token + 会话引用校验） |
+| POST | `/api/media/cleanup` | 破坏性维护端点：默认禁用 (`COVEL_MEDIA_CLEANUP_ENABLED`)，商业层 503，`dryRun:false` 需 `X-Confirm-Cleanup: yes` |
+
 ### 配置信息
 
 | 方法 | 路径 | 描述 |
@@ -2291,6 +2298,82 @@ AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、
   "error": "Not implemented"
 }
 ```
+
+---
+
+### 媒体管理
+
+#### `GET /api/media/:id?token=<signed>`
+
+短时鉴权下载内容寻址媒体。`token` 通过 `GET /api/sessions/:id/media-token?id=<mediaId>` 颁发。详细鉴权语义见路由实现 doc-comment。
+
+#### `POST /api/media/cleanup`
+
+破坏性维护端点：扫描 `messages` / `plugin_data` / `runtime_outputs` / `trace_events` / `snapshots` / `turn_results` / `runtime_results` 收集仍被引用的 mediaId，再调用 `MediaStore.cleanup()` 删除未引用的资产。
+
+**默认禁用。** 必须显式启用：
+
+| 条件 | 行为 |
+|------|------|
+| `COVEL_MEDIA_CLEANUP_ENABLED` 未设为 truthy（`true` / `1`） | 403 `{ "error": "cleanup endpoint disabled", "code": "forbidden" }` |
+| `DEPLOYMENT_TIER=commercial` | 503 `{ "error": "cleanup endpoint not available in this deployment tier", "code": "unavailable" }` — 在管理员鉴权中间件就绪前永远不在商业部署可用 |
+| `dryRun:false` 且无 `X-Confirm-Cleanup: yes` 请求头 | 400 `{ "error": "confirmation header missing: …", "code": "invalid_request" }` |
+| 同一时刻第二次并发请求 | 429 `{ "error": "Operation already in progress" }` (singleFlight) |
+| 任一会话的扫描行数超过 `scanLimit`（默认 1000） | 400 `{ "error": "scan limit exceeded for session …", "code": "limit_exceeded" }` |
+
+**请求体:**
+
+```json
+{
+  "dryRun": true,
+  "maxBytes": 0,
+  "maxAgeMs": 0,
+  "keepRecentBytes": 0,
+  "scanLimit": 1000
+}
+```
+
+- `dryRun` (boolean, default `true`) — `true` 仅返回拟删除清单；`false` 真正删除，需配合 `X-Confirm-Cleanup: yes`。
+- `maxBytes` / `maxAgeMs` / `keepRecentBytes` (non-negative number, optional) — 透传 `MediaLifecyclePolicy`。
+- `scanLimit` (positive integer, optional, default 1000) — 单个 session 累计扫描行数上限。超过即拒绝，宁可让运维显式抬高也不静默截断。
+
+**成功响应（200）:**
+
+```json
+{
+  "policy": { "dryRun": true, "maxBytes": 0 },
+  "result": {
+    "scanned": 12,
+    "protected": 7,
+    "retained": 7,
+    "deleted": 5,
+    "totalBytes": 1048576,
+    "bytesDeleted": 524288,
+    "bytesRetained": 524288,
+    "protectedIds": ["..."],
+    "deletedIds": ["..."]
+  }
+}
+```
+
+**示例:**
+
+```bash
+# Dry-run only — 安全
+COVEL_MEDIA_CLEANUP_ENABLED=true \
+  curl -X POST http://localhost:3001/api/media/cleanup \
+       -H "content-type: application/json" \
+       -d '{"dryRun": true}'
+
+# 真正删除 — 必须带确认头
+COVEL_MEDIA_CLEANUP_ENABLED=true \
+  curl -X POST http://localhost:3001/api/media/cleanup \
+       -H "content-type: application/json" \
+       -H "X-Confirm-Cleanup: yes" \
+       -d '{"dryRun": false, "maxBytes": 0}'
+```
+
+> 大型部署（>100 sessions）会自动按 50 个一批迭代并通过 `console.info` 输出 `[cleanup] scanned X/Y sessions` 进度。
 
 ---
 
