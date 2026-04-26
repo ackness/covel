@@ -102,6 +102,7 @@ tmp/
 !apps/desktop/resources/icon.png
 !apps/desktop-tauri/src-tauri/icons/**/*.png
 .playwright-mcp/
+# Local git worktrees for parallel agents
 .worktrees/
 
 # Local debugging screenshots (not part of the repo)
