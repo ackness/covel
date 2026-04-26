@@ -4,7 +4,7 @@ export { createSqliteStore } from './sqlite/sqlite-store.js';
 export { createPgStore } from './postgres/pg-store.js';
 export { createMemoryMediaStore, createSqliteMediaStore } from './media-store.js';
 export { supportsVector } from './vector-store.js';
-export type { MediaStore, SqliteMediaStoreOptions } from './media-store.js';
+export type { MediaAssetLookup, MediaStore, SqliteMediaStoreOptions } from './media-store.js';
 export type {
   VectorStoreCapability,
   VectorModelOps,

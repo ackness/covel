@@ -168,6 +168,15 @@ export const COVEL_ENV_REGISTRY = [
     description: 'Documented proxy allowlist for future rate-limit hardening.',
   },
   {
+    name: 'COVEL_MEDIA_TOKEN_SECRET',
+    group: 'server',
+    type: 'secret',
+    status: 'active',
+    secret: true,
+    description:
+      'HMAC-SHA256 secret used to sign /api/media/:id short-lived URLs (5min TTL). Required in production; dev generates a per-process random secret if absent.',
+  },
+  {
     name: 'APP_PORT',
     group: 'server',
     type: 'integer',

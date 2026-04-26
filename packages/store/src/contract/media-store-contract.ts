@@ -66,5 +66,113 @@ export function runMediaStoreContractTests(
       expect(await store.exists(ref.id)).toBe(false);
       await expect(store.get(ref)).rejects.toThrow(ref.id);
     });
+
+    // ── Ownership / refs / streaming (P0-a §5.1 g/h) ───────────────
+
+    it('lookup returns null for unknown ids and metadata for stored ones', async () => {
+      const store = await createStore();
+      expect(await store.lookup('does-not-exist')).toBeNull();
+
+      const ref = await store.put(PNG, 'image/png');
+      const lookup = await store.lookup(ref.id);
+      expect(lookup).not.toBeNull();
+      expect(lookup?.id).toBe(ref.id);
+      expect(lookup?.mime).toBe('image/png');
+      expect(lookup?.size).toBe(PNG.byteLength);
+      // Ownership defaults to null until recordOwnership runs.
+      expect(lookup?.ownerSessionId).toBeNull();
+      expect(lookup?.ownerPluginId).toBeNull();
+    });
+
+    it('records ownership idempotently and does not overwrite a different session', async () => {
+      const store = await createStore();
+      const ref = await store.put(PNG, 'image/png');
+
+      await store.recordOwnership(ref.id, 'sess-A', 'plugin-X');
+      let lookup = await store.lookup(ref.id);
+      expect(lookup?.ownerSessionId).toBe('sess-A');
+      expect(lookup?.ownerPluginId).toBe('plugin-X');
+
+      // Idempotent re-record by same session is a no-op.
+      await store.recordOwnership(ref.id, 'sess-A', 'plugin-X');
+      lookup = await store.lookup(ref.id);
+      expect(lookup?.ownerSessionId).toBe('sess-A');
+
+      // First-writer wins: a different session must NOT steal ownership.
+      await store.recordOwnership(ref.id, 'sess-B', 'plugin-Y');
+      lookup = await store.lookup(ref.id);
+      expect(lookup?.ownerSessionId).toBe('sess-A');
+      expect(lookup?.ownerPluginId).toBe('plugin-X');
+    });
+
+    it('addRef + isReferencedBy lets non-owner sessions reach the asset', async () => {
+      const store = await createStore();
+      const ref = await store.put(PNG, 'image/png');
+      await store.recordOwnership(ref.id, 'sess-A');
+
+      // Owner is implicitly referenced.
+      expect(await store.isReferencedBy(ref.id, 'sess-A')).toBe(true);
+      // Other sessions are not, until addRef runs.
+      expect(await store.isReferencedBy(ref.id, 'sess-B')).toBe(false);
+
+      await store.addRef(ref.id, 'sess-B', 'plugin-Y');
+      expect(await store.isReferencedBy(ref.id, 'sess-B')).toBe(true);
+
+      // addRef is idempotent — second call must not throw on the unique index.
+      await store.addRef(ref.id, 'sess-B', 'plugin-Y');
+      expect(await store.isReferencedBy(ref.id, 'sess-B')).toBe(true);
+
+      // Unknown sessions still report false.
+      expect(await store.isReferencedBy(ref.id, 'sess-C')).toBe(false);
+    });
+
+    it('isReferencedBy returns true purely from ownership when no addRef ran', async () => {
+      const store = await createStore();
+      const ref = await store.put(PNG, 'image/png');
+      await store.recordOwnership(ref.id, 'sess-OWNER');
+
+      expect(await store.isReferencedBy(ref.id, 'sess-OWNER')).toBe(true);
+    });
+
+    it('openReadStream returns the full byte sequence for ~1 MiB assets', async () => {
+      const store = await createStore();
+      if (typeof store.openReadStream !== 'function') {
+        // Optional capability — skip when the backend opts out.
+        return;
+      }
+      // 1 MiB of pseudo-random-but-deterministic bytes so we exercise
+      // multi-chunk reads in the SQLite createReadStream path without
+      // pulling in a CSPRNG dependency.
+      const big = new Uint8Array(1 * 1024 * 1024);
+      for (let i = 0; i < big.byteLength; i += 1) {
+        big[i] = (i * 2654435761) & 0xff;
+      }
+      const ref = await store.put(big, 'application/octet-stream');
+
+      const stream = await store.openReadStream(ref);
+      const reader = stream.getReader();
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+        chunks.push(value);
+        total += value.byteLength;
+      }
+      expect(total).toBe(big.byteLength);
+
+      const combined = new Uint8Array(total);
+      let offset = 0;
+      for (const c of chunks) {
+        combined.set(c, offset);
+        offset += c.byteLength;
+      }
+      // Spot-check head, tail, and middle to catch any silent corruption.
+      expect(combined[0]).toBe(big[0]);
+      expect(combined[big.byteLength - 1]).toBe(big[big.byteLength - 1]);
+      expect(combined[big.byteLength / 2]).toBe(big[big.byteLength / 2]);
+    });
   });
 }

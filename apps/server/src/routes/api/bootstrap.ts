@@ -87,6 +87,8 @@ import { createRoutes } from './create.js';
 import { installRoutes } from './install.js';
 import { aiRoutes } from './ai.js';
 import { traceRoutes } from './traces.js';
+import { mediaRoutes } from './media.js';
+import type { MediaStore } from '@covel/store';
 import { resumeRoutes } from './resume.js';
 import { snapshotRoutes } from './snapshots.js';
 import { lorebookRoutes } from './lorebook.js';
@@ -168,6 +170,13 @@ export interface ApiBootstrapConfig {
    * across processes. See `docs/architecture-audit-followups/F5-*`.
    */
   readonly sessionLock?: SessionLock;
+  /**
+   * Optional content-addressable media store backing `/api/media/:id`
+   * and `ctx.media`. Composition roots that do not generate or serve
+   * media (e.g. headless test harnesses) may leave this unset; the
+   * route returns 503 in that case. See SPEC §5.1 (b)(g).
+   */
+  readonly mediaStore?: MediaStore;
 }
 
 export interface ApiBootstrapResult {
@@ -841,6 +850,9 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     if (config.ensureEmbeddingLock) {
       c.set('ensureEmbeddingLock', config.ensureEmbeddingLock);
     }
+    if (config.mediaStore) {
+      c.set('mediaStore', config.mediaStore);
+    }
     await next();
   });
 
@@ -881,6 +893,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   app.route('/api/ai', aiRoutes);
   app.route('/api/actions', actionRoutes);
   app.route('/api/traces', traceRoutes);
+  app.route('/api/media', mediaRoutes); // SPEC §5.1 (g): signed-URL access to MediaStore
 
   return { app, registry, stateManager, store, eventBus, compactorRunner, prepareToolsForSession };
 }
