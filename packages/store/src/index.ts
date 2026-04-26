@@ -2,7 +2,9 @@ export { createStore, createStoreFromEnv, resolveBackendFromEnv } from './factor
 export { createMemoryStore } from './memory/memory-store.js';
 export { createSqliteStore } from './sqlite/sqlite-store.js';
 export { createPgStore } from './postgres/pg-store.js';
+export { createMemoryMediaStore, createSqliteMediaStore } from './media-store.js';
 export { supportsVector } from './vector-store.js';
+export type { MediaStore, SqliteMediaStoreOptions } from './media-store.js';
 export type {
   VectorStoreCapability,
   VectorModelOps,

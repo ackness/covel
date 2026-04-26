@@ -27,7 +27,9 @@ import type { DataStore } from '@covel/store';
 import { executeTurn } from '../src/turn-executor.js';
 import type { TurnExecutorDeps } from '../src/turn-executor.js';
 import type { LLMAdapter, LLMResponse } from '../src/llm-adapter.js';
-import type { PluginRuntimeGateway } from '@covel/plugin-loader';
+import type { FunctionHandlerContext, PluginRuntimeGateway } from '@covel/plugin-loader';
+
+type MediaContext = NonNullable<FunctionHandlerContext['media']>;
 
 class NoopLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
@@ -280,6 +282,48 @@ describe('executeTurn: manual trigger', () => {
     );
 
     expect('gateway' in (handlerCalls['plug/gateway-less']?.[0] ?? {})).toBe(false);
+  });
+
+  it('exposes deps.mediaStore to function handlers via ctx.media', async () => {
+    const target = fnManifest('plug/needs-media', { trigger: { type: 'manual' } });
+    let sawMedia: MediaContext | undefined;
+
+    const { result } = await runTurn(
+      [target],
+      {
+        'plug/needs-media': async (ctx) => {
+          sawMedia = ctx.media as MediaContext | undefined;
+          const ref = await sawMedia!.put(new Uint8Array([1, 2, 3]), 'application/octet-stream');
+          return { ok: true, mediaId: ref.id };
+        },
+      },
+      {
+        sessionId: 'sess-1',
+        turnId: 'turn-1',
+        playerMessage: '',
+        manualTrigger: { runtimeId: 'plug/needs-media' },
+      },
+      {
+        mediaStore: {
+          async put(bytes, mime) {
+            return {
+              id: 'media-1',
+              mime,
+              size: bytes instanceof Uint8Array ? bytes.byteLength : bytes.size,
+            };
+          },
+          async get() {
+            return new Uint8Array();
+          },
+          async resolveUrl() {
+            return 'https://media.example.test/media-1';
+          },
+        },
+      },
+    );
+
+    expect(sawMedia).toBeDefined();
+    expect(result.runtimeResults[0]!.output).toMatchObject({ ok: true, mediaId: 'media-1' });
   });
 
   // ── Audit F7: userSettings merging. ────────────────────────────────

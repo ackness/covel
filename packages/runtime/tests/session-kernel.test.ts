@@ -13,6 +13,11 @@ import { makeEmitterSpy } from './_helpers/emitter-spy.js';
 const SOURCE = { pluginId: 'test-plugin', runtimeId: 'test-runtime' };
 const TURN_ID = 'turn-001';
 const SESSION_ID = 'sess-001';
+const MEDIA_REF = {
+  id: 'b'.repeat(64),
+  mime: 'image/png',
+  size: 2048,
+};
 
 describe('normalizeOutput', () => {
   describe('narrative.append', () => {
@@ -177,6 +182,42 @@ describe('normalizeOutput', () => {
       const eventProposals = proposals.filter(p => p.type === 'event.emit');
       expect(eventProposals).toHaveLength(1);
       expect(eventProposals[0].payload).toEqual({ topic: 'combat.started', data: { enemies: 3 } });
+    });
+  });
+
+  describe('asset.generate', () => {
+    it('emits asset.generate proposals from assets[]', () => {
+      const output = {
+        assets: [
+          { ref: MEDIA_REF, modality: 'image', meta: { prompt: 'forest' } },
+        ],
+      };
+
+      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+
+      expect(proposals).toHaveLength(1);
+      expect(proposals[0].type).toBe('asset.generate');
+      expect(proposals[0].payload).toEqual({
+        ref: MEDIA_REF,
+        modality: 'image',
+        meta: { prompt: 'forest' },
+      });
+    });
+
+    it('emits asset.generate proposals from assetGenerations[] and drops inline media', () => {
+      const output = {
+        assetGenerations: [
+          { ref: MEDIA_REF, modality: 'image' },
+          { base64: 'abc', modality: 'image' },
+          { ref: MEDIA_REF, modality: '' },
+        ],
+      };
+
+      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+
+      expect(proposals).toHaveLength(1);
+      expect(proposals[0].type).toBe('asset.generate');
+      expect(proposals[0].payload).toEqual({ ref: MEDIA_REF, modality: 'image' });
     });
   });
 
@@ -535,6 +576,50 @@ describe('createCommitPipeline', () => {
     });
   });
 
+  describe('asset.generate commit', () => {
+    it('persists an asset block and emits asset.generated', async () => {
+      const store = createMockStore();
+      const pipeline = createCommitPipeline(store as any);
+      const proposal = makeProposal('asset.generate', {
+        ref: MEDIA_REF,
+        modality: 'image',
+        meta: { prompt: 'forest' },
+      });
+
+      const result = await pipeline.commit(proposal);
+
+      expect(result.committed).toBe(true);
+      expect(result.event!.type).toBe('asset.generated');
+      expect(result.event!.payload.asset).toMatchObject({
+        id: proposal.id,
+        type: 'asset.generate',
+        ref: MEDIA_REF,
+        modality: 'image',
+        meta: { prompt: 'forest' },
+      });
+      expect(store.addMessage).toHaveBeenCalledOnce();
+      const msgArg = store.addMessage.mock.calls[0][0];
+      expect(msgArg.content).toBe('');
+      expect(msgArg.metadata.block.type).toBe('asset.generate');
+      expect(msgArg.metadata.block.data.ref).toEqual(MEDIA_REF);
+    });
+
+    it('returns a failed commit for malformed asset.generate payloads', async () => {
+      const store = createMockStore();
+      const pipeline = createCommitPipeline(store as any);
+      const proposal = makeProposal('asset.generate', {
+        base64: 'abc',
+        modality: 'image',
+      });
+
+      const result = await pipeline.commit(proposal);
+
+      expect(result.committed).toBe(false);
+      expect(result.error).toContain('asset.generate');
+      expect(store.addMessage).toHaveBeenCalledTimes(0);
+    });
+  });
+
   describe('plugin.data commit', () => {
     it('should persist plugin data through the store', async () => {
       const store = createMockStore();
@@ -681,6 +766,28 @@ describe('createCommitPipeline', () => {
 
       expect(emitter.events.find((e) => e.type === 'block.emitted')).toBeUndefined();
       expect(emitter.events.find((e) => e.type === 'state.patch.applied')).toBeUndefined();
+    });
+
+    it('emits asset.generated when an asset.generate proposal commits', async () => {
+      const emitter = makeEmitterSpy();
+      const store = createMockStore();
+      const pipeline = createCommitPipeline(store as any, undefined, undefined, emitter);
+      const proposal = makeProposal('asset.generate', {
+        ref: MEDIA_REF,
+        modality: 'image',
+      });
+
+      const result = await pipeline.commit(proposal);
+
+      expect(result.committed).toBe(true);
+      const assetEvent = emitter.events.find((e) => e.type === 'asset.generated');
+      expect(assetEvent).toBeDefined();
+      expect(assetEvent!.payload).toMatchObject({
+        proposalId: proposal.id,
+        pluginId: 'test-plugin',
+        runtimeId: 'test-runtime',
+      });
+      expect((assetEvent!.payload.asset as Record<string, unknown>).modality).toBe('image');
     });
   });
 });
@@ -868,6 +975,37 @@ describe('processRuntimeResult', () => {
     expect(events[0].source).toEqual({ pluginId: 'core-narrator', runtimeId: 'core-narrator' });
     const msgArg = store.addMessage.mock.calls[0][0];
     expect(msgArg.metadata.runtimeId).toBe('core-narrator');
+  });
+
+  it('commits a fake runtime asset output through the event and trace path', async () => {
+    const emitter = makeEmitterSpy(SESSION_ID, TURN_ID);
+    const store = createMockStore();
+    const result = makeRuntimeResult({
+      assets: [
+        { ref: MEDIA_REF, modality: 'image', meta: { prompt: 'forest' } },
+      ],
+    });
+
+    const { events, failedProposals } = await processRuntimeResult(result, store as any, SESSION_ID, 'plugin', {
+      emitter,
+    });
+
+    expect(failedProposals).toHaveLength(0);
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('asset.generated');
+    expect(events[0].payload.asset).toMatchObject({
+      type: 'asset.generate',
+      ref: MEDIA_REF,
+      modality: 'image',
+    });
+    expect(store.addMessage).toHaveBeenCalledOnce();
+    expect(store.addTraceEvent).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'proposal.committed',
+      payload: expect.objectContaining({
+        proposalType: 'asset.generate',
+      }),
+    }));
+    expect(emitter.events.find((e) => e.type === 'asset.generated')).toBeDefined();
   });
 
   it('should surface failed proposals when commit returns committed:false', async () => {

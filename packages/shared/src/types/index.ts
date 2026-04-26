@@ -1,4 +1,13 @@
 export type {
+  MediaRef,
+  MediaRefSchema,
+} from './media.js';
+
+export {
+  mediaRefSchema,
+} from './media.js';
+
+export type {
   PluginType,
   RuntimeType,
   TriggerType,
@@ -101,6 +110,7 @@ export type {
   StatePatchPayload,
   EventEmitPayload,
   RecordUpsertPayload,
+  AssetGeneratePayload,
   PluginDataPayload,
   PluginDataBatchPayload,
   SessionEvent,

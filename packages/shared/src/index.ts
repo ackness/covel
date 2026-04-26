@@ -96,5 +96,17 @@ export {
 
 export type { InteractionRecordSchema } from './schemas/interaction-record.js';
 
+// ── Proposal Helpers ─────────────────────────────────────────────
+export {
+  assetGenerateToLLM,
+  assetGenerateToView,
+  isAssetGeneratePayload,
+} from './proposals/asset-generate.js';
+
+export type {
+  AssetGenerateLLMPlaceholder,
+  AssetGenerateView,
+} from './proposals/asset-generate.js';
+
 // ── Unified Settings Store ─────────────────────────────────────────
 export * from './settings/index.js';
