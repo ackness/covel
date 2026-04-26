@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAnthropicMessagesAdapter } from "../src/adapters/anthropic-messages.js";
 import { createOpenAiChatAdapter } from "../src/adapters/openai-chat.js";
 import { createOpenAiResponsesAdapter } from "../src/adapters/openai-responses.js";
-import type { TextMessage } from "../src/types.js";
+import type { ModelRequestContext, PresetConfig, TextMessage } from "../src/types.js";
 
 const IMAGE_REF = {
   id: "a".repeat(64),
@@ -114,6 +114,74 @@ describe("content part serialization", () => {
         content: [
           { type: "text", text: "Inspect this image." },
           { type: "image", source: { type: "url", url: IMAGE_REF.url } },
+        ],
+      },
+    ]);
+  });
+
+  it("downgrades image parts to text descriptors for text-only models (capability fallback)", async () => {
+    stubFetch({
+      choices: [{ message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+
+    const textOnlyPreset = {
+      capability: { input: ["text"], output: ["text"] },
+    } as unknown as PresetConfig;
+    const context: ModelRequestContext = {
+      profile: {} as never,
+      preset: textOnlyPreset,
+      mode: "text",
+    };
+
+    await createOpenAiChatAdapter().generateText(
+      { baseUrl: "https://api.deepseek.com/v1", apiKey: "test" },
+      { model: "deepseek-chat", messages: [MULTIMODAL_MESSAGE] },
+      context,
+    );
+
+    const body = readRequestBody();
+    const messages = body.messages as Array<{ content: Array<{ type: string; text: string }> }>;
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.content).toHaveLength(2);
+    expect(messages[0]!.content[0]).toEqual({ type: "text", text: "Inspect this image." });
+    // Image part is collapsed into a text descriptor — same image_ref shape
+    // adapters use when a URL is missing, so the model still sees the asset id.
+    const downgradedText = messages[0]!.content[1]!.text;
+    expect(messages[0]!.content[1]!.type).toBe("text");
+    expect(JSON.parse(downgradedText)).toMatchObject({
+      type: "image_ref",
+      ref: IMAGE_REF,
+    });
+  });
+
+  it("keeps image parts intact for vision-capable models", async () => {
+    stubFetch({
+      choices: [{ message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+
+    const visionPreset = {
+      capability: { input: ["text", "image"], output: ["text"] },
+    } as unknown as PresetConfig;
+    const context: ModelRequestContext = {
+      profile: {} as never,
+      preset: visionPreset,
+      mode: "text",
+    };
+
+    await createOpenAiChatAdapter().generateText(
+      { baseUrl: "https://api.openai.com/v1", apiKey: "test" },
+      { model: "gpt-4.1-mini", messages: [MULTIMODAL_MESSAGE] },
+      context,
+    );
+
+    expect(readRequestBody().messages).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Inspect this image." },
+          { type: "image_url", image_url: { url: IMAGE_REF.url } },
         ],
       },
     ]);
