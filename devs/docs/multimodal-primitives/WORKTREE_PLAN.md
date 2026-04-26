@@ -12,14 +12,16 @@
 
 ## 0. 基准分支
 
-先建立一个所有 agent 共同继承的基准分支：
+当前 `main` 已包含两次准备提交：
+
+- `a7c17bb docs: add multimodal primitives spec plan`
+- `5c97aca chore: add release preflight script`
+
+从当前 `main` 建立所有 agent 共同继承的基准分支：
 
 ```bash
+git switch main
 git switch -c feature/multimodal-primitives-base
-git add devs/docs/multimodal-primitives/SPEC.md \
-  devs/docs/multimodal-primitives/WORKTREE_PLAN.md \
-  .gitignore
-git commit -m "docs: plan multimodal primitives worktrees"
 ```
 
 后续所有 worktree 从 `feature/multimodal-primitives-base` 创建。
@@ -71,6 +73,7 @@ git worktree add .worktrees/codex-p0d-snapshot-fork \
 | Worktree | `.worktrees/codex-p0a-media-store` |
 | Branch | `agent/codex-p0a-media-store` |
 | 目标 | 实现 `MediaRef`、`MediaStore` 接口、Memory 后端、SQLite/local-fs 后端、contract tests |
+| SPEC 指向 | `SPEC.md` §0.0 推荐推进顺序 P0-a；§5.1 (a)(b)(i)；§6 P0-a；附录 A |
 | 写入范围 | `packages/shared/src/types/media.ts`、`packages/store/src/media-store.ts`、`packages/store/src/contract/media-store-contract.ts`、`packages/store/src/schema/*` |
 | 交付 | 类型导出、store 实现、contract test、迁移说明 |
 | 验证 | store 相关 unit / contract tests |
@@ -82,6 +85,7 @@ git worktree add .worktrees/codex-p0d-snapshot-fork \
 | Worktree | `.worktrees/codex-p0a-runtime-media` |
 | Branch | `agent/codex-p0a-runtime-media` |
 | 目标 | 把 `ctx.media` 注入 function runtime，提供 `put/get/resolveUrl/ingestUrl` |
+| SPEC 指向 | `SPEC.md` §0.0 当前框架对齐度；§5.1 (d)(f)；§6 P0-a |
 | 写入范围 | `packages/plugin-loader/src/types.ts`、`packages/runtime/src/plugin-handler-helpers.ts`、`packages/runtime/src/turn-executor.ts`、runtime media helper 文件 |
 | 交付 | `FunctionHandlerContext.media`、安全远程 ingest helper、runtime wiring |
 | 验证 | runtime handler helper tests、SSRF/redirect/maxBytes/MIME sniff 测试 |
@@ -93,6 +97,7 @@ git worktree add .worktrees/codex-p0d-snapshot-fork \
 | Worktree | `.worktrees/claude-p0a-media-api` |
 | Branch | `agent/claude-p0a-media-api` |
 | 目标 | 实现 `/api/media/:id?token=...`、HMAC 短期 token、server route wiring |
+| SPEC 指向 | `SPEC.md` §5.1 (g)；§5.1 框架适配表；§6 P0-a；§9 MediaStore / 存储层 |
 | 写入范围 | `apps/server/src/routes/api/media.ts`、`apps/server/src/middleware/media-token.ts`、server route index |
 | 交付 | signed URL 校验、streaming response、权限失败错误码 |
 | 验证 | route tests、token TTL tests、跨 session 权限 tests |
@@ -104,6 +109,7 @@ git worktree add .worktrees/codex-p0d-snapshot-fork \
 | Worktree | `.worktrees/claude-p0a-media-web` |
 | Branch | `agent/claude-p0a-media-web` |
 | 目标 | 前端支持 `MediaRef` 渲染，`Image` / `Media` 组件读取 signed URL |
+| SPEC 指向 | `SPEC.md` §0.0 当前框架对齐度；§5.1 (g)(i)；§5.7 框架适配表；§6 P0-a |
 | 写入范围 | `apps/web/src/components/Media.tsx`、`apps/web/src/lib/catalog.tsx`、`apps/web/src/stores/*` 中的媒体缓存相关文件 |
 | 交付 | `<Media src={ref}>`、`Image` ref 输入兼容、IDB blob cache |
 | 验证 | component tests、json-render fixture、浏览器 smoke test |
@@ -126,6 +132,7 @@ git worktree add .worktrees/codex-p0d-snapshot-fork \
 | Worktree | `.worktrees/codex-p0b-asset-kernel` |
 | Branch | `agent/codex-p0b-asset-kernel` |
 | 目标 | 接入 `asset.generate` normalizer、commit handler、trace、SSE、`assetGenerateToView()` |
+| SPEC 指向 | `SPEC.md` §1.3 Proposal 类型现状；§5.1 (e)；§5.2；§5.7；§6 P0-b |
 | 写入范围 | `packages/runtime/src/session-kernel.ts`、`packages/runtime/src/turn-emitter.ts`、`packages/runtime/src/prompt-delta.ts`、`packages/shared/src/proposals/asset-generate.ts`、shared proposal schema |
 | 交付 | `output.assets[]` / `output.assetGenerations[]` 到 `Proposal{ type: 'asset.generate' }` 的端到端路径 |
 | 验证 | kernel fixture、trace/SSE snapshot、runtime fake asset test |
@@ -137,6 +144,7 @@ git worktree add .worktrees/codex-p0d-snapshot-fork \
 | Worktree | `.worktrees/claude-p0b-asset-web` |
 | Branch | `agent/claude-p0b-asset-web` |
 | 目标 | Web 接收 `AssetGenerateView`，按 `modality` 渲染默认 image / audio / generic-link |
+| SPEC 指向 | `SPEC.md` §5.2 `asset.generate` 局部 view helper；§5.7 框架适配表；§6 P0-b |
 | 写入范围 | `apps/web/src/stores/session-store.tsx`、`apps/web/src/components/asset-render/*`、web fixtures |
 | 交付 | asset renderer、pending/committed/error 状态展示、modality routing |
 | 验证 | store tests、component tests、Playwright smoke test |
@@ -155,6 +163,7 @@ git worktree add .worktrees/codex-p0d-snapshot-fork \
 | Worktree | `.worktrees/claude-p0c-dashscope-plugin` |
 | Branch | `agent/claude-p0c-dashscope-plugin` |
 | 目标 | DashScope 图片插件迁移到 `ctx.media.ingestUrl()` / `ctx.media.put()`，额外 emit `asset.generate` |
+| SPEC 指向 | `SPEC.md` §5.1 DashScope handler diff；§5.7 现有图像插件迁移清单；§6 P0-c；附录 C Finding 4 |
 | 写入范围 | DashScope 图片插件目录、对应 UI spec、插件测试 |
 | 交付 | ref-only `plugin_data.images`、`asset.generate` proposal、OSS URL 过期问题收口 |
 | 验证 | plugin unit test、mock handler test、manual fixture |
@@ -166,6 +175,7 @@ git worktree add .worktrees/codex-p0d-snapshot-fork \
 | Worktree | `.worktrees/claude-p0c-openai-plugin` |
 | Branch | `agent/claude-p0c-openai-plugin` |
 | 目标 | OpenAI 图片插件迁移到 `ctx.media.put()`，额外 emit `asset.generate` |
+| SPEC 指向 | `SPEC.md` §5.1 openai handler diff；§5.7 现有图像插件迁移清单；§6 P0-c；附录 C Finding 4 |
 | 写入范围 | OpenAI 图片插件目录、对应 UI spec、插件测试 |
 | 交付 | ref-only `plugin_data.images`、`asset.generate` proposal、multi-image refs |
 | 验证 | plugin unit test、mock handler test、manual fixture |
@@ -184,6 +194,7 @@ git worktree add .worktrees/codex-p0d-snapshot-fork \
 | Worktree | `.worktrees/codex-p0d-media-migration` |
 | Branch | `agent/codex-p0d-media-migration` |
 | 目标 | 实现 `pnpm migrate:media` 多表扫描和 `legacy_inline_media` 影子表 |
+| SPEC 指向 | `SPEC.md` §5.1 现有数据迁移范围；§5.1 清理后的后果；§6 P0-d；§9 迁移 / 兼容 |
 | 写入范围 | `scripts/*`、store migration/schema、migration tests |
 | 交付 | 多表扫描、批量迁移、单条失败继续、回滚索引 |
 | 验证 | migration fixtures、SQLite integration test |
@@ -195,6 +206,7 @@ git worktree add .worktrees/codex-p0d-snapshot-fork \
 | Worktree | `.worktrees/codex-p0d-snapshot-fork` |
 | Branch | `agent/codex-p0d-snapshot-fork` |
 | 目标 | `SnapshotPayload.mediaRefs`，fork 时复制 `media_refs` 引用关系 |
+| SPEC 指向 | `SPEC.md` §5.1 (h) Snapshot / fork 媒体可达性；§6 P0-d；§9 迁移 / 兼容 |
 | 写入范围 | `packages/runtime/src/snapshot-payload-builder.ts`、`apps/server/src/routes/api/snapshots.ts`、store fork helper/tests |
 | 交付 | snapshot 收集 refs、fork session 继承 refs、端到端 fixture |
 | 验证 | snapshot/fork integration test |
