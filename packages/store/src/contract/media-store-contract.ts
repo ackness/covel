@@ -60,8 +60,10 @@ export function runMediaStoreContractTests(
       const ref = await store.put(PNG, 'image/png');
 
       const url = await store.resolveUrl(ref);
-      expect(url).toMatch(/^(memory:\/\/media\/|file:\/\/)/);
-      expect(url).toContain(ref.id);
+      expect(url).toMatch(/^(memory:\/\/media\/|file:\/\/|blob:)/);
+      if (!url.startsWith('blob:')) {
+        expect(url).toContain(ref.id);
+      }
     });
 
     it('prefers a MediaRef url when provided', async () => {

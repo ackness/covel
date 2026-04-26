@@ -8,6 +8,8 @@
  */
 
 import { openDB, type IDBPDatabase } from 'idb';
+export { createIndexedDbMediaStore } from './idb-media-store.js';
+export type { IndexedDbMediaStoreOptions } from './idb-media-store.js';
 
 function applyPagination<T>(items: T[], pagination?: PaginationOpts): T[] {
   if (!pagination) return items;

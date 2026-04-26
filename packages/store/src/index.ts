@@ -2,8 +2,10 @@ export { createStore, createStoreFromEnv, resolveBackendFromEnv } from './factor
 export { createMemoryStore } from './memory/memory-store.js';
 export { createSqliteStore } from './sqlite/sqlite-store.js';
 export { createPgStore } from './postgres/pg-store.js';
+export { createIndexedDbMediaStore } from './indexeddb/idb-media-store.js';
 export { createMemoryMediaStore, createSqliteMediaStore } from './media-store.js';
 export { supportsVector } from './vector-store.js';
+export type { IndexedDbMediaStoreOptions } from './indexeddb/idb-media-store.js';
 export type { MediaAssetLookup, MediaStore, SqliteMediaStoreOptions } from './media-store.js';
 export type {
   VectorStoreCapability,
