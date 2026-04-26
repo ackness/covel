@@ -28,14 +28,24 @@ interface MediaStore {
 
 ## Backends
 
-| Backend | Factory | Byte storage |
-|---|---|---|
-| Memory | `createMemoryMediaStore()` | Process memory |
-| SQLite/local-fs | `createSqliteMediaStore(dbPath, { mediaRoot })` | Local files under `{mediaRoot}/{ab}/{cd}/{sha256}.bin` |
-| PostgreSQL | `createPgMediaStore(databaseUrl)` | `media_assets.body` as `bytea` |
-| S3/R2-compatible | `createS3MediaStore(client, options)` | External object storage via `S3CompatibleMediaClient` |
+| Backend | Factory | Byte storage | `openReadStream()` |
+|---|---|---|---|
+| Memory | `createMemoryMediaStore()` | Process memory | yes (single chunk) |
+| SQLite/local-fs | `createSqliteMediaStore(dbPath, { mediaRoot })` | Local files under `{mediaRoot}/{ab}/{cd}/{sha256}.bin` | yes (true streaming) |
+| PostgreSQL | `createPgMediaStore(databaseUrl)` | `media_assets.body` as `bytea` | **no** — see "PG streaming" |
+| S3/R2-compatible | `createS3MediaStore(client, options)` | External object storage via `S3CompatibleMediaClient` | yes (eager `get()` wrap) |
+| IndexedDB (web) | `createIndexedDbMediaStore({ dbName })` | Browser IDB Blob store | yes (Blob.stream()) |
 
 The S3/R2 adapter accepts a small object-client interface. Production deployments can wrap AWS SDK S3, Cloudflare R2, MinIO, or any compatible object store behind that interface.
+
+### PG streaming caveat
+
+`createPgMediaStore` intentionally does **not** implement `openReadStream`. The `bytea` column type forces the entire blob into memory before the driver can hand it back, so a "streaming" wrapper would just buffer the whole asset and add no value over the eager `get()` path. The route layer in `apps/server/src/routes/api/media.ts` already gates on `typeof store.openReadStream === 'function'` and falls back to `get()` automatically — no caller change is required.
+
+If you store media larger than a few MiB on PostgreSQL, consider one of:
+
+- Move bytes to SQLite local-fs (`createSqliteMediaStore`) and keep PG for the rest of the kernel state.
+- Use S3/R2 (`createS3MediaStore`) with a durable metadata adapter — see "S3 metadata adapter" below.
 
 ## Ownership
 

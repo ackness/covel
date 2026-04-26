@@ -643,10 +643,16 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
       return result;
     },
 
-    async openReadStream(ref) {
-      const bytes = await this.get(ref);
-      return bytesToReadableStream(await toBytes(bytes));
-    },
+    // openReadStream is intentionally NOT implemented for the PG bytea
+    // backend. The previous version called `this.get(ref)`, which read the
+    // entire BYTEA into memory before wrapping it in a one-shot
+    // ReadableStream — so it failed the contract's stated goal ("> 1 MiB
+    // assets stream to keep V8 ArrayBuffer pressure off the request path").
+    // The route in apps/server/src/routes/api/media.ts already gates on
+    // `typeof store.openReadStream === 'function'`, so omitting it cleanly
+    // falls back to the eager `get()` path. Operators with media > 1 MiB on
+    // PostgreSQL should switch to SQLite-backed media (createSqliteMediaStore)
+    // or S3 with a metadata adapter — see docs/reference/media-store.md.
   };
 }
 
