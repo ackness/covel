@@ -2,7 +2,7 @@
  * Plugin loader types — parsed results of PLUGIN.md files and references.
  */
 
-import type { PluginType, RuntimeManifest } from '@covel/shared';
+import type { MediaRef, PluginType, RuntimeManifest } from '@covel/shared';
 
 // ── Parsed PLUGIN.md ─────────────────────────────────────────────
 
@@ -185,6 +185,30 @@ export interface PluginRuntimeUtils {
   ): Promise<Response>;
 }
 
+export interface IngestUrlOptions {
+  /** Maximum response bytes accepted before the download is aborted. */
+  readonly maxBytes?: number;
+  /** End-to-end timeout for the ingest request, including redirects. */
+  readonly timeoutMs?: number;
+  /** MIME allow-list. Supports exact matches and family wildcards such as `image/*`. */
+  readonly allowedMimes?: readonly string[];
+  /** Abort signal forwarded from the handler or turn runtime. */
+  readonly signal?: AbortSignal;
+  /** Additional metadata persisted with the media object. */
+  readonly meta?: Readonly<Record<string, unknown>>;
+}
+
+export interface MediaContext {
+  put(
+    blob: Uint8Array | Blob,
+    mime: string,
+    meta?: Readonly<Record<string, unknown>>,
+  ): Promise<MediaRef>;
+  get(ref: MediaRef): Promise<Uint8Array | Blob>;
+  resolveUrl(ref: MediaRef): Promise<string>;
+  ingestUrl(url: string, opts?: IngestUrlOptions): Promise<MediaRef>;
+}
+
 /**
  * Function handler context — passed to `runtimeType: 'function'` handlers.
  * The handler receives this context and returns a Record<string, unknown> output.
@@ -224,6 +248,13 @@ export interface FunctionHandlerContext {
    * URL through `utils.validateBaseUrl` before calling it.
    */
   readonly utils?: PluginRuntimeUtils;
+  /**
+   * Media storage primitives for function runtimes. Present when the
+   * runtime is wired with a MediaStore. `ingestUrl` applies the framework
+   * SSRF, redirect, timeout, byte budget, and MIME validation policy before
+   * persisting bytes.
+   */
+  readonly media?: MediaContext;
   /**
    * Optional manual-trigger payload — only populated when the turn was
    * initiated via `POST /api/sessions/:id/plugin-rpc` with a `runtimeId`

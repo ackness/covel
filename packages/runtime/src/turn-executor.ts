@@ -57,6 +57,10 @@ import {
   createFunctionStoreView,
 } from './plugin-handler-helpers.js';
 import {
+  createRuntimeMediaContext,
+  type MediaStoreLike,
+} from './runtime-media-context.js';
+import {
   buildRetryPolicy,
   callLLMWithRetry,
   streamLLMWithRetry,
@@ -114,6 +118,12 @@ export interface TurnExecutorDeps {
    * test harnesses; handlers must null-check before use.
    */
   readonly utils?: PluginRuntimeUtils;
+  /**
+   * Optional MediaStore forwarded to function-runtime handlers as
+   * `FunctionHandlerContext.media`. Store implementation is provided by
+   * the P0-a MediaStore Core package.
+   */
+  readonly mediaStore?: MediaStoreLike;
   /** Get effective config for a plugin/runtime. */
   readonly getConfig: (pluginId: string, runtimeId: string) => Readonly<Record<string, unknown>>;
   /** Optional DataStore for persisting results. */
@@ -1995,6 +2005,9 @@ async function executeOneRuntime(
       const loggerHandle = deps.store
         ? createPluginLogger(deps.store, helperCtx)
         : undefined;
+      const mediaHandle = deps.mediaStore
+        ? createRuntimeMediaContext(deps.mediaStore, deps.utils)
+        : undefined;
       // Audit P0-3: third-party (community) function runtimes get a
       // narrowed `FunctionStoreView` so they can't quietly call
       // `setPluginData` / `upsertCharacter` / `setPluginDataBatch` to
@@ -2019,6 +2032,7 @@ async function executeOneRuntime(
         config,
         ...(deps.gateway ? { gateway: deps.gateway } : {}),
         ...(deps.utils ? { utils: deps.utils } : {}),
+        ...(mediaHandle ? { media: mediaHandle } : {}),
         ...(manualPayloadForRuntime ? { manualPayload: manualPayloadForRuntime } : {}),
         ...(triggerEvent ? { triggerEvent } : {}),
         ...(userSettingsForRuntime ? { userSettings: userSettingsForRuntime } : {}),
@@ -2184,6 +2198,7 @@ async function executeOneRuntime(
         config: guardConfig,
         ...(deps.gateway ? { gateway: deps.gateway } : {}),
         ...(deps.utils ? { utils: deps.utils } : {}),
+        ...(deps.mediaStore ? { media: createRuntimeMediaContext(deps.mediaStore, deps.utils) } : {}),
         ...(guardManualPayload ? { manualPayload: guardManualPayload } : {}),
         ...(triggerEvent ? { triggerEvent } : {}),
         ...(guardUserSettings ? { userSettings: guardUserSettings } : {}),
