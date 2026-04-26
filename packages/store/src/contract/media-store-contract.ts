@@ -154,6 +154,44 @@ export function runMediaStoreContractTests(
       expect(await store.isReferencedBy(ref.id, 'sess-C')).toBe(false);
     });
 
+    it('addRef is idempotent on (sessionId, mediaId) regardless of pluginId', async () => {
+      // The UNIQUE constraint on media_refs is (session_id, media_id) only —
+      // plugin_id is "first-source metadata", not part of the key. SQL UNIQUE
+      // treats every NULL as distinct, so the previous (s,m,plugin_id) key
+      // silently allowed unbounded duplicate rows when pluginId was undefined.
+      // This contract pins the new behaviour across every backend.
+      const store = await createStore();
+      const ref = await store.put(PNG, 'image/png');
+
+      // Two NULL-pluginId addRefs collapse to a single row.
+      await store.addRef(ref.id, 'sess-X');
+      await store.addRef(ref.id, 'sess-X');
+      let refs = (await store.listRefs()).filter(
+        (r) => r.sessionId === 'sess-X' && r.mediaId === ref.id,
+      );
+      expect(refs).toHaveLength(1);
+      expect(refs[0]?.pluginId).toBeNull();
+
+      // A subsequent addRef with a different pluginId is a no-op (first
+      // writer wins) — the row count stays at 1 and the original pluginId
+      // (NULL) is preserved.
+      await store.addRef(ref.id, 'sess-X', 'plugin-late');
+      refs = (await store.listRefs()).filter(
+        (r) => r.sessionId === 'sess-X' && r.mediaId === ref.id,
+      );
+      expect(refs).toHaveLength(1);
+      expect(refs[0]?.pluginId).toBeNull();
+
+      // Same idempotency holds when the first write provided a pluginId.
+      await store.addRef(ref.id, 'sess-Y', 'plugin-A');
+      await store.addRef(ref.id, 'sess-Y', 'plugin-B');
+      const yRefs = (await store.listRefs()).filter(
+        (r) => r.sessionId === 'sess-Y' && r.mediaId === ref.id,
+      );
+      expect(yRefs).toHaveLength(1);
+      expect(yRefs[0]?.pluginId).toBe('plugin-A');
+    });
+
     it('lists assets and refs for lifecycle scans', async () => {
       const store = await createStore();
       const ref = await store.put(PNG, 'image/png', { label: 'scan' });

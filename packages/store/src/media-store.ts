@@ -89,8 +89,10 @@ export interface MediaStore {
   /**
    * Idempotently record that `sessionId` references this asset (used by fork /
    * inherit flows where multiple sessions need read access without taking
-   * ownership). The unique index on `(session_id, media_id, plugin_id)`
-   * makes repeated calls a no-op.
+   * ownership). The unique index on `(session_id, media_id)` makes repeated
+   * calls a no-op; `pluginId` is recorded as first-source metadata only and
+   * does NOT participate in the key (a second addRef with a different
+   * pluginId is a silent no-op, preserving the first writer's pluginId).
    */
   addRef(id: string, sessionId: string, pluginId?: string): Promise<void>;
   /**
@@ -366,12 +368,17 @@ export function createMemoryMediaStore(): MediaStore {
     async addRef(id, sessionId, pluginId) {
       if (!assets.has(id)) return;
       addRefInternal(sessionId, id);
-      refRows.set(`${sessionId}\u0000${id}\u0000${pluginId ?? ''}`, {
-        sessionId,
-        mediaId: id,
-        pluginId: pluginId ?? null,
-        createdAt: new Date().toISOString(),
-      });
+      // First writer wins for plugin_id — keyed only on (sessionId, mediaId)
+      // to mirror the UNIQUE constraint enforced by SQLite/PG.
+      const key = `${sessionId}\u0000${id}`;
+      if (!refRows.has(key)) {
+        refRows.set(key, {
+          sessionId,
+          mediaId: id,
+          pluginId: pluginId ?? null,
+          createdAt: new Date().toISOString(),
+        });
+      }
     },
 
     async isReferencedBy(id, sessionId) {
@@ -552,11 +559,13 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
     },
 
     async addRef(id, sessionId, pluginId) {
+      // UNIQUE key is (session_id, media_id) only — first writer wins for
+      // plugin_id. A subsequent addRef with a different pluginId is a no-op.
       await sql`
         INSERT INTO media_refs (session_id, media_id, plugin_id, created_at)
         SELECT ${sessionId}, ${id}, ${pluginId ?? null}, ${new Date().toISOString()}
         WHERE EXISTS (SELECT 1 FROM media_assets WHERE id = ${id})
-        ON CONFLICT (session_id, media_id, plugin_id) DO NOTHING
+        ON CONFLICT (session_id, media_id) DO NOTHING
       `;
     },
 
@@ -763,12 +772,17 @@ export function createS3MediaStore(
     async addRef(id, sessionId, pluginId) {
       if (!(await this.exists(id))) return;
       addRefInternal(sessionId, id);
-      refRows.set(`${sessionId}\u0000${id}\u0000${pluginId ?? ''}`, {
-        sessionId,
-        mediaId: id,
-        pluginId: pluginId ?? null,
-        createdAt: new Date().toISOString(),
-      });
+      // First writer wins for plugin_id — keyed only on (sessionId, mediaId)
+      // to mirror the UNIQUE constraint enforced by SQLite/PG.
+      const key = `${sessionId}\u0000${id}`;
+      if (!refRows.has(key)) {
+        refRows.set(key, {
+          sessionId,
+          mediaId: id,
+          pluginId: pluginId ?? null,
+          createdAt: new Date().toISOString(),
+        });
+      }
     },
 
     async isReferencedBy(id, sessionId) {
@@ -969,9 +983,9 @@ export function createSqliteMediaStore(
     },
 
     async addRef(id, sessionId, pluginId) {
-      // Schema unique key includes plugin_id, so a NULL pluginId still allows
-      // a second non-null pluginId row for the same session — that's intended,
-      // it lets multiple plugins independently anchor a fork.
+      // UNIQUE key is (session_id, media_id) only — first writer wins for
+      // plugin_id. A subsequent addRef with a different pluginId is a no-op
+      // (INSERT OR IGNORE swallows the unique-violation).
       insertRef.run({
         sessionId,
         mediaId: id,

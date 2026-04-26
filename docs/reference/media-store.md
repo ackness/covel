@@ -41,6 +41,24 @@ The S3/R2 adapter accepts a small object-client interface. Production deployment
 
 `recordOwnership()` sets the first owner for an asset. `addRef()` grants another session read access for fork and snapshot flows. `isReferencedBy()` returns true for the owner session and for sessions with an explicit reference row.
 
+`addRef()` is **idempotent on `(sessionId, mediaId)`** — the `media_refs` UNIQUE constraint ignores `plugin_id` (which is recorded as first-source metadata only). This is the safe behaviour because SQL `UNIQUE` treats every `NULL` as distinct, so a constraint that includes a nullable `plugin_id` would silently allow unbounded duplicate rows when callers passed `undefined`. The new key shape matches Memory and IndexedDB, which use `(sessionId, mediaId)` as their map key.
+
+> **Existing databases.** Fresh installs get the new constraint immediately. Existing PG/SQLite databases keep any pre-existing UNIQUE on `(session_id, media_id, plugin_id)` — that older index is strictly looser than the new one, so the stricter constraint wins and addRef stays safe. **Sites with legacy duplicate rows** (same `session_id` + `media_id` with different `plugin_id`) MUST run a one-off migration before the new index can be created. Templates:
+>
+> ```sql
+> -- PostgreSQL
+> DELETE FROM media_refs a USING media_refs b
+>   WHERE a.ctid > b.ctid AND a.session_id = b.session_id AND a.media_id = b.media_id;
+> CREATE UNIQUE INDEX pg_media_refs_unique_session_media_idx
+>   ON media_refs(session_id, media_id);
+>
+> -- SQLite (apply through pnpm db:migrate after deduplicating)
+> DELETE FROM media_refs
+>  WHERE rowid NOT IN (
+>    SELECT MIN(rowid) FROM media_refs GROUP BY session_id, media_id
+>  );
+> ```
+
 ## Lifecycle Cleanup
 
 The framework exposes `POST /api/media/cleanup` for manual cleanup and scheduler integration. The route scans live sessions, messages, plugin data, runtime outputs, trace events, snapshots, turn results, `MediaStore.listAssets()`, and `MediaStore.listRefs()` with the shared `collectMediaRefIds()` scanner, then passes the protected id set into `MediaStore.cleanup()`.

@@ -522,7 +522,10 @@ export const mediaRefs = pgTable(
   (table) => [
     index('pg_media_refs_session_id_idx').on(table.sessionId),
     index('pg_media_refs_media_id_idx').on(table.mediaId),
-    uniqueIndex('pg_media_refs_unique_idx').on(table.sessionId, table.mediaId, table.pluginId),
+    // UNIQUE on (sessionId, mediaId) only — see DDL comment in
+    // pg-store-mappers.ts. plugin_id is "first-source metadata", not part of
+    // the key, so addRef is idempotent regardless of pluginId.
+    uniqueIndex('pg_media_refs_unique_idx').on(table.sessionId, table.mediaId),
   ],
 );
 
