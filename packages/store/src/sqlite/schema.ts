@@ -441,6 +441,42 @@ export const workingMemory = sqliteTable(
   ],
 );
 
+// ── Media Assets (content-addressable bytes) ───────────────────
+
+export const mediaAssets = sqliteTable(
+  'media_assets',
+  {
+    id: text('id').primaryKey(),
+    sha256: text('sha256').notNull(),
+    mime: text('mime').notNull(),
+    size: integer('size').notNull(),
+    path: text('path').notNull(),
+    meta: text('meta'), // JSON
+    ownerSessionId: text('owner_session_id'),
+    ownerPluginId: text('owner_plugin_id'),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('media_assets_sha256_idx').on(table.sha256),
+    index('media_assets_owner_idx').on(table.ownerSessionId, table.ownerPluginId),
+  ],
+);
+
+export const mediaRefs = sqliteTable(
+  'media_refs',
+  {
+    sessionId: text('session_id').notNull(),
+    mediaId: text('media_id').notNull(),
+    pluginId: text('plugin_id'),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    index('media_refs_session_id_idx').on(table.sessionId),
+    index('media_refs_media_id_idx').on(table.mediaId),
+    uniqueIndex('media_refs_unique_idx').on(table.sessionId, table.mediaId, table.pluginId),
+  ],
+);
+
 // ── Lorebook Entries (S3-T2) ──────────────────────────────────
 
 export const lorebookEntries = sqliteTable(

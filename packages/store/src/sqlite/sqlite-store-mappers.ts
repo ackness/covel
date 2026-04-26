@@ -340,6 +340,29 @@ export function createTables(sqlite: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_working_memory_session ON working_memory(session_id);
 
+    CREATE TABLE IF NOT EXISTS media_assets (
+      id TEXT PRIMARY KEY,
+      sha256 TEXT NOT NULL UNIQUE,
+      mime TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      path TEXT NOT NULL,
+      meta TEXT,
+      owner_session_id TEXT,
+      owner_plugin_id TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS media_assets_owner_idx ON media_assets(owner_session_id, owner_plugin_id);
+
+    CREATE TABLE IF NOT EXISTS media_refs (
+      session_id TEXT NOT NULL,
+      media_id TEXT NOT NULL,
+      plugin_id TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE (session_id, media_id, plugin_id)
+    );
+    CREATE INDEX IF NOT EXISTS media_refs_session_id_idx ON media_refs(session_id);
+    CREATE INDEX IF NOT EXISTS media_refs_media_id_idx ON media_refs(media_id);
+
     CREATE TABLE IF NOT EXISTS lorebook_entries (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL,
