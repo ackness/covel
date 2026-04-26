@@ -11,9 +11,11 @@
  */
 
 import {
+  InMemoryToolClient,
   ToolValidationError,
   getPendingProposals,
   getToolContent,
+  type ToolClient,
   type ToolModule,
 } from '@covel/tools';
 import type { DataStore } from '@covel/store';
@@ -86,7 +88,9 @@ export interface ToolExecutor {
 
 export interface ToolExecutorConfig {
   /** Tool lookup function — returns the tool module by name. Context enables per-plugin scoping. */
-  readonly findTool: (name: string, context?: ToolCallContext) => ToolModule | undefined;
+  readonly findTool?: (name: string, context?: ToolCallContext) => ToolModule | undefined;
+  /** Tool client lookup function — returns the execution client by name. */
+  readonly findToolClient?: (name: string, context?: ToolCallContext) => ToolClient | undefined;
   /** Optional DataStore for recording tool calls. */
   readonly store?: DataStore;
   /** Optional approval pipeline for permission checking. */
@@ -166,10 +170,49 @@ async function emitToolFailed(
   });
 }
 
+function resolveToolModule(
+  config: ToolExecutorConfig,
+  name: string,
+  context?: ToolCallContext,
+): ToolModule | undefined {
+  const direct = config.findTool?.(name, context);
+  if (direct) return direct;
+  const client = config.findToolClient?.(name, context);
+  if (client instanceof InMemoryToolClient) {
+    return client.get(name)?.module;
+  }
+  return undefined;
+}
+
+function resolveToolClient(
+  config: ToolExecutorConfig,
+  name: string,
+  context: ToolCallContext,
+): ToolClient | undefined {
+  const client = config.findToolClient?.(name, context);
+  if (client) return client;
+
+  const tool = config.findTool?.(name, context);
+  if (!tool) return undefined;
+
+  return new InMemoryToolClient({
+    id: `legacy:${context.pluginId}:${context.runtimeId}:${name}`,
+    tools: [{
+      fullName: name,
+      localName: name,
+      pluginId: context.pluginId,
+      runtimeId: context.runtimeId,
+      module: tool,
+      source: config.getToolSource?.(name) === 'builtin' ? 'builtin' : 'local',
+      requiresApproval: false,
+    }],
+  });
+}
+
 export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
   return {
     getToolInfo(name: string, context?: ToolCallContext): ToolInfo | undefined {
-      const tool = config.findTool(name, context);
+      const tool = resolveToolModule(config, name, context);
       if (!tool) return undefined;
       return { name: tool.name, description: tool.description, jsonSchema: tool.jsonSchema as Record<string, unknown> };
     },
@@ -177,9 +220,9 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
     async execute(call: ToolCall, context: ToolCallContext): Promise<ToolCallResult> {
       const startTime = Date.now();
 
-      // 1. Find tool (scoped to calling plugin if context available)
-      const tool = config.findTool(call.name, context);
-      if (!tool) {
+      // 1. Resolve tool client (scoped to calling plugin if context available)
+      const client = resolveToolClient(config, call.name, context);
+      if (!client) {
         const errorResult = toolError('NOT_FOUND', `Unknown tool: ${call.name}. Check the tool name and try again.`);
         await recordCall(config.store, call, context, errorResult, startTime, false, 'auto-allowed');
         await emitToolFailed(context, call, 'NOT_FOUND', `Unknown tool: ${call.name}`, undefined, Date.now() - startTime, 'auto-allowed');
@@ -241,7 +284,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           runtimeId: context.runtimeId,
           pendingProposals: context.pendingProposals,
         };
-        const rawResult = await tool.execute(params, execContext);
+        const rawResult = await client.call(call.name, params, execContext);
         const parsedResult = getToolContent(rawResult);
         const pendingProposals = getPendingProposals(rawResult);
 

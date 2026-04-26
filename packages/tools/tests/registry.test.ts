@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { generateToolName, createToolRegistry } from '../src/registry.js';
+import { InMemoryToolClient } from '../src/in-memory-client.js';
 import { tool } from '../src/tool.js';
 import type { ResolvedTool } from '../src/types.js';
 import type { RuntimeManifest } from '@covel/shared';
@@ -58,6 +59,51 @@ describe('ToolRegistry', () => {
 
   it('getByFullName returns undefined for unknown tools', () => {
     expect(registry.getByFullName('covel_unknown_tool')).toBeUndefined();
+  });
+
+  it('register indexes tools through an in-memory client', async () => {
+    const resolved = makeResolved({
+      fullName: 'covel_system_builtin_echo',
+      localName: 'echo',
+      pluginId: 'system',
+      runtimeId: 'builtin',
+      source: 'builtin',
+    });
+    registry.register(resolved);
+
+    const entry = registry.getClientEntry('covel_system_builtin_echo');
+    expect(entry).toBeDefined();
+    expect(entry?.tool).toBe(resolved);
+    expect(entry?.client.transport).toBe('in-memory');
+    expect(registry.getClientForTool('covel_system_builtin_echo')).toBe(entry?.client);
+    await expect(entry!.client.call('echo', {}, {
+      sessionId: 's',
+      turnId: 't',
+      pluginId: 'p',
+      runtimeId: 'r',
+    })).resolves.toEqual({});
+  });
+
+  it('registerClient keeps explicit client ownership', async () => {
+    const resolved = makeResolved({
+      fullName: 'covel_myplugin_main_echo',
+      localName: 'echo',
+      pluginId: 'myplugin',
+      runtimeId: 'main',
+      source: 'local',
+    });
+    const client = new InMemoryToolClient({ id: 'myplugin:main' });
+
+    registry.registerClient(client, [resolved]);
+
+    expect(registry.getByFullName('covel_myplugin_main_echo')).toBe(resolved);
+    expect(registry.getClientForTool('covel_myplugin_main_echo')).toBe(client);
+    await expect(client.call('covel_myplugin_main_echo', {}, {
+      sessionId: 's',
+      turnId: 't',
+      pluginId: 'myplugin',
+      runtimeId: 'main',
+    })).resolves.toEqual({});
   });
 
   it('size reflects the number of registered tools', () => {

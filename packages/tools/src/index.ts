@@ -9,6 +9,15 @@ export { z } from 'zod';
 // ── Registry ─────────────────────────────────────────────────────
 export { createToolRegistry, generateToolName } from './registry.js';
 export type { ToolRegistry } from './registry.js';
+export { InMemoryToolClient } from './in-memory-client.js';
+export type { InMemoryToolClientOptions } from './in-memory-client.js';
+export type {
+  ToolCallResult,
+  ToolClient,
+  ToolClientEntry,
+  ToolDefinition,
+  ToolTransport,
+} from './client.js';
 
 // ── Output validation ────────────────────────────────────────────
 export { validateOutput, selectOutputStrategy, generateSchemaPrompt } from './output-validator.js';
