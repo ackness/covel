@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
+import { mediaRefSchema } from '@covel/shared';
 import { createMemoryStore, type DataStore, type SessionRecord } from '@covel/store';
 import { traceRoutes } from '../../src/routes/api/traces.js';
 
@@ -115,5 +116,43 @@ describe('traceRoutes legacy asset adapter', () => {
     const body = await res.json() as { events: Array<{ type: string }> };
 
     expect(body.events.filter((event) => event.type === 'asset.generated')).toHaveLength(1);
+  });
+
+  it('marks remote-url legacy assets so they cannot impersonate a content-addressed MediaRef', async () => {
+    const store = createMemoryStore();
+    await store.createSession(makeSession('sess-remote'));
+    await store.setPluginData({
+      id: 'pd-remote',
+      sessionId: 'sess-remote',
+      pluginId: 'image-plugin',
+      namespace: 'images',
+      key: 'img-1',
+      value: {
+        turnId: 'turn-1',
+        imageUrl: 'https://example.test/legacy.png',
+        mime: 'image/png',
+      },
+      createdAt: '2026-04-26T00:00:00.000Z',
+      updatedAt: '2026-04-26T00:00:00.000Z',
+    });
+
+    const app = makeApp(store);
+    const res = await app.request('/api/traces/sess-remote');
+    const body = await res.json() as {
+      events: Array<{ type: string; payload: Record<string, unknown> }>;
+    };
+    const legacy = body.events.find((event) => event.type === 'asset.generated');
+    expect(legacy).toBeDefined();
+    expect(legacy?.payload.legacyKind).toBe('remote-url');
+
+    const asset = legacy?.payload.asset as Record<string, unknown>;
+    const ref = asset?.ref as { id: string; url?: string };
+    // remote-url legacy refs keep the URL so the debug viewer can render
+    // the asset directly without going through the media route.
+    expect(ref.url).toBe('https://example.test/legacy.png');
+    // The id is tagged with the legacy: prefix so any strict consumer
+    // immediately knows this is not a real content-addressed ref.
+    expect(ref.id.startsWith('legacy:')).toBe(true);
+    expect(mediaRefSchema.safeParse(ref).success).toBe(false);
   });
 });

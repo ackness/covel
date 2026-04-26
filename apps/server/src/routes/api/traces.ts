@@ -7,6 +7,15 @@ import { Hono } from 'hono';
 import { mediaRefSchema, type MediaRef } from '@covel/shared';
 import type { DataStore, TraceEventRecord } from '@covel/store';
 
+/**
+ * Marker prefix used on the synthetic `MediaRef.id` field for legacy assets.
+ * Real `MediaRef.id` is the SHA-256 of the bytes; legacy entries are derived
+ * from URLs / sourceKeys, so we tag them so:
+ *   - `mediaRefSchema.safeParse()` rejects the value (regex `^[a-f0-9]{64}$`).
+ *   - Frontend code can do a one-line `id.startsWith('legacy:')` fallback.
+ */
+const LEGACY_MEDIA_REF_PREFIX = 'legacy:';
+
 type Env = {
   Variables: {
     store: DataStore;
@@ -110,6 +119,8 @@ function compareTraceEvents(a: TraceEventRecord, b: TraceEventRecord): number {
   return a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
 }
 
+type LegacyAssetKind = 'data-url' | 'remote-url';
+
 interface LegacyAssetCandidate {
   readonly ref: MediaRef;
   readonly modality: string;
@@ -119,6 +130,8 @@ interface LegacyAssetCandidate {
   readonly createdAt: string;
   readonly source: string;
   readonly sourceKey: string;
+  /** Whether the underlying url is a `data:` URL or a remote http(s) URL. */
+  readonly legacyKind: LegacyAssetKind;
   readonly meta?: Readonly<Record<string, unknown>>;
 }
 
@@ -224,6 +237,7 @@ function toLegacyAssetEvent(sessionId: string, candidate: LegacyAssetCandidate):
     meta: {
       ...candidate.meta,
       legacy: true,
+      legacyKind: candidate.legacyKind,
       legacySource: candidate.source,
       legacySourceKey: candidate.sourceKey,
     },
@@ -241,6 +255,7 @@ function toLegacyAssetEvent(sessionId: string, candidate: LegacyAssetCandidate):
       pluginId: candidate.pluginId,
       proposalId: asset.id,
       legacy: true,
+      legacyKind: candidate.legacyKind,
       legacySource: candidate.source,
       asset,
     },
@@ -259,6 +274,11 @@ interface LegacyScanContext {
   readonly assumeImage: boolean;
 }
 
+interface LegacyRefHit {
+  readonly ref: MediaRef;
+  readonly legacyKind: LegacyAssetKind;
+}
+
 function extractLegacyImageCandidates(
   value: unknown,
   ctx: LegacyScanContext,
@@ -272,10 +292,10 @@ function extractLegacyImageCandidates(
     }
 
     const record = node as Record<string, unknown>;
-    const ref = legacyMediaRef(record, ctx.assumeImage);
-    if (ref) {
+    const hit = legacyMediaRef(record, ctx.assumeImage);
+    if (hit) {
       candidates.push({
-        ref,
+        ref: hit.ref,
         modality: stringField(record, ['modality', 'assetType', 'kind']) ?? 'image',
         pluginId: stringField(record, ['pluginId']) ?? ctx.pluginId,
         runtimeId: stringField(record, ['runtimeId']) ?? ctx.runtimeId,
@@ -283,6 +303,7 @@ function extractLegacyImageCandidates(
         createdAt: stringField(record, ['createdAt', 'updatedAt', 'timestamp']) ?? ctx.createdAt,
         source: ctx.source,
         sourceKey: ctx.sourceKey,
+        legacyKind: hit.legacyKind,
         meta: recordField(record, 'meta'),
       });
       return;
@@ -294,12 +315,19 @@ function extractLegacyImageCandidates(
   return candidates;
 }
 
-function legacyMediaRef(record: Record<string, unknown>, assumeImage: boolean): MediaRef | null {
+function legacyMediaRef(record: Record<string, unknown>, assumeImage: boolean): LegacyRefHit | null {
+  // A real ref already passes the strict SHA-id schema — propagate as-is and
+  // tag it as `remote-url` since strict refs are content-addressable and
+  // therefore safe for the media route to resolve.
   const directRef = mediaRefSchema.safeParse(record.ref);
-  if (directRef.success) return directRef.data;
+  if (directRef.success) {
+    return { ref: directRef.data, legacyKind: 'remote-url' };
+  }
 
   const mediaRef = mediaRefSchema.safeParse(record.mediaRef);
-  if (mediaRef.success) return mediaRef.data;
+  if (mediaRef.success) {
+    return { ref: mediaRef.data, legacyKind: 'remote-url' };
+  }
 
   const mime = stringField(record, ['mime', 'contentType', 'mediaType']) ?? 'image/png';
   const modality = stringField(record, ['modality', 'assetType', 'kind', 'type']);
@@ -307,14 +335,14 @@ function legacyMediaRef(record: Record<string, unknown>, assumeImage: boolean): 
 
   const dataUrl = stringField(record, ['dataUrl', 'dataURI']);
   if (dataUrl && dataUrl.startsWith('data:')) {
-    return mediaRefFromUrl(dataUrl, mimeFromDataUrl(dataUrl) ?? mime, byteSizeFromDataUrl(dataUrl), record);
+    return legacyRefFromDataUrl(dataUrl, mimeFromDataUrl(dataUrl) ?? mime, byteSizeFromDataUrl(dataUrl), record);
   }
 
   const base64 = stringField(record, ['base64', 'b64']);
   if (base64 && imageLike) {
     const normalized = base64.replace(/\s+/g, '');
     const dataMime = mime.startsWith('image/') ? mime : 'image/png';
-    return mediaRefFromUrl(
+    return legacyRefFromDataUrl(
       `data:${dataMime};base64,${normalized}`,
       dataMime,
       byteSizeFromBase64(normalized),
@@ -324,23 +352,30 @@ function legacyMediaRef(record: Record<string, unknown>, assumeImage: boolean): 
 
   const imageUrl = stringField(record, ['imageUrl', 'image_url']);
   if (imageUrl) {
-    return mediaRefFromUrl(imageUrl, mime, 0, record);
+    return legacyRefFromRemoteUrl(imageUrl, mime, 0, record);
   }
 
   const url = stringField(record, ['url']);
   if (url && imageLike) {
-    return mediaRefFromUrl(url, mime, 0, record);
+    return legacyRefFromRemoteUrl(url, mime, 0, record);
   }
 
   return null;
 }
 
-function mediaRefFromUrl(
+/**
+ * Build a synthetic MediaRef for a remote http(s) URL. The `id` field is
+ * tagged with `legacy:` — `mediaRefSchema.safeParse` will reject it (regex
+ * `^[a-f0-9]{64}$`), so any consumer that mistakes this for a real
+ * content-addressed ref fails loudly. The `url` is preserved so the debug
+ * timeline can still display the asset directly.
+ */
+function legacyRefFromRemoteUrl(
   url: string,
   mime: string,
   size: number,
   record: Record<string, unknown>,
-): MediaRef | null {
+): LegacyRefHit | null {
   try {
     new URL(url);
   } catch {
@@ -348,16 +383,44 @@ function mediaRefFromUrl(
   }
 
   const ref: MediaRef = {
-    id: hashHex(url),
+    id: `${LEGACY_MEDIA_REF_PREFIX}${hashHex(url)}`,
     mime,
     size,
     url,
     meta: {
       legacy: true,
+      legacyKind: 'remote-url',
       ...(recordField(record, 'meta') ?? {}),
     },
   };
-  return mediaRefSchema.safeParse(ref).success ? ref : null;
+  return { ref, legacyKind: 'remote-url' };
+}
+
+/**
+ * Build a synthetic MediaRef for a data: URL. Tags the synthetic id with
+ * the `legacy:` prefix for the same reason as `legacyRefFromRemoteUrl`.
+ * Data-URL byte caps land in a follow-up commit.
+ */
+function legacyRefFromDataUrl(
+  dataUrl: string,
+  mime: string,
+  size: number,
+  record: Record<string, unknown>,
+): LegacyRefHit | null {
+  if (!dataUrl.startsWith('data:')) return null;
+
+  const ref: MediaRef = {
+    id: `${LEGACY_MEDIA_REF_PREFIX}${hashHex(dataUrl)}`,
+    mime,
+    size,
+    url: dataUrl,
+    meta: {
+      legacy: true,
+      legacyKind: 'data-url',
+      ...(recordField(record, 'meta') ?? {}),
+    },
+  };
+  return { ref, legacyKind: 'data-url' };
 }
 
 function inferTurnId(value: unknown): string | null {
