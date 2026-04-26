@@ -24,6 +24,14 @@ interface CovelIpcApi {
   on(channel: string, handler: (payload: unknown) => void): () => void;
 }
 
+interface TauriCoreApi {
+  invoke<T = unknown>(command: string, args?: Record<string, unknown>): Promise<T>;
+}
+
+interface TauriGlobalApi {
+  readonly core?: TauriCoreApi;
+}
+
 interface ServerStatus {
   state: "up" | "down" | "degraded" | "restarting";
   attempts?: number;
@@ -48,12 +56,22 @@ interface DesktopBridgeHandlers {
 declare global {
   interface Window {
     covelIpc?: CovelIpcApi;
+    __TAURI__?: TauriGlobalApi;
   }
 }
 
 export function getCovelIpc(): CovelIpcApi | null {
   if (typeof window === "undefined") return null;
   return window.covelIpc ?? null;
+}
+
+export function getTauriCore(): TauriCoreApi | null {
+  if (typeof window === "undefined") return null;
+  return window.__TAURI__?.core ?? null;
+}
+
+export function isTauriApp(): boolean {
+  return getTauriCore() !== null;
 }
 
 // REST-mode desktop capability — set by probeDesktopMode() at app boot.
@@ -85,7 +103,7 @@ export async function probeDesktopMode(): Promise<void> {
  * available — either via Electron IPC or the server's desktop-REST surface.
  */
 export function isDesktopApp(): boolean {
-  return getCovelIpc() !== null || restDesktopCapable;
+  return getCovelIpc() !== null || isTauriApp() || restDesktopCapable;
 }
 
 /** True specifically for the IPC branch (Electron). */

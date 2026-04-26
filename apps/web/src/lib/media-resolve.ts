@@ -23,6 +23,7 @@ import {
   putCachedMedia,
   type MediaCacheRecord,
 } from "./media-cache.js";
+import { readNativeTauriMedia } from "./tauri-media.js";
 
 export interface ResolveOptions {
   readonly sessionId: string;
@@ -143,6 +144,17 @@ export async function resolveMediaSrc(
   ref: MediaRef,
   opts: ResolveOptions,
 ): Promise<ResolveResult> {
+  // Desktop Tauri can read the local MediaStore layout directly from native fs.
+  const nativeBlob = await readNativeTauriMedia(ref);
+  if (nativeBlob) {
+    return {
+      url: URL.createObjectURL(nativeBlob),
+      blob: nativeBlob,
+      fromCache: true,
+      ok: true,
+    };
+  }
+
   // 1. Authorize the session before consulting the shared browser cache.
   const signedUrl = await fetchSignedUrl(ref, opts);
   if (!signedUrl) {
