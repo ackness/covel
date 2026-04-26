@@ -476,8 +476,12 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
           store: handlerStore,
           completedResults: new Map(),
           config,
+          recursiveCall: async () => {
+            throw new Error('recursiveCall is unavailable for background plugin-rpc followers');
+          },
+          recursionDepth: 0,
           ...(pluginGateway ? { gateway: pluginGateway } : {}),
-        ...(pluginUtils ? { utils: pluginUtils } : {}),
+          ...(pluginUtils ? { utils: pluginUtils } : {}),
           ...(mediaHandle ? { media: mediaHandle } : {}),
           triggerEvent: args.triggerEvent,
           ...(followerUserSettings ? { userSettings: followerUserSettings } : {}),

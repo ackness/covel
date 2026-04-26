@@ -941,12 +941,17 @@ return {
 
 ### P2：扩展后端 + 高层抽象（2-3 周）
 
-- `MediaStore` 扩 PG/S3 后端（生产部署）
-- `IdbStore` 后端（纯前端模式）
-- Tauri command 适配（桌面端 Tauri 走原生 fs API）
-- `recursiveCall` + 深度限制（§ 5.4）
-- `ui.render` parts 类型化 + 独立 status（§ 5.5）
-- 通用 gallery / jobs preset 提取到 `packages/shared/json-render-presets/`
+- [x] `MediaStore` 扩 PG/S3 后端（生产部署）
+- [x] IndexedDB media blob 后端（纯前端模式）
+- [x] Tauri command 适配（桌面端 Tauri 走原生 fs API）
+- [x] `recursiveCall` + 深度限制（§ 5.4）
+- [x] `ui.render` parts 类型化 + 独立 status（§ 5.5）
+- [x] 通用 gallery / jobs preset 提取到 `@covel/shared/json-render-presets`
+
+P2 集成备注：
+- PG media contract 需要可用 `DATABASE_URL` 才跑 live PG 用例；本地不可用时自动跳过。
+- S3/R2 后端通过 caller-provided `S3CompatibleMediaClient` 接入签名 URL 与凭证。
+- Web renderer 对 `ui.rendered` / `ui.part.update` 的专门展示仍由后续 UI 集成完善；当前 commit path 和事件/trace 已可用。
 
 ### P3：清理 + 强制约束（1 周）
 

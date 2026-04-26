@@ -753,6 +753,10 @@ async function runDeferredFollower(args: {
       store: isCorePlugin ? args.store : createFunctionStoreView(args.store, helperCtx),
       completedResults: new Map(),
       config: args.config,
+      recursiveCall: async () => {
+        throw new Error('recursiveCall is unavailable for test-runtime deferred followers');
+      },
+      recursionDepth: 0,
       gateway: args.gateway,
       utils: args.utils,
       media: mediaHandle,
