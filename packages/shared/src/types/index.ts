@@ -110,6 +110,7 @@ export type {
   StatePatchPayload,
   EventEmitPayload,
   RecordUpsertPayload,
+  AssetGeneratePayload,
   PluginDataPayload,
   PluginDataBatchPayload,
   SessionEvent,
