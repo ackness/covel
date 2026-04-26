@@ -1,11 +1,12 @@
 /**
  * Unit tests for `resolveMediaSrc`.
  *
- * Covers the four resolution paths in SPEC §5.1 (g):
- *   1. token endpoint authorizes the current session
- *   2. cache hit after authorization
- *   3. signed URL fetch
- *   4. explicit error result on failure
+ * Covers the resolution paths in SPEC §5.1 (g):
+ *   1. media-token endpoint authorizes the current session
+ *   2. (Tauri only) native fast path — but only *after* authorization
+ *   3. cache hit (with integrity verification)
+ *   4. signed URL fetch (with integrity verification before caching)
+ *   5. explicit error result on failure
  *
  * Uses the same minimal IDB shim from `media-cache.test.ts`. The IDB
  * cache is reset between tests so we can isolate the network paths.
@@ -19,6 +20,7 @@ import {
   MEDIA_TOKEN_ENDPOINT,
   __testing,
 } from "../media-resolve.js";
+import { sha256Hex } from "../media-hash.js";
 import type { MediaRef } from "@covel/shared";
 
 // ── Inline minimal IDB shim (same shape as media-cache.test.ts) ────
@@ -51,9 +53,12 @@ class FakeStore {
     });
     return req;
   }
-  delete(): FakeReq {
+  delete(key: string): FakeReq {
     const req = mk();
-    queueMicrotask(() => req.onsuccess?.());
+    queueMicrotask(() => {
+      this.data.delete(key);
+      req.onsuccess?.();
+    });
     return req;
   }
   openCursor(): FakeReq {
@@ -159,8 +164,41 @@ afterEach(() => {
   }
 });
 
+const PNG_PAYLOAD = "fake-png-bytes";
+const PNG_BYTES = new TextEncoder().encode(PNG_PAYLOAD);
+
+/**
+ * jsdom's `Response` constructor stringifies a `Blob` body into
+ * `"[object Blob]"` instead of preserving the bytes. To avoid that we
+ * always feed `Response` a `Uint8Array` directly. The downstream call
+ * site (`fetchBlobAndCache`) still receives a real `Blob` via
+ * `res.blob()`.
+ */
+function pngBytes(): Uint8Array {
+  return new Uint8Array(PNG_BYTES);
+}
+
 function pngBlob(): Blob {
-  return new Blob(["fake-png-bytes"], { type: "image/png" });
+  return new Blob([PNG_PAYLOAD], { type: "image/png" });
+}
+
+function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+}
+
+async function pngRef(): Promise<MediaRef> {
+  const id = await sha256Hex(bytesToArrayBuffer(PNG_BYTES));
+  return { id, mime: "image/png", size: PNG_BYTES.byteLength };
+}
+
+function pngResponse(): Response {
+  return new Response(bytesToArrayBuffer(pngBytes()), {
+    status: 200,
+    headers: { "Content-Type": "image/png" },
+  });
 }
 
 function mockFetch(handler: (url: string) => Response | Promise<Response>): void {
@@ -184,13 +222,8 @@ describe("MEDIA_TOKEN_ENDPOINT", () => {
 });
 
 describe("resolveMediaSrc", () => {
-  const baseRef: MediaRef = {
-    id: "sha256-abc",
-    mime: "image/png",
-    size: 14,
-  };
-
   it("uses the server-issued signed URL after authorization", async () => {
+    const baseRef = await pngRef();
     const refWithUrl: MediaRef = { ...baseRef, url: "https://cdn.example.com/abc.png" };
     const calls: string[] = [];
     mockFetch(async (url) => {
@@ -201,11 +234,11 @@ describe("resolveMediaSrc", () => {
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }
-      return new Response(pngBlob(), { status: 200 });
+      return pngResponse();
     });
     const result = await resolveMediaSrc(refWithUrl, { sessionId: "s1" });
     expect(calls).toEqual([
-      MEDIA_TOKEN_ENDPOINT("s1", "sha256-abc"),
+      MEDIA_TOKEN_ENDPOINT("s1", baseRef.id),
       "https://signed.example.com/abc.png?token=xyz",
     ]);
     expect(result.fromCache).toBe(false);
@@ -214,31 +247,65 @@ describe("resolveMediaSrc", () => {
     expect(result.blob).toBeInstanceOf(Blob);
   });
 
-  it("uses the Tauri native media bridge before the HTTP path", async () => {
+  it("uses the Tauri native media bridge ONLY after the session token authorizes", async () => {
+    const baseRef = await pngRef();
+    const tokenCalls: string[] = [];
+    const tauriCalls: string[] = [];
+    mockFetch(async (url) => {
+      tokenCalls.push(url);
+      if (url.startsWith("/api/sessions/")) {
+        return new Response(
+          JSON.stringify({ url: "https://signed.example.com/x.png?token=ok" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      // Should never be hit because the Tauri native path returns first.
+      tauriCalls.push("UNEXPECTED " + url);
+      return pngResponse();
+    });
     const invoke = vi.fn(async (command: string, args?: Record<string, unknown>) => {
+      tauriCalls.push(command);
       expect(command).toBe("native_media_read");
-      expect(args).toEqual({ id: "sha256-abc" });
+      expect(args).toEqual({ id: baseRef.id });
       return {
-        id: "sha256-abc",
-        size: 14,
-        bytes: Array.from(new TextEncoder().encode("fake-png-bytes")),
+        id: baseRef.id,
+        size: baseRef.size,
+        bytes: Array.from(PNG_BYTES),
       };
     });
     window.__TAURI__ = {
       core: { invoke: invoke as unknown as TauriInvoke },
     };
-    globalThis.fetch = vi.fn() as unknown as typeof globalThis.fetch;
 
     const result = await resolveMediaSrc(baseRef, { sessionId: "s-tauri" });
 
+    expect(tokenCalls[0]).toBe(MEDIA_TOKEN_ENDPOINT("s-tauri", baseRef.id));
+    // Only the token call should have hit fetch — the signed URL never gets pulled.
+    expect(tokenCalls).toHaveLength(1);
+    expect(tauriCalls).toEqual(["native_media_read"]);
     expect(result.ok).toBe(true);
     expect(result.fromCache).toBe(true);
     expect(result.blob).toBeInstanceOf(Blob);
     expect(result.url.startsWith("blob:")).toBe(true);
-    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("does NOT consult the Tauri native media bridge when the token endpoint fails", async () => {
+    const baseRef = await pngRef();
+    mockFetch(async () => new Response("nope", { status: 401 }));
+    const invoke = vi.fn();
+    window.__TAURI__ = {
+      core: { invoke: invoke as unknown as TauriInvoke },
+    };
+
+    const result = await resolveMediaSrc(baseRef, { sessionId: "s-stranger" });
+
+    expect(invoke).not.toHaveBeenCalled();
+    expect(result.ok).toBe(false);
+    expect(result.url).toBe(__testing.TRANSPARENT_PNG_DATA_URI);
   });
 
   it("falls back to media-token endpoint when ref.url is absent (path 3)", async () => {
+    const baseRef = await pngRef();
     const calls: string[] = [];
     mockFetch(async (url) => {
       calls.push(url);
@@ -248,10 +315,10 @@ describe("resolveMediaSrc", () => {
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }
-      return new Response(pngBlob(), { status: 200 });
+      return pngResponse();
     });
     const result = await resolveMediaSrc(baseRef, { sessionId: "s2" });
-    expect(calls[0]).toBe(MEDIA_TOKEN_ENDPOINT("s2", "sha256-abc"));
+    expect(calls[0]).toBe(MEDIA_TOKEN_ENDPOINT("s2", baseRef.id));
     expect(calls[1]).toBe("https://signed.example.com/sha256-abc?token=xyz");
     expect(result.url.startsWith("blob:")).toBe(true);
     expect(result.fromCache).toBe(false);
@@ -259,6 +326,7 @@ describe("resolveMediaSrc", () => {
   });
 
   it("returns an error result when authorization fails", async () => {
+    const baseRef = await pngRef();
     mockFetch(async () => new Response("nope", { status: 500 }));
     const result = await resolveMediaSrc(
       { ...baseRef, url: "https://broken.example.com/x.png" },
@@ -270,6 +338,7 @@ describe("resolveMediaSrc", () => {
   });
 
   it("uses cache hit after authorizing the session", async () => {
+    const baseRef = await pngRef();
     const refWithUrl: MediaRef = { ...baseRef, url: "https://cdn.example.com/cached.png" };
     let tokenFetchCount = 0;
     let blobFetchCount = 0;
@@ -282,7 +351,7 @@ describe("resolveMediaSrc", () => {
         );
       }
       blobFetchCount += 1;
-      return new Response(pngBlob(), { status: 200 });
+      return pngResponse();
     });
 
     const first = await resolveMediaSrc(refWithUrl, { sessionId: "s4" });
@@ -300,6 +369,7 @@ describe("resolveMediaSrc", () => {
   });
 
   it("does not serve a cached blob when a different session fails authorization", async () => {
+    const baseRef = await pngRef();
     const refWithUrl: MediaRef = { ...baseRef, url: "https://cdn.example.com/cached.png" };
     mockFetch(async (url) => {
       if (url.startsWith("/api/sessions/s4/")) {
@@ -311,7 +381,7 @@ describe("resolveMediaSrc", () => {
       if (url.startsWith("/api/sessions/s5/")) {
         return new Response("forbidden", { status: 403 });
       }
-      return new Response(pngBlob(), { status: 200 });
+      return pngResponse();
     });
 
     const first = await resolveMediaSrc(refWithUrl, { sessionId: "s4" });
@@ -324,6 +394,7 @@ describe("resolveMediaSrc", () => {
   });
 
   it("ignores stale ref.url and fetches via the token endpoint", async () => {
+    const baseRef = await pngRef();
     const refWithUrl: MediaRef = { ...baseRef, url: "https://broken.example.com/x.png" };
     const calls: string[] = [];
     mockFetch(async (url) => {
@@ -334,13 +405,162 @@ describe("resolveMediaSrc", () => {
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }
-      return new Response(pngBlob(), { status: 200 });
+      return pngResponse();
     });
     const result = await resolveMediaSrc(refWithUrl, { sessionId: "s5" });
     expect(result.url.startsWith("blob:")).toBe(true);
     expect(calls).toEqual([
-      MEDIA_TOKEN_ENDPOINT("s5", "sha256-abc"),
+      MEDIA_TOKEN_ENDPOINT("s5", baseRef.id),
       "https://recovered.example.com/x.png",
     ]);
+  });
+
+  it("does not cache a fetched blob whose size disagrees with the ref", async () => {
+    // The signed URL serves a different-length payload than ref.size promised.
+    // The integrity check must reject it before it pollutes the cache.
+    const baseRef = await pngRef();
+    let blobFetchCount = 0;
+    mockFetch(async (url) => {
+      if (url.startsWith("/api/sessions/")) {
+        return new Response(
+          JSON.stringify({ url: "https://signed.example.com/wrong-size.png?token=ok" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      blobFetchCount += 1;
+      // Wrong size on purpose:
+      return new Response(new TextEncoder().encode("a-much-longer-payload-than-the-ref"), {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      });
+    });
+
+    const first = await resolveMediaSrc(baseRef, { sessionId: "s-size" });
+    expect(first.ok).toBe(false);
+    expect(first.url).toBe(__testing.TRANSPARENT_PNG_DATA_URI);
+    expect(blobFetchCount).toBe(1);
+
+    // Now serve the correct payload — should fetch again (cache wasn't poisoned).
+    mockFetch(async (url) => {
+      if (url.startsWith("/api/sessions/")) {
+        return new Response(
+          JSON.stringify({ url: "https://signed.example.com/right.png?token=ok" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      blobFetchCount += 1;
+      return pngResponse();
+    });
+
+    const second = await resolveMediaSrc(baseRef, { sessionId: "s-size" });
+    expect(second.ok).toBe(true);
+    expect(second.fromCache).toBe(false);
+    expect(blobFetchCount).toBe(2);
+  });
+
+  it("does not cache a fetched blob whose SHA-256 does not match the ref id", async () => {
+    // ref.size matches but content differs → SHA mismatch must reject.
+    const ref: MediaRef = {
+      // intentionally not the SHA of PNG_PAYLOAD
+      id: "0".repeat(64),
+      mime: "image/png",
+      size: PNG_BYTES.byteLength,
+    };
+    let blobFetchCount = 0;
+    mockFetch(async (url) => {
+      if (url.startsWith("/api/sessions/")) {
+        return new Response(
+          JSON.stringify({ url: "https://signed.example.com/wrong-sha.png?token=ok" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      blobFetchCount += 1;
+      return pngResponse();
+    });
+
+    const result = await resolveMediaSrc(ref, { sessionId: "s-sha" });
+    expect(result.ok).toBe(false);
+    expect(result.url).toBe(__testing.TRANSPARENT_PNG_DATA_URI);
+    expect(blobFetchCount).toBe(1);
+
+    // A second call should fetch again — the bad blob was not cached.
+    const second = await resolveMediaSrc(ref, { sessionId: "s-sha" });
+    expect(second.ok).toBe(false);
+    expect(blobFetchCount).toBe(2);
+  });
+
+  it("rejects an HTML error page being served at the signed URL (mime + sha mismatch)", async () => {
+    const baseRef = await pngRef();
+    let blobFetchCount = 0;
+    mockFetch(async (url) => {
+      if (url.startsWith("/api/sessions/")) {
+        return new Response(
+          JSON.stringify({ url: "https://signed.example.com/error.html?token=ok" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      blobFetchCount += 1;
+      return new Response("<html><body>error</body></html>", {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+      });
+    });
+
+    const result = await resolveMediaSrc(baseRef, { sessionId: "s-html" });
+    expect(result.ok).toBe(false);
+    expect(blobFetchCount).toBe(1);
+
+    // No cache poisoning: a follow-up call should attempt another fetch.
+    mockFetch(async (url) => {
+      if (url.startsWith("/api/sessions/")) {
+        return new Response(
+          JSON.stringify({ url: "https://signed.example.com/right.png?token=ok" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      blobFetchCount += 1;
+      return pngResponse();
+    });
+    const recovered = await resolveMediaSrc(baseRef, { sessionId: "s-html" });
+    expect(recovered.ok).toBe(true);
+    expect(blobFetchCount).toBe(2);
+  });
+});
+
+describe("__testing.verifyBlobAgainstRef", () => {
+  it("accepts a blob whose size, mime and SHA-256 all match", async () => {
+    const ref = await pngRef();
+    const result = await __testing.verifyBlobAgainstRef(pngBlob(), ref);
+    expect(result).toBeNull();
+  });
+
+  it("returns a size-mismatch reason when sizes diverge", async () => {
+    const ref = await pngRef();
+    const tooBig = new Blob([PNG_PAYLOAD + "extra"], { type: "image/png" });
+    const reason = await __testing.verifyBlobAgainstRef(tooBig, ref);
+    expect(reason).toMatch(/size mismatch/);
+  });
+
+  it("returns a mime-mismatch reason when types diverge", async () => {
+    const ref = await pngRef();
+    const wrongType = new Blob([PNG_PAYLOAD], { type: "text/html" });
+    const reason = await __testing.verifyBlobAgainstRef(wrongType, ref);
+    expect(reason).toMatch(/mime mismatch/);
+  });
+
+  it("returns a sha mismatch reason when bytes do not hash to ref.id", async () => {
+    const ref: MediaRef = {
+      id: "0".repeat(64),
+      mime: "image/png",
+      size: PNG_BYTES.byteLength,
+    };
+    const reason = await __testing.verifyBlobAgainstRef(pngBlob(), ref);
+    expect(reason).toMatch(/sha256 mismatch/);
+  });
+
+  it("ignores trivial mime parameter differences (charset)", () => {
+    expect(__testing.mimeMatches("image/png; charset=binary", "image/png")).toBe(true);
+    expect(__testing.mimeMatches("image/png", "image/png; foo=bar")).toBe(true);
+    expect(__testing.mimeMatches("text/html", "image/png")).toBe(false);
   });
 });

@@ -76,12 +76,25 @@ export function __resetMediaCacheForTests(): void {
   dbPromise = null;
 }
 
+/**
+ * Optional structural shape used to verify a cached record at read time.
+ * Mirrors the relevant `MediaRef` fields without coupling this module to
+ * the shared types package — keeps the cache reusable from any caller
+ * that wants the integrity guarantee.
+ */
+export interface ExpectedRecordShape {
+  readonly id: string;
+  readonly mime: string;
+  readonly size: number;
+}
+
 export async function getCachedMedia(
   id: string,
+  expected?: ExpectedRecordShape,
 ): Promise<MediaCacheRecord | null> {
   const db = await openMediaDb();
   if (!db) return null;
-  return new Promise<MediaCacheRecord | null>((resolve) => {
+  const record = await new Promise<MediaCacheRecord | null>((resolve) => {
     let tx: IDBTransaction;
     try {
       tx = db.transaction(STORE_BLOBS, "readonly");
@@ -101,6 +114,30 @@ export async function getCachedMedia(
       resolve(null);
     };
   });
+  if (!record) return null;
+  if (expected && !cachedRecordMatches(record, expected)) {
+    console.warn(
+      "[media-cache] evicting cached record — does not match expected ref",
+      { id: expected.id, expected, cached: { id: record.id, mime: record.mime, size: record.size } },
+    );
+    // Fire-and-forget eviction; never block the read path on cleanup.
+    void deleteCachedMedia(id);
+    return null;
+  }
+  return record;
+}
+
+function cachedRecordMatches(
+  record: MediaCacheRecord,
+  expected: ExpectedRecordShape,
+): boolean {
+  if (record.id !== expected.id) return false;
+  if (record.size !== expected.size) return false;
+  if (record.blob.size !== expected.size) return false;
+  if (expected.mime && record.mime && record.mime !== expected.mime) {
+    return false;
+  }
+  return true;
 }
 
 export async function putCachedMedia(record: MediaCacheRecord): Promise<void> {
