@@ -87,6 +87,8 @@ import { createRoutes } from './create.js';
 import { installRoutes } from './install.js';
 import { aiRoutes } from './ai.js';
 import { traceRoutes } from './traces.js';
+import { mediaRoutes } from './media.js';
+import type { MediaStore } from '../../_stubs/media-types.js';
 import { resumeRoutes } from './resume.js';
 import { snapshotRoutes } from './snapshots.js';
 import { lorebookRoutes } from './lorebook.js';
@@ -168,6 +170,15 @@ export interface ApiBootstrapConfig {
    * across processes. See `docs/architecture-audit-followups/F5-*`.
    */
   readonly sessionLock?: SessionLock;
+  /**
+   * Optional content-addressable media store backing `/api/media/:id`
+   * and `ctx.media`. Optional during P0-a because Codex A's
+   * `agent/codex-p0a-media-store` worktree has not landed yet — the
+   * coordinator flips this field to required after that merge so a
+   * misconfigured server fails at boot instead of returning 503 from
+   * media routes. See SPEC §5.1 (b)(g).
+   */
+  readonly mediaStore?: MediaStore;
 }
 
 export interface ApiBootstrapResult {
@@ -841,6 +852,9 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     if (config.ensureEmbeddingLock) {
       c.set('ensureEmbeddingLock', config.ensureEmbeddingLock);
     }
+    if (config.mediaStore) {
+      c.set('mediaStore', config.mediaStore);
+    }
     await next();
   });
 
@@ -881,6 +895,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   app.route('/api/ai', aiRoutes);
   app.route('/api/actions', actionRoutes);
   app.route('/api/traces', traceRoutes);
+  app.route('/api/media', mediaRoutes); // SPEC §5.1 (g): signed-URL access to MediaStore
 
   return { app, registry, stateManager, store, eventBus, compactorRunner, prepareToolsForSession };
 }
