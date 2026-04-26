@@ -11,6 +11,37 @@
 import { z } from 'zod';
 import { tool } from '../tool.js';
 
+// ── render-ui ───────────────────────────────────────────────────
+
+const uiPartStatusSchema = z.enum(['pending', 'streaming', 'success', 'error', 'paused']);
+
+const uiRenderPartSchema = z.object({
+  id: z.string().min(1).describe('稳定 part id'),
+  type: z.string().min(1).describe('part 类型，如 text/image/audio/video/card'),
+  status: uiPartStatusSchema.default('success').describe('part 独立状态'),
+  content: z.unknown().describe('part 内容，由 type 决定结构'),
+  retry: z.object({
+    count: z.number().int().min(0),
+    lastError: z.string().optional(),
+  }).optional(),
+});
+
+export const renderUITool = tool({
+  name: 'render-ui',
+  description: '渲染一个由多个独立 part 组成的 UI 块。每个 part 有自己的状态，适用于文本、图片、卡片、音频等多模态混排。',
+  parameters: z.object({
+    parts: z.array(uiRenderPartSchema).min(1).describe('UI parts 列表'),
+    layout: z.enum(['stream', 'split', 'overlay']).optional().describe('布局方式'),
+  }),
+  execute: async (params) => ({
+    rendered: true,
+    ui: [{
+      parts: params.parts,
+      ...(params.layout ? { layout: params.layout } : {}),
+    }],
+  }),
+});
+
 // ── create-form ──────────────────────────────────────────────────
 
 const formFieldSchema = z.object({
@@ -105,6 +136,7 @@ export const createNotificationTool = tool({
 // ── All built-in UI tools ────────────────────────────────────────
 
 export const builtinUITools = [
+  renderUITool,
   createFormTool,
   createChoicesTool,
   createNotificationTool,

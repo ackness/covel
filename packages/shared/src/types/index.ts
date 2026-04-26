@@ -80,9 +80,20 @@ export type {
 
 export type {
   UIComponentType,
+  UIPartStatus,
+  UIRenderLayout,
+  UIRenderPartRetry,
+  UIRenderPart,
+  UIRenderPartsInstruction,
+  UIRenderLegacyInstruction,
   UIRenderInstruction,
   BlockSchemaMeta,
   BlockSchemaDeclaration,
+} from './ui.js';
+
+export {
+  isUIRenderPartsInstruction,
+  normalizeUIRenderInstruction,
 } from './ui.js';
 
 export type {
@@ -111,6 +122,7 @@ export type {
   StatePatchPayload,
   EventEmitPayload,
   RecordUpsertPayload,
+  UIRenderPayload,
   AssetGeneratePayload,
   PluginDataPayload,
   PluginDataBatchPayload,

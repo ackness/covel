@@ -321,6 +321,12 @@ export interface RuntimeManifest {
    * Default 3. Set to 0 to disable loop detection.
    */
   readonly loopDetectionThreshold?: number;
+  /**
+   * Maximum nested `ctx.recursiveCall()` depth for this runtime. Defaults
+   * to the executor limit, currently 10. Depth starts at 0 for a top-level
+   * turn and increments once per recursive call.
+   */
+  readonly maxRecursionDepth?: number;
   readonly pluginType?: PluginType;
   /**
    * How the framework treats this runtime's output in the UI.

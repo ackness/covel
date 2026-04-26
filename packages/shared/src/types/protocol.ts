@@ -91,6 +91,9 @@ export type ProtocolEventType =
   // Interaction
   | 'interaction.requested'
   | 'interaction.completed'
+  // UI render parts
+  | 'ui.rendered'
+  | 'ui.part.update'
   // State
   | 'state.changed'
   | 'state.snapshot'
