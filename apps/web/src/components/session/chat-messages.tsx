@@ -27,6 +27,7 @@ import { covelRegistry } from "@/lib/catalog.js";
 import { messageToSpec, messageToSpecDisabled } from "@/lib/message-to-spec.js";
 import { PluginPanel } from "./plugin-panel.js";
 import { ExecutionTimeline } from "./execution-timeline.js";
+import { AssetTurnSidebar } from "@/components/asset-render/index.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import { useSession } from "@/stores/session-store.js";
 import { postPluginRpc, resolveApproval } from "@/services/api.js";
@@ -531,6 +532,14 @@ export function ChatMessages({
                   />
                 );
               }
+              // P0-b — surface modality-routed assets emitted by this turn
+              // out-of-band, so plain narrative turns stay untouched while
+              // image / audio / generic-link assets show up next to the
+              // execution timeline. Renders nothing when the turn has no
+              // assets, so this is a layout no-op for text-only turns.
+              rendered.push(
+                <AssetTurnSidebar key={`assets-${msg.turnId}`} turnId={msg.turnId} />,
+              );
             }
           });
 

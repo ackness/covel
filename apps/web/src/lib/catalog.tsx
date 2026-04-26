@@ -26,7 +26,11 @@ import { useSession } from "@/stores/session-store.js";
 import { useCharacterAttributeSchema } from "@/stores/plugin-data-store.js";
 import { WorldDimensionsPanel } from "@/components/session/world-dimensions-panel.js";
 import { Media as MediaComponent } from "@/components/Media.js";
-import type { MediaRef } from "@covel/shared";
+import {
+  AssetRender as AssetRenderComponent,
+  AssetTurnSidebar as AssetTurnSidebarComponent,
+} from "@/components/asset-render/index.js";
+import type { AssetGenerateView, MediaRef } from "@covel/shared";
 import { isMediaRef } from "@/lib/media-ref-utils.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -1769,6 +1773,49 @@ const WorldDimensions: ComponentRenderer = () => {
   return <WorldDimensionsPanel dimensions={dims} />;
 };
 
+/**
+ * `AssetRender` registry entry — surfaces a single `AssetGenerateView`
+ * (SPEC §5.7) inside a json-render spec. Plugin specs can opt-in via:
+ *   `{ "type": "AssetRender", "props": { "view": {...}, "sessionId": "..." } }`
+ *
+ * The component routes by `view.modality` to the modality-specific renderer
+ * (image / audio / generic-link). A passed-in `sessionId` overrides the
+ * active-session lookup so debug fixtures still resolve media tokens.
+ */
+const AssetRenderCatalog: ComponentRenderer = ({ element }) => {
+  const sessionId = useActiveSessionId();
+  const props = element.props ?? {};
+  const view = props.view as AssetGenerateView | undefined;
+  if (!view || typeof view !== "object" || view.type !== "asset.generate") {
+    return null;
+  }
+  const overrideSession =
+    typeof props.sessionId === "string" && (props.sessionId as string).length > 0
+      ? (props.sessionId as string)
+      : sessionId;
+  return <AssetRenderComponent view={view} sessionId={overrideSession} />;
+};
+
+/**
+ * `AssetTurnSidebar` registry entry — fans out every asset recorded for
+ * a turn from the session store. Plugin specs can opt-in via:
+ *   `{ "type": "AssetTurnSidebar", "props": { "turnId": "{{turn.id}}" } }`
+ *
+ * Reads from `state.assetsByTurn` populated by the `asset.generated` SSE
+ * handler. Renders nothing for turns with no assets, so it is safe to
+ * mount unconditionally.
+ */
+const AssetTurnSidebarCatalog: ComponentRenderer = ({ element }) => {
+  const props = element.props ?? {};
+  const turnId = typeof props.turnId === "string" ? (props.turnId as string) : "";
+  if (!turnId) return null;
+  const sessionId =
+    typeof props.sessionId === "string" && (props.sessionId as string).length > 0
+      ? (props.sessionId as string)
+      : undefined;
+  return <AssetTurnSidebarComponent turnId={turnId} sessionId={sessionId} />;
+};
+
 // ── Form Components ──────────────────────────────────────────────
 
 const Form: ComponentRenderer = ({ children }) => {
@@ -1839,4 +1886,7 @@ export const covelRegistry: Record<string, ComponentRenderer> = {
   // Visualization
   GraphCanvas,
   WorldDimensions,
+  // Multimodal (P0-b — SPEC §5.7)
+  AssetRender: AssetRenderCatalog,
+  AssetTurnSidebar: AssetTurnSidebarCatalog,
 };
