@@ -648,14 +648,19 @@ export async function createPgStore(
 
     async listPluginDataSessionScope(
       sessionId: string,
+      pagination?: PaginationOpts,
     ): Promise<readonly PluginDataRecord[]> {
       // Full session scope — used by the snapshot payload builder to avoid
       // missing plugins that never produced a runtime result (audit
       // 2026-04-20 finding 7.2).
-      const rows = await db
+      let query = db
         .select()
         .from(schema.pluginData)
-        .where(eq(schema.pluginData.sessionId, sessionId));
+        .where(eq(schema.pluginData.sessionId, sessionId))
+        .$dynamic();
+      if (pagination?.limit !== undefined) query = query.limit(pagination.limit);
+      if (pagination?.offset) query = query.offset(pagination.offset);
+      const rows = await query;
       return rows.map(toPluginDataRecord);
     },
 

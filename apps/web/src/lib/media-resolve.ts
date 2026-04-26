@@ -243,7 +243,7 @@ export async function resolveMediaSrc(
   // 2. Desktop Tauri can read the local MediaStore layout directly from
   // native fs — only after step 1 confirmed the session is authorised.
   // See the file-level TODO for the planned defence-in-depth Rust check.
-  const nativeBlob = await readNativeTauriMedia(ref);
+  const nativeBlob = await readNativeTauriMedia(ref, { authorized: true });
   if (nativeBlob) {
     return {
       url: URL.createObjectURL(nativeBlob),

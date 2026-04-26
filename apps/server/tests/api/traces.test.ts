@@ -144,6 +144,7 @@ describe('traceRoutes legacy asset adapter', () => {
     const legacy = body.events.find((event) => event.type === 'asset.generated');
     expect(legacy).toBeDefined();
     expect(legacy?.payload.legacyKind).toBe('remote-url');
+    expect(legacy?.payload.legacyRef).toBe(true);
 
     const asset = legacy?.payload.asset as Record<string, unknown>;
     const ref = asset?.ref as { id: string; url?: string };
@@ -189,6 +190,7 @@ describe('traceRoutes legacy asset adapter', () => {
     const legacy = body.events.find((event) => event.type === 'asset.generated');
     expect(legacy).toBeDefined();
     expect(legacy?.payload.legacyKind).toBe('data-url');
+    expect(legacy?.payload.legacyRef).toBe(true);
 
     const asset = legacy?.payload.asset as Record<string, unknown>;
     const ref = asset?.ref as { id: string; url?: string; mime: string; size: number; meta?: Record<string, unknown> };

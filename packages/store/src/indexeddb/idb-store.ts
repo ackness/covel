@@ -502,12 +502,12 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
       return applyPagination(filtered, pagination);
     },
 
-    async listPluginDataSessionScope(sessionId: string): Promise<readonly PluginDataRecord[]> {
+    async listPluginDataSessionScope(sessionId: string, pagination?: PaginationOpts): Promise<readonly PluginDataRecord[]> {
       // IDB is dev/test-only and its `plugin_data` store has no (sessionId)-only
       // composite index. Full scan + in-memory filter is acceptable at this
       // scale (per audit 2026-04-20 finding 7.2).
       const all = (await db.getAll('plugin_data')) as PluginDataRecord[];
-      return all.filter((r) => r.sessionId === sessionId);
+      return applyPagination(all.filter((r) => r.sessionId === sessionId), pagination);
     },
 
     async deletePluginData(sessionId: string, pluginId: string, namespace: string, key: string): Promise<void> {

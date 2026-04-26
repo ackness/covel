@@ -684,15 +684,18 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
 
     async listPluginDataSessionScope(
       sessionId: string,
+      pagination?: PaginationOpts,
     ): Promise<readonly PluginDataRecord[]> {
       // Uses the existing `plugin_data_session_id_idx` index for O(n) scan
       // scoped to one session (audit 2026-04-20 finding 7.2).
-      const rows = db
+      let query = db
         .select()
         .from(schema.pluginData)
         .where(eq(schema.pluginData.sessionId, sessionId))
-        .all();
-      return rows.map(toPluginDataRecord);
+        .$dynamic();
+      if (pagination?.limit !== undefined) query = query.limit(pagination.limit);
+      if (pagination?.offset) query = query.offset(pagination.offset);
+      return query.all().map(toPluginDataRecord);
     },
 
     async deletePluginData(

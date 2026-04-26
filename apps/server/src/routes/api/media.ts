@@ -128,6 +128,9 @@ function optionalPositiveInteger(value: unknown): number | undefined {
  */
 const DEFAULT_SCAN_LIMIT_PER_SESSION = 1_000;
 
+/** Page size for cleanup scans; keeps each store call below the row ceiling. */
+const CLEANUP_SCAN_PAGE_SIZE = 100;
+
 /** Maximum sessions per kernel batch when iterating large installs. */
 const SESSION_BATCH_SIZE = 50;
 
@@ -172,6 +175,7 @@ export async function buildProtectedMediaIds(
   };
 
   const maxRowsPerSession = options.maxScanRowsPerSession ?? DEFAULT_SCAN_LIMIT_PER_SESSION;
+  const pageSize = Math.max(1, Math.min(CLEANUP_SCAN_PAGE_SIZE, maxRowsPerSession));
   const sessionsToScan = options.maxSessions !== undefined
     ? sessions.slice(0, options.maxSessions)
     : sessions;
@@ -183,95 +187,58 @@ export async function buildProtectedMediaIds(
     const batch = sessionsToScan.slice(batchStart, batchStart + SESSION_BATCH_SIZE);
     for (const session of batch) {
       let rowsForSession = 0;
-      const enforceLimit = (rows: { readonly length: number }): boolean => {
+      const consumeRows = (rows: { readonly length: number }): BuildProtectedResult | null => {
         rowsForSession += rows.length;
-        return rowsForSession > maxRowsPerSession;
+        if (rowsForSession <= maxRowsPerSession) return null;
+        return {
+          protectedIds,
+          scannedSessions,
+          limitExceeded: true,
+          limitExceededSessionId: session.id,
+          limitExceededRowCount: rowsForSession,
+        };
+      };
+      const scanRows = (rows: readonly unknown[]): BuildProtectedResult | null => {
+        const exceeded = consumeRows(rows);
+        if (exceeded) return exceeded;
+        scan(rows);
+        return null;
+      };
+      const scanPaged = async (
+        loader: (pagination: { readonly limit: number; readonly offset: number }) => Promise<readonly unknown[]>,
+      ): Promise<BuildProtectedResult | null> => {
+        for (let offset = 0; ; offset += pageSize) {
+          const rows = await loader({ limit: pageSize, offset });
+          const exceeded = scanRows(rows);
+          if (exceeded) return exceeded;
+          if (rows.length < pageSize) return null;
+        }
       };
 
-      const messages = await store.listMessages(session.id);
-      if (enforceLimit(messages)) {
-        return {
-          protectedIds,
-          scannedSessions,
-          limitExceeded: true,
-          limitExceededSessionId: session.id,
-          limitExceededRowCount: rowsForSession,
-        };
-      }
-      scan(messages);
+      let exceeded = await scanPaged((pagination) => store.listMessages(session.id, pagination));
+      if (exceeded) return exceeded;
 
-      const pluginData = await store.listPluginDataSessionScope(session.id);
-      if (enforceLimit(pluginData)) {
-        return {
-          protectedIds,
-          scannedSessions,
-          limitExceeded: true,
-          limitExceededSessionId: session.id,
-          limitExceededRowCount: rowsForSession,
-        };
-      }
-      scan(pluginData);
+      exceeded = await scanPaged((pagination) => store.listPluginDataSessionScope(session.id, pagination));
+      if (exceeded) return exceeded;
 
-      const runtimeOutputs = await store.listRuntimeOutputs(session.id);
-      if (enforceLimit(runtimeOutputs)) {
-        return {
-          protectedIds,
-          scannedSessions,
-          limitExceeded: true,
-          limitExceededSessionId: session.id,
-          limitExceededRowCount: rowsForSession,
-        };
-      }
-      scan(runtimeOutputs);
+      exceeded = await scanPaged((pagination) => store.listRuntimeOutputs(session.id, pagination));
+      if (exceeded) return exceeded;
 
-      const traceEvents = await store.listTraceEvents(session.id);
-      if (enforceLimit(traceEvents)) {
-        return {
-          protectedIds,
-          scannedSessions,
-          limitExceeded: true,
-          limitExceededSessionId: session.id,
-          limitExceededRowCount: rowsForSession,
-        };
-      }
-      scan(traceEvents);
+      exceeded = await scanPaged((pagination) => store.listTraceEvents(session.id, pagination));
+      if (exceeded) return exceeded;
 
       const snapshots = await store.listSnapshots(session.id);
-      if (enforceLimit(snapshots)) {
-        return {
-          protectedIds,
-          scannedSessions,
-          limitExceeded: true,
-          limitExceededSessionId: session.id,
-          limitExceededRowCount: rowsForSession,
-        };
-      }
-      scan(snapshots);
+      exceeded = scanRows(snapshots);
+      if (exceeded) return exceeded;
 
       const turnResults = await store.listTurnResults(session.id);
-      if (enforceLimit(turnResults)) {
-        return {
-          protectedIds,
-          scannedSessions,
-          limitExceeded: true,
-          limitExceededSessionId: session.id,
-          limitExceededRowCount: rowsForSession,
-        };
-      }
-      scan(turnResults);
+      exceeded = scanRows(turnResults);
+      if (exceeded) return exceeded;
 
       for (const turn of turnResults) {
         const runtimeResults = await store.listRuntimeResults(session.id, turn.turnId);
-        if (enforceLimit(runtimeResults)) {
-          return {
-            protectedIds,
-            scannedSessions,
-            limitExceeded: true,
-            limitExceededSessionId: session.id,
-            limitExceededRowCount: rowsForSession,
-          };
-        }
-        scan(runtimeResults);
+        exceeded = scanRows(runtimeResults);
+        if (exceeded) return exceeded;
       }
 
       scannedSessions += 1;

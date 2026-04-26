@@ -32,9 +32,24 @@ export function hasNativeTauriMedia(): boolean {
   return getTauriCore() !== null;
 }
 
+interface NativeMediaReadAuth {
+  /**
+   * Marker proving the caller already passed the server-side media-token
+   * authorization gate. This is a lightweight defense against accidental
+   * direct use of the native fast path from future UI code; the authoritative
+   * check remains `/api/sessions/:id/media-token` in `media-resolve.ts`.
+   */
+  readonly authorized: true;
+}
+
 export async function readNativeTauriMedia(
   ref: MediaRef,
+  auth?: NativeMediaReadAuth,
 ): Promise<Blob | null> {
+  if (!auth?.authorized) {
+    console.warn("[tauri-media] native media read requires prior media-token authorization");
+    return null;
+  }
   const tauri = getTauriCore();
   if (!tauri) return null;
   try {

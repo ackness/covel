@@ -133,8 +133,22 @@ function compareTraceEvents(a: TraceEventRecord, b: TraceEventRecord): number {
 
 type LegacyAssetKind = 'data-url' | 'remote-url';
 
+interface LegacyMediaRef {
+  readonly id: `${typeof LEGACY_MEDIA_REF_PREFIX}${string}`;
+  readonly mime: string;
+  readonly size: number;
+  readonly url?: string;
+  readonly meta?: Readonly<Record<string, unknown>>;
+}
+
+type TraceAssetRef = MediaRef | LegacyMediaRef;
+
+function isLegacyMediaRef(ref: TraceAssetRef): ref is LegacyMediaRef {
+  return ref.id.startsWith(LEGACY_MEDIA_REF_PREFIX);
+}
+
 interface LegacyAssetCandidate {
-  readonly ref: MediaRef;
+  readonly ref: TraceAssetRef;
   readonly modality: string;
   readonly pluginId: string;
   readonly runtimeId: string;
@@ -267,6 +281,7 @@ function toLegacyAssetEvent(sessionId: string, candidate: LegacyAssetCandidate):
     meta: {
       ...candidate.meta,
       legacy: true,
+      legacyRef: isLegacyMediaRef(candidate.ref),
       legacyKind: candidate.legacyKind,
       legacySource: candidate.source,
       legacySourceKey: candidate.sourceKey,
@@ -285,6 +300,7 @@ function toLegacyAssetEvent(sessionId: string, candidate: LegacyAssetCandidate):
       pluginId: candidate.pluginId,
       proposalId: asset.id,
       legacy: true,
+      legacyRef: isLegacyMediaRef(candidate.ref),
       legacyKind: candidate.legacyKind,
       legacySource: candidate.source,
       asset,
@@ -305,7 +321,7 @@ interface LegacyScanContext {
 }
 
 interface LegacyRefHit {
-  readonly ref: MediaRef;
+  readonly ref: TraceAssetRef;
   readonly legacyKind: LegacyAssetKind;
 }
 
@@ -412,7 +428,7 @@ function legacyRefFromRemoteUrl(
     return null;
   }
 
-  const ref: MediaRef = {
+  const ref: LegacyMediaRef = {
     id: `${LEGACY_MEDIA_REF_PREFIX}${hashHex(url)}`,
     mime,
     size,
@@ -444,7 +460,7 @@ function legacyRefFromDataUrl(
   if (!dataUrl.startsWith('data:')) return null;
 
   const inline = size > 0 && size <= LEGACY_DATA_URL_MAX_INLINE_BYTES;
-  const ref: MediaRef = {
+  const ref: LegacyMediaRef = {
     id: `${LEGACY_MEDIA_REF_PREFIX}${hashHex(dataUrl)}`,
     mime,
     size,

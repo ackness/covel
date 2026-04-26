@@ -385,7 +385,7 @@ export interface DataStore {
    * the same as `listPluginData`, just without the pluginId filter. The
    * plugin-scoped `listPluginData` remains the narrower, high-traffic API.
    */
-  listPluginDataSessionScope(sessionId: string): Promise<readonly PluginDataRecord[]>;
+  listPluginDataSessionScope(sessionId: string, pagination?: PaginationOpts): Promise<readonly PluginDataRecord[]>;
   deletePluginData(sessionId: string, pluginId: string, namespace: string, key: string): Promise<void>;
 
   // ── Plugin Configs ──

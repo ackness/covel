@@ -35,7 +35,7 @@ describe("tauri media adapter", () => {
     expect(hasNativeTauriMedia()).toBe(true);
   });
 
-  it("reads native media into a typed Blob", async () => {
+  it("refuses native reads without an authorization marker", async () => {
     const invoke = vi.fn(async () => ({
       id: ref.id,
       size: ref.size,
@@ -43,7 +43,19 @@ describe("tauri media adapter", () => {
     }));
     window.__TAURI__ = { core: { invoke: invoke as unknown as TauriInvoke } };
 
-    const blob = await readNativeTauriMedia(ref);
+    await expect(readNativeTauriMedia(ref)).resolves.toBeNull();
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("reads native media into a typed Blob after authorization", async () => {
+    const invoke = vi.fn(async () => ({
+      id: ref.id,
+      size: ref.size,
+      bytes: [1, 2, 3],
+    }));
+    window.__TAURI__ = { core: { invoke: invoke as unknown as TauriInvoke } };
+
+    const blob = await readNativeTauriMedia(ref, { authorized: true });
 
     expect(invoke).toHaveBeenCalledWith("native_media_read", { id: ref.id });
     expect(blob).toBeInstanceOf(Blob);
@@ -62,7 +74,7 @@ describe("tauri media adapter", () => {
       },
     };
 
-    await expect(readNativeTauriMedia(ref)).resolves.toBeNull();
+    await expect(readNativeTauriMedia(ref, { authorized: true })).resolves.toBeNull();
   });
 
   it("writes bytes through the native command and returns a MediaRef", async () => {

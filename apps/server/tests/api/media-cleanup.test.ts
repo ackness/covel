@@ -172,7 +172,8 @@ describe('POST /api/media/cleanup gate', () => {
     process.env.COVEL_MEDIA_CLEANUP_ENABLED = 'true';
     const dataStore = createMemoryStore();
     await dataStore.createSession(makeSession('sess-A'));
-    // Pump messages so scanLimit=1 trips on the first scan call.
+    // Pump messages so scanLimit=1 trips after a bounded page, not after
+    // materialising the entire table.
     for (let i = 0; i < 5; i += 1) {
       await dataStore.addMessage({
         id: `msg-${i}`,
@@ -194,6 +195,39 @@ describe('POST /api/media/cleanup gate', () => {
     const body = await res.json() as { code: string; error: string };
     expect(body.code).toBe('limit_exceeded');
     expect(body.error).toContain('sess-A');
+  });
+
+  it('uses paginated store scans instead of loading all rows at once', async () => {
+    process.env.COVEL_MEDIA_CLEANUP_ENABLED = 'true';
+    const dataStore = createMemoryStore();
+    await dataStore.createSession(makeSession('sess-A'));
+    for (let i = 0; i < 250; i += 1) {
+      await dataStore.addMessage({
+        id: `msg-${i}`,
+        sessionId: 'sess-A',
+        role: 'system',
+        content: '',
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    const pageSizes: number[] = [];
+    const originalListMessages = dataStore.listMessages.bind(dataStore);
+    dataStore.listMessages = async (sessionId, pagination) => {
+      const rows = await originalListMessages(sessionId, pagination);
+      pageSizes.push(rows.length);
+      return rows;
+    };
+
+    const app = createTestApp(createMemoryMediaStore(), dataStore);
+    const res = await app.request('/api/media/cleanup', {
+      method: 'POST',
+      body: JSON.stringify({ dryRun: true, scanLimit: 1_000 }),
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.status).toBe(200);
+    expect(pageSizes.length).toBeGreaterThan(1);
+    expect(Math.max(...pageSizes)).toBeLessThanOrEqual(100);
   });
 
   it('returns 400 invalid_request when scanLimit is not a positive integer', async () => {

@@ -561,8 +561,9 @@ export function createMemoryStore(): DataStore & VectorStoreCapability & VectorM
       return applyPagination(filtered, pagination);
     },
 
-    async listPluginDataSessionScope(sessionId) {
-      return [...pluginData.values()].filter((r) => r.sessionId === sessionId);
+    async listPluginDataSessionScope(sessionId, pagination?) {
+      const filtered = [...pluginData.values()].filter((r) => r.sessionId === sessionId);
+      return applyPagination(filtered, pagination);
     },
 
     async deletePluginData(sessionId, pluginId, namespace, key) {
