@@ -74,10 +74,21 @@ export interface TurnInput {
    * targeted runtime (bypassing scheduling of auto/event runtimes), then
    * processes any events the runtime emitted as a chained mini-pipeline.
    * Used by `POST /api/sessions/:id/plugin-rpc` with a `runtimeId` body.
+   *
+   * `triggerEvent` is an optional event payload forwarded to the targeted
+   * runtime via `FunctionHandlerContext.triggerEvent` — used by the
+   * background follower path (audit P1) so a deferred follower runtime
+   * receives the same `triggerEvent` shape it would have seen during the
+   * synchronous event-chain fan-out. Independent of `payload`, which is
+   * the manual click payload from the UI.
    */
   readonly manualTrigger?: {
     readonly runtimeId: string;
     readonly payload?: Readonly<Record<string, unknown>>;
+    readonly triggerEvent?: {
+      readonly topic: string;
+      readonly data: Readonly<Record<string, unknown>>;
+    };
   };
   /**
    * Player-authored plugin settings, keyed by pluginId. Each plugin's bucket
