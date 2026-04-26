@@ -15,6 +15,7 @@
 
 import { applyBudget } from './budget.js';
 import { isEnvEnabled } from '@covel/shared';
+import { messageContentFromHistoryRecord } from './llm-content-parts.js';
 import { buildContextV2, buildContextV2Async } from './prompt-assembler.js';
 import {
   assemblePromptVariables,
@@ -51,11 +52,7 @@ function buildMessageHistoryWithSummaries(
   const compactorEnabled = isEnvEnabled('COVEL_COMPACTOR_V1');
 
   if (!compactorEnabled || summaries.length === 0) {
-    return messageHistory.map(msg => ({
-      role: msg.role as 'system' | 'user' | 'assistant',
-      content: msg.content,
-      ...(msg.name ? { name: msg.name } : {}),
-    }));
+    return messageHistory.map(toLLMMessage);
   }
 
   const summaryById = new Map(summaries.map(s => [s.id, s]));
@@ -81,14 +78,26 @@ function buildMessageHistoryWithSummaries(
       continue;
     }
 
-    result.push({
-      role: msg.role as 'system' | 'user' | 'assistant',
-      content: msg.content,
-      ...(msg.name ? { name: msg.name } : {}),
-    });
+    result.push(toLLMMessage(msg));
   }
 
   return result;
+}
+
+/**
+ * Project a {@link MessageHistoryRecord} onto the {@link LLMMessage}
+ * shape. Plain text history maps to a `string` `content`; messages
+ * carrying an `asset.generate` block in `metadata` are upgraded to a
+ * multimodal `readonly ContentPart[]` so vision-capable runtimes can
+ * reason over assets generated on previous turns. See
+ * {@link messageContentFromHistoryRecord} for the narrowing rules.
+ */
+function toLLMMessage(msg: MessageHistoryRecord): LLMMessage {
+  return {
+    role: msg.role as 'system' | 'user' | 'assistant',
+    content: messageContentFromHistoryRecord(msg),
+    ...(msg.name ? { name: msg.name } : {}),
+  };
 }
 
 /**

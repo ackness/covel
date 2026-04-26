@@ -2,14 +2,26 @@
  * Context assembly types.
  */
 
-import type { RuntimeManifest, RuntimeResult, TurnInput } from '@covel/shared';
+import type { ContentPart, RuntimeManifest, RuntimeResult, TurnInput } from '@covel/shared';
 import type { DataStore } from '@covel/store';
 import type { BudgetOptions, TokenEstimator } from './budget.js';
 
-/** A single LLM message in the conversation. */
+/** Re-export for callers that consume {@link LLMMessage}. */
+export type { ContentPart } from '@covel/shared';
+
+/**
+ * A single LLM message in the conversation.
+ *
+ * `content` is `string` for the historical text-only path. When a message
+ * carries multimodal data (e.g. a generated image referenced from history)
+ * the bridge in `buildMessageHistoryWithSummaries` rewrites the field to a
+ * `readonly ContentPart[]`. Downstream adapters in `@covel/ai-provider`
+ * accept the same union via their `TextMessageContent` shape, so the value
+ * passes through without conversion.
+ */
 export interface LLMMessage {
   readonly role: 'system' | 'user' | 'assistant' | 'tool';
-  readonly content: string;
+  readonly content: string | readonly ContentPart[];
   readonly name?: string;
   readonly toolCallId?: string;
 }
@@ -34,6 +46,20 @@ export interface MessageHistoryRecord {
    * `COVEL_COMPACTOR_V1=1` is set.
    */
   readonly compactedAtTurnId?: string;
+  /**
+   * Optional free-form bag mirroring the `metadata` payload that
+   * `commit*` handlers in `@covel/runtime` write to wire-format
+   * messages. The context-builder bridge inspects
+   * `metadata.block.type === 'asset.generate'` to upgrade plain text
+   * history entries into multimodal {@link ContentPart} arrays so a
+   * vision-capable runtime can reason over previously generated assets.
+   *
+   * The shape is intentionally `unknown` — the bridge narrows defensively
+   * and falls back to the plain-string path when fields are missing or
+   * mistyped, so callers that do not know about block metadata stay
+   * byte-identical to the legacy behaviour.
+   */
+  readonly metadata?: unknown;
 }
 
 /**
