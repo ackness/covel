@@ -15,7 +15,18 @@ import { render, screen, waitFor, cleanup } from "@testing-library/react";
 
 import { Media } from "../Media.js";
 import { __resetMediaCacheForTests } from "../../lib/media-cache.js";
+import { sha256Hex } from "../../lib/media-hash.js";
 import type { MediaRef } from "@covel/shared";
+
+const PAYLOAD_BYTES = new TextEncoder().encode("payload");
+async function makeRef(mime: string): Promise<MediaRef> {
+  const buffer = PAYLOAD_BYTES.buffer.slice(
+    PAYLOAD_BYTES.byteOffset,
+    PAYLOAD_BYTES.byteOffset + PAYLOAD_BYTES.byteLength,
+  ) as ArrayBuffer;
+  const id = await sha256Hex(buffer);
+  return { id, mime, size: PAYLOAD_BYTES.byteLength };
+}
 
 // ── Inline minimal IDB shim (same shape as media-cache.test.ts) ────
 
@@ -154,7 +165,9 @@ function setFetchToBlob(mime: string): void {
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
     }
-    return new Response(new Blob(["payload"], { type: mime }), {
+    // jsdom's `Response(Blob)` stringifies to "[object Blob]" — feed the
+    // raw bytes directly so the body length matches the ref.size promised.
+    return new Response(new Uint8Array(PAYLOAD_BYTES), {
       status: 200,
       headers: { "Content-Type": mime },
     });
@@ -172,9 +185,7 @@ function setFetchAlwaysFails(): void {
 describe("<Media>", () => {
   it("renders <img> for MediaRef with image mime", async () => {
     const ref: MediaRef = {
-      id: "img-1",
-      mime: "image/png",
-      size: 7,
+      ...(await makeRef("image/png")),
       url: "https://cdn.example/a.png",
     };
     setFetchToBlob("image/png");
@@ -188,9 +199,7 @@ describe("<Media>", () => {
 
   it("renders <audio> for MediaRef with audio mime", async () => {
     const ref: MediaRef = {
-      id: "aud-1",
-      mime: "audio/mp3",
-      size: 7,
+      ...(await makeRef("audio/mp3")),
       url: "https://cdn.example/a.mp3",
     };
     setFetchToBlob("audio/mp3");
@@ -207,9 +216,7 @@ describe("<Media>", () => {
 
   it("renders <video> for MediaRef with video mime", async () => {
     const ref: MediaRef = {
-      id: "vid-1",
-      mime: "video/mp4",
-      size: 7,
+      ...(await makeRef("video/mp4")),
       url: "https://cdn.example/a.mp4",
     };
     setFetchToBlob("video/mp4");
@@ -226,9 +233,7 @@ describe("<Media>", () => {
 
   it("renders unavailable state when resolution fails", async () => {
     const ref: MediaRef = {
-      id: "fail-1",
-      mime: "image/png",
-      size: 1,
+      ...(await makeRef("image/png")),
       url: "https://broken.example/missing.png",
     };
     setFetchAlwaysFails();
@@ -241,9 +246,7 @@ describe("<Media>", () => {
 
   it("revokes blob URL on unmount", async () => {
     const ref: MediaRef = {
-      id: "rev-1",
-      mime: "image/png",
-      size: 7,
+      ...(await makeRef("image/png")),
       url: "https://cdn.example/r.png",
     };
     setFetchToBlob("image/png");
@@ -260,9 +263,7 @@ describe("<Media>", () => {
 
   it("respects `as` override for image-mime payloads", async () => {
     const ref: MediaRef = {
-      id: "as-1",
-      mime: "application/octet-stream",
-      size: 4,
+      ...(await makeRef("application/octet-stream")),
       url: "https://cdn.example/blob.bin",
     };
     setFetchToBlob("application/octet-stream");

@@ -239,4 +239,41 @@ describe("media-cache", () => {
       putCachedMedia(makeRecord("noop")),
     ).resolves.toBeUndefined();
   });
+
+  it("evicts a cached record when its size disagrees with the expected ref", async () => {
+    await putCachedMedia(makeRecord("evict-size"));
+    const got = await getCachedMedia("evict-size", {
+      id: "evict-size",
+      mime: "image/png",
+      size: 999_999, // intentionally wrong
+    });
+    expect(got).toBeNull();
+    // After eviction, a follow-up read returns nothing (record gone).
+    // Allow the deferred delete a microtask to complete.
+    await Promise.resolve();
+    const after = await getCachedMedia("evict-size");
+    expect(after).toBeNull();
+  });
+
+  it("evicts a cached record when its mime disagrees with the expected ref", async () => {
+    await putCachedMedia(makeRecord("evict-mime"));
+    const got = await getCachedMedia("evict-mime", {
+      id: "evict-mime",
+      mime: "image/jpeg", // stored is image/png
+      size: makeRecord("evict-mime").size,
+    });
+    expect(got).toBeNull();
+  });
+
+  it("returns the record when expected shape matches", async () => {
+    const record = makeRecord("ok");
+    await putCachedMedia(record);
+    const got = await getCachedMedia("ok", {
+      id: "ok",
+      mime: record.mime,
+      size: record.size,
+    });
+    expect(got).not.toBeNull();
+    expect(got?.id).toBe("ok");
+  });
 });

@@ -1,3 +1,13 @@
+// FIXME(audit-2026-04-26 P2): the current Tauri media bridge transports
+// blob bytes as a JSON `number[]` over the IPC boundary. For media >1 MiB
+// (notably video / generated images) this triggers a massive JSON encode
+// in Rust + a second JS allocation when we feed the array into
+// `new Uint8Array(...)`. The follow-up is to switch to a Tauri custom
+// protocol (`tauri://media/<id>` served from Rust as raw bytes) or have
+// the sidecar stream the blob over HTTP and let the webview decode it via
+// `Response#blob()`. Until that lands, keep an eye on `native_media_read`
+// /`native_media_write` for >5 MiB payloads — they are the single biggest
+// IPC cost in Tauri builds today.
 import type { MediaRef } from "@covel/shared";
 import { getTauriCore } from "./desktop-bridge.js";
 
