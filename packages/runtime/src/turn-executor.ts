@@ -1931,9 +1931,13 @@ async function executeOneRuntime(
   const runId = crypto.randomUUID();
   const timeoutMs = manifest.timeoutMs ?? defaultTimeoutMs;
   const createRecursiveCall = () => {
-    return async (delta: Partial<TurnInput>): Promise<TurnResult> => {
+    return async (
+      delta: Partial<TurnInput>,
+      opts?: { readonly reason?: string },
+    ): Promise<TurnResult> => {
       const maxDepth = manifest.maxRecursionDepth ?? turnOptions?.maxRecursionDepth ?? 10;
       const nextDepth = recursionDepth + 1;
+      const reason = typeof opts?.reason === 'string' && opts.reason.length > 0 ? opts.reason : undefined;
 
       const nestedInput: TurnInput & TurnInputExecutionFlags = {
         ...input,
@@ -1952,6 +1956,7 @@ async function executeOneRuntime(
         maxDepth,
         turnId: nestedInput.turnId,
         sessionId: nestedInput.sessionId,
+        ...(reason ? { reason } : {}),
       };
 
       if (nextDepth > maxDepth) {

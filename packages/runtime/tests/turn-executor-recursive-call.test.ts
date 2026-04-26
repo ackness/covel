@@ -37,6 +37,8 @@ describe('executeTurn recursiveCall', () => {
           const nested = await ctx.recursiveCall({
             manualTrigger: { runtimeId: 'leaf' },
             playerMessage: 'nested',
+          }, {
+            reason: 'delegate leaf pass',
           });
           return {
             depth: ctx.recursionDepth,
@@ -70,6 +72,10 @@ describe('executeTurn recursiveCall', () => {
       'recursive.calling',
       'recursive.completed',
     ]);
+    expect(emitter.events.map((event) => event.payload.reason)).toEqual([
+      'delegate leaf pass',
+      'delegate leaf pass',
+    ]);
   });
 
   it('enforces the runtime maxRecursionDepth limit', async () => {
@@ -82,7 +88,10 @@ describe('executeTurn recursiveCall', () => {
         promptTemplate: '',
         references: [],
         handler: async (ctx) => {
-          await ctx.recursiveCall({ manualTrigger: { runtimeId: 'leaf' } });
+          await ctx.recursiveCall(
+            { manualTrigger: { runtimeId: 'leaf' } },
+            { reason: 'limit check' },
+          );
           return { ok: true };
         },
       }],
@@ -110,6 +119,7 @@ describe('executeTurn recursiveCall', () => {
       depth: 0,
       nextDepth: 1,
       maxDepth: 0,
+      reason: 'limit check',
     });
     expect(new MaxRecursionExceeded({ runtimeId: 'caller', depth: 1, maxDepth: 0 }).code).toBe('MAX_RECURSION_EXCEEDED');
   });

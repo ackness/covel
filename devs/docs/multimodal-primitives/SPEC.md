@@ -958,6 +958,32 @@ P2 集成备注：
 - [x] 删除旧 inline 媒体兼容分支
 - [x] `image-generation` 插件的 `pluginData.images` 运行期拒绝旧 `url` / `base64` / `dataUrl` 字段
 
+### P4：Hardening + lifecycle policies（2-4 周）
+
+**P4a：策略冻结 + 小实现（当前批次）**
+
+- [x] Tauri 桌面端 MediaStore 路径采用 Tauri command，后续大文件场景补 chunk/streaming 读取。
+- [x] `ctx.media.ingestUrl()` 默认 `maxBytes` 保持 `50 * 1024 * 1024`，插件可在调用参数中显式提高或降低。
+- [x] HMAC media token TTL 保持 5 分钟，前端按需重新获取 token。
+- [x] 同一 runtime 同一 turn 返回多个 `assetGenerations[]` 时，数组顺序就是 commit / trace / 展示顺序。
+- [x] `recursiveCall(delta, { reason })` 写入 `recursive.calling` / `recursive.completed` / `recursive.failed` trace payload。
+
+**P4b：Media lifecycle**
+
+- [ ] Media GC / quota / retention 策略：框架自动 GC + 用户手动清理入口，覆盖 Memory / SQLite / PG / S3 / IDB / Tauri 后端。
+- [ ] Media ownership refs 扫描和 snapshot/fork 保留策略，防止清理仍被 session 引用的资产。
+
+**P4c：LLM content lifecycle**
+
+- [ ] `TextMessage.content` string 兼容窗口与 content parts projection 策略。
+- [ ] OpenAI / Anthropic / Gemini 图片输入 URL / base64 / inlineData 能力矩阵。
+
+**P4d：Compatibility + observability**
+
+- [ ] Hook manifest version gate。
+- [ ] 旧 trace read-time adapter：`plugin.data` / `runtime_results` 历史图像记录标记 legacy，并进入单一路径展示。
+- [ ] `asset.progress` SSE envelope：生成中进度独立事件，最终仍落 `asset.generate`。
+
 ---
 
 每阶段都可独立交付、独立 rollback。整体节奏：
@@ -971,8 +997,12 @@ P2 集成备注：
 | **P1** | Hook 语义、局部 view/LLM helper 收尾、ToolClient 统一 | 2-3 周 | P0 完结 |
 | **P2** | 后端扩展、recursiveCall、ui.render parts | 2-3 周 | P1 |
 | **P3** | 清理 + 强制约束 | 1 周 | P2 |
+| **P4a** | 策略冻结 + 小实现 | 1-2 天 | P3 |
+| **P4b** | Media lifecycle | 1-2 周 | P4a |
+| **P4c** | LLM content lifecycle | 1 周 | P4a |
+| **P4d** | compatibility + observability | 1-2 周 | P4a + P4b |
 
-总计 **9-13 周**（之前估的 5-7 周低估了 `asset.generate` 端到端接入和 LLM content parts 设计的工作量）。
+P0-P3 总计 **9-13 周**（之前估的 5-7 周低估了 `asset.generate` 端到端接入和 LLM content parts 设计的工作量）。P4 作为 hardening 阶段按实际风险分批交付。
 
 ---
 
@@ -1009,14 +1039,14 @@ P1/P2（Hook 语义、LLM content parts、ToolClient、recursiveCall、ui.render
 ## 9. 待决问题
 
 **MediaStore / 存储层**
-- [ ] `MediaStore` 在 Tauri 桌面端是用 fs API 还是 Tauri command？（P2 决定）
+- [x] `MediaStore` 在 Tauri 桌面端采用 Tauri command；大文件后续补 chunk/streaming
 - [ ] `MediaStore` 的清理策略（GC、quota、retention）由谁触发——框架还是用户手动？
-- [ ] `ctx.media.ingestUrl()` 默认 `maxBytes` 取多少合适？（50 MB 兜得住头像 / 场景图，但视频会超）
-- [ ] HMAC 签名 token 的 TTL 设多久？5 分钟够前端展示，但批量画廊翻页可能需要更长
+- [x] `ctx.media.ingestUrl()` 默认 `maxBytes` 保持 50 MB，插件调用可显式覆盖
+- [x] HMAC 签名 token 的 TTL 保持 5 分钟，前端按需重新获取
 
 **`asset.generate` 端到端（P0-b）**
 - [x] runtime 输出 schema 统一使用 `output.assetGenerations[]`
-- [ ] 一个 turn 里同一插件 emit 多个 asset.generate 时，commit 顺序是否需要保证？
+- [x] 一个 turn 里同一插件 emit 多个 asset.generate 时，`assetGenerations[]` 数组顺序就是 commit / trace / 展示顺序
 
 **LLM content parts（P1 阻塞 P0-b 完整实现）**
 - [ ] `TextMessage.content` 改为 content parts 联合后，向后兼容老 string 路径多久？
@@ -1024,7 +1054,7 @@ P1/P2（Hook 语义、LLM content parts、ToolClient、recursiveCall、ui.render
 
 **Hook**
 - [ ] Hook 语义改变是否需要 plugin manifest 版本号 bump？（目前零现存 hook，可以延后到 P1）
-- [ ] `recursiveCall` 是否应该带"reason"字段方便 trace 阅读？
+- [x] `recursiveCall(delta, { reason })` 写入 recursive trace，方便 debug 阅读
 
 **迁移 / 兼容**
 - [ ] `asset.generate` 接入 kernel commit handler 后，旧 trace（来自 `plugin.data` / `runtime_results` 两条路径）如何呈现？（双显 / lazy migrate / 一次性导出）

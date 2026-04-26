@@ -256,7 +256,10 @@ export interface FunctionHandlerContext {
    */
   readonly media?: MediaContext;
   /** Run a nested turn with a partial input override. Depth is bounded by runtime governance. */
-  readonly recursiveCall: (delta: Partial<TurnInput>) => Promise<TurnResult>;
+  readonly recursiveCall: (
+    delta: Partial<TurnInput>,
+    opts?: { readonly reason?: string },
+  ) => Promise<TurnResult>;
   /** Current recursiveCall depth. Top-level runtime executions start at 0. */
   readonly recursionDepth: number;
   /**

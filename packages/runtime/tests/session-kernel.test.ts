@@ -18,6 +18,11 @@ const MEDIA_REF = {
   mime: 'image/png',
   size: 2048,
 };
+const MEDIA_REF_2 = {
+  id: 'c'.repeat(64),
+  mime: 'image/png',
+  size: 4096,
+};
 
 describe('normalizeOutput', () => {
   describe('narrative.append', () => {
@@ -1070,6 +1075,28 @@ describe('processRuntimeResult', () => {
       }),
     }));
     expect(emitter.events.find((e) => e.type === 'asset.generated')).toBeDefined();
+  });
+
+  it('commits multiple asset.generate outputs in assetGenerations[] order', async () => {
+    const store = createMockStore();
+    const result = makeRuntimeResult({
+      assetGenerations: [
+        { ref: MEDIA_REF, modality: 'image', meta: { prompt: 'first' } },
+        { ref: MEDIA_REF_2, modality: 'image', meta: { prompt: 'second' } },
+      ],
+    });
+
+    const { events, failedProposals } = await processRuntimeResult(result, store as any, SESSION_ID, 'plugin');
+
+    expect(failedProposals).toHaveLength(0);
+    expect(events.map((event) => (event.payload.asset as Record<string, unknown>).ref)).toEqual([
+      MEDIA_REF,
+      MEDIA_REF_2,
+    ]);
+    expect(store.addMessage.mock.calls.map((call) => call[0].metadata.block.data.ref)).toEqual([
+      MEDIA_REF,
+      MEDIA_REF_2,
+    ]);
   });
 
   it('reports an error when image generation finishes without a valid asset proposal', async () => {

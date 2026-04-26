@@ -427,7 +427,7 @@ Function runtime 和 guard 的 `FunctionHandlerContext` 暴露：
 
 ```typescript
 interface FunctionHandlerContext {
-  recursiveCall(delta: Partial<TurnInput>): Promise<TurnResult>;
+  recursiveCall(delta: Partial<TurnInput>, opts?: { reason?: string }): Promise<TurnResult>;
   recursionDepth: number;
 }
 ```
@@ -440,7 +440,7 @@ handler: ./handler.js
 maxRecursionDepth: 5
 ```
 
-超过上限会抛出 `MaxRecursionExceeded`，并进入 runtime 的失败路径。trace 会记录 `recursive.calling`、`recursive.completed`、`recursive.failed`。
+`opts.reason` 会写入 `recursive.calling`、`recursive.completed`、`recursive.failed` trace payload，方便在 debug timeline 中解释嵌套调用意图。超过上限会抛出 `MaxRecursionExceeded`，并进入 runtime 的失败路径。
 
 ### guard
 
