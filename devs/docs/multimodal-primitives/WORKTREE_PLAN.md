@@ -49,9 +49,6 @@ git worktree add .worktrees/codex-p0b-asset-kernel \
 git worktree add .worktrees/claude-p0b-asset-web \
   -b agent/claude-p0b-asset-web feature/multimodal-primitives-base
 
-git worktree add .worktrees/codex-p0d-media-cleanup \
-  -b agent/codex-p0d-media-cleanup feature/multimodal-primitives-base
-
 git worktree add .worktrees/codex-p0d-snapshot-fork \
   -b agent/codex-p0d-snapshot-fork feature/multimodal-primitives-base
 ```
@@ -179,21 +176,9 @@ git worktree add .worktrees/codex-p0d-snapshot-fork \
 1. `/Users/wuyong/.covel/plugins/dashscope-image-gen`
 2. `/Users/wuyong/.covel/plugins/openai-image-gen`
 
-## 5. 第四批：P0-d 旧数据清理与 Snapshot/Fork
+## 5. 第四批：P0-d Snapshot/Fork
 
-### Codex D：Legacy Inline Media Cleanup
-
-| 项 | 内容 |
-|---|---|
-| Worktree | `.worktrees/codex-p0d-media-cleanup` |
-| Branch | `agent/codex-p0d-media-cleanup` |
-| 目标 | 实现 `pnpm media:purge-legacy` 多表扫描和旧 inline 大对象删除 |
-| SPEC 指向 | `SPEC.md` §5.1 旧 inline 数据清理范围；§5.1 清理后的后果；§6 P0-d；§9 迁移 / 兼容 |
-| 写入范围 | `scripts/*`、store cleanup helper、cleanup tests |
-| 交付 | dry-run 统计、显式 `--write` 删除、逐条清理日志、失败记录 |
-| 验证 | cleanup fixtures、SQLite integration test |
-
-### Codex E：Snapshot / Fork Media Refs
+### Codex D：Snapshot / Fork Media Refs
 
 | 项 | 内容 |
 |---|---|
@@ -207,8 +192,7 @@ git worktree add .worktrees/codex-p0d-snapshot-fork \
 
 **P0-d 合并顺序**
 
-1. `codex-p0d-media-cleanup`
-2. `codex-p0d-snapshot-fork`
+1. `codex-p0d-snapshot-fork`
 
 ## 6. Coordinator 职责
 
