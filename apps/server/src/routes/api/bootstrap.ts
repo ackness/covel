@@ -24,6 +24,7 @@ import {
   type ParsedPluginMd,
   type PluginLlmConfig,
   type PluginRuntimeGateway,
+  type PluginRuntimeUtils,
 } from '@covel/plugin-loader';
 import { createStateManager, type StateManager } from '@covel/state';
 import { createEventBus, type EventBus } from '@covel/events';
@@ -115,6 +116,13 @@ export interface ApiBootstrapConfig {
    * LLM access from function runtimes can leave it out.
    */
   readonly pluginGateway?: PluginRuntimeGateway;
+  /**
+   * Plugin-facing utility surface (SSRF guard + retrying fetch) exposed
+   * via `FunctionHandlerContext.utils`. Stateless singleton — typically
+   * built from `@covel/ai-provider`'s `validateBaseUrlForPlugin` +
+   * `fetchWithRetry` exports in the composition root.
+   */
+  readonly pluginUtils?: PluginRuntimeUtils;
   /** DataStore for all persistence. */
   readonly store: DataStore;
   /**
@@ -814,6 +822,9 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     c.set('llmAdapter', config.llmAdapter);
     if (config.pluginGateway) {
       c.set('pluginGateway', config.pluginGateway);
+    }
+    if (config.pluginUtils) {
+      c.set('pluginUtils', config.pluginUtils);
     }
     c.set('loadRuntimeFn', loadRuntimeFn);
     c.set('toolExecutor', toolExecutor);

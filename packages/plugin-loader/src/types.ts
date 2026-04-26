@@ -115,28 +115,74 @@ export interface PluginRuntimeGateway {
     readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
   }>;
 
-  generateImage(input: {
+  /**
+   * Resolve a slot/preset id into its public configuration view. Returns
+   * `null` when no slot can be resolved (typical when llm.toml is empty).
+   *
+   * Use this when your plugin owns the wire format (image generators,
+   * audio, custom HTTP-based providers). The framework still picks the
+   * right preset, applies request-scoped key/url overrides, and hands
+   * back `{ baseUrl, apiKey, model, metadata, … }` — your handler then
+   * uses any SDK or raw fetch you like.
+   *
+   * Prefer this over `generateImage`/`embed` when you need wire-level
+   * control (custom polling, novel response shape, vendor-specific
+   * params). The high-level helpers stay for the most common cases.
+   */
+  resolveSlot(input: {
     readonly presetId?: string;
-    readonly prompt: string;
-    /**
-     * Per-call model override. When set, replaces the model resolved from
-     * `presetId` for this single call (audit F4). Use to let plugin
-     * `userSettings` expose a model picker without forcing the player to
-     * configure a dedicated `llm.toml` slot per model variant. The host
-     * still validates the model against the resolved provider — providers
-     * that don't recognize the id will surface their normal error.
-     */
-    readonly model?: string;
-    readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
-    readonly signal?: AbortSignal;
-  }): Promise<{
-    readonly images: readonly {
-      readonly url?: string;
-      readonly base64?: string;
-      readonly mimeType?: string;
-    }[];
-    readonly usage?: { readonly inputTokens?: number; readonly outputTokens?: number };
-  }>;
+    /** Defaults to "text"; pass "image" / "embedding" / "speech" / "transcription" for non-text slots. */
+    readonly fallbackTag?: string;
+  }): ResolvedSlotForPlugin | null;
+}
+
+/**
+ * Plugin-facing projection of `@covel/ai-provider`'s `ResolvedSlotConfig`.
+ * Same shape, redeclared here so this package keeps zero dep on
+ * @covel/ai-provider (avoids circular dep with @covel/runtime).
+ */
+export interface ResolvedSlotForPlugin {
+  readonly presetId: string;
+  readonly provider: string;
+  readonly protocol: string;
+  readonly baseUrl?: string;
+  readonly apiKey?: string;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly model: string;
+  readonly tag: string;
+  readonly metadata: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * Narrow utility surface exposed to plugin function handlers via
+ * `FunctionHandlerContext.utils`. Plugins use these to enforce the same
+ * SSRF policy and retry semantics the framework's own adapters use,
+ * without re-implementing them.
+ *
+ * Structural type: kept free of `@covel/ai-provider` imports so
+ * `@covel/plugin-loader` stays at the bottom of the dep graph. The
+ * runtime wires actual implementations from `@covel/ai-provider/plugin-utils`.
+ */
+export interface PluginRuntimeUtils {
+  /**
+   * SSRF-safe URL check. Returns `{ ok: true }` for safe URLs and
+   * `{ ok: false, reason }` with a human-readable explanation for
+   * blocked ones (private IPs, cloud metadata hosts, non-loopback http).
+   */
+  validateBaseUrl(url: string): { readonly ok: boolean; readonly reason?: string };
+
+  /**
+   * fetch with exponential-backoff retry on 429 / 5xx. Honors `Retry-After`.
+   * Does NOT retry on thrown fetch errors (DNS / network). Default
+   * `maxRetries: 3`; pass 0 to disable.
+   */
+  fetchWithRetry(
+    input: string | URL,
+    init?: RequestInit & {
+      readonly maxRetries?: number;
+      readonly signal?: AbortSignal;
+    },
+  ): Promise<Response>;
 }
 
 /**
@@ -170,6 +216,14 @@ export interface FunctionHandlerContext {
    * than assuming availability.
    */
   readonly gateway?: PluginRuntimeGateway;
+  /**
+   * Vetted utility helpers (SSRF guard + retrying fetch). Always present
+   * in production — only absent in test harnesses constructed without
+   * `utils` wired. Plugins that own their own wire format should prefer
+   * `utils.fetchWithRetry` over bare `fetch` and gate every user-supplied
+   * URL through `utils.validateBaseUrl` before calling it.
+   */
+  readonly utils?: PluginRuntimeUtils;
   /**
    * Optional manual-trigger payload — only populated when the turn was
    * initiated via `POST /api/sessions/:id/plugin-rpc` with a `runtimeId`

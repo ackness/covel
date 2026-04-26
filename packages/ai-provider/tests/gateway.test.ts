@@ -41,9 +41,6 @@ function createStubAdapter(
         usage: { inputTokens: 5, outputTokens: 0 },
       };
     },
-    async generateImage() {
-      return { images: [], usage: null };
-    },
     async synthesizeSpeech() {
       return {
         audio: { mimeType: "audio/mp3", data: new Uint8Array() },
@@ -282,19 +279,17 @@ describe("gateway slot tag fallback", () => {
     warn.mockRestore();
   });
 
-  it("does not cross-tag fallback: image request cannot reach text slot", async () => {
+  it("does not cross-tag fallback: image slot resolution rejects when only text slot exists", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { gateway } = setupMinimalSlots();
 
-    // Image generation requests an "image" slot; we only have a `text`
-    // slot. Must NOT silently route to `story` — the caller needs to know
-    // image generation is unconfigured.
-    await expect(
-      gateway.generateImage({
-        presetId: "image",
-        prompt: "a cat",
-      }),
-    ).rejects.toThrow();
+    // Plugin asks for an "image" slot via resolveSlot; we only have a
+    // `text` slot. Must NOT silently route to `story` — the plugin needs
+    // to know image generation is unconfigured so it can surface that to
+    // the user instead of running on the wrong provider.
+    expect(() =>
+      gateway.resolveSlot("image", { fallbackTag: "image" }),
+    ).toThrow();
 
     warn.mockRestore();
   });

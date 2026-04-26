@@ -209,12 +209,6 @@ export interface PresetConfig {
   /** Capability tag for slot compatibility. */
   tag?: string;
   /**
-   * Image generation API format. Carried from llm.toml `imageApi` field.
-   * Only meaningful for image slots. Passed through to slot config and
-   * ultimately to the adapter via providerRequestMetadata.imageFormat.
-   */
-  imageApi?: ImageApiFormat;
-  /**
    * Embeddings request body format. Carried from llm.toml `embeddingFormat`
    * field. Only meaningful for embed slots (output includes "embedding").
    * The gateway merges this into providerRequestMetadata.embeddingFormat
@@ -335,25 +329,6 @@ export interface EmbeddingResult {
   usage: UsageSummary;
 }
 
-// ── Image Generation ───────────────────────────────────────────────
-
-export interface ImageGenerationParams {
-  model: string;
-  prompt: string;
-  providerRequestMetadata?: Record<string, unknown>;
-}
-
-export interface GeneratedImage {
-  mimeType: string;
-  dataBase64?: string;
-  url?: string;
-}
-
-export interface ImageGenerationResult {
-  images: GeneratedImage[];
-  usage: UsageSummary | null;
-}
-
 // ── Speech Synthesis ───────────────────────────────────────────────
 
 export interface SpeechSynthesisParams {
@@ -434,7 +409,34 @@ export interface ProviderLifecycleHook {
 // SlotTag was in @covel/shared v1 — inlined here after v2 type refactor
 type SlotTag = "text" | "image" | "embed" | "speech" | string;
 
-export type ImageApiFormat = "dashscope-wan" | "openai-chat";
+/**
+ * Public, immutable view of a resolved slot/preset suitable for
+ * plugin-side wire calls. Returned by `gateway.resolveSlot(presetId)`.
+ *
+ * Plugins that own their own wire format (e.g. image generators) use
+ * this to grab credentials + endpoint without forcing the call through
+ * a built-in adapter. The framework still owns slot resolution,
+ * per-request key overlay, and SSRF/observability primitives — the
+ * plugin owns the actual HTTP shape and SDK choice.
+ *
+ * `metadata` is a free-form bag carrying `embeddingFormat` and any
+ * future per-slot hints. Plugins are free to inspect it; the framework
+ * does not interpret these fields when this surface is used.
+ */
+export interface ResolvedSlotConfig {
+  readonly presetId: string;
+  readonly provider: string;
+  readonly protocol: string;
+  readonly baseUrl?: string;
+  readonly apiKey?: string;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly model: string;
+  /** Slot tag (text / image / embedding / speech / transcription). */
+  readonly tag: string;
+  /** Free-form fields from the llm.toml preset, plugin-owned semantics. */
+  readonly metadata: Readonly<Record<string, unknown>>;
+  readonly parameterOverrides?: ModelParameterOverrides;
+}
 
 /**
  * Embeddings request body format.
@@ -452,11 +454,6 @@ export interface ModelSlotConfig {
   /** Capability tag — determines compatibility with runtime providerTag. */
   tag: SlotTag;
   parameterOverrides?: ModelParameterOverrides;
-  /**
-   * Image generation API format. Only used for slots with tag "image".
-   * If omitted, the adapter defaults to "dalle" (standard /images/generations).
-   */
-  imageApi?: ImageApiFormat;
 }
 
 export interface ModelParameterOverrides {

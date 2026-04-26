@@ -27,9 +27,8 @@ interface RecordedCall {
   slotOverrides: GenerateOptions extends { slotOverrides?: infer S } ? S : never;
 }
 
-interface RecordedImageCall {
+interface RecordedResolveSlotCall {
   presetId: string | undefined;
-  prompt: string;
   apiKeys: Record<string, string> | undefined;
   slotOverrides: GenerateOptions extends { slotOverrides?: infer S } ? S : never;
 }
@@ -44,7 +43,7 @@ function stubDefaultPluginGateway(): PluginRuntimeGateway {
     async generateObject() {
       throw new Error('default pluginGateway.generateObject: unused');
     },
-    async generateImage() {
+    resolveSlot() {
       throw new Error(
         'default pluginGateway should NOT be invoked when request overrides are present',
       );
@@ -61,10 +60,10 @@ function stubDefaultPluginGateway(): PluginRuntimeGateway {
 function createMockAi(): {
   ai: AiStack;
   calls: RecordedCall[];
-  imageCalls: RecordedImageCall[];
+  resolveSlotCalls: RecordedResolveSlotCall[];
 } {
   const calls: RecordedCall[] = [];
-  const imageCalls: RecordedImageCall[] = [];
+  const resolveSlotCalls: RecordedResolveSlotCall[] = [];
 
   const gateway: AiStack['gateway'] = {
     async generateText(input, options) {
@@ -89,16 +88,21 @@ function createMockAi(): {
     async embed() {
       throw new Error('embed: not used in this test');
     },
-    async generateImage(input, options) {
-      imageCalls.push({
-        presetId: input.presetId,
-        prompt: input.prompt,
+    resolveSlot(presetId, options) {
+      resolveSlotCalls.push({
+        presetId,
         apiKeys: options?.apiKeys,
         slotOverrides: options?.slotOverrides,
       });
       return {
-        images: [{ mimeType: 'image/png', url: 'https://example.com/x.png' }],
-        usage: { inputTokens: 0, outputTokens: 0 },
+        presetId: presetId ?? 'unknown',
+        provider: 'mock',
+        protocol: 'openai-chat-v1',
+        baseUrl: 'https://mock.example/v1',
+        apiKey: 'mock-key',
+        model: 'mock-model',
+        tag: 'image',
+        metadata: {},
       };
     },
     async synthesizeSpeech() {
@@ -119,7 +123,7 @@ function createMockAi(): {
     gateway,
   } as unknown as AiStack;
 
-  return { ai, calls, imageCalls };
+  return { ai, calls, resolveSlotCalls };
 }
 
 function buildTestApp(opts: {
@@ -161,20 +165,25 @@ function buildTestApp(opts: {
     return c.json({ text: result.content });
   });
 
-  // Image route — exercises the pluginGateway path so we can assert that
-  // request-scoped provider keys + slot overrides propagate into
-  // function-runtime image calls (audit F2).
-  app.post('/image', async (c) => {
+  // Slot-resolve route — exercises the pluginGateway path so we can
+  // assert that request-scoped provider keys + slot overrides propagate
+  // into function-runtime slot resolution (audit F2). Plugins call
+  // `ctx.gateway.resolveSlot()` to get baseUrl/apiKey for their own
+  // wire (image generation, custom HTTP). The middleware must rebuild
+  // the gateway with merged keys so the plugin sees the same browser-
+  // declared custom presets the agent-runtime side does.
+  app.post('/resolve-slot', async (c) => {
     const gateway = c.get('pluginGateway');
     if (!gateway) {
       return c.json({ error: 'pluginGateway missing' }, 500);
     }
-    const body = await c.req.json<{ presetId?: string }>();
-    const result = await gateway.generateImage({
-      presetId: body.presetId,
-      prompt: 'a test',
+    const body = await c.req.json<{ presetId?: string; fallbackTag?: string }>();
+    const slot = gateway.resolveSlot({
+      ...(body.presetId !== undefined ? { presetId: body.presetId } : {}),
+      ...(body.fallbackTag !== undefined ? { fallbackTag: body.fallbackTag } : {}),
     });
-    return c.json({ count: result.images.length });
+    if (!slot) return c.json({ resolved: false });
+    return c.json({ resolved: true, baseUrl: slot.baseUrl, model: slot.model });
   });
 
   return app;
@@ -321,10 +330,10 @@ describe('per-request LLM middleware', () => {
   });
 
   it('rebuilds pluginGateway with merged apiKeys and slotOverrides when headers are present (audit F2)', async () => {
-    const { ai, imageCalls } = createMockAi();
+    const { ai, resolveSlotCalls } = createMockAi();
     const defaultAdapter: LLMAdapter = {
       async generate() {
-        throw new Error('llmAdapter unused by the /image route');
+        throw new Error('llmAdapter unused by the /resolve-slot route');
       },
     };
     const app = buildTestApp({
@@ -347,24 +356,24 @@ describe('per-request LLM middleware', () => {
     };
     const providerKeys = { qwen: 'sk-user-live' };
 
-    const res = await app.request('/image', {
+    const res = await app.request('/resolve-slot', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         'X-Provider-Keys': b64(providerKeys),
         'X-Slot-Config': b64(slotConfig),
       },
-      body: JSON.stringify({ presetId: 'image' }),
+      body: JSON.stringify({ presetId: 'image', fallbackTag: 'image' }),
     });
     expect(res.status).toBe(200);
 
-    expect(imageCalls).toHaveLength(1);
-    expect(imageCalls[0].presetId).toBe('image');
-    expect(imageCalls[0].apiKeys).toEqual({
+    expect(resolveSlotCalls).toHaveLength(1);
+    expect(resolveSlotCalls[0].presetId).toBe('image');
+    expect(resolveSlotCalls[0].apiKeys).toEqual({
       deepseek: 'env-key',
       qwen: 'sk-user-live',
     });
-    expect(imageCalls[0].slotOverrides).toMatchObject({
+    expect(resolveSlotCalls[0].slotOverrides).toMatchObject({
       slotPresetOverrides: { image: 'custom_dashscope' },
       customPresets: [
         expect.objectContaining({
@@ -377,7 +386,7 @@ describe('per-request LLM middleware', () => {
   });
 
   it('leaves the default pluginGateway in place when no headers are present', async () => {
-    const { ai, imageCalls } = createMockAi();
+    const { ai, resolveSlotCalls } = createMockAi();
     let defaultPluginInvoked = false;
     const defaultPluginGateway: PluginRuntimeGateway = {
       async generateText() {
@@ -386,10 +395,17 @@ describe('per-request LLM middleware', () => {
       async generateObject() {
         throw new Error('unused');
       },
-      async generateImage() {
+      resolveSlot() {
         defaultPluginInvoked = true;
         return {
-          images: [{ mimeType: 'image/png', url: 'https://default.example/img.png' }],
+          presetId: 'image',
+          provider: 'default-mock',
+          protocol: 'openai-chat-v1',
+          baseUrl: 'https://default.example/v1',
+          apiKey: 'default-key',
+          model: 'default-model',
+          tag: 'image',
+          metadata: {},
         };
       },
     };
@@ -406,14 +422,14 @@ describe('per-request LLM middleware', () => {
       defaultPluginGateway,
     });
 
-    const res = await app.request('/image', {
+    const res = await app.request('/resolve-slot', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ presetId: 'image' }),
+      body: JSON.stringify({ presetId: 'image', fallbackTag: 'image' }),
     });
     expect(res.status).toBe(200);
     expect(defaultPluginInvoked).toBe(true);
-    expect(imageCalls).toHaveLength(0);
+    expect(resolveSlotCalls).toHaveLength(0);
   });
 
   it('drops custom preset entries missing required fields', async () => {

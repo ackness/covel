@@ -153,6 +153,7 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
     const pluginRegistry = c.get('pluginRegistry');
     const llmAdapter = c.get('llmAdapter');
     const pluginGateway = c.get('pluginGateway');
+  const pluginUtils = c.get('pluginUtils');
     const loadRuntimeFn = c.get('loadRuntimeFn');
     const toolExecutor = c.get('toolExecutor');
     const resolveModel = c.get('resolveModel');
@@ -311,6 +312,7 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
           loadRuntime: loadRuntimeFn,
           llm: llmAdapter,
           ...(pluginGateway ? { gateway: pluginGateway } : {}),
+        ...(pluginUtils ? { utils: pluginUtils } : {}),
           getConfig: turnGetConfig,
           store,
           toolExecutor,
@@ -462,6 +464,7 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
           completedResults: new Map(),
           config,
           ...(pluginGateway ? { gateway: pluginGateway } : {}),
+        ...(pluginUtils ? { utils: pluginUtils } : {}),
           triggerEvent: args.triggerEvent,
           ...(followerUserSettings ? { userSettings: followerUserSettings } : {}),
           pluginData: pluginDataHandle,

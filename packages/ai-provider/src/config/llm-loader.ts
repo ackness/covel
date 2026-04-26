@@ -119,7 +119,6 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
       fallbackPresetIds: fallbackIds.length > 0 ? fallbackIds : undefined,
       capability,
       tag,
-      ...(def.imageApi !== undefined ? { imageApi: def.imageApi } : {}),
       ...(def.embeddingFormat !== undefined ? { embeddingFormat: def.embeddingFormat } : {}),
       ...(providerRequestMetadata !== undefined ? { providerRequestMetadata } : {}),
     });

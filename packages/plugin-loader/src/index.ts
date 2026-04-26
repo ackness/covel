@@ -36,6 +36,8 @@ export type {
   FunctionHandler,
   FunctionHandlerContext,
   PluginRuntimeGateway,
+  PluginRuntimeUtils,
+  ResolvedSlotForPlugin,
   PluginDataWriter,
   PluginLogger,
   FunctionStoreView,

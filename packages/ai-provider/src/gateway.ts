@@ -7,13 +7,13 @@ import type { SlotRegistry } from "./slot-registry.js";
 import { applySlotOverlay, resolveSlotOverride } from "./slot-overlay.js";
 import type {
   EmbeddingResult,
-  ImageGenerationResult,
   ModelParameterOverrides,
   OperationMode,
   PresetConfig,
   ProviderConfig,
   ProviderLifecycleHook,
   ProviderProtocol,
+  ResolvedSlotConfig,
   ResolvedTarget,
   SlotOverridesInput,
   SpeechSynthesisResult,
@@ -392,52 +392,6 @@ export function createGateway(deps: GatewayDependencies) {
     );
   }
 
-  async function generateImage(
-    input: {
-      presetId?: string;
-      prompt: string;
-      /**
-       * Per-call model override. When set, replaces the model resolved
-       * from the preset for this single invocation. Lets a plugin
-       * `userSettings` field expose a model picker (e.g. wan2.7-image vs
-       * wan2.7-image-pro) without forcing a dedicated `llm.toml` slot
-       * per variant (audit F4). The provider/baseUrl still come from the
-       * resolved preset, so cross-provider misuse stays bounded.
-       */
-      model?: string;
-      providerRequestMetadata?: Record<string, unknown>;
-    },
-    options?: GatewayOptions
-  ): Promise<ImageGenerationResult> {
-    return runSingleFromPreset(
-      input.presetId,
-      "image",
-      options,
-      (target, resolved) => {
-        const presetImageApi = target.preset?.imageApi;
-        const mergedMetadata = withPresetMetadata(
-          target,
-          input.providerRequestMetadata,
-          input.presetId,
-          options,
-        );
-        const metadataWithImageFormat: Record<string, unknown> | undefined =
-          presetImageApi
-            ? { ...(mergedMetadata ?? {}), imageFormat: presetImageApi }
-            : mergedMetadata;
-        return resolved.adapter.generateImage(
-          configWithSignal(resolved.config, options),
-          {
-            model: input.model ?? targetModel(target),
-            prompt: input.prompt,
-            providerRequestMetadata: metadataWithImageFormat,
-          },
-          { profile: target.profile, preset: target.preset, mode: "image" }
-        );
-      }
-    );
-  }
-
   async function synthesizeSpeech(
     input: {
       presetId?: string;
@@ -556,16 +510,94 @@ export function createGateway(deps: GatewayDependencies) {
     return withParameterOverrides(merged, presetId, options);
   }
 
+  /**
+   * Resolve a slot/preset id into a public, immutable configuration view
+   * suitable for plugin-side wire calls.
+   *
+   * Plugins that own their own image/audio/custom wire format use this in
+   * preference to the high-level helpers (`generateImage`, `embed`, …):
+   * the framework picks the right preset, applies request-scoped
+   * overlays + API keys, and hands back `{ baseUrl, apiKey, model, … }`
+   * without forcing the call through a built-in adapter. The plugin
+   * decides whether to use Vercel AI SDK, the OpenAI SDK, raw fetch, a
+   * custom polling state machine, etc.
+   *
+   * Returns `null` when no slot can be resolved (typical when llm.toml is
+   * empty AND no per-request override applies). Throws when the preset
+   * registry rejects the resolved id (e.g. malformed config).
+   */
+  function resolveSlot(
+    presetId: string | undefined,
+    options?: GatewayOptions & { fallbackTag?: string },
+  ): ResolvedSlotConfig | null {
+    const cleanup = applySlotOverlay(deps, options?.slotOverrides);
+    try {
+      const tag = options?.fallbackTag ?? "text";
+      const effectivePresetId = resolveSlotOrPassthrough(presetId, tag, options);
+      if (!effectivePresetId) return null;
+
+      const target = deps.presetRegistry.resolveTextTarget({
+        presetId: effectivePresetId,
+      });
+      let resolved = deps.providerRegistry.resolve(
+        target.preset ?? target.profile,
+        { mode: tag === "image" ? "image" : "text" },
+      );
+      if (options?.apiKeys) {
+        resolved = deps.providerRegistry.withApiKeys(
+          resolved,
+          options.apiKeys,
+          targetProvider(target),
+        );
+      }
+
+      const provider = targetProvider(target);
+      const model = targetModel(target);
+      const protocol =
+        target.preset?.protocol ?? resolved.protocol;
+      const baseUrl = resolved.config.baseUrl ?? target.preset?.baseUrl;
+      const presetTag = target.preset?.tag ?? "text";
+      const presetMeta = target.preset?.providerRequestMetadata ?? {};
+      const parameterOverrides = resolveParameterOverrides(presetId, options);
+
+      // Surface llm.toml's free-form fields (embeddingFormat + any future
+      // per-slot hints) under a single `metadata` bag the plugin owns.
+      // This is the contract that lets new plugin formats declare bespoke
+      // slot fields without framework changes.
+      const metadata: Record<string, unknown> = {
+        ...presetMeta,
+        ...(target.preset?.embeddingFormat !== undefined
+          ? { embeddingFormat: target.preset.embeddingFormat }
+          : {}),
+      };
+
+      return {
+        presetId: effectivePresetId,
+        provider,
+        protocol: protocol as string,
+        ...(baseUrl ? { baseUrl } : {}),
+        ...(resolved.config.apiKey ? { apiKey: resolved.config.apiKey } : {}),
+        ...(resolved.config.headers ? { headers: { ...resolved.config.headers } } : {}),
+        model,
+        tag: presetTag,
+        metadata,
+        ...(parameterOverrides ? { parameterOverrides } : {}),
+      };
+    } finally {
+      cleanup();
+    }
+  }
+
   return {
     generateText,
     generateObject,
     streamText,
     embed,
-    generateImage,
     synthesizeSpeech,
     transcribeAudio,
     resolveSlotToPresetId,
     getSlotParameterOverrides,
+    resolveSlot,
   };
 
   // ── Internal helpers ─────────────────────────────────────────────

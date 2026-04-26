@@ -223,24 +223,31 @@ describe('executeTurn: manual trigger', () => {
         finishReason: 'stop',
         usage: { inputTokens: 1, outputTokens: 1 },
       }),
-      generateImage: async () => ({
-        images: [{ url: 'https://example.test/img.png', mimeType: 'image/png' }],
+      resolveSlot: () => ({
+        presetId: 'image',
+        provider: 'fake',
+        protocol: 'openai-chat-v1',
+        baseUrl: 'https://example.test/v1',
+        apiKey: 'fake-key',
+        model: 'fake-image-model',
+        tag: 'image',
+        metadata: {},
       }),
     };
 
     let sawGateway: PluginRuntimeGateway | undefined;
-    let imageUrl: string | undefined;
+    let resolvedBaseUrl: string | undefined;
     const { result } = await runTurn(
       [target],
       {
         'plug/needs-gateway': async (ctx) => {
           sawGateway = ctx.gateway as PluginRuntimeGateway | undefined;
-          const { images } = await sawGateway!.generateImage({
+          const slot = sawGateway!.resolveSlot({
             presetId: 'image',
-            prompt: 'a sunset',
+            fallbackTag: 'image',
           });
-          imageUrl = images[0]?.url;
-          return { ok: true, imageUrl };
+          resolvedBaseUrl = slot?.baseUrl;
+          return { ok: true, resolvedBaseUrl };
         },
       },
       {
@@ -253,7 +260,7 @@ describe('executeTurn: manual trigger', () => {
     );
 
     expect(sawGateway).toBe(fakeGateway);
-    expect(imageUrl).toBe('https://example.test/img.png');
+    expect(resolvedBaseUrl).toBe('https://example.test/v1');
     expect(result.runtimeResults[0]!.status).toBe('success');
   });
 

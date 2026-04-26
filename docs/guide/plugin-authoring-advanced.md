@@ -254,11 +254,12 @@ export default async function handler(
 | `pluginId` / `runtimeId` | `string` | 本 runtime 的身份(和 manifest 里一致) |
 | `locale` | `string` | `zh-CN` / `en` / ...,来自 session / 请求 |
 | `store` | `FunctionStoreView` | 绑定当前 session/plugin 的只读 DataStore 视图：`getPluginData(namespace, key)` / `listPluginData(namespace)` / `getSession()` / `listTurnMessages(limit?)`。写入使用 `ctx.pluginData` 或 handler return 值 |
-| `gateway` | `PluginRuntimeGateway?` | 调用 LLM / 图像 / 嵌入等 provider 的唯一通道。签名见下 |
+| `gateway` | `PluginRuntimeGateway?` | 文本/object 生成 + slot 解析。签名见下 |
+| `utils` | `PluginRuntimeUtils?` | SSRF 安全的 URL 校验 + 带重试的 fetch。插件自管 wire 时使用 |
 | `manualPayload` | `unknown?` | 仅在 `POST /plugin-rpc` 手动触发时注入,为请求体的 `payload` 字段 |
 | `triggerEvent` | `{ topic, data }?` | 仅 event 触发时存在,包含触发该 runtime 的事件 |
 
-**`ctx.gateway`:** function runtime 调用 LLM / 图像的唯一合法入口。绝不允许直接 `fetch` provider URL 或导入 provider SDK —— 这样会跳过 slot 解析、密钥管理、SSRF 防护和 replay cache。
+**`ctx.gateway`:** function runtime 调用 LLM 的入口。绝不允许直接 `fetch` 文本 provider URL 或导入文本 SDK —— 这样会跳过 slot 解析、密钥管理、SSRF 防护和 replay cache。
 
 ```ts
 // 文本补全
@@ -267,19 +268,37 @@ const res = await ctx.gateway.generateText({
   messages: [{ role: 'user', content: '...' }],
 });
 
-// 图像生成(wan2.x / DALL-E / SD)
-const { images } = await ctx.gateway.generateImage({
-  presetId: 'image',
-  prompt: 'a moonlit castle',
-});
-// images[i] = { url?, base64?, mimeType? }
+// 解析 slot 配置(图像 / 自管 wire 的插件用)
+const slot = ctx.gateway.resolveSlot({ presetId: 'image', fallbackTag: 'image' });
+if (slot) {
+  // slot = { presetId, provider, baseUrl, apiKey, model, tag, metadata, ... }
+  // 拿到凭据后用任意 SDK / fetch 调供应商
+}
 ```
+
+> **图像生成的设计:** 框架**不**提供 `gateway.generateImage`。图像 wire(OpenAI Images / DashScope wan2.x 异步轮询 / Replicate / fal 队列 / Midjourney)各家差异极大,集中适配器收益小、维护成本高。插件通过 `resolveSlot` 拿凭据后**自管** HTTP 形态:可以用 Vercel AI SDK、`openai` SDK、原生 fetch、自写状态机。新增图像格式 = ship 一个插件,框架不动。参考 `dashscope-image-gen` / `openai-image-gen` 两个内置实现。
 
 > **结构化 JSON 输出(未在函数 runtime 中可用,审计 F9):** `ctx.gateway.generateObject`
 > 需要宿主向 gateway 注入 JSON Schema → Zod 的转换器,目前组合根未接入。若需要
 > 结构化输出,请用 **agent runtime** 的 `output.schema` / `responseFormat` 路径 ——
 > 框架在那里自动处理 schema → provider-specific grammar。
 > 待某个插件真正需要 function-runtime 下的 `generateObject` 时,再引入转换器。
+
+**`ctx.utils`:** 自管 wire 的插件必须经过这里调用网络,不要直接 `fetch`,以保持 SSRF 守卫和重试策略统一。
+
+```ts
+// SSRF 守卫 — 远端必须 https,loopback 才允许 http,阻断 RFC1918/169.254/cloud metadata
+const guard = ctx.utils.validateBaseUrl(slot.baseUrl);
+if (!guard.ok) throw new Error(`Bad baseUrl: ${guard.reason}`);
+
+// fetch 包装 — 自动 429 / 5xx 指数退避重试,honor Retry-After
+const response = await ctx.utils.fetchWithRetry(`${slot.baseUrl}/...`, {
+  method: 'POST',
+  headers: { authorization: `Bearer ${slot.apiKey}` },
+  body: JSON.stringify({ ... }),
+  maxRetries: 3,                                    // 默认 3,设 0 禁用
+});
+```
 
 ### 手动触发: 前端 → RPC → 函数 Runtime
 
@@ -355,17 +374,41 @@ handler: ./image-handler.js
 
 ```ts
 // runtimes/image-generator/image-handler.js
+//
+// Plugin-owned wire: 框架只通过 ctx.gateway.resolveSlot() 给凭据,
+// 不参与图像 HTTP 形态。可换成 Vercel AI SDK / openai SDK / 直 fetch /
+// 自写轮询;参考 dashscope-image-gen 或 openai-image-gen 两个内置实现。
 export default async function handler(ctx) {
   const prompt = ctx.triggerEvent?.data?.prompt;
-  const { images } = await ctx.gateway.generateImage({ presetId: 'image', prompt });
-  const image = images[0];
+
+  // 1. 拿 slot 凭据(凭据全部住在 ~/.covel/llm.toml,不复制到插件设置)
+  const slot = ctx.gateway.resolveSlot({ presetId: 'image', fallbackTag: 'image' });
+  if (!slot) throw new Error('image slot not configured in llm.toml');
+
+  // 2. SSRF 守卫
+  const guard = ctx.utils.validateBaseUrl(slot.baseUrl);
+  if (!guard.ok) throw new Error(`Bad baseUrl: ${guard.reason}`);
+
+  // 3. 任选 SDK 或裸 fetch 调供应商。这里演示 OpenAI Images API 同步形态。
+  const response = await ctx.utils.fetchWithRetry(`${slot.baseUrl}/images/generations`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${slot.apiKey}`,
+    },
+    body: JSON.stringify({ model: slot.model, prompt, n: 1, response_format: 'b64_json' }),
+  });
+  const payload = await response.json();
+  const first = payload.data?.[0] ?? {};
+  const mimeType = 'image/png';
+
   return {
     // output JSON for downstream runtimes / trace
-    url: image?.url,
-    base64: image?.base64,
+    url: first.url ?? (first.b64_json ? `data:${mimeType};base64,${first.b64_json}` : null),
+    base64: first.b64_json ?? null,
     // framework picks this up → commits one plugin.data proposal
     pluginData: [
-      { namespace: 'images', key: ctx.turnId, value: image },
+      { namespace: 'images', key: ctx.turnId, value: { ...first, mimeType } },
     ],
   };
 }

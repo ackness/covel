@@ -109,6 +109,7 @@ resumeRoutes.post('/:id/resume', async (c) => {
   const pluginRegistry = c.get('pluginRegistry');
   const llmAdapter = c.get('llmAdapter');
   const pluginGateway = c.get('pluginGateway');
+  const pluginUtils = c.get('pluginUtils');
   const loadRuntimeFn = c.get('loadRuntimeFn');
   const toolExecutor = c.get('toolExecutor');
   const resolveModel = c.get('resolveModel');
@@ -230,6 +231,7 @@ resumeRoutes.post('/:id/resume', async (c) => {
         loadRuntime: loadRuntimeFn,
         llm: llmAdapter,
         ...(pluginGateway ? { gateway: pluginGateway } : {}),
+        ...(pluginUtils ? { utils: pluginUtils } : {}),
         getConfig: c.get('getConfigFn') ?? ((_p: string, _r: string) => ({})),
         store,
         toolExecutor,

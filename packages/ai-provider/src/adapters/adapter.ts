@@ -1,8 +1,6 @@
 import type {
   EmbeddingParams,
   EmbeddingResult,
-  ImageGenerationParams,
-  ImageGenerationResult,
   ModelRequestContext,
   ObjectGenerationParams,
   ObjectGenerationResult,
@@ -44,12 +42,6 @@ export interface ModelProviderAdapter {
     params: EmbeddingParams,
     context?: ModelRequestContext
   ): Promise<EmbeddingResult>;
-
-  generateImage(
-    config: ProviderConfig,
-    params: ImageGenerationParams,
-    context?: ModelRequestContext
-  ): Promise<ImageGenerationResult>;
 
   synthesizeSpeech(
     config: ProviderConfig,

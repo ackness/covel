@@ -18,6 +18,7 @@ import { createAiStack } from "./ai-setup.js";
 import { createStoreFromEnv, resolveBackendFromEnv } from "@covel/store";
 import { createEmbeddingLockHelper } from "./embedding-lock.js";
 import { createGatewayAdapter, createPluginRuntimeGateway } from "@covel/runtime";
+import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
 import { bootstrapApi } from "./routes/api/bootstrap.js";
 import {
   createInProcessSessionLock,
@@ -185,6 +186,14 @@ const llmAdapter = createGatewayAdapter(ai.gateway, { apiKeys });
 // app.ts composition root. A future PR can supply a converter if a
 // plugin genuinely needs it.
 const pluginGateway = createPluginRuntimeGateway(ai.gateway, { apiKeys });
+// Stateless plugin utility surface — exposed to function handlers via
+// `FunctionHandlerContext.utils`. Plugins call these in lieu of bare
+// fetch / hand-rolled SSRF checks so the framework stays the single
+// source of truth for those policies.
+const pluginUtils = {
+  validateBaseUrl: validateBaseUrlForPlugin,
+  fetchWithRetry,
+};
 const preferredMemorySlot = resolvePreferredMemorySlot(ai.slotRegistry);
 
 // ── Bootstrap API ───────────────────────────────────────────────
@@ -212,6 +221,7 @@ const api = await bootstrapApi({
   pluginsDirs,
   llmAdapter,
   pluginGateway,
+  pluginUtils,
   store,
   storeBackend,
   ensureEmbeddingLock,

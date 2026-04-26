@@ -114,7 +114,6 @@ export function createAiStack(): AiStack {
           slotId: preset.defaultSlot,
           presetId: preset.id,
           tag: preset.tag ?? "text",
-          ...(preset.imageApi !== undefined ? { imageApi: preset.imageApi } : {}),
         };
       }
     }

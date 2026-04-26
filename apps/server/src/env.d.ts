@@ -1,5 +1,5 @@
 import type { DataStore } from '@covel/store';
-import type { PluginRegistry, LoadedRuntime, PluginRuntimeGateway } from '@covel/plugin-loader';
+import type { PluginRegistry, LoadedRuntime, PluginRuntimeGateway, PluginRuntimeUtils } from '@covel/plugin-loader';
 import type { StateManager } from '@covel/state';
 import type { EventBus } from '@covel/events';
 import type { LLMAdapter, ToolExecutor, RpcExecutor, PluginRpcRegistry, HookPipeline } from '@covel/runtime';
@@ -30,6 +30,12 @@ declare module 'hono' {
      * minimal test-harness LLMAdapter only.
      */
     pluginGateway?: PluginRuntimeGateway;
+    /**
+     * Stateless plugin-facing utility surface (SSRF guard + retrying
+     * fetch) exposed via `FunctionHandlerContext.utils`. Set by
+     * `bootstrapApi()` when the caller provides `pluginUtils`.
+     */
+    pluginUtils?: PluginRuntimeUtils;
     loadRuntimeFn: LoadRuntimeFn;
     toolExecutor: ToolExecutor;
     getConfigFn: GetConfigFn;

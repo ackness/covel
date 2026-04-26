@@ -16,7 +16,7 @@ import type {
   TurnResult,
 } from '@covel/shared';
 import { isEnvEnabled } from '@covel/shared';
-import type { LoadedRuntime, PluginRuntimeGateway } from '@covel/plugin-loader';
+import type { LoadedRuntime, PluginRuntimeGateway, PluginRuntimeUtils } from '@covel/plugin-loader';
 import type {
   DataStore,
   TurnMessageRecord,
@@ -107,6 +107,13 @@ export interface TurnExecutorDeps {
    * that don't wire up the ai-provider gateway; handlers must null-check.
    */
   readonly gateway?: PluginRuntimeGateway;
+  /**
+   * Optional plugin-facing utility surface (SSRF guard + retrying fetch)
+   * forwarded to function-runtime handlers via `FunctionHandlerContext.utils`.
+   * Wired in production from `@covel/ai-provider/plugin-utils`. Absent in
+   * test harnesses; handlers must null-check before use.
+   */
+  readonly utils?: PluginRuntimeUtils;
   /** Get effective config for a plugin/runtime. */
   readonly getConfig: (pluginId: string, runtimeId: string) => Readonly<Record<string, unknown>>;
   /** Optional DataStore for persisting results. */
@@ -2011,6 +2018,7 @@ async function executeOneRuntime(
         completedResults,
         config,
         ...(deps.gateway ? { gateway: deps.gateway } : {}),
+        ...(deps.utils ? { utils: deps.utils } : {}),
         ...(manualPayloadForRuntime ? { manualPayload: manualPayloadForRuntime } : {}),
         ...(triggerEvent ? { triggerEvent } : {}),
         ...(userSettingsForRuntime ? { userSettings: userSettingsForRuntime } : {}),
@@ -2175,6 +2183,7 @@ async function executeOneRuntime(
         completedResults,
         config: guardConfig,
         ...(deps.gateway ? { gateway: deps.gateway } : {}),
+        ...(deps.utils ? { utils: deps.utils } : {}),
         ...(guardManualPayload ? { manualPayload: guardManualPayload } : {}),
         ...(triggerEvent ? { triggerEvent } : {}),
         ...(guardUserSettings ? { userSettings: guardUserSettings } : {}),

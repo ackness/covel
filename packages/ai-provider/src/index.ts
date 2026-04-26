@@ -23,15 +23,13 @@ export type {
   StreamEvent,
   EmbeddingParams,
   EmbeddingResult,
-  ImageGenerationParams,
-  GeneratedImage,
-  ImageGenerationResult,
   SpeechSynthesisParams,
   SpeechSynthesisResult,
   TranscriptionParams,
   TranscriptionResult,
   ModelRequestContext,
   ResolvedTarget,
+  ResolvedSlotConfig,
   ProviderLifecycleHook,
   AiConfig,
   ModelSlotConfig,
@@ -77,6 +75,14 @@ export {
   resolveSlotOverride,
   type OverlayDeps,
 } from "./slot-overlay.js";
+
+// Plugin utilities (exposed via runtime → ctx.utils)
+export {
+  validateBaseUrlForPlugin,
+  fetchWithRetry,
+  type BaseUrlValidationResult,
+  type FetchWithRetryOptions,
+} from "./plugin-utils.js";
 
 // Capability
 export {

@@ -17,7 +17,7 @@ interface CliOptions {
   llmResponses?: readonly Record<string, unknown>[];
   llmContent?: string;
   llmObject?: Record<string, unknown>;
-  mockImageUrl?: string;
+  mockPresetId?: string;
   showPrompts?: boolean;
   ignoreUpstreams?: boolean;
   expectsBackgroundFollower?: boolean;
@@ -46,7 +46,7 @@ Options:
   --llm-object <json>        Mock LLM JSON object content (auto stringified — easier than --llm-content for JSON envelopes).
   --llm-response <json>      Full mock LLM response JSON.
   --llm-responses <json>     Array of mock LLM responses, consumed one per model call.
-  --mock-image-url <url>     Mock gateway image URL.
+  --mock-preset-id <id>      Override the synthetic preset id surfaced by the mock gateway's resolveSlot() (default mock-image).
   --expects-background-follower
                              Write a failed _jobs row when no deferred follower is emitted.
   --show-prompts             Include captured LLM messages in output.
@@ -143,8 +143,8 @@ function parseArgs(argv: readonly string[]): CliOptions {
       case '--llm-object':
         options.llmObject = parseJsonObject(next(), '--llm-object');
         break;
-      case '--mock-image-url':
-        options.mockImageUrl = next();
+      case '--mock-preset-id':
+        options.mockPresetId = next();
         break;
       case '--show-prompts':
         options.showPrompts = true;

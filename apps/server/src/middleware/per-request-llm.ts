@@ -40,11 +40,12 @@ export interface PerRequestLlmOptions {
   /**
    * The plugin-runtime gateway facade produced at server startup. When the
    * request carries overriding headers the middleware rebuilds a request-
-   * scoped facade so function-runtime `ctx.gateway.generateImage(...)` calls
-   * honour the same browser-supplied provider keys / custom presets / slot
-   * overrides as the agent-runtime LLM adapter. Without this rebuild the
-   * function-runtime path silently uses the startup env keys and the
-   * server-side llm.toml, defeating per-session UI settings (audit F2).
+   * scoped facade so function-runtime `ctx.gateway.resolveSlot(...)` /
+   * `generateText(...)` calls honour the same browser-supplied provider
+   * keys / custom presets / slot overrides as the agent-runtime LLM
+   * adapter. Without this rebuild the function-runtime path silently uses
+   * the startup env keys and the server-side llm.toml, defeating
+   * per-session UI settings (audit F2).
    */
   readonly defaultPluginGateway: PluginRuntimeGateway;
 }
@@ -83,10 +84,10 @@ export function createPerRequestLlmMiddleware(
 
     // Audit F2: keep the function-runtime gateway in lock-step with the
     // agent-runtime LLM adapter. Both are rebuilt from the same merged
-    // keys / slot overrides so `ctx.gateway.generateImage(...)` inside a
+    // keys / slot overrides so `ctx.gateway.resolveSlot(...)` inside a
     // function handler resolves the same browser-declared custom presets
-    // (e.g. `covel.image` override to a user-added DashScope preset) as
-    // the agent-runtime side sees via `llmAdapter`.
+    // (e.g. a user-added DashScope preset for image plugins) as the
+    // agent-runtime side sees via `llmAdapter`.
     const perRequestPluginGateway = createPluginRuntimeGateway(opts.ai.gateway, {
       apiKeys: mergedApiKeys,
       ...(slotOverrides ? { slotOverrides } : {}),

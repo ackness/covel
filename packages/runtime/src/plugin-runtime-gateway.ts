@@ -14,7 +14,7 @@
  * keeps zero static dependency on @covel/ai-provider.
  */
 
-import type { PluginRuntimeGateway } from '@covel/plugin-loader';
+import type { PluginRuntimeGateway, ResolvedSlotForPlugin } from '@covel/plugin-loader';
 import type { GatewayAdapterConfig, SlotOverridesInput } from './gateway-llm-adapter.js';
 
 /**
@@ -61,24 +61,20 @@ export interface FullGatewayLike {
     usage: { inputTokens: number; outputTokens: number };
   }>;
 
-  generateImage(
-    input: {
-      presetId?: string;
-      prompt: string;
-      /**
-       * Per-call model override. Forwarded to the provider in place of the
-       * preset's resolved model. Lets plugin `userSettings` expose a model
-       * picker without requiring a dedicated llm.toml slot per variant
-       * (audit F4).
-       */
-      model?: string;
-      providerRequestMetadata?: Record<string, unknown>;
-    },
-    options?: FullGatewayOptions,
-  ): Promise<{
-    images: Array<{ mimeType: string; url?: string; dataBase64?: string }>;
-    usage: { inputTokens: number; outputTokens: number } | null;
-  }>;
+  resolveSlot(
+    presetId: string | undefined,
+    options?: FullGatewayOptions & { fallbackTag?: string },
+  ): {
+    presetId: string;
+    provider: string;
+    protocol: string;
+    baseUrl?: string;
+    apiKey?: string;
+    headers?: Record<string, string>;
+    model: string;
+    tag: string;
+    metadata: Record<string, unknown>;
+  } | null;
 }
 
 /**
@@ -197,41 +193,25 @@ export function createPluginRuntimeGateway(
       };
     },
 
-    async generateImage(input) {
-      const result = await gateway.generateImage(
-        {
-          ...(input.presetId ? { presetId: input.presetId } : {}),
-          prompt: input.prompt,
-          // Audit F4: forward per-call model override to the underlying
-          // gateway so the plugin can let `userSettings` pick a model
-          // (e.g. wan2.7-image-pro vs wan2.7-image) without requiring a
-          // separate llm.toml slot per variant.
-          ...(input.model ? { model: input.model } : {}),
-          ...(input.providerRequestMetadata
-            ? { providerRequestMetadata: { ...input.providerRequestMetadata } }
-            : {}),
-        },
-        {
-          ...commonOptions(),
-          ...(input.signal ? { signal: input.signal } : {}),
-        },
-      );
+    resolveSlot(input): ResolvedSlotForPlugin | null {
+      const resolved = gateway.resolveSlot(input.presetId, {
+        ...commonOptions(),
+        ...(input.fallbackTag ? { fallbackTag: input.fallbackTag } : {}),
+      });
+      if (!resolved) return null;
       return {
-        images: result.images.map((img) => ({
-          ...(img.url !== undefined ? { url: img.url } : {}),
-          ...(img.dataBase64 !== undefined ? { base64: img.dataBase64 } : {}),
-          mimeType: img.mimeType,
-        })),
-        ...(result.usage
-          ? {
-              usage: {
-                inputTokens: result.usage.inputTokens,
-                outputTokens: result.usage.outputTokens,
-              },
-            }
-          : {}),
+        presetId: resolved.presetId,
+        provider: resolved.provider,
+        protocol: resolved.protocol,
+        ...(resolved.baseUrl !== undefined ? { baseUrl: resolved.baseUrl } : {}),
+        ...(resolved.apiKey !== undefined ? { apiKey: resolved.apiKey } : {}),
+        ...(resolved.headers !== undefined ? { headers: { ...resolved.headers } } : {}),
+        model: resolved.model,
+        tag: resolved.tag,
+        metadata: { ...resolved.metadata },
       };
     },
+
   };
 }
 

@@ -61,14 +61,6 @@ export const slotDefinitionSchema = z.object({
   /** Capability tag. Auto-inferred from output modalities if omitted. */
   tag: z.string().optional(),
   /**
-   * Image generation API format for image covel.
-   * Only relevant when tag = "image" (or output = ["image"]).
-   *   "dashscope-wan" — DashScope WAN async task API (wan2.x models, Chinese prompts)
-   *   "openai-chat"   — OpenAI chat completions returning image output (gpt-4o-image etc., English prompts)
-   * If omitted, defaults to "openai-chat".
-   */
-  imageApi: z.enum(["dashscope-wan", "openai-chat"]).optional(),
-  /**
    * Embeddings request body format for embed slots.
    *   "openai" (default)       — standard `{input: string[]}` (OpenAI, Ollama, most OpenRouter text embedders)
    *   "nemotron-multimodal"    — OpenRouter NVIDIA Nemotron multimodal shape `{input: [{content: [...]}]}`

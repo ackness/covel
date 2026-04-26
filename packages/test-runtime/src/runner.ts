@@ -69,7 +69,8 @@ export interface RunRuntimeDebugOptions {
   readonly llmResponses?: readonly Record<string, unknown>[];
   readonly llmContent?: string;
   readonly llmObject?: Record<string, unknown>;
-  readonly mockImageUrl?: string;
+  /** Optional preset id surfaced by the mock gateway's resolveSlot. */
+  readonly mockPresetId?: string;
   readonly showPrompts?: boolean;
   readonly ignoreUpstreams?: boolean;
   readonly expectsBackgroundFollower?: boolean;
@@ -131,7 +132,7 @@ interface RuntimeCase {
   readonly llmResponses?: readonly Record<string, unknown>[];
   readonly llmContent?: string;
   readonly llmObject?: Record<string, unknown>;
-  readonly mockImageUrl?: string;
+  readonly mockPresetId?: string;
   readonly ignoreUpstreams?: boolean;
   readonly expectsBackgroundFollower?: boolean;
   readonly mode?: 'mock' | 'live' | 'both';
@@ -266,7 +267,6 @@ function pluginIdFromRuntime(runtimeId: string): string {
 }
 
 function makeGateway(options: RunRuntimeDebugOptions): PluginRuntimeGateway {
-  const imageUrl = options.mockImageUrl ?? 'mock://covel-test-runtime/image.png';
   return {
     async generateText(input) {
       return {
@@ -282,10 +282,20 @@ function makeGateway(options: RunRuntimeDebugOptions): PluginRuntimeGateway {
         usage: { inputTokens: 1, outputTokens: 1 },
       };
     },
-    async generateImage() {
+    resolveSlot() {
+      // Mock harness: return a synthetic slot config so plugins that own
+      // their own wire (e.g. openai-image-gen) can be unit-tested without
+      // a live llm.toml. Live mode replaces this whole gateway with a
+      // real one via createPluginRuntimeGateway().
       return {
-        images: [{ url: imageUrl, mimeType: 'image/png' }],
-        usage: { inputTokens: 1, outputTokens: 0 },
+        presetId: options.mockPresetId ?? 'mock-image',
+        provider: 'mock',
+        protocol: 'openai-chat-v1',
+        baseUrl: 'mock://covel-test-runtime/v1',
+        apiKey: 'mock-api-key',
+        model: 'mock-model',
+        tag: 'image',
+        metadata: {},
       };
     },
   };
@@ -327,7 +337,6 @@ function configureSlots(config: AiConfig): ReturnType<typeof createSlotRegistry>
         slotId: preset.defaultSlot,
         presetId: preset.id,
         tag: preset.tag ?? 'text',
-        ...(preset.imageApi !== undefined ? { imageApi: preset.imageApi } : {}),
       };
     }
   }
@@ -1024,7 +1033,7 @@ export async function runRuntimeCases(
       llmResponses: testCase.llmResponses ?? options.llmResponses,
       llmContent: testCase.llmContent ?? options.llmContent,
       llmObject: testCase.llmObject ?? options.llmObject,
-      mockImageUrl: testCase.mockImageUrl ?? options.mockImageUrl,
+      mockPresetId: testCase.mockPresetId ?? options.mockPresetId,
       ignoreUpstreams: testCase.ignoreUpstreams ?? options.ignoreUpstreams,
       expectsBackgroundFollower: testCase.expectsBackgroundFollower ?? options.expectsBackgroundFollower,
     });
