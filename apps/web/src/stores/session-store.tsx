@@ -5,7 +5,7 @@ import { getDataService } from "@/services/data-service";
 import { migrateLocalStorageToIdb } from "@/services/app-kv-store";
 import { setBlockSchemas } from "@/components/blocks/block-renderer.js";
 import { deepMerge } from "@covel/shared";
-import type { BlockSchemaDeclaration } from "@covel/shared";
+import type { AssetGenerateView, BlockSchemaDeclaration } from "@covel/shared";
 import {
   createSessionSubscription,
   type SessionSubscription,
@@ -164,6 +164,15 @@ interface SessionState {
    */
   pendingInteractionDrafts: PendingInteractionDraft[];
 
+  /**
+   * Assets emitted via `asset.generated` SSE keyed by turnId. Populated by the
+   * kernel's commit handler (see `session-kernel.ts` — emits one envelope per
+   * `asset.generate` proposal); rendered out-of-band by `<AssetTurnSidebar>`
+   * so the existing message timeline stays untouched. Order within a turn
+   * matches arrival order. Cleared on session swap / reset.
+   */
+  readonly assetsByTurn: ReadonlyMap<string, readonly AssetGenerateView[]>;
+
   /** Block IDs that have been submitted by the player (permanently locked). */
   submittedBlockIds: ReadonlySet<string>;
 
@@ -232,7 +241,8 @@ type Action =
   | { type: "CLEAR_DRAFTS" }
   | { type: "SET_SUSPENSIONS"; suspensions: SuspensionRecord[] }
   | { type: "ADD_SUSPENSION"; suspension: SuspensionRecord }
-  | { type: "REMOVE_SUSPENSION"; suspensionId: string };
+  | { type: "REMOVE_SUSPENSION"; suspensionId: string }
+  | { type: "ASSET_GENERATED"; turnId: string; asset: AssetGenerateView };
 
 const initialState: SessionState = {
   presets: [],
@@ -260,6 +270,7 @@ const initialState: SessionState = {
   messageUiSpecs: [],
   pendingInteractionDrafts: [],
   suspensions: [],
+  assetsByTurn: new Map<string, readonly AssetGenerateView[]>(),
 };
 
 
@@ -281,8 +292,20 @@ function reducer(state: SessionState, action: Action): SessionState {
         worlds: state.worlds.map((w) => w.id === action.world.id ? action.world : w),
         world: state.world?.id === action.world.id ? action.world : state.world,
       };
-    case "SET_SESSION":
-      return { ...state, session: action.session, phase: toLegacyPhase(action.session) };
+    case "SET_SESSION": {
+      // Reset asset map whenever the session id changes so assets from a
+      // previous session never bleed into the new one. Other per-session
+      // slices (messages, executionSteps, …) ride on RESET_SESSION earlier
+      // in the dispatch chain — assetsByTurn defends here too because the
+      // view layer reads it eagerly on render.
+      const sameSession = state.session?.id === action.session.id;
+      return {
+        ...state,
+        session: action.session,
+        phase: toLegacyPhase(action.session),
+        assetsByTurn: sameSession ? state.assetsByTurn : new Map<string, readonly AssetGenerateView[]>(),
+      };
+    }
     case "SET_WORLD_SESSIONS":
       return { ...state, worldSessions: action.sessions };
     case "REMOVE_SESSION":
@@ -444,9 +467,9 @@ function reducer(state: SessionState, action: Action): SessionState {
           : state.submittedBlockValues,
       };
     case "RESET_SESSION":
-      return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), submittedBlockValues: {}, sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [], suspensions: [] };
+      return { ...state, session: null, phase: "init", messages: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), submittedBlockValues: {}, sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [], suspensions: [], assetsByTurn: new Map<string, readonly AssetGenerateView[]>() };
     case "RESET_TO_WORLD_SELECT":
-      return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), submittedBlockValues: {}, sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [], suspensions: [] };
+      return { ...state, world: null, session: null, phase: "init", messages: [], worldSessions: [], statePatches: [], gameState: {}, pluginData: {}, executing: false, executionError: null, executionSteps: [], submittedBlockIds: new Set<string>(), submittedBlockValues: {}, sessionPlugins: [], messageUiSpecs: [], pendingInteractionDrafts: [], suspensions: [], assetsByTurn: new Map<string, readonly AssetGenerateView[]>() };
     case "LOAD_SESSION_PLUGINS":
       return { ...state, sessionPlugins: action.plugins };
     case "TOGGLE_SESSION_PLUGIN":
@@ -522,6 +545,22 @@ function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, pendingInteractionDrafts: state.pendingInteractionDrafts.filter((d) => d.id !== action.draftId) };
     case "CLEAR_DRAFTS":
       return { ...state, pendingInteractionDrafts: [] };
+    case "ASSET_GENERATED": {
+      // Append the asset to its turn's bucket. We construct a new Map and a
+      // new readonly array on every dispatch so memoised consumers (the
+      // sidebar reads via state.assetsByTurn.get(turnId)) re-render on each
+      // arrival. Same-id de-dup defends against the eventBus double-delivery
+      // pattern documented in handleSseEvent (turn.suspended arrives twice
+      // because /actions and /events/stream share the bus).
+      const existing = state.assetsByTurn.get(action.turnId) ?? [];
+      if (existing.some((a) => a.id === action.asset.id)) {
+        return state;
+      }
+      const nextBucket: readonly AssetGenerateView[] = [...existing, action.asset];
+      const nextMap = new Map(state.assetsByTurn);
+      nextMap.set(action.turnId, nextBucket);
+      return { ...state, assetsByTurn: nextMap };
+    }
     default:
       return state;
   }
@@ -1224,6 +1263,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // plugin-data.changed is delivered exclusively through the persistent
       // /events/stream subscription below — both channels share the same
       // eventBus so handling it here too would dispatch twice per event.
+      // ── Asset events (P0-b) ───────────────────────────────────
+      // The kernel emits one `asset.generated` envelope per `asset.generate`
+      // proposal that survives validation/commit (see session-kernel.ts).
+      // Payload: { proposalId, runtimeId, pluginId, asset: AssetGenerateView }.
+      // We surface assets out-of-band via state.assetsByTurn so the existing
+      // narrative timeline stays unchanged — modality-aware rendering happens
+      // in `<AssetTurnSidebar>` which the message column mounts per turn.
+      case "asset.generated": {
+        const asset = payload.asset as AssetGenerateView | undefined;
+        const turnIdFromPayload = (payload.turnId as string | undefined) ?? turnId;
+        if (!asset || !turnIdFromPayload) break;
+        dispatch({ type: "ASSET_GENERATED", turnId: turnIdFromPayload, asset });
+        break;
+      }
       // ── Error events ──────────────────────────────────────────
       case "error.occurred": {
         dispatch({ type: "SET_EXECUTION_ERROR", error: (payload.message as string) ?? "Execution failed" });
