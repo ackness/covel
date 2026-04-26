@@ -153,6 +153,40 @@ export interface S3MediaStoreOptions {
   readonly bucket?: string;
   readonly keyPrefix?: string;
   readonly publicBaseUrl?: string;
+  /**
+   * Durable metadata adapter. When supplied, owner / refs / asset metadata
+   * are delegated to the adapter (typically SQLite or PostgreSQL) instead of
+   * the default in-process Maps. Required for production: without it, owner
+   * and ref state evaporate on every restart, and `lookup()` always reports
+   * `ownerSessionId: null` post-restart — meaning every strict-route asset
+   * becomes inaccessible.
+   *
+   * See `createSqliteS3MetadataAdapter` for the canonical implementation.
+   */
+  readonly metadataAdapter?: S3MediaMetadataAdapter;
+}
+
+/**
+ * Persistence interface for S3-backed `MediaStore` metadata. The S3 client
+ * stores opaque bytes; everything else (owner, refs, mime, size, meta,
+ * createdAt) flows through this adapter so it can survive restarts and span
+ * multiple server instances. Implementations live alongside the SQL backends
+ * (`createSqliteS3MetadataAdapter`, `createPgS3MetadataAdapter` — TODO).
+ */
+export interface S3MediaMetadataAdapter {
+  /** Idempotent insert of an asset row. First writer wins for mime/size/meta. */
+  upsertAsset(record: MediaAssetRecord): Promise<void>;
+  /** Look up combined asset + owner metadata; null if unknown. */
+  getAsset(id: string): Promise<MediaAssetRecord | null>;
+  /** First-writer-wins ownership. Subsequent calls with a different sessionId are no-ops. */
+  recordOwnership(id: string, ownerSessionId: string, ownerPluginId?: string): Promise<void>;
+  /** Idempotent on (sessionId, mediaId); plugin_id is first-writer metadata only. */
+  addRef(id: string, sessionId: string, pluginId?: string): Promise<void>;
+  isReferencedBy(id: string, sessionId: string): Promise<boolean>;
+  listAssets(): Promise<readonly MediaAssetRecord[]>;
+  listRefs(): Promise<readonly MediaRefRecord[]>;
+  /** Remove the asset row plus all its refs. Called from MediaStore.delete(). */
+  deleteAsset(id: string): Promise<void>;
 }
 
 interface StoredMedia {
@@ -656,23 +690,91 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
   };
 }
 
+/**
+ * In-memory fallback metadata adapter. Used when `S3MediaStoreOptions.
+ * metadataAdapter` is not supplied. NOT durable: owner / refs / mime / size
+ * are lost on restart, and multiple server instances cannot share state.
+ * Production deployments MUST inject a real adapter (e.g.
+ * `createSqliteS3MetadataAdapter` or a future PG variant).
+ */
+function createInMemoryS3MetadataAdapter(): S3MediaMetadataAdapter {
+  const assets = new Map<string, MediaAssetRecord>();
+  const refRows = new Map<string, MediaRefRecord>();
+
+  return {
+    async upsertAsset(record) {
+      const existing = assets.get(record.id);
+      // First writer wins to match content-addressed semantics.
+      if (existing) return;
+      assets.set(record.id, record);
+    },
+    async getAsset(id) {
+      return assets.get(id) ?? null;
+    },
+    async recordOwnership(id, ownerSessionId, ownerPluginId) {
+      const asset = assets.get(id);
+      if (!asset) return;
+      if (asset.ownerSessionId && asset.ownerSessionId !== ownerSessionId) return;
+      assets.set(id, {
+        ...asset,
+        ownerSessionId,
+        ownerPluginId: ownerPluginId ?? null,
+      });
+    },
+    async addRef(id, sessionId, pluginId) {
+      if (!assets.has(id)) return;
+      // First writer wins on (sessionId, mediaId). Mirrors UNIQUE constraint
+      // enforced by SQLite/PG metadata backends.
+      const key = `${sessionId}\u0000${id}`;
+      if (refRows.has(key)) return;
+      refRows.set(key, {
+        sessionId,
+        mediaId: id,
+        pluginId: pluginId ?? null,
+        createdAt: new Date().toISOString(),
+      });
+    },
+    async isReferencedBy(id, sessionId) {
+      const asset = assets.get(id);
+      if (asset?.ownerSessionId === sessionId) return true;
+      return refRows.has(`${sessionId}\u0000${id}`);
+    },
+    async listAssets() {
+      return [...assets.values()].sort(
+        (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+      );
+    },
+    async listRefs() {
+      return [...refRows.values()];
+    },
+    async deleteAsset(id) {
+      assets.delete(id);
+      for (const [key, row] of refRows) {
+        if (row.mediaId === id) refRows.delete(key);
+      }
+    },
+  };
+}
+
 export function createS3MediaStore(
   client: S3CompatibleMediaClient,
   options?: S3MediaStoreOptions,
 ): MediaStore {
-  const owners = new Map<string, OwnerRecord>();
-  const refs = new Map<string, Set<string>>();
-  const metaById = new Map<string, MediaRef>();
-  const createdAtById = new Map<string, string>();
-  const refRows = new Map<string, MediaRefRecord>();
-
-  function addRefInternal(sessionId: string, id: string): void {
-    let set = refs.get(sessionId);
-    if (!set) {
-      set = new Set<string>();
-      refs.set(sessionId, set);
-    }
-    set.add(id);
+  let adapter: S3MediaMetadataAdapter;
+  if (options?.metadataAdapter) {
+    adapter = options.metadataAdapter;
+  } else {
+    // Surface the durability gap once at construction so operators can't
+    // miss it in dev. Stays out of the hot path (no per-request log spam).
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[covel/store] createS3MediaStore: no metadataAdapter supplied; ' +
+        'falling back to in-memory metadata. Ownership and refs will NOT ' +
+        'survive restarts and cannot be shared across server instances. ' +
+        'Pass metadataAdapter: createSqliteS3MetadataAdapter(...) (or an ' +
+        'equivalent PG adapter) for production.',
+    );
+    adapter = createInMemoryS3MetadataAdapter();
   }
 
   function makeUrl(ref: MediaRef): string {
@@ -683,42 +785,58 @@ export function createS3MediaStore(
     return `s3://${bucket}/${mediaObjectKey(ref.id, options?.keyPrefix)}`;
   }
 
+  function recordToRef(record: MediaAssetRecord): MediaRef {
+    return {
+      id: record.id,
+      mime: record.mime,
+      size: record.size,
+      ...(record.meta === undefined ? {} : { meta: record.meta }),
+    };
+  }
+
   return {
     async put(blob, mime, meta) {
       const bytes = await toBytes(blob);
       const id = sha256(bytes);
-      const existing = metaById.get(id);
-      if (existing) return existing;
+      const existing = await adapter.getAsset(id);
+      if (existing) return recordToRef(existing);
 
       const key = mediaObjectKey(id, options?.keyPrefix);
+      // Re-attach metadata for an object that's already in the bucket but
+      // missing from the adapter (e.g. populated by another process or a
+      // restored backup). headObject() preserves first-writer semantics.
       const head = await client.headObject(key);
       if (head) {
-        const ref: MediaRef = {
+        const record: MediaAssetRecord = {
           id,
           mime: head.mime,
           size: head.size,
+          ownerSessionId: null,
+          ownerPluginId: null,
+          createdAt: new Date().toISOString(),
           ...(head.meta === undefined ? {} : { meta: head.meta }),
         };
-        metaById.set(id, ref);
-        createdAtById.set(id, new Date().toISOString());
-        return ref;
+        await adapter.upsertAsset(record);
+        return recordToRef(record);
       }
 
-      const ref: MediaRef = {
+      const record: MediaAssetRecord = {
         id,
         mime,
         size: bytes.byteLength,
+        ownerSessionId: null,
+        ownerPluginId: null,
+        createdAt: new Date().toISOString(),
         ...(meta === undefined ? {} : { meta: toMeta(meta) }),
       };
       await client.putObject({
         key,
         bytes: new Uint8Array(bytes),
         mime,
-        ...(ref.meta === undefined ? {} : { meta: ref.meta }),
+        ...(record.meta === undefined ? {} : { meta: record.meta }),
       });
-      metaById.set(id, ref);
-      createdAtById.set(id, new Date().toISOString());
-      return ref;
+      await adapter.upsertAsset(record);
+      return recordToRef(record);
     },
 
     async get(ref) {
@@ -740,84 +858,57 @@ export function createS3MediaStore(
 
     async delete(id) {
       await client.deleteObject(mediaObjectKey(id, options?.keyPrefix));
-      owners.delete(id);
-      metaById.delete(id);
-      createdAtById.delete(id);
-      for (const set of refs.values()) {
-        set.delete(id);
-      }
-      for (const [key, row] of refRows) {
-        if (row.mediaId === id) refRows.delete(key);
-      }
+      await adapter.deleteAsset(id);
     },
 
     async lookup(id) {
+      const record = await adapter.getAsset(id);
+      if (record) {
+        return {
+          id: record.id,
+          mime: record.mime,
+          size: record.size,
+          ownerSessionId: record.ownerSessionId,
+          ownerPluginId: record.ownerPluginId,
+        };
+      }
+      // Adapter has no row but the bucket still holds the bytes — best-effort
+      // surface mime/size from headObject so callers can at least serve the
+      // asset. Owner is null because we have no metadata source.
       const key = mediaObjectKey(id, options?.keyPrefix);
       const object = await client.headObject(key);
       if (!object) return null;
-      const owner = owners.get(id);
       return {
         id,
         mime: object.mime,
         size: object.size,
-        ownerSessionId: owner?.sessionId ?? null,
-        ownerPluginId: owner?.pluginId ?? null,
+        ownerSessionId: null,
+        ownerPluginId: null,
       };
     },
 
     async recordOwnership(id, ownerSessionId, ownerPluginId) {
+      // exists() short-circuit prevents stamping ownership on a missing object
+      // (mirrors Memory/SQLite/IDB which guard via the assets map / row).
       if (!(await this.exists(id))) return;
-      const existing = owners.get(id);
-      if (existing && existing.sessionId !== ownerSessionId) return;
-      owners.set(id, {
-        sessionId: ownerSessionId,
-        pluginId: ownerPluginId ?? null,
-      });
+      await adapter.recordOwnership(id, ownerSessionId, ownerPluginId);
     },
 
     async addRef(id, sessionId, pluginId) {
       if (!(await this.exists(id))) return;
-      addRefInternal(sessionId, id);
-      // First writer wins for plugin_id — keyed only on (sessionId, mediaId)
-      // to mirror the UNIQUE constraint enforced by SQLite/PG.
-      const key = `${sessionId}\u0000${id}`;
-      if (!refRows.has(key)) {
-        refRows.set(key, {
-          sessionId,
-          mediaId: id,
-          pluginId: pluginId ?? null,
-          createdAt: new Date().toISOString(),
-        });
-      }
+      await adapter.addRef(id, sessionId, pluginId);
     },
 
     async isReferencedBy(id, sessionId) {
-      const owner = owners.get(id);
-      if (owner?.sessionId === sessionId) return true;
-      return refs.get(sessionId)?.has(id) ?? false;
+      return adapter.isReferencedBy(id, sessionId);
     },
 
     async listAssets() {
-      const rows: MediaAssetRecord[] = [];
-      for (const [id, ref] of metaById) {
-        const object = await client.headObject(mediaObjectKey(id, options?.keyPrefix));
-        if (!object) continue;
-        const owner = owners.get(id);
-        rows.push({
-          id,
-          mime: object.mime,
-          size: object.size,
-          ownerSessionId: owner?.sessionId ?? null,
-          ownerPluginId: owner?.pluginId ?? null,
-          createdAt: createdAtById.get(id) ?? new Date(0).toISOString(),
-          ...(object.meta === undefined ? ref.meta === undefined ? {} : { meta: ref.meta } : { meta: object.meta }),
-        });
-      }
-      return rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+      return adapter.listAssets();
     },
 
     async listRefs() {
-      return [...refRows.values()];
+      return adapter.listRefs();
     },
 
     async cleanup(protectedIds, policy) {

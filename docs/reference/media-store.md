@@ -69,6 +69,29 @@ If you store media larger than a few MiB on PostgreSQL, consider one of:
 >  );
 > ```
 
+## S3 metadata adapter
+
+`createS3MediaStore(client)` only persists bytes to the bucket. Owner / refs / mime / size / `createdAt` go through an `S3MediaMetadataAdapter` so they survive process restarts and span multiple server instances.
+
+| Wiring | When to use |
+|---|---|
+| `createS3MediaStore(client)` (no adapter) | Dev only. Logs a warning at construction. Owner / refs vanish on restart and `lookup()` always reports `ownerSessionId: null` post-restart, which makes every strict-route asset inaccessible. |
+| `createS3MediaStore(client, { metadataAdapter: createSqliteS3MetadataAdapter(dbPath) })` | Single-node production. Reuses the standard `media_assets` / `media_refs` schema; the same SQLite database can host metadata for both local-fs media and S3-backed media. |
+| `createS3MediaStore(client, { metadataAdapter: <custom PG adapter> })` | Multi-node production. A PG-backed adapter is the natural next step (TODO — open follow-up); implement the `S3MediaMetadataAdapter` interface against the existing `media_assets` / `media_refs` PG tables. |
+
+```ts
+import {
+  createS3MediaStore,
+  createSqliteS3MetadataAdapter,
+} from '@covel/store';
+
+const mediaStore = createS3MediaStore(s3Client, {
+  bucket: 'covel-media',
+  keyPrefix: 'prod',
+  metadataAdapter: createSqliteS3MetadataAdapter('/var/lib/covel/media-meta.db'),
+});
+```
+
 ## Lifecycle Cleanup
 
 The framework exposes `POST /api/media/cleanup` for manual cleanup and scheduler integration. The route scans live sessions, messages, plugin data, runtime outputs, trace events, snapshots, turn results, `MediaStore.listAssets()`, and `MediaStore.listRefs()` with the shared `collectMediaRefIds()` scanner, then passes the protected id set into `MediaStore.cleanup()`.
