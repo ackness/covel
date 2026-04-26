@@ -240,4 +240,75 @@ describe('traceRoutes legacy asset adapter', () => {
     expect(ref.meta?.dataUrlOmitted).toBeUndefined();
     expect(ref.id.startsWith('legacy:')).toBe(true);
   });
+
+  it('scans plugin_data rows across all namespaces, not just images', async () => {
+    const store = createMemoryStore();
+    await store.createSession(makeSession('sess-multi-ns'));
+
+    // Same plugin_data row, namespace 'gallery' (not 'images') — must
+    // still be discovered because the framework cannot hard-code which
+    // namespaces hold media (P3 finding).
+    await store.setPluginData({
+      id: 'pd-gallery',
+      sessionId: 'sess-multi-ns',
+      pluginId: 'gallery-plugin',
+      namespace: 'gallery',
+      key: 'item-1',
+      value: {
+        turnId: 'turn-1',
+        imageUrl: 'https://example.test/from-gallery.png',
+        mime: 'image/png',
+      },
+      createdAt: '2026-04-26T00:00:00.000Z',
+      updatedAt: '2026-04-26T00:00:00.000Z',
+    });
+
+    const app = makeApp(store);
+    const res = await app.request('/api/traces/sess-multi-ns');
+    const body = await res.json() as {
+      events: Array<{ type: string; payload: Record<string, unknown> }>;
+    };
+    const legacy = body.events.find((event) => event.type === 'asset.generated');
+    expect(legacy).toBeDefined();
+    expect(legacy?.payload.legacySource).toBe('plugin_data');
+    const asset = legacy?.payload.asset as Record<string, unknown>;
+    expect((asset.ref as { url: string }).url).toBe('https://example.test/from-gallery.png');
+  });
+
+  it('caps the legacy plugin_data row scan to bound REST payload size', async () => {
+    const store = createMemoryStore();
+    await store.createSession(makeSession('sess-flood'));
+
+    // Row cap is 200 in production; create 205 rows, each carrying a
+    // unique remote URL. After the cap the synth scan must not produce
+    // a legacy event for the overflow rows.
+    const ROW_LIMIT = 200;
+    const totalRows = ROW_LIMIT + 5;
+    for (let i = 0; i < totalRows; i++) {
+      await store.setPluginData({
+        id: `pd-${i}`,
+        sessionId: 'sess-flood',
+        pluginId: 'image-plugin',
+        namespace: 'images',
+        key: `img-${i}`,
+        value: {
+          turnId: `turn-${i}`,
+          imageUrl: `https://example.test/legacy-${i}.png`,
+          mime: 'image/png',
+        },
+        createdAt: '2026-04-26T00:00:00.000Z',
+        updatedAt: '2026-04-26T00:00:00.000Z',
+      });
+    }
+
+    const app = makeApp(store);
+    const res = await app.request('/api/traces/sess-flood');
+    const body = await res.json() as {
+      events: Array<{ type: string; payload: Record<string, unknown> }>;
+    };
+    const legacyEvents = body.events.filter((event) => event.type === 'asset.generated');
+    // Must not exceed the cap regardless of how many rows exist.
+    expect(legacyEvents.length).toBeLessThanOrEqual(ROW_LIMIT);
+    expect(legacyEvents.length).toBeGreaterThan(0);
+  });
 });

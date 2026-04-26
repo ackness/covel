@@ -22,6 +22,11 @@ const LEGACY_MEDIA_REF_PREFIX = 'legacy:';
  * (P2 audit finding 2).
  */
 const LEGACY_DATA_URL_MAX_INLINE_BYTES = 64 * 1024;
+/**
+ * Hard cap on legacy plugin_data rows scanned per session. Bounded so a
+ * pathological session cannot multiply the trace REST payload size.
+ */
+const LEGACY_PLUGIN_DATA_ROW_LIMIT = 200;
 
 type Env = {
   Variables: {
@@ -150,8 +155,22 @@ async function buildLegacyAssetEvents(
   const seen = existingAssetKeys(existingEvents);
   const candidates: LegacyAssetCandidate[] = [];
 
-  for (const row of await store.listPluginDataSessionScope(sessionId)) {
-    if (row.namespace !== 'images') continue;
+  // Scan all plugin_data namespaces — hard-coding `images` here violates the
+  // framework rule against assuming concrete plugin conventions and silently
+  // drops legacy media sitting under other namespaces (e.g. `gallery`).
+  // `legacyMediaRef` is conservative enough that broadening the scan is
+  // safe; we still cap row count to bound REST payload size.
+  const pluginDataRows = await store.listPluginDataSessionScope(sessionId);
+  const pluginDataScan = pluginDataRows.length > LEGACY_PLUGIN_DATA_ROW_LIMIT
+    ? pluginDataRows.slice(0, LEGACY_PLUGIN_DATA_ROW_LIMIT)
+    : pluginDataRows;
+  if (pluginDataRows.length > LEGACY_PLUGIN_DATA_ROW_LIMIT) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[traces] legacy plugin_data scan truncated: ${pluginDataRows.length} rows > cap ${LEGACY_PLUGIN_DATA_ROW_LIMIT} (sessionId=${sessionId})`,
+    );
+  }
+  for (const row of pluginDataScan) {
     candidates.push(...extractLegacyImageCandidates(row.value, {
       sessionId,
       pluginId: row.pluginId,
@@ -160,7 +179,11 @@ async function buildLegacyAssetEvents(
       createdAt: row.updatedAt,
       source: 'plugin_data',
       sourceKey: `${row.pluginId}/${row.namespace}/${row.key}`,
-      assumeImage: true,
+      // Heuristic: only an `images` namespace is allowed to default `mime`
+      // to image/png when the row didn't carry one. Other namespaces must
+      // produce an explicit hint or be skipped — preserves `legacyMediaRef`
+      // conservatism for unknown shapes.
+      assumeImage: row.namespace === 'images',
     }));
   }
 
