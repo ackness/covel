@@ -32,7 +32,7 @@
 1. P0-a：`MediaRef`、`MediaStore` 最小版、`ctx.media.put/get/resolveUrl/ingestUrl`、`/api/media/:id`、`Image/Media` 组件支持 ref。
 2. P0-b：`asset.generate` 接入 kernel：normalizer 接收 `output.assets[]`，commit handler 落 trace/SSE，web 按 `modality` 渲染。
 3. P0-c：迁移两个图像插件：handler 写 `ctx.media.put/ingestUrl`，`plugin_data.images` 保留索引记录，UI 读 `ref`。
-4. P0-d：补迁移脚本和 snapshot/fork 媒体引用，完成端到端回归。
+4. P0-d：补旧 inline 数据清理脚本和 snapshot/fork 媒体引用，完成端到端回归。
 5. P1：Hook 语义、`asset.generate` 局部 view/LLM helper、ToolClient 统一。
 6. P2：recursiveCall、ui.render parts、PG/S3/IDB/Tauri 媒体后端、通用 gallery preset。
 
@@ -456,7 +456,7 @@ DashScope 比 openai 复杂一点——结果可能是远程 OSS URL（24 小时
 
 **dashscope 这一改还顺便修复了"OSS URL 24 小时过期"的隐患**——之前画廊会在 24h 后变成断图，迁到 MediaStore 之后字节常驻本地/S3，永远可读。这是迁移的额外收益。
 
-**现有数据迁移范围**（Codex 评审 #5 修正）：base64 不只在 `plugin_data` 一处。`pnpm migrate:media` 脚本必须扫描以下表：
+**旧 inline 数据清理范围**（2026-04-26 用户决策）：历史 base64 / data URI 数据采用一次性删除策略，新版本生成结果全部通过 `MediaRef` 写入 MediaStore。清理脚本扫描以下表并移除旧 inline 字段或旧记录：
 
 | 表 | 字段 | base64 出现路径 |
 |---|---|---|
@@ -467,13 +467,13 @@ DashScope 比 openai 复杂一点——结果可能是远程 OSS URL（24 小时
 | `turn_messages` | `content` | 极少数情况下出现 inline `data:image/...;base64,` |
 | `snapshots` | `payload.pluginData` 嵌套 | 走 plugin_data 同款扫描逻辑 |
 
-脚本结构：按 sessionId 分批（避免大事务）、按表逐张扫、单条失败不阻断整体、每条迁移完写一行 `legacy_inline_media`（原表名 + 主键 + 旧字段哈希 + 新 ref id），60 天保留兜底回滚。
+脚本结构：按 sessionId 分批、按表逐张扫、单条失败记录到清理日志、清理前输出 dry-run 统计，正式执行时删除旧 inline 字段或整条旧图像记录。清理日志只保存表名、主键、字段路径、字节估算和时间戳，避免继续保留大对象。
 
 #### 清理后的后果
 
-- 旧 session 存档里直接 inline 的 base64 图片需要数据迁移（`MediaStore.put` 一遍）—— 提供 `pnpm migrate:media` 脚本
+- 旧 session 存档里直接 inline 的 base64 图片会被清理，历史图像展示从新生成记录开始
 - 已发布插件需要按收紧后的 `asset.generate` schema 改写（`{ ref: MediaRef, modality, meta }`）——提供 codemod
-- **无法回滚的部分**：迁移完后 PG/SQLite 的 `messages` 表里 base64 字段消失，回滚到旧版会出现"图片显示不出来"；建议保留 `legacy_inline_media` 影子表 60 天
+- **回滚边界**：清理执行后，旧版依赖 inline base64 的历史图片记录将只保留非媒体元数据；回滚到旧版也读取不到被清理的图片字节
 
 #### 这条改动 unlocks 什么
 
@@ -930,14 +930,14 @@ return {
 - 按 § 5.1 P0-a 的具体 diff 改 dashscope-image-gen / openai-image-gen handler（每个 ~10 行）
 - 两个插件改成额外 emit `asset.generate` proposal（payload `{ ref, modality: 'image', meta }`）
 - DashScope 把 OSS URL 改用 `ctx.media.ingestUrl(first.url)`，顺便修掉 24h 过期问题
-- `plugin_data.images` 保留作为画廊查询索引，`value` 里只存 ref；base64 通过迁移进入 MediaStore
+- `plugin_data.images` 保留作为画廊查询索引，`value` 里只存 ref；新生成图片进入 MediaStore，旧 inline 数据按 P0-d 清理
 
-### P0-d：数据迁移 + snapshot/fork 媒体引用 + 端到端回归（1 周）
+### P0-d：旧 inline 数据清理 + snapshot/fork 媒体引用 + 端到端回归（1 周）
 
-- 写 `pnpm migrate:media` 多表扫描脚本（覆盖 § 5.1 列出的 6 张表）
+- 写 `pnpm media:purge-legacy` 多表清理脚本（覆盖 § 5.1 列出的 6 张表），默认 dry-run，显式 `--write` 后删除旧 inline 大对象
 - `SnapshotPayload` 加 `mediaRefs` 字段；fork 时复制 `media_refs` 表行（Codex 评审 #4）
 - 全链路回归：生成图 → snapshot → fork → 在 fork session 解析 ref → 验证可读
-- staging 环境跑一周观察 `legacy_inline_media` 兜底命中情况
+- staging 环境先跑 dry-run 统计，再执行正式清理并保留清理日志
 
 ---
 
@@ -964,7 +964,7 @@ return {
 - 删除 `MessageBlock` / `proposal.payload` 里所有兼容 base64 字段的 shim
 - 运行期 warning 升级为 error
 - 文档全量更新（`docs/reference/plugins.md`、`docs/guide/plugin-authoring.md`、`docs/reference/protocol.md`）
-- `legacy_inline_media` 影子表保留 60 天后删除
+- 删除旧 inline 媒体兼容清理脚本和临时清理日志
 
 ---
 
@@ -975,7 +975,7 @@ return {
 | **P0-a** | MediaRef 基础设施可用 | 1 周 | 无 |
 | **P0-b** | `asset.generate` 端到端打通 | 1-2 周 | P0-a |
 | **P0-c** | 两个图像插件迁完 | 1 周 | P0-a + P0-b |
-| **P0-d** | 数据迁移 + snapshot/fork 收尾 | 1 周 | P0-a + P0-b + P0-c |
+| **P0-d** | 旧 inline 数据清理 + snapshot/fork 收尾 | 1 周 | P0-a + P0-b + P0-c |
 | **P1** | Hook 语义、局部 view/LLM helper 收尾、ToolClient 统一 | 2-3 周 | P0 完结 |
 | **P2** | 后端扩展、recursiveCall、ui.render parts | 2-3 周 | P1 |
 | **P3** | 清理 + 强制约束 | 1 周 | P2 |
@@ -989,11 +989,11 @@ return {
 | 风险 | 影响 | 缓解 |
 |---|---|---|
 | 重构面广（6 个 packages） | 短期开发暂停其他 feature | 分 7 阶段（P0-a/b/c/d + P1/P2/P3），每阶段独立 ship；P0-a 可独立启动，P0-b 接在 P0-a 完成后启动 |
-| 已发布插件需要适配 | 用户态图像插件要改 | 改动表面积小（每个 handler ~10 行 diff，已写在 § 5.1）；提供 `pnpm migrate:media` 一次性迁移脚本；保留 `legacy_inline_media` 影子表 60 天兜底 |
+| 已发布插件需要适配 | 用户态图像插件要改 | 改动表面积小（每个 handler ~10 行 diff，已写在 § 5.1）；提供 `pnpm media:purge-legacy` 清理脚本和 dry-run 统计 |
 | Hook 语义改变可能打破现有插件 | 14 个 runtime（10 core-* + 4 用户态） | ✅ **2026-04-26 已扫描，零 hook 声明，零破坏**（附录 C） |
 | `MediaRef` 增加一次性查询开销 | 大对象列表渲染慢 | 加 in-memory LRU cache + signed URL 短期缓存 |
 | 局部 view / LLM helper 心智负担 | 插件作者需要理解 `asset.generate` 的 record/view/LLM 三种形态 | P0 只做 `asset.generate`；等第二、第三种类型出现同类需求后再抽统一 codec |
-| 数据迁移成本（base64 → MediaRef） | 旧 session 存档需要迁移 | 提供 `pnpm migrate:media` 脚本，保留 `legacy_inline_media` 影子表 60 天 |
+| 旧 inline 数据清理成本 | 旧 session 存档里的历史图片字节会被删除 | 提供 `pnpm media:purge-legacy --dry-run` 统计和正式清理日志 |
 | 设计过度抽象 | 类型契约太多反而吓走插件作者 | 文档侧重"快速上手"路径，复杂契约只在边界出现 |
 
 ---
@@ -1008,7 +1008,7 @@ return {
 | **半年后启动** | 已有 5-10 个插件按旧模式写，迁移成本可能是现在的 3 倍 |
 | **现在启动** | 7 阶段共 9-13 周（详见 § 6 迁移计划修订版），从 P0-a 基础设施一直到 P3 强制约束。两个图像插件的 handler 改动量仍小（每个 ~10 行），但 `asset.generate` 端到端接入 kernel 是新增的真实工作量（P0-b 1-2 周） |
 
-**建议先完成 P0-a/b/c/d**：MediaRef 基础设施、`asset.generate` kernel 接入、两个图像插件迁移、数据迁移与 snapshot/fork 收尾。这条链路完成后，当前图像插件就能从 base64 存储切换到 ref 存储。
+**建议先完成 P0-a/b/c/d**：MediaRef 基础设施、`asset.generate` kernel 接入、两个图像插件迁移、旧 inline 数据清理与 snapshot/fork 收尾。这条链路完成后，当前图像插件就能从 base64 存储切换到 ref 存储。
 
 P1/P2（Hook 语义、LLM content parts、ToolClient、recursiveCall、ui.render parts）可以在 P0 稳定后按真实插件需求推进。
 
@@ -1047,7 +1047,7 @@ P1/P2（Hook 语义、LLM content parts、ToolClient、recursiveCall、ui.render
    - **P0-a**（1 周）：MediaRef 最小基础设施（Memory + SQLite/local-fs 两后端 + 签名 token + `<Media>` 组件）
    - **P0-b**（1-2 周）：`asset.generate` 端到端接入 kernel（normalizer + commit handler + SSE + web renderer）
    - **P0-c**（1 周）：两个图像插件迁移到 `ctx.media.put` + emit `asset.generate`
-   - **P0-d**（1 周）：多表数据迁移脚本 + snapshot/fork 媒体引用收尾
+   - **P0-d**（1 周）：多表旧 inline 数据清理脚本 + snapshot/fork 媒体引用收尾
    - **P1**（2-3 周）：Hook 语义、`assetGenerateToLLM` 落地（依赖 ai-provider content parts）、ToolClient 统一
    - **P2**（2-3 周）：扩展后端（PG/S3/IDB/Tauri）+ recursiveCall + ui.render parts
    - **P3**（1 周）：清理兼容 shim + 强制约束 + 文档全量更新

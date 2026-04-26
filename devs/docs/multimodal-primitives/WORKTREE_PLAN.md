@@ -49,14 +49,8 @@ git worktree add .worktrees/codex-p0b-asset-kernel \
 git worktree add .worktrees/claude-p0b-asset-web \
   -b agent/claude-p0b-asset-web feature/multimodal-primitives-base
 
-git worktree add .worktrees/claude-p0c-dashscope-plugin \
-  -b agent/claude-p0c-dashscope-plugin feature/multimodal-primitives-base
-
-git worktree add .worktrees/claude-p0c-openai-plugin \
-  -b agent/claude-p0c-openai-plugin feature/multimodal-primitives-base
-
-git worktree add .worktrees/codex-p0d-media-migration \
-  -b agent/codex-p0d-media-migration feature/multimodal-primitives-base
+git worktree add .worktrees/codex-p0d-media-cleanup \
+  -b agent/codex-p0d-media-cleanup feature/multimodal-primitives-base
 
 git worktree add .worktrees/codex-p0d-snapshot-fork \
   -b agent/codex-p0d-snapshot-fork feature/multimodal-primitives-base
@@ -160,44 +154,44 @@ git worktree add .worktrees/codex-p0d-snapshot-fork \
 
 | 项 | 内容 |
 |---|---|
-| Worktree | `.worktrees/claude-p0c-dashscope-plugin` |
-| Branch | `agent/claude-p0c-dashscope-plugin` |
+| Repo | `/Users/wuyong/.covel/plugins/dashscope-image-gen` |
+| Branch | `main`（插件目录内独立 git 仓库） |
 | 目标 | DashScope 图片插件迁移到 `ctx.media.ingestUrl()` / `ctx.media.put()`，额外 emit `asset.generate` |
 | SPEC 指向 | `SPEC.md` §5.1 DashScope handler diff；§5.7 现有图像插件迁移清单；§6 P0-c；附录 C Finding 4 |
 | 写入范围 | DashScope 图片插件目录、对应 UI spec、插件测试 |
-| 交付 | ref-only `plugin_data.images`、`asset.generate` proposal、OSS URL 过期问题收口 |
+| 交付 | 插件仓库提交、ref-only `plugin_data.images`、`asset.generate` proposal、OSS URL 过期问题收口 |
 | 验证 | plugin unit test、mock handler test、manual fixture |
 
 ### Claude E：OpenAI Plugin
 
 | 项 | 内容 |
 |---|---|
-| Worktree | `.worktrees/claude-p0c-openai-plugin` |
-| Branch | `agent/claude-p0c-openai-plugin` |
+| Repo | `/Users/wuyong/.covel/plugins/openai-image-gen` |
+| Branch | `main`（插件目录内独立 git 仓库） |
 | 目标 | OpenAI 图片插件迁移到 `ctx.media.put()`，额外 emit `asset.generate` |
 | SPEC 指向 | `SPEC.md` §5.1 openai handler diff；§5.7 现有图像插件迁移清单；§6 P0-c；附录 C Finding 4 |
 | 写入范围 | OpenAI 图片插件目录、对应 UI spec、插件测试 |
-| 交付 | ref-only `plugin_data.images`、`asset.generate` proposal、multi-image refs |
+| 交付 | 插件仓库提交、ref-only `plugin_data.images`、`asset.generate` proposal、multi-image refs |
 | 验证 | plugin unit test、mock handler test、manual fixture |
 
-**P0-c 合并顺序**
+**P0-c 提交确认顺序**
 
-1. `claude-p0c-dashscope-plugin`
-2. `claude-p0c-openai-plugin`
+1. `/Users/wuyong/.covel/plugins/dashscope-image-gen`
+2. `/Users/wuyong/.covel/plugins/openai-image-gen`
 
-## 5. 第四批：P0-d 迁移与 Snapshot/Fork
+## 5. 第四批：P0-d 旧数据清理与 Snapshot/Fork
 
-### Codex D：Media Migration
+### Codex D：Legacy Inline Media Cleanup
 
 | 项 | 内容 |
 |---|---|
-| Worktree | `.worktrees/codex-p0d-media-migration` |
-| Branch | `agent/codex-p0d-media-migration` |
-| 目标 | 实现 `pnpm migrate:media` 多表扫描和 `legacy_inline_media` 影子表 |
-| SPEC 指向 | `SPEC.md` §5.1 现有数据迁移范围；§5.1 清理后的后果；§6 P0-d；§9 迁移 / 兼容 |
-| 写入范围 | `scripts/*`、store migration/schema、migration tests |
-| 交付 | 多表扫描、批量迁移、单条失败继续、回滚索引 |
-| 验证 | migration fixtures、SQLite integration test |
+| Worktree | `.worktrees/codex-p0d-media-cleanup` |
+| Branch | `agent/codex-p0d-media-cleanup` |
+| 目标 | 实现 `pnpm media:purge-legacy` 多表扫描和旧 inline 大对象删除 |
+| SPEC 指向 | `SPEC.md` §5.1 旧 inline 数据清理范围；§5.1 清理后的后果；§6 P0-d；§9 迁移 / 兼容 |
+| 写入范围 | `scripts/*`、store cleanup helper、cleanup tests |
+| 交付 | dry-run 统计、显式 `--write` 删除、逐条清理日志、失败记录 |
+| 验证 | cleanup fixtures、SQLite integration test |
 
 ### Codex E：Snapshot / Fork Media Refs
 
@@ -213,7 +207,7 @@ git worktree add .worktrees/codex-p0d-snapshot-fork \
 
 **P0-d 合并顺序**
 
-1. `codex-p0d-media-migration`
+1. `codex-p0d-media-cleanup`
 2. `codex-p0d-snapshot-fork`
 
 ## 6. Coordinator 职责

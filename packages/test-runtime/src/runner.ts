@@ -10,9 +10,11 @@ import {
   createPresetRegistry,
   createProviderRegistry,
   createSlotRegistry,
+  fetchWithRetry,
   loadLlmConfig,
   parseLlmConfig,
   setModelDatabase,
+  validateBaseUrlForPlugin,
   type AiConfig,
   type ModelSlotConfig,
 } from '@covel/ai-provider';
@@ -28,15 +30,17 @@ import {
   type LoadedRuntime,
   type PluginDiscoveryResult,
   type PluginRuntimeGateway,
+  type PluginRuntimeUtils,
 } from '@covel/plugin-loader';
-import { createMemoryStore } from '@covel/store';
-import type { DataStore } from '@covel/store';
+import { createMemoryMediaStore, createMemoryStore } from '@covel/store';
+import type { DataStore, MediaStore } from '@covel/store';
 import {
   createToolExecutor,
   createFunctionStoreView,
   createGatewayAdapter,
   createPluginDataWriter,
   createPluginLogger,
+  createRuntimeMediaContext,
   createPluginRuntimeGateway,
   executeTurn,
   processRuntimeResult,
@@ -76,6 +80,7 @@ export interface RunRuntimeDebugOptions {
   readonly expectsBackgroundFollower?: boolean;
   readonly mode?: 'mock' | 'live';
   readonly caseName?: string;
+  readonly mediaStore?: MediaStore;
 }
 
 export interface RunRuntimeDebugResult {
@@ -174,7 +179,7 @@ interface CaseArtifact {
   readonly namespace: string;
   readonly key: string;
   readonly path: string;
-  readonly source: 'url' | 'base64';
+  readonly source: 'url' | 'base64' | 'media';
   readonly mimeType?: string;
 }
 
@@ -185,6 +190,11 @@ model    = "deepseek-chat"
 baseUrl  = "https://api.deepseek.com"
 protocol = "openai-chat-v1"
 `;
+
+const PLUGIN_UTILS: PluginRuntimeUtils = {
+  validateBaseUrl: validateBaseUrlForPlugin,
+  fetchWithRetry,
+};
 
 class DebugLLM implements LLMAdapter {
   readonly calls: unknown[] = [];
@@ -596,6 +606,7 @@ async function saveImageArtifacts(args: {
   readonly result: RunRuntimeDebugResult;
   readonly pluginRoot: string;
   readonly config: CaseArtifactConfig | undefined;
+  readonly mediaStore?: MediaStore;
 }): Promise<readonly CaseArtifact[]> {
   const saveImages = args.config?.saveImages;
   if (!saveImages) return [];
@@ -610,12 +621,31 @@ async function saveImageArtifacts(args: {
     const value = row.value;
     if (!value || typeof value !== 'object') continue;
     const record = value as Record<string, unknown>;
-    const mimeType = typeof record.mimeType === 'string' ? record.mimeType : undefined;
+    const maybeRef = record[field];
+    const refMime = isMediaRef(maybeRef) ? maybeRef.mime : undefined;
+    const mimeType = refMime ?? (typeof record.mimeType === 'string' ? record.mimeType : undefined);
     const ext = extensionFromMime(mimeType);
     const fileName = `${safeFilePart(args.result.caseName ?? args.result.runtimeId)}-${safeFilePart(row.key)}${ext}`;
     const filePath = path.join(outDir, fileName);
 
-    const url = record[field];
+    if (isMediaRef(maybeRef) && args.mediaStore) {
+      const bytes = await args.mediaStore.get(maybeRef);
+      const buffer = bytes instanceof Blob
+        ? Buffer.from(await bytes.arrayBuffer())
+        : Buffer.from(bytes);
+      fs.writeFileSync(filePath, buffer);
+      artifacts.push({
+        type: 'image',
+        namespace,
+        key: row.key,
+        path: filePath,
+        source: 'media',
+        mimeType: maybeRef.mime,
+      });
+      continue;
+    }
+
+    const url = maybeRef;
     if (typeof url === 'string' && /^https?:\/\//.test(url)) {
       const response = await fetch(url);
       if (!response.ok) {
@@ -650,6 +680,16 @@ async function saveImageArtifacts(args: {
   return artifacts;
 }
 
+function isMediaRef(value: unknown): value is { id: string; mime: string; size: number } {
+  if (!value || typeof value !== 'object') return false;
+  const ref = value as { id?: unknown; mime?: unknown; size?: unknown };
+  return (
+    typeof ref.id === 'string' &&
+    typeof ref.mime === 'string' &&
+    typeof ref.size === 'number'
+  );
+}
+
 async function runDeferredFollower(args: {
   readonly follower: {
     readonly runtimeId: string;
@@ -662,6 +702,8 @@ async function runDeferredFollower(args: {
   readonly manifests: readonly RuntimeManifest[];
   readonly loadedCache: Map<string, LoadedRuntime>;
   readonly gateway: PluginRuntimeGateway;
+  readonly mediaStore: MediaStore;
+  readonly utils: PluginRuntimeUtils;
   readonly config: Record<string, unknown>;
   readonly userSettings?: Record<string, unknown>;
 }): Promise<{ jobId: string; runtimeId: string; pluginId: string; status: 'done' | 'failed'; result: RuntimeResult }> {
@@ -698,6 +740,10 @@ async function runDeferredFollower(args: {
   };
   try {
     const isCorePlugin = manifest.pluginType === 'core-plugin';
+    const mediaHandle = createRuntimeMediaContext(args.mediaStore, args.utils, {
+      sessionId: args.sessionId,
+      pluginId: args.follower.pluginId,
+    });
     const output = await loaded.handler({
       sessionId: args.sessionId,
       turnId,
@@ -708,6 +754,8 @@ async function runDeferredFollower(args: {
       completedResults: new Map(),
       config: args.config,
       gateway: args.gateway,
+      utils: args.utils,
+      media: mediaHandle,
       triggerEvent: args.follower.triggerEvent,
       ...(args.userSettings ? { userSettings: args.userSettings } : {}),
       pluginData: createPluginDataWriter(args.store, helperCtx),
@@ -837,6 +885,7 @@ export async function runRuntimeDebug(
   }
 
   const store = createMemoryStore();
+  const mediaStore = options.mediaStore ?? createMemoryMediaStore();
   const now = new Date().toISOString();
   await store.createSession({
     id: sessionId,
@@ -882,6 +931,8 @@ export async function runRuntimeDebug(
       loadRuntime: async (manifest) => loadedCache.get(manifest.name),
       llm: liveAdapters?.llm ?? llm,
       gateway: liveAdapters?.gateway ?? makeGateway(options),
+      utils: PLUGIN_UTILS,
+      mediaStore,
       getConfig: () => options.config ?? {},
       store,
       toolExecutor: createToolExecutor({
@@ -912,6 +963,8 @@ export async function runRuntimeDebug(
       manifests,
       loadedCache,
       gateway: liveAdapters?.gateway ?? makeGateway(options),
+      mediaStore,
+      utils: PLUGIN_UTILS,
       config: options.config ?? {},
       ...(options.userSettings ? { userSettings: options.userSettings } : {}),
     });
@@ -1020,6 +1073,7 @@ export async function runRuntimeCases(
 
   const results: Array<RunRuntimeCasesResult['cases'][number]> = [];
   for (const testCase of cases) {
+    const mediaStore = createMemoryMediaStore();
     const result = await runRuntimeDebug({
       ...options,
       runtimeId: testCase.runtimeId,
@@ -1036,12 +1090,14 @@ export async function runRuntimeCases(
       mockPresetId: testCase.mockPresetId ?? options.mockPresetId,
       ignoreUpstreams: testCase.ignoreUpstreams ?? options.ignoreUpstreams,
       expectsBackgroundFollower: testCase.expectsBackgroundFollower ?? options.expectsBackgroundFollower,
+      mediaStore,
     });
     const assertions = evaluateExpectations(testCase.expect, result);
     const artifacts = await saveImageArtifacts({
       result,
       pluginRoot: discovery.rootPath,
       config: testCase.artifacts,
+      mediaStore,
     });
     const withAssertions = { ...result, artifacts, assertions };
     const runtimeFailed = withAssertions.runtimeResults.some(
