@@ -2,6 +2,7 @@ import type { MediaRef } from '@covel/shared';
 import Database from 'better-sqlite3';
 import { createHash } from 'node:crypto';
 import {
+  createReadStream,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -9,8 +10,26 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 import { createTables } from './sqlite/sqlite-store-mappers.js';
+
+/**
+ * Lightweight ownership / metadata view returned by `MediaStore.lookup()`.
+ *
+ * Distinct from `MediaRef` because callers (e.g. the `/api/media/:id` route)
+ * need the owner identifiers to perform per-session authorisation BEFORE
+ * dereferencing the bytes. Owner fields are nullable: assets uploaded before
+ * `recordOwnership()` runs (legacy, or runtime contexts that don't yet thread
+ * a sessionId) will appear with `ownerSessionId: null`.
+ */
+export interface MediaAssetLookup {
+  readonly id: string;
+  readonly mime: string;
+  readonly size: number;
+  readonly ownerSessionId: string | null;
+  readonly ownerPluginId: string | null;
+}
 
 export interface MediaStore {
   put(blob: Uint8Array | Blob, mime: string, meta?: object): Promise<MediaRef>;
@@ -18,6 +37,38 @@ export interface MediaStore {
   exists(id: string): Promise<boolean>;
   resolveUrl(ref: MediaRef): Promise<string>;
   delete(id: string, opts?: { force?: boolean }): Promise<void>;
+  /**
+   * Returns owner / size metadata for an existing asset, or `null` if the id
+   * is unknown. Used by route-level auth checks and by the runtime to decide
+   * whether an asset already belongs to the current session before re-`put`-ing.
+   */
+  lookup(id: string): Promise<MediaAssetLookup | null>;
+  /**
+   * Idempotently mark an asset as owned by `(sessionId, pluginId?)`.
+   *
+   * First-writer wins: a second call with a different `sessionId` does NOT
+   * overwrite an already-set owner. This matches the SQLite UPDATE guard
+   * (`WHERE owner_session_id IS NULL OR owner_session_id = ?`) and prevents
+   * a malicious or buggy plugin from re-owning another session's asset.
+   */
+  recordOwnership(id: string, ownerSessionId: string, ownerPluginId?: string): Promise<void>;
+  /**
+   * Idempotently record that `sessionId` references this asset (used by fork /
+   * inherit flows where multiple sessions need read access without taking
+   * ownership). The unique index on `(session_id, media_id, plugin_id)`
+   * makes repeated calls a no-op.
+   */
+  addRef(id: string, sessionId: string, pluginId?: string): Promise<void>;
+  /**
+   * True if `sessionId` owns the asset OR has a row in `media_refs` for it.
+   * The route handler uses this to gate dereferencing.
+   */
+  isReferencedBy(id: string, sessionId: string): Promise<boolean>;
+  /**
+   * Optional streaming read for large assets. Callers SHOULD fall back to
+   * `get()` when this is undefined (e.g. tests with hand-rolled mocks).
+   */
+  openReadStream?(ref: MediaRef): Promise<ReadableStream<Uint8Array>>;
 }
 
 export interface SqliteMediaStoreOptions {
@@ -27,6 +78,11 @@ export interface SqliteMediaStoreOptions {
 interface StoredMedia {
   readonly bytes: Uint8Array;
   readonly ref: MediaRef;
+}
+
+interface OwnerRecord {
+  readonly sessionId: string;
+  readonly pluginId: string | null;
 }
 
 async function toBytes(blob: Uint8Array | Blob): Promise<Uint8Array> {
@@ -46,8 +102,33 @@ function toMeta(meta?: object): Readonly<Record<string, unknown>> | undefined {
   return meta === undefined ? undefined : { ...(meta as Record<string, unknown>) };
 }
 
+function bytesToReadableStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
+  // Copy to a fresh Uint8Array so the stream owner can't observe later mutations
+  // of the source buffer.
+  const copy = new Uint8Array(bytes);
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(copy);
+      controller.close();
+    },
+  });
+}
+
 export function createMemoryMediaStore(): MediaStore {
   const assets = new Map<string, StoredMedia>();
+  const owners = new Map<string, OwnerRecord>();
+  // Inverted index: sessionId → set of media ids referenced. Mirrors the
+  // SQLite media_refs table so isReferencedBy() can stay O(1).
+  const refs = new Map<string, Set<string>>();
+
+  function addRefInternal(sessionId: string, id: string): void {
+    let set = refs.get(sessionId);
+    if (!set) {
+      set = new Set<string>();
+      refs.set(sessionId, set);
+    }
+    set.add(id);
+  }
 
   return {
     async put(blob, mime, meta) {
@@ -81,6 +162,54 @@ export function createMemoryMediaStore(): MediaStore {
 
     async delete(id) {
       assets.delete(id);
+      owners.delete(id);
+      // Drop reverse refs so isReferencedBy stays consistent across delete/recreate.
+      for (const set of refs.values()) {
+        set.delete(id);
+      }
+    },
+
+    async lookup(id) {
+      const asset = assets.get(id);
+      if (!asset) return null;
+      const owner = owners.get(id);
+      return {
+        id,
+        mime: asset.ref.mime,
+        size: asset.ref.size,
+        ownerSessionId: owner?.sessionId ?? null,
+        ownerPluginId: owner?.pluginId ?? null,
+      };
+    },
+
+    async recordOwnership(id, ownerSessionId, ownerPluginId) {
+      if (!assets.has(id)) return;
+      const existing = owners.get(id);
+      if (existing && existing.sessionId !== ownerSessionId) {
+        // First-writer wins: do not overwrite a different session's ownership.
+        return;
+      }
+      owners.set(id, {
+        sessionId: ownerSessionId,
+        pluginId: ownerPluginId ?? null,
+      });
+    },
+
+    async addRef(id, sessionId, _pluginId) {
+      if (!assets.has(id)) return;
+      addRefInternal(sessionId, id);
+    },
+
+    async isReferencedBy(id, sessionId) {
+      const owner = owners.get(id);
+      if (owner?.sessionId === sessionId) return true;
+      return refs.get(sessionId)?.has(id) ?? false;
+    },
+
+    async openReadStream(ref) {
+      const asset = assets.get(ref.id);
+      if (!asset) throw new Error(`Media asset not found: ${ref.id}`);
+      return bytesToReadableStream(asset.bytes);
     },
   };
 }
@@ -111,8 +240,31 @@ export function createSqliteMediaStore(
       path = excluded.path,
       meta = excluded.meta
   `);
-  const select = sqlite.prepare('SELECT id, mime, size, path, meta FROM media_assets WHERE id = ?');
+  const select = sqlite.prepare(
+    'SELECT id, mime, size, path, meta, owner_session_id AS ownerSessionId, owner_plugin_id AS ownerPluginId FROM media_assets WHERE id = ?',
+  );
   const remove = sqlite.prepare('DELETE FROM media_assets WHERE id = ?');
+  const removeRefs = sqlite.prepare('DELETE FROM media_refs WHERE media_id = ?');
+
+  // First-writer wins guard: only set owner when row has no owner yet, or
+  // when the caller already owns it (idempotent re-record). Prevents a
+  // second session/plugin silently stealing ownership of an existing asset.
+  const updateOwnership = sqlite.prepare(`
+    UPDATE media_assets
+    SET owner_session_id = @sessionId, owner_plugin_id = @pluginId
+    WHERE id = @id
+      AND (owner_session_id IS NULL OR owner_session_id = @sessionId)
+  `);
+  const insertRef = sqlite.prepare(`
+    INSERT OR IGNORE INTO media_refs (session_id, media_id, plugin_id, created_at)
+    VALUES (@sessionId, @mediaId, @pluginId, @createdAt)
+  `);
+  const checkOwner = sqlite.prepare(
+    'SELECT owner_session_id AS ownerSessionId FROM media_assets WHERE id = ?',
+  );
+  const checkRef = sqlite.prepare(
+    'SELECT 1 AS one FROM media_refs WHERE session_id = ? AND media_id = ? LIMIT 1',
+  );
 
   return {
     async put(blob, mime, meta) {
@@ -161,10 +313,68 @@ export function createSqliteMediaStore(
 
     async delete(id) {
       const row = select.get(id) as { path: string } | undefined;
+      // Clean up the inbound refs first so a foreign-key-style invariant holds
+      // even though the schema has no explicit FK between the two tables.
+      removeRefs.run(id);
       remove.run(id);
       if (row?.path) {
         rmSync(row.path, { force: true });
       }
+    },
+
+    async lookup(id) {
+      const row = select.get(id) as
+        | {
+            id: string;
+            mime: string;
+            size: number;
+            ownerSessionId: string | null;
+            ownerPluginId: string | null;
+          }
+        | undefined;
+      if (!row) return null;
+      return {
+        id: row.id,
+        mime: row.mime,
+        size: row.size,
+        ownerSessionId: row.ownerSessionId ?? null,
+        ownerPluginId: row.ownerPluginId ?? null,
+      };
+    },
+
+    async recordOwnership(id, ownerSessionId, ownerPluginId) {
+      updateOwnership.run({
+        id,
+        sessionId: ownerSessionId,
+        pluginId: ownerPluginId ?? null,
+      });
+    },
+
+    async addRef(id, sessionId, pluginId) {
+      // Schema unique key includes plugin_id, so a NULL pluginId still allows
+      // a second non-null pluginId row for the same session — that's intended,
+      // it lets multiple plugins independently anchor a fork.
+      insertRef.run({
+        sessionId,
+        mediaId: id,
+        pluginId: pluginId ?? null,
+        createdAt: new Date().toISOString(),
+      });
+    },
+
+    async isReferencedBy(id, sessionId) {
+      const ownerRow = checkOwner.get(id) as { ownerSessionId: string | null } | undefined;
+      if (ownerRow?.ownerSessionId === sessionId) return true;
+      const refRow = checkRef.get(sessionId, id) as { one: number } | undefined;
+      return refRow !== undefined;
+    },
+
+    async openReadStream(ref) {
+      const row = select.get(ref.id) as { path: string } | undefined;
+      if (!row) throw new Error(`Media asset not found: ${ref.id}`);
+      // Node 22+ exposes Readable.toWeb; Covel's engines field requires Node ≥ 22.
+      const nodeStream = createReadStream(row.path);
+      return Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
     },
   };
 }

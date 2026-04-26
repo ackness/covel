@@ -88,7 +88,7 @@ import { installRoutes } from './install.js';
 import { aiRoutes } from './ai.js';
 import { traceRoutes } from './traces.js';
 import { mediaRoutes } from './media.js';
-import type { MediaStore } from '../../_stubs/media-types.js';
+import type { MediaStore } from '@covel/store';
 import { resumeRoutes } from './resume.js';
 import { snapshotRoutes } from './snapshots.js';
 import { lorebookRoutes } from './lorebook.js';
@@ -172,11 +172,9 @@ export interface ApiBootstrapConfig {
   readonly sessionLock?: SessionLock;
   /**
    * Optional content-addressable media store backing `/api/media/:id`
-   * and `ctx.media`. Optional during P0-a because Codex A's
-   * `agent/codex-p0a-media-store` worktree has not landed yet — the
-   * coordinator flips this field to required after that merge so a
-   * misconfigured server fails at boot instead of returning 503 from
-   * media routes. See SPEC §5.1 (b)(g).
+   * and `ctx.media`. Composition roots that do not generate or serve
+   * media (e.g. headless test harnesses) may leave this unset; the
+   * route returns 503 in that case. See SPEC §5.1 (b)(g).
    */
   readonly mediaStore?: MediaStore;
 }

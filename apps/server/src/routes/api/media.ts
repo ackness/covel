@@ -24,7 +24,8 @@
  */
 
 import { Hono } from 'hono';
-import type { MediaStore, MediaRef } from '../../_stubs/media-types.js';
+import type { MediaRef } from '@covel/shared';
+import type { MediaStore } from '@covel/store';
 import {
   getMediaTokenSecret,
   verifyMediaToken,
@@ -32,10 +33,9 @@ import {
 
 /**
  * Module augmentation so `c.get('mediaStore')` / `c.set('mediaStore', ...)`
- * type-check across the server. Optional during P0-a because Codex A's
- * real `MediaStore` implementation has not landed yet — the bootstrap
- * field is also optional and the route returns 503 when absent so
- * frontend code never observes a hard 500.
+ * type-check across the server. The field is optional during the P0-a
+ * runtime-wiring window so a misconfigured deployment surfaces as 503
+ * here rather than a hard 500 in route-loading code.
  */
 declare module 'hono' {
   interface ContextVariableMap {
@@ -122,6 +122,21 @@ mediaRoutes.get('/:id', async (c) => {
     } catch {
       return jsonError('internal', 'media reference check failed', 500);
     }
+  }
+  if (!allowed && lookup.ownerSessionId === null) {
+    // P0-a transitional: runtime ctx.media.put() does not yet thread
+    // sessionId/pluginId into recordOwnership(), so freshly-ingested assets
+    // appear with ownerSessionId === null and no media_refs row. Without
+    // this fallback every freshly-generated image would 403 when the front
+    // end tried to display it. The follow-up ticket (see SPEC §5.1 (h)
+    // and the agent worktree notes) will thread sessionId through the
+    // runtime media context; once that lands, the conditional below
+    // becomes dead code and should be removed.
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[api/media] ownership not recorded for ${id}; allowing access pending runtime wiring (session=${verdict.sessionId})`,
+    );
+    allowed = true;
   }
   if (!allowed) {
     return jsonError('forbidden', 'session does not reference this media', 403);

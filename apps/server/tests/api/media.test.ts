@@ -11,11 +11,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import { createHash } from 'node:crypto';
-import type {
-  MediaAssetLookup,
-  MediaRef,
-  MediaStore,
-} from '../../src/_stubs/media-types.js';
+import type { MediaRef } from '@covel/shared';
+import type { MediaAssetLookup, MediaStore } from '@covel/store';
 import { mediaRoutes } from '../../src/routes/api/media.js';
 import {
   _resetMediaTokenSecretForTests,
@@ -28,7 +25,8 @@ interface StoredAsset {
   readonly bytes: Uint8Array;
   readonly mime: string;
   readonly size: number;
-  readonly ownerSessionId: string;
+  /** `null` models the "ownership not yet recorded" state. */
+  readonly ownerSessionId: string | null;
   readonly ownerPluginId?: string;
   readonly references: ReadonlySet<string>;
 }
@@ -83,8 +81,14 @@ function createMockMediaStore(options: MockMediaStoreOptions = {}): {
         mime: a.mime,
         size: a.size,
         ownerSessionId: a.ownerSessionId,
-        ...(a.ownerPluginId !== undefined ? { ownerPluginId: a.ownerPluginId } : {}),
+        ownerPluginId: a.ownerPluginId ?? null,
       };
+    },
+    async recordOwnership() {
+      // No-op: the test fixture sets ownership directly via the seed asset.
+    },
+    async addRef() {
+      // No-op: the test fixture seeds references via the `references` set.
     },
     async isReferencedBy(id, sessionId) {
       const a = assets.get(id);
@@ -223,6 +227,27 @@ describe('GET /api/media/:id', () => {
     expect(res.status).toBe(403);
     const body = await res.json();
     expect(body.code).toBe('forbidden');
+  });
+
+  it('200 (transitional) when ownership has not been recorded yet', async () => {
+    // Simulates the current runtime ctx.media path: put() without
+    // recordOwnership() — owner is null and there are no media_refs rows.
+    // The route logs a warning but allows the read so freshly-generated
+    // images do not 403 in the UI. Drop this test once runtime wiring
+    // calls recordOwnership() on every put.
+    const mock = createMockMediaStore();
+    const bytes = new Uint8Array([9, 9, 9]);
+    const ref = mock.put({
+      bytes,
+      mime: 'application/octet-stream',
+      size: bytes.byteLength,
+      ownerSessionId: null,
+      references: new Set(),
+    });
+    const token = signMediaTokenForSession(ref.id, 'sess-anyone');
+    const app = createTestApp(mock.store);
+    const res = await app.request(`/api/media/${ref.id}?token=${encodeURIComponent(token)}`);
+    expect(res.status).toBe(200);
   });
 
   it('200 when ownership is via media_refs (not direct owner)', async () => {
