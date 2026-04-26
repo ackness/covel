@@ -31,6 +31,22 @@ export function isAssetGeneratePayload(value: unknown): value is AssetGeneratePa
   return true;
 }
 
+export function isAssetGenerateView(value: unknown): value is AssetGenerateView {
+  if (!value || typeof value !== 'object') return false;
+  const view = value as Record<string, unknown>;
+  const source = view.source as Record<string, unknown> | undefined;
+  if (view.type !== 'asset.generate') return false;
+  if (typeof view.id !== 'string' || view.id.length === 0) return false;
+  if (typeof view.sessionId !== 'string' || view.sessionId.length === 0) return false;
+  if (typeof view.turnId !== 'string' || view.turnId.length === 0) return false;
+  if (!source || typeof source.pluginId !== 'string' || typeof source.runtimeId !== 'string') return false;
+  if (typeof view.modality !== 'string' || view.modality.length === 0) return false;
+  if (!mediaRefSchema.safeParse(view.ref).success) return false;
+  if (view.meta !== undefined && !isPlainRecord(view.meta)) return false;
+  if (typeof view.createdAt !== 'string' || view.createdAt.length === 0) return false;
+  return true;
+}
+
 export function assetGenerateToView(proposal: Proposal): AssetGenerateView {
   if (proposal.type !== 'asset.generate') {
     throw new Error(`assetGenerateToView expected asset.generate, received ${proposal.type}`);

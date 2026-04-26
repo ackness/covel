@@ -2,11 +2,10 @@
  * Resolve a `MediaRef` into a usable URL string for `<img|audio|video src>`.
  *
  * Resolution order (per SPEC §5.1 (g)):
- *   1. IDB cache hit                    → URL.createObjectURL(blob), fromCache=true
- *   2. ref.url already signed           → fetch + cache + return blob URL
- *   3. /api/sessions/:sessionId/media-token?id=:id  → fetch token endpoint,
- *      use returned signed URL, cache, return blob URL
- *   4. any failure                      → 1x1 transparent PNG sentinel data URI
+ *   1. /api/sessions/:sessionId/media-token?id=:id authorizes the session
+ *   2. IDB cache hit                    → URL.createObjectURL(blob), fromCache=true
+ *   3. signed URL fetch                 → cache + return blob URL
+ *   4. any failure                      → explicit error result + sentinel URL
  *
  * The token endpoint provides the framework path for refs that arrive
  * without an eager `url` from the producer plugin.
@@ -35,6 +34,7 @@ export interface ResolveResult {
   readonly blob?: Blob;
   /** True when the URL came from IDB. */
   readonly fromCache: boolean;
+  readonly ok: boolean;
 }
 
 // 1x1 transparent PNG, base64-encoded. Stable sentinel for failures so
@@ -136,51 +136,42 @@ async function fetchBlobAndCache(
 /**
  * Resolve a `MediaRef` to a renderable URL.
  *
- * Never throws. On failure returns the sentinel transparent-PNG data URI
- * so callers can render without conditional logic.
+ * Never throws. On failure returns `ok: false` with the sentinel URL so
+ * non-React callers can still keep a stable fallback value.
  */
 export async function resolveMediaSrc(
   ref: MediaRef,
   opts: ResolveOptions,
 ): Promise<ResolveResult> {
-  // 1. IDB cache hit
+  // 1. Authorize the session before consulting the shared browser cache.
+  const signedUrl = await fetchSignedUrl(ref, opts);
+  if (!signedUrl) {
+    return { url: TRANSPARENT_PNG_DATA_URI, fromCache: false, ok: false };
+  }
+
+  // 2. IDB cache hit
   const cached = await getCachedMedia(ref.id);
   if (cached?.blob) {
     return {
       url: URL.createObjectURL(cached.blob),
       blob: cached.blob,
       fromCache: true,
+      ok: true,
     };
   }
 
-  // 2. ref.url is already a usable signed URL — fetch + cache + return blob URL
-  if (typeof ref.url === "string" && ref.url.length > 0) {
-    const fetched = await fetchBlobAndCache(ref, ref.url, opts);
-    if (fetched) {
-      return {
-        url: URL.createObjectURL(fetched.blob),
-        blob: fetched.blob,
-        fromCache: false,
-      };
-    }
-    // Fall through to token endpoint.
+  // 3. Fetch via the server-issued signed URL.
+  const fetched = await fetchBlobAndCache(ref, signedUrl, opts);
+  if (fetched) {
+    return {
+      url: URL.createObjectURL(fetched.blob),
+      blob: fetched.blob,
+      fromCache: false,
+      ok: true,
+    };
   }
 
-  // 3. token endpoint (server-issued signed URL)
-  const signedUrl = await fetchSignedUrl(ref, opts);
-  if (signedUrl) {
-    const fetched = await fetchBlobAndCache(ref, signedUrl, opts);
-    if (fetched) {
-      return {
-        url: URL.createObjectURL(fetched.blob),
-        blob: fetched.blob,
-        fromCache: false,
-      };
-    }
-  }
-
-  // 4. Sentinel placeholder — never throw, callers can render unconditionally.
-  return { url: TRANSPARENT_PNG_DATA_URI, fromCache: false };
+  return { url: TRANSPARENT_PNG_DATA_URI, fromCache: false, ok: false };
 }
 
 export const __testing = {

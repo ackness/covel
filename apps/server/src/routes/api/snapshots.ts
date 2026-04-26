@@ -22,9 +22,10 @@
 
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
-import { isEnvEnabled } from '@covel/shared';
+import { isEnvEnabled, mediaRefSchema } from '@covel/shared';
 import type {
   DataStore,
+  MediaStore,
   SnapshotRecord,
   CharacterRecord,
   StateEntryRecord,
@@ -40,6 +41,7 @@ type Env = {
   Variables: {
     store: DataStore;
     eventBus?: EventBus;
+    mediaStore?: MediaStore;
   };
 };
 
@@ -54,6 +56,23 @@ const FLAG_OFF_BODY = {
 
 function flagOn(): boolean {
   return isEnvEnabled('COVEL_SNAPSHOTS_V1');
+}
+
+function collectMediaRefIds(value: unknown, out = new Set<string>()): Set<string> {
+  if (!value || typeof value !== 'object') return out;
+  const parsed = mediaRefSchema.safeParse(value);
+  if (parsed.success) {
+    out.add(parsed.data.id);
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectMediaRefIds(item, out);
+    return out;
+  }
+  for (const item of Object.values(value as Record<string, unknown>)) {
+    collectMediaRefIds(item, out);
+  }
+  return out;
 }
 
 // ── POST /api/sessions/:id/snapshot — manual snapshot ─────────────
@@ -144,6 +163,7 @@ snapshotRoutes.post('/:id/fork', async (c) => {
 
   const parentSessionId = c.req.param('id');
   const store = c.get('store');
+  const mediaStore = c.get('mediaStore');
 
   let body: { fromSnapshotId?: unknown };
   try {
@@ -237,6 +257,13 @@ snapshotRoutes.post('/:id/fork', async (c) => {
     }));
     if (pluginDataBatch.length > 0) {
       await store.setPluginDataBatch(pluginDataBatch);
+    }
+
+    if (mediaStore) {
+      const mediaIds = collectMediaRefIds(snapshot.payload);
+      for (const mediaId of mediaIds) {
+        await mediaStore.addRef(mediaId, childSessionId);
+      }
     }
 
     // Copy working memory

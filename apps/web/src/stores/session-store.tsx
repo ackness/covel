@@ -6,6 +6,7 @@ import { migrateLocalStorageToIdb } from "@/services/app-kv-store";
 import { setBlockSchemas } from "@/components/blocks/block-renderer.js";
 import { deepMerge } from "@covel/shared";
 import type { AssetGenerateView, BlockSchemaDeclaration } from "@covel/shared";
+import { isAssetGenerateView } from "@covel/shared";
 import {
   createSessionSubscription,
   type SessionSubscription,
@@ -1271,7 +1272,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // narrative timeline stays unchanged — modality-aware rendering happens
       // in `<AssetTurnSidebar>` which the message column mounts per turn.
       case "asset.generated": {
-        const asset = payload.asset as AssetGenerateView | undefined;
+        const asset = isAssetGenerateView(payload.asset) ? payload.asset : undefined;
         const turnIdFromPayload = (payload.turnId as string | undefined) ?? turnId;
         if (!asset || !turnIdFromPayload) break;
         dispatch({ type: "ASSET_GENERATED", turnId: turnIdFromPayload, asset });

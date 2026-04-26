@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assetGenerateToLLM, assetGenerateToView, isAssetGeneratePayload } from '../src/index.js';
+import { assetGenerateToLLM, assetGenerateToView, isAssetGeneratePayload, isAssetGenerateView } from '../src/index.js';
 import type { Proposal } from '../src/index.js';
 
 const REF = {
@@ -43,6 +43,8 @@ describe('asset.generate helpers', () => {
       meta: { prompt: 'mountain' },
     });
     expect(view.ref).toEqual(REF);
+    expect(isAssetGenerateView(view)).toBe(true);
+    expect(isAssetGenerateView({ ...view, source: {} })).toBe(false);
   });
 
   it('returns a typed LLM placeholder while content parts are pending', () => {

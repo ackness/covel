@@ -10,18 +10,19 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
-import { createMemoryStore, type DataStore } from '@covel/store';
+import { createMemoryMediaStore, createMemoryStore, type DataStore, type MediaStore } from '@covel/store';
 import { createEventBus, type EventBus } from '@covel/events';
 import type { CovelMessage } from '@covel/shared';
 import { snapshotRoutes } from '../../src/routes/api/snapshots.js';
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-function createTestApp(store: DataStore, eventBus?: EventBus) {
-  const app = new Hono<{ Variables: { store: DataStore; eventBus?: EventBus } }>();
+function createTestApp(store: DataStore, eventBus?: EventBus, mediaStore?: MediaStore) {
+  const app = new Hono<{ Variables: { store: DataStore; eventBus?: EventBus; mediaStore?: MediaStore } }>();
   app.use('*', async (c, next) => {
     c.set('store', store);
     if (eventBus) c.set('eventBus', eventBus);
+    if (mediaStore) c.set('mediaStore', mediaStore);
     await next();
   });
   app.route('/api/sessions', snapshotRoutes);
@@ -383,6 +384,35 @@ describe('Snapshot routes — flag on', () => {
       const childWm = await store.listWorkingMemory(childId);
       expect(childWm).toHaveLength(1);
       expect(childWm[0]!.key).toBe('mood');
+    });
+
+    it('copies media_refs for inherited MediaRefs on fork', async () => {
+      const mediaStore = createMemoryMediaStore();
+      const ref = await mediaStore.put(new Uint8Array([1, 2, 3]), 'image/png', { prompt: 'fork me' });
+      await mediaStore.recordOwnership(ref.id, 'sess-1', 'test-plugin');
+      await store.setPluginData({
+        id: 'sess-1-pd-media',
+        sessionId: 'sess-1',
+        pluginId: 'test-plugin',
+        namespace: 'images',
+        key: 'img-1',
+        value: { status: 'done', ref },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      const app = createTestApp(store, undefined, mediaStore);
+      const snapId = await createParentSnapshot(store, app);
+      const res = await app.request('/api/sessions/sess-1/fork', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as Record<string, unknown>;
+      const childId = body.sessionId as string;
+      expect(await mediaStore.isReferencedBy(ref.id, childId)).toBe(true);
     });
 
     it('copies turn messages up to the snapshot cursor', async () => {

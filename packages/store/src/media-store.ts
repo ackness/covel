@@ -134,6 +134,8 @@ export function createMemoryMediaStore(): MediaStore {
     async put(blob, mime, meta) {
       const bytes = await toBytes(blob);
       const id = sha256(bytes);
+      const existing = assets.get(id);
+      if (existing) return existing.ref;
       const ref: MediaRef = {
         id,
         mime,
@@ -231,14 +233,10 @@ export function createSqliteMediaStore(
   const mediaRoot = resolve(options?.mediaRoot ?? join(dbDir === ':memory:' ? process.cwd() : dbDir, 'media'));
   mkdirSync(mediaRoot, { recursive: true });
 
-  const upsert = sqlite.prepare(`
+  const insertAsset = sqlite.prepare(`
     INSERT INTO media_assets (id, sha256, mime, size, path, meta, created_at)
     VALUES (@id, @sha256, @mime, @size, @path, @meta, @createdAt)
-    ON CONFLICT(id) DO UPDATE SET
-      mime = excluded.mime,
-      size = excluded.size,
-      path = excluded.path,
-      meta = excluded.meta
+    ON CONFLICT(id) DO NOTHING
   `);
   const select = sqlite.prepare(
     'SELECT id, mime, size, path, meta, owner_session_id AS ownerSessionId, owner_plugin_id AS ownerPluginId FROM media_assets WHERE id = ?',
@@ -270,6 +268,15 @@ export function createSqliteMediaStore(
     async put(blob, mime, meta) {
       const bytes = await toBytes(blob);
       const id = sha256(bytes);
+      const existing = select.get(id) as { id: string; mime: string; size: number; meta: string | null } | undefined;
+      if (existing) {
+        return {
+          id: existing.id,
+          mime: existing.mime,
+          size: existing.size,
+          ...(existing.meta ? { meta: JSON.parse(existing.meta) as Readonly<Record<string, unknown>> } : {}),
+        };
+      }
       const path = mediaPath(mediaRoot, id);
       mkdirSync(dirname(path), { recursive: true });
       if (!existsSync(path)) {
@@ -281,7 +288,7 @@ export function createSqliteMediaStore(
         size: bytes.byteLength,
         ...(meta === undefined ? {} : { meta: toMeta(meta) }),
       };
-      upsert.run({
+      insertAsset.run({
         id,
         sha256: id,
         mime,

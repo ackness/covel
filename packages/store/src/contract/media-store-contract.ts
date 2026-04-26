@@ -40,6 +40,21 @@ export function runMediaStoreContractTests(
       expect(a.id).not.toBe(c.id);
     });
 
+    it('keeps metadata immutable for duplicate content', async () => {
+      const store = await createStore();
+
+      const first = await store.put(PNG, 'image/png', { label: 'first' });
+      await store.recordOwnership(first.id, 'sess-A', 'plugin-A');
+      const second = await store.put(PNG, 'image/jpeg', { label: 'second' });
+
+      expect(second).toEqual(first);
+      const lookup = await store.lookup(first.id);
+      expect(lookup?.mime).toBe('image/png');
+      expect(lookup?.size).toBe(PNG.byteLength);
+      expect(lookup?.ownerSessionId).toBe('sess-A');
+      expect(lookup?.ownerPluginId).toBe('plugin-A');
+    });
+
     it('resolves a readable URL for stored media', async () => {
       const store = await createStore();
       const ref = await store.put(PNG, 'image/png');

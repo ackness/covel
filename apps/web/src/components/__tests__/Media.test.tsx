@@ -143,12 +143,23 @@ afterEach(() => {
 });
 
 function setFetchToBlob(mime: string): void {
-  globalThis.fetch = vi.fn(async () =>
-    new Response(new Blob(["payload"], { type: mime }), {
+  globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
+    const url = typeof input === "string"
+      ? input
+      : input instanceof URL
+      ? input.href
+      : (input as Request).url;
+    if (url.startsWith("/api/sessions/")) {
+      return new Response(
+        JSON.stringify({ url: "https://signed.example/media?token=ok" }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    return new Response(new Blob(["payload"], { type: mime }), {
       status: 200,
       headers: { "Content-Type": mime },
-    }),
-  ) as unknown as typeof globalThis.fetch;
+    });
+  }) as unknown as typeof globalThis.fetch;
 }
 
 function setFetchAlwaysFails(): void {
@@ -223,7 +234,7 @@ describe("<Media>", () => {
     });
   });
 
-  it("falls back to sentinel placeholder when resolution fails", async () => {
+  it("renders unavailable state when resolution fails", async () => {
     const ref: MediaRef = {
       id: "fail-1",
       mime: "image/png",
@@ -233,9 +244,8 @@ describe("<Media>", () => {
     setFetchAlwaysFails();
     render(<Media src={ref} sessionId="s1" alt="oops" />);
     await waitFor(() => {
-      const img = screen.getByAltText("oops") as HTMLImageElement;
-      // Sentinel data URI for opaque-failure rendering.
-      expect(img.src.startsWith("data:image/png;base64,")).toBe(true);
+      expect(screen.getByRole("img", { name: "oops" })).toBeTruthy();
+      expect(screen.queryByAltText("oops")).toBeNull();
     });
   });
 

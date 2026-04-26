@@ -101,6 +101,7 @@ export {
   assetGenerateToLLM,
   assetGenerateToView,
   isAssetGeneratePayload,
+  isAssetGenerateView,
 } from './proposals/asset-generate.js';
 
 export type {

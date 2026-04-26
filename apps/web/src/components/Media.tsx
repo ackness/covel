@@ -134,7 +134,7 @@ export function Media(props: MediaProps): ReactElement {
       setState({
         url: result.url,
         fromCache: result.fromCache,
-        status: "ready",
+        status: result.ok ? "ready" : "error",
       });
     });
 

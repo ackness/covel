@@ -27,9 +27,10 @@ import { covelRegistry } from "@/lib/catalog.js";
 import { messageToSpec, messageToSpecDisabled } from "@/lib/message-to-spec.js";
 import { PluginPanel } from "./plugin-panel.js";
 import { ExecutionTimeline } from "./execution-timeline.js";
-import { AssetTurnSidebar } from "@/components/asset-render/index.js";
+import { AssetRender, AssetTurnSidebar } from "@/components/asset-render/index.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import { useSession } from "@/stores/session-store.js";
+import { isAssetGenerateView } from "@covel/shared";
 import { postPluginRpc, resolveApproval } from "@/services/api.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import type {
@@ -415,6 +416,20 @@ export function ChatMessages({
             locked={hasLaterUserMessage(msg, messages)}
           />
           <SubmittedSelectionFooter values={submittedValues} />
+        </div>
+      );
+    }
+
+    const assetView = isAssetGenerateView(block.data) ? block.data : null;
+    if (blockType === "asset.generate" && sessionId && assetView) {
+      return (
+        <div key={msg.id} className="flex flex-col gap-1.5">
+          {viewMode === "detailed" && (
+            <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
+              asset · {assetView.modality}
+            </span>
+          )}
+          <AssetRender view={assetView} sessionId={sessionId} />
         </div>
       );
     }
