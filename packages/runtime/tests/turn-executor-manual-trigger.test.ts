@@ -321,6 +321,21 @@ describe('executeTurn: manual trigger', () => {
           async recordOwnership() {
             /* no-op for this test */
           },
+          async lookup(id) {
+            return {
+              id,
+              mime: 'application/octet-stream',
+              size: 0,
+              ownerSessionId: 'sess-1',
+              ownerPluginId: 'plug',
+            };
+          },
+          async addRef() {
+            /* no-op for this test */
+          },
+          async isReferencedBy() {
+            return true;
+          },
         },
       },
     );
