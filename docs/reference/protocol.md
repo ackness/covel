@@ -100,6 +100,30 @@ type AssetGeneration = {
 
 声明 `image-generation` capability 的插件在完成态缺少 `assetGenerations[]` 时会产生 `image.generate.asset_missing` error。`plugin_data.images` 中出现旧 `url` / `base64` / `dataUrl` 字段时会产生 `image.generate.plugin_data_inline_media` error。
 
+### LLM content parts
+
+`@covel/ai-provider` 的 `TextMessage.content` 使用双形态契约：
+
+| 形态 | 用途 | 生命周期 |
+|------|------|----------|
+| `string` | 纯文本消息快路径 | 长期保留 |
+| `null` | assistant tool-call 等 provider 允许空内容的消息 | 长期保留 |
+| `ContentPart[]` | 多模态消息路径，当前包含 `{ type: "text", text }` 与 `{ type: "image", image: MediaRef }` | 长期保留 |
+
+`@covel/shared` / `@covel/runtime` 保持 provider-agnostic content parts；`@covel/ai-provider` adapter 负责把 `MediaRef` 编码成各 provider 的 wire shape。`assetGenerateToLLM()` 会把 `asset.generate` proposal 派生成文本摘要，并在图片资产场景追加 image part。
+
+Provider 图片输入矩阵：
+
+| Provider 路径 | 图片 wire shape | 输入优先级 | 当前状态 |
+|---------------|-----------------|------------|----------|
+| OpenAI Chat | `{ type: "image_url", image_url: { url } }` | `MediaRef.url` URL / data URL 优先；File API 作为大图或复用资产后续能力 | URL-backed image parts 已实现 |
+| OpenAI Responses | `{ type: "input_image", image_url }` | `MediaRef.url` URL / data URL 优先；File API 作为大图或复用资产后续能力 | URL-backed image parts 已实现 |
+| Anthropic Messages | `{ type: "image", source: { type: "url", url } }` | URL source 优先；Files API 用于大图或复用资产；base64 用于小图兜底 | URL-backed image parts 已实现 |
+| Gemini native | File API 或 `inlineData` | 大图 / 复用资产走 File API，小图走 `inlineData`；URL 输入先由框架或 adapter 取回字节 | native adapter 后续实现 |
+| Gemini OpenAI-compatible endpoint | 跟随 OpenAI Chat / Responses 形态 | 使用 OpenAI-compatible adapter 的 URL / data URL 路径 | 随 OpenAI-compatible preset 生效 |
+
+当前 adapter 直接消费 `MediaRef.url`。缺少 `url` 的 image part 会序列化为文本 `image_ref` JSON，保留资产 id / mime / size 供 trace 和模型上下文读取。远程 provider vision 调用应在进入 adapter 前提供 provider 可取回的 URL、data URL 或 provider file upload 引用；`file://` / `memory://` 这类本地 URL 主要服务本地后端、测试与展示路径。
+
 **保留命名空间 `_jobs`（后台任务协议）:**
 
 `POST /api/sessions/:id/plugin-rpc` 的 runtime 级 + `execution: background` 分支使用 `_jobs` 命名空间写回任务进度：

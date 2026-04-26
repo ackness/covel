@@ -975,8 +975,10 @@ P2 集成备注：
 
 **P4c：LLM content lifecycle**
 
-- [ ] `TextMessage.content` string 兼容窗口与 content parts projection 策略。
-- [ ] OpenAI / Anthropic / Gemini 图片输入 URL / base64 / inlineData 能力矩阵。
+- [x] `TextMessage.content` 使用双形态契约：`string` 作为纯文本稳定快路径长期保留，`ContentPart[]` 作为多模态路径。
+- [x] OpenAI / Anthropic / Gemini 图片输入矩阵：OpenAI URL/data URL 优先，Anthropic URL/Files/base64，Gemini native File API/inlineData。
+
+落地文档：`docs/reference/protocol.md#llm-content-parts` 记录 `TextMessage.content` 生命周期、provider 图片输入矩阵、当前 URL-backed adapter 状态，以及缺少 `MediaRef.url` 时的 `image_ref` 文本兜底。
 
 **P4d：Compatibility + observability**
 
@@ -1049,8 +1051,8 @@ P1/P2（Hook 语义、LLM content parts、ToolClient、recursiveCall、ui.render
 - [x] 一个 turn 里同一插件 emit 多个 asset.generate 时，`assetGenerations[]` 数组顺序就是 commit / trace / 展示顺序
 
 **LLM content parts（P1 阻塞 P0-b 完整实现）**
-- [ ] `TextMessage.content` 改为 content parts 联合后，向后兼容老 string 路径多久？
-- [ ] OpenAI `image_url` vs Anthropic `image source` vs Gemini `inlineData`：base64 还是 URL 优先？
+- [x] `TextMessage.content` 的 `string` 路径长期保留，纯文本消息继续使用 string；多模态消息使用 `ContentPart[]`
+- [x] Provider 图片输入优先级：OpenAI Chat/Responses 走 `image_url` / `input_image.image_url`，Anthropic Messages 走 URL source 并预留 Files/base64，Gemini native 后续走 File API / `inlineData`
 
 **Hook**
 - [ ] Hook 语义改变是否需要 plugin manifest 版本号 bump？（目前零现存 hook，可以延后到 P1）
