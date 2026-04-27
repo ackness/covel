@@ -475,6 +475,19 @@ function extractLastBalancedJsonObject(text: string): Record<string, unknown> | 
   return lastValid;
 }
 
+/**
+ * Pull the top-level `required: [...]` field names out of a JSON Schema so
+ * the schema-validation failure path can surface them as a hint to the user.
+ * Returns an empty array for malformed schemas — never throws.
+ */
+function extractRequiredFields(
+  schema: Readonly<Record<string, unknown>>,
+): readonly string[] {
+  const required = schema.required;
+  if (!Array.isArray(required)) return [];
+  return required.filter((field): field is string => typeof field === 'string' && field.length > 0);
+}
+
 function shouldSuppressToolLoopNarrative(args: {
   outputKind?: string;
   executedToolCalls: readonly ExecutedToolCallState[];
@@ -3117,18 +3130,42 @@ async function executeOneRuntime(
         manifest.outputKind !== 'story'
       ) {
         const preview = finalContent.slice(0, 220).replace(/\s+/g, ' ').trim();
+        const requiredFields = extractRequiredFields(loaded.outputSchema);
+        const requiredHint = requiredFields.length > 0
+          ? ` Required fields: {${requiredFields.join(', ')}}.`
+          : '';
         const failedResult: RuntimeResult = {
           pluginId: manifest.pluginId,
           runtimeId: manifest.name,
           runId,
           turnId: input.turnId,
           status: 'failed',
-          output: { narrativeOutput: finalContent },
+          // Preserve the full LLM output (`narrativeOutput`) plus a structured
+          // diagnostic the task UI can render verbatim. The shape is stable so
+          // a plugin's jobs.json can bind `value/runtimeResults/0/output/diagnostic`
+          // and show the user the schema contract + raw output side-by-side.
+          output: {
+            narrativeOutput: finalContent,
+            diagnostic: {
+              kind: 'schema-validation-prose',
+              requiredFields,
+              schemaTitle:
+                typeof loaded.outputSchema.title === 'string'
+                  ? loaded.outputSchema.title
+                  : undefined,
+              llmOutput: finalContent,
+              hint:
+                'Model returned plain prose instead of JSON. Try a model with reliable structured-output mode, ' +
+                'tighten the system prompt to enforce JSON, or relax overly strict schema fields.',
+            },
+          },
           toolCalls: collectedToolCalls,
           durationMs: Date.now() - startTime,
           error:
-            `Runtime "${manifest.name}" declares output.schema but the model emitted unparseable prose ` +
-            `instead of the required JSON envelope. Preview: "${preview}${finalContent.length > 220 ? '…' : ''}"`,
+            `Runtime "${manifest.name}" expected a JSON envelope per output.schema but the model returned plain prose.` +
+            requiredHint +
+            ` Full LLM output preserved in runtimeResults[].output.narrativeOutput.` +
+            ` Preview: "${preview}${finalContent.length > 220 ? '…' : ''}"`,
           timestamp: new Date().toISOString(),
         };
         emitSubEvent(deps.eventBus, 'runtime', 'runtime.failed', input.sessionId, {
