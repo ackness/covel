@@ -16,12 +16,21 @@
 <data_root>/                 ← 默认 ~/.covel/data；可改到任意路径
   covel.db                   ← SQLite 数据库
   worlds/                    ← 用户创建的世界
-  logs/                      ← 应用日志（自动轮转）
-    tauri-main*.log          ← Tauri 主进程
-    electron-*.log           ← Electron 主进程
-    server-*.log             ← Node 后端（pino-roll）
+  logs/                      ← 应用日志（按尺寸轮转，NDJSON 一行一记录）
+    desktop.log              ← Electron 主进程事件（窗口 / IPC / sidecar 监督 / 启动失败）
+    server.log               ← Node sidecar 的 stdout/stderr（bootstrap 输出 + Hono 请求日志）
+    desktop.log.1 … .N       ← 轮转副本，超过 max_files 丢弃最旧
+    server.log.1 … .N
+    tauri-main*.log          ← Tauri 主进程（Tauri 壳专用，pino-roll）
   server.port                ← 最近一次启动的端口（诊断用）
 ```
+
+**日志写入约定**：
+
+- `/api/health` 心跳被 Hono logger 显式跳过，不再刷屏；通过 `COVEL_LOG_QUIET_PATHS=/api/foo,/api/bar` 可追加要静默的路径
+- 业务级 trace（LLM 调用、proposal、tool 调用）**不写文件**，留在 DB `trace_events` 表，通过 `/debug` 页面或 JSON 导出查看
+- `pnpm dev:server` 单跑时，server 自身会把 stdout/stderr 同时落到 `server.log`（终端仍可见原文）；`COVEL_SERVER_LOG_FILE=""` 可禁用，`COVEL_SERVER_LOG_FILE=/path/foo.log` 可改路径
+- 老版本写入的 `electron.log` 会随轮转自然过期，不会被自动迁移
 
 ## `~/.covel/config.toml`
 

@@ -21,6 +21,8 @@ const ENV_KEYS = [
   'SQLITE_PATH',
   'NODE_ENV',
   'COVEL_DESKTOP_REST',
+  'COVEL_LOGS_DIR',
+  'COVEL_SERVER_LOG_FILE',
 ];
 
 // `dev-home-bootstrap` runs `bootstrap()` once at module init as a side effect.
@@ -46,6 +48,9 @@ describe('dev-home-bootstrap', () => {
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'covel-home-'));
     process.env.COVEL_HOME = tmpHome;
     process.env.NODE_ENV = 'development';
+    // Disable stdout/stderr tee so bootstrap() doesn't wrap real test
+    // streams (which would persist across test files and corrupt output).
+    process.env.COVEL_SERVER_LOG_FILE = '';
   });
 
   afterEach(() => {

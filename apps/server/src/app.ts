@@ -124,7 +124,20 @@ app.onError((err, c) => {
 });
 
 // ── Middleware ────────────────────────────────────────────────────
-app.use("*", logger());
+// Suppress Hono request logging for noisy paths (Electron heartbeat, health
+// probes). These routes are hit ~1×/s and would otherwise dwarf every other
+// signal in `server.log`. Override via COVEL_LOG_QUIET_PATHS (comma-separated).
+const QUIET_LOG_PATHS = new Set<string>(
+  (process.env.COVEL_LOG_QUIET_PATHS ?? "/api/health")
+    .split(",")
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0),
+);
+const honoLogger = logger();
+app.use("*", async (c, next) => {
+  if (QUIET_LOG_PATHS.has(c.req.path)) return next();
+  return honoLogger(c, next);
+});
 app.use("*", secureHeaders());
 app.use("*", bodyLimit({ maxSize: 1 * 1024 * 1024 }));
 

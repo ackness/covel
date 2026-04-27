@@ -26,6 +26,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { setupServerLogFile } from "./server-log-tee.js";
 
 interface BootstrapSummary {
   readonly applied: boolean;
@@ -33,6 +34,7 @@ interface BootstrapSummary {
   readonly setVars: readonly string[];
   readonly loadedKeys: number;
   readonly skipReason?: string;
+  readonly serverLogFile?: string;
 }
 
 /**
@@ -111,10 +113,42 @@ export function bootstrap(): BootstrapSummary {
   setIfMissing("COVEL_USER_WORLDS_DIR", path.join(home, "worlds"), applied);
   setIfMissing("COVEL_LLM_TOML", path.join(home, "llm.toml"), applied);
   setIfMissing("SQLITE_PATH", path.join(home, "data", "covel.db"), applied, "ensureParent");
+  // Mirror the desktop layout: `<home>/data/logs/` collects both the
+  // shell's `desktop.log` and our sidecar `server.log`. We populate
+  // `COVEL_LOGS_DIR` so downstream code can locate it without
+  // re-deriving the path.
+  const logsDir = path.join(home, "data", "logs");
+  setIfMissing("COVEL_LOGS_DIR", logsDir, applied, "ensureParent");
 
   const loadedKeys = loadKeysEnvIntoProcessEnv(path.join(home, "keys.env"));
 
-  return { applied: true, home, setVars: applied, loadedKeys };
+  // Tee stdout/stderr to a NDJSON `server.log` so `pnpm dev:server`
+  // output is durable. `COVEL_SERVER_LOG_FILE` lets users override the
+  // path; setting it to an empty string disables the tee.
+  const explicit = process.env.COVEL_SERVER_LOG_FILE;
+  const serverLogFile =
+    explicit === undefined
+      ? path.join(process.env.COVEL_LOGS_DIR ?? logsDir, "server.log")
+      : explicit.length > 0
+        ? explicit
+        : null;
+  if (serverLogFile) {
+    setupServerLogFile({
+      filePath: serverLogFile,
+      rotation: {
+        maxSizeMb: Number(process.env.COVEL_LOG_MAX_SIZE_MB) || 10,
+        maxFiles: Number(process.env.COVEL_LOG_MAX_FILES) || 10,
+      },
+    });
+  }
+
+  return {
+    applied: true,
+    home,
+    setVars: applied,
+    loadedKeys,
+    serverLogFile: serverLogFile ?? undefined,
+  };
 }
 
 /** Result of the import-time bootstrap call. Exported so tests can inspect it. */
@@ -124,7 +158,10 @@ if (summary.applied) {
     `home=${summary.home}`,
     `vars=[${summary.setVars.join(", ") || "—"}]`,
     `keys=${summary.loadedKeys}`,
-  ].join(" ");
+    summary.serverLogFile ? `serverLog=${summary.serverLogFile}` : null,
+  ]
+    .filter((p): p is string => p !== null)
+    .join(" ");
   console.log(`[dev-home-bootstrap] applied ${parts}`);
 } else if (summary.skipReason && summary.skipReason !== "production" && summary.skipReason !== "desktop-sidecar") {
   console.log(`[dev-home-bootstrap] skipped (${summary.skipReason})`);

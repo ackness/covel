@@ -52,69 +52,55 @@ import { importAsset, type ImportKind, type ImportResult } from "./import-assets
 import { initAutoUpdater } from "./auto-updater.js";
 
 // ── Persistent logging ──────────────────────────────────────────
+//
+// Two parallel rolling channels live under <logsDir>/:
+//   - desktop.log : Electron shell events (lifecycle, window, IPC, sidecar
+//                   supervisor decisions). NDJSON, one record per line.
+//   - server.log  : Raw stdout/stderr from the sidecar child process,
+//                   wrapped line-by-line into NDJSON. Sidecar bootstrap
+//                   logs and Hono request logs land here. Business
+//                   trace events stay in the DB (`trace_events`) and
+//                   are surfaced via the `/debug` UI / export — they
+//                   are intentionally NOT mirrored to file.
+//
+// Each channel rotates independently by size: file → file.1 → … → file.N.
+//
+// Older releases wrote everything to a single `electron.log`; the file is
+// left in place to age out via rotation. New writes go to `desktop.log`.
 
 type LogLevel = "info" | "warn" | "error";
 
-let logStream: fs.WriteStream | null = null;
-let logFilePath: string | null = null;
+interface LogChannel {
+  readonly filePath: string;
+  stream: fs.WriteStream | null;
+  bytesWritten: number;
+}
+
+let desktopChannel: LogChannel | null = null;
+let serverChannel: LogChannel | null = null;
 let logMaxBytes = 10 * 1024 * 1024; // default 10MB per file
 let logMaxFiles = 10;
-let logBytesWritten = 0;
 
-function initPersistentLog(
-  logsDir: string,
-  rotation: { maxSizeMb: number; maxFiles: number },
-): void {
+function openChannel(filePath: string): LogChannel {
+  let bytesWritten = 0;
   try {
-    logMaxBytes = Math.max(1, rotation.maxSizeMb) * 1024 * 1024;
-    logMaxFiles = Math.max(1, rotation.maxFiles);
-    // Single rolling file: electron.log → electron.log.1 → …electron.log.N
-    // (newest is unsuffixed, older ones carry numeric suffixes; oldest is dropped)
-    logFilePath = path.join(logsDir, "electron.log");
-    try {
-      logBytesWritten = fs.statSync(logFilePath).size;
-    } catch {
-      logBytesWritten = 0;
-    }
-    logStream = fs.createWriteStream(logFilePath, { flags: "a" });
-    writeLog("info", `--- Covel desktop start (v${app.getVersion()}) ---`);
-  } catch (err) {
-    console.error("[desktop] Could not open log file:", err);
+    bytesWritten = fs.statSync(filePath).size;
+  } catch {
+    bytesWritten = 0;
   }
+  return {
+    filePath,
+    stream: fs.createWriteStream(filePath, { flags: "a" }),
+    bytesWritten,
+  };
 }
 
-function writeLog(level: LogLevel, ...parts: unknown[]): void {
-  const line = `[${new Date().toISOString()}] [${level.toUpperCase()}] ${parts
-    .map((p) => (typeof p === "string" ? p : JSON.stringify(p)))
-    .join(" ")}`;
-  switch (level) {
-    case "error":
-      console.error(line);
-      break;
-    case "warn":
-      console.warn(line);
-      break;
-    default:
-      console.log(line);
-  }
-  const buf = line + "\n";
-  if (!logStream || !logFilePath) return;
-  const byteLen = Buffer.byteLength(buf, "utf8");
-  if (logBytesWritten + byteLen > logMaxBytes) {
-    rotateLogFile();
-  }
-  logStream.write(buf);
-  logBytesWritten += byteLen;
-}
-
-function rotateLogFile(): void {
-  if (!logFilePath || !logStream) return;
+function rotateChannel(ch: LogChannel): void {
   try {
-    // Close current stream, rotate suffixed files, open a fresh one.
-    logStream.end();
+    ch.stream?.end();
     for (let i = logMaxFiles - 1; i >= 1; i--) {
-      const older = `${logFilePath}.${i}`;
-      const newer = i === 1 ? logFilePath : `${logFilePath}.${i - 1}`;
+      const older = `${ch.filePath}.${i}`;
+      const newer = i === 1 ? ch.filePath : `${ch.filePath}.${i - 1}`;
       if (fs.existsSync(newer)) {
         if (i === logMaxFiles - 1 && fs.existsSync(older)) {
           fs.unlinkSync(older);
@@ -126,11 +112,99 @@ function rotateLogFile(): void {
         }
       }
     }
-    logStream = fs.createWriteStream(logFilePath, { flags: "a" });
-    logBytesWritten = 0;
+    ch.stream = fs.createWriteStream(ch.filePath, { flags: "a" });
+    ch.bytesWritten = 0;
   } catch (err) {
-    console.error("[desktop] log rotation failed:", err);
+    console.error(`[desktop] log rotation failed for ${ch.filePath}:`, err);
   }
+}
+
+function writeChannel(ch: LogChannel | null, ndjsonLine: string): void {
+  if (!ch || !ch.stream) return;
+  const buf = ndjsonLine + "\n";
+  const byteLen = Buffer.byteLength(buf, "utf8");
+  if (ch.bytesWritten + byteLen > logMaxBytes) {
+    rotateChannel(ch);
+  }
+  ch.stream?.write(buf);
+  ch.bytesWritten += byteLen;
+}
+
+function initPersistentLog(
+  logsDir: string,
+  rotation: { maxSizeMb: number; maxFiles: number },
+): void {
+  try {
+    logMaxBytes = Math.max(1, rotation.maxSizeMb) * 1024 * 1024;
+    logMaxFiles = Math.max(1, rotation.maxFiles);
+    desktopChannel = openChannel(path.join(logsDir, "desktop.log"));
+    serverChannel = openChannel(path.join(logsDir, "server.log"));
+    writeLog("info", `--- Covel desktop start (v${app.getVersion()}) ---`);
+  } catch (err) {
+    console.error("[desktop] Could not open log files:", err);
+  }
+}
+
+/**
+ * Strip CSI / SGR escape sequences before persisting a line. The terminal
+ * forwards (`process.stdout.write` / `console.*`) keep the original
+ * coloured text — only the file copy is sanitised so `jq` / log viewers
+ * see a clean `msg` field.
+ */
+// eslint-disable-next-line no-control-regex
+const ANSI_PATTERN = /[\u001B\u009B]\[[0-?]*[ -/]*[@-~]/g;
+function stripAnsi(input: string): string {
+  return input.replace(ANSI_PATTERN, "");
+}
+
+/**
+ * Render an NDJSON line. Each record carries a stable shape so downstream
+ * `jq` / log viewers can filter by level/source without parsing free text.
+ */
+function ndjsonLine(
+  level: LogLevel,
+  source: "desktop" | "server" | "server.err",
+  msg: string,
+): string {
+  return JSON.stringify({
+    ts: new Date().toISOString(),
+    level,
+    source,
+    msg: stripAnsi(msg),
+  });
+}
+
+function writeLog(level: LogLevel, ...parts: unknown[]): void {
+  const msg = parts
+    .map((p) => (typeof p === "string" ? p : JSON.stringify(p)))
+    .join(" ");
+  // Pretty for stdout / dev terminal — keeps `pnpm dev:electron` readable.
+  const pretty = `[${new Date().toISOString()}] [${level.toUpperCase()}] ${msg}`;
+  switch (level) {
+    case "error":
+      console.error(pretty);
+      break;
+    case "warn":
+      console.warn(pretty);
+      break;
+    default:
+      console.log(pretty);
+  }
+  writeChannel(desktopChannel, ndjsonLine(level, "desktop", msg));
+}
+
+/**
+ * Persist a sidecar stdout/stderr line to `server.log` only.
+ * The desktop channel intentionally stays clean of sidecar chatter.
+ */
+function writeServerStreamLine(
+  origin: "stdout" | "stderr",
+  line: string,
+): void {
+  if (!line || !line.trim()) return;
+  const level: LogLevel = origin === "stderr" ? "error" : "info";
+  const source = origin === "stderr" ? "server.err" : "server";
+  writeChannel(serverChannel, ndjsonLine(level, source, line));
 }
 
 // ── Startup error classification ───────────────────────────────
@@ -242,7 +316,8 @@ function captureStderrLine(line: string): void {
   if (serverStderrLines.length > MAX_STDERR_BUFFER) {
     serverStderrLines.shift();
   }
-  logStream?.write(`[server:err] ${line}\n`);
+  // Sidecar stderr → server.log (NDJSON). desktop.log stays uncluttered.
+  writeServerStreamLine("stderr", line);
 }
 
 function buildSplashHtml(): string {
@@ -518,8 +593,10 @@ async function startServer(paths: ReturnType<typeof ensureUserPaths>): Promise<n
 
   serverProcess.stdout?.on("data", (data: Buffer) => {
     const text = data.toString();
+    // Forward to the desktop console for live observability; persist
+    // line-by-line as NDJSON to server.log (no leak into desktop.log).
     process.stdout.write(`[server] ${text}`);
-    logStream?.write(`[server] ${text}`);
+    for (const line of text.split("\n")) writeServerStreamLine("stdout", line);
   });
 
   serverProcess.stderr?.on("data", (data: Buffer) => {
