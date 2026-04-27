@@ -35,13 +35,30 @@ interface BootstrapSummary {
   readonly skipReason?: string;
 }
 
+/**
+ * Set `process.env[key] = candidate` only if the env var is currently unset.
+ *
+ * `mode` controls how we decide whether the candidate is usable:
+ *  - `requireExists` (default) — the candidate must already exist on disk
+ *    (suitable for *user-provided* resources like plugins/worlds/llm.toml; if
+ *    the user hasn't created them, fall through to the server's defaults).
+ *  - `ensureParent` — the candidate is a runtime artifact the server will
+ *    create on first boot (e.g. the SQLite database file). The candidate file
+ *    itself need not exist; we only ensure its parent directory is present so
+ *    the server can write to it.
+ */
 function setIfMissing(
   key: string,
   candidate: string,
   applied: string[],
+  mode: "requireExists" | "ensureParent" = "requireExists",
 ): void {
   if (process.env[key]) return;
-  if (!fs.existsSync(candidate)) return;
+  if (mode === "requireExists") {
+    if (!fs.existsSync(candidate)) return;
+  } else {
+    fs.mkdirSync(path.dirname(candidate), { recursive: true });
+  }
   process.env[key] = candidate;
   applied.push(key);
 }
@@ -75,7 +92,8 @@ function loadKeysEnvIntoProcessEnv(filePath: string): number {
   return count;
 }
 
-function bootstrap(): BootstrapSummary {
+/** Exported for tests. Production code triggers it via the side-effect call below. */
+export function bootstrap(): BootstrapSummary {
   if (process.env.NODE_ENV === "production") {
     return { applied: false, setVars: [], loadedKeys: 0, skipReason: "production" };
   }
@@ -92,14 +110,15 @@ function bootstrap(): BootstrapSummary {
   setIfMissing("COVEL_USER_PLUGINS_DIR", path.join(home, "plugins"), applied);
   setIfMissing("COVEL_USER_WORLDS_DIR", path.join(home, "worlds"), applied);
   setIfMissing("COVEL_LLM_TOML", path.join(home, "llm.toml"), applied);
-  setIfMissing("SQLITE_PATH", path.join(home, "data", "covel.db"), applied);
+  setIfMissing("SQLITE_PATH", path.join(home, "data", "covel.db"), applied, "ensureParent");
 
   const loadedKeys = loadKeysEnvIntoProcessEnv(path.join(home, "keys.env"));
 
   return { applied: true, home, setVars: applied, loadedKeys };
 }
 
-const summary = bootstrap();
+/** Result of the import-time bootstrap call. Exported so tests can inspect it. */
+export const summary = bootstrap();
 if (summary.applied) {
   const parts = [
     `home=${summary.home}`,
