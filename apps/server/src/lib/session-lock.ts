@@ -93,27 +93,3 @@ export function createInProcessSessionLock(): SessionLock & {
   };
 }
 
-// ── Backwards-compat shim ───────────────────────────────────────────
-//
-// Older call sites imported `withSessionLock(sessionId, fn)` directly from
-// this module. They now route through a shared in-process instance so
-// legacy imports keep working until every caller is migrated to
-// `c.get('sessionLock').withLock(...)`.
-//
-// New code SHOULD NOT import this — use the Hono context variable so PG
-// deployments pick up the advisory-lock implementation automatically.
-
-const _legacyInProcessLock = createInProcessSessionLock();
-
-/** @deprecated Use `c.get('sessionLock').withLock(...)` instead. */
-export function withSessionLock<T>(
-  sessionId: string,
-  fn: () => Promise<T>,
-): Promise<T> {
-  return _legacyInProcessLock.withLock(sessionId, fn);
-}
-
-/** Test-only: observe the legacy in-process lock count. */
-export function _lockCountForTests(): number {
-  return _legacyInProcessLock._sizeForTests();
-}
