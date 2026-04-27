@@ -338,10 +338,10 @@ importers:
       '@covel/shared':
         specifier: workspace:*
         version: link:../shared
+    devDependencies:
       '@covel/store':
         specifier: workspace:*
         version: link:../store
-    devDependencies:
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

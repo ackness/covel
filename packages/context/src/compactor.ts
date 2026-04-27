@@ -22,7 +22,11 @@
  * a `compactedAtTurnId` set, the whole compaction is skipped for this round.
  */
 
-import type { DataStore, TurnMessageRecord, SessionSummaryRecord } from '@covel/store';
+import type {
+  SessionContextStore,
+  SessionSummaryRecord,
+  TurnMessageRecord,
+} from './session-context-store.js';
 import type { TokenEstimator } from './budget.js';
 import { loadPrompt, interpolate } from './prompts-loader.js';
 
@@ -38,7 +42,7 @@ export interface CompactorLLMAdapter {
 }
 
 export interface CompactorDeps {
-  readonly store: DataStore;
+  readonly store: SessionContextStore;
   readonly estimator: TokenEstimator;
   /** LLM adapter bound to the 'fast' slot. */
   readonly fastSlotLlm: CompactorLLMAdapter;

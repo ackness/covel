@@ -16,7 +16,7 @@
 
 import type { InputInjectDecl, PluginDataInjectDecl, RuntimeInjectDecl } from '@covel/shared';
 import { isEnvEnabled } from '@covel/shared';
-import type { PluginDataRecord } from '@covel/store';
+import type { PluginDataRecord } from './session-context-store.js';
 import type { ContextBuildParams, SessionMeta } from './types.js';
 
 /**

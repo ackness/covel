@@ -3,7 +3,7 @@
  */
 
 import type { ContentPart, RuntimeManifest, RuntimeResult, TurnInput } from '@covel/shared';
-import type { DataStore } from '@covel/store';
+import type { SessionContextStore } from './session-context-store.js';
 import type { BudgetOptions, TokenEstimator } from './budget.js';
 
 /** Re-export for callers that consume {@link LLMMessage}. */
@@ -166,8 +166,12 @@ export interface ContextBuildParams {
    * plugin-data inject is present in the manifest. The sync `buildContext`
    * path ignores this field entirely and stays byte-identical to the
    * pre-ticket behaviour.
+   *
+   * Typed against the narrow {@link SessionContextStore} surface so
+   * `@covel/context` does not depend on `@covel/store`. The concrete
+   * `DataStore` from `@covel/store` satisfies this shape via structural typing.
    */
-  readonly store?: DataStore;
+  readonly store?: SessionContextStore;
   /**
    * Core memory blocks (Letta-style in-context memory).
    * When present, rendered as a `[Core Memory]` section in the prompt.

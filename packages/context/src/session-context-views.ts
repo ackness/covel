@@ -12,7 +12,7 @@
  *    refactor is rolling.
  */
 
-import type { WorldRecord } from '@covel/store';
+import type { WorldRecord } from './session-context-store.js';
 import type { WorldContextView } from './types.js';
 
 export interface BuildViewInput {

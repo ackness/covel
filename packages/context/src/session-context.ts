@@ -18,12 +18,12 @@
  */
 
 import type {
-  DataStore,
   LorebookEntryRecord,
   PluginDataRecord,
+  SessionContextStore,
   WorldRecord,
   WorkingMemoryRecord,
-} from '@covel/store';
+} from './session-context-store.js';
 import type {
   CharacterSummary,
   CoreMemoryBlockView,
@@ -69,7 +69,7 @@ export interface BuildSessionContextSnapshotOpts {
 }
 
 export async function buildSessionContextSnapshot(
-  store: DataStore,
+  store: SessionContextStore,
   sessionId: string,
   opts: BuildSessionContextSnapshotOpts,
 ): Promise<SessionContextSnapshot> {
@@ -119,7 +119,7 @@ export async function buildSessionContextSnapshot(
 
 // ── Per-source loaders ──────────────────────────────────────────────
 
-async function safeGetSession(store: DataStore, sessionId: string) {
+async function safeGetSession(store: SessionContextStore, sessionId: string) {
   try {
     return await store.getSession(sessionId);
   } catch {
@@ -128,7 +128,7 @@ async function safeGetSession(store: DataStore, sessionId: string) {
 }
 
 async function loadCharacters(
-  store: DataStore,
+  store: SessionContextStore,
   sessionId: string,
 ): Promise<readonly CharacterSummary[]> {
   try {
@@ -148,7 +148,7 @@ async function loadCharacters(
 }
 
 async function loadLastFormValues(
-  store: DataStore,
+  store: SessionContextStore,
   sessionId: string,
 ): Promise<Readonly<Record<string, unknown>> | undefined> {
   // Non-critical: player inputs may not exist yet
@@ -166,7 +166,7 @@ async function loadLastFormValues(
 }
 
 async function loadWorkingMemory(
-  store: DataStore,
+  store: SessionContextStore,
   sessionId: string,
 ): Promise<readonly WorkingMemoryEntry[]> {
   if (typeof store.listWorkingMemory !== 'function') return [];
@@ -180,7 +180,7 @@ async function loadWorkingMemory(
 }
 
 async function loadLorebookRecords(
-  store: DataStore,
+  store: SessionContextStore,
   sessionId: string,
 ): Promise<readonly LorebookEntryRecord[]> {
   if (typeof store.listSessionLorebookEntries !== 'function') return [];
@@ -214,7 +214,7 @@ function toLorebookEntryView(r: LorebookEntryRecord): LorebookEntryView {
 }
 
 async function safeGetWorld(
-  store: DataStore,
+  store: SessionContextStore,
   worldId: string,
 ): Promise<WorldRecord | null> {
   try {
@@ -225,7 +225,7 @@ async function safeGetWorld(
 }
 
 async function loadWorldSchema(
-  store: DataStore,
+  store: SessionContextStore,
   sessionId: string,
   worldDataPluginId: string | undefined,
 ): Promise<Record<string, unknown> | undefined> {
@@ -242,7 +242,7 @@ async function loadWorldSchema(
 }
 
 async function loadWorldEntries(
-  store: DataStore,
+  store: SessionContextStore,
   sessionId: string,
   worldDataPluginId: string | undefined,
   lorebookRecords: readonly LorebookEntryRecord[],
