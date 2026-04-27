@@ -3,11 +3,17 @@
  */
 
 import { Hono } from 'hono';
+import { createCommitPipeline } from '@covel/runtime';
 import type { DataStore, CharacterRecord } from '@covel/store';
+import type { EventBus } from '@covel/events';
+import type { Proposal } from '@covel/shared';
+import type { HookPipeline } from '@covel/runtime';
 
 type Env = {
   Variables: {
     store: DataStore;
+    hookPipeline?: HookPipeline;
+    eventBus?: EventBus;
   };
 };
 
@@ -57,6 +63,33 @@ characterRoutes.post('/:id/characters', async (c) => {
     updatedAt: now,
   };
 
-  await store.upsertCharacter(record);
+  const proposal: Proposal = {
+    id: crypto.randomUUID(),
+    type: 'character.upsert',
+    source: { pluginId: 'framework-api', runtimeId: 'framework-api/characters' },
+    turnId: `api-character-${crypto.randomUUID()}`,
+    sessionId,
+    payload: {
+      id: record.id,
+      name: record.name,
+      type: record.type,
+      ...(record.description !== undefined ? { description: record.description } : {}),
+      ...(record.fields !== undefined ? { fields: record.fields } : {}),
+      version: record.version,
+      createdAt: record.createdAt,
+    },
+    timestamp: now,
+  };
+
+  const pipeline = createCommitPipeline(
+    store,
+    c.get('hookPipeline'),
+    c.get('eventBus'),
+  );
+  const result = await pipeline.commit(proposal);
+  if (!result.committed) {
+    return c.json({ error: result.error ?? 'Failed to upsert character' }, 500);
+  }
+
   return c.json(record);
 });

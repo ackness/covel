@@ -4,8 +4,6 @@
  * All routes are mounted at `/api/sessions` by bootstrap.ts.
  *
  *   GET  /api/sessions/:id/state                        — all state tables
- *   GET  /api/sessions/:id/state/:table                 — table snapshot
- *   GET  /api/sessions/:id/state/:table/:field/history  — field change history
  *   GET  /api/sessions/:id/state-patches                — state change patches
  *   GET  /api/sessions/:id/state-snapshot                — full state snapshot
  *   PUT  /api/sessions/:id/state-snapshot                — save state snapshot

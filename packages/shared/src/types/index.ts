@@ -138,6 +138,7 @@ export type {
   AssetGeneratePayload,
   PluginDataPayload,
   PluginDataBatchPayload,
+  CharacterUpsertPayload,
   SessionEvent,
   CommitResult,
 } from './proposal.js';

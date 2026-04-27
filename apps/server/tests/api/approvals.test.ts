@@ -3,7 +3,7 @@
  *
  * Covers:
  *   - community-trust dispatch → 202 approval-required
- *   - GET /api/approvals/:id and the per-session listing
+ *   - per-session pending approval listing
  *   - POST decision → allow once → next dispatch goes through
  *   - decision deny → next dispatch still pending
  *   - session-scope grant → repeated dispatches all auto-allowed
@@ -202,8 +202,4 @@ describe('Plugin RPC approval flow (PR-7)', () => {
     expect(res.status).toBe(404);
   });
 
-  it('GET /api/approvals/:id with unknown id returns 404', async () => {
-    const res = await app.request('/api/approvals/nonexistent');
-    expect(res.status).toBe(404);
-  });
 });

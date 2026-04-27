@@ -22,6 +22,7 @@ import {
 } from '@covel/shared';
 import type {
   AssetGeneratePayload,
+  CharacterUpsertPayload,
   CommitResult,
   PluginDataBatchPayload,
   PluginDataPayload,
@@ -220,6 +221,17 @@ export interface KernelStore {
   saveEvent(record: { id: string; sessionId: string; type: string; topic: string; payload: unknown; createdAt: string }): Promise<void>;
   addStateChange(record: { id: string; sessionId: string; tableName: string; fieldName: string; value: unknown; changedBy: string; turnId: string; reason?: string; createdAt: string }): Promise<void>;
   addTraceEvent(record: { id: string; sessionId: string; type: string; traceId: string; turnId: string; payload: unknown; createdAt: string }): Promise<void>;
+  upsertCharacter?(record: {
+    id: string;
+    sessionId: string;
+    name: string;
+    type: string;
+    description?: string;
+    fields?: unknown;
+    version: number;
+    createdAt: string;
+    updatedAt: string;
+  }): Promise<void>;
   setPluginData?(record: {
     id: string;
     sessionId: string;
@@ -303,6 +315,7 @@ export function createCommitPipeline(
     'event.emit': commitEvent,
     'plugin.data': commitPluginData,
     'plugin.data.batch': commitPluginDataBatch,
+    'character.upsert': commitCharacterUpsert,
     'working_memory.set': commitWorkingMemory,
     'lorebook.upsert': commitLorebookUpsert,
     'asset.generate': commitAssetGenerate,
@@ -679,6 +692,77 @@ export function createCommitPipeline(
 
     await store.setPluginDataBatch(records);
     return { committed: true };
+  }
+
+  async function commitCharacterUpsert(proposal: Proposal): Promise<CommitResult> {
+    if (!store.upsertCharacter) {
+      return { committed: false, error: 'character.upsert: store does not support character writes' };
+    }
+
+    const payload = proposal.payload as unknown as CharacterUpsertPayload;
+    if (typeof payload.id !== 'string' || payload.id.length === 0) {
+      return { committed: false, error: 'character.upsert: id must be a non-empty string' };
+    }
+    if (typeof payload.name !== 'string' || payload.name.length === 0) {
+      return { committed: false, error: 'character.upsert: name must be a non-empty string' };
+    }
+    if (payload.type !== undefined && typeof payload.type !== 'string') {
+      return { committed: false, error: 'character.upsert: type must be a string when provided' };
+    }
+    if (payload.description !== undefined && typeof payload.description !== 'string') {
+      return { committed: false, error: 'character.upsert: description must be a string when provided' };
+    }
+    if (payload.version !== undefined && typeof payload.version !== 'number') {
+      return { committed: false, error: 'character.upsert: version must be a number when provided' };
+    }
+    if (payload.createdAt !== undefined && typeof payload.createdAt !== 'string') {
+      return { committed: false, error: 'character.upsert: createdAt must be a string when provided' };
+    }
+    if (payload.mirrorPluginId !== undefined && typeof payload.mirrorPluginId !== 'string') {
+      return { committed: false, error: 'character.upsert: mirrorPluginId must be a string when provided' };
+    }
+
+    const now = new Date().toISOString();
+    const record = {
+      id: payload.id,
+      sessionId: proposal.sessionId,
+      name: payload.name,
+      type: payload.type ?? 'npc',
+      ...(payload.description !== undefined ? { description: payload.description } : {}),
+      ...(payload.fields !== undefined ? { fields: payload.fields } : {}),
+      version: payload.version ?? 1,
+      createdAt: payload.createdAt ?? now,
+      updatedAt: now,
+    };
+
+    await store.upsertCharacter(record);
+
+    if (payload.mirrorPluginId && store.setPluginData) {
+      await store.setPluginData({
+        id: crypto.randomUUID(),
+        sessionId: proposal.sessionId,
+        pluginId: payload.mirrorPluginId,
+        namespace: 'characters',
+        key: record.id,
+        value: {
+          id: record.id,
+          name: record.name,
+          type: record.type,
+          ...(record.description !== undefined ? { description: record.description } : {}),
+          ...(record.fields !== undefined ? { fields: record.fields } : {}),
+          version: record.version,
+          createdAt: record.createdAt,
+          updatedAt: record.updatedAt,
+        },
+        createdAt: proposal.timestamp,
+        updatedAt: now,
+      });
+    }
+
+    return {
+      committed: true,
+      event: makeEvent('character.upserted', proposal, { character: record }),
+    };
   }
 
   async function commitWorkingMemory(proposal: Proposal): Promise<CommitResult> {

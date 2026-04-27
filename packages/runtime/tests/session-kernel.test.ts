@@ -746,6 +746,70 @@ describe('createCommitPipeline', () => {
     });
   });
 
+  describe('character.upsert commit', () => {
+    it('persists a character and emits character.upserted', async () => {
+      const store = createMockStore();
+      const pipeline = createCommitPipeline(store as any);
+      const proposal = makeProposal('character.upsert', {
+        id: 'char-1',
+        name: 'Ari',
+        type: 'player',
+        description: 'Explorer',
+        fields: { class: 'Ranger' },
+        version: 2,
+        createdAt: '2026-04-27T00:00:00.000Z',
+      });
+
+      const result = await pipeline.commit(proposal);
+
+      expect(result.committed).toBe(true);
+      expect(result.event?.type).toBe('character.upserted');
+      expect(store.upsertCharacter).toHaveBeenCalledOnce();
+      expect(store.upsertCharacter.mock.calls[0][0]).toMatchObject({
+        id: 'char-1',
+        sessionId: SESSION_ID,
+        name: 'Ari',
+        type: 'player',
+        description: 'Explorer',
+        fields: { class: 'Ranger' },
+        version: 2,
+        createdAt: '2026-04-27T00:00:00.000Z',
+      });
+    });
+
+    it('can mirror the character snapshot to plugin data for UI subscribers', async () => {
+      const store = createMockStore();
+      const pipeline = createCommitPipeline(store as any);
+      const proposal = makeProposal('character.upsert', {
+        id: 'char-2',
+        name: 'Mira',
+        mirrorPluginId: 'core-char-creator',
+      });
+
+      const result = await pipeline.commit(proposal);
+
+      expect(result.committed).toBe(true);
+      expect(store.setPluginData).toHaveBeenCalledOnce();
+      expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
+        sessionId: SESSION_ID,
+        pluginId: 'core-char-creator',
+        namespace: 'characters',
+        key: 'char-2',
+        value: expect.objectContaining({ id: 'char-2', name: 'Mira', type: 'npc', version: 1 }),
+      });
+    });
+
+    it('validates required fields', async () => {
+      const store = createMockStore();
+      const pipeline = createCommitPipeline(store as any);
+      const result = await pipeline.commit(makeProposal('character.upsert', { id: 'char-missing-name' }));
+
+      expect(result.committed).toBe(false);
+      expect(result.error).toContain('name must be a non-empty string');
+      expect(store.upsertCharacter).not.toHaveBeenCalled();
+    });
+  });
+
   describe('trace recording', () => {
     it('should write trace event for every committed proposal', async () => {
       const store = createMockStore();

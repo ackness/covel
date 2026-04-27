@@ -122,6 +122,9 @@ pluginDataRoutes.put('/:id/plugin-data/:pluginId/:namespace/:key', async (c) => 
   if (!parsed.success) {
     return c.json({ error: 'Invalid body: value field is required' }, 400);
   }
+  if (parsed.data.value === undefined) {
+    return c.json({ error: 'Invalid body: value field is required' }, 400);
+  }
   // Guard against oversized payloads (max 64KB serialized)
   const serialized = JSON.stringify(parsed.data.value);
   if (serialized.length > 65_536) {

@@ -4,8 +4,7 @@
  * Flow:
  *   POST /api/sessions           → create session, activate core-narrator
  *   POST /api/sessions/:id/turn  → execute turn with narrator
- *   GET  /api/sessions/:id/results → verify narrative output
- *   GET  /api/sessions/:id/turns   → verify turn history
+ *   store assertions             → verify narrative output and turn history
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';

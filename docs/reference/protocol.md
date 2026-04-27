@@ -267,7 +267,6 @@ community-trust 插件的 RPC 调用需要玩家显式批准。框架返回 202 
 | 命令 | 方法 | 端点 | 响应 |
 |------|------|------|------|
 | `approval.list` | GET | `/api/sessions/:id/approvals` | JSON: `{ pending: RpcApprovalPending[] }` |
-| `approval.get` | GET | `/api/approvals/:approvalId` | JSON: `{ pending }` 或 404 |
 | `approval.decide` | POST | `/api/approvals/:approvalId/decision` | JSON: `{ ok, decision, scope, pending }` |
 
 **Decision 请求体:**

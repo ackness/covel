@@ -209,6 +209,8 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 为跨 runtime 消费和观测接入而设计的规范记录。每次 runtime 执行产生一条 `RuntimeOutput`，每次外部输入（玩家消息、插件 UI、RPC 调用）产生一条 `InteractionRecord`。两张表与 `trace_events` 并存 —— 翻译层面向"被组件消费"，trace 层面向"调试时钻取细节"。
 
+> **接入状态（2026-04-27）**：服务端写入和查询 API 已实现并有测试覆盖；当前内置 Web UI 暂未直接消费这些 HTTP 查询端点，debug 页面主要使用 `/api/traces/*` 与 `/api/sessions/:id/snapshot`。这些端点保留为 observability / API client 能力，不应因 UI 暂未接入而删除。
+
 | 方法 | 路径 | 描述 |
 |------|------|------|
 | GET | `/api/sessions/:id/runtime-outputs` | 列出该 session 的 runtime 输出记录，支持 `?runtimeId=` / `?pluginId=` / `?since=` / `?limit=` 过滤，按 timestamp 降序 |
@@ -264,6 +266,8 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 插件数据（Plugin Data）
 
+> **接入状态（2026-04-27）**：内置 Web UI 目前使用 GET/list 读取 plugin-data（右侧面板、message UI specs、plugin data store）。PUT/DELETE 是管理/API 写入口，当前内置 Web UI 暂未直接调用；插件 runtime 推荐通过 plugin-data tools、plugin RPC 或 proposal 写入。PUT/DELETE 保持兼容，但若未来收窄攻击面，应先标记 deprecated 或加 admin/debug gate，而不是静默删除。
+
 | 方法 | 路径 | 描述 |
 |------|------|------|
 | GET | `/api/sessions/:id/plugin-data/:pluginId/:namespace` | 列出某 namespace 下的数据 |
@@ -274,6 +278,8 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 ### Working Memory（工作记忆）
 
 > 需要环境变量 `COVEL_WORKING_MEMORY_V1=1`，否则返回 404。
+>
+> **接入状态（2026-04-27）**：Working Memory 的 store / proposal / prompt injection 是运行时功能；下列 HTTP CRUD 是管理/调试接口，当前内置 Web UI 暂未直接消费。若未来收敛写路径，应保持 URL/响应兼容，优先替换内部实现而不是直接删除。
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
@@ -312,6 +318,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 ### Snapshot / Fork（S4-T2）
 
 > 需要环境变量 `COVEL_SNAPSHOTS_V1=1`。关闭时所有路径返回 `503`。
+>
+> **接入状态（2026-04-27）**：服务端手动快照、列表和 fork 能力已实现并有测试覆盖；当前内置 Web UI 只直接使用 `GET /api/sessions/:id/snapshot` 做恢复/重连，暂未提供手动快照列表或 fork 操作界面。
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
@@ -320,6 +328,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 | POST | `/api/sessions/:id/fork` | 从指定 snapshotId 物化一个新 session，拷贝状态与截至 cursor 的消息 |
 
 ### 角色数据
+
+> **接入状态（2026-04-27）**：当前内置 Web UI 主要通过 `GET /api/sessions/:id/snapshot` 获取角色快照；本节 REST 端点保留为轻量读取/管理 API。插件 runtime 推荐使用 `create-character` / `update-character` / `list-characters` / `get-character` 工具维护角色。`POST /characters` 是兼容管理入口，后续若收敛角色写路径，应保持 URL/响应兼容并优先替换内部实现。
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
@@ -1549,6 +1559,8 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 插件的 session 级持久化 KV 存储。数据按 `(sessionId, pluginId, namespace, key)` 隔离。
 
+> **接入状态（2026-04-27）**：内置 Web UI 目前使用 GET/list 读取 plugin-data（右侧面板、message UI specs、plugin data store）。PUT/DELETE 是管理/API 写入口，当前内置 Web UI 暂未直接调用；插件 runtime 推荐通过 plugin-data tools、plugin RPC 或 proposal 写入。PUT/DELETE 保持兼容，但若未来收窄攻击面，应先标记 deprecated 或加 admin/debug gate，而不是静默删除。
+
 #### `GET /api/sessions/:id/plugin-data/:pluginId/:namespace`
 
 列出某插件某 namespace 下的所有数据条目。
@@ -1613,6 +1625,8 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 ### Working Memory（工作记忆）
 
 > 需要环境变量 `COVEL_WORKING_MEMORY_V1=1`，否则所有端点返回 `404 Feature flag not enabled`。
+>
+> **接入状态（2026-04-27）**：Working Memory 的 store / proposal / prompt injection 是运行时功能；下列 HTTP CRUD 是管理/调试接口，当前内置 Web UI 暂未直接消费。若未来收敛写路径，应保持 URL/响应兼容，优先替换内部实现而不是直接删除。
 
 #### `GET /api/sessions/:id/working-memory`
 
@@ -1739,6 +1753,8 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 ### Snapshot / Fork（S4-T2）
 
 > 需要环境变量 `COVEL_SNAPSHOTS_V1=1`。关闭时所有路径返回 `503`（`{ "error": "...", "code": "feature_disabled" }`）。
+>
+> **接入状态（2026-04-27）**：服务端手动快照、列表和 fork 能力已实现并有测试覆盖；当前内置 Web UI 只直接使用 `GET /api/sessions/:id/snapshot` 做恢复/重连，暂未提供手动快照列表或 fork 操作界面。
 
 物化快照是存档 / 读档 / 时间线分叉的核心 —— 每个快照把一个回合结束时的完整 session 状态序列化为 `payload`，保存在 `state_snapshots` 表。`kind` 取三种值：`auto`（flag 开启时每回合结束自动写入）、`manual`（`POST /snapshot` 显式创建）、`fork`（`POST /fork` 写到子 session 上记录来源）。
 
@@ -1818,6 +1834,8 @@ session 不存在时返回 `404`。
 
 ### 角色数据
 
+> **接入状态（2026-04-27）**：当前内置 Web UI 主要通过 `GET /api/sessions/:id/snapshot` 获取角色快照；本节 REST 端点保留为轻量读取/管理 API。插件 runtime 推荐使用 `create-character` / `update-character` / `list-characters` / `get-character` 工具维护角色。`POST /characters` 是兼容管理入口，后续若收敛角色写路径，应保持 URL/响应兼容并优先替换内部实现。
+
 #### `GET /api/sessions/:id/characters`
 
 获取会话中的所有角色。角色在游戏过程中动态创建和演化。
@@ -1850,7 +1868,7 @@ session 不存在时返回 `404`。
 
 #### `POST /api/sessions/:id/characters`
 
-创建或更新一个角色（upsert 语义）。
+创建或更新一个角色（upsert 语义）。该兼容管理端点内部通过 `character.upsert` proposal 提交，因此后续可继续接入 commit pipeline 的 hook / trace 策略，同时保持原 URL 和响应形状。
 
 **参数:**
 

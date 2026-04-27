@@ -24,6 +24,7 @@ export type ProposalType =
   | 'asset.generate'
   | 'plugin.data'
   | 'plugin.data.batch'
+  | 'character.upsert'
   | 'working_memory.set'
   | 'lorebook.upsert';
 
@@ -93,6 +94,23 @@ export interface PluginDataPayload {
 
 export interface PluginDataBatchPayload {
   readonly items: readonly PluginDataPayload[];
+}
+
+export interface CharacterUpsertPayload {
+  readonly id: string;
+  readonly name: string;
+  readonly type?: string;
+  readonly description?: string;
+  readonly fields?: unknown;
+  readonly version?: number;
+  readonly createdAt?: string;
+  /**
+   * Optional plugin-data mirror target. When provided, the commit handler
+   * mirrors a compact character snapshot into this plugin's
+   * `characters/<id>` namespace so existing plugin UI panels can update via
+   * the standard `plugin-data.changed` channel.
+   */
+  readonly mirrorPluginId?: string;
 }
 
 export interface WorkingMemorySetPayload {

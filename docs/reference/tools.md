@@ -805,7 +805,7 @@ tools:
 
 ## Proposal 类型
 
-Runtime 输出最终都被规范化为 `Proposal[]`（定义见 `packages/shared/src/types/proposal.ts`），由 commit chain 顺序提交、写入 store、再以 SessionEvent 形式广播。已注册的 `ProposalType` 包括：`narrative.append`、`narrative.template`、`state.patch`、`event.emit`、`record.upsert`、`interaction.request`、`ui.render`、`asset.generate`、`plugin.data`、`working_memory.set`、`lorebook.upsert`。（历史上的 `phase.transition` 已随 turn-band 迁移移除；状态机改由 `status + turnCount + preGameCompleted` 描述。）
+Runtime 输出最终都被规范化为 `Proposal[]`（定义见 `packages/shared/src/types/proposal.ts`），由 commit chain 顺序提交、写入 store、再以 SessionEvent 形式广播。已注册的 `ProposalType` 包括：`narrative.append`、`narrative.template`、`state.patch`、`event.emit`、`record.upsert`、`interaction.request`、`ui.render`、`asset.generate`、`plugin.data`、`plugin.data.batch`、`character.upsert`、`working_memory.set`、`lorebook.upsert`。（历史上的 `phase.transition` 已随 turn-band 迁移移除；状态机改由 `status + turnCount + preGameCompleted` 描述。）
 
 ### `ui.render`
 
@@ -820,6 +820,23 @@ interface UIRenderInstruction {
 ```
 
 commit trace 会记录 `ui.rendered`，并为每个 part 记录 `ui.part.update` trace。`status` 是 UI 展示状态，独立于 runtime 的 `success` / `failed` 执行状态。
+
+### `character.upsert`
+
+写入或更新 session 级角色记录。commit handler 持久化到 `characters` 表，并发出 `character.upserted` SessionEvent。HTTP `POST /api/sessions/:id/characters` 已保持原 URL/响应兼容，但内部通过该 proposal 提交，后续可继续接入 hook/trace 策略而不破坏 API client。
+
+**Payload (`CharacterUpsertPayload`):**
+
+| 字段 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| id | string | ✓ | 角色 ID |
+| name | string | ✓ | 角色名称 |
+| type | string | | 角色类型，默认 `npc` |
+| description | string | | 角色描述 |
+| fields | unknown | | 角色属性 |
+| version | number | | 版本号，默认 `1` |
+| createdAt | string | | 创建时间，缺省为提交时间 |
+| mirrorPluginId | string | | 可选：同时镜像到该插件的 `plugin_data/<plugin>/characters/<id>`，供插件 UI 订阅 |
 
 ### `working_memory.set`（S3-T3）
 
