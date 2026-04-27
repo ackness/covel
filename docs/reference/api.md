@@ -285,6 +285,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | GET | `/api/sessions/:id/working-memory` | 列出该 session 的所有工作记忆条目 |
 | PUT | `/api/sessions/:id/working-memory/:scope/:key` | 写入/更新工作记忆（scope: player \| story \| shared） |
 | DELETE | `/api/sessions/:id/working-memory/:scope/:key` | 删除工作记忆条目 |
+| GET | `/api/sessions/:id/memory-blocks` | 只读返回 Letta 风格的 memory blocks（story scope，需 `COVEL_MEMORY_V1=1`）。2026-04-27 从 `/:id/core-memory` 重命名以避免与 `core-memory` 插件 id 冲突。 |
 
 ### Lorebook（S3-T6）
 
@@ -1396,7 +1397,9 @@ rpc:
 
 #### `GET /api/plugins`
 
-列出所有已加载的插件。
+列出所有已加载的插件。`name` 与 `description` 是 `I18nText`（可能是字符串或 `{ "<locale>": "..." }` 字典）。`capabilities` 为该插件所有 runtime 声明的 capability 并集；`outputKind` 取首个 runtime 的输出类别（`story` / `plugin` / `system`）；`source` 是框架根据加载路径派定的信任层级（`builtin` / `official` / `community`）。
+
+UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` 派发，**不要**根据 `id` 字符串硬编码（违反框架/插件隔离规则）。
 
 **响应:**
 
@@ -1405,19 +1408,25 @@ rpc:
   "plugins": [
     {
       "id": "core-narrator",
-      "name": "核心叙事者",
+      "name": { "zh-CN": "核心叙事者", "en-US": "Narrator" },
       "description": "主要叙事生成插件",
-      "pluginType": "runtime",
+      "pluginType": "core-plugin",
       "runtimeCount": 1,
-      "status": "loaded"
+      "status": "active",
+      "source": "builtin",
+      "capabilities": ["narrative"],
+      "outputKind": "story"
     },
     {
-      "id": "core-combat",
-      "name": "战斗系统",
-      "description": "结构化回合制战斗",
-      "pluginType": "runtime",
-      "runtimeCount": 1,
-      "status": "loaded"
+      "id": "dashscope-image-gen",
+      "name": "DashScope Image",
+      "description": "DashScope 文生图（wan2.x）",
+      "pluginType": "plugin",
+      "runtimeCount": 2,
+      "status": "active",
+      "source": "community",
+      "capabilities": ["image-generation", "image-prompt", "manual-invoke"],
+      "outputKind": "plugin"
     }
   ]
 }
@@ -1425,7 +1434,7 @@ rpc:
 
 #### `GET /api/plugins/:id`
 
-获取单个插件的详细信息。
+获取单个插件的详细信息。返回字段与列表项一致。
 
 **参数:**
 
@@ -1438,11 +1447,14 @@ rpc:
 ```json
 {
   "id": "core-narrator",
-  "name": "核心叙事者",
+  "name": { "zh-CN": "核心叙事者", "en-US": "Narrator" },
   "description": "主要叙事生成插件",
-  "pluginType": "runtime",
+  "pluginType": "core-plugin",
   "runtimeCount": 1,
-  "status": "loaded"
+  "status": "active",
+  "source": "builtin",
+  "capabilities": ["narrative"],
+  "outputKind": "story"
 }
 ```
 

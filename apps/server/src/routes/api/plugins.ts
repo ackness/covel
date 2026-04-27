@@ -8,7 +8,7 @@
  */
 
 import { Hono } from 'hono';
-import type { PluginRegistry } from '@covel/plugin-loader';
+import type { PluginRegistry, PluginRegistryEntry } from '@covel/plugin-loader';
 
 type Env = {
   Variables: {
@@ -18,18 +18,39 @@ type Env = {
 
 export const pluginRoutes = new Hono<Env>();
 
+// Aggregate manifest-derived fields the framework UI needs to discover plugins
+// by capability instead of hardcoding plugin IDs (framework/plugin isolation rule).
+//
+// `capabilities` is the union across all runtimes of a multi-runtime plugin.
+// `outputKind` reports the primary runtime's output kind (story | plugin | system),
+// matching how `summary` already collapses multi-runtime plugins down to one row.
+function summarizePluginManifests(entry: PluginRegistryEntry) {
+  const manifests = entry.manifests ?? (entry.manifest ? [entry.manifest] : []);
+  const capabilities = Array.from(
+    new Set(manifests.flatMap((m) => m.manifest.capabilities ?? [])),
+  );
+  const outputKind = entry.manifest?.manifest.outputKind;
+  return { capabilities, outputKind };
+}
+
 // GET /plugins — List all loaded plugins
 pluginRoutes.get('/', async (c) => {
   const registry = c.get('pluginRegistry');
   const all = registry.getAll();
-  const plugins = Array.from(all.values()).map((entry) => ({
-    id: entry.id,
-    name: entry.summary.name,
-    description: entry.summary.description,
-    pluginType: entry.summary.pluginType,
-    runtimeCount: entry.summary.runtimeCount,
-    status: entry.status,
-  }));
+  const plugins = Array.from(all.values()).map((entry) => {
+    const { capabilities, outputKind } = summarizePluginManifests(entry);
+    return {
+      id: entry.id,
+      name: entry.summary.name,
+      description: entry.summary.description,
+      pluginType: entry.summary.pluginType,
+      runtimeCount: entry.summary.runtimeCount,
+      status: entry.status,
+      source: entry.source,
+      capabilities,
+      outputKind,
+    };
+  });
   return c.json({ plugins });
 });
 
@@ -41,6 +62,7 @@ pluginRoutes.get('/:id', async (c) => {
   if (!entry) {
     return c.json({ error: `Plugin "${id}" not found` }, 404);
   }
+  const { capabilities, outputKind } = summarizePluginManifests(entry);
   return c.json({
     id: entry.id,
     name: entry.summary.name,
@@ -48,6 +70,9 @@ pluginRoutes.get('/:id', async (c) => {
     pluginType: entry.summary.pluginType,
     runtimeCount: entry.summary.runtimeCount,
     status: entry.status,
+    source: entry.source,
+    capabilities,
+    outputKind,
   });
 });
 

@@ -1,90 +1,155 @@
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useInView } from "@/hooks/use-in-view";
+import { useI18nResolver } from "@/lib/catalog";
 
+/**
+ * Marketing tile descriptor. Only the visual layout (`span`) and the
+ * `capability` slot are framework-owned. The plugin's display name and blurb
+ * are read from the plugin's manifest at fetch time so the framework never
+ * hardcodes plugin-specific copy or i18n keys (framework/plugin isolation rule).
+ *
+ * `bandKey` describes the *capability tier* shown above the card (e.g.
+ * "Narrator · 500", "After-Turn"), not the plugin itself — keeping it as a
+ * framework i18n key is intentional.
+ */
 interface Tile {
   key: string;
-  pluginId: string;
+  capability: string;
   bandKey: string;
   bandFallback: string;
-  blurbKey: string;
-  blurbFallback: string;
-  capability: string;
   span: string;
 }
 
 const TILES: readonly Tile[] = [
   {
     key: "narrator",
-    pluginId: "core-narrator",
+    capability: "narrative",
     bandKey: "home.plugins.narratorBand",
     bandFallback: "Narrator · 500",
-    blurbKey: "home.plugins.narratorBlurb",
-    blurbFallback:
-      "Owns the prose. Streams the narrator's voice token-by-token, never blocks the next turn.",
-    capability: "narrative",
     span: "md:col-span-3 md:row-span-2",
   },
   {
     key: "world-init",
-    pluginId: "core-world-init",
+    capability: "world-data-provider",
     bandKey: "home.plugins.worldInitBand",
     bandFallback: "Pre-Game · 0–99",
-    blurbKey: "home.plugins.worldInitBlurb",
-    blurbFallback: "Generates a world schema before turn 1, then steps aside.",
-    capability: "world-data-provider",
     span: "md:col-span-2 md:row-span-1",
   },
   {
     key: "image",
-    pluginId: "core-image",
+    capability: "image-generation",
     bandKey: "home.plugins.imageBand",
     bandFallback: "After-Turn · 700",
-    blurbKey: "home.plugins.imageBlurb",
-    blurbFallback:
-      "Watches the narrative for visual moments and proposes an image render.",
-    capability: "image-generation",
     span: "md:col-span-2 md:row-span-1",
   },
   {
     key: "memory",
-    pluginId: "core-memory",
+    capability: "memory-panel",
     bandKey: "home.plugins.memoryBand",
     bandFallback: "Audit · 1000",
-    blurbKey: "home.plugins.memoryBlurb",
-    blurbFallback:
-      "Letta-style core blocks plus archival recall. Long-term, indexable, replaceable.",
-    capability: "memory",
     span: "md:col-span-2 md:row-span-1",
   },
   {
     key: "rules",
-    pluginId: "core-rules",
+    capability: "rules-engine",
     bandKey: "home.plugins.rulesBand",
     bandFallback: "Pre-Turn · 200",
-    blurbKey: "home.plugins.rulesBlurb",
-    blurbFallback:
-      "House rules, dice math, modifiers — pure functions, zero LLM cost.",
-    capability: "rules-engine",
     span: "md:col-span-2 md:row-span-1",
   },
   {
     key: "characters",
-    pluginId: "core-characters",
+    capability: "character-management",
     bandKey: "home.plugins.charactersBand",
     bandFallback: "After-Turn · 600",
-    blurbKey: "home.plugins.charactersBlurb",
-    blurbFallback:
-      "Tracks NPCs, relationships, and character state through typed records.",
-    capability: "character-management",
     span: "md:col-span-3 md:row-span-1",
   },
 ];
 
+interface RegistryPlugin {
+  id: string;
+  name?: unknown;
+  description?: unknown;
+  capabilities?: string[];
+  source?: "builtin" | "official" | "community";
+}
+
+interface PluginMatch {
+  id: string;
+  name?: unknown;
+  description?: unknown;
+}
+
+const SOURCE_RANK: Record<NonNullable<RegistryPlugin["source"]>, number> = {
+  builtin: 0,
+  official: 1,
+  community: 2,
+};
+
+/**
+ * Resolve `capability → first matching plugin`, preferring builtin over
+ * official over community when multiple plugins claim the same capability.
+ */
+function indexByCapability(
+  plugins: readonly RegistryPlugin[],
+): Map<string, PluginMatch> {
+  const sorted = [...plugins].sort(
+    (a, b) =>
+      (SOURCE_RANK[a.source ?? "community"] ?? 3) -
+      (SOURCE_RANK[b.source ?? "community"] ?? 3),
+  );
+  const index = new Map<string, PluginMatch>();
+  for (const p of sorted) {
+    for (const cap of p.capabilities ?? []) {
+      if (!index.has(cap)) {
+        index.set(cap, { id: p.id, name: p.name, description: p.description });
+      }
+    }
+  }
+  return index;
+}
+
 export function PluginShowcase() {
   const { t } = useTranslation();
+  const resolveI18n = useI18nResolver();
   const [headerRef, headerInView] = useInView<HTMLDivElement>({
     threshold: 0.3,
   });
+  const [capabilityToPlugin, setCapabilityToPlugin] = useState<Map<string, PluginMatch>>(
+    () => new Map(),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/plugins");
+        if (!res.ok) return;
+        const body = (await res.json()) as { plugins?: RegistryPlugin[] };
+        if (cancelled || !body.plugins) return;
+        setCapabilityToPlugin(indexByCapability(body.plugins));
+      } catch {
+        // Landing page renders without a backend — silent fallback.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const cards = useMemo(
+    () =>
+      TILES.map((tile) => {
+        const match = capabilityToPlugin.get(tile.capability);
+        return {
+          tile,
+          pluginId: match?.id,
+          displayName: match?.name ? resolveI18n(match.name) : undefined,
+          description: match?.description ? resolveI18n(match.description) : undefined,
+        };
+      }),
+    [capabilityToPlugin, resolveI18n],
+  );
 
   return (
     <section
@@ -123,10 +188,13 @@ export function PluginShowcase() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-6 md:auto-rows-[200px] gap-px bg-border border border-border rounded-[var(--radius-card)] overflow-hidden">
-          {TILES.map((tile, i) => (
+          {cards.map((card, i) => (
             <PluginCard
-              key={tile.key}
-              tile={tile}
+              key={card.tile.key}
+              tile={card.tile}
+              pluginId={card.pluginId}
+              displayName={card.displayName}
+              description={card.description}
               delay={i * 75}
               t={t}
             />
@@ -146,12 +214,18 @@ export function PluginShowcase() {
 
 interface CardProps {
   tile: Tile;
+  pluginId: string | undefined;
+  displayName: string | undefined;
+  description: string | undefined;
   delay: number;
   t: (key: string, fallback: string) => string;
 }
 
-function PluginCard({ tile, delay, t }: CardProps) {
+function PluginCard({ tile, pluginId, displayName, description, delay, t }: CardProps) {
   const [ref, inView] = useInView<HTMLDivElement>({ threshold: 0.25 });
+  const headline = displayName ?? pluginId ?? tile.capability;
+  const blurb = description ??
+    t("home.plugins.unfilledSlot", "Awaiting a plugin to claim this capability.");
   return (
     <article
       ref={ref}
@@ -172,10 +246,13 @@ function PluginCard({ tile, delay, t }: CardProps) {
       </header>
       <div className="flex-1 flex flex-col justify-end">
         <h3 className="font-mono text-xs text-muted-foreground mb-2">
-          {tile.pluginId}
+          {pluginId ?? tile.capability}
         </h3>
         <p className="font-display text-base md:text-lg leading-snug text-foreground/90 group-hover:text-foreground transition-colors">
-          {t(tile.blurbKey, tile.blurbFallback)}
+          {headline !== (pluginId ?? tile.capability) ? (
+            <span className="block font-sans text-foreground mb-1">{headline}</span>
+          ) : null}
+          {blurb}
         </p>
       </div>
     </article>
