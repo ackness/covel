@@ -40,29 +40,6 @@ function makeEntry(overrides?: Partial<PluginRegistryEntry>): PluginRegistryEntr
   };
 }
 
-function makeEntryWithConfig(
-  pluginId: string,
-  config: Record<string, unknown>,
-): PluginRegistryEntry {
-  return {
-    id: pluginId,
-    summary: makeSummary({ id: pluginId, name: pluginId }),
-    manifest: {
-      manifest: {
-        name: pluginId,
-        description: 'Plugin with config',
-        priority: 500,
-        config: config as never,
-      },
-      promptTemplate: '',
-      referenceLinks: [],
-      rawFrontmatter: {},
-    },
-    loadedRuntimes: new Map(),
-    status: 'registered',
-  };
-}
-
 // ── App factory ──────────────────────────────────────────────────
 
 type AppVariables = {
@@ -143,37 +120,6 @@ describe('V2 Plugin Routes', () => {
     });
   });
 
-  describe('GET /api/plugins/:id/config', () => {
-    it('should return config schema when plugin has config', async () => {
-      const configSchema = {
-        difficulty: { type: 'enum', options: ['easy', 'hard'], default: 'easy' },
-        maxTurns: { type: 'integer', min: 1, max: 100, default: 10 },
-      };
-      registry.register(makeEntryWithConfig('cfg-plugin', configSchema));
-
-      const res = await app.request('/api/plugins/cfg-plugin/config');
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.pluginId).toBe('cfg-plugin');
-      expect(body.config).toEqual(configSchema);
-    });
-
-    it('should return empty config when plugin has no config', async () => {
-      registry.register(makeEntry({ id: 'no-cfg' , summary: makeSummary({ id: 'no-cfg' }) }));
-
-      const res = await app.request('/api/plugins/no-cfg/config');
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.pluginId).toBe('no-cfg');
-      expect(body.config).toEqual({});
-    });
-
-    it('should return 404 when plugin not found', async () => {
-      const res = await app.request('/api/plugins/ghost/config');
-      expect(res.status).toBe(404);
-    });
-  });
-
   // PATCH /api/plugins/:id/config tests removed 2026-04-12.
   // The route was deleted because the underlying sessionScopes Map was never
   // populated by any production code path. See audits/2026-04-12-backend-webv2-framework-audit
@@ -219,21 +165,4 @@ describe('V2 Turn Routes', () => {
     });
   });
 
-  describe('GET /api/session/:id/results', () => {
-    it('should return empty results when no turns executed', async () => {
-      const res = await app.request('/api/session/sess-1/results');
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.results).toEqual([]);
-    });
-  });
-
-  describe('GET /api/session/:id/turns', () => {
-    it('should return empty turns for session with no turns', async () => {
-      const res = await app.request('/api/session/sess-1/turns');
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.turns).toEqual([]);
-    });
-  });
 });

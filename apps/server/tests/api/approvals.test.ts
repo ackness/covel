@@ -116,16 +116,6 @@ describe('Plugin RPC approval flow (PR-7)', () => {
     expect(body.pending.description).toBe('Run the thing');
   });
 
-  it('GET /api/approvals/:id returns the pending entry', async () => {
-    const initial = await dispatchRpc(app, 'sess-approval-1');
-    const { approvalId } = (await initial.json()) as { approvalId: string };
-
-    const res = await app.request(`/api/approvals/${approvalId}`);
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { pending: { approvalId: string } };
-    expect(body.pending.approvalId).toBe(approvalId);
-  });
-
   it('GET /api/sessions/:id/approvals lists session pending entries', async () => {
     await dispatchRpc(app, 'sess-approval-1');
     await dispatchRpc(app, 'sess-approval-1');

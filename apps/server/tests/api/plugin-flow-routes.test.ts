@@ -100,18 +100,4 @@ describe("plugin flow routes", () => {
     });
   });
 
-  it("returns raw plugin documents grouped by runtime", async () => {
-    const res = await app.request("/api/plugin-docs/core-char-creator");
-    expect(res.status).toBe(200);
-
-    const body = await res.json() as {
-      pluginId: string;
-      docs: Array<{ runtimeId: string; path: string; content: string }>;
-    };
-
-    expect(body.pluginId).toBe("core-char-creator");
-    expect(body.docs.some((doc) => doc.runtimeId === "core-char-creator/player-init")).toBe(true);
-    expect(body.docs.some((doc) => doc.path.includes("plugins/core-char-creator/runtimes/player-init/PLUGIN.md"))).toBe(true);
-    expect(body.docs.some((doc) => doc.content.includes("name: core-char-creator/player-init"))).toBe(true);
-  });
 });

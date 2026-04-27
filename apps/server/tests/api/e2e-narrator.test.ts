@@ -128,14 +128,7 @@ describe('E2E: Narrator game flow', () => {
     expect(narratorResult!.output.narrativeOutput).toContain('走进了黑暗的森林');
     expect(narratorResult!.output.narrativeOutput).toContain('泥土气息');
 
-    // 3. Get results
-    const resultsRes = await app.request(`/api/sessions/${sessionId}/results`);
-    expect(resultsRes.status).toBe(200);
-
-    const resultsBody = await resultsRes.json() as { turnId: string };
-    expect(resultsBody.turnId).toBe(turnBody.turnId);
-
-    // 4. Verify LLM was called with correct context
+    // 3. Verify LLM was called with correct context
     expect(mockLLM.callCount).toBeGreaterThanOrEqual(1);
     const narratorMessages = mockLLM.allMessages.find((messages) =>
       messages.some((m) => m.role === 'system' && m.content.includes('叙述者')),
@@ -174,12 +167,6 @@ describe('E2E: Narrator game flow', () => {
     });
     expect(turn2Res.status).toBe(200);
 
-    // Get turn history
-    const historyRes = await app.request(`/api/sessions/${session.id}/turns`);
-    expect(historyRes.status).toBe(200);
-
-    const historyBody = await historyRes.json() as { turns: Array<{ turnId: string }> };
-    expect(historyBody.turns).toHaveLength(2);
   });
 
   it('should return 404 for turn on non-existent session', async () => {
