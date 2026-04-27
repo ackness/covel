@@ -278,6 +278,8 @@ runtime handler `output.assetGenerations[]`  →  normalizeOutput()  →  Propos
   →  SessionEvent  →  SSE 推前端  →  按 modality 渲染
 ```
 
+> `output.assets[]` 是 `output.assetGenerations[]` 的别名，两者都会被 `normalizeOutput()` 收集（按数组顺序，先 `assetGenerations` 后 `assets`）。新代码请用 `assetGenerations[]`；别名仅为兼容现有第三方插件（其 README 与 P0-c handler diff 历史上文档化了 `assets`）。
+
 每一段都要新增代码。详见 § 6 Phase 0-b。
 
 **(f) `ctx.media.ingestUrl(remoteUrl, opts)` 远程拉取 helper**（Codex 评审 #6 修正）

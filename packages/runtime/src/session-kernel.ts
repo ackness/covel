@@ -133,8 +133,10 @@ export function normalizeOutput(
     }
   }
 
-  // asset.generate — from output.assetGenerations[].
-  // Accepted entry shape: { ref: MediaRef, modality: string, meta?: object }.
+  // asset.generate — from output.assetGenerations[] (canonical, per SPEC §5.7)
+  // or output.assets[] (alias kept for the bundled image plugins whose P0-c
+  // diffs documented `assets` as the wire field). Accepted entry shape:
+  // { ref: MediaRef, modality: string, meta?: object }.
   for (const asset of collectAssetGenerations(output)) {
     proposals.push(makeProposal('asset.generate', source, turnId, sessionId, {
       ref: asset.ref,
@@ -1201,6 +1203,9 @@ function collectUiBlocks(
 function collectAssetGenerations(output: Record<string, unknown>): AssetGeneratePayload[] {
   const assets: AssetGeneratePayload[] = [];
   appendAssets(output.assetGenerations, assets);
+  // `assets` is the alias used by the bundled image plugins. Read it after
+  // `assetGenerations` so callers that emit both keep the canonical order.
+  appendAssets(output.assets, assets);
   return assets;
 }
 

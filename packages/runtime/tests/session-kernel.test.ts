@@ -236,6 +236,47 @@ describe('normalizeOutput', () => {
       expect(proposals[0].type).toBe('asset.generate');
       expect(proposals[0].payload).toEqual({ ref: MEDIA_REF, modality: 'image' });
     });
+
+    // Regression: bundled image plugins (dashscope-image-gen, openai-image-gen)
+    // emit `output.assets[]` instead of `output.assetGenerations[]` because the
+    // P0-c handler diffs and READMEs documented `assets` as the wire field.
+    // The framework must accept both spellings — otherwise enforceImageAssetOutput
+    // rejects every proposal (including the plugin.data write that flips the
+    // gallery row from `pending` to `done`), leaving the session in a torn state.
+    it('emits asset.generate proposals from assets[] alias (plugin compat)', () => {
+      const output = {
+        assets: [
+          { ref: MEDIA_REF, modality: 'image', meta: { prompt: 'forest' } },
+        ],
+      };
+
+      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+
+      expect(proposals).toHaveLength(1);
+      expect(proposals[0].type).toBe('asset.generate');
+      expect(proposals[0].payload).toEqual({
+        ref: MEDIA_REF,
+        modality: 'image',
+        meta: { prompt: 'forest' },
+      });
+    });
+
+    it('merges assetGenerations[] and assets[] when both are present', () => {
+      const output = {
+        assetGenerations: [{ ref: MEDIA_REF, modality: 'image' }],
+        assets: [{ ref: MEDIA_REF_2, modality: 'image' }],
+      };
+
+      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+
+      expect(proposals).toHaveLength(2);
+      expect(proposals.map((p) => p.type)).toEqual([
+        'asset.generate',
+        'asset.generate',
+      ]);
+      expect((proposals[0].payload as { ref: { id: string } }).ref.id).toBe(MEDIA_REF.id);
+      expect((proposals[1].payload as { ref: { id: string } }).ref.id).toBe(MEDIA_REF_2.id);
+    });
   });
 
   describe('pluginData', () => {
@@ -1164,6 +1205,52 @@ describe('processRuntimeResult', () => {
     expect(events).toHaveLength(1);
     expect(failedProposals).toHaveLength(0);
     expect(store.setPluginData).not.toHaveBeenCalled();
+  });
+
+  // Regression for the cloudmere-682fb5bf "task done but gallery pending" bug:
+  // bundled image plugins emit `output.assets[]` (not `assetGenerations[]`)
+  // alongside a `pluginData[]` write that flips the gallery row to `done`.
+  // Before the alias was added, enforceImageAssetOutput rejected the entire
+  // proposal batch and the plugin.data write was silently dropped, leaving
+  // _jobs=done but images=pending in the store.
+  it('commits pluginData and asset.generate together when plugin emits assets[] alias', async () => {
+    const store = createMockStore();
+    const result = makeRuntimeResult({
+      // Mirrors the real dashscope handler shape from ~/.covel/plugins/.
+      assets: [
+        { ref: MEDIA_REF, modality: 'image', meta: { prompt: 'forest' } },
+      ],
+      pluginData: [
+        {
+          namespace: 'images',
+          key: 'img-001',
+          value: { status: 'done', ref: MEDIA_REF, prompt: 'forest' },
+        },
+      ],
+    });
+
+    const { events, failedProposals } = await processRuntimeResult(
+      result,
+      store as any,
+      SESSION_ID,
+      'plugin',
+      { capabilities: ['image-generation'] },
+    );
+
+    expect(failedProposals).toHaveLength(0);
+    // Both proposals should have committed: one asset.generated event +
+    // one plugin.data write that flips the gallery row to `done`.
+    expect(events.map((e) => e.type).sort()).toEqual(['asset.generated']);
+    const galleryWrites = store.setPluginData.mock.calls.filter(
+      (call: ReadonlyArray<Record<string, unknown>>) => call[0].namespace === 'images',
+    );
+    expect(galleryWrites).toHaveLength(1);
+    expect(galleryWrites[0][0]).toMatchObject({
+      sessionId: SESSION_ID,
+      namespace: 'images',
+      key: 'img-001',
+      value: { status: 'done', ref: MEDIA_REF, prompt: 'forest' },
+    });
   });
 
   it('reports an error when image generation writes inline media into pluginData.images', async () => {
