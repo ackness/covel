@@ -227,6 +227,16 @@ export function SessionPrepScreen({
     return flowData.steps.filter((s) => selectedPlugins.has(s.pluginId));
   }, [flowData, selectedPlugins]);
 
+  const resolveDeclaredSlot = useCallback((slotId: string) => {
+    if (slotId === "default") return resolvedSlots[0] ?? null;
+    return resolvedSlots.find((slot) => slot.slotId === slotId) ?? null;
+  }, [resolvedSlots]);
+
+  const isMissingDeclaredSlot = useCallback((slotId: string) => {
+    if (slotId === "default") return resolvedSlots.length === 0;
+    return !resolvedSlots.some((slot) => slot.slotId === slotId);
+  }, [resolvedSlots]);
+
   const handleStart = useCallback(() => {
     const pluginIds = [...new Set([...selectedPlugins, ...corePluginIds])];
     onStart(pluginIds.length > 0 ? pluginIds : undefined);
@@ -446,12 +456,17 @@ export function SessionPrepScreen({
                     const isCore = corePluginIds.has(pkg.name);
                     const runtimes = pkg.runtimes ?? [];
                     const tools = pkg.tools ?? [];
-                    // Primary binding entry for this package — single-runtime
-                    // plugins get exactly one; multi-runtime plugins show the
-                    // first agent runtime here and expose the rest in the
-                    // separate "Model Assignments" section below.
-                    const primaryBinding = bindingState.entries.find((e) => e.pluginId === pkg.name);
-                    const hasAgentRuntime = runtimes.some((rt) => rt.kind === "agent");
+                    const pluginBindings = bindingState.entries.filter((e) => e.pluginId === pkg.name);
+                    const primaryBinding = pluginBindings[0];
+                    const hasAgentRuntime = pluginBindings.length > 0;
+                    const providerSlotSetting = pkg.userSettings?.find((spec) => spec.key === "modelPresetId");
+                    const providerSlotName = typeof providerSlotSetting?.default === "string"
+                      ? providerSlotSetting.default
+                      : undefined;
+                    const providerSlotMissing = providerSlotName ? isMissingDeclaredSlot(providerSlotName) : false;
+                    const hasMissingRuntimeSlot = pluginBindings.some(
+                      (binding) => isMissingDeclaredSlot(binding.defaultSlot),
+                    );
 
                     return (
                       <div
@@ -515,21 +530,30 @@ export function SessionPrepScreen({
                               Hidden when only one slot is resolvable — the
                               dropdown would be a no-op and just adds cognitive
                               load for casual players. P-13 audit finding. */}
-                          {hasAgentRuntime && isSelected && primaryBinding && resolvedSlots.length > 1 && (
+                          {hasAgentRuntime && isSelected && primaryBinding && pluginBindings.length === 1 && !hasMissingRuntimeSlot && resolvedSlots.length > 1 && (
                             <select
                               value={primaryBinding.slotName}
                               onChange={(e) => bindingState.setBinding(primaryBinding.qualifiedId, e.target.value)}
-                              className="shrink-0 text-[9px] bg-background border border-border rounded px-1 py-0.5 max-w-[180px]"
+                              className="shrink-0 text-[11px] bg-background border border-border rounded px-2 py-1 max-w-[240px]"
                               aria-label={t("plugin.modelBindingAria", "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.")}
                               title={t("plugin.modelBindingAria", "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.")}
                             >
                               <option value="">
                                 {(() => {
-                                  const defaultSlot = resolvedSlots[0];
+                                  const declared = primaryBinding.defaultSlot;
+                                  const defaultSlot = resolveDeclaredSlot(declared);
                                   const label = formatSlotLabel(defaultSlot);
-                                  return label
-                                    ? t("plugin.useDefaultWith", { value: label, defaultValue: `Use default (${label})` })
-                                    : t("plugin.useDefault", "Use default");
+                                  if (label) {
+                                    return t("plugin.useRuntimeDefaultWith", {
+                                      slot: declared,
+                                      value: label,
+                                      defaultValue: `Runtime default: ${declared} (${label})`,
+                                    });
+                                  }
+                                  return t("plugin.useRuntimeDefault", {
+                                    slot: declared,
+                                    defaultValue: `Runtime default: ${declared}`,
+                                  });
                                 })()}
                               </option>
                               {resolvedSlots.map((slot) => (
@@ -541,7 +565,81 @@ export function SessionPrepScreen({
                           )}
                         </div>
                         {description && (
-                          <p className="text-[10px] text-muted-foreground mt-1 ml-9 line-clamp-1">{description}</p>
+                          <p className="text-[11px] text-muted-foreground mt-1.5 ml-9 line-clamp-2">{description}</p>
+                        )}
+                        {isSelected && providerSlotName && (
+                          <div className="mt-2.5 ml-9 flex items-center gap-2.5 text-[11px] text-muted-foreground">
+                            <KeyRound className="w-3 h-3 shrink-0" />
+                            <span className="font-medium shrink-0">provider slot</span>
+                            <Badge
+                              variant={providerSlotMissing ? "destructive" : "outline"}
+                              className="text-[10px] px-1.5 py-0.5 h-5 shrink-0"
+                              title={providerSlotMissing ? `Add [covel.${providerSlotName}] to llm.toml, or change ${pkg.name}.modelPresetId in Settings → Plugins.` : undefined}
+                            >
+                              {providerSlotMissing ? `missing [covel.${providerSlotName}]` : `[covel.${providerSlotName}]`}
+                            </Badge>
+                            <span className="truncate">
+                              {providerSlotMissing
+                                ? `Configure [covel.${providerSlotName}] in llm.toml, or change modelPresetId in Settings → Plugins → ${pkg.name}.`
+                                : `from plugin setting modelPresetId; edit in Settings → Plugins → ${pkg.name}`}
+                            </span>
+                          </div>
+                        )}
+                        {isSelected && pluginBindings.length > 0 && (pluginBindings.length > 1 || hasMissingRuntimeSlot) && (
+                          <div className="mt-2.5 ml-9 space-y-1.5">
+                            {pluginBindings.map((binding) => {
+                              const declaredSlot = binding.defaultSlot;
+                              const configuredDefault = resolveDeclaredSlot(declaredSlot);
+                              const selectedSlot = binding.slotName
+                                ? resolvedSlots.find((s) => s.slotId === binding.slotName)
+                                : configuredDefault;
+                              const missingDefault = isMissingDeclaredSlot(declaredSlot);
+                              const showPicker = pluginBindings.length > 1 || missingDefault || resolvedSlots.length > 1;
+                              return (
+                                <div key={binding.qualifiedId} className="flex items-center gap-2.5 text-[11px] text-muted-foreground">
+                                  <Cpu className="w-3 h-3 shrink-0" />
+                                  <span className="font-mono truncate max-w-[240px]" title={binding.qualifiedId}>
+                                    {binding.qualifiedId}
+                                  </span>
+                                  <Badge
+                                    variant={missingDefault ? "destructive" : "outline"}
+                                    className="text-[10px] px-1.5 py-0.5 h-5 shrink-0"
+                                    title={missingDefault ? `Add [covel.${declaredSlot}] to llm.toml` : undefined}
+                                  >
+                                    {missingDefault ? `missing [covel.${declaredSlot}]` : `default: ${declaredSlot}`}
+                                  </Badge>
+                                  {missingDefault && (
+                                    <code className="text-[10px] text-muted-foreground/80 bg-muted px-1.5 py-0.5 rounded shrink-0">
+                                      [covel.{declaredSlot}]
+                                    </code>
+                                  )}
+                                  {showPicker ? (
+                                    <select
+                                      value={binding.slotName}
+                                      onChange={(e) => bindingState.setBinding(binding.qualifiedId, e.target.value)}
+                                      className="ml-auto shrink-0 text-[11px] bg-background border border-border rounded px-2 py-1 max-w-[280px]"
+                                      aria-label={t("plugin.modelBindingAria", "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.")}
+                                    >
+                                      <option value="">
+                                        {configuredDefault
+                                          ? `runtime default · ${declaredSlot}${configuredDefault.serverModel ? ` · ${configuredDefault.serverModel}` : ""}`
+                                          : `runtime default · ${declaredSlot} (missing)`}
+                                      </option>
+                                      {resolvedSlots.map((slot) => (
+                                        <option key={slot.slotId} value={slot.slotId}>
+                                          {slot.slotId}{slot.serverModel ? ` · ${slot.serverModel}` : ""}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : selectedSlot ? (
+                                    <span className="ml-auto truncate text-[11px]" title={formatSlotLabel(selectedSlot) ?? selectedSlot.slotId}>
+                                      {formatSlotLabel(selectedSlot) ?? selectedSlot.slotId}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
                         )}
                       </div>
                     );

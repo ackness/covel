@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Database,
@@ -82,11 +82,37 @@ export function LlmSlotsPane() {
   ];
 
   const configuredSlots = isConfigured ? Object.keys(llm!.slots) : [];
-  const slots = isConfigured ? configuredSlots : LEGACY_SLOTS;
+  const discoveredSlotIds = useMemo(() => discoverRuntimeSlotIds(state.packages), [state.packages]);
+  const slots = useMemo(() => {
+    const out: string[] = [];
+    const add = (slotId: string | undefined) => {
+      if (!slotId || slotId === "default" || out.includes(slotId)) return;
+      out.push(slotId);
+    };
+    if (isConfigured) {
+      configuredSlots.forEach(add);
+    } else {
+      LEGACY_SLOTS.forEach(add);
+    }
+    discoveredSlotIds.forEach(add);
+    return out;
+  }, [isConfigured, configuredSlots.join("\n"), discoveredSlotIds.join("\n")]);
 
   const commitSlot = (next: Record<string, SlotConfigEntry>) => {
     setSlotConfigLocal(next);
     setSlotConfig(next);
+  };
+
+  const autoBindDiscoveredSlots = () => {
+    const next = { ...slotConfig };
+    for (const slotId of discoveredSlotIds) {
+      if (slotId === "default" || next[slotId]?.presetId) continue;
+      const byName = allPresets.find((p) => p.id === `slot-${slotId}` || p.id === slotId);
+      const byProvider = allPresets.find((p) => p.provider === slotId);
+      const candidate = byName ?? byProvider;
+      if (candidate) next[slotId] = { presetId: candidate.id };
+    }
+    commitSlot(next);
   };
 
   const updateCapOverride = (
@@ -173,6 +199,38 @@ export function LlmSlotsPane() {
         <Info className="w-3 h-3 shrink-0" />
         <span>{t("settings.slotPingMovedHint")}</span>
       </div>
+      {discoveredSlotIds.length > 0 && (
+        <div className="border border-border/70 bg-muted/20 px-3 py-2 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="space-y-1">
+              <div className="text-xs font-medium">
+                {t("settings.runtimeSlotsDiscovered", "Runtime-requested slots")}
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                {t(
+                  "settings.runtimeSlotsDiscoveredHint",
+                  "These slot names were discovered from active plugin runtimes and image-provider settings. Add or bind presets here so plugins can resolve them.",
+                )}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-[11px] shrink-0"
+              onClick={autoBindDiscoveredSlots}
+            >
+              {t("settings.autoBindSlots", "Auto-bind")}
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {discoveredSlotIds.map((slotId) => (
+              <Badge key={slotId} variant={slotConfig[slotId]?.presetId ? "default" : "outline"} className="text-[10px]">
+                {slotId}{slotConfig[slotId]?.presetId ? " ✓" : ""}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
       {slots.map((slotId) => {
         const selectedPresetId = slotConfig[slotId]?.presetId ?? "";
         const selectedPreset = allPresets.find(
@@ -186,6 +244,8 @@ export function LlmSlotsPane() {
         const effectiveProtocol = serverSlot?.protocol ?? "";
         const isRequired = !isConfigured && slotId === "default";
         const isFirst = isConfigured && slotId === configuredSlots[0];
+        const isDiscovered = discoveredSlotIds.includes(slotId);
+        const isVirtualSlot = isDiscovered && !serverSlot;
         const effectiveCap = isConfigured
           ? getEffectiveCapability(slotId)
           : null;
@@ -205,6 +265,16 @@ export function LlmSlotsPane() {
                 {isFirst && (
                   <Badge variant="default" className="text-[10px]">
                     default
+                  </Badge>
+                )}
+                {isDiscovered && (
+                  <Badge variant="secondary" className="text-[10px]">
+                    runtime
+                  </Badge>
+                )}
+                {isVirtualSlot && (
+                  <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-400">
+                    frontend overlay
                   </Badge>
                 )}
                 {serverSlot?.fallback && (
@@ -239,11 +309,13 @@ export function LlmSlotsPane() {
             >
               <option value="">
                 --{" "}
-                {isConfigured
+                {serverSlot
                   ? "Use base slot config"
-                  : isRequired
-                    ? t("settings.selectPreset")
-                    : t("settings.noPresetFallback")}{" "}
+                  : isDiscovered
+                    ? t("settings.selectPreset", "Select preset")
+                    : isRequired
+                      ? t("settings.selectPreset")
+                      : t("settings.noPresetFallback")}{" "}
                 --
               </option>
               {state.presets.length > 0 && (
@@ -723,4 +795,24 @@ function CapabilityEditor({
       </div>
     </div>
   );
+}
+
+function discoverRuntimeSlotIds(packages: readonly { runtimes?: readonly { kind: string; model?: string; providerTag?: string }[]; userSettings?: readonly { key: string; default: unknown }[] }[]): string[] {
+  const out = new Set<string>();
+  for (const pkg of packages) {
+    for (const rt of pkg.runtimes ?? []) {
+      if (rt.kind === "function") continue;
+      const slot = rt.model ?? rt.providerTag;
+      if (typeof slot === "string" && slot.length > 0 && slot !== "default" && slot !== "text") {
+        out.add(slot);
+      }
+    }
+    for (const setting of pkg.userSettings ?? []) {
+      if (setting.key !== "modelPresetId") continue;
+      if (typeof setting.default === "string" && setting.default.length > 0 && setting.default !== "default") {
+        out.add(setting.default);
+      }
+    }
+  }
+  return [...out].sort((a, b) => a.localeCompare(b));
 }

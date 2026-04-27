@@ -42,10 +42,15 @@ export function sanitizeRuntimeBindingsForHeader(
  *
  * Matching priority (per runtime):
  * 0. Direct name match: slot whose slotId === runtime.providerTag (highest priority)
- * 1. Exact tag match (slot.tag === runtime.providerTag, only when tags are distinct)
- * 2. Slot name matches runtime kind (e.g. kind="story" → slot named "story")
- * 3. Slot named "plugin" or "fast" for non-story plugin runtimes
- * 4. Default slot (slotId === "default") or first available slot
+ * 1. If runtime.providerTag is an explicit slot name (not legacy "text") and
+ *    that slot is missing, leave it unbound so the UI can surface
+ *    "missing [covel.<slot>]" instead of silently routing image/plugin work to
+ *    an unrelated text slot.
+ * 2. For legacy providerTag="text", prefer slot named "plugin" or "fast" for
+ *    non-story plugin runtimes.
+ * 3. Exact tag match (only meaningful when tags are distinct)
+ * 4. Slot name matches runtime kind (e.g. kind="story" → slot named "story")
+ * 5. Default slot (slotId === "default") or first available slot
  */
 export function autoAssignRuntimeBindings(
   bindings: Record<string, string>,
@@ -70,9 +75,22 @@ export function autoAssignRuntimeBindings(
     //    e.g. providerTag: "plugin" → slot named "plugin", providerTag: "image" → slot named "image"
     chosen = slots.find((s) => s.slotId === target.providerTag);
 
-    // 1. For non-story plugin runtimes, prefer "plugin"/"fast" slot over first tag match.
-    //    This ensures runtimes with providerTag: "text" and kind: "plugin" use the dedicated
-    //    plugin slot (e.g. a larger model) rather than the default text slot.
+    // 1. `default` is a virtual slot name used by some plugins to mean
+    //    "the deployment's default text model". It does not require a literal
+    //    [covel.default] block; bind it to the configured default/first slot.
+    if (!chosen && target.providerTag === "default") {
+      chosen = defaultSlot;
+    }
+
+    // 2. Other non-legacy providerTags are concrete slot names from PLUGIN.md.
+    //    If missing, do NOT auto-bind to a fallback: leaving it unbound lets
+    //    the UI tell the user to add [covel.<slot>] to llm.toml.
+    if (!chosen && target.providerTag !== "text") {
+      continue;
+    }
+
+    // 2. For legacy providerTag="text" plugin runtimes, prefer "plugin"/"fast"
+    //    over the first generic text slot.
     if (!chosen && target.kind !== "story" && target.kind !== "background") {
       chosen = slots.find((s) => s.slotId === "plugin") ?? slots.find((s) => s.slotId === "fast");
     }

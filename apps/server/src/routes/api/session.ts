@@ -383,6 +383,8 @@ sessionRoutes.get('/:id/plugins', async (c) => {
     const runtimes: Array<{
       id: string;
       runtimeType?: string;
+      model?: string;
+      outputKind?: string;
       trigger?: { type: string; topic?: string };
       capabilities?: string[];
     }> = [];
@@ -396,6 +398,8 @@ sessionRoutes.get('/:id/plugins', async (c) => {
       runtimes.push({
         id: m.name,
         ...(m.runtimeType ? { runtimeType: m.runtimeType } : {}),
+        ...(m.model ? { model: m.model } : {}),
+        ...(m.outputKind ? { outputKind: m.outputKind } : {}),
         ...(m.trigger
           ? {
               trigger: {

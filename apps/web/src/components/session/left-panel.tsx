@@ -209,6 +209,7 @@ export function LeftPanel({
               onTogglePlugin={onTogglePlugin}
               resolvedSlots={resolvedSlots}
               sessionId={session.id}
+              runtimeModelOverrides={session.runtimeModelOverrides}
             />
           </div>
 

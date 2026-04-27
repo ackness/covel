@@ -13,6 +13,9 @@ export interface RuntimeBindingEntry {
   pluginId: string;
   pluginDisplayName?: string;
   kind: string;
+  /** Runtime's declared default slot from PLUGIN.md `model`; defaults to `text`. */
+  defaultSlot: string;
+  /** Back-compat alias for older binding helpers. */
   providerTag: string;
   slotName: string;
 }
@@ -47,18 +50,12 @@ export function useRuntimeBindings(
   const [bindings, setBindingsState] = useState<Record<string, string>>({});
 
   const runtimeTargets = useMemo(() => {
-    const result: Array<{
-      qualifiedId: string;
-      pluginId: string;
-      pluginDisplayName?: string;
-      kind: string;
-      providerTag: string;
-    }> = [];
+    const result: Array<Omit<RuntimeBindingEntry, "slotName">> = [];
 
     if (packages.length === 0 && sessionPlugins && sessionPlugins.length > 0) {
       for (const sp of sessionPlugins) {
-        if (sp.status === "error" || sp.runtimeType === "function") continue;
-        const tag = sp.model ?? "text";
+        if (sp.status === "error" || sp.runtimeType === "function" || sp.model === undefined) continue;
+        const defaultSlot = sp.model;
         result.push({
           qualifiedId: sp.id,
           pluginId: sp.id.includes("/")
@@ -71,7 +68,8 @@ export function useRuntimeBindings(
                 ? Object.values(sp.displayName)[0]
                 : sp.id,
           kind: sp.outputKind ?? "plugin",
-          providerTag: tag,
+          defaultSlot,
+          providerTag: defaultSlot,
         });
       }
       return result;
@@ -80,7 +78,8 @@ export function useRuntimeBindings(
     for (const pkg of packages) {
       if (!pkg.enabled || !pkg.runtimes) continue;
       for (const rt of pkg.runtimes) {
-        if (rt.kind === "function") continue;
+        if (rt.kind === "function" || (rt.model ?? rt.providerTag) === undefined) continue;
+        const defaultSlot = rt.providerTag ?? rt.model!;
         result.push({
           qualifiedId: rt.id,
           pluginId: pkg.name,
@@ -90,8 +89,9 @@ export function useRuntimeBindings(
               : typeof pkg.displayName === "object"
                 ? Object.values(pkg.displayName)[0]
                 : pkg.name,
-          kind: rt.kind,
-          providerTag: rt.providerTag ?? "text",
+          kind: rt.outputKind ?? rt.kind,
+          defaultSlot,
+          providerTag: defaultSlot,
         });
       }
     }
@@ -172,11 +172,12 @@ export function useRuntimeBindings(
 
   const allBound = useMemo(() => {
     return entries.every((e) => {
-      if (!e.slotName) return false;
+      const effectiveSlotName = e.slotName || e.defaultSlot;
+      if (effectiveSlotName === "default") return resolvedSlots.length > 0;
       return resolvedSlots.some(
         (s) =>
-          s.slotId === e.slotName &&
-          (s.tag === e.providerTag || s.slotId === e.providerTag),
+          s.slotId === effectiveSlotName &&
+          (s.tag === e.defaultSlot || s.slotId === e.defaultSlot || e.defaultSlot === "default"),
       );
     });
   }, [entries, resolvedSlots]);
