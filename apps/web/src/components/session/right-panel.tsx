@@ -66,6 +66,16 @@ function resolvePluginIcon(name: string): Icons.LucideIcon {
   return HelpCircle;
 }
 
+/**
+ * Strip the common `core-` / `xxx-image-gen` boilerplate from a pluginId so
+ * the duplicate-tab disambiguation stays short. Falls back to the raw id
+ * when nothing matches.
+ */
+function shortPluginId(pluginId: string): string {
+  const stripped = pluginId.replace(/^core-/, '').replace(/-image-gen$/, '');
+  return stripped.length > 0 ? stripped : pluginId;
+}
+
 function aggregateSpecsIntoGroups(
   slotEntries: readonly UISlotEntry[],
   locale: string,
@@ -292,10 +302,22 @@ export function RightPanel({
                 {group.label}
               </h3>
               {group.subPanels.length > 1 && (
-                <div className="flex items-center gap-1 mb-3 border-b border-border pb-2">
+                <div className="flex items-center gap-1 mb-3 border-b border-border pb-2 flex-wrap">
                   {group.subPanels.map((sub, idx) => {
                     const SubIcon = resolvePluginIcon(sub.icon);
                     const isActive = idx === subIdx;
+                    // When multiple plugins contribute the same sub-label
+                    // (e.g. dashscope-image-gen + openai-image-gen both
+                    // declare a 画廊 panel under group: "image-studio"), the
+                    // bare label produces indistinguishable duplicate tabs
+                    // and the user can't tell which gallery is which.
+                    // Suffix the pluginId only on the colliding tabs so
+                    // the common single-plugin case stays clean.
+                    const labelCollides =
+                      group.subPanels.filter((other) => other.label === sub.label).length > 1;
+                    const displayLabel = labelCollides
+                      ? `${sub.label} · ${shortPluginId(sub.pluginId)}`
+                      : sub.label;
                     return (
                       <button
                         key={sub.id}
@@ -308,9 +330,10 @@ export function RightPanel({
                             ? "border-primary text-primary"
                             : "border-transparent text-muted-foreground hover:text-foreground"
                         }`}
+                        title={labelCollides ? sub.pluginId : undefined}
                       >
                         <SubIcon className="w-3 h-3" />
-                        {sub.label}
+                        {displayLabel}
                       </button>
                     );
                   })}
