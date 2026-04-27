@@ -167,8 +167,6 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | 方法 | 路径 | 描述 |
 |------|------|------|
 | POST | `/api/sessions/:id/turn` | 执行玩家回合 |
-| GET | `/api/sessions/:id/results` | 获取最近一次 Turn 结果 |
-| GET | `/api/sessions/:id/turns` | 获取 Turn 历史 |
 
 ### 玩家交互
 
@@ -177,7 +175,6 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | POST | `/api/sessions/:id/submit-inputs` | 提交玩家交互响应(legacy alias,转发到 plugin-rpc `submit-form`) |
 | POST | `/api/sessions/:id/plugin-rpc` | **PR-3** 统一插件 RPC 通道(action 级 / runtime 级) |
 | GET  | `/api/sessions/:id/approvals` | **PR-7** 列出该 session 的待批准 RPC 请求 |
-| GET  | `/api/approvals/:approvalId` | **PR-7** 查询单个 pending approval |
 | POST | `/api/approvals/:approvalId/decision` | **PR-7** 提交玩家批准决定(allow/deny + once/session) |
 
 ### 会话插件管理
@@ -200,8 +197,6 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | 方法 | 路径 | 描述 |
 |------|------|------|
 | GET | `/api/sessions/:id/state` | 获取所有状态表 |
-| GET | `/api/sessions/:id/state/:table` | 获取指定状态表快照 |
-| GET | `/api/sessions/:id/state/:table/:field/history` | 获取字段变更历史 |
 
 ### 消息历史
 
@@ -860,75 +855,6 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 - 服务端会对每个 runtimeResult 运行 `processRuntimeResult` 提交管道（与 `/api/actions` 一致）：normalize → state.commit → 触发后续 SessionEvent
 - 如果某个 Runtime 的输出包含 `pendingInputs`，需要通过 `/submit-inputs` 提交玩家响应
 
-#### `GET /api/sessions/:id/results`
-
-获取最近一次 Turn 的执行结果。
-
-**参数:**
-
-| 参数 | 位置 | 说明 |
-|------|------|------|
-| `id` | 路径 | 会话 ID |
-
-**响应:**
-
-```json
-{
-  "turnId": "a1b2c3d4-...",
-  "sessionId": "cloudmere-a1b2c3d4",
-  "runtimeResults": [...],
-  "durationMs": 2500,
-  "timestamp": "2025-01-15T10:05:00.000Z"
-}
-```
-
-如果没有 Turn 记录，返回：
-
-```json
-{
-  "results": []
-}
-```
-
-#### `GET /api/sessions/:id/turns`
-
-获取 Turn 历史记录。
-
-**参数:**
-
-| 参数 | 位置 | 说明 |
-|------|------|------|
-| `id` | 路径 | 会话 ID |
-
-**查询参数:**
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `limit` | number | 返回最近 N 条记录（从末尾截取） |
-
-**示例:**
-
-```bash
-# 获取最近 5 条 Turn
-curl "http://localhost:3001/api/sessions/<sessionId>/turns?limit=5"
-```
-
-**响应:**
-
-```json
-{
-  "turns": [
-    {
-      "turnId": "a1b2c3d4-...",
-      "sessionId": "cloudmere-a1b2c3d4",
-      "runtimeResults": [...],
-      "durationMs": 2500,
-      "timestamp": "2025-01-15T10:05:00.000Z"
-    }
-  ]
-}
-```
-
 ---
 
 ### 玩家交互
@@ -1336,13 +1262,6 @@ rpc:
 }
 ```
 
-#### `GET /api/approvals/:approvalId`
-
-按 ID 查询单个 pending approval。
-
-**响应 200:** `{ pending: { ... } }`
-**响应 404:** approval 不存在或已被消费
-
 #### `POST /api/approvals/:approvalId/decision`
 
 提交玩家决定。
@@ -1587,69 +1506,6 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 }
 ```
 
-#### `GET /api/sessions/:id/state/:table`
-
-获取指定状态表的快照。
-
-**参数:**
-
-| 参数 | 位置 | 说明 |
-|------|------|------|
-| `id` | 路径 | 会话 ID |
-| `table` | 路径 | 状态表名（如 `character_stats`） |
-
-**响应 200:**
-
-```json
-{
-  "table": "character_stats",
-  "data": {
-    "hp": 85,
-    "mp": 42
-  }
-}
-```
-
-**响应 404:**
-
-```json
-{ "error": "Session not found: <id>" }     // 会话不存在
-{ "error": "Table not found: <table>" }     // 表不存在
-```
-
-#### `GET /api/sessions/:id/state/:table/:field/history`
-
-获取某个字段的变更历史记录。
-
-**参数:**
-
-| 参数 | 位置 | 说明 |
-|------|------|------|
-| `id` | 路径 | 会话 ID |
-| `table` | 路径 | 状态表名 |
-| `field` | 路径 | 字段名 |
-
-**响应 200:**
-
-```json
-{
-  "table": "character_stats",
-  "field": "hp",
-  "history": [
-    { "value": 100, "turnId": "t1", "timestamp": "2025-01-15T10:00:00.000Z" },
-    { "value": 85, "turnId": "t2", "timestamp": "2025-01-15T10:05:00.000Z" }
-  ]
-}
-```
-
-**错误响应:**
-
-```json
-{ "error": "Session not found: <id>" }   // 404
-{ "error": "Table not found: <table>" }  // 404
-{ "error": "Field not found: <field>" }  // 404
-```
-
 ---
 
 ### 消息历史
@@ -1681,36 +1537,6 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
       "sessionId": "cloudmere-a1b2c3d4",
       "role": "assistant",
       "content": "你发现自己站在一片广阔的草原上...",
-      "createdAt": "2025-01-15T10:00:05.000Z"
-    }
-  ]
-}
-```
-
-#### `GET /api/sessions/:id/turn-messages`
-
-获取会话的 Turn 级别消息列表。Turn 消息包含更细粒度的信息，如来源类型、Runtime 名称、排序等。
-
-**参数:**
-
-| 参数 | 位置 | 说明 |
-|------|------|------|
-| `id` | 路径 | 会话 ID |
-
-**响应:**
-
-```json
-{
-  "items": [
-    {
-      "id": "tm-001",
-      "sessionId": "cloudmere-a1b2c3d4",
-      "turnId": "a1b2c3d4-...",
-      "sourceType": "runtime",
-      "role": "assistant",
-      "name": "core-narrator",
-      "content": "你发现自己站在一片广阔的草原上...",
-      "order": 500,
       "createdAt": "2025-01-15T10:00:05.000Z"
     }
   ]

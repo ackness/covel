@@ -10,7 +10,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 /** Channels the renderer may SEND (fire-and-forget) to main. */
-const SEND_CHANNELS = ["covel:log"] as const;
+const SEND_CHANNELS = [] as const;
 
 /** Channels the renderer may INVOKE (request/response) on main. */
 const INVOKE_CHANNELS = [

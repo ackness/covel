@@ -450,40 +450,6 @@ export function createMiscApiRoutes(
     return c.json(payload);
   });
 
-  // GET /api/plugin-docs/:pluginId — raw PLUGIN.md documents for preview
-  app.get('/api/plugin-docs/:pluginId', async (c) => {
-    const pluginId = c.req.param('pluginId');
-    const discovery = await loadPluginDiscovery(pluginId);
-    if (!discovery) {
-      return c.json({ error: `Plugin "${pluginId}" not found` }, 404);
-    }
-
-    // Root-of-origin is the plugin's own discovered root, not the bundled
-    // plugins dir — this keeps relative paths correct for user-installed
-    // plugins that live under ~/.covel/plugins rather than the app bundle.
-    const pluginsDir = resolve(discovery.rootPath, '..');
-    const [summary, manifests] = await Promise.all([
-      loadPluginSummary(discovery),
-      loadPluginManifest(discovery),
-    ]);
-
-    const docs = await Promise.all(
-      discovery.pluginMdPaths.map(async (mdPath, index) => ({
-        id: manifests[index]?.manifest.name ?? `${pluginId}:${index}`,
-        runtimeId: manifests[index]?.manifest.name ?? `${pluginId}:${index}`,
-        label: manifests[index]?.manifest.name ?? pluginId,
-        path: docPathFromAbsolute(pluginsDir, mdPath),
-        content: await fs.readFile(mdPath, 'utf-8'),
-      })),
-    );
-
-    return c.json({
-      pluginId,
-      name: textValue(summary.name) || pluginId,
-      docs,
-    });
-  });
-
   // GET /api/commands — list registered commands
   // TODO: populate from plugin command registry when command system is implemented
   app.get('/api/commands', (c) => {

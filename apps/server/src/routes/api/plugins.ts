@@ -76,14 +76,3 @@ pluginRoutes.get('/:id', async (c) => {
   });
 });
 
-// GET /plugins/:id/config — Get plugin config schema (read-only)
-pluginRoutes.get('/:id/config', async (c) => {
-  const registry = c.get('pluginRegistry');
-  const id = c.req.param('id');
-  const entry = registry.get(id);
-  if (!entry) {
-    return c.json({ error: `Plugin "${id}" not found` }, 404);
-  }
-  const config = entry.manifest?.manifest.config ?? {};
-  return c.json({ pluginId: id, config });
-});

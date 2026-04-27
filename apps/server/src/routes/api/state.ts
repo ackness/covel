@@ -140,61 +140,6 @@ function typeOf(v: unknown): string {
   return typeof v;
 }
 
-// GET /sessions/:id/state/:table — Get table snapshot
-stateRoutes.get('/:id/state/:table', async (c) => {
-  const store = c.get('store');
-  const stateManager = c.get('stateManager');
-  const id = c.req.param('id');
-  const table = c.req.param('table');
-
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
-
-  const schemas = await stateManager.getTableSchemas(id);
-  const tableSchema = schemas.find((s) => s.name === table);
-
-  if (!tableSchema) {
-    return c.json({ error: `Table not found: ${table}` }, 404);
-  }
-
-  const data = await stateManager.getTableSnapshot(id, table);
-
-  return c.json({ table, data: { ...data } });
-});
-
-// GET /sessions/:id/state/:table/:field/history — Get field change history
-stateRoutes.get('/:id/state/:table/:field/history', async (c) => {
-  const store = c.get('store');
-  const stateManager = c.get('stateManager');
-  const id = c.req.param('id');
-  const table = c.req.param('table');
-  const field = c.req.param('field');
-
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
-
-  const schemas = await stateManager.getTableSchemas(id);
-  const tableSchema = schemas.find((s) => s.name === table);
-
-  if (!tableSchema) {
-    return c.json({ error: `Table not found: ${table}` }, 404);
-  }
-
-  const fieldDef = tableSchema.fields.find((f) => f.name === field);
-
-  if (!fieldDef) {
-    return c.json({ error: `Field not found: ${field}` }, 404);
-  }
-
-  const history = await stateManager.getChangeLog(id, table, field);
-
-  return c.json({ table, field, history: [...history] });
-});
-
 // ── State patches & snapshots ───────────────────────────────────
 
 // GET /sessions/:id/state-patches — aggregated state change patches

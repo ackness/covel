@@ -43,17 +43,6 @@ sessionApprovalRoutes.get('/:id/approvals', (c) => {
   return c.json({ pending: gate.listPending(sessionId) });
 });
 
-// Standalone approval lookup + decision — mounted under /api/approvals
-approvalRoutes.get('/:approvalId', (c) => {
-  const gate = c.get('rpcApprovalGate');
-  const approvalId = c.req.param('approvalId');
-  const pending = gate.getPending(approvalId);
-  if (!pending) {
-    return c.json({ error: 'approval not found or already resolved' }, 404);
-  }
-  return c.json({ pending });
-});
-
 approvalRoutes.post('/:approvalId/decision', async (c) => {
   const gate = c.get('rpcApprovalGate');
   const approvalId = c.req.param('approvalId');

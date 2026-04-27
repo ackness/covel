@@ -64,14 +64,3 @@ messageRoutes.post('/:id/messages/sync', rateLimiter({ max: 60 }), async (c) => 
   return c.json({ ok: true });
 });
 
-// GET /session/:id/turn-messages
-messageRoutes.get('/:id/turn-messages', async (c) => {
-  const store = c.get('store');
-  const sessionId = c.req.param('id');
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json({ error: 'Session not found' }, 404);
-  }
-  const turnMessages = await store.listTurnMessages(sessionId);
-  return c.json({ items: turnMessages });
-});
