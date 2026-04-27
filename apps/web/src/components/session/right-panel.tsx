@@ -27,6 +27,7 @@ import {
 import type { UISlotEntry, WorldRecord } from "@/services/api.js";
 import { resolveI18n } from "@/lib/catalog.js";
 import { loadPluginData } from "@/stores/plugin-data-store.js";
+import { useSession } from "@/stores/session-store.js";
 
 // ── Plugin tab aggregation ───────────────────────────────────────
 
@@ -162,6 +163,15 @@ export function RightPanel({
   const [storeBackend, setStoreBackend] = useState<string | null>(null);
   const [rawSlotEntries, setRawSlotEntries] = useState<UISlotEntry[]>([]);
   const [activePluginSubTab, setActivePluginSubTab] = useState<Record<string, number>>({});
+  const { state: sessionState } = useSession();
+  const activePluginKey = useMemo(
+    () => sessionState.sessionPlugins
+      .filter((plugin) => plugin.isActive)
+      .map((plugin) => plugin.id)
+      .sort()
+      .join("\u001f"),
+    [sessionState.sessionPlugins],
+  );
 
   const pluginTabGroups = useMemo(
     () => aggregateSpecsIntoGroups(rawSlotEntries, i18n.language),
@@ -203,7 +213,7 @@ export function RightPanel({
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [sessionId]);
+  }, [sessionId, activePluginKey]);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">

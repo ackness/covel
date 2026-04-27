@@ -114,7 +114,10 @@ export function PluginPanel({
   const namespace = (spec.dataSource as Record<string, string> | undefined)?.namespace ?? "default";
   const liveData = usePluginNamespace(pluginId, namespace);
   const jobs = usePluginJobs(pluginId);
-  const data = stateOverride ?? liveData;
+  const frameworkData = namespace === "_jobs"
+    ? Object.fromEntries(jobs.map((job) => [job.jobId, job]))
+    : liveData;
+  const data = stateOverride ?? frameworkData;
 
   // Per-action in-flight tracking — surfaced to json-render state under
   // `/_invoking/<key>` so the catalog Button can show a loading spinner while
@@ -442,8 +445,14 @@ export function PluginPanel({
   // Empty state: namespace has no data yet.
   // Specs can opt out by setting `alwaysRender: true` when they render content
   // sourced from elsewhere (e.g. a framework-registered component reading from
-  // session context instead of plugin_data).
-  const alwaysRender = spec.alwaysRender === true;
+  // session context instead of plugin_data). Framework-owned helper components
+  // (`ImageGallery` / `ImageJobs`) also read directly from live stores, so they
+  // must render even before their namespace has rows; otherwise a just-started
+  // image job is hidden until a refresh/hydration path repaints the panel.
+  const alwaysRender =
+    spec.alwaysRender === true ||
+    specUsesComponent(spec.view, "ImageGallery") ||
+    specUsesComponent(spec.view, "ImageJobs");
   const isEmpty = !alwaysRender && Object.keys(data).length === 0;
   if (isEmpty) {
     const emptySpec = spec.emptyState as Record<string, unknown> | undefined;
@@ -517,6 +526,17 @@ export function PluginPanel({
       </Dialog>
     </div>
   );
+}
+
+function specUsesComponent(node: unknown, component: string): boolean {
+  if (!node || typeof node !== "object") return false;
+  const rec = node as Record<string, unknown>;
+  if (rec.component === component || rec.type === component) return true;
+  const children = rec.children;
+  if (Array.isArray(children)) {
+    return children.some((child) => specUsesComponent(child, component));
+  }
+  return false;
 }
 
 function expandIndexedState(data: Record<string, unknown>): Record<string, unknown> {

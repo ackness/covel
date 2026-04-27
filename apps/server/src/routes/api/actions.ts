@@ -205,6 +205,7 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
       'llm.responded',
       'message.completed',
       'block.emitted',
+      'ui.rendered',
       'state.patch.applied',
       'hook.fired',
       'hook.rewrote',

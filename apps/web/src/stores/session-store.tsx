@@ -329,8 +329,15 @@ function reducer(state: SessionState, action: Action): SessionState {
       return { ...state, worldSessions: action.sessions };
     case "REMOVE_SESSION":
       return { ...state, worldSessions: state.worldSessions.filter((s) => s.id !== action.sessionId) };
-    case "ADD_MESSAGE":
+    case "ADD_MESSAGE": {
+      const existingIdx = state.messages.findIndex((m) => m.id === action.message.id);
+      if (existingIdx >= 0) {
+        const next = [...state.messages];
+        next[existingIdx] = { ...next[existingIdx], ...action.message };
+        return { ...state, messages: next };
+      }
       return { ...state, messages: [...state.messages, action.message] };
+    }
     case "COMPLETE_MESSAGE": {
       // Replace the streaming placeholder with the final message content.
       // Previously we skipped when a placeholder existed — but if any delta
@@ -979,6 +986,51 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const lastBackfilledTurnIdRef = useRef<string | null>(null);
 
+  const addBlockMessageFromSse = useCallback((
+    block: Record<string, unknown>,
+    payload: Record<string, unknown>,
+    timestamp: string,
+    fallbackTurnId?: string,
+  ) => {
+    const blockMeta = block.meta as Record<string, unknown> | undefined;
+    const blockId = (block.id as string) ?? (payload.proposalId as string) ?? api.uid();
+    const blockTurnId =
+      (blockMeta?.turnId as string | undefined) ??
+      (payload.turnId as string | undefined) ??
+      fallbackTurnId;
+    const runtimeId =
+      (blockMeta?.runtimeId as string | undefined) ??
+      (payload.runtimeId as string | undefined) ??
+      undefined;
+    const msg: StreamMessage = {
+      id: blockId,
+      role: "assistant",
+      content: "",
+      timestamp,
+      turnId: blockTurnId,
+      runtimeId,
+      kind: "plugin",
+      block,
+    };
+    dispatch({ type: "ADD_MESSAGE", message: msg });
+    // Persist block message to IDB for local fallback restores; the server has
+    // already persisted it during the commit path.
+    const sid = sessionIdRef.current;
+    if (sid) {
+      ds.addMessage({
+        id: blockId,
+        sessionId: sid,
+        role: "assistant",
+        content: "",
+        turnId: blockTurnId,
+        runtimeId,
+        kind: "plugin",
+        block,
+        createdAt: timestamp,
+      }).catch(() => { });
+    }
+  }, [ds]);
+
   // ── Primary SSE Event Handler (/actions SSE) ──────────────────
   // Single handler for ALL in-turn data updates. Every piece of UI state
   // is updated through this handler during turn execution:
@@ -1085,32 +1137,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       case "interaction.requested": {
         const block = payload.block as Record<string, unknown>;
         if (block) {
-          const blockMeta = block.meta as Record<string, unknown> | undefined;
-          const blockId = (block.id as string) ?? api.uid();
-          const msg: StreamMessage = {
-            id: blockId,
-            role: "assistant",
-            content: "",
-            timestamp: envelope.timestamp,
-            turnId,
-            runtimeId: (blockMeta?.runtimeId as string) || undefined,
-            block,
-          };
-          dispatch({ type: "ADD_MESSAGE", message: msg });
-          // Persist block message to IDB
-          const sid = sessionIdRef.current;
-          if (sid) {
-            ds.addMessage({
-              id: blockId,
-              sessionId: sid,
-              role: "assistant",
-              content: "",
-              turnId,
-              runtimeId: (blockMeta?.runtimeId as string) || undefined,
-              block,
-              createdAt: envelope.timestamp,
-            }).catch(() => { });
-          }
+          addBlockMessageFromSse(block, payload, envelope.timestamp, turnId);
+        }
+        break;
+      }
+      case "ui.rendered": {
+        const block = payload.block as Record<string, unknown> | undefined;
+        const render = payload.render as Record<string, unknown> | undefined;
+        const uiBlock = block ?? (render ? {
+          id: (payload.proposalId as string | undefined) ?? api.uid(),
+          type: "ui.render",
+          data: render,
+          meta: {
+            runtimeId: payload.runtimeId,
+            pluginId: payload.pluginId,
+            turnId: (payload.turnId as string | undefined) ?? turnId,
+          },
+        } : null);
+        if (uiBlock) {
+          addBlockMessageFromSse(uiBlock, payload, envelope.timestamp, turnId);
         }
         break;
       }
@@ -1285,9 +1330,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
         break;
       }
-      // plugin-data.changed is delivered exclusively through the persistent
-      // /events/stream subscription below — both channels share the same
-      // eventBus so handling it here too would dispatch twice per event.
+      case "plugin-data.changed": {
+        // In-turn writes (including tool writes and plugin-rpc manual turns) are
+        // forwarded on the /actions SSE stream. The persistent /events/stream
+        // subscription usually carries the same event too, but it is not
+        // guaranteed to be connected before a fast write happens (notably the
+        // synchronous `_jobs` placeholder written when image generation starts).
+        // Handle it here as well so plugin panels update immediately; duplicate
+        // delivery is idempotent because both stores overwrite by
+        // pluginId/namespace/key and job toasts are guarded by prior snapshot.
+        const pluginId = payload.pluginId as string | undefined;
+        const changes = payload.changes as readonly PluginDataChange[] | undefined;
+        if (pluginId && changes) {
+          const transitions = collectJobTransitions(pluginId, changes);
+          dispatch({ type: "PLUGIN_DATA_CHANGED", pluginId, changes });
+          applyPluginDataStoreChanges(pluginId, changes);
+          for (const tr of transitions) emitJobTransitionToast(tr);
+        }
+        break;
+      }
       // ── Asset events (P0-b) ───────────────────────────────────
       // The kernel emits one `asset.generated` envelope per `asset.generate`
       // proposal that survives validation/commit (see session-kernel.ts).

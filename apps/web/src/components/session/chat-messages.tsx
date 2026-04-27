@@ -441,6 +441,19 @@ export function ChatMessages({
       );
     }
 
+    if (blockType === "ui.render") {
+      return (
+        <div key={msg.id} className="flex flex-col gap-1.5">
+          {viewMode === "detailed" && (
+            <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
+              ui.render{msg.runtimeId && <span className="ml-1.5 opacity-60">· {msg.runtimeId}</span>}
+            </span>
+          )}
+          <UiRenderBlock block={block} />
+        </div>
+      );
+    }
+
     const assetView = isAssetGenerateView(block.data) ? block.data : null;
     if (blockType === "asset.generate" && sessionId && assetView) {
       return (
@@ -720,6 +733,66 @@ function PluginMessageBlock({
       ))}
     </div>
   );
+}
+
+function UiRenderBlock({ block }: { block: Record<string, unknown> }) {
+  const data = (block.data ?? {}) as Record<string, unknown>;
+  const parts = Array.isArray(data.parts) ? data.parts : [];
+  if (parts.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      {parts.map((raw, index) => {
+        const part = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+        const content = part.content;
+        const spec = uiPartToSpec(part.type, content);
+        if (!spec) return null;
+        return (
+          <div key={typeof part.id === "string" ? part.id : index}>
+            <JSONUIProvider registry={covelRegistry} initialState={{}} handlers={{}}>
+              <Renderer spec={nestedToFlat(spec)} registry={covelRegistry} />
+            </JSONUIProvider>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function uiPartToSpec(type: unknown, content: unknown): Record<string, unknown> | null {
+  if (content && typeof content === "object") {
+    const obj = content as Record<string, unknown>;
+    const nested = obj.spec && typeof obj.spec === "object"
+      ? obj.spec as Record<string, unknown>
+      : obj.component || obj.type
+        ? obj
+        : null;
+    if (nested) return normalizeNestedSpec(nested);
+  }
+
+  if (typeof content === "string" && content.trim()) {
+    return { type: "Text", props: { content } };
+  }
+
+  return {
+    type: "JsonView",
+    props: { value: { type, content } },
+  };
+}
+
+function normalizeNestedSpec(node: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(node)) {
+    if (key === "component") out.type = value;
+    else if (key === "children" && Array.isArray(value)) {
+      out.children = value.map((child) =>
+        child && typeof child === "object"
+          ? normalizeNestedSpec(child as Record<string, unknown>)
+          : child,
+      );
+    } else out[key] = value;
+  }
+  return out;
 }
 
 // ── MessageBlockRenderer ────────────────────────────────────────

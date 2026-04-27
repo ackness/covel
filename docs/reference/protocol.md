@@ -360,6 +360,7 @@ These events ride the standard SSE envelope and are also persisted into `trace_e
 | `llm.responded` | `{ runtimeId, pluginId, text?, toolCalls?, usage, finishReason, durationMs, attempt, error? }` |
 | `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }` — `deltaCount` is the number of upstream `narrative.delta` events the runtime produced. Frontend views aggregating live `narrative.delta` streams use a separate synthesized `_aggregated` field; the two are not interchangeable — `deltaCount` is the authoritative persisted count. |
 | `block.emitted` | `{ runtimeId, pluginId, proposalId, source, block }` |
+| `ui.rendered` | `{ runtimeId, pluginId, proposalId, source, render, block? }` — `/actions` SSE forwards this so chat can render committed `ui.render` blocks live; older trace-only payloads may omit `block`, in which case clients synthesize it from `render`. |
 | `state.patch.applied` | `{ runtimeId, pluginId, proposalId, patch: { packageName, summary, ops } }` |
 | `hook.fired` | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType }` |
 | `hook.rewrote` | `{ event, hookName, pluginId, runtimeId?, targetId?, diff? }` |
