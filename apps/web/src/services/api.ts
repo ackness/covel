@@ -101,7 +101,12 @@ export interface RuntimeSummary {
     condition?: string;
     maxRetryCount?: number;
   };
+  /** Slot declared by PLUGIN.md `model` (e.g. story/plugin/image). */
+  model?: string;
+  /** Back-compat alias used by runtime binding UI; same as `model` when present. */
   providerTag?: string;
+  outputKind?: string;
+  capabilities?: string[];
 }
 
 export interface ToolSummary {
@@ -201,6 +206,22 @@ function buildProviderKeysHeader(): Record<string, string> {
     headers["X-Provider-Keys"] = btoa(JSON.stringify(keys));
   }
   return headers;
+}
+
+function persistCustomPresetKeyToProvider(
+  preset: Pick<CustomPreset, "provider" | "apiKey">,
+  store: ReturnType<typeof getSettings>,
+): void {
+  const provider = providerKeyToId(preset.provider) ?? preset.provider.trim();
+  const key = preset.apiKey?.trim();
+  if (!provider || !key) return;
+  // Mirror custom-preset secrets to the provider namespace as well. The
+  // `preset:<id>` key is useful client-side, but desktop `keys.env` and the
+  // server's startup env map resolve function-runtime slots by provider id
+  // (`OPENAI_API_KEY`, `DASHSCOPE_API_KEY`, ...). Without this mirror a
+  // custom preset can work only while the request header is present and then
+  // fail in background/job paths or after restart with "no apiKey".
+  void store.set(`keys.${provider}`, key);
 }
 
 /**
@@ -550,6 +571,8 @@ export interface SessionPluginInfo {
   runtimes?: Array<{
     id: string;
     runtimeType?: string;
+    model?: string;
+    outputKind?: string;
     trigger?: { type: string; topic?: string };
     capabilities?: string[];
   }>;
@@ -1269,7 +1292,9 @@ export function setCustomPresets(presets: CustomPreset[]): void {
   const sanitized = normalized.map((preset) => {
     const { apiKey, ...rest } = preset;
     if (typeof apiKey === "string") {
-      void store.set(presetSecretKey(preset.id), apiKey.trim());
+      const trimmed = apiKey.trim();
+      void store.set(presetSecretKey(preset.id), trimmed);
+      persistCustomPresetKeyToProvider({ ...preset, apiKey: trimmed }, store);
     }
     return rest;
   });

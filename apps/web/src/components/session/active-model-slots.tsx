@@ -32,32 +32,25 @@ export function ActiveModelSlots({
 
   if (variant === "compact") {
     return (
-      <div className="space-y-1">
+      <div className="flex flex-wrap gap-1.5">
         {slots.map((slot) => {
           const modelName = slot.preset?.model ?? slot.serverModel ?? "unknown";
           const provider = slot.preset?.provider ?? slot.serverProvider ?? "";
+          const tooltip = [slot.label, provider, modelName].filter(Boolean).join(" · ");
           return (
-            <div key={slot.slotId} className="flex items-center justify-between py-1.5 px-2 bg-muted/30 text-xs">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground w-16 shrink-0">
-                  {slot.label}
-                </span>
-                <span className="truncate font-medium">
-                  {modelName}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0 ml-1">
-                {provider && (
-                  <span className="text-[10px] text-muted-foreground">
-                    {provider}
-                  </span>
-                )}
-                <PingButton
-                  target={{ kind: "slot", slotId: slot.slotId }}
-                  variant="icon"
-                  size="xs"
-                />
-              </div>
+            <div
+              key={slot.slotId}
+              className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/20 px-1.5 py-1"
+              title={tooltip}
+            >
+              <span className="max-w-[5.5rem] truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {slot.label}
+              </span>
+              <PingButton
+                target={{ kind: "slot", slotId: slot.slotId }}
+                variant="icon"
+                size="xs"
+              />
             </div>
           );
         })}

@@ -241,7 +241,7 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
     // pipeline, commit proposals for every emitted runtime result, and
     // return a summary suitable for the JSON response or the `_jobs`
     // writeback.
-    const runManualTurn = async (): Promise<{
+    type ManualTurnSummary = {
       readonly turnId: string;
       readonly runtimeResults: ReadonlyArray<{
         readonly runtimeId: string;
@@ -261,7 +261,9 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
           readonly data: Readonly<Record<string, unknown>>;
         };
       }>;
-    }> => {
+    };
+
+    const runManualTurn = async (): Promise<ManualTurnSummary> => {
       const emitter = createTurnEmitter({ store, eventBus, sessionId, turnId });
       const turnInput: TurnInput = {
         sessionId,
@@ -770,21 +772,148 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
     // row per follower BEFORE responding so the frontend can render a
     // loading state, then fire each follower with setImmediate so the
     // response flushes without waiting for image generation etc.
+    //
+    // UX: some sync entry runtimes are only prompt-builders for a background
+    // follower (e.g. image prompt-generator → image-generator). When the
+    // client declares `expectsBackgroundFollower`, write a `_jobs` placeholder
+    // immediately and run the sync prompt-builder off-request as well. The UI
+    // can then show "generating prompt" at once instead of waiting 20–40s for
+    // the prompt LLM call before any job row exists.
+    if (body.expectsBackgroundFollower === true) {
+      const placeholderJobId = crypto.randomUUID();
+      const startedAt = new Date().toISOString();
+      try {
+        await store.setPluginData({
+          id: `${sessionId}:${body.pluginId}:_jobs:${placeholderJobId}`,
+          sessionId,
+          pluginId: body.pluginId,
+          namespace: '_jobs',
+          key: placeholderJobId,
+          value: {
+            status: 'pending',
+            progress: 1,
+            runtimeId: body.runtimeId,
+            turnId,
+            startedAt,
+            phase: 'prompt',
+            message: 'Generating image prompt...',
+          },
+          createdAt: startedAt,
+          updatedAt: startedAt,
+        });
+      } catch (err) {
+        return c.json(
+          {
+            status: 'error',
+            error: err instanceof Error ? err.message : 'failed to enqueue prompt job',
+            code: 'prompt-job-enqueue-failed',
+          },
+          500,
+        );
+      }
+
+      setImmediate(() => {
+        void (async (): Promise<void> => {
+          try {
+            const summary = await runManualTurn();
+            const deferredJobs =
+              summary.deferredFollowers.length > 0
+                ? await scheduleDeferredFollowers(summary.deferredFollowers)
+                : [];
+            const completedAt = new Date().toISOString();
+            const failedResult = summary.runtimeResults.find((r) => r.status === 'failed');
+            if (deferredJobs.length > 0) {
+              await store.setPluginData({
+                id: `${sessionId}:${body.pluginId}:_jobs:${placeholderJobId}`,
+                sessionId,
+                pluginId: body.pluginId!,
+                namespace: '_jobs',
+                key: placeholderJobId,
+                value: {
+                  status: 'done',
+                  progress: 100,
+                  runtimeId: body.runtimeId,
+                  turnId: summary.turnId,
+                  startedAt,
+                  completedAt,
+                  durationMs: summary.durationMs,
+                  phase: 'prompt',
+                  message: 'Image prompt generated; image job queued.',
+                  runtimeResults: summary.runtimeResults,
+                  deferredJobs,
+                  ...(summary.abortReason ? { abortReason: summary.abortReason } : {}),
+                },
+                createdAt: startedAt,
+                updatedAt: completedAt,
+              });
+              return;
+            }
+            await store.setPluginData({
+              id: `${sessionId}:${body.pluginId}:_jobs:${placeholderJobId}`,
+              sessionId,
+              pluginId: body.pluginId!,
+              namespace: '_jobs',
+              key: placeholderJobId,
+              value: {
+                status: 'failed',
+                progress: 100,
+                runtimeId: body.runtimeId,
+                turnId: summary.turnId,
+                startedAt,
+                completedAt,
+                durationMs: summary.durationMs,
+                error:
+                  failedResult?.error ??
+                  `runtime "${body.runtimeId}" completed without emitting a matching background follower event`,
+                runtimeResults: summary.runtimeResults,
+                reason: 'expected-background-follower-missing',
+                ...(summary.abortReason ? { abortReason: summary.abortReason } : {}),
+              },
+              createdAt: startedAt,
+              updatedAt: completedAt,
+            });
+          } catch (err) {
+            const completedAt = new Date().toISOString();
+            await store.setPluginData({
+              id: `${sessionId}:${body.pluginId}:_jobs:${placeholderJobId}`,
+              sessionId,
+              pluginId: body.pluginId!,
+              namespace: '_jobs',
+              key: placeholderJobId,
+              value: {
+                status: 'failed',
+                progress: 100,
+                runtimeId: body.runtimeId,
+                turnId,
+                startedAt,
+                completedAt,
+                error: err instanceof Error ? err.message : 'runtime execution failed',
+              },
+              createdAt: startedAt,
+              updatedAt: completedAt,
+            }).catch(() => undefined);
+          }
+        })();
+      });
+
+      return c.json(
+        {
+          status: 'accepted',
+          jobId: placeholderJobId,
+          pending: true,
+          turnId,
+          runtimeId: body.runtimeId,
+          phase: 'prompt',
+        },
+        202,
+      );
+    }
+
     try {
       const summary = await runManualTurn();
       const deferredJobs =
         summary.deferredFollowers.length > 0
           ? await scheduleDeferredFollowers(summary.deferredFollowers)
-          : [];
-      const failedJobs =
-        body.expectsBackgroundFollower === true && deferredJobs.length === 0
-          ? [await writeExpectedFollowerFailureJob({
-              turnId: summary.turnId,
-              error:
-                summary.runtimeResults.find((r) => r.status === 'failed')?.error ??
-                `runtime "${body.runtimeId}" completed without emitting a matching background follower event`,
-              runtimeResults: summary.runtimeResults,
-            })]
           : [];
       return c.json({
         status: 'ok',
@@ -793,15 +922,8 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
         durationMs: summary.durationMs,
         ...(summary.abortReason ? { abortReason: summary.abortReason } : {}),
         ...(deferredJobs.length > 0 ? { deferredJobs } : {}),
-        ...(failedJobs.length > 0 ? { failedJobs } : {}),
       });
     } catch (err) {
-      if (body.expectsBackgroundFollower === true) {
-        await writeExpectedFollowerFailureJob({
-          turnId,
-          error: err instanceof Error ? err.message : 'runtime execution failed',
-        }).catch(() => undefined);
-      }
       return c.json(
         {
           status: 'error',

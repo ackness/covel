@@ -53,6 +53,8 @@ Reference for the json-render components available to plugin UI specs. This page
 | `Source` | Small attribution label. | `label` (string) |
 | `Image` | Renders an image from a MediaRef resolved through the media store. Falls back to a placeholder tile when no ref is bound. | `ref` *(MediaRef, preferred)*, `src` *(MediaRef accepted for early specs)*, `alt` (string), `aspectRatio` (CSS ratio, default `"1/1"`), `rounded` (`none` / `sm` / `md` / `lg`), `fit` (`cover` / `contain`) |
 | `Media` | Renders image / audio / video / file assets from a MediaRef resolved through the media store. | `ref` *(MediaRef, preferred)*, `src` *(MediaRef accepted for early specs)*, `as` (`auto` / `image` / `audio` / `video`), `alt`, `aspectRatio`, `rounded`, `fit` |
+| `ImageGallery` | Framework-provided compact gallery for image-generation plugins. Reads the plugin `images` namespace, hides long prompts, and provides preview/download/re-draw controls. | `pluginId` |
+| `ImageJobs` | Framework-provided image task viewer. Reads `_jobs`, shows prompt details, copy/re-draw controls, and groups generated image thumbnails under matching prompts. | `pluginId` |
 
 ### Data
 

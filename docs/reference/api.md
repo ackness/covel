@@ -1050,6 +1050,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 | `action` | string(可选) | RPC action 名,kebab-case。与 `runtimeId` 互斥 |
 | `runtimeId` | string(可选) | runtime 全名(如 `my-plugin/my-runtime`)。与 `action` 互斥 |
 | `payload` | unknown | handler 的输入数据 / agent runtime 的 manualPayload / function runtime 的 `ctx.manualPayload` |
+| `expectsBackgroundFollower` | boolean(可选) | runtime 级 sync 入口若只是生成 prompt 并预计触发后台 follower，可设为 `true`。框架会立即写入 `_jobs` 占位并返回 202，随后在后台执行入口 runtime 与 follower，避免 UI 等 prompt LLM 完成后才出现任务。 |
 
 **解析顺序(action 级):**
 
@@ -1140,6 +1141,8 @@ For plugins with `capabilities: ["image-generation"]`, a successful completed ru
 }
 ```
 
+当请求体包含 `expectsBackgroundFollower: true` 时，sync prompt-builder 也会使用同样的 202 形态立即返回；此时 `_jobs/{jobId}` 先以 `phase: "prompt"` / `message: "Generating image prompt..."` 写入，prompt 完成并排入后续 background follower 后会更新为 `status: "done"` 且包含 `deferredJobs`。
+
 **`_jobs` 命名空间协议(background 模式):**
 
 框架在 `plugin_data` 表中为每个后台任务保留以下 row,插件 **禁止**直接写该命名空间,但可订阅 SSE 读取:
@@ -1157,6 +1160,10 @@ value         : {
   completedAt?: ISO8601,
   durationMs?: number,
   runtimeResults?: RuntimeResultSummary[],   // status=done
+  deferredJobs?: { jobId: string; runtimeId: string }[], // prompt-builder follower 队列
+  phase?: "prompt" | string,
+  message?: string,
+  progress?: number,
   error?: string,                             // status=failed
   abortReason?: string
 }

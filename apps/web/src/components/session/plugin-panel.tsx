@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { Button as UIButton } from "@/components/ui/button.js";
+import { X } from "lucide-react";
 
 export interface PluginPanelProps {
   pluginId: string;
@@ -127,6 +128,7 @@ export function PluginPanel({
   // a flat-pointer diff each time `initialState` changes (see @json-render/
   // react StateProvider) so flipping a key here propagates through.
   const [invokingMap, setInvokingMap] = useState<Record<string, true>>({});
+  const [dismissedErrorJobs, setDismissedErrorJobs] = useState<Record<string, true>>({});
   const markInvoking = useCallback((key: string, on: boolean) => {
     setInvokingMap((prev) => {
       if (on) {
@@ -172,8 +174,10 @@ export function PluginPanel({
   }, [data, invokingMap]);
 
   const failedJobs = useMemo(
-    () => jobs.filter((job) => job.status === "failed" && (job.error || job.abortReason)).slice(0, 3),
-    [jobs],
+    () => jobs
+      .filter((job) => job.status === "failed" && (job.error || job.abortReason) && !dismissedErrorJobs[job.jobId])
+      .slice(0, 3),
+    [dismissedErrorJobs, jobs],
   );
 
   const flatSpec = useMemo(() => convertToSpec(spec.view), [spec.view]);
@@ -470,11 +474,28 @@ export function PluginPanel({
     <div className={interactionLocked ? "pointer-events-none opacity-80 select-none" : undefined} aria-disabled={interactionLocked}>
       {namespace !== "_jobs" && failedJobs.length > 0 && (
         <div className="mb-3 rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          <div className="font-medium">
-            {t("plugin.runtimeErrors.title", {
-              count: failedJobs.length,
-              defaultValue: "Recent plugin error",
-            })}
+          <div className="flex items-center justify-between gap-2">
+            <div className="font-medium">
+              {t("plugin.runtimeErrors.title", {
+                count: failedJobs.length,
+                defaultValue: "Recent plugin error",
+              })}
+            </div>
+            <UIButton
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-5 w-5 p-0 text-destructive hover:bg-destructive/10"
+              aria-label={t("plugin.runtimeErrors.dismiss", "Dismiss plugin error")}
+              onClick={() => {
+                setDismissedErrorJobs((prev) => ({
+                  ...prev,
+                  ...Object.fromEntries(failedJobs.map((job) => [job.jobId, true as const])),
+                }));
+              }}
+            >
+              <X className="h-3 w-3" />
+            </UIButton>
           </div>
           <div className="mt-1 space-y-1">
             {failedJobs.map((job) => (

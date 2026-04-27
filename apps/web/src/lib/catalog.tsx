@@ -25,6 +25,7 @@ import {
 import { useSession } from "@/stores/session-store.js";
 import { useCharacterAttributeSchema } from "@/stores/plugin-data-store.js";
 import { WorldDimensionsPanel } from "@/components/session/world-dimensions-panel.js";
+import { ImageGalleryPanel, ImageJobsPanel } from "@/components/session/image-plugin-panels.js";
 import { Media as MediaComponent } from "@/components/Media.js";
 import {
   AssetRender as AssetRenderComponent,
@@ -1709,6 +1710,16 @@ const MediaCatalogComponent: ComponentRenderer = ({ element }) => {
 };
 
 /** Source — subtle source attribution label. */
+const ImageGallery: ComponentRenderer = ({ element }) => {
+  const pluginId = element.props?.pluginId as string | undefined;
+  return pluginId ? <ImageGalleryPanel pluginId={pluginId} /> : null;
+};
+
+const ImageJobs: ComponentRenderer = ({ element }) => {
+  const pluginId = element.props?.pluginId as string | undefined;
+  return pluginId ? <ImageJobsPanel pluginId={pluginId} /> : null;
+};
+
 const Source: ComponentRenderer = ({ element }) => {
   const label = element.props?.label as string ?? "";
   return (
@@ -1823,6 +1834,8 @@ export const covelRegistry: Record<string, ComponentRenderer> = {
   Source,
   Image: ImageComponent,
   Media: MediaCatalogComponent,
+  ImageGallery,
+  ImageJobs,
   // Data
   Card,
   CardList,
