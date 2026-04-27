@@ -11,7 +11,7 @@ import { JSONUIProvider, Renderer } from "@json-render/react";
 import { nestedToFlat } from "@json-render/core";
 import type { Spec } from "@json-render/core";
 import { covelRegistry } from "@/lib/catalog.js";
-import { usePluginNamespace } from "@/stores/plugin-data-store.js";
+import { usePluginJobs, usePluginNamespace } from "@/stores/plugin-data-store.js";
 import { useSession } from "@/stores/session-store.js";
 import { postPluginRpc, resolveApproval } from "@/services/api.js";
 import type { PluginRpcRequest, PluginRpcResponse } from "@/services/api.js";
@@ -69,6 +69,20 @@ function rewriteComponentToType(node: Record<string, unknown>): Record<string, u
   return result;
 }
 
+function getPluginRpcFailureMessage(res: PluginRpcResponse): string {
+  if (res.status === "error") return res.error;
+  if (res.status !== "ok") return "";
+  const runtimeError = res.runtimeResults?.find(
+    (r) => r.status === "failed" || (typeof r.error === "string" && r.error.length > 0),
+  )?.error;
+  if (runtimeError) return runtimeError;
+  return res.abortReason ?? "";
+}
+
+function shortJobId(jobId: string): string {
+  return jobId.length > 10 ? `${jobId.slice(0, 8)}…` : jobId;
+}
+
 function resolveEmptyMessage(value: unknown): string {
   if (!value) return "";
   if (typeof value === "string") {
@@ -99,6 +113,7 @@ export function PluginPanel({
   const { t } = useTranslation();
   const namespace = (spec.dataSource as Record<string, string> | undefined)?.namespace ?? "default";
   const liveData = usePluginNamespace(pluginId, namespace);
+  const jobs = usePluginJobs(pluginId);
   const data = stateOverride ?? liveData;
 
   // Per-action in-flight tracking — surfaced to json-render state under
@@ -152,6 +167,11 @@ export function PluginPanel({
     const entries = Object.entries(data).map(([key, value]) => ({ key, value }));
     return { ...expandIndexedState(data), entries, _invoking: invokingMap };
   }, [data, invokingMap]);
+
+  const failedJobs = useMemo(
+    () => jobs.filter((job) => job.status === "failed" && (job.error || job.abortReason)).slice(0, 3),
+    [jobs],
+  );
 
   const flatSpec = useMemo(() => convertToSpec(spec.view), [spec.view]);
 
@@ -275,8 +295,21 @@ export function PluginPanel({
           );
         } else if (next.status === "accepted") {
           emitAcceptedJob(next.jobId);
-        } else if (next.status === "ok" && (next.deferredJobs ?? []).length > 0) {
-          emitDeferredJobs(next.deferredJobs ?? []);
+        } else if (next.status === "ok") {
+          const failureMessage = getPluginRpcFailureMessage(next);
+          if (failureMessage) {
+            emitToast("error", failureMessage);
+          } else if ((next.failedJobs ?? []).length > 0) {
+            emitToast(
+              "error",
+              t("plugin.invokeRuntime.failedJobs", {
+                count: next.failedJobs?.length ?? 0,
+                defaultValue: "{{count}} background job(s) failed. Check the job panel for details.",
+              }),
+            );
+          } else if ((next.deferredJobs ?? []).length > 0) {
+            emitDeferredJobs(next.deferredJobs ?? []);
+          }
         }
       } catch (err) {
         emitToast("error", err instanceof Error ? err.message : String(err));
@@ -312,6 +345,21 @@ export function PluginPanel({
               postPluginRpc(sessionId, req),
             );
           } else if (res.status === "ok") {
+            const failureMessage = getPluginRpcFailureMessage(res);
+            if (failureMessage) {
+              emitToast("error", failureMessage);
+              return;
+            }
+            if ((res.failedJobs ?? []).length > 0) {
+              emitToast(
+                "error",
+                t("plugin.invokeRuntime.failedJobs", {
+                  count: res.failedJobs?.length ?? 0,
+                  defaultValue: "{{count}} background job(s) failed. Check the job panel for details.",
+                }),
+              );
+              return;
+            }
             // Audit P1-8: when a sync runtime declares an event-chain
             // contract (e.g. prompt-generator → image-generator) but the
             // LLM emitted no events[].topic that matches a follower, the
@@ -411,6 +459,28 @@ export function PluginPanel({
 
   return (
     <div className={interactionLocked ? "pointer-events-none opacity-80 select-none" : undefined} aria-disabled={interactionLocked}>
+      {namespace !== "_jobs" && failedJobs.length > 0 && (
+        <div className="mb-3 rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <div className="font-medium">
+            {t("plugin.runtimeErrors.title", {
+              count: failedJobs.length,
+              defaultValue: "Recent plugin error",
+            })}
+          </div>
+          <div className="mt-1 space-y-1">
+            {failedJobs.map((job) => (
+              <div key={job.jobId} className="leading-relaxed">
+                <span className="font-mono text-[10px] opacity-80">
+                  {shortJobId(job.jobId)}
+                </span>
+                {job.runtimeId ? <span className="opacity-80"> · {job.runtimeId}</span> : null}
+                <span>: </span>
+                <span>{job.error ?? job.abortReason}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <JSONUIProvider
         registry={covelRegistry}
         initialState={initialState}

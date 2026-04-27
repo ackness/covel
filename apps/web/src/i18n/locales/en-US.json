@@ -603,7 +603,11 @@
     },
     "invokeRuntime": {
       "submitted": "Submitted {{count}} background job(s): {{ids}}. Waiting for completion…",
-      "noFollowerEvents": "{{runtimeId}} finished but emitted no background follower (missing matching events[]). Check that the model output a valid JSON envelope."
+      "noFollowerEvents": "{{runtimeId}} finished but emitted no background follower (missing matching events[]). Check that the model output a valid JSON envelope.",
+      "failedJobs": "{{count}} background job(s) failed. Check the job panel for details."
+    },
+    "runtimeErrors": {
+      "title": "Recent plugin error"
     }
   },
   "pluginJob": {

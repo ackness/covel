@@ -603,7 +603,11 @@
     },
     "invokeRuntime": {
       "submitted": "已提交 {{count}} 个后台任务：{{ids}}，等待返回…",
-      "noFollowerEvents": "{{runtimeId}} 已完成，但未触发任何后台任务（缺少匹配的 events[]）。请检查模型是否输出了正确的 JSON 包络。"
+      "noFollowerEvents": "{{runtimeId}} 已完成，但未触发任何后台任务（缺少匹配的 events[]）。请检查模型是否输出了正确的 JSON 包络。",
+      "failedJobs": "{{count}} 个后台任务失败。请在任务面板查看详情。"
+    },
+    "runtimeErrors": {
+      "title": "最近的插件错误"
     }
   },
   "pluginJob": {

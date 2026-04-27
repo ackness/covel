@@ -217,13 +217,34 @@ export function ChatMessages({
         );
         return;
       }
+      const runtimeFailure = res.runtimeResults?.find(
+        (r) => r.status === "failed" || (typeof r.error === "string" && r.error.length > 0),
+      )?.error;
+      if (runtimeFailure || res.abortReason) {
+        emitToast("error", runtimeFailure ?? res.abortReason ?? "Image generation failed");
+        return;
+      }
+      if ((res.failedJobs ?? []).length > 0) {
+        emitToast(
+          "error",
+          t("plugin.invokeRuntime.failedJobs", {
+            count: res.failedJobs?.length ?? 0,
+            defaultValue: "{{count}} background job(s) failed. Check the job panel for details.",
+          }),
+        );
+        return;
+      }
       if ((res.deferredJobs ?? []).length === 0) {
         // Same UX guard as the right-panel button: when the entry runtime
         // succeeds but emits no `events[]` to wake the image generator, the
         // gallery would silently stay empty.
         emitToast(
           "error",
-          `${imageGenEntry.runtimeId} 完成，但未触发任何 background 任务（缺少匹配的 events[]）。请检查模型是否输出正确的 JSON 包络。`,
+          t("plugin.invokeRuntime.noFollowerEvents", {
+            runtimeId: imageGenEntry.runtimeId,
+            defaultValue:
+              "{{runtimeId}} finished but emitted no background follower (missing matching events[]). Check that the model output a valid JSON envelope.",
+          }),
         );
         return;
       }
