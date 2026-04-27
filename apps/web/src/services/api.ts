@@ -2,7 +2,12 @@
  * API client for communicating with the Covel server.
  */
 
-import type { I18nText, RuntimeResult, SessionEvent } from "@covel/shared";
+import type {
+  I18nText,
+  RuntimeResult,
+  SessionEvent,
+  SessionStatus,
+} from "@covel/shared";
 import {
   normalizeProviderKeyMap,
   providerKeyToId,
@@ -27,7 +32,7 @@ export interface WorldRecord {
   updatedAt?: string;
 }
 
-export type SessionStatus = "active" | "paused" | "ended";
+export type { SessionStatus };
 
 export interface SessionRecord {
   id: string;

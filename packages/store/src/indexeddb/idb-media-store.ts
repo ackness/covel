@@ -1,6 +1,11 @@
-import type { MediaRef } from '@covel/shared';
+import type {
+  MediaAssetLookup,
+  MediaAssetRecord,
+  MediaRef,
+  MediaRefRecord,
+  MediaStore,
+} from '@covel/shared';
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { MediaAssetLookup, MediaAssetRecord, MediaRefRecord, MediaStore } from '../media-store.js';
 
 const DEFAULT_DB_NAME = 'covel-media-store';
 const DB_VERSION = 2;

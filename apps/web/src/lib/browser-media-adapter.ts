@@ -1,5 +1,4 @@
-import type { MediaRef } from "@covel/shared";
-import type { MediaStore } from "@covel/store";
+import type { MediaRef, MediaStore } from "@covel/shared";
 
 const BROWSER_MEDIA_DB = "covel-media-store";
 

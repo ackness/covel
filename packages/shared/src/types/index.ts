@@ -1,6 +1,12 @@
 export type {
   MediaRef,
   MediaRefSchema,
+  MediaAssetLookup,
+  MediaAssetRecord,
+  MediaRefRecord,
+  MediaLifecyclePolicy,
+  MediaCleanupResult,
+  MediaStore,
 } from './media.js';
 
 export {

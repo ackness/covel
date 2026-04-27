@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { MediaRef } from "@covel/shared";
-import type { MediaStore } from "@covel/store";
+import type { MediaRef, MediaStore } from "@covel/shared";
 import {
   __resetBrowserMediaStoreForTests,
   deleteBrowserMedia,
