@@ -99,6 +99,7 @@ target/
 vendor/
 tmp/
 *.png
+!apps/web/public/icon.png
 !apps/desktop/resources/icon.png
 !apps/desktop-tauri/src-tauri/icons/**/*.png
 .playwright-mcp/
