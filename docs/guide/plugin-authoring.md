@@ -83,6 +83,7 @@ hooks:
 plugins/<plugin-id>/
 ├── PLUGIN.md              # 必需：frontmatter + 提示词
 ├── package.json           # 必需：workspace 依赖
+├── .npmrc                 # 必需：供应链防护（minimum-release-age=10080）
 ├── vitest.config.ts       # 可选：测试配置
 ├── tools/                 # 可选：本地工具
 │   └── my-tool.ts
@@ -94,3 +95,28 @@ plugins/<plugin-id>/
     └── sub-runtime/
         └── PLUGIN.md
 ```
+
+### E. 供应链防护（`.npmrc`）
+
+每个插件根目录必须包含 `.npmrc`，内容固定为：
+
+```ini
+# 供应链防护：拒绝安装发布不足 7 天的依赖版本（10080 分钟）
+# 仅在本插件作为独立项目安装时生效；在 Covel 主仓 workspace 内会被根配置接管。
+minimum-release-age=10080
+```
+
+**为什么需要每个插件单独配置：**
+
+- `minimumReleaseAge` 是**安装方**（consumer-side）的策略，不是发布到 npm 的元数据；它由"谁在跑 `pnpm install`"决定，不会随 package 元信息分发。
+- 在 Covel 主仓 workspace 内，根 `pnpm-workspace.yaml` 已声明 `minimumReleaseAge: 10080`，覆盖所有 workspace member。本字段对 workspace 内插件是冗余但无害。
+- 当插件被**第三方独立 clone / 安装 / 作为 community plugin 通过 `COVEL_PLUGINS_DIR` 加载**时，下游用户在插件目录里跑 `pnpm install` 会读到本 `.npmrc`，7 天延迟规则即时生效。这是阻断"刚发布的恶意包"进入插件运行环境的最后一道防线。
+
+**注意：**
+
+- `.npmrc` 用 kebab-case (`minimum-release-age`)；`pnpm-workspace.yaml` 用 camelCase (`minimumReleaseAge`)。pnpm 两边都吃，但**不要混写**。
+- `scripts/create-plugin.js` 生成的新插件骨架已自动带上此文件；如果是从已有插件 fork，请手动补齐。
+- 如需为内部 scope 例外（例如自家 `@covel/*` 私包要立即生效），追加：
+  ```ini
+  minimum-release-age-exclude[]=@covel/*
+  ```
