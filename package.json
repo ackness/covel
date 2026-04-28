@@ -41,7 +41,8 @@
     "build:desktop": "pnpm run build:electron && pnpm run build:tauri",
     "e2e:verify": "tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts",
     "test:runtime": "tsx packages/test-runtime/src/cli.ts",
-    "create-plugin": "node scripts/create-plugin.js"
+    "create-plugin": "node scripts/create-plugin.js",
+    "release:preflight": "node ./scripts/release-preflight.mjs"
   },
   "packageManager": "pnpm@10.33.0",
   "engines": {
