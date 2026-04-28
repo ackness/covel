@@ -1,19 +1,25 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { parseAiConfig } from "../src/config/loader.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { loadAiConfig, parseAiConfig } from "../src/config/loader.js";
 
 describe("config-loader", () => {
   const savedEnv: Record<string, string | undefined> = {};
+  let tmpDir: string;
 
   beforeEach(() => {
     savedEnv.TEST_BASE_URL = process.env.TEST_BASE_URL;
     savedEnv.TEST_OTHER_URL = process.env.TEST_OTHER_URL;
     process.env.TEST_BASE_URL = "https://api.test.com/v1";
     process.env.TEST_OTHER_URL = "https://other.test.com/v1";
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "covel-ai-config-"));
   });
 
   afterEach(() => {
     process.env.TEST_BASE_URL = savedEnv.TEST_BASE_URL;
     process.env.TEST_OTHER_URL = savedEnv.TEST_OTHER_URL;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   it("parses a minimal TOML config", () => {
@@ -53,6 +59,32 @@ protocol = "openai-chat-v1"
 
     expect(config.providers.test.baseUrl).toBe("https://api.test.com/v1");
     expect(config.providers.other.baseUrl).toBe("https://other.test.com/v1");
+  });
+
+  it("reads process.env at parse time so runtime key changes are visible", () => {
+    const toml = `
+[providers.test]
+baseUrl = "\${TEST_BASE_URL}"
+protocol = "openai-chat-v1"
+`;
+
+    expect(parseAiConfig(toml).providers.test.baseUrl).toBe("https://api.test.com/v1");
+    process.env.TEST_BASE_URL = "https://api.changed.test/v1";
+    expect(parseAiConfig(toml).providers.test.baseUrl).toBe("https://api.changed.test/v1");
+  });
+
+  it("loads TOML from disk and reports read failures with the resolved path", () => {
+    const file = path.join(tmpDir, "llm.toml");
+    fs.writeFileSync(file, `
+[providers.test]
+baseUrl = "\${TEST_BASE_URL}"
+protocol = "openai-chat-v1"
+`);
+
+    expect(loadAiConfig(file).providers.test.baseUrl).toBe("https://api.test.com/v1");
+
+    const missing = path.join(tmpDir, "missing.toml");
+    expect(() => loadAiConfig(missing)).toThrow(`failed to read file "${missing}"`);
   });
 
   it("throws on unresolved env variable", () => {

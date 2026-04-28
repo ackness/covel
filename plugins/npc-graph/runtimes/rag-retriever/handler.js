@@ -17,9 +17,9 @@ export default async function handler(ctx) {
 
   try {
     const nodeRows =
-      (await store.listPluginData(sessionId, pluginId, 'nodes')) ?? [];
+      (await listPluginData(store, sessionId, pluginId, 'nodes')) ?? [];
     const edgeRows =
-      (await store.listPluginData(sessionId, pluginId, 'edges')) ?? [];
+      (await listPluginData(store, sessionId, pluginId, 'edges')) ?? [];
 
     // Short-circuit when there is nothing to retrieve — zero-cost for
     // fresh sessions and for worlds that never trigger the extractor.
@@ -169,7 +169,7 @@ async function loadAdjacency(store, sessionId, pluginId, nodeId) {
   /** @type {string[]} */
   const out = [];
   for (const indexKey of [`by-source:${nodeId}`, `by-target:${nodeId}`]) {
-    const row = await store.getPluginData(sessionId, pluginId, 'index', indexKey);
+    const row = await getPluginData(store, sessionId, pluginId, 'index', indexKey);
     if (row && Array.isArray(row.value)) {
       for (const edgeId of row.value) {
         if (typeof edgeId === 'string') out.push(edgeId);
@@ -177,4 +177,34 @@ async function loadAdjacency(store, sessionId, pluginId, nodeId) {
     }
   }
   return out;
+}
+
+/**
+ * Function runtimes receive a scoped FunctionStoreView in the framework, while
+ * direct plugin tests often pass a full DataStore. Support both call shapes.
+ *
+ * @param {any} store
+ * @param {string} sessionId
+ * @param {string} pluginId
+ * @param {string} namespace
+ */
+async function listPluginData(store, sessionId, pluginId, namespace) {
+  if (store.listPluginData.length <= 1) {
+    return store.listPluginData(namespace);
+  }
+  return store.listPluginData(sessionId, pluginId, namespace);
+}
+
+/**
+ * @param {any} store
+ * @param {string} sessionId
+ * @param {string} pluginId
+ * @param {string} namespace
+ * @param {string} key
+ */
+async function getPluginData(store, sessionId, pluginId, namespace, key) {
+  if (store.getPluginData.length <= 2) {
+    return store.getPluginData(namespace, key);
+  }
+  return store.getPluginData(sessionId, pluginId, namespace, key);
 }

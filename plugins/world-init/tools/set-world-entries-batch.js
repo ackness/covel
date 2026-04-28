@@ -11,23 +11,22 @@
  *      lorebook row so the context loader can compose `worldEntries` from
  *      lorebook first, then fall back to plugin_data.
  *
- * The tool writes to both destinations so world-init can migrate
- * incrementally without breaking sessions that predate the lorebook layer.
- * If the store does not expose `upsertLorebookEntries` (thin mock stores),
- * only the plugin_data write is performed.
+ * The tool emits both writes as pending proposals so the kernel commits them
+ * through the same transaction path as every other runtime side effect.
  *
  * @param {{ tool: Function, z: import('zod'), store: any }} injection
  */
 import { withPendingProposals } from '@covel/tools';
 
 export default function ({ tool, z, store }) {
+  void store;
   return tool({
     name: 'set-world-entries-batch',
     description: '批量写入世界词条。一次调用传入所有词条（地理、阵营、货币、力量体系等），无需逐个调用。至少 5 个词条。',
     parameters: z.object({
       entries: z.array(z.object({
         key: z.string().min(1).describe('词条标识（如 "geography", "factions", "currency"）'),
-        value: z.record(z.unknown()).describe('词条内容（任意 JSON 对象）'),
+        value: z.record(z.string(), z.unknown()).describe('词条内容（任意 JSON 对象）'),
       })).min(1).describe('世界词条数组'),
     }),
     execute: async (params, context) => {
@@ -45,36 +44,20 @@ export default function ({ tool, z, store }) {
         updatedAt: now,
       }));
 
-      // 2) Lorebook write — canonical destination for world dimensions.
+      // 2) Lorebook proposal — canonical destination for world dimensions.
       // Each entry becomes one `constant` lorebook row. The id is a
       // deterministic suffix of (sessionId, key) so re-runs replace rather
       // than duplicate. Spacing insertionOrder by 100 keeps room for
       // future interleaving without a full re-numbering.
-      if (typeof store.upsertLorebookEntries === 'function') {
-        const lorebookRecords = params.entries.map((entry, idx) => ({
-          id: `world-entry:${entry.key}`,
-          sessionId: context.sessionId,
-          pluginId: context.pluginId,
-          keys: [entry.key],
-          content: formatEntryContent(entry.key, entry.value),
-          strategy: 'constant',
-          position: 'after_char_defs',
-          insertionOrder: 100 + idx * 100,
-          enabled: true,
-          createdAt: now,
-          updatedAt: now,
-        }));
-        try {
-          await store.upsertLorebookEntries(lorebookRecords);
-        } catch (err) {
-          // Non-fatal: if the lorebook layer rejects the write (e.g. a
-          // legacy backend that advertised the method but hasn't been
-          // migrated), the plugin_data path above still delivers the data
-          // to the legacy context loader.
-          // eslint-disable-next-line no-console
-          console.warn('[set-world-entries-batch] lorebook write failed:', err);
-        }
-      }
+      const lorebookEntries = params.entries.map((entry, idx) => ({
+        id: `world-entry:${entry.key}`,
+        keys: [entry.key],
+        content: formatEntryContent(entry.key, entry.value),
+        strategy: 'constant',
+        position: 'after_char_defs',
+        insertionOrder: 100 + idx * 100,
+        enabled: true,
+      }));
 
       return withPendingProposals(
         {
@@ -94,6 +77,16 @@ export default function ({ tool, z, store }) {
               key: record.key,
               value: record.value,
             })),
+          },
+          timestamp: now,
+        }, {
+          id: crypto.randomUUID(),
+          type: 'lorebook.upsert',
+          source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
+          turnId: context.turnId,
+          sessionId: context.sessionId,
+          payload: {
+            entries: lorebookEntries,
           },
           timestamp: now,
         }],
