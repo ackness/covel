@@ -133,9 +133,12 @@ export async function discoverPluginsMulti(
         onCollision?.(result.id, existing.rootPath, result.rootPath);
         continue;
       }
-      // Tag non-bundled dirs as community so prefix-based trust cannot be
-      // spoofed by a user-dropped plugin whose folder name starts with core-.
-      seen.set(result.id, i === 0 ? result : { ...result, source: 'community' });
+      // Tag by load path: index 0 (bundled `plugins/`) → 'builtin', everything
+      // else → 'community'. Without an explicit source, getPluginTrustInfo
+      // falls through to the community fallback and bootstrap skips importing
+      // tools.local for shipped plugins (regression after dropping the core-
+      // prefix heuristic in 85a7684).
+      seen.set(result.id, { ...result, source: i === 0 ? 'builtin' : 'community' });
     }
   }
   return Array.from(seen.values());
