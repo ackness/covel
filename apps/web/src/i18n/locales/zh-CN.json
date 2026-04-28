@@ -52,7 +52,8 @@
       "rulesBlurb": "处理规则计算、骰子和修正值，适合承载确定性的纯逻辑。",
       "charactersBand": "After-Turn · 600",
       "charactersBlurb": "追踪 NPC、关系和角色字段，把叙事里的变化沉淀成结构化记录。",
-      "footnote": "内置插件可以直接启用，自定义插件也沿用同一份接口。"
+      "footnote": "内置插件可以直接启用，自定义插件也沿用同一份接口。",
+      "unfilledSlot": "等待插件认领此能力。"
     },
     "demo": {
       "eyebrow": "产品界面",
@@ -97,11 +98,15 @@
   "nav": {
     "home": "首页",
     "play": "游玩",
+    "world": "世界",
     "worlds": "世界观",
+    "session": "会话",
     "plugins": "插件",
+    "images": "图像",
     "settings": "设置",
     "studio": "工作室",
     "debug": "调试",
+    "primary": "主导航",
     "getStarted": "开始使用"
   },
   "session": {
@@ -254,7 +259,11 @@
     "suspensionAgoSeconds": "{{count}} 秒前",
     "suspensionAgoMinutes": "{{count}} 分钟前",
     "suspensionAgoHours": "{{count}} 小时前",
-    "suspensionAgoDays": "{{count}} 天前"
+    "suspensionAgoDays": "{{count}} 天前",
+    "memoryStoreWarning": "重启后数据将丢失",
+    "pluginsSelected": "个插件已选",
+    "dbSchema": "结构",
+    "dbValues": "数据"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -383,7 +392,11 @@
     "aiValidating": "验证世界数据...",
     "aiSaving": "保存世界...",
     "aiDone": "世界创建完成！",
-    "aiError": "生成失败"
+    "aiError": "生成失败",
+    "delete": "删除世界",
+    "deleteConfirmTitle": "删除世界？",
+    "deleteConfirmDesc": "将永久删除「{{name}}」，此操作无法撤销。",
+    "deleteConfirmAction": "删除"
   },
   "settings": {
     "storageMode": "数据存储",
@@ -558,7 +571,9 @@
     "chainPreset": "预设",
     "chainKey": "API 密钥",
     "desktopLlmMissingTitle": "尚未配置任何 LLM slot",
-    "desktopLlmMissingHint": "点击下方按钮打开 ~/.covel/llm.toml，至少添加一个 [covel.<slot>] 片段。"
+    "desktopLlmMissingHint": "点击下方按钮打开 ~/.covel/llm.toml，至少添加一个 [covel.<slot>] 片段。",
+    "autoBindSlots": "自动绑定",
+    "runtimeSlotsDiscovered": "运行时声明的 Slot"
   },
   "plugin": {
     "runtimes": "运行时",
@@ -578,6 +593,17 @@
     "modelBindingAria": "该插件运行时将使用的模型 Slot，除非需要特别覆盖否则保持默认即可。",
     "modelBindingSource": "模型绑定 — 在「会话准备」中修改",
     "modelBindingFallback": "模型绑定：前往「会话准备」查看",
+    "modelBinding": "模型",
+    "modelOverrideHint": "已覆盖 — 下一回合将使用该模型",
+    "defaultSlot": "默认",
+    "autoSlot": "自动（系统默认）",
+    "config": "配置",
+    "loadError": "加载失败",
+    "unknownError": "未知错误",
+    "slotsMissing": "请在 llm.toml 中配置模型 Slot 后再覆盖",
+    "useRuntimeDefault": "运行时默认: {{slot}}",
+    "useRuntimeDefaultWith": "运行时默认: {{slot}} ({{value}})",
+    "invalidPanelSpec": "面板规范无效",
     "source": {
       "builtin": {
         "label": "核心",
@@ -607,7 +633,8 @@
       "failedJobs": "{{count}} 个后台任务失败。请在任务面板查看详情。"
     },
     "runtimeErrors": {
-      "title": "最近的插件错误"
+      "title": "最近的插件错误",
+      "dismiss": "关闭插件错误"
     }
   },
   "pluginJob": {
@@ -617,6 +644,25 @@
   },
   "coreImage": {
     "generateButton": "生成插画",
+    "panel": {
+      "noImagesYet": "还没有生成过图片。",
+      "galleryHint": "生成结果（最新在前）。Prompt 请在「任务」页查看。",
+      "viewLarge": "查看大图",
+      "noJobs": "当前没有图像生成任务。",
+      "jobsHint": "Prompt 与任务状态。点击任务 ID 展开详情。",
+      "promptHeader": "Prompt",
+      "promptCopied": "Prompt 已复制",
+      "copy": "复制",
+      "linkedImages": "此 Prompt 的图片 · {{count}}",
+      "rerunWithPrompt": "按此 Prompt 重抽（保留原图）",
+      "rerunSubmitted": "已提交重抽任务：{{id}}",
+      "rerunSubmittedSimple": "已提交重抽任务",
+      "viewLargeAction": "大图",
+      "download": "下载",
+      "downloadImage": "下载图片",
+      "rerun": "重抽",
+      "authorizeConfirm": "是否在本会话内授权 {{runtimeId}}？"
+    },
     "settings": {
       "title": "插画生成设置",
       "style": "画面风格",
@@ -740,7 +786,9 @@
     "save": "保存",
     "cancel": "取消",
     "confirm": "确认",
+    "close": "关闭",
     "delete": "删除",
+    "deleting": "删除中...",
     "edit": "编辑",
     "create": "创建",
     "search": "搜索",
@@ -755,7 +803,8 @@
     "noData": "暂无数据",
     "noMatch": "没有匹配的条目",
     "yes": "是",
-    "no": "否"
+    "no": "否",
+    "toggleTheme": "切换主题"
   },
   "debugger": {
     "title": "追踪检查器",

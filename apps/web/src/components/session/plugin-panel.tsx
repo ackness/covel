@@ -443,7 +443,7 @@ export function PluginPanel({
     : defaultHandlers;
 
   if (!flatSpec) {
-    return <p className="text-xs text-muted-foreground italic">Invalid panel spec</p>;
+    return <p className="text-xs text-muted-foreground italic">{t("plugin.invalidPanelSpec", "Invalid panel spec")}</p>;
   }
 
   // Empty state: namespace has no data yet.

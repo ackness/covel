@@ -604,7 +604,7 @@ export function ChatMessages({
           <div className="flex items-start gap-2 border border-destructive/50 bg-destructive/5 p-4 text-sm">
             <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
             <div>
-              <p className="font-medium text-destructive">Error</p>
+              <p className="font-medium text-destructive">{t("common.error", "Error")}</p>
               <p className="text-xs text-muted-foreground mt-1 break-all">
                 {executionError}
               </p>

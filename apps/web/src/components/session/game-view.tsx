@@ -308,7 +308,13 @@ export function GameView({
         // dispatch the matching pointerdown sequence instead.
         const panel = rightPanelRef.current;
         if (panel && panel.isCollapsed()) panel.expand();
-        const targetLabel = event === "open-images" ? "图像" : "数据库";
+        // The aria-label is locale-resolved (framework: t(); plugin: i18n
+        // map). Both sides agree on the same translation table, so we resolve
+        // the same key here to match whichever locale is active.
+        const targetLabel =
+          event === "open-images"
+            ? t("nav.images", "图像")
+            : t("session.database", "数据库");
         const activate = () => {
           const tab = document.querySelector<HTMLElement>(
             `button[role="tab"][aria-label="${targetLabel}"]`,
@@ -328,7 +334,7 @@ export function GameView({
         requestAnimationFrame(() => requestAnimationFrame(activate));
       }
     });
-  }, []);
+  }, [t]);
 
   const direction = isMobile ? "vertical" : "horizontal";
 

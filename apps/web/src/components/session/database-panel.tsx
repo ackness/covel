@@ -325,9 +325,10 @@ function TableRow({ table, parsed, compact = false }: TableRowProps) {
 }
 
 function SchemaList({ fields }: { fields: StateTableEntry["fields"] }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1 min-w-0">
-      <span className="ui-eyebrow">Schema</span>
+      <span className="ui-eyebrow">{t("session.dbSchema", "Schema")}</span>
       <ul className="space-y-0.5 min-w-0">
         {fields.map((f) => (
           <li
@@ -356,9 +357,10 @@ function SchemaList({ fields }: { fields: StateTableEntry["fields"] }) {
 }
 
 function ValuesBlock({ data, valueCount }: { data: unknown; valueCount: number }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1 min-w-0">
-      <span className="ui-eyebrow">Values</span>
+      <span className="ui-eyebrow">{t("session.dbValues", "Values")}</span>
       {valueCount === 0 ? (
         <p className="ui-empty-copy text-[10px]">(empty)</p>
       ) : (

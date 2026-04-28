@@ -52,7 +52,8 @@
       "rulesBlurb": "Handles rules, dice, and modifiers where deterministic logic belongs.",
       "charactersBand": "After-Turn · 600",
       "charactersBlurb": "Tracks NPCs, relationships, and character fields as structured records.",
-      "footnote": "Bundled plugins are ready to use, and custom plugins follow the same contract."
+      "footnote": "Bundled plugins are ready to use, and custom plugins follow the same contract.",
+      "unfilledSlot": "Awaiting a plugin to claim this capability."
     },
     "demo": {
       "eyebrow": "Product UI",
@@ -97,11 +98,15 @@
   "nav": {
     "home": "Home",
     "play": "Play",
+    "world": "World",
     "worlds": "Worlds",
+    "session": "Session",
     "plugins": "Plugins",
+    "images": "Images",
     "settings": "Settings",
     "studio": "Studio",
     "debug": "Debugger",
+    "primary": "Primary",
     "getStarted": "Get Started"
   },
   "session": {
@@ -254,7 +259,11 @@
     "suspensionAgoSeconds": "{{count}}s ago",
     "suspensionAgoMinutes": "{{count}}m ago",
     "suspensionAgoHours": "{{count}}h ago",
-    "suspensionAgoDays": "{{count}}d ago"
+    "suspensionAgoDays": "{{count}}d ago",
+    "memoryStoreWarning": "Data lost on restart",
+    "pluginsSelected": "plugins selected",
+    "dbSchema": "Schema",
+    "dbValues": "Values"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -383,7 +392,11 @@
     "aiValidating": "Validating world data...",
     "aiSaving": "Saving world...",
     "aiDone": "World created successfully!",
-    "aiError": "Generation failed"
+    "aiError": "Generation failed",
+    "delete": "Delete world",
+    "deleteConfirmTitle": "Delete world?",
+    "deleteConfirmDesc": "This will permanently delete \"{{name}}\". This action cannot be undone.",
+    "deleteConfirmAction": "Delete"
   },
   "settings": {
     "storageMode": "Data Storage",
@@ -558,7 +571,9 @@
     "chainPreset": "Preset",
     "chainKey": "API key",
     "desktopLlmMissingTitle": "No LLM slots configured yet",
-    "desktopLlmMissingHint": "Click below to open ~/.covel/llm.toml and add at least one [covel.<slot>] section."
+    "desktopLlmMissingHint": "Click below to open ~/.covel/llm.toml and add at least one [covel.<slot>] section.",
+    "autoBindSlots": "Auto-bind",
+    "runtimeSlotsDiscovered": "Runtime-requested slots"
   },
   "plugin": {
     "runtimes": "Runtimes",
@@ -578,6 +593,17 @@
     "modelBindingAria": "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.",
     "modelBindingSource": "Model binding — edit in Session Prep",
     "modelBindingFallback": "Model binding: see Session Prep",
+    "modelBinding": "Model",
+    "modelOverrideHint": "Override active — next turn will use this model",
+    "defaultSlot": "default",
+    "autoSlot": "auto (system default)",
+    "config": "Config",
+    "loadError": "Load Error",
+    "unknownError": "Unknown error",
+    "slotsMissing": "Configure model slots in llm.toml to override",
+    "useRuntimeDefault": "Runtime default: {{slot}}",
+    "useRuntimeDefaultWith": "Runtime default: {{slot}} ({{value}})",
+    "invalidPanelSpec": "Invalid panel spec",
     "source": {
       "builtin": {
         "label": "Core",
@@ -607,7 +633,8 @@
       "failedJobs": "{{count}} background job(s) failed. Check the job panel for details."
     },
     "runtimeErrors": {
-      "title": "Recent plugin error"
+      "title": "Recent plugin error",
+      "dismiss": "Dismiss plugin error"
     }
   },
   "pluginJob": {
@@ -617,6 +644,25 @@
   },
   "coreImage": {
     "generateButton": "Generate Illustration",
+    "panel": {
+      "noImagesYet": "No images generated yet.",
+      "galleryHint": "Latest first. Find prompts on the Jobs tab.",
+      "viewLarge": "View larger",
+      "noJobs": "No image jobs in progress.",
+      "jobsHint": "Prompt and job status. Click a job ID to expand.",
+      "promptHeader": "Prompt",
+      "promptCopied": "Prompt copied",
+      "copy": "Copy",
+      "linkedImages": "Images for this prompt · {{count}}",
+      "rerunWithPrompt": "Re-run this prompt (keep originals)",
+      "rerunSubmitted": "Submitted re-run job: {{id}}",
+      "rerunSubmittedSimple": "Submitted re-run job",
+      "viewLargeAction": "Open",
+      "download": "Download",
+      "downloadImage": "Download image",
+      "rerun": "Re-run",
+      "authorizeConfirm": "Authorize {{runtimeId}} for this session?"
+    },
     "settings": {
       "title": "Image Generation Settings",
       "style": "Art Style",
@@ -740,7 +786,9 @@
     "save": "Save",
     "cancel": "Cancel",
     "confirm": "Confirm",
+    "close": "Close",
     "delete": "Delete",
+    "deleting": "Deleting...",
     "edit": "Edit",
     "create": "Create",
     "search": "Search",
@@ -755,7 +803,8 @@
     "noData": "No data",
     "noMatch": "No matching entries",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "toggleTheme": "Toggle theme"
   },
   "debugger": {
     "title": "Trace Inspector",

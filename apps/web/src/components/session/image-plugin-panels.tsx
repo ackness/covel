@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n/index.js";
 import { Copy, Download, ExternalLink, ImageIcon, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 import { Button } from "@/components/ui/button.js";
@@ -10,7 +12,20 @@ import { postPluginRpc, resolveApproval } from "@/services/api.js";
 import { resolveMediaSrc } from "@/lib/media-resolve.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import type { MediaRef } from "@covel/shared";
+import type { SessionPluginInfo } from "@/services/api.js";
 import { isMediaRef } from "@/lib/media-ref-utils.js";
+
+// Discover the image-generator runtime by capability rather than baking in a
+// runtime-name convention. The contract: any plugin that ships an image
+// generator runtime tags it with `image-generator` capability — same shape as
+// the `image-prompt` discovery used in chat-messages.tsx.
+function findImageGeneratorRuntimeId(
+  plugin: SessionPluginInfo | undefined,
+): string | null {
+  if (!plugin) return null;
+  const rt = plugin.runtimes?.find((r) => r.capabilities?.includes("image-generator"));
+  return rt?.id ?? null;
+}
 
 interface ImageRecord {
   readonly imageId: string;
@@ -59,30 +74,32 @@ function isImageRecord(key: string, value: unknown): value is ImageRecord {
 async function triggerImageFromPrompt(
   sessionId: string | undefined,
   pluginId: string,
+  runtimeId: string | null,
   payload: ImagePromptPayload,
 ): Promise<void> {
   if (!sessionId) throw new Error("session unavailable");
-  const req = {
-    pluginId,
-    runtimeId: `${pluginId}/image-generator`,
-    payload,
-  };
+  if (!runtimeId) {
+    throw new Error(
+      `plugin ${pluginId} has no runtime declaring \`image-generator\` capability`,
+    );
+  }
+  const req = { pluginId, runtimeId, payload };
   let res = await postPluginRpc(sessionId, req);
   if (res.status === "approval-required") {
-    const ok = window.confirm(`Authorize ${pluginId}/image-generator for this session?`);
+    const ok = window.confirm(i18n.t("coreImage.panel.authorizeConfirm", { runtimeId }));
     await resolveApproval(res.approvalId, ok ? "allow" : "deny", "session");
     if (!ok) return;
     res = await postPluginRpc(sessionId, req);
   }
   if (res.status === "accepted") {
-    emitToast("info", `已提交重抽任务：${shortId(res.jobId)}`);
+    emitToast("info", i18n.t("coreImage.panel.rerunSubmitted", { id: shortId(res.jobId) }));
     return;
   }
   if (res.status === "error") throw new Error(res.error);
   if (res.status !== "ok") return;
   const failed = res.runtimeResults?.find((r) => r.status === "failed" || r.error)?.error;
   if (failed || res.abortReason) throw new Error(failed ?? res.abortReason ?? "image generation failed");
-  emitToast("info", "已提交重抽任务");
+  emitToast("info", i18n.t("coreImage.panel.rerunSubmittedSimple"));
 }
 
 async function downloadRef(ref: MediaRef, sessionId: string | undefined, filename: string): Promise<void> {
@@ -98,10 +115,15 @@ async function downloadRef(ref: MediaRef, sessionId: string | undefined, filenam
 }
 
 export function ImageGalleryPanel({ pluginId }: { pluginId: string }) {
+  const { t } = useTranslation();
   const { state } = useSession();
   const sessionId = state.session?.id;
   const data = usePluginNamespace(pluginId, "images");
   const [preview, setPreview] = useState<ImageRecord | null>(null);
+  const generatorRuntimeId = useMemo(
+    () => findImageGeneratorRuntimeId(state.sessionPlugins.find((p) => p.id === pluginId)),
+    [pluginId, state.sessionPlugins],
+  );
   const images = useMemo(() => {
     const rows = Object.entries(data)
       .filter(([key, value]) => isImageRecord(key, value))
@@ -111,12 +133,12 @@ export function ImageGalleryPanel({ pluginId }: { pluginId: string }) {
   }, [data]);
 
   if (images.length === 0) {
-    return <p className="text-xs text-muted-foreground italic text-center leading-relaxed px-4 pt-6">还没有生成过图片。</p>;
+    return <p className="text-xs text-muted-foreground italic text-center leading-relaxed px-4 pt-6">{t("coreImage.panel.noImagesYet")}</p>;
   }
 
   return (
     <div className="space-y-2">
-      <p className="text-[11px] text-muted-foreground">生成结果（最新在前）。Prompt 请在「任务」页查看。</p>
+      <p className="text-[11px] text-muted-foreground">{t("coreImage.panel.galleryHint")}</p>
       <div className="grid grid-cols-1 gap-2">
         {images.map(({ key, value }) => {
           const ref = isMediaRef(value.ref) ? value.ref : null;
@@ -127,7 +149,7 @@ export function ImageGalleryPanel({ pluginId }: { pluginId: string }) {
                 className="block w-full text-left"
                 onClick={() => ref && setPreview(value)}
                 disabled={!ref}
-                title={ref ? "查看大图" : undefined}
+                title={ref ? t("coreImage.panel.viewLarge") : undefined}
               >
                 {ref ? (
                   <Media src={ref} sessionId={sessionId ?? ""} alt={value.imageId ?? key} aspectRatio="1/1" rounded="none" fit="cover" />
@@ -155,7 +177,7 @@ export function ImageGalleryPanel({ pluginId }: { pluginId: string }) {
                   {ref && (
                     <>
                       <Button variant="outline" size="sm" className="h-7 px-2 text-[10px] flex-1" onClick={() => setPreview(value)}>
-                        <ExternalLink className="w-3 h-3 mr-1" /> 大图
+                        <ExternalLink className="w-3 h-3 mr-1" /> {t("coreImage.panel.viewLargeAction")}
                       </Button>
                       <Button
                         variant="outline"
@@ -167,7 +189,7 @@ export function ImageGalleryPanel({ pluginId }: { pluginId: string }) {
                           );
                         }}
                       >
-                        <Download className="w-3 h-3 mr-1" /> 下载
+                        <Download className="w-3 h-3 mr-1" /> {t("coreImage.panel.download")}
                       </Button>
                     </>
                   )}
@@ -177,14 +199,14 @@ export function ImageGalleryPanel({ pluginId }: { pluginId: string }) {
                       size="sm"
                       className="h-7 px-2 text-[10px] flex-1"
                       onClick={() => {
-                        void triggerImageFromPrompt(sessionId, pluginId, {
+                        void triggerImageFromPrompt(sessionId, pluginId, generatorRuntimeId, {
                           prompt: value.prompt!,
                           promptMode: value.promptMode ?? "text",
                           composition: value.composition ?? "single-scene",
                         }).catch((err) => emitToast("error", err instanceof Error ? err.message : String(err)));
                       }}
                     >
-                      重抽
+                      {t("coreImage.panel.rerun")}
                     </Button>
                   )}
                 </div>
@@ -212,7 +234,7 @@ export function ImageGalleryPanel({ pluginId }: { pluginId: string }) {
                     );
                   }}
                 >
-                  <Download className="w-3 h-3 mr-1" /> 下载图片
+                  <Download className="w-3 h-3 mr-1" /> {t("coreImage.panel.downloadImage")}
                 </Button>
               </div>
             </div>
@@ -224,12 +246,17 @@ export function ImageGalleryPanel({ pluginId }: { pluginId: string }) {
 }
 
 export function ImageJobsPanel({ pluginId }: { pluginId: string }) {
+  const { t } = useTranslation();
   const { state } = useSession();
   const sessionId = state.session?.id;
   const jobs = usePluginJobs(pluginId);
   const imageData = usePluginNamespace(pluginId, "images");
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [preview, setPreview] = useState<ImageRecord | null>(null);
+  const generatorRuntimeId = useMemo(
+    () => findImageGeneratorRuntimeId(state.sessionPlugins.find((p) => p.id === pluginId)),
+    [pluginId, state.sessionPlugins],
+  );
   const images = useMemo(() => {
     const rows = Object.entries(imageData)
       .filter(([key, value]) => isImageRecord(key, value))
@@ -239,12 +266,12 @@ export function ImageJobsPanel({ pluginId }: { pluginId: string }) {
   }, [imageData]);
 
   if (jobs.length === 0) {
-    return <p className="text-xs text-muted-foreground italic text-center leading-relaxed px-4 pt-6">当前没有图像生成任务。</p>;
+    return <p className="text-xs text-muted-foreground italic text-center leading-relaxed px-4 pt-6">{t("coreImage.panel.noJobs")}</p>;
   }
 
   return (
     <div className="space-y-2">
-      <p className="text-[11px] text-muted-foreground">Prompt 与任务状态。点击任务 ID 展开详情。</p>
+      <p className="text-[11px] text-muted-foreground">{t("coreImage.panel.jobsHint")}</p>
       {jobs.map((job) => {
         const expanded = open[job.jobId] ?? job.status === "pending";
         const output = job.runtimeResults?.[0]?.output as Record<string, unknown> | undefined;
@@ -277,17 +304,17 @@ export function ImageJobsPanel({ pluginId }: { pluginId: string }) {
                 {prompt && (
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-medium text-muted-foreground">Prompt</span>
+                      <span className="text-[10px] font-medium text-muted-foreground">{t("coreImage.panel.promptHeader")}</span>
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-6 px-2 text-[10px]"
                         onClick={() => {
                           void navigator.clipboard?.writeText(prompt);
-                          emitToast("info", "Prompt 已复制");
+                          emitToast("info", t("coreImage.panel.promptCopied"));
                         }}
                       >
-                        <Copy className="w-3 h-3 mr-1" /> 复制
+                        <Copy className="w-3 h-3 mr-1" /> {t("coreImage.panel.copy")}
                       </Button>
                     </div>
                     <p className="text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap max-h-48 overflow-auto rounded bg-muted/30 p-2">{prompt}</p>
@@ -297,7 +324,7 @@ export function ImageJobsPanel({ pluginId }: { pluginId: string }) {
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-medium text-muted-foreground">
-                        此 Prompt 的图片 · {linkedImages.length}
+                        {t("coreImage.panel.linkedImages", { count: linkedImages.length })}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-1.5">
@@ -310,7 +337,7 @@ export function ImageJobsPanel({ pluginId }: { pluginId: string }) {
                             className="group relative overflow-hidden rounded-md border border-border bg-muted text-left"
                             onClick={() => ref && setPreview(value)}
                             disabled={!ref}
-                            title="查看大图"
+                            title={t("coreImage.panel.viewLarge")}
                           >
                             {ref ? (
                               <Media src={ref} sessionId={sessionId ?? ""} alt={value.imageId ?? key} aspectRatio="1/1" rounded="none" fit="cover" />
@@ -333,11 +360,11 @@ export function ImageJobsPanel({ pluginId }: { pluginId: string }) {
                     size="sm"
                     className="h-7 px-2 text-[10px] w-full"
                     onClick={() => {
-                      void triggerImageFromPrompt(sessionId, pluginId, { prompt, promptMode, composition })
+                      void triggerImageFromPrompt(sessionId, pluginId, generatorRuntimeId, { prompt, promptMode, composition })
                         .catch((err) => emitToast("error", err instanceof Error ? err.message : String(err)));
                     }}
                   >
-                    按此 Prompt 重抽（保留原图）
+                    {t("coreImage.panel.rerunWithPrompt")}
                   </Button>
                 )}
               </div>
@@ -364,7 +391,7 @@ export function ImageJobsPanel({ pluginId }: { pluginId: string }) {
                     );
                   }}
                 >
-                  <Download className="w-3 h-3 mr-1" /> 下载图片
+                  <Download className="w-3 h-3 mr-1" /> {t("coreImage.panel.downloadImage")}
                 </Button>
               </div>
             </div>
