@@ -543,6 +543,9 @@ importers:
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../plugin-loader
+      '@covel/plugin-test-utils':
+        specifier: workspace:*
+        version: link:../plugin-test-utils
       '@covel/runtime':
         specifier: workspace:*
         version: link:../runtime

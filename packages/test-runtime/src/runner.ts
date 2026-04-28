@@ -47,6 +47,7 @@ import {
   type LLMAdapter,
   type LLMResponse,
 } from '@covel/runtime';
+import { MockLLM, type MockLLMCall } from '@covel/plugin-test-utils';
 import {
   builtinUITools,
   createCharacterTools,
@@ -200,30 +201,28 @@ const PLUGIN_UTILS: PluginRuntimeUtils = {
   fetchWithRetry,
 };
 
-class DebugLLM implements LLMAdapter {
-  readonly calls: unknown[] = [];
-  private readonly responses: readonly LLMResponse[];
-  private nextResponseIndex = 0;
-  private readonly showPrompts: boolean;
+function buildMockLlm(options: RunRuntimeDebugOptions): MockLLM {
+  const responses = normalizeLlmResponses(options);
+  return new MockLLM({
+    responses,
+    // Original DebugLLM stayed on the last response after exhausting the
+    // queue; mirror that by using the final response as the fallback.
+    defaultResponse: responses[responses.length - 1],
+    captureMessages: options.showPrompts === true,
+  });
+}
 
-  constructor(options: RunRuntimeDebugOptions) {
-    this.showPrompts = options.showPrompts === true;
-    this.responses = normalizeLlmResponses(options);
-  }
-
-  async generate(params: Parameters<LLMAdapter['generate']>[0]): Promise<LLMResponse> {
-    const callIndex = this.nextResponseIndex;
-    this.calls.push({
-      callIndex,
-      model: params.model,
-      toolNames: params.tools?.map((t) => t.name) ?? [],
-      responseFormat: params.responseFormat,
-      ...(this.showPrompts ? { messages: params.messages } : {}),
-    });
-    const response = this.responses[Math.min(this.nextResponseIndex, this.responses.length - 1)]!;
-    this.nextResponseIndex += 1;
-    return response;
-  }
+function serializeLlmCalls(
+  calls: readonly MockLLMCall[],
+  showPrompts: boolean,
+): readonly unknown[] {
+  return calls.map((call) => ({
+    callIndex: call.callIndex,
+    model: call.model,
+    toolNames: call.toolNames ?? [],
+    responseFormat: call.responseFormat,
+    ...(showPrompts ? { messages: call.messages } : {}),
+  }));
 }
 
 function normalizeLlmResponses(options: RunRuntimeDebugOptions): readonly LLMResponse[] {
@@ -917,7 +916,7 @@ export async function runRuntimeDebug(
     toolMap.set(t.name, t);
   }
 
-  const llm = new DebugLLM(options);
+  const llm = buildMockLlm(options);
   const liveAdapters = options.mode === 'live' ? makeLiveAdapters() : undefined;
   const result = await executeTurn(
     {
@@ -1018,7 +1017,7 @@ export async function runRuntimeDebug(
     deferredFollowers: result.deferredFollowers ?? [],
     pluginData,
     logs,
-    llmCalls: llm.calls,
+    llmCalls: serializeLlmCalls(llm.calls, options.showPrompts === true),
   };
 
   return baseResult;

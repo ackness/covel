@@ -21,6 +21,7 @@
   "dependencies": {
     "@covel/ai-provider": "workspace:*",
     "@covel/plugin-loader": "workspace:*",
+    "@covel/plugin-test-utils": "workspace:*",
     "@covel/runtime": "workspace:*",
     "@covel/shared": "workspace:*",
     "@covel/store": "workspace:*",
