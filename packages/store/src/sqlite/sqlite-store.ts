@@ -382,7 +382,7 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
           sessionId: record.sessionId,
           tableName: record.tableName,
           fieldName: record.fieldName,
-          value: record.value != null ? toJson(record.value) : null,
+          value: toJson(record.value),
           updatedAt: record.updatedAt,
         })
         .onConflictDoUpdate({
@@ -392,7 +392,7 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
             schema.stateEntries.fieldName,
           ],
           set: {
-            value: record.value != null ? toJson(record.value) : null,
+            value: toJson(record.value),
             updatedAt: record.updatedAt,
           },
         })
@@ -422,7 +422,7 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
           sessionId: record.sessionId,
           tableName: record.tableName,
           fieldName: record.fieldName,
-          value: record.value != null ? toJson(record.value) : null,
+          value: toJson(record.value),
           changedBy: record.changedBy,
           turnId: record.turnId,
           reason: record.reason ?? null,
@@ -586,7 +586,7 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
           pluginId: record.pluginId,
           namespace: record.namespace,
           key: record.key,
-          value: record.value != null ? toJson(record.value) : null,
+          value: toJson(record.value),
           createdAt: record.createdAt,
           updatedAt: record.updatedAt,
         })
@@ -598,7 +598,7 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
             schema.pluginData.key,
           ],
           set: {
-            value: record.value != null ? toJson(record.value) : null,
+            value: toJson(record.value),
             updatedAt: record.updatedAt,
           },
         })
@@ -616,7 +616,7 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
               pluginId: record.pluginId,
               namespace: record.namespace,
               key: record.key,
-              value: record.value != null ? toJson(record.value) : null,
+              value: toJson(record.value),
               createdAt: record.createdAt,
               updatedAt: record.updatedAt,
             })
@@ -628,7 +628,7 @@ export function createSqliteStore(dbPath: string): DataStore & Partial<VectorSto
                 schema.pluginData.key,
               ],
               set: {
-                value: record.value != null ? toJson(record.value) : null,
+                value: toJson(record.value),
                 updatedAt: record.updatedAt,
               },
             })

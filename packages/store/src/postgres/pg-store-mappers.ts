@@ -561,7 +561,7 @@ export function toStateEntryRecord(row: typeof schema.stateEntries.$inferSelect)
     sessionId: row.sessionId,
     tableName: row.tableName,
     fieldName: row.fieldName,
-    value: row.value ?? undefined,
+    value: row.value,
     updatedAt: row.updatedAt,
   };
 }
@@ -572,7 +572,7 @@ export function toStateChangeRecord(row: typeof schema.stateChanges.$inferSelect
     sessionId: row.sessionId,
     tableName: row.tableName,
     fieldName: row.fieldName,
-    value: row.value ?? undefined,
+    value: row.value,
     changedBy: row.changedBy,
     turnId: row.turnId,
     reason: row.reason ?? undefined,
@@ -637,7 +637,7 @@ export function toPluginDataRecord(row: typeof schema.pluginData.$inferSelect): 
     pluginId: row.pluginId,
     namespace: row.namespace,
     key: row.key,
-    value: row.value ?? undefined,
+    value: row.value,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

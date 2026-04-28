@@ -604,6 +604,18 @@ export function runStoreContractTests(
         expect(result).toEqual(entry);
       });
 
+      it('should preserve state entry null values', async () => {
+        const entry = makeStateEntry({
+          sessionId: 'sess-state-null',
+          tableName: 'stats',
+          fieldName: 'hp',
+          value: null,
+        });
+        await store.upsertStateEntry(entry);
+        const result = await store.getStateEntry('sess-state-null', 'stats', 'hp');
+        expect(result?.value).toBeNull();
+      });
+
       it('should overwrite on second upsert', async () => {
         const entry1 = makeStateEntry({
           sessionId: 'sess-1',
@@ -649,6 +661,19 @@ export function runStoreContractTests(
         const list = await store.listStateChanges('sess-1', 'stats', 'hp');
         expect(list).toHaveLength(1);
         expect(list[0]).toEqual(change);
+      });
+
+      it('should preserve state change null values', async () => {
+        const change = makeStateChange({
+          sessionId: 'sess-state-change-null',
+          tableName: 'stats',
+          fieldName: 'hp',
+          value: null,
+        });
+        await store.addStateChange(change);
+        const list = await store.listStateChanges('sess-state-change-null', 'stats', 'hp');
+        expect(list).toHaveLength(1);
+        expect(list[0].value).toBeNull();
       });
 
       it('should return changes ordered by createdAt', async () => {
@@ -793,6 +818,24 @@ export function runStoreContractTests(
         expect(result!.value).toEqual(record.value);
       });
 
+      it('should preserve plugin data null values', async () => {
+        const now = new Date().toISOString();
+        await store.setPluginData({
+          id: 'pd-null',
+          sessionId: 'sess-null',
+          pluginId: 'p-null',
+          namespace: 'entries',
+          key: 'empty',
+          value: null,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        const result = await store.getPluginData('sess-null', 'p-null', 'entries', 'empty');
+        expect(result).not.toBeNull();
+        expect(result!.value).toBeNull();
+      });
+
       it('should upsert on conflict (same session+plugin+namespace+key)', async () => {
         const record1 = {
           id: 'pd-2',
@@ -872,6 +915,18 @@ export function runStoreContractTests(
         const single = await store.getPluginData('sess-batch', 'p1', 'entries', 'a');
         expect(single).not.toBeNull();
         expect(single!.value).toEqual({ x: 1 });
+      });
+
+      it('should preserve plugin data null values in batch writes', async () => {
+        const now = new Date().toISOString();
+        await store.setPluginDataBatch([
+          { id: 'pd-bn1', sessionId: 'sess-batch-null', pluginId: 'p1', namespace: 'entries', key: 'a', value: null, createdAt: now, updatedAt: now },
+          { id: 'pd-bn2', sessionId: 'sess-batch-null', pluginId: 'p1', namespace: 'entries', key: 'b', value: { ready: true }, createdAt: now, updatedAt: now },
+        ]);
+
+        const single = await store.getPluginData('sess-batch-null', 'p1', 'entries', 'a');
+        expect(single).not.toBeNull();
+        expect(single!.value).toBeNull();
       });
 
       it('should batch upsert on conflict', async () => {
@@ -1286,6 +1341,13 @@ export function runStoreContractTests(
         expect(result!.scope).toBe('player');
         expect(result!.sessionId).toBe('wm-sess');
         expect(result!.value).toEqual(wm.value);
+      });
+
+      it('preserves null values', async () => {
+        const wm = makeWorkingMemory({ sessionId: 'wm-null', scope: 'player', key: 'prefs', value: null });
+        await store.upsertWorkingMemory(wm);
+        const result = await store.getWorkingMemory('wm-null', 'player', 'prefs');
+        expect(result?.value).toBeNull();
       });
 
       it('list returns all entries for a session', async () => {

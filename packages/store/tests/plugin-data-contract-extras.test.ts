@@ -2,7 +2,7 @@
  * Plugin-data DataStore contract extras — runs against MemoryStore + SqliteStore.
  *
  * Pins the plugin-data write/read invariants the kernel depends on:
- *  - JSONB null vs missing: storing `value: null` is preserved as null on read
+ *  - JSONB null: storing `value: null` is preserved as null on read
  *  - Namespace isolation: `(sessionId, pluginId, namespace, key)` is the key
  *  - Last-write-wins per (pluginId, namespace, key)
  *  - `setPluginDataBatch` is atomic from the kernel's perspective: list reads
@@ -52,16 +52,8 @@ const backends: ReadonlyArray<{ name: string; create: () => DataStore | Promise<
 
 for (const { name, create } of backends) {
   describe(`plugin-data extras — ${name}`, () => {
-    // Known regression on SqliteStore (2026-04-28): the mapper at
-    // sqlite-store.ts setPluginData uses `record.value != null ? toJson(record.value) : null`
-    // which writes SQL NULL for a JSON null payload. On read, `fromJson(null)`
-    // returns `undefined`, so a null round-trips as undefined. MemoryStore
-    // keeps the null. We pin both behaviours so a future fix in SQLite flips
-    // the `.fails` annotation, prompting the matching PR to flip it back to a
-    // plain `it` and adopt the cross-backend invariant.
-    const nullTest = name === 'SqliteStore' ? it.fails : it;
-    nullTest(
-      'preserves a null value on round-trip (JSONB null is not collapsed to undefined)',
+    it(
+      'preserves a null value on round-trip as JSON null',
       async () => {
         const store = await create();
         await store.setPluginData(row({ value: null }));
@@ -137,10 +129,7 @@ for (const { name, create } of backends) {
 
     it('setPluginDataBatch — empty array is a no-op', async () => {
       const store = await create();
-      // Some backends (e.g. better-sqlite3) reject "INSERT INTO ... VALUES"
-      // statements with zero values. The contract is: empty batch must not
-      // throw and must not produce phantom rows.
-      await expect(store.setPluginDataBatch([])).resolves.not.toThrow();
+      await store.setPluginDataBatch([]);
       const list = await store.listPluginData(SESSION, 'codex', 'entries');
       expect(list).toHaveLength(0);
     });
