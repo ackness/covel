@@ -28,6 +28,7 @@
         "children": [
           {
             "component": "Card",
+            "props": { "collapsible": true, "defaultExpanded": false },
             "children": [
               {
                 "component": "Row",

@@ -10,7 +10,7 @@
  * a visual selection marker when the user picks a choice.
  */
 
-import { useState, useMemo, useCallback, type ReactNode } from "react";
+import { useState, useMemo, useCallback, Children, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import i18nInstance from "@/i18n";
 import type { ComponentRenderer } from "@json-render/react";
@@ -199,20 +199,53 @@ const TagList: ComponentRenderer = ({ element }) => {
 
 const Card: ComponentRenderer = ({ element, children }) => {
   const variant = element.props?.variant as string;
+  const collapsible = element.props?.collapsible as boolean ?? false;
+  const defaultExpanded = element.props?.defaultExpanded as boolean ?? false;
+  const [expanded, setExpanded] = useState(defaultExpanded);
+
+  let body: ReactNode = children;
+  if (collapsible) {
+    const items = Children.toArray(children);
+    const head = items[0];
+    const rest = items.slice(1);
+    const Chevron = expanded ? Icons.ChevronDown : Icons.ChevronRight;
+    body = (
+      <>
+        <div
+          className="flex items-center gap-2 cursor-pointer select-none"
+          onClick={() => setExpanded((v) => !v)}
+          role="button"
+          tabIndex={0}
+          aria-expanded={expanded}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setExpanded((v) => !v);
+            }
+          }}
+        >
+          <Chevron className="w-3 h-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <div className="flex-1 min-w-0">{head}</div>
+        </div>
+        {expanded && rest}
+      </>
+    );
+  }
+
   // Default Card now reads as a band — marker bar on the left, no enclosure.
   // Variants:
   //   glow    → highlighted band with primary marker
   //   subtle  → quiet section with just internal padding & breathable spacing
   //   frame   → opt-in enclosed frame for cases that genuinely need walls
   if (variant === "frame") {
-    return <div className="ui-frame p-4 space-y-2.5">{children}</div>;
+    return <div className="ui-frame p-4 space-y-2.5">{body}</div>;
   }
   if (variant === "subtle") {
     // Used heavily by plugins for choice grids — needs comfortable padding
     // and inter-child spacing or the content reads as a wall of text.
     return (
       <div className="px-3 py-3 space-y-2 border-l-2 border-[var(--rule-color)] hover:border-[var(--accent-primary)] transition-colors">
-        {children}
+        {body}
       </div>
     );
   }
@@ -221,7 +254,7 @@ const Card: ComponentRenderer = ({ element, children }) => {
       className="ui-band space-y-2"
       data-tone={variant === "glow" ? undefined : "muted"}
     >
-      {children}
+      {body}
     </div>
   );
 };
@@ -1208,7 +1241,7 @@ const Tabs: ComponentRenderer = ({ element, bindings }) => {
   };
 
   return (
-    <div role="tablist" className="ui-rule flex flex-wrap gap-2 border-b border-border pb-1">
+    <div role="tablist" className="flex flex-wrap gap-2 border-b border-border pb-1">
       {tabs.map((tab) => {
         const active = value === tab.value;
         const TabIcon = resolveIcon(tab.icon);
