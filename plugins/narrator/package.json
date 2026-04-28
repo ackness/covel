@@ -1,0 +1,16 @@
+{
+  "name": "@covel/plugin-narrator",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@covel/context": "workspace:*",
+    "@covel/plugin-loader": "workspace:*",
+    "@covel/shared": "workspace:*",
+    "vitest": "^4.1.4"
+  }
+}

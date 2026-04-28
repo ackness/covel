@@ -1,0 +1,81 @@
+{
+  "id": "memory",
+  "label": { "zh": "核心记忆", "en": "Core Memory" },
+  "shortLabel": { "zh": "记忆", "en": "Memory" },
+  "icon": "brain",
+  "groupOrder": 800,
+  "dataSource": { "namespace": "blocks" },
+  "emptyState": {
+    "message": {
+      "zh": "记忆块尚未初始化，等待首轮游戏结束后自动填充……",
+      "en": "Memory blocks not yet initialized, waiting for first turn to complete…"
+    }
+  },
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "sm" },
+    "children": [
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "Letta 式记忆管理。每轮结束后自动更新，保存关键剧情、场景和角色信息。",
+            "en": "Letta-style memory management. Auto-updates after each turn to capture key story, scene, and character information."
+          },
+          "size": "xs",
+          "variant": "muted"
+        }
+      },
+      {
+        "component": "Accordion",
+        "repeat": { "statePath": "/entries", "key": "key" },
+        "children": [
+          {
+            "component": "Section",
+            "props": {
+              "title": { "$item": "value/displayName" },
+              "icon": { "$item": "value/icon" },
+              "defaultOpen": true
+            },
+            "children": [
+              {
+                "component": "Stack",
+                "props": { "gap": "xs" },
+                "children": [
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "$item": "value/content" },
+                      "size": "sm"
+                    }
+                  },
+                  {
+                    "component": "Row",
+                    "props": { "justify": "between", "align": "center", "gap": "sm" },
+                    "children": [
+                      {
+                        "component": "Badge",
+                        "props": {
+                          "label": { "$item": "value/charCount" },
+                          "color": "blue"
+                        }
+                      },
+                      {
+                        "component": "Text",
+                        "props": {
+                          "content": { "$item": "value/updatedAt" },
+                          "size": "xs",
+                          "variant": "muted"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

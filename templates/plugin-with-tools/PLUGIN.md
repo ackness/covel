@@ -16,7 +16,7 @@ tools:
     - ./tools/example.js
 input:
   inject:
-    - from: core-narrator
+    - from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
 ---

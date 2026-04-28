@@ -1,0 +1,140 @@
+{
+  "id": "{{pluginName}}-hello",
+  "group": "{{pluginName}}",
+  "groupLabel": { "zh": "Hello", "en": "Hello" },
+  "groupOrder": 800,
+  "label": { "zh": "Hello World", "en": "Hello World" },
+  "shortLabel": { "zh": "Hello", "en": "Hello" },
+  "icon": "smile",
+  "dataSource": { "namespace": "messages" },
+  "alwaysRender": true,
+  "emptyState": {
+    "message": {
+      "zh": "还没有消息。点 Echo 写入 hello，或点总结让 agent 概括 narrator。",
+      "en": "No messages yet. Click Echo to write 'hello', or click Summarize to let the agent summarise the narrator output."
+    }
+  },
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "md" },
+    "children": [
+      {
+        "component": "Card",
+        "props": { "variant": "subtle" },
+        "children": [
+          {
+            "component": "Stack",
+            "props": { "gap": "sm" },
+            "children": [
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "zh": "{{pluginName}} 示例插件", "en": "{{pluginName}} demo plugin" },
+                  "weight": "bold",
+                  "size": "sm"
+                }
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": {
+                    "zh": "下方两个按钮分别触发函数 runtime 和 agent runtime。结果都会写入本面板的消息流。",
+                    "en": "The two buttons trigger a function runtime and an agent runtime respectively. Both write into the message log below."
+                  },
+                  "variant": "muted",
+                  "size": "xs"
+                }
+              },
+              {
+                "component": "Row",
+                "props": { "gap": "sm" },
+                "children": [
+                  {
+                    "component": "Button",
+                    "props": {
+                      "label": { "zh": "Echo Hello", "en": "Echo hello" },
+                      "variant": "primary",
+                      "size": "md"
+                    },
+                    "on": {
+                      "click": {
+                        "action": "invokeRuntime",
+                        "params": {
+                          "runtimeId": "{{pluginName}}/echo"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "component": "Button",
+                    "props": {
+                      "label": { "zh": "总结剧情", "en": "Summarize narrator" },
+                      "variant": "default",
+                      "size": "md"
+                    },
+                    "on": {
+                      "click": {
+                        "action": "invokeRuntime",
+                        "params": {
+                          "runtimeId": "{{pluginName}}/summarizer"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      { "component": "Separator" },
+      {
+        "component": "Stack",
+        "props": { "gap": "xs" },
+        "repeat": { "statePath": "/messages", "key": "key" },
+        "children": [
+          {
+            "component": "Card",
+            "props": { "variant": "subtle" },
+            "children": [
+              {
+                "component": "Stack",
+                "props": { "gap": "xs" },
+                "children": [
+                  {
+                    "component": "Row",
+                    "props": { "gap": "xs", "align": "center" },
+                    "children": [
+                      {
+                        "component": "Badge",
+                        "props": {
+                          "label": { "$item": "value/role" },
+                          "color": "blue"
+                        }
+                      },
+                      {
+                        "component": "Text",
+                        "props": {
+                          "content": { "$item": "value/createdAt" },
+                          "variant": "muted",
+                          "size": "xs"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "$item": "value/text" },
+                      "size": "sm"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

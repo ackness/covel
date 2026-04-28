@@ -1,0 +1,14 @@
+{
+  "name": "@covel/plugin-{{pluginName}}",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "{{pluginDescription}}",
+  "packageManager": "{{packageManager}}",
+  "scripts": {
+    "preinstall": "npx only-allow pnpm"
+  },
+  "covel": {
+    "capabilities": ["manual-invoke"]
+  }
+}
