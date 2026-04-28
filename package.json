@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node ./scripts/dev-supervisor.mjs turbo dev",
+    "dev": "node ./scripts/dev-supervisor.mjs turbo dev --filter=!@covel/desktop-tauri",
     "dev:web": "node ./scripts/dev-supervisor.mjs turbo dev --filter=@covel/web",
     "dev:server": "node ./scripts/dev-supervisor.mjs turbo dev --filter=@covel/server",
     "dev:pg:preflight": "node ./scripts/dev-pg-preflight.mjs",
