@@ -62,29 +62,48 @@ function listFiles(dir, exts) {
 }
 
 // Match imports that begin a *line* — that's the only safe heuristic
-// without an AST. Embedded `import(...)` calls inside string literals
-// (e.g. JSDoc, error messages) are skipped, which is the right call
-// because the worst-case false negative for dynamic imports is far
-// less common than the false positive of capturing literal text.
+// without an AST.
 const STATIC_IMPORT_RE = /^\s*(?:import|export)\s+(?:[^'"\n]+?\s+from\s+)?["']([^"']+)["']/gm;
 const SIDE_EFFECT_IMPORT_RE = /^\s*import\s+["']([^"']+)["']/gm;
 const REQUIRE_RE = /^[^"']*\brequire\(\s*["']([^"'.][^"']*)["']\s*\)/gm;
 const AWAIT_IMPORT_RE = /\bawait\s+import\(\s*["']([^"'.][^"']*)["']\s*\)/g;
+// `await import("X").catch(...)` signals an opt-in optional runtime dep:
+// the caller explicitly handles a missing package, so it does NOT need to
+// appear in package.json. Detected so the required-set excludes it.
+const OPTIONAL_AWAIT_IMPORT_RE = /\bawait\s+import\(\s*["']([^"'.][^"']*)["']\s*\)\s*\.catch\b/g;
+
+// Replace backtick-delimited template literal contents with spaces (preserving
+// newlines so line-anchored regexes still align). Code-generation templates
+// (e.g. packages/create) embed real-looking `import` statements inside backticks
+// — without stripping, those false-positive as imports of the host package.
+// Does not recurse into `${...}` expressions; backtick strings nested inside
+// interpolations are vanishingly rare here.
+function stripTemplateLiterals(source) {
+  return source.replace(/`(?:\\[\s\S]|[^`\\])*`/g, (m) =>
+    m.replace(/[^\n]/g, " "),
+  );
+}
 
 function extractBareImports(source) {
-  const ids = new Set();
+  const stripped = stripTemplateLiterals(source);
+  const required = new Set();
+  const optional = new Set();
+  for (let m; (m = OPTIONAL_AWAIT_IMPORT_RE.exec(stripped)); ) {
+    optional.add(m[1]);
+  }
   for (const re of [STATIC_IMPORT_RE, SIDE_EFFECT_IMPORT_RE, REQUIRE_RE, AWAIT_IMPORT_RE]) {
     let m;
-    while ((m = re.exec(source))) {
+    while ((m = re.exec(stripped))) {
       const spec = m[1];
       // Relative paths and absolute paths are not bare imports.
       if (spec.startsWith(".") || spec.startsWith("/")) continue;
       // tsconfig path aliases (e.g. `@/components`, `~/foo`) — not npm packages.
       if (spec.startsWith("@/") || spec.startsWith("~/")) continue;
-      ids.add(spec);
+      if (optional.has(spec)) continue;
+      required.add(spec);
     }
   }
-  return ids;
+  return { required, optional };
 }
 
 function pkgRoot(spec) {
@@ -137,7 +156,8 @@ for (const rel of wsPkgDirs) {
   const undeclared = new Set();
   for (const file of srcFiles) {
     const source = fs.readFileSync(file, "utf-8");
-    for (const spec of extractBareImports(source)) {
+    const { required } = extractBareImports(source);
+    for (const spec of required) {
       const root = pkgRoot(spec);
       if (builtin.has(root)) continue;
       if (declared.has(root)) continue;
