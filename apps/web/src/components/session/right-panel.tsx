@@ -2,9 +2,9 @@ import { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Database,
-  PanelRightClose,
   BookOpen,
   HelpCircle,
+  type LucideIcon,
 } from "lucide-react";
 import * as Icons from "lucide-react";
 import {
@@ -47,6 +47,14 @@ interface PluginTabGroup {
   subPanels: SubPanel[];
 }
 
+interface RightPanelTabItem {
+  id: string;
+  value: string;
+  label: string;
+  icon: LucideIcon;
+  title?: string;
+}
+
 function resolvePluginIcon(name: string): Icons.LucideIcon {
   const pascal = name
     .split("-")
@@ -75,6 +83,25 @@ function resolvePluginIcon(name: string): Icons.LucideIcon {
 function shortPluginId(pluginId: string): string {
   const stripped = pluginId.replace(/^core-/, '').replace(/-image-gen$/, '');
   return stripped.length > 0 ? stripped : pluginId;
+}
+
+function compactTabLabel(label: string): string {
+  const normalized = label.trim();
+  if (!normalized) return "";
+
+  const chars = Array.from(normalized);
+  const hanChars = chars.filter((char) => /\p{Script=Han}/u.test(char));
+  if (hanChars.length >= 2) return hanChars.slice(0, 2).join("");
+
+  const words = normalized.split(/\s+/).filter(Boolean);
+  if (words.length > 1) {
+    return words
+      .map((word) => Array.from(word)[0]?.toUpperCase() ?? "")
+      .join("")
+      .slice(0, 3);
+  }
+
+  return chars.slice(0, 4).join("");
 }
 
 function aggregateSpecsIntoGroups(
@@ -177,6 +204,29 @@ export function RightPanel({
     () => aggregateSpecsIntoGroups(rawSlotEntries, i18n.language),
     [rawSlotEntries, i18n.language],
   );
+  const tabItems = useMemo<RightPanelTabItem[]>(
+    () => [
+      {
+        id: "world",
+        value: "world",
+        label: t("session.worldTab"),
+        icon: BookOpen,
+      },
+      {
+        id: "database",
+        value: "database",
+        label: t("session.database"),
+        icon: Database,
+      },
+      ...pluginTabGroups.map((group) => ({
+        id: `plugin-${group.id}`,
+        value: `plugin-${group.id}`,
+        label: group.label,
+        icon: resolvePluginIcon(group.icon),
+      })),
+    ],
+    [pluginTabGroups, t],
+  );
 
   useEffect(() => {
     fetchServerHealth()
@@ -222,80 +272,58 @@ export function RightPanel({
       className="flex-1 flex min-h-0 min-w-0"
       orientation="vertical"
     >
-      <div className="flex flex-col border-r border-border bg-background shrink-0 w-12 items-center py-2 gap-1">
-        <TabsList className="flex flex-col rounded-none gap-1 bg-transparent h-auto p-0">
-          {/* Section 1 — framework tabs */}
-          <TabsTrigger
-            value="world"
-            className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title={t("session.worldTab")}
-          >
-            <BookOpen className="w-4 h-4" />
-            <span className="text-[9px] leading-none">
-              {t("session.worldTab")}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="database"
-            className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-            title={t("session.database")}
-          >
-            <Database className="w-4 h-4" />
-            <span className="text-[9px] leading-none">
-              {t("session.database")}
-            </span>
-          </TabsTrigger>
-
-          {/* Divider — only render when plugin tabs exist */}
-          {pluginTabGroups.length > 0 && (
-            <div
-              aria-hidden
-              className="w-6 h-px bg-border my-1.5"
-            />
-          )}
-
-          {/* Section 2 — dynamic plugin tabs from /api/ui-specs */}
-          {pluginTabGroups.map((group) => {
-            const GroupIcon = resolvePluginIcon(group.icon);
+      <div className="border-r border-[var(--rule-color)] shrink-0 w-12 overflow-hidden" style={{ background: "color-mix(in oklab, var(--surface-rail) 70%, var(--surface-page))" }}>
+        <TabsList className="flex h-full w-full flex-col items-center justify-start rounded-none bg-transparent p-0 text-muted-foreground">
+          {tabItems.map((item, idx) => {
+            const ItemIcon = item.icon;
+            const afterFrameworkTabs = idx === 2;
             return (
-              <TabsTrigger
-                key={`plugin-${group.id}`}
-                value={`plugin-${group.id}`}
-                className="w-10 h-10 p-0 flex flex-col items-center justify-center gap-0.5"
-                title={group.label}
-              >
-                <GroupIcon className="w-4 h-4" />
-                <span className="text-[9px] leading-none truncate max-w-[36px]">
-                  {group.label.slice(0, 4)}
-                </span>
-              </TabsTrigger>
+              <div key={item.id} className="w-full flex flex-col items-center">
+                {afterFrameworkTabs && (
+                  <div
+                    aria-hidden
+                    className="w-6 h-px bg-border my-1.5 shrink-0"
+                  />
+                )}
+                <TabsTrigger
+                  value={item.value}
+                  className="group relative h-11 w-full rounded-none border-0 px-0 py-0 text-muted-foreground shadow-none data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                  title={item.title ?? item.label}
+                  aria-label={item.label}
+                >
+                  <span
+                    aria-hidden
+                    className="absolute left-0 top-1 bottom-1 w-[2px] bg-transparent transition-colors group-data-[state=active]:bg-[var(--accent-primary)]"
+                  />
+                  <span className="flex h-full w-full flex-col items-center justify-center gap-0.5 overflow-hidden px-1">
+                    <ItemIcon className="w-4 h-4 shrink-0" />
+                    <span className="block w-full max-w-full truncate text-center text-[9px] leading-none whitespace-nowrap">
+                      {compactTabLabel(item.label)}
+                    </span>
+                  </span>
+                </TabsTrigger>
+              </div>
             );
           })}
         </TabsList>
-        <div className="mt-auto">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 rounded-sm"
-            onClick={onToggleRightPanel}
-          >
-            <PanelRightClose className="w-4 h-4" />
-          </Button>
-        </div>
       </div>
       <ScrollArea className="flex-1 min-h-0 min-w-0">
-        <TabsContent value="world" className="p-4 m-0">
-          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <BookOpen className="w-4 h-4 shrink-0" />{" "}
-            {t("session.worldTab")}
-          </h3>
+        <TabsContent value="world" className="p-4 m-0 max-w-full">
+          <div className="flex items-center gap-2 mb-4 min-w-0">
+            <BookOpen className="w-4 h-4 shrink-0 text-muted-foreground" />
+            <h3 className="ui-title text-sm font-semibold tracking-tight truncate">
+              {t("session.worldTab")}
+            </h3>
+          </div>
           <WorldDocumentPanel world={world} />
         </TabsContent>
-        <TabsContent value="database" className="p-4 m-0">
-          <h3 className="font-display font-semibold flex items-center gap-2 mb-4 text-sm uppercase tracking-widest whitespace-nowrap">
-            <Database className="w-4 h-4 shrink-0" />{" "}
-            {t("session.database")}
-          </h3>
+        <TabsContent value="database" className="p-4 m-0 max-w-full">
+          <div className="flex items-center gap-2 mb-4 min-w-0">
+            <Database className="w-4 h-4 shrink-0 text-muted-foreground" />
+            <h3 className="ui-title text-sm font-semibold tracking-tight truncate">
+              {t("session.database")}
+            </h3>
+          </div>
           <DatabasePanel
             sessionId={sessionId}
             refreshKey={statePatches.length}
@@ -306,28 +334,80 @@ export function RightPanel({
         {pluginTabGroups.map((group) => {
           const subIdx = activePluginSubTab[group.id] ?? 0;
           const currentSub = group.subPanels[subIdx];
+          // Group sub-panels by pluginId so that when multiple plugins
+          // contribute the same group (e.g. dashscope-image-gen +
+          // openai-image-gen both publish a 画廊/任务/生成 trio under
+          // image-studio), we render a 2-tier picker:
+          //   row 1 = provider segmented control
+          //   row 2 = sub-panel chips for that provider
+          // This avoids the awful flat list of "画廊·dashscope, 任务·dashscope,
+          // 生成·dashscope, 画廊·openai, 任务·openai, 生成·openai".
+          const byProvider = new Map<string, { pluginId: string; subs: { sub: SubPanel; idx: number }[] }>();
+          group.subPanels.forEach((sub, idx) => {
+            if (!byProvider.has(sub.pluginId)) {
+              byProvider.set(sub.pluginId, { pluginId: sub.pluginId, subs: [] });
+            }
+            byProvider.get(sub.pluginId)!.subs.push({ sub, idx });
+          });
+          const providers = [...byProvider.values()];
+          const multiProvider = providers.length > 1;
+          const activeProviderId = currentSub?.pluginId ?? providers[0]?.pluginId;
+          const activeProviderSubs = byProvider.get(activeProviderId)?.subs ?? [];
+          const GroupIcon = resolvePluginIcon(group.icon);
+
           return (
-            <TabsContent key={`plugin-content-${group.id}`} value={`plugin-${group.id}`} className="p-4 m-0">
-              <h3 className="font-display font-semibold flex items-center gap-2 mb-3 text-sm uppercase tracking-widest whitespace-nowrap">
-                {group.label}
-              </h3>
-              {group.subPanels.length > 1 && (
-                <div className="flex items-center gap-1 mb-3 border-b border-border pb-2 flex-wrap">
-                  {group.subPanels.map((sub, idx) => {
+            <TabsContent
+              key={`plugin-content-${group.id}`}
+              value={`plugin-${group.id}`}
+              className="p-4 m-0 max-w-full"
+            >
+              <div className="flex items-center gap-2 mb-3 min-w-0">
+                <GroupIcon className="w-4 h-4 shrink-0 text-muted-foreground" />
+                <h3 className="ui-title text-sm font-semibold tracking-tight truncate">
+                  {group.label}
+                </h3>
+              </div>
+
+              {/* Provider switcher — only when 2+ plugins share the group */}
+              {multiProvider && (
+                <div className="flex items-center gap-2 mb-2 ui-meta text-[10px] text-muted-foreground">
+                  <span>provider</span>
+                  <div className="flex items-center border border-[var(--rule-color)] rounded-[var(--radius-control)] overflow-hidden">
+                    {providers.map((p) => {
+                      const isActive = p.pluginId === activeProviderId;
+                      return (
+                        <button
+                          key={p.pluginId}
+                          type="button"
+                          onClick={() => {
+                            // jump to first sub-panel of this provider
+                            const firstIdx = byProvider.get(p.pluginId)!.subs[0]?.idx;
+                            if (typeof firstIdx === "number") {
+                              setActivePluginSubTab((prev) => ({ ...prev, [group.id]: firstIdx }));
+                            }
+                          }}
+                          className={`px-2 py-0.5 text-[10px] font-medium tracking-wider transition-colors ${
+                            isActive
+                              ? "bg-foreground text-[var(--surface-page)]"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                          title={p.pluginId}
+                        >
+                          {shortPluginId(p.pluginId)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-panel chips (filtered to active provider) */}
+              {(activeProviderSubs.length > 1 ||
+                (!multiProvider && group.subPanels.length > 1)) && (
+                <div className="flex items-center gap-2 mb-3 border-b border-[var(--rule-color)] pb-2 flex-wrap">
+                  {(multiProvider ? activeProviderSubs : group.subPanels.map((sub, idx) => ({ sub, idx }))).map(({ sub, idx }) => {
                     const SubIcon = resolvePluginIcon(sub.icon);
                     const isActive = idx === subIdx;
-                    // When multiple plugins contribute the same sub-label
-                    // (e.g. dashscope-image-gen + openai-image-gen both
-                    // declare a 画廊 panel under group: "image-studio"), the
-                    // bare label produces indistinguishable duplicate tabs
-                    // and the user can't tell which gallery is which.
-                    // Suffix the pluginId only on the colliding tabs so
-                    // the common single-plugin case stays clean.
-                    const labelCollides =
-                      group.subPanels.filter((other) => other.label === sub.label).length > 1;
-                    const displayLabel = labelCollides
-                      ? `${sub.label} · ${shortPluginId(sub.pluginId)}`
-                      : sub.label;
                     return (
                       <button
                         key={sub.id}
@@ -335,20 +415,20 @@ export function RightPanel({
                         onClick={() =>
                           setActivePluginSubTab((prev) => ({ ...prev, [group.id]: idx }))
                         }
-                        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium border-b-2 -mb-px transition-colors ${
+                        className={`flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium border-b-2 -mb-px transition-colors ${
                           isActive
-                            ? "border-primary text-primary"
+                            ? "border-[var(--accent-primary)] text-foreground"
                             : "border-transparent text-muted-foreground hover:text-foreground"
                         }`}
-                        title={labelCollides ? sub.pluginId : undefined}
                       >
                         <SubIcon className="w-3 h-3" />
-                        {displayLabel}
+                        <span className="truncate max-w-[8rem]">{sub.label}</span>
                       </button>
                     );
                   })}
                 </div>
               )}
+
               {currentSub && (
                 <PluginPanel
                   key={currentSub.id}

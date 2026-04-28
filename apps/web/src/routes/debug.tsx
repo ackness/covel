@@ -102,12 +102,50 @@ function deriveRuntimesFromTurn(events: api.TraceEvent[]): RuntimeInfo[] {
 
 // ── Time formatting ───────────────────────────────────────────────
 
-function fmtTime(iso: string): string {
+interface FmtTimeOptions {
+  /** Append `.mmm` milliseconds. Default true — useful for trace events. */
+  withMillis?: boolean;
+  /** Force the date prefix even when the timestamp is today. */
+  alwaysDate?: boolean;
+}
+
+/**
+ * Render an ISO timestamp without the noise of "today's full date" but
+ * still self-describing across days:
+ *
+ *   today          → `15:23:45.123`
+ *   earlier year   → `2025-12-31 15:23:45.123`
+ *   this year      → `04-27 15:23:45.123`
+ *
+ * When `alwaysDate` is set, the prefix is rendered even for today — used
+ * by surfaces (session lists, archived runs) that benefit from an absolute
+ * timestamp regardless of when the user is reading.
+ */
+function fmtTime(iso: string, opts: FmtTimeOptions = {}): string {
+  const { withMillis = true, alwaysDate = false } = opts;
   try {
     const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    const now = new Date();
+    const sameDay =
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate();
+    const sameYear = d.getFullYear() === now.getFullYear();
+
     const locale = i18n.language || "zh-CN";
-    return d.toLocaleTimeString(locale, { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
-      + "." + String(d.getMilliseconds()).padStart(3, "0");
+    const timeOpts: Intl.DateTimeFormatOptions = withMillis
+      ? { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }
+      : { hour12: false, hour: "2-digit", minute: "2-digit" };
+    const time = d.toLocaleTimeString(locale, timeOpts)
+      + (withMillis ? "." + String(d.getMilliseconds()).padStart(3, "0") : "");
+
+    if (sameDay && !alwaysDate) return time;
+
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    if (sameYear) return `${mm}-${dd} ${time}`;
+    return `${d.getFullYear()}-${mm}-${dd} ${time}`;
   } catch {
     return iso;
   }
@@ -243,12 +281,14 @@ function DebugPage() {
   );
 
   return (
-    <div className="flex h-full w-full flex-col border-t border-border overflow-hidden">
+    <div className="flex h-full w-full flex-col border-t border-[var(--rule-color)] overflow-hidden">
       {/* ── Header ── */}
-      <div className="flex-shrink-0 h-11 px-4 border-b border-border bg-background flex items-center justify-between gap-4">
+      <div className="flex-shrink-0 h-11 px-4 border-b border-[var(--rule-color)] flex items-center justify-between gap-4" style={{ background: "var(--surface-page)" }}>
         <div className="flex items-center gap-3">
-          <h1 className="font-display font-bold text-sm uppercase tracking-widest flex items-center gap-2">
-            <Terminal className="w-4 h-4" /> {t("debugger.title")}
+          <h1 className="flex items-baseline gap-3">
+            <span className="ui-meta text-[10px] text-muted-foreground">§ TRACE</span>
+            <span className="ui-title text-sm font-semibold tracking-tight">{t("debugger.title")}</span>
+            <Terminal className="w-3.5 h-3.5 opacity-50" />
           </h1>
           {selectedSessionId && (
             <Badge variant="outline" className="font-mono text-[10px]">
@@ -291,8 +331,8 @@ function DebugPage() {
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* ── Left Sidebar: Sessions ── */}
-        <div className="w-56 flex-shrink-0 border-r border-border flex flex-col min-h-0 bg-muted/5">
-          <div className="px-3 py-2 border-b border-border">
+        <div className="w-56 flex-shrink-0 border-r border-[var(--rule-color)] flex flex-col min-h-0 ui-rail">
+          <div className="px-3 py-2 border-b border-[var(--rule-color)]">
             <h2 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
               {t("debugger.sessions")}
             </h2>
@@ -318,7 +358,7 @@ function DebugPage() {
                   </div>
                   <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                     <Badge variant="secondary" className="text-[9px] h-4 px-1">{s.status} · t{s.turnCount}</Badge>
-                    <span>{new Date(s.createdAt).toLocaleTimeString(i18n.language, { hour12: false, hour: "2-digit", minute: "2-digit" })}</span>
+                    <span title={s.createdAt}>{fmtTime(s.createdAt, { withMillis: false, alwaysDate: true })}</span>
                   </div>
                 </button>
               ))}
@@ -329,9 +369,9 @@ function DebugPage() {
         {/* ── Main Content ── */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           {/* View Tabs + Filter Bar */}
-          <div className="flex-shrink-0 h-9 px-4 border-b border-border bg-muted/5 flex items-center gap-4 overflow-x-auto">
+          <div className="flex-shrink-0 h-9 px-4 border-b border-[var(--rule-color)] ui-rail flex items-center gap-4 overflow-x-auto">
             {/* View switcher */}
-            <div className="flex items-center gap-1 shrink-0 border-r border-border pr-3">
+            <div className="flex items-center gap-1 shrink-0 border-r border-[var(--rule-color)] pr-3">
               <button
                 onClick={() => setDebugView("traces")}
                 className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors ${debugView === "traces"
@@ -540,8 +580,8 @@ function DebugPage() {
 
                 {/* Detail Panel */}
                 {selectedEvent && (
-                  <div className="w-80 flex-shrink-0 border-l border-border flex flex-col min-h-0 bg-muted/5">
-                    <div className="px-3 py-2 border-b border-border flex items-center justify-between">
+                  <div className="w-80 flex-shrink-0 border-l border-border flex flex-col min-h-0 ui-rail">
+                    <div className="px-3 py-2 border-b border-[var(--rule-color)] flex items-center justify-between">
                       <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                         {t("debugger.eventDetail")}
                       </h3>
@@ -715,7 +755,7 @@ function TurnCard({
         <div className="border-t border-border">
           {/* Runtime Breakdown */}
           {runtimes.length > 0 && (
-            <div className="px-3 py-2 space-y-1 border-b border-border bg-muted/5">
+            <div className="px-3 py-2 space-y-1 border-b border-[var(--rule-color)] ui-rail">
               <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">
                 {t("debugger.runtimes")}
               </h4>
@@ -741,7 +781,7 @@ function TurnCard({
           {orphanEvents.length > 0 && (
             <div className="divide-y divide-border/50">
               {runtimes.length > 0 && (
-                <div className="px-3 py-1.5 bg-muted/5">
+                <div className="px-3 py-1.5 ui-rail">
                   <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">
                     {t("debugger.flowEvents")}
                   </h4>
@@ -1185,7 +1225,7 @@ function DataSection({ title, icon, children }: { title: string; icon: React.Rea
     <div className="border border-border">
       <button
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground bg-muted/5"
+        className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground ui-rail"
       >
         {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
         {icon}

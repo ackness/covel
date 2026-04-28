@@ -103,33 +103,23 @@ export function ThemeManagerWidget() {
     <div className="space-y-4">
       {(notice || error) && (
         <div
-          className={`text-xs px-3 py-2 rounded-[var(--radius-card)] border ${
-            error
-              ? "border-destructive/20 bg-destructive/10 text-destructive"
-              : "border-primary/20 bg-primary/10 text-primary"
-          }`}
+          className="ui-band text-xs"
+          data-tone={error ? "danger" : "info"}
         >
-          {error ?? notice}
+          <span className={error ? "text-[var(--accent-danger)]" : "text-[var(--accent-secondary)]"}>
+            {error ?? notice}
+          </span>
         </div>
       )}
 
-      <div className="border border-border rounded-[var(--radius-card)] bg-card/60 p-4 space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Palette className="w-4 h-4 text-primary" />
-              <p className="text-sm font-medium text-foreground">
-                {t("settings.themeLibraryTitle")}
-              </p>
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {t("settings.themeLibraryDesc")}
-            </p>
-          </div>
+      <div className="ui-section pb-4">
+        <div className="ui-section-head">
+          <Palette className="w-4 h-4 opacity-60" />
+          <span className="ui-section-title">{t("settings.themeLibraryTitle")}</span>
           <Button
             size="sm"
             variant="outline"
-            className="shrink-0"
+            className="ml-auto shrink-0"
             disabled={busy}
             onClick={() => fileRef.current?.click()}
           >
@@ -137,6 +127,9 @@ export function ThemeManagerWidget() {
             {t("settings.themeImportButton")}
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground leading-relaxed mb-3">
+          {t("settings.themeLibraryDesc")}
+        </p>
 
         <input
           ref={fileRef}
@@ -146,45 +139,49 @@ export function ThemeManagerWidget() {
           onChange={(event) => void handleImport(event)}
         />
 
-        <div className="rounded-[var(--radius-card)] border border-dashed border-border p-3 space-y-2 text-xs text-muted-foreground">
+        <div className="ui-frame p-3 space-y-2 text-xs text-muted-foreground">
           <p>{t("settings.themeImportHint")}</p>
-          <pre className="overflow-auto rounded-[var(--radius-control)] bg-muted/35 px-3 py-2 text-[11px] font-mono leading-relaxed">
+          <pre
+            className="overflow-auto rounded-[var(--radius-control)] px-3 py-2 text-[11px] font-mono leading-relaxed"
+            style={{ background: "var(--surface-page)" }}
+          >
 {`html[data-theme="my-theme"] {
   --color-background: #10141c;
   --color-foreground: #edf2f7;
-  --surface-panel: #151b26;
+  --accent-primary: #ff7a45;
+  --rule-color: #1f2937;
+  --noise-opacity: 0.04;
 }`}
           </pre>
         </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-0">
         {themes.map((theme) => {
           const selected = appearance === theme.id;
           const custom = isCustomTheme(theme.id, customThemeList);
           return (
             <div
               key={theme.id}
-              className="flex items-center justify-between gap-3 rounded-[var(--radius-card)] border border-border bg-card/40 px-3 py-3"
+              className="ui-band flex items-center justify-between gap-3 py-3"
+              data-tone={selected ? undefined : "muted"}
             >
-              <div className="min-w-0 space-y-1">
+              <div className="min-w-0 space-y-0.5">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="truncate text-sm font-medium text-foreground">
+                  <span className="ui-section-title truncate">
                     {labelToString(theme.label, i18n.language)}
                   </span>
-                  <span className="ui-chip text-[10px]">
+                  <span className="ui-tag">
                     {custom ? t("settings.themeSourceCustom") : t("settings.themeSourceBuiltin")}
                   </span>
                   {selected && (
-                    <span className="ui-chip text-[10px]">
-                      <Check className="w-3 h-3" />
+                    <span className="ui-tag ui-tag-solid inline-flex items-center gap-1">
+                      <Check className="w-2.5 h-2.5" />
                       {t("settings.themeActive")}
                     </span>
                   )}
                 </div>
-                <p className="text-[11px] text-muted-foreground font-mono truncate">
-                  {theme.id}
-                </p>
+                <p className="ui-meta truncate">{theme.id}</p>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">

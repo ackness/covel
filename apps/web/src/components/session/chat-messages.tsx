@@ -23,7 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { Markdown } from "@/components/ui/markdown.js";
-import { covelRegistry } from "@/lib/catalog.js";
+import { covelRegistry, resolveI18n } from "@/lib/catalog.js";
 import { messageToSpec, messageToSpecDisabled } from "@/lib/message-to-spec.js";
 import { PluginPanel } from "./plugin-panel.js";
 import { ExecutionTimeline } from "./execution-timeline.js";
@@ -505,36 +505,22 @@ export function ChatMessages({
           // derived `LegacyPhase` (`init` / `playing` / `paused` / `ended`)
           // to choose between the "begin adventure" CTA and the post-start
           // empty message.
-          <div className="flex flex-col items-center justify-center py-20 text-center space-y-6">
-            {phase === "init" ? (
-              <>
-                <div className="space-y-3">
-                  <p className="ui-empty-title text-xl md:text-2xl">
-                    {world ? (typeof world.name === "string" ? world.name : (world.name as Record<string, string>)["zh-CN"] ?? "") : ""}
-                  </p>
-                  <p className="ui-empty-copy text-sm leading-relaxed">
-                    {t("session.beginAdventureHint")}
-                  </p>
-                </div>
-                <Button
-                  size="lg"
-                  className="px-10 py-5 text-sm uppercase tracking-widest font-bold"
-                  onClick={onBeginAdventure}
-                >
-                  <Flame className="w-4 h-4 mr-2" />
-                  {t("session.beginAdventure")}
-                </Button>
-              </>
-            ) : (
-              <>
-                <MessageSquare className="w-8 h-8 text-muted-foreground/50" />
-                <p className="text-sm text-muted-foreground">
-                  {phase === "playing" && t("session.emptyPlaying")}
-                  {phase === "ended" && t("session.emptyEnded")}
-                </p>
-              </>
-            )}
-          </div>
+          phase === "init" ? (
+            <SessionCanvasHero
+              world={world}
+              onBegin={onBeginAdventure}
+              beginLabel={t("session.beginAdventure")}
+              hintLabel={t("session.beginAdventureHint")}
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20 text-center space-y-6">
+              <MessageSquare className="w-8 h-8 text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">
+                {phase === "playing" && t("session.emptyPlaying")}
+                {phase === "ended" && t("session.emptyEnded")}
+              </p>
+            </div>
+          )
         )}
 
         {/* Render messages with per-turn execution timelines inline */}
@@ -1097,6 +1083,78 @@ function RawJsonBlock({ content }: { content: string }) {
       <pre className="p-4 text-xs font-mono text-muted-foreground whitespace-pre-wrap break-all">
         {content}
       </pre>
+    </div>
+  );
+}
+
+// ── SessionCanvasHero ───────────────────────────────────────────────
+// Editorial opening view rendered when a session is loaded but no turn has
+// run yet. Pulls `openingHook` / `openingChips` from the world's starting
+// conditions; falls back to `world.name` and the world tags when those are
+// absent, so older world packages keep working unchanged.
+
+interface SessionCanvasHeroProps {
+  world: WorldRecord | null;
+  onBegin: () => void;
+  beginLabel: string;
+  hintLabel: string;
+}
+
+function SessionCanvasHero({ world, onBegin, beginLabel, hintLabel }: SessionCanvasHeroProps) {
+  const { i18n } = useTranslation();
+  const locale = i18n.language;
+
+  const worldName = world ? resolveI18n(world.name, locale) : "";
+  const start = world?.dimensions?.startingConditions;
+  const hook = start?.openingHook ? resolveI18n(start.openingHook, locale) : worldName;
+  const chips: string[] = (() => {
+    if (start?.openingChips && start.openingChips.length > 0) {
+      return start.openingChips
+        .map((chip) => resolveI18n(chip, locale))
+        .filter((s) => s.length > 0);
+    }
+    if (world?.tags && world.tags.length > 0) {
+      return world.tags.slice(0, 3).map((tag) => String(tag));
+    }
+    return [];
+  })();
+  const summary = world ? resolveI18n(world.description, locale) : "";
+
+  return (
+    <div className="ui-session-canvas py-8 md:py-12 max-w-3xl mx-auto px-1">
+      {/* Eyebrow + chip row — editorial "kicker" */}
+      <div className="flex flex-wrap items-center gap-2 mb-5">
+        <span className="ui-eyebrow">§ SESSION CANVAS</span>
+        {chips.map((chip, i) => (
+          <span key={`${chip}-${i}`} className="ui-chip text-[10px]">
+            {chip}
+          </span>
+        ))}
+      </div>
+
+      {/* Display title — the chosen hook or the world name */}
+      <h2
+        className="ui-title text-2xl md:text-[2.25rem] leading-tight tracking-tight mb-4"
+        style={{ textWrap: "balance" } as React.CSSProperties}
+      >
+        {hook || hintLabel}
+      </h2>
+
+      {/* Body copy — fall back to summary, then to the i18n hint */}
+      {(summary || hintLabel) && (
+        <p className="ui-empty-copy text-sm md:text-base leading-relaxed mb-6 not-italic text-muted-foreground">
+          {summary || hintLabel}
+        </p>
+      )}
+
+      <Button
+        size="lg"
+        className="px-8 py-5 text-sm uppercase tracking-widest font-bold"
+        onClick={onBegin}
+      >
+        <Flame className="w-4 h-4 mr-2" />
+        {beginLabel}
+      </Button>
     </div>
   );
 }

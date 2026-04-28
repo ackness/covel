@@ -51,6 +51,7 @@ import type {
 import { text } from "@/components/world/editor-helpers.js";
 import { LeftPanel } from "./left-panel.js";
 import { RightPanel } from "./right-panel.js";
+import { onNavEvent } from "@/lib/nav-events.js";
 
 // ── Extracted Panel Components (see left-panel.tsx, right-panel.tsx) ──
 
@@ -156,6 +157,7 @@ export function GameView({
   const [viewMode, setViewMode] = useState<"parsed" | "detailed" | "raw">("parsed");
   const [inputValue, setInputValue] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsInitialKey, setSettingsInitialKey] = useState<string | undefined>(undefined);
 
   // Legacy blockSelections path is kept only to satisfy ChatMessages' prop
   // contract (some older blocks still wire onSelect). The "confirm & send"
@@ -284,8 +286,49 @@ export function GameView({
 
   const handleSettingsOpenChange = (v: boolean) => {
     setSettingsOpen(v);
-    if (!v) refreshSlots();
+    if (!v) {
+      setSettingsInitialKey(undefined);
+      refreshSlots();
+    }
   };
+
+  // Topbar nav → in-page panel actions. The global topbar dispatches via
+  // nav-events because it can't reach this component's local state directly.
+  useEffect(() => {
+    return onNavEvent((event) => {
+      if (event === "open-plugins") {
+        setSettingsInitialKey("plugin");
+        setSettingsOpen(true);
+        return;
+      }
+      if (event === "open-images" || event === "open-database") {
+        // Make sure the right panel is expanded, then activate the requested
+        // activity tab. Radix Tabs use pointerdown to trigger selection
+        // (not click), so a plain programmatic .click() is a no-op — we
+        // dispatch the matching pointerdown sequence instead.
+        const panel = rightPanelRef.current;
+        if (panel && panel.isCollapsed()) panel.expand();
+        const targetLabel = event === "open-images" ? "图像" : "数据库";
+        const activate = () => {
+          const tab = document.querySelector<HTMLElement>(
+            `button[role="tab"][aria-label="${targetLabel}"]`,
+          );
+          if (!tab) return;
+          // Radix Tabs trigger on the mousedown → mouseup → click sequence;
+          // a plain `tab.click()` alone is a no-op because the trigger only
+          // commits when it sees the pointerdown half. Replay the full
+          // sequence so it matches a real interaction.
+          const opts = { bubbles: true, cancelable: true, button: 0 } as const;
+          tab.dispatchEvent(new MouseEvent("mousedown", opts));
+          tab.dispatchEvent(new MouseEvent("mouseup", opts));
+          tab.click();
+        };
+        // Defer two frames to give the panel time to finish expanding before
+        // dispatching pointer events at the now-visible tab.
+        requestAnimationFrame(() => requestAnimationFrame(activate));
+      }
+    });
+  }, []);
 
   const direction = isMobile ? "vertical" : "horizontal";
 
@@ -307,6 +350,7 @@ export function GameView({
       <SettingsDialog
         open={settingsOpen}
         onOpenChange={handleSettingsOpenChange}
+        initialKey={settingsInitialKey}
       />
 
       <Dialog open={suspensionsOpen} onOpenChange={setSuspensionsOpen}>
@@ -334,7 +378,7 @@ export function GameView({
           collapsible={true}
           collapsedSize="0%"
           onResize={() => setIsLeftCollapsed(leftPanelRef.current?.isCollapsed() ?? false)}
-          className="bg-muted/10 flex flex-col min-h-0 min-w-0"
+          className="ui-rail flex flex-col min-h-0 min-w-0"
         >
           <LeftPanel
             session={session}
@@ -377,7 +421,7 @@ export function GameView({
               collapsible={true}
               collapsedSize="0%"
               onResize={() => setIsRightCollapsed(rightPanelRef.current?.isCollapsed() ?? false)}
-              className="bg-muted/10 flex flex-col min-h-0 min-w-0"
+              className="ui-rail flex flex-col min-h-0 min-w-0"
             >
               <RightPanel
                 sessionId={session.id}
@@ -399,18 +443,19 @@ export function GameView({
           id="center-panel"
           defaultSize={isMobile ? "100%" : "55%"}
           minSize={isMobile ? "20%" : "30%"}
-          className="bg-background flex flex-col min-w-0 min-h-0"
+          className="flex flex-col min-w-0 min-h-0"
+          style={{ background: "var(--surface-page)" }}
         >
           {/* Header */}
-          <div className="ui-panel-header px-3 border-b border-border flex justify-between items-center z-10 shrink-0">
-            <div className="flex items-center gap-3 overflow-hidden">
+          <div className="ui-panel-header px-3 flex justify-between items-center gap-2 z-10">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-8 w-8 shrink-0 border border-border/80 ${!isLeftCollapsed && "bg-accent text-accent-foreground"}`}
+                className={`h-7 w-7 shrink-0 border border-border/80 ${!isLeftCollapsed && "bg-accent text-accent-foreground"}`}
                 onClick={toggleLeftPanel}
               >
-                <SlidersHorizontal className="w-4 h-4" />
+                <SlidersHorizontal className="w-3.5 h-3.5" />
               </Button>
               <SessionBreadcrumb
                 step="game"
@@ -420,10 +465,10 @@ export function GameView({
                 disabled={executing}
               />
               <span
-                className={`ui-chip hidden sm:inline-flex ml-2 text-[10px] ${
+                className={`ui-chip hidden lg:inline-flex ml-1 text-[10px] ${
                   executing
-                    ? "border-transparent bg-primary/10 text-primary"
-                    : "border-transparent bg-emerald-500/12 text-emerald-600 dark:text-emerald-400"
+                    ? "border-transparent bg-[color-mix(in_oklab,var(--accent-primary)_12%,transparent)] text-[var(--accent-primary)]"
+                    : "border-transparent bg-[color-mix(in_oklab,var(--accent-success)_14%,transparent)] text-[var(--accent-success)]"
                 }`}
                 aria-live="polite"
               >
@@ -433,44 +478,15 @@ export function GameView({
                 {executing ? t("session.stateStreaming") : t("session.statePlaying")}
               </span>
             </div>
-            <div className="flex items-center gap-2 md:gap-4 shrink-0">
-              <div className="hidden sm:flex items-center border border-border rounded-md overflow-hidden">
+            <div className="flex items-center gap-1 shrink-0">
+              <div className="flex items-center border border-[var(--rule-color)] rounded-[var(--radius-control)] overflow-hidden">
                 <Toggle
                   pressed={viewMode === "parsed"}
                   onPressedChange={() => setViewMode("parsed")}
                   size="sm"
-                  className="rounded-[var(--radius-control)] border-0 h-7 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                >
-                  <LayoutTemplate className="w-3.5 h-3.5 mr-1.5" />
-                  <span className="text-xs">{t("session.viewParsed")}</span>
-                </Toggle>
-                <Toggle
-                  pressed={viewMode === "detailed"}
-                  onPressedChange={() => setViewMode("detailed")}
-                  size="sm"
-                  className="rounded-none border-0 h-7 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                >
-                  <ListTree className="w-3.5 h-3.5 mr-1.5" />
-                  <span className="text-xs">{t("session.viewDetailed")}</span>
-                </Toggle>
-                <Toggle
-                  pressed={viewMode === "raw"}
-                  onPressedChange={() => setViewMode("raw")}
-                  size="sm"
-                  className="rounded-[var(--radius-control)] border-0 h-7 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                >
-                  <Code className="w-3.5 h-3.5 mr-1.5" />
-                  <span className="text-xs">{t("session.viewRaw")}</span>
-                </Toggle>
-              </div>
-
-              <div className="flex sm:hidden items-center border border-border rounded-md overflow-hidden">
-                <Toggle
-                  pressed={viewMode === "parsed"}
-                  onPressedChange={() => setViewMode("parsed")}
-                  size="sm"
-                  className="rounded-[var(--radius-control)] border-0 h-7 px-2 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                  className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-[var(--surface-page)]"
                   aria-label={t("session.viewParsedAria")}
+                  title={t("session.viewParsed")}
                 >
                   <LayoutTemplate className="w-3.5 h-3.5" />
                 </Toggle>
@@ -478,8 +494,9 @@ export function GameView({
                   pressed={viewMode === "detailed"}
                   onPressedChange={() => setViewMode("detailed")}
                   size="sm"
-                  className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                  className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-[var(--surface-page)]"
                   aria-label={t("session.viewDetailedAria")}
+                  title={t("session.viewDetailed")}
                 >
                   <ListTree className="w-3.5 h-3.5" />
                 </Toggle>
@@ -487,8 +504,9 @@ export function GameView({
                   pressed={viewMode === "raw"}
                   onPressedChange={() => setViewMode("raw")}
                   size="sm"
-                  className="rounded-[var(--radius-control)] border-0 h-7 px-2 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                  className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-[var(--surface-page)]"
                   aria-label={t("session.viewRawAria")}
+                  title={t("session.viewRaw")}
                 >
                   <Code className="w-3.5 h-3.5" />
                 </Toggle>
@@ -497,24 +515,24 @@ export function GameView({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 shrink-0 border border-transparent"
+                className="h-7 w-7 shrink-0"
                 onClick={() => setSettingsOpen(true)}
                 title={t("nav.settings")}
               >
-                <KeyRound className="w-4 h-4" />
+                <KeyRound className="w-3.5 h-3.5" />
               </Button>
 
               {suspensions.length > 0 && (
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  className="h-8 px-2 shrink-0 gap-1.5 border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/5"
+                  className="h-7 px-2 shrink-0 gap-1 text-[var(--accent-warning)] hover:bg-[color-mix(in_oklab,var(--accent-warning)_8%,transparent)]"
                   onClick={() => setSuspensionsOpen(true)}
                   title={t("session.suspensionsTitle")}
                 >
                   <Clock className="w-3.5 h-3.5" />
-                  <span className="text-xs tabular-nums">
-                    {t("session.suspensionsBadge", { count: suspensions.length })}
+                  <span className="text-[11px] tabular-nums">
+                    {suspensions.length}
                   </span>
                 </Button>
               )}
@@ -522,23 +540,23 @@ export function GameView({
               <Button
                 variant="ghost"
                 size="icon"
-                className="hidden md:inline-flex h-8 w-8 shrink-0 border border-transparent"
+                className="hidden md:inline-flex h-7 w-7 shrink-0"
                 asChild
                 title={t("session.debugTraces")}
               >
                 <Link to="/debug" search={{ sid: session.id }}>
-                  <Bug className="w-4 h-4" />
+                  <Bug className="w-3.5 h-3.5" />
                 </Link>
               </Button>
 
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-8 w-8 shrink-0 border border-transparent ${!isRightCollapsed && "bg-accent text-accent-foreground"}`}
+                className={`h-7 w-7 shrink-0 ${!isRightCollapsed && "bg-accent text-accent-foreground"}`}
                 onClick={toggleRightPanel}
                 title={t("session.toggleContextPanel")}
               >
-                <Database className="w-4 h-4" />
+                <Database className="w-3.5 h-3.5" />
               </Button>
             </div>
           </div>
@@ -571,7 +589,10 @@ export function GameView({
               draftMessage actions) stage their text here. Confirm joins them
               with newlines and sends as one player message. */}
           {pendingDrafts.length > 0 && (
-            <div className="px-3 md:px-4 py-2.5 border-t border-border bg-primary/5 shrink-0">
+            <div
+              className="px-3 md:px-4 py-2.5 border-t border-[var(--rule-color)] shrink-0 relative"
+              style={{ background: "color-mix(in oklab, var(--accent-primary) 4%, transparent)" }}
+            >
               <div className="max-w-4xl mx-auto space-y-2">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
@@ -622,14 +643,14 @@ export function GameView({
           )}
 
           {/* Input — always fixed at bottom */}
-          <div className="border-t border-border bg-muted/5 shrink-0 px-3 md:px-4 py-4 md:py-5">
+          <div className="border-t border-[var(--rule-color)] shrink-0 px-3 md:px-4 py-4 md:py-5 bg-[var(--surface-page)]">
             {phase === "ended" ? (
               <p className="ui-empty-copy mx-auto text-center text-sm">
                 {t("session.ended", "This session has ended.")}
               </p>
             ) : (
-              <div className="ui-composer-frame flex flex-col gap-1 mx-auto">
-                <div className="flex gap-2.5">
+              <div className="ui-composer-frame mx-auto">
+                <div className="flex items-stretch rounded-[var(--radius-control)] border border-[var(--rule-color)] bg-[var(--surface-inset)] focus-within:border-[var(--accent-primary)] transition-colors">
                   <input
                     type="text"
                     value={inputValue}
@@ -648,25 +669,24 @@ export function GameView({
                         : t("session.inputPlaceholderAny", "Send a message...")
                     }
                     disabled={executing}
-                    className="ui-composer-input flex-1 min-w-0 border border-border px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-primary transition-all disabled:opacity-50"
+                    className="flex-1 min-w-0 px-3.5 py-2.5 bg-transparent text-sm outline-none disabled:opacity-50 placeholder:text-muted-foreground"
                   />
-                  <Button
+                  <button
+                    type="button"
                     onClick={handleSubmit}
                     disabled={executing || !inputValue.trim()}
-                    className="ui-composer-submit px-0 w-[46px] h-[46px] shrink-0"
-                    size="sm"
+                    aria-label={t("session.inputKbdHint", "send")}
+                    className="shrink-0 inline-flex items-center justify-center w-11 self-stretch border-l border-[var(--rule-color)] text-muted-foreground hover:text-foreground hover:bg-[color-mix(in_oklab,var(--color-foreground)_6%,transparent)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
                   >
                     {executing ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
-                      <Send className="w-4 h-4" />
+                      <Send className="w-3.5 h-3.5" />
                     )}
-                  </Button>
+                  </button>
                 </div>
-                <div className="hidden md:flex justify-end items-center gap-1 text-[10px] text-muted-foreground/70 pr-1 select-none">
-                  <kbd className="px-1.5 py-0.5 font-mono border border-border/60 bg-muted/30 rounded-sm">
-                    {"\u23CE"}
-                  </kbd>
+                <div className="hidden md:flex justify-end items-center gap-1.5 ui-meta text-[10px] text-muted-foreground/60 pr-1 mt-1.5 select-none">
+                  <kbd className="ui-tag px-1.5 py-0">{"\u23CE"}</kbd>
                   <span>{t("session.inputKbdHint", "to send")}</span>
                 </div>
               </div>
@@ -691,7 +711,7 @@ export function GameView({
               collapsible={true}
               collapsedSize="0%"
               onResize={() => setIsRightCollapsed(rightPanelRef.current?.isCollapsed() ?? false)}
-              className="bg-muted/10 flex flex-col min-h-0 min-w-0"
+              className="ui-rail flex flex-col min-h-0 min-w-0"
             >
               <RightPanel
                 sessionId={session.id}

@@ -199,12 +199,28 @@ const TagList: ComponentRenderer = ({ element }) => {
 
 const Card: ComponentRenderer = ({ element, children }) => {
   const variant = element.props?.variant as string;
+  // Default Card now reads as a band — marker bar on the left, no enclosure.
+  // Variants:
+  //   glow    → highlighted band with primary marker
+  //   subtle  → quiet section with just internal padding & breathable spacing
+  //   frame   → opt-in enclosed frame for cases that genuinely need walls
+  if (variant === "frame") {
+    return <div className="ui-frame p-4 space-y-2.5">{children}</div>;
+  }
+  if (variant === "subtle") {
+    // Used heavily by plugins for choice grids — needs comfortable padding
+    // and inter-child spacing or the content reads as a wall of text.
+    return (
+      <div className="px-3 py-3 space-y-2 border-l-2 border-[var(--rule-color)] hover:border-[var(--accent-primary)] transition-colors">
+        {children}
+      </div>
+    );
+  }
   return (
-    <div className={clsx(
-      "ui-card-surface border border-border rounded-[var(--radius-card)] p-3 bg-card/60",
-      variant === "glow" && "shadow-lg shadow-amber-500/20 border-amber-500/50",
-      variant === "subtle" && "bg-muted/40 border-dashed",
-    )}>
+    <div
+      className="ui-band space-y-2"
+      data-tone={variant === "glow" ? undefined : "muted"}
+    >
       {children}
     </div>
   );
@@ -240,11 +256,17 @@ const EntryCard: ComponentRenderer = ({ element }) => {
     monster: "skull", item: "gem", location: "map-pin",
     lore: "scroll-text", character: "users", skill: "sparkles",
   };
-  const rarityColors: Record<string, string> = {
-    legendary: "border-l-amber-500",
-    rare: "border-l-purple-500/70",
-    uncommon: "border-l-blue-500/60",
-    common: "border-l-border",
+  const rarityTone: Record<string, string> = {
+    legendary: "warning",
+    rare: "info",
+    uncommon: "info",
+    common: "muted",
+  };
+  const rarityMarkerColor: Record<string, string> = {
+    legendary: "var(--accent-warning)",
+    rare: "var(--accent-secondary)",
+    uncommon: "var(--accent-secondary)",
+    common: "var(--color-border)",
   };
   const rarityBadgeColors: Record<string, string> = {
     legendary: "bg-amber-500/10 text-amber-600 border-amber-500/30",
@@ -276,10 +298,9 @@ const EntryCard: ComponentRenderer = ({ element }) => {
 
   return (
     <div
-      className={clsx(
-        "ui-card-surface border border-border rounded-[var(--radius-card)] p-3 border-l-2 space-y-2 bg-card",
-        rarityColors[rarity],
-      )}
+      className="ui-band space-y-2"
+      data-tone={rarityTone[rarity] ?? "muted"}
+      style={{ ["--tw-band-marker" as string]: rarityMarkerColor[rarity] }}
     >
       <div
         className={titleRowClass}
@@ -883,11 +904,11 @@ const Button: ComponentRenderer = ({ element, emit }) => {
       className={clsx(
         "font-medium rounded-[var(--radius-control)] transition-all text-left relative inline-flex items-center gap-1.5",
         size === "compact" ? "px-2.5 py-1 text-[11px]" : "px-3.5 py-1.5 text-xs",
-        !isSelected && variant === "primary" && "bg-primary text-primary-foreground hover:opacity-90",
-        !isSelected && variant === "default" && "bg-card text-foreground border border-border hover:border-primary/40",
-        !isSelected && variant === "ghost" && "bg-card/60 border border-border border-dashed hover:border-primary/60",
-        !isSelected && variant === "danger" && "bg-red-600 text-white hover:bg-red-700",
-        isSelected && "bg-primary/10 text-primary border border-primary ring-2 ring-primary/30 shadow-sm",
+        !isSelected && variant === "primary" && "bg-foreground text-[var(--surface-page)] hover:bg-foreground/90",
+        !isSelected && variant === "default" && "bg-transparent text-foreground border border-border hover:border-foreground/40 hover:bg-foreground/5",
+        !isSelected && variant === "ghost" && "bg-transparent text-muted-foreground border border-dashed border-border hover:border-foreground/40 hover:text-foreground",
+        !isSelected && variant === "danger" && "bg-[var(--accent-danger)] text-white hover:opacity-90",
+        isSelected && "bg-[color-mix(in_oklab,var(--accent-primary)_8%,transparent)] text-[var(--accent-primary)] border border-[var(--accent-primary)]",
         isPending && "opacity-70 cursor-progress",
       )}
     >
@@ -1471,17 +1492,29 @@ const Alert: ComponentRenderer = ({ element }) => {
   const title = resolve(element.props?.title);
   const message = resolve(element.props?.message);
 
-  const colors: Record<string, string> = {
-    success: "border-emerald-500/30 bg-emerald-50 dark:bg-emerald-900/10 text-emerald-700 dark:text-emerald-400",
-    warning: "border-amber-500/30 bg-amber-50 dark:bg-amber-900/10 text-amber-700 dark:text-amber-400",
-    error: "border-red-500/30 bg-red-50 dark:bg-red-900/10 text-red-700 dark:text-red-400",
-    info: "border-blue-500/30 bg-blue-50 dark:bg-blue-900/10 text-blue-700 dark:text-blue-400",
+  const toneMap: Record<string, "success" | "warning" | "danger" | "info"> = {
+    success: "success",
+    warning: "warning",
+    error: "danger",
+    info: "info",
+  };
+  const textColorMap: Record<string, string> = {
+    success: "text-[var(--accent-success)]",
+    warning: "text-[var(--accent-warning)]",
+    error: "text-[var(--accent-danger)]",
+    info: "text-[var(--accent-secondary)]",
   };
 
   return (
-    <div className={clsx("ui-card-surface border rounded-[var(--radius-card)] px-4 py-2.5 text-sm", colors[level])}>
-      {title && <div className="ui-eyebrow font-medium text-xs mb-1">{title}</div>}
-      {message && <div className="text-[13px] mt-0.5 opacity-90 leading-[1.55]">{message}</div>}
+    <div className="ui-band text-sm" data-tone={toneMap[level]}>
+      {title && (
+        <div className={clsx("ui-eyebrow font-medium text-[11px] mb-1", textColorMap[level])}>
+          {title}
+        </div>
+      )}
+      {message && (
+        <div className="text-[13px] leading-[1.55] text-foreground/90">{message}</div>
+      )}
     </div>
   );
 };
@@ -1550,7 +1583,7 @@ const SubmitButton: ComponentRenderer = ({ element, emit }) => {
         "w-full py-3 text-sm font-medium rounded-[var(--radius-control)] transition-colors tracking-[0.04em]",
         disabled
           ? "bg-muted text-muted-foreground cursor-not-allowed"
-          : "bg-primary text-primary-foreground hover:opacity-90",
+          : "bg-foreground text-[var(--surface-page)] hover:opacity-90",
       )}
     >
       {label}
@@ -1799,7 +1832,7 @@ const AssetTurnSidebarCatalog: ComponentRenderer = ({ element }) => {
 
 const Form: ComponentRenderer = ({ children }) => {
   return (
-    <div className="ui-card-surface border border-border rounded-[var(--radius-card)] overflow-hidden bg-card">
+    <div className="ui-frame overflow-hidden">
       <div className="p-5 space-y-4">{children}</div>
     </div>
   );

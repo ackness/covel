@@ -36,6 +36,7 @@ interface WorldSelectScreenProps {
   resolvedSlots: ResolvedSlot[];
   settingsOpen: boolean;
   onSettingsOpenChange: (v: boolean) => void;
+  settingsInitialKey?: string;
   onSelectWorld: (worldId: string) => void;
   onWorldUpdated?: (world: WorldRecord) => void;
   onWorldCreated?: (world: WorldRecord) => void;
@@ -64,6 +65,7 @@ export function WorldSelectScreen({
   resolvedSlots,
   settingsOpen,
   onSettingsOpenChange,
+  settingsInitialKey,
   onSelectWorld,
   onWorldUpdated,
   onWorldCreated,
@@ -181,7 +183,7 @@ export function WorldSelectScreen({
           </div>
         </DialogContent>
       </Dialog>
-      <SettingsDialog open={settingsOpen} onOpenChange={onSettingsOpenChange} />
+      <SettingsDialog open={settingsOpen} onOpenChange={onSettingsOpenChange} initialKey={settingsInitialKey} />
       <AiWorldGenerator
         open={generatorOpen}
         onOpenChange={setGeneratorOpen}
@@ -264,89 +266,99 @@ export function WorldSelectScreen({
             </aside>
           </header>
 
-          {/* World grid */}
+          {/* World list — editorial plate layout. No gradient hero, no card.
+              Each world is a numbered plate with a thin top rule, hover
+              shifts the title via the marker color. */}
           {worlds.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-5">
-              {worlds.map((world) => {
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-10 gap-y-0">
+              {worlds.map((world, index) => {
                 const isEntering = enteringWorldId === world.id;
                 const dimmed = enteringWorldId !== null && !isEntering;
-                const gradient = CARD_GRADIENTS[hashIndex(world.id, CARD_GRADIENTS.length)];
+                const accentHue = hashIndex(world.id, CARD_GRADIENTS.length);
+                const accentColors = [
+                  "var(--accent-primary)",
+                  "var(--accent-secondary)",
+                  "var(--accent-warning)",
+                  "var(--accent-success)",
+                  "var(--accent-primary)",
+                ];
+                const markerColor = accentColors[accentHue];
                 return (
                   <article
                     key={world.id}
                     aria-busy={isEntering}
                     onClick={() => handleEnterWorld(world.id)}
-                    className={`group relative overflow-hidden rounded-[var(--radius-card)] border border-border bg-card cursor-pointer transition-all duration-300 hover:border-primary/50 hover:-translate-y-0.5 ${
-                      isEntering ? "border-primary -translate-y-0.5" : ""
-                    } ${dimmed ? "opacity-40 pointer-events-none" : ""}`}
+                    className={`group relative cursor-pointer py-7 transition-opacity ${
+                      isEntering ? "opacity-100" : ""
+                    } ${dimmed ? "opacity-30 pointer-events-none" : ""}`}
+                    style={{
+                      borderTop: "1px solid var(--rule-strong-color)",
+                    }}
                   >
-                    {/* Gradient hero strip */}
+                    {/* Plate number — top right */}
+                    <div className="absolute top-2 right-0 ui-meta text-[10px] text-muted-foreground/70 tabular-nums">
+                      № {String(index + 1).padStart(2, "0")} · {world.id}
+                    </div>
+
+                    {/* Marker dot — colored hairline above title */}
                     <div
-                      aria-hidden="true"
-                      className="relative h-28 md:h-32 overflow-hidden"
-                      style={{ background: gradient }}
-                    >
-                      <div
-                        className="absolute inset-0"
-                        style={{
-                          background:
-                            "radial-gradient(circle at 25% 30%, color-mix(in oklab, var(--surface-app) 35%, transparent) 0%, transparent 60%)",
-                        }}
-                      />
-                      <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between gap-3">
-                        <span className="font-mono text-[10px] uppercase tracking-widest text-foreground/80 bg-background/40 backdrop-blur-sm px-2 py-1 rounded">
-                          {world.id}
-                        </span>
-                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      aria-hidden
+                      className="absolute -top-px left-0 h-0.5 w-12 transition-all group-hover:w-24"
+                      style={{ background: markerColor }}
+                    />
+
+                    <div className="space-y-3 mt-1.5 pr-4">
+                      <h2
+                        className="ui-title text-2xl md:text-3xl leading-[1.1] tracking-tight transition-colors"
+                        style={isEntering ? { color: markerColor } : undefined}
+                      >
+                        {text(world.name)}
+                      </h2>
+                      <p className="text-[14px] text-muted-foreground leading-relaxed line-clamp-3 break-words [overflow-wrap:anywhere] max-w-prose">
+                        {text(world.description)}
+                      </p>
+
+                      <div className="flex items-center justify-between gap-3 pt-1">
+                        <div className="flex flex-wrap gap-1.5 min-w-0">
+                          {(world.tags ?? []).slice(0, 4).map((tag) => (
+                            <span key={tag} className="ui-tag">
+                              {tag}
+                            </span>
+                          ))}
+                          {(world.tags?.length ?? 0) > 4 && (
+                            <span className="ui-meta text-[10px] text-muted-foreground/70 self-center">
+                              +{(world.tags?.length ?? 0) - 4}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1">
                           <button
                             type="button"
                             onClick={(e) => handleViewDetails(e, world.id)}
                             aria-label={t("world.viewDetails", "View details")}
-                            className="h-7 w-7 inline-flex items-center justify-center rounded bg-background/60 backdrop-blur-sm hover:bg-background text-foreground"
+                            className="ui-btn ui-btn-quiet text-muted-foreground hover:text-foreground h-7 w-7 p-0"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
-                          {world.metadata?.source !== 'file' && (
+                          {world.metadata?.source !== "file" && (
                             <button
                               type="button"
                               onClick={(e) => handleDeleteClick(e, world.id)}
                               aria-label={t("world.delete", "Delete world")}
-                              className="h-7 w-7 inline-flex items-center justify-center rounded bg-background/60 backdrop-blur-sm hover:bg-destructive hover:text-destructive-foreground text-foreground"
+                              className="ui-btn ui-btn-quiet text-muted-foreground hover:text-[var(--accent-danger)] h-7 w-7 p-0"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           )}
+                          <span
+                            className="ui-meta inline-flex items-center gap-1 ml-2 transition-all group-hover:gap-2"
+                            style={{ color: markerColor }}
+                          >
+                            {t("session.enter", "Enter")}
+                            <ArrowRight className="w-3 h-3" />
+                          </span>
                         </div>
-                      </div>
-                    </div>
-
-                    <div className="p-5 md:p-6 space-y-3">
-                      <h2 className="font-display font-bold text-lg md:text-xl leading-tight group-hover:text-primary transition-colors">
-                        {text(world.name)}
-                      </h2>
-                      <p className="text-sm text-muted-foreground font-light leading-relaxed line-clamp-3 break-words [overflow-wrap:anywhere]">
-                        {text(world.description)}
-                      </p>
-                      <div className="flex items-center justify-between gap-3 pt-1">
-                        <div className="flex flex-wrap gap-1.5 min-w-0">
-                          {(world.tags ?? []).slice(0, 3).map((tag) => (
-                            <span
-                              key={tag}
-                              className="inline-flex items-center px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground border border-border/80 rounded-full"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                          {(world.tags?.length ?? 0) > 3 && (
-                            <span className="text-[10px] text-muted-foreground/60">
-                              +{(world.tags?.length ?? 0) - 3}
-                            </span>
-                          )}
-                        </div>
-                        <span className="ui-eyebrow text-primary inline-flex items-center gap-1 shrink-0 group-hover:gap-2 transition-all">
-                          {t("session.enter", "Enter")}
-                          <ArrowRight className="w-3 h-3" />
-                        </span>
                       </div>
                     </div>
                   </article>
@@ -356,7 +368,7 @@ export function WorldSelectScreen({
           )}
 
           {worlds.length === 0 && (
-            <div className="text-center py-16 md:py-24 border border-dashed border-border rounded-[var(--radius-card)] bg-card/30">
+            <div className="text-center py-16 md:py-24 border-y border-dashed border-[var(--rule-color)]">
               <FolderOpen className="w-10 h-10 mx-auto text-muted-foreground/60" />
               <h2 className="font-display font-bold text-xl mt-5">
                 {t("session.worldsEmptyTitle", "No worlds yet")}

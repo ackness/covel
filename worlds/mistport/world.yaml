@@ -322,6 +322,16 @@ dimensions:
     openingScenario:
       zh-CN: "你刚抵达雾港中港的主栈桥。潮汐钟敲响——一次罕见的深退潮即将发生。码头上有人在招募深潮探险队，也有人在发放封潮令传单。"
       en-US: "You step off the ferry onto Mid-Harbor's main pier. The fog is thick today. A deep tide-bell rings — signaling a rare 'deep withdrawal' that will expose deeper ruins than usual. The dock buzzes with expedition recruiters and Council officers handing out Seal Tide Decree leaflets."
+    openingHook:
+      zh-CN: 潮钟已鸣，下潜还是封港？
+      en-US: The bell has rung — dive, or seal?
+    openingChips:
+      - zh-CN: 中港主栈桥
+        en-US: Mid-Harbor pier
+      - zh-CN: 深退潮
+        en-US: Deep withdrawal
+      - zh-CN: 封潮令
+        en-US: Seal Tide Decree
     playerConstraints:
       - zh-CN: "初始为验潮师学徒或普通潮民"
         en-US: "Start as a Tide-Reader apprentice or common Undertow dweller"

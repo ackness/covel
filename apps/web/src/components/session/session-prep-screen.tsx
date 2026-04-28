@@ -29,6 +29,7 @@ interface SessionPrepScreenProps {
   onDeleteSession: (sessionId: string) => Promise<void>;
   settingsOpen: boolean;
   onSettingsOpenChange: (v: boolean) => void;
+  settingsInitialKey?: string;
 }
 
 export function isLockedCorePackage(pkg: Pick<api.PackageSummary, "pluginType" | "source">): boolean {
@@ -76,6 +77,7 @@ export function SessionPrepScreen({
   onDeleteSession,
   settingsOpen,
   onSettingsOpenChange,
+  settingsInitialKey,
 }: SessionPrepScreenProps) {
   const { t } = useTranslation();
   const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(presets, llmConfig);
@@ -244,7 +246,7 @@ export function SessionPrepScreen({
 
   return (
     <div className="flex h-full w-full overflow-hidden">
-      <SettingsDialog open={settingsOpen} onOpenChange={handleSettingsOpenChange} />
+      <SettingsDialog open={settingsOpen} onOpenChange={handleSettingsOpenChange} initialKey={settingsInitialKey} />
       <ScrollArea className="w-full h-full">
         <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
 

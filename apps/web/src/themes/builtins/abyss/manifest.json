@@ -5,9 +5,9 @@
     "en-US": "Abyss"
   },
   "source": "builtin",
-  "schemes": ["light", "dark"],
+  "schemes": ["dark"],
   "description": {
-    "zh-CN": "深色、沉浸式的夜航风格。",
-    "en-US": "A deep-night immersive style."
+    "zh-CN": "深色 codex 风格 — 深紫蓝 + 衬线 italic，专为沉浸阅读而设。",
+    "en-US": "A dim codex style — deep indigo + violet markers + serif italic, tuned for immersive reading."
   }
 }

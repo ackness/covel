@@ -26,16 +26,15 @@ export function SessionBreadcrumb({
     game: t("session.breadcrumbGame"),
   };
 
-  const items: Array<{ label: string; active: boolean; onClick?: () => void }> = [];
+  type Item = { label: string; active: boolean; onClick?: () => void };
+  const items: Item[] = [];
 
-  // World select
   items.push({
     label: STEP_LABELS.world_select,
     active: step === "world_select",
     onClick: step !== "world_select" && !disabled ? onGoWorldSelect : undefined,
   });
 
-  // Prep
   if (step === "prep" || step === "game") {
     items.push({
       label: worldName ?? STEP_LABELS.prep,
@@ -44,7 +43,6 @@ export function SessionBreadcrumb({
     });
   }
 
-  // Game
   if (step === "game") {
     items.push({
       label: STEP_LABELS.game,
@@ -52,25 +50,49 @@ export function SessionBreadcrumb({
     });
   }
 
+  // The breadcrumb sits inside narrow flex containers (chat header), so
+  // both the wrapping nav AND each cell must enforce nowrap or CJK content
+  // wraps character-by-character into a vertical column.
   return (
-    <nav className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      {items.map((item, i) => (
-        <span key={i} className="flex items-center gap-1.5">
-          {i > 0 && <ChevronRight className="w-3 h-3 opacity-60" />}
-          {item.onClick ? (
-            <button
-              className="hover:text-primary transition-colors underline-offset-2 hover:underline"
-              onClick={item.onClick}
-            >
-              {item.label}
-            </button>
-          ) : (
-            <span className={item.active ? "text-foreground font-medium" : ""}>
-              {item.label}
-            </span>
-          )}
-        </span>
-      ))}
+    <nav className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 max-w-full overflow-hidden whitespace-nowrap">
+      {items.map((item, i) => {
+        const isLast = i === items.length - 1;
+        // At narrow widths, hide all intermediate steps so the active node
+        // (and only the active node) stays readable.
+        const intermediate = !isLast && i > 0;
+        return (
+          <span
+            key={i}
+            className={`flex items-center gap-1.5 min-w-0 whitespace-nowrap ${
+              intermediate ? "hidden lg:inline-flex" : ""
+            } ${i === 0 && step === "game" ? "hidden md:inline-flex" : ""}`}
+          >
+            {i > 0 && (
+              <ChevronRight
+                className={`w-3 h-3 opacity-60 shrink-0 ${
+                  i === 1 && step === "game" ? "hidden md:inline-block" : ""
+                }`}
+              />
+            )}
+            {item.onClick ? (
+              <button
+                className="hover:text-primary transition-colors underline-offset-2 hover:underline truncate max-w-[14rem]"
+                onClick={item.onClick}
+              >
+                {item.label}
+              </button>
+            ) : (
+              <span
+                className={`truncate max-w-[14rem] ${
+                  item.active ? "text-foreground font-medium" : ""
+                }`}
+              >
+                {item.label}
+              </span>
+            )}
+          </span>
+        );
+      })}
     </nav>
   );
 }

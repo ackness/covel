@@ -157,6 +157,8 @@ export const worldStartingConditionsSchema = z.object({
   startingLocation: i18nTextSchema.optional(),
   playerConstraints: z.array(i18nTextSchema).optional(),
   startingResources: z.record(z.string(), z.number()).optional(),
+  openingHook: i18nTextSchema.optional(),
+  openingChips: z.array(i18nTextSchema).optional(),
 }).strict();
 
 // ── Dimensions ──────────────────────────────────────────────────

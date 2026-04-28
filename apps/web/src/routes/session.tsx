@@ -5,6 +5,7 @@ import { useSession } from "@/stores/session-store.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { resolveI18n } from "@/lib/catalog.js";
 import { initDesktopBridge } from "@/lib/desktop-bridge.js";
+import { onNavEvent } from "@/lib/nav-events.js";
 import { WorldSelectScreen } from "@/components/session/world-select-screen.js";
 import { SessionPrepScreen } from "@/components/session/session-prep-screen.js";
 import { GameView } from "@/components/session/game-view.js";
@@ -45,6 +46,7 @@ function SessionPage() {
     triggerEvent,
   } = useSession();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsInitialKey, setSettingsInitialKey] = useState<string | undefined>(undefined);
   const { resolvedSlots } = useSlotConfig(state.presets, state.llmConfig);
   const { sid } = Route.useSearch();
   const navigate = useNavigate();
@@ -106,6 +108,17 @@ function SessionPage() {
   navigateRef.current = navigate;
   const messagesRef = useRef(state.messages);
   messagesRef.current = state.messages;
+
+  // Topbar nav → in-page panel toggles. The global topbar lives in __root and
+  // can't reach page-local state directly, so it dispatches via nav-events.
+  useEffect(() => {
+    return onNavEvent((event) => {
+      if (event === "open-plugins") {
+        setSettingsInitialKey("plugin");
+        setSettingsOpen(true);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     return initDesktopBridge({
@@ -209,7 +222,11 @@ function SessionPage() {
         onResume={resumeSession}
         onDeleteSession={deleteSession}
         settingsOpen={settingsOpen}
-        onSettingsOpenChange={setSettingsOpen}
+        onSettingsOpenChange={(v) => {
+          if (!v) setSettingsInitialKey(undefined);
+          setSettingsOpen(v);
+        }}
+        settingsInitialKey={settingsInitialKey}
       />
     );
   }
@@ -225,7 +242,11 @@ function SessionPage() {
         packages={state.packages}
         resolvedSlots={resolvedSlots}
         settingsOpen={settingsOpen}
-        onSettingsOpenChange={setSettingsOpen}
+        onSettingsOpenChange={(v) => {
+          if (!v) setSettingsInitialKey(undefined);
+          setSettingsOpen(v);
+        }}
+        settingsInitialKey={settingsInitialKey}
         onSelectWorld={selectWorld}
         onWorldUpdated={updateWorldLocal}
         onWorldCreated={addWorldLocal}

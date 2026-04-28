@@ -1,5 +1,4 @@
 import * as React from "react"
-import { GripVertical, GripHorizontal } from "lucide-react"
 import { Group, Panel, Separator } from "react-resizable-panels"
 
 import { cn } from "@/lib/utils"
@@ -8,48 +7,49 @@ const ResizablePanelGroup = ({
   className,
   ...props
 }: React.ComponentProps<typeof Group>) => (
-  <Group
-    className={cn("h-full w-full", className)}
-    {...props}
-  />
+  <Group className={cn("h-full w-full", className)} {...props} />
 )
 
 const ResizablePanel = Panel
 
+/**
+ * ResizableHandle — quiet hairline handle.
+ *
+ * Default: a 1px hairline using --rule-color. The grip becomes visible only
+ * on hover, expanding to a 4px stripe of --accent-primary so the user can
+ * still find it. No floating "card-with-grip-button" decoration anymore —
+ * that read as junk on the editorial canvas.
+ */
 const ResizableHandle = ({
-  withHandle,
   className,
   orientation,
   ...props
 }: React.ComponentProps<typeof Separator> & {
+  /** kept for API compat; no longer renders a grip badge */
   withHandle?: boolean
   orientation?: "horizontal" | "vertical"
 }) => {
   const isVertical = orientation === "vertical"
 
+  // Strip out the legacy `withHandle` prop so it doesn't reach the DOM.
+  // (We accept it for API compatibility but ignore it.)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { withHandle: _withHandle, ...rest } = props as { withHandle?: boolean }
+
   return (
     <Separator
       className={cn(
-        "relative flex items-center justify-center bg-border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1",
-        isVertical ? "w-full h-2 cursor-row-resize" : "w-2 h-full cursor-col-resize",
-        "hover:bg-primary/50 transition-colors z-[50]",
-        className
+        "ui-resize-handle relative shrink-0 transition-colors focus-visible:outline-none focus-visible:bg-[var(--accent-primary)]",
+        isVertical
+          ? "w-full h-px cursor-row-resize"
+          : "h-full w-px cursor-col-resize",
+        className,
       )}
-      {...props}
-    >
-      {withHandle && (
-        <div className={cn(
-          "z-10 flex items-center justify-center rounded-sm border bg-background shadow-sm",
-          isVertical ? "h-4 w-8" : "h-8 w-4"
-        )}>
-          {isVertical ? (
-            <GripHorizontal className="h-3.5 w-3.5" />
-          ) : (
-            <GripVertical className="h-3.5 w-3.5" />
-          )}
-        </div>
-      )}
-    </Separator>
+      style={{
+        background: "var(--rule-color)",
+      }}
+      {...rest}
+    />
   )
 }
 

@@ -176,6 +176,18 @@ export interface WorldStartingConditions {
   readonly startingLocation?: I18nText;
   readonly playerConstraints?: readonly string[];
   readonly startingResources?: Readonly<Record<string, number>>;
+  /**
+   * Optional editorial hook used by the session-canvas opening view —
+   * one short headline that captures the choice the player is about to make
+   * (e.g. "渡口起雾，选择下一步。"). Falls back to `openingScenario` when
+   * absent.
+   */
+  readonly openingHook?: I18nText;
+  /**
+   * Short tags rendered as chips next to the opening hook. Two to four
+   * tokens work best (e.g. ["青萍外门", "试炼前夜", "野生灵脉"]).
+   */
+  readonly openingChips?: readonly I18nText[];
 }
 
 // ── Aggregate ────────────────────────────────────────────────────

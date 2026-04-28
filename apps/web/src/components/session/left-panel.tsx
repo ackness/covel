@@ -1,11 +1,9 @@
 import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  SlidersHorizontal,
   History,
   KeyRound,
   Plus,
-  PanelLeftClose,
   Trash2,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
@@ -55,7 +53,6 @@ export interface LeftPanelProps {
 export function LeftPanel({
   session,
   phase,
-  isLeftCollapsed,
   showSessionList,
   otherSessions,
   enabledPackages,
@@ -64,7 +61,6 @@ export function LeftPanel({
   executing,
   commands,
   resolvedSlots,
-  onToggleLeftPanel,
   onToggleSessionList,
   onSwitchSession,
   onDeleteSession,
@@ -90,23 +86,11 @@ export function LeftPanel({
 
   return (
     <>
-      <div className="ui-panel-header px-3 border-b border-border flex items-center justify-between shrink-0">
-        <h2 className="ui-title text-sm flex items-center gap-2 whitespace-nowrap">
-          <SlidersHorizontal className="w-4 h-4 shrink-0 opacity-70" />
-          <span
-            className={isLeftCollapsed ? "hidden" : "hidden sm:inline-block"}
-          >
-            {t("session.config", "Studio Config")}
-          </span>
+      <div className="ui-panel-header px-3 flex items-center gap-2">
+        <span className="ui-meta text-[10px] text-muted-foreground">§ STUDIO</span>
+        <h2 className="ui-title text-sm font-medium whitespace-nowrap truncate">
+          {t("session.config", "Studio Config")}
         </h2>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 ml-2 shrink-0 border border-border/80"
-          onClick={onToggleLeftPanel}
-        >
-          <PanelLeftClose className="w-4 h-4" />
-        </Button>
       </div>
 
       <ScrollArea className="flex-1 min-h-0">

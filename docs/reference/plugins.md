@@ -156,7 +156,9 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/scheduler.ts` 强制
 **上下文变量**:
 - `{{ world.lore }}` — 世界观全文
 - `{{ world.dimensions }}` — 世界维度信息
-- `{{ world.openingScenario }}` — 开场场景
+- `{{ world.openingScenario }}` — 开场场景（叙事用整段铺垫）
+- `{{ world.openingHook }}` — 可选，会话首屏「扉页大字」（一句话钩子，UI 用）
+- `{{ world.openingChips }}` — 可选，会话首屏的 2-4 个短 tag（UI 用）
 - `{{ world.tone }}` — 叙事风格设定
 - `{{ player.message }}` — 玩家当前输入
 - `{{ player.character }}` — 玩家角色数据（CharacterSummary）

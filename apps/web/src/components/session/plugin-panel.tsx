@@ -464,9 +464,11 @@ export function PluginPanel({
     const label = resolveEmptyMessage(spec.label) || pluginId;
     const emptyMsg = customMsg || t("plugin.emptyPlaceholder", { label });
     return (
-      <p className="text-xs text-muted-foreground italic text-center leading-relaxed px-4 pt-6">
-        {emptyMsg}
-      </p>
+      <div className="px-4 pt-6">
+        <p className="text-xs text-muted-foreground italic leading-relaxed text-center break-words [overflow-wrap:anywhere] max-w-prose mx-auto">
+          {emptyMsg}
+        </p>
+      </div>
     );
   }
 

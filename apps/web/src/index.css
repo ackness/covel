@@ -3,32 +3,38 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ─────────────────────────────────────────────────────────────────────
+   Theme tokens — base (default = Atelier light)
+   The token system is layered: themes override the @layer covel-tokens
+   block via html[data-theme="…"] selectors in their own stylesheets.
+   ───────────────────────────────────────────────────────────────────── */
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  --font-display: "Syne", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", "Newsreader", ui-serif, Georgia, serif;
+  --font-serif: "Fraunces", "Newsreader", ui-serif, Georgia, serif;
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  --color-background: hsl(0 0% 98%);
-  --color-foreground: hsl(240 10% 3.9%);
-  --color-card: hsl(0 0% 100%);
-  --color-card-foreground: hsl(240 10% 3.9%);
-  --color-popover: hsl(0 0% 100%);
-  --color-popover-foreground: hsl(240 10% 3.9%);
-  --color-primary: hsl(240 5.9% 10%);
-  --color-primary-foreground: hsl(0 0% 98%);
-  --color-secondary: hsl(240 4.8% 95.9%);
-  --color-secondary-foreground: hsl(240 5.9% 10%);
-  --color-muted: hsl(240 4.8% 90%);
-  --color-muted-foreground: hsl(240 3.8% 46.1%);
-  --color-accent: hsl(240 4.8% 90%);
-  --color-accent-foreground: hsl(240 5.9% 10%);
-  --color-destructive: hsl(0 84.2% 60.2%);
-  --color-destructive-foreground: hsl(0 0% 98%);
-  --color-border: hsl(240 5.9% 85%);
-  --color-input: hsl(240 5.9% 85%);
-  --color-ring: hsl(240 5.9% 10%);
+  --color-background: oklch(97% 0.008 90);
+  --color-foreground: oklch(20% 0.018 60);
+  --color-card: oklch(99% 0.005 90);
+  --color-card-foreground: oklch(20% 0.018 60);
+  --color-popover: oklch(99% 0.005 90);
+  --color-popover-foreground: oklch(20% 0.018 60);
+  --color-primary: oklch(45% 0.12 35);
+  --color-primary-foreground: oklch(98% 0.005 90);
+  --color-secondary: oklch(93% 0.012 90);
+  --color-secondary-foreground: oklch(25% 0.02 60);
+  --color-muted: oklch(94% 0.01 90);
+  --color-muted-foreground: oklch(46% 0.018 60);
+  --color-accent: oklch(82% 0.08 60);
+  --color-accent-foreground: oklch(22% 0.04 35);
+  --color-destructive: oklch(54% 0.18 25);
+  --color-destructive-foreground: oklch(98% 0.005 90);
+  --color-border: oklch(86% 0.012 75);
+  --color-input: oklch(86% 0.012 75);
+  --color-ring: oklch(45% 0.12 35 / 0.5);
 
   --radius-sm: 0.125rem;
   --radius-md: 0.25rem;
@@ -37,46 +43,90 @@
 }
 
 :root {
-  --surface-app: var(--color-background);
-  --surface-panel: var(--color-background);
-  --surface-panel-strong: var(--color-card);
+  /* ── Surfaces (layered, do NOT add a Card per item) ────────────── */
+  --surface-page: var(--color-background);
+  --surface-rail: color-mix(in oklab, var(--color-background) 92%, var(--color-foreground) 4%);
+  --surface-inset: color-mix(in oklab, var(--color-background) 90%, var(--color-foreground) 6%);
+  --surface-elevated: var(--color-card);
   --surface-dialog: var(--color-card);
-  --surface-player: var(--color-primary);
-  --surface-empty: color-mix(in oklab, var(--color-muted) 70%, transparent);
-  --border-subtle: color-mix(in oklab, var(--color-border) 70%, transparent);
+  --surface-player: color-mix(in oklab, var(--color-primary) 12%, transparent);
 
-  --radius-card: var(--radius-md);
-  --radius-control: var(--radius-sm);
-  --radius-dialog: var(--radius-lg);
+  /* Legacy aliases (kept so all old usages keep working) */
+  --surface-app: var(--surface-page);
+  --surface-panel: var(--surface-rail);
+  --surface-panel-strong: var(--surface-elevated);
+  --surface-empty: color-mix(in oklab, var(--color-muted) 70%, transparent);
+  --border-subtle: color-mix(in oklab, var(--color-border) 65%, transparent);
+
+  /* ── Edges & rules ────────────────────────────────────────────── */
+  --rule-color: var(--color-border);
+  --rule-strong-color: color-mix(in oklab, var(--color-foreground) 35%, transparent);
+  --rule-style: solid;
+  --rule-thickness: 1px;
+  --rule-strong-thickness: 1px;
+
+  /* ── Marker accents (for ribbons, callouts, type underlines) ── */
+  --accent-primary: var(--color-primary);
+  --accent-secondary: oklch(58% 0.13 200);
+  --accent-warning: oklch(72% 0.16 75);
+  --accent-danger: var(--color-destructive);
+  --accent-success: oklch(62% 0.14 145);
+
+  /* ── Ambience (replaceable per theme — flat by default) ────── */
+  --ambience-image: none;
+  --ambience-blend: normal;
+  --ambience-opacity: 1;
+  --noise-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0   0 0 0 0 0   0 0 0 0 0   0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='1'/></svg>");
+  --noise-opacity: 0.025;
+
+  /* ── Radius scale (collapsed — themes can grow it) ───────────── */
+  --radius-card: 0.25rem;
+  --radius-control: 0.1875rem;
+  --radius-dialog: 0.375rem;
   --radius-chip: 999px;
 
-  --panel-header-height: 3.5rem;
-  --panel-section-padding-x: 0.75rem;
-  --panel-section-padding-y: 0.75rem;
-  --composer-max-width: 64rem;
-  --session-column-max-width: 64rem;
+  /* ── Layout rhythm ──────────────────────────────────────────── */
+  --panel-header-height: 2.875rem;
+  --panel-section-padding-x: 1rem;
+  --panel-section-padding-y: 0.875rem;
+  --rail-width-left: clamp(15rem, 17vw, 18rem);
+  --rail-width-right: clamp(20rem, 26vw, 28rem);
+  --composer-max-width: 56rem;
+  --session-column-max-width: 56rem;
 
-  --eyebrow-font-family: var(--font-mono);
+  /* ── Typography ──────────────────────────────────────────── */
+  --type-display: var(--font-display);
+  --type-body: var(--font-sans);
+  --type-mono: var(--font-mono);
+  --type-meta: var(--font-mono);
+
+  --eyebrow-font-family: var(--type-meta);
   --eyebrow-font-size: 0.6875rem;
   --eyebrow-font-weight: 500;
-  --eyebrow-letter-spacing: 0.14em;
+  --eyebrow-letter-spacing: 0.18em;
   --eyebrow-text-transform: uppercase;
 
-  --title-font-family: var(--font-display);
+  --title-font-family: var(--type-display);
   --title-font-style: normal;
-  --title-font-weight: 700;
-  --title-letter-spacing: 0.14em;
-  --title-text-transform: uppercase;
+  --title-font-weight: 600;
+  --title-letter-spacing: -0.01em;
+  --title-text-transform: none;
 
-  --story-font-family: var(--font-sans);
+  --story-font-family: var(--type-body);
   --story-font-size: 0.9375rem;
   --story-line-height: 1.72;
   --story-font-weight: 400;
   --story-letter-spacing: 0;
   --story-max-width: 54rem;
 
-  --shadow-card: 0 10px 30px -24px rgb(15 23 42 / 0.25);
-  --shadow-dialog: 0 26px 80px -42px rgb(15 23 42 / 0.45);
+  --meta-font-family: var(--type-meta);
+  --meta-font-size: 0.6875rem;
+  --meta-letter-spacing: 0.08em;
+  --meta-text-transform: uppercase;
+
+  --shadow-card: 0 6px 24px -18px rgb(15 23 42 / 0.18);
+  --shadow-dialog: 0 28px 80px -42px rgb(15 23 42 / 0.45);
+  --shadow-pop: 0 10px 30px -20px rgb(15 23 42 / 0.3);
 }
 
 @layer base {
@@ -85,7 +135,7 @@
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-border);
+    border-color: var(--rule-color);
   }
 
   html,
@@ -95,15 +145,39 @@
   }
 
   html {
-    background-color: var(--surface-app);
+    background-color: var(--surface-page);
   }
 
   body {
-    background-color: var(--surface-app);
+    background-color: var(--surface-page);
     color: var(--color-foreground);
     margin: 0;
+    background-image: var(--ambience-image);
+    background-size: cover;
+    background-attachment: fixed;
+  }
+
+  /* Page-wide noise texture (optional — disabled when --noise-opacity is 0) */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image: var(--noise-image);
+    opacity: var(--noise-opacity);
+    mix-blend-mode: multiply;
+    z-index: 0;
+  }
+
+  body > * {
+    position: relative;
+    z-index: 1;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Prose (for narrative)
+   ───────────────────────────────────────────────────────────────── */
 
 .prose {
   --tw-prose-body: var(--color-foreground);
@@ -119,17 +193,30 @@
   --tw-prose-captions: var(--color-muted-foreground);
   --tw-prose-code: var(--color-primary);
   --tw-prose-pre-code: var(--color-foreground);
-  --tw-prose-pre-bg: var(--color-muted);
+  --tw-prose-pre-bg: var(--surface-inset);
   --tw-prose-th-borders: var(--color-border);
   --tw-prose-td-borders: var(--color-border);
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   ATOMS — the new design language
+   ───────────────────────────────────────────────────────────────── */
+
+/* Meta typography — for IDs, numbers, labels */
 .ui-eyebrow {
   font-family: var(--eyebrow-font-family);
   font-size: var(--eyebrow-font-size);
   font-weight: var(--eyebrow-font-weight);
   letter-spacing: var(--eyebrow-letter-spacing);
   text-transform: var(--eyebrow-text-transform);
+  color: var(--color-muted-foreground);
+}
+
+.ui-meta {
+  font-family: var(--meta-font-family);
+  font-size: var(--meta-font-size);
+  letter-spacing: var(--meta-letter-spacing);
+  text-transform: var(--meta-text-transform);
   color: var(--color-muted-foreground);
 }
 
@@ -141,9 +228,173 @@
   text-transform: var(--title-text-transform);
 }
 
+/* Folio — page-header line "卷·则" style for editorial section labels */
+.ui-folio {
+  font-family: var(--meta-font-family);
+  font-size: 0.625rem;
+  letter-spacing: 0.16em;
+  color: color-mix(in oklab, var(--color-foreground) 50%, transparent);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ui-folio em {
+  font-style: normal;
+  color: color-mix(in oklab, var(--color-foreground) 80%, transparent);
+}
+
+/* Rules / hairlines */
+.ui-rule,
+.ui-rule-h {
+  border: 0;
+  border-top: var(--rule-thickness) var(--rule-style) var(--rule-color);
+  height: 0;
+  width: 100%;
+}
+
+.ui-rule-strong {
+  border: 0;
+  border-top: var(--rule-strong-thickness) var(--rule-style) var(--rule-strong-color);
+  height: 0;
+  width: 100%;
+}
+
+.ui-rule-v {
+  width: var(--rule-thickness);
+  background: var(--rule-color);
+  align-self: stretch;
+}
+
+.ui-outline-rail {
+  border-left-style: solid;
+}
+
+/* Section: a content group with optional marker bar */
+.ui-section {
+  display: block;
+  padding-block: 0.875rem 1rem;
+  border-bottom: var(--rule-thickness) var(--rule-style) var(--rule-color);
+}
+
+.ui-section:last-child {
+  border-bottom: 0;
+}
+
+.ui-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.625rem;
+  margin-bottom: 0.625rem;
+}
+
+.ui-section-title {
+  font-family: var(--title-font-family);
+  font-weight: var(--title-font-weight);
+  letter-spacing: -0.005em;
+  font-size: 0.9375rem;
+  color: var(--color-foreground);
+}
+
+.ui-section-count {
+  font-family: var(--type-meta);
+  font-size: 0.625rem;
+  color: var(--color-muted-foreground);
+  letter-spacing: 0.08em;
+}
+
+/* Band: marker ribbon + content (replaces most Card uses) */
+.ui-band {
+  position: relative;
+  display: block;
+  padding: 0.75rem 0.875rem 0.75rem 1.125rem;
+  background: transparent;
+  border-left: 3px solid transparent;
+}
+
+.ui-band::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent-primary);
+  opacity: 0.85;
+}
+
+.ui-band[data-tone="muted"]::before {
+  background: var(--color-muted-foreground);
+  opacity: 0.45;
+}
+
+.ui-band[data-tone="warning"]::before { background: var(--accent-warning); }
+.ui-band[data-tone="danger"]::before { background: var(--accent-danger); }
+.ui-band[data-tone="success"]::before { background: var(--accent-success); }
+.ui-band[data-tone="info"]::before { background: var(--accent-secondary); }
+
+.ui-band-quiet {
+  background: transparent;
+  padding: 0.625rem 0.875rem 0.625rem 0.875rem;
+  border-left: 0;
+}
+
+.ui-band-quiet::before {
+  display: none;
+}
+
+/* Frame: hairline outline used sparingly (replaces ui-card-surface
+   for cases that genuinely need an enclosure) */
+.ui-frame {
+  background: var(--surface-inset);
+  border: var(--rule-thickness) var(--rule-style) var(--rule-color);
+  border-radius: var(--radius-card);
+}
+
+.ui-frame-elevated {
+  background: var(--surface-elevated);
+  border: var(--rule-thickness) var(--rule-style) var(--rule-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+/* Plate: editorial figure-style print, with print number */
+.ui-plate {
+  position: relative;
+  padding: 1rem 1.125rem;
+  background: var(--surface-inset);
+  border-top: var(--rule-strong-thickness) var(--rule-style) var(--rule-strong-color);
+  border-bottom: var(--rule-thickness) var(--rule-style) var(--rule-color);
+}
+
+.ui-plate-number {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.625rem;
+  font-family: var(--type-meta);
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+  opacity: 0.7;
+}
+
+/* Rail: vertical surface for left/right panels */
+.ui-rail {
+  background: var(--surface-rail);
+}
+
+.ui-rail-divider {
+  border-color: var(--rule-color);
+}
+
+/* Panel header / footer (same surface as rail) */
 .ui-panel-header {
+  height: var(--panel-header-height);
   min-height: var(--panel-header-height);
-  background: var(--surface-panel);
+  max-height: var(--panel-header-height);
+  background: var(--surface-rail);
+  border-bottom: var(--rule-thickness) var(--rule-style) var(--rule-color);
+  flex-shrink: 0;
 }
 
 .ui-panel-section {
@@ -152,11 +403,13 @@
 }
 
 .ui-panel-footer {
-  background: var(--surface-panel);
+  background: var(--surface-rail);
   padding-inline: var(--panel-section-padding-x);
   padding-block: calc(var(--panel-section-padding-y) * 0.85);
+  border-top: var(--rule-thickness) var(--rule-style) var(--rule-color);
 }
 
+/* Narrative copy */
 .ui-narrative {
   font-family: var(--story-font-family);
   font-size: var(--story-font-size);
@@ -181,17 +434,18 @@
   margin-top: 1.25rem;
 }
 
+/* Card surface (LEGACY — keep so existing usage stays valid;
+   now renders as a quiet hairline frame instead of a glossy card) */
 .ui-card-surface {
-  background: var(--surface-panel-strong);
+  background: var(--surface-elevated);
   border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
 }
 
 .ui-entry-title {
   font-family: var(--title-font-family);
   font-style: var(--title-font-style);
   font-weight: var(--title-font-weight);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.005em;
   text-transform: none;
 }
 
@@ -199,12 +453,16 @@
   background: var(--surface-dialog);
   border-radius: var(--radius-dialog);
   box-shadow: var(--shadow-dialog);
+  border: var(--rule-thickness) var(--rule-style) var(--rule-color);
 }
 
 .ui-input-shell {
   border-radius: var(--radius-control);
+  background: var(--surface-inset);
+  border: var(--rule-thickness) var(--rule-style) var(--rule-color);
 }
 
+/* Chips */
 .ui-chip {
   display: inline-flex;
   align-items: center;
@@ -212,12 +470,12 @@
   padding: 0.125rem 0.625rem 0.125rem 0.5rem;
   border-radius: var(--radius-chip);
   border: 1px solid var(--color-border);
-  background: color-mix(in oklab, var(--surface-panel-strong) 90%, transparent);
+  background: color-mix(in oklab, var(--surface-elevated) 80%, transparent);
   color: var(--color-muted-foreground);
 }
 
 .ui-chip-name {
-  font-family: var(--font-mono);
+  font-family: var(--type-mono);
   font-size: 0.625rem;
   color: var(--color-primary);
 }
@@ -231,6 +489,68 @@
   flex-shrink: 0;
 }
 
+/* Tags (square not rounded — feels more editorial) */
+.ui-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.0625rem 0.4375rem;
+  font-family: var(--type-meta);
+  font-size: 0.625rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+
+.ui-tag-solid {
+  background: var(--color-foreground);
+  color: var(--surface-page);
+  border-color: var(--color-foreground);
+}
+
+/* Buttons */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.4375rem 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-foreground);
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  cursor: pointer;
+}
+
+.ui-btn:hover {
+  background: color-mix(in oklab, var(--color-foreground) 7%, transparent);
+}
+
+.ui-btn-primary {
+  background: var(--color-foreground);
+  color: var(--surface-page);
+  border-color: var(--color-foreground);
+}
+
+.ui-btn-primary:hover {
+  background: color-mix(in oklab, var(--color-foreground) 88%, var(--accent-primary) 12%);
+}
+
+.ui-btn-quiet {
+  border-color: transparent;
+}
+
+.ui-btn-quiet:hover {
+  background: color-mix(in oklab, var(--color-foreground) 5%, transparent);
+}
+
+/* Empty state */
 .ui-empty-title {
   font-family: var(--title-font-family);
   font-style: var(--title-font-style);
@@ -245,28 +565,25 @@
   color: var(--color-muted-foreground);
 }
 
+/* Messages */
 .ui-message-player {
   background: var(--surface-player);
-  color: var(--color-primary-foreground);
-  border-radius: var(--radius-card);
+  color: var(--color-foreground);
+  border-left: 3px solid var(--accent-primary);
+  border-radius: 0;
+  padding: 0.5rem 0.875rem;
 }
 
 .ui-message-assistant {
   color: var(--color-foreground);
 }
 
+/* Session column */
 .ui-session-column {
   max-width: var(--session-column-max-width);
 }
 
-.ui-rule {
-  border-style: solid;
-}
-
-.ui-outline-rail {
-  border-left-style: solid;
-}
-
+/* Meters / progress */
 .ui-meter-track {
   background: var(--color-muted);
 }
@@ -275,40 +592,78 @@
   background: var(--color-primary);
 }
 
+/* Composer */
 .ui-composer-frame {
   max-width: var(--composer-max-width);
 }
 
 .ui-composer-input {
   border-radius: var(--radius-control);
-  background: var(--surface-panel-strong);
+  background: var(--surface-inset);
+  border: var(--rule-thickness) var(--rule-style) var(--rule-color);
 }
 
 .ui-composer-submit {
   border-radius: var(--radius-control);
 }
 
-@keyframes ui-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
+/* Choice — used for narrative branching options. NOT a card. */
+.ui-choice {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.875rem 1rem 0.875rem 1.125rem;
+  background: transparent;
+  border-left: 2px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
 
-  50% {
-    opacity: 0.35;
-  }
+.ui-choice:hover {
+  border-left-color: var(--accent-primary);
+  background: color-mix(in oklab, var(--accent-primary) 4%, transparent);
+}
+
+.ui-choice[aria-selected="true"],
+.ui-choice[data-selected="true"] {
+  border-left-color: var(--accent-primary);
+  border-left-width: 3px;
+  background: color-mix(in oklab, var(--accent-primary) 6%, transparent);
+}
+
+.ui-choice-eyebrow {
+  font-family: var(--type-meta);
+  font-size: 0.625rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+}
+
+.ui-choice-title {
+  font-family: var(--title-font-family);
+  font-weight: 500;
+  font-size: 0.9375rem;
+  color: var(--color-foreground);
+}
+
+.ui-choice-body {
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--color-muted-foreground);
+}
+
+/* Animations */
+@keyframes ui-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
 @keyframes ui-blink {
-  0%,
-  50% {
-    opacity: 1;
-  }
-
-  50.01%,
-  100% {
-    opacity: 0;
-  }
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
 }
 
 .ui-pulse-dot {
@@ -324,4 +679,80 @@
   vertical-align: -0.15em;
   background: var(--color-primary);
   animation: ui-blink 1s step-end infinite;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Resize handle — quiet hairline by default, becomes a thin colored
+   stripe on hover so the user still has a clear affordance.
+   ───────────────────────────────────────────────────────────────── */
+.ui-resize-handle {
+  position: relative;
+  z-index: 10;
+}
+
+.ui-resize-handle::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  transition: background 150ms ease;
+}
+
+/* Wider invisible hit-target so the 1px hairline is still grabable */
+.ui-resize-handle.cursor-col-resize::before { left: -3px; right: -3px; }
+.ui-resize-handle.cursor-row-resize::before { top: -3px; bottom: -3px; }
+
+.ui-resize-handle:hover {
+  background: var(--accent-primary) !important;
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent-primary) 35%, transparent);
+}
+
+.ui-resize-handle[data-separator="dragging"] {
+  background: var(--accent-primary) !important;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Global scrollbar — thin and theme-aware
+   ───────────────────────────────────────────────────────────────── */
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--color-foreground) 14%, transparent) transparent;
+}
+
+/* WebKit / Blink */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: transparent;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--color-foreground) 14%, transparent);
+  border-radius: 999px;
+  /* Inset border keeps the thumb a hair away from the panel edge */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  min-height: 32px;
+  transition: background-color 150ms ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--color-foreground) 28%, transparent);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* `.ui-scroll` is now a no-op alias kept for backward compat */
+.ui-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--color-foreground) 14%, transparent) transparent;
 }

@@ -1,4 +1,4 @@
-import { createRootRoute, Link, Outlet, useLocation } from "@tanstack/react-router";
+import { createRootRoute, Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,6 +10,7 @@ import { AppErrorBoundary } from "@/components/error-boundary";
 import { useLocalePreference } from "@/hooks/useLocalePreference";
 import { getCovelIpc } from "@/lib/desktop-bridge";
 import { useSession } from "@/stores/session-store";
+import { emitNavEvent } from "@/lib/nav-events";
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -22,7 +23,10 @@ function RootLayout() {
   const { t } = useTranslation();
   const { locale, setLocale } = useLocalePreference();
   const location = useLocation();
-  const isSession = location.pathname.startsWith('/session') || location.pathname.startsWith('/debug');
+  const navigate = useNavigate();
+  const isSessionRoute = location.pathname.startsWith('/session');
+  const isDebugRoute = location.pathname.startsWith('/debug');
+  const isSession = isSessionRoute || isDebugRoute;
   const isHome = location.pathname === '/';
 
   // Carry the active session id between Studio (/session) and Debugger (/debug)
@@ -33,7 +37,7 @@ function RootLayout() {
   // /debug doesn't restore the session into SessionProvider, so we must also
   // honour `?sid=` already in the URL. The session-store value takes priority
   // (matches the Studio's authoritative state); the URL is a read-only fallback.
-  const { state: sessionState } = useSession();
+  const { state: sessionState, backToWorldSelect } = useSession();
   const urlSid = (() => {
     const search = location.search as unknown;
     if (typeof search === "string") {
@@ -48,6 +52,45 @@ function RootLayout() {
   })();
   const activeSid = sessionState.session?.id ?? urlSid;
   const navSearch = activeSid ? { sid: activeSid } : {};
+  const hasSession = sessionState.session !== null;
+  const sessionSearch = activeSid ? { sid: activeSid } : {};
+
+  // Active state for the primary nav. The 5 tabs map to either real routes
+  // (世界 / 会话 / 调试) or in-page panel toggles (插件 / 图像) so the active
+  // computation has to merge URL state with sub-views.
+  type NavId = "world" | "session" | "plugins" | "images" | "debug";
+  const activeNav: NavId | null = (() => {
+    if (isDebugRoute) return "debug";
+    if (isSessionRoute) {
+      // World-select view (no session) implicitly maps to 世界
+      if (!hasSession) return "world";
+      return "session";
+    }
+    return null;
+  })();
+
+  const goWorld = () => {
+    if (sessionState.session) backToWorldSelect();
+    navigate({ to: "/session", search: {} });
+  };
+  const goSession = () => navigate({ to: "/session", search: sessionSearch });
+  const goPlugins = () => {
+    navigate({ to: "/session", search: sessionSearch });
+    emitNavEvent("open-plugins");
+  };
+  const goImages = () => {
+    navigate({ to: "/session", search: sessionSearch });
+    emitNavEvent("open-images");
+  };
+  const goDebug = () => navigate({ to: "/debug", search: navSearch });
+
+  const navItems: Array<{ id: NavId; label: string; onClick: () => void; disabled?: boolean }> = [
+    { id: "world",   label: t("nav.world",   "世界"),  onClick: goWorld },
+    { id: "session", label: t("nav.session", "会话"),  onClick: goSession, disabled: !hasSession },
+    { id: "plugins", label: t("nav.plugins", "插件"),  onClick: goPlugins, disabled: !hasSession },
+    { id: "images",  label: t("nav.images",  "图像"),  onClick: goImages,  disabled: !hasSession },
+    { id: "debug",   label: t("nav.debug",   "调试"),  onClick: goDebug },
+  ];
 
   // Electron / Tauri both hide the native title bar so the in-app header can
   // follow the active theme. Electron uses `-webkit-app-region: drag`; Tauri
@@ -99,23 +142,39 @@ function RootLayout() {
             data-tauri-drag-region={isTauri ? "" : undefined}
           >
             <nav
-              className="hidden md:flex items-center gap-6 text-xs font-medium tracking-[0.14em] uppercase"
+              className="hidden md:flex items-center gap-1 text-xs font-medium"
               style={isElectron ? noDragStyle : undefined}
+              aria-label={t("nav.primary", "Primary")}
             >
-              <Link
-                to="/session"
-                search={navSearch}
-                className="text-muted-foreground hover:text-primary transition-colors [&.active]:text-primary"
-              >
-                {t("nav.studio", "Studio")}
-              </Link>
-              <Link
-                to="/debug"
-                search={navSearch}
-                className="text-muted-foreground hover:text-primary transition-colors [&.active]:text-primary"
-              >
-                {t("nav.debug", "Debugger")}
-              </Link>
+              {navItems.map((item) => {
+                const isActive = activeNav === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={item.onClick}
+                    disabled={item.disabled}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`relative h-8 px-3 transition-colors rounded-[var(--radius-control)] ${
+                      isActive
+                        ? "text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    } ${
+                      item.disabled
+                        ? "opacity-40 cursor-not-allowed hover:text-muted-foreground"
+                        : ""
+                    }`}
+                  >
+                    <span>{item.label}</span>
+                    {isActive && (
+                      <span
+                        aria-hidden
+                        className="absolute left-2 right-2 -bottom-[1px] h-[2px] bg-[var(--accent-primary)]"
+                      />
+                    )}
+                  </button>
+                );
+              })}
             </nav>
             <div
               className="flex items-center gap-1 md:gap-1.5 ml-auto"

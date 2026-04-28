@@ -564,7 +564,15 @@ dimensions:
     openingScenario: >-
       试炼大会三日后举行，你正在坊市采购备战物资...
     startingLocation: 青萍山・坊市
+    # 可选 — 给会话首屏的 SessionCanvasHero 用：
+    openingHook: 试炼三日，野脉初现。     # 一句"扉页大字"
+    openingChips:                       # 2-4 个短 tag
+      - 青萍外门
+      - 试炼前夜
+      - 野生灵脉
 ```
+
+`openingHook` / `openingChips` 都接受 `string` 或 `{ "zh-CN": ..., "en-US": ... }`，留空时前端会回落到 `world.name` + `world.tags`。
 
 **WORLD.md** 是默认的世界观长文本，框架通过 `{{ world.lore }}` 注入到插件提示词中。支持多语言：`WORLD.zh.md`、`WORLD.en.md`。
 

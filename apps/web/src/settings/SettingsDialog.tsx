@@ -95,18 +95,24 @@ export function SettingsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[80vh] p-0 gap-0 flex flex-col">
-        <DialogHeader className="px-5 pt-5 pb-3 border-b border-border">
-          <DialogTitle className="flex items-center gap-2 text-sm uppercase tracking-widest">
-            <Settings2 className="w-4 h-4" />
-            {t("settings.title")}
+        <DialogHeader className="px-6 pt-5 pb-4 border-b border-[var(--rule-color)]">
+          <DialogTitle className="flex items-baseline gap-3">
+            <span className="ui-meta text-[10px] text-muted-foreground">§ SETTINGS</span>
+            <span className="ui-title text-base font-semibold tracking-tight">
+              {t("settings.title")}
+            </span>
+            <Settings2 className="w-3.5 h-3.5 ml-auto opacity-50" />
           </DialogTitle>
           <DialogDescription className="sr-only">
             {t("settings.title")}
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 flex overflow-hidden">
-          <aside className="w-56 shrink-0 border-r border-border flex flex-col">
-            <div className="p-2 border-b border-border flex items-center gap-1.5">
+          <aside
+            className="w-56 shrink-0 border-r border-[var(--rule-color)] flex flex-col"
+            style={{ background: "var(--surface-rail)" }}
+          >
+            <div className="p-3 border-b border-[var(--rule-color)] flex items-center gap-2">
               <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               <input
                 value={query}
@@ -115,11 +121,12 @@ export function SettingsDialog({
                 className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground min-w-0"
               />
             </div>
-            <nav className="flex-1 overflow-y-auto py-2">
+            <nav className="flex-1 overflow-y-auto py-2 ui-scroll">
               {filtered.map((node) => {
                 const selectable = isSelectable(node);
-                const indent = node.parentId ? "pl-8 " : "";
+                const indent = node.parentId ? "pl-9 " : "pl-4 ";
                 const isHeader = node.kind === "group" && !selectable;
+                const isSelected = selected === node.id;
                 return (
                   <button
                     key={node.id}
@@ -127,15 +134,22 @@ export function SettingsDialog({
                     disabled={isHeader}
                     onClick={() => setSelected(node.id)}
                     className={
-                      "w-full text-left px-4 py-1.5 text-xs transition-colors " +
+                      "w-full text-left pr-4 py-1.5 text-xs transition-colors relative " +
                       indent +
                       (isHeader
-                        ? "text-muted-foreground uppercase tracking-widest text-[10px] pt-3"
-                        : selected === node.id
-                          ? "bg-primary/10 text-primary"
-                          : "text-foreground hover:bg-muted/50")
+                        ? "ui-meta text-[10px] text-muted-foreground pt-4 pb-1"
+                        : isSelected
+                          ? "text-foreground font-medium"
+                          : "text-muted-foreground hover:text-foreground")
                     }
                   >
+                    {isSelected && !isHeader && (
+                      <span
+                        aria-hidden
+                        className="absolute left-0 top-0 bottom-0 w-[3px]"
+                        style={{ background: "var(--accent-primary)" }}
+                      />
+                    )}
                     {node.label}
                   </button>
                 );
@@ -147,7 +161,7 @@ export function SettingsDialog({
               )}
             </nav>
           </aside>
-          <section className="flex-1 overflow-y-auto p-5">
+          <section className="flex-1 overflow-y-auto p-6 ui-scroll">
             {renderPane(selectedNode, t)}
           </section>
         </div>

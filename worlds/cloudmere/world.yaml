@@ -181,6 +181,11 @@ dimensions:
   startingConditions:
     openingScenario: >-
       试炼大会三日后举行，你正在坊市采购备战物资。师姐苏婉匆匆赶来，说她在云梦泽深处发现了一处野生灵脉。消息若泄露，各大宗门必定争抢。她问你：大会之前，要不要先去探查？
+    openingHook: 试炼三日，野脉初现。
+    openingChips:
+      - 青萍外门
+      - 试炼前夜
+      - 野生灵脉
     playerConstraints:
       - 初始为练气三层，水灵根
       - 仅限使用青萍宗入门功法

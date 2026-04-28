@@ -3,32 +3,41 @@
   "dataSource": { "namespace": "message" },
   "view": {
     "component": "Stack",
-    "props": { "gap": "sm" },
+    "props": { "gap": "md" },
     "children": [
       {
-        "component": "Card",
-        "props": { "variant": "subtle" },
+        "component": "Row",
+        "props": { "gap": "sm", "align": "baseline" },
         "children": [
           {
-            "component": "Row",
-            "props": { "gap": "sm", "align": "center" },
-            "children": [
-              { "component": "Icon", "props": { "name": "compass", "size": "sm" } },
-              { "component": "Text", "props": { "content": { "$state": "/topic" }, "weight": "bold", "size": "sm" } }
-            ]
+            "component": "Text",
+            "props": {
+              "content": "§ GUIDE",
+              "variant": "muted",
+              "size": "xs",
+              "className": "ui-meta"
+            }
           },
           {
             "component": "Text",
             "props": {
-              "content": {
-                "zh": "从下列策略里选择一个切入点继续推进。",
-                "en": "Pick one of the strategies below as your next move."
-              },
-              "variant": "muted",
-              "size": "xs"
+              "content": { "$state": "/topic" },
+              "weight": "bold",
+              "size": "sm"
             }
           }
         ]
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "从下列策略中挑选切入点继续推进，或在底部自定义你的行动。",
+            "en": "Pick a strategy below to advance, or write your own action at the bottom."
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
       },
       {
         "component": "Grid",
