@@ -393,6 +393,7 @@ plugins/<plugin-id>/
 ```
 plugins/<plugin-id>/
 ├── package.json
+├── PLUGIN.md              # 可选：包级摘要（见下）
 ├── runtimes/
 │   ├── runtime-a/
 │   │   ├── PLUGIN.md      # name: plugin-id/runtime-a
@@ -406,6 +407,24 @@ plugins/<plugin-id>/
 > 真实多 runtime 范例见 `plugins/npc-graph/`（`extractor` agent + `rag-retriever` function）和 `plugins/char-creator/`（`player-init` 首轮 agent + `character-tracker` 持续 agent）。`world-init` 当前是单 runtime（`schema-gen`）+ 一个 `guard` 文件，不算多 runtime。
 
 子运行时之间可通过 `input.inject` 传递数据（上游输出 → 下游 prompt 注入）。
+
+#### 包级 PLUGIN.md（可选，用于 displayName）
+
+多 runtime 插件可以在根目录放置一个**仅含摘要 frontmatter** 的 `PLUGIN.md`，框架会用它作为整个插件的展示信息（在插件列表、provider 切换器等地方显示）。该文件**不**作为 runtime 加载，只读取以下三个字段：
+
+```yaml
+---
+name:                       # I18nText：插件展示名（不是 runtime name）
+  zh-CN: "DashScope"
+  en-US: "DashScope"
+description:                # I18nText：包级简介
+  zh-CN: "阿里云 DashScope 图像生成插件。"
+  en-US: "Aliyun DashScope image generation plugin."
+pluginType: plugin          # core-plugin | plugin
+---
+```
+
+**没有**这个文件时，框架强制把展示名设为 plugin id（如 `dashscope-image-gen`），UI 上会显得冗长且不直观。第三方插件作者**强烈建议**提供该文件；内置核心插件由前端 i18n 翻译键兜底，可以省略。
 
 ### pluginType
 

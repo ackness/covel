@@ -174,29 +174,31 @@ const result = pipeline.check(
 
 ## 4. 多 Runtime 插件
 
-一个插件可以包含多个 runtime（多个 PLUGIN.md），适用于复杂的游戏系统：
+一个插件可以包含多个 runtime（每个 runtime 一份独立的 PLUGIN.md），适用于复杂的游戏系统：
 
 ```
 plugins/my-combat/
-├── PLUGIN.md              # 主 runtime
+├── PLUGIN.md              # 可选：包级摘要（仅 name/description/pluginType，不作为 runtime）
 ├── runtimes/
 │   ├── combat-init/
-│   │   └── PLUGIN.md      # 战斗初始化 runtime
+│   │   └── PLUGIN.md      # 战斗初始化 runtime（name: my-combat/combat-init）
 │   └── combat-resolve/
-│       └── PLUGIN.md      # 战斗结算 runtime
+│       └── PLUGIN.md      # 战斗结算 runtime（name: my-combat/combat-resolve）
 ├── tools/
 │   └── roll-dice.js
 └── package.json
 ```
 
-每个 PLUGIN.md 都是独立的 runtime，有自己的优先级、触发条件和 LLM 提示词。它们可以：
+`runtimes/*/PLUGIN.md` 才是真正的 runtime，有自己的优先级、触发条件和 LLM 提示词。它们可以：
 
-- 使用不同的 model slot（如主 runtime 用 `balance`，初始化用 `fast`）
+- 使用不同的 model slot（如战斗结算用 `balance`，初始化用 `fast`）
 - 设置不同的 trigger（如一个 auto，一个 event）
 - 通过 `input.inject` 互相传递数据
 - 共享 `tools/` 目录下的工具
 
-框架 `discoverPlugins()` 会自动扫描主 PLUGIN.md 和 `runtimes/` 子目录中的所有 PLUGIN.md。
+`discoverPlugins()` 在检测到 `runtimes/` 子目录后**只**收集 `runtimes/*/PLUGIN.md` 作为 runtime；根目录的 `PLUGIN.md`（如果存在）仅被 `loadPluginSummary()` 读取，用于提供包级 `name`（displayName）和 `description`。**没有**根 PLUGIN.md 时，框架会把展示名强制设为 plugin id（如 `my-combat`），UI 会显得冗长。第三方插件作者建议提供根 PLUGIN.md；详见 [plugins.md 多 runtime 插件](../reference/plugins.md#多-runtime-插件)。
+
+> 注意：单 runtime 插件正好相反 —— 没有 `runtimes/` 时，根目录的 `PLUGIN.md` 本身就是唯一的 runtime（其 frontmatter 同时承担 runtime 字段和包级摘要两种职责）。
 
 `PluginManifest` 类型反映了这种结构：
 

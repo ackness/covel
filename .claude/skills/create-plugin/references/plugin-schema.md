@@ -3,6 +3,8 @@
 Schema 使用 Zod **strict** 模式（`runtimeManifestSchema`）— 不允许未定义字段，拼错会直接报错。
 
 > 如果插件有多个 runtime，把 **每个** runtime 放到 `runtimes/<sub>/PLUGIN.md`，每个 PLUGIN.md 独立按本 schema 校验。框架自动扫描 `runtimes/*/PLUGIN.md`；不需要根目录合并列表。
+>
+> **可选的根 PLUGIN.md（多 runtime 场景）**：在根目录额外放一份**仅含摘要 frontmatter** 的 `PLUGIN.md`（只读 `name` / `description` / `pluginType`，**不**作为 runtime），框架用它做包级 displayName，决定 UI 上展示的插件名。**没有**根 PLUGIN.md 时，UI 会回退显示 plugin id（如 `dashscope-image-gen`）。第三方插件作者强烈建议提供。`name` 推荐写 `I18nText`：`{ "zh-CN": "DashScope", "en-US": "DashScope" }`。
 
 ## 核心字段
 

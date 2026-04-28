@@ -96,6 +96,8 @@ plugins/<plugin-id>/
         └── PLUGIN.md
 ```
 
+> **多 runtime 插件的根 PLUGIN.md**：当 `runtimes/` 存在时，框架不再把根 `PLUGIN.md` 当成 runtime——但仍会读它的 frontmatter `name`/`description` 作为整个插件的展示信息。**没有**根 PLUGIN.md 时，UI 会回退显示 plugin id（如 `dashscope-image-gen`），不直观。详见 [plugins.md 多 runtime 插件](../reference/plugins.md#多-runtime-插件)。
+
 ### E. 供应链防护（`.npmrc`）
 
 每个插件根目录必须包含 `.npmrc`，内容固定为：

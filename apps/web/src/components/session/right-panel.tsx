@@ -400,14 +400,14 @@ export function RightPanel({
                               setActivePluginSubTab((prev) => ({ ...prev, [group.id]: firstIdx }));
                             }
                           }}
-                          className={`px-2 py-0.5 text-[10px] font-medium tracking-wider transition-colors ${
+                          className={`px-2 py-0.5 text-[10px] font-medium tracking-wider transition-colors max-w-[10rem] truncate ${
                             isActive
                               ? "bg-foreground text-[var(--surface-page)]"
                               : "text-muted-foreground hover:text-foreground"
                           }`}
                           title={p.pluginId}
                         >
-                          {compactTabLabel(pluginShortLabel(p.pluginId, sessionState.sessionPlugins, i18n.language))}
+                          {pluginShortLabel(p.pluginId, sessionState.sessionPlugins, i18n.language)}
                         </button>
                       );
                     })}

@@ -12,7 +12,7 @@ user_invocable: true
 
 - **插件 = 一组 Runtime**。每个 runtime 是一个独立调度单元，有自己的 `PLUGIN.md`（frontmatter + Markdown）。
   - 单 runtime：根目录只放一个 `PLUGIN.md`。
-  - 多 runtime：根目录无 `PLUGIN.md`，把每个 runtime 放到 `runtimes/<sub>/PLUGIN.md`。框架自动扫描。
+  - 多 runtime：把每个 runtime 放到 `runtimes/<sub>/PLUGIN.md`。框架自动扫描。**强烈建议**额外在根目录放一份**摘要级** `PLUGIN.md`（仅含 `name` / `description` / `pluginType`，**不**作为 runtime），框架用它做包级 displayName 和简介。**没有**根 PLUGIN.md 时 UI 会回退显示 plugin id（如 `dashscope-image-gen`），不直观。
 - **Runtime 类型**
   - `agent`（默认）：LLM 驱动，正文就是 system prompt。支持 `model` slot。
   - `function`：纯 JS handler，不跑 LLM，由 `handler: ./handler.js` 指向入口。可访问 `ctx.gateway` 调 LLM/图像。
@@ -51,8 +51,8 @@ user_invocable: true
 ```
 <plugins-root>/<plugin-id>/
 ├── package.json                      # 必须
-├── PLUGIN.md                         # 单 runtime 必须
-├── runtimes/<sub>/PLUGIN.md          # 多 runtime:替代根 PLUGIN.md
+├── PLUGIN.md                         # 单 runtime 必须；多 runtime 时可选（仅摘要：name/description/pluginType，作为包级 displayName）
+├── runtimes/<sub>/PLUGIN.md          # 多 runtime:每个 runtime 一份
 ├── runtimes/<sub>/handler.js         # function runtime 必须
 ├── runtimes/<sub>/ui/*.json          # UI spec
 ├── tools/*.js                        # 自定义本地工具
