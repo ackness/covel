@@ -15,7 +15,7 @@ export { createSessionScope } from './session-scope.js';
 export type { SessionPluginScope } from './session-scope.js';
 
 // ── Trust ────────────────────────────────────────────────────────
-export { getPluginTrustInfo } from './trust.js';
+export { getPluginTrustInfo, BUILTIN_PLUGIN_IDS } from './trust.js';
 
 // ── Plugin LLM Config ────────────────────────────────────────────
 export { loadPluginLlmConfig, parsePluginLlmToml } from './plugin-llm-config.js';

@@ -31,6 +31,7 @@ import {
   validateWorldManifest,
   formatValidationErrors,
 } from '@covel/shared';
+import { BUILTIN_PLUGIN_IDS } from '@covel/plugin-loader';
 import yauzl, { type Entry, type ZipFile } from 'yauzl';
 
 export const installRoutes = new Hono();
@@ -322,7 +323,7 @@ function readPackageId(entries: readonly ExtractedEntry[]): string | null {
   try {
     const json = JSON.parse(pkg.content.toString('utf-8')) as { name?: unknown };
     if (typeof json.name !== 'string' || !json.name.trim()) return null;
-    // `@covel/plugin-foo` → `plugin-foo`; `core-narrator` stays.
+    // `@covel/plugin-foo` → `plugin-foo`; `narrator` stays.
     const name = json.name.trim();
     const after = name.includes('/') ? name.split('/').slice(-1)[0] : name;
     return after;
@@ -356,6 +357,14 @@ function validatePluginBundle(entries: readonly ExtractedEntry[]): PluginManifes
   if (!/^[a-z0-9][a-z0-9-_]{0,63}$/i.test(pkgId)) {
     throw httpError(400, `invalid plugin id derived from package.json: ${pkgId}`);
   }
+  // Reserve builtin plugin IDs — third-party installs cannot shadow a shipped
+  // plugin's `plugin_data` namespace by claiming the same name. The list lives
+  // in `@covel/plugin-loader` (BUILTIN_PLUGIN_IDS) so it stays in sync with
+  // the directory contents under `plugins/`.
+  const pkgRoot = manifestRootId(pkgId);
+  if (BUILTIN_PLUGIN_IDS.has(pkgRoot)) {
+    throw httpError(409, `plugin id "${pkgRoot}" is reserved for a builtin plugin`);
+  }
 
   const manifestEntry = findPluginManifestEntry(entries);
   if (!manifestEntry) {
@@ -365,8 +374,8 @@ function validatePluginBundle(entries: readonly ExtractedEntry[]): PluginManifes
   // Validate every PLUGIN.md we find — multi-runtime layouts must all be valid —
   // AND enforce that each manifest's root `name` is consistent with the package.json id.
   // Without this check a bundle could install into dir `plugin-innocent` while
-  // declaring `name: core-narrator`, which the loader would then treat as the
-  // real core-narrator and collide with its plugin-data namespace.
+  // declaring `name: narrator`, which the loader would then treat as the
+  // real narrator and collide with its plugin-data namespace.
   const manifests = entries.filter(
     (e) => e.relativePath === 'PLUGIN.md' || /^runtimes\/[^/]+\/PLUGIN\.md$/.test(e.relativePath),
   );

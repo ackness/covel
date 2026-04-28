@@ -74,14 +74,18 @@ describe('Session plugin routes (real sessionRoutes)', () => {
     store = createMemoryStore();
     app = createTestApp(registry, store);
 
-    // Register plugins
+    // Register plugins. `source: 'builtin'` mirrors how bootstrap.ts marks
+    // shipped plugins by load path; trust is no longer inferred from any name
+    // prefix, so the test must set it explicitly.
     registry.register(makeEntry({
-      id: 'core-narrator',
-      summary: makeSummary({ id: 'core-narrator', name: 'Core Narrator', pluginType: 'core-plugin' }),
+      id: 'narrator',
+      summary: makeSummary({ id: 'narrator', name: 'Core Narrator', pluginType: 'core-plugin' }),
+      source: 'builtin',
     }));
     registry.register(makeEntry({
       id: 'optional-plugin',
       summary: makeSummary({ id: 'optional-plugin', name: 'Optional Plugin', pluginType: 'plugin' }),
+      source: 'community',
     }));
 
     // Create a session with both plugins active
@@ -92,7 +96,7 @@ describe('Session plugin routes (real sessionRoutes)', () => {
       turnCount: 1,
       preGameCompleted: [],
       presetId: null,
-      activePlugins: ['core-narrator', 'optional-plugin'],
+      activePlugins: ['narrator', 'optional-plugin'],
       createdAt: new Date().toISOString(),
     });
   });
@@ -110,17 +114,17 @@ describe('Session plugin routes (real sessionRoutes)', () => {
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as { activePlugins: string[] };
-      expect(body.activePlugins).toEqual(expect.arrayContaining(['core-narrator', 'optional-plugin']));
+      expect(body.activePlugins).toEqual(expect.arrayContaining(['narrator', 'optional-plugin']));
 
       const session = await store.getSession('sess-core-create');
-      expect(session?.activePlugins).toEqual(expect.arrayContaining(['core-narrator', 'optional-plugin']));
+      expect(session?.activePlugins).toEqual(expect.arrayContaining(['narrator', 'optional-plugin']));
     });
 
     it('should return 403 when attempting to disable a core-plugin', async () => {
       const res = await app.request(`/api/sessions/${SESSION_ID}/plugins/disable`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pluginId: 'core-narrator' }),
+        body: JSON.stringify({ pluginId: 'narrator' }),
       });
       expect(res.status).toBe(403);
       const body = (await res.json()) as Record<string, unknown>;
@@ -140,14 +144,14 @@ describe('Session plugin routes (real sessionRoutes)', () => {
       expect((body.active as string[])).not.toContain('optional-plugin');
     });
 
-    it('should still include core-narrator in active list after failed disable', async () => {
+    it('should still include narrator in active list after failed disable', async () => {
       await app.request(`/api/sessions/${SESSION_ID}/plugins/disable`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pluginId: 'core-narrator' }),
+        body: JSON.stringify({ pluginId: 'narrator' }),
       });
       const session = await store.getSession(SESSION_ID);
-      expect(session!.activePlugins).toContain('core-narrator');
+      expect(session!.activePlugins).toContain('narrator');
     });
 
     it('uses discovery trust metadata when deciding whether a plugin is core', async () => {
@@ -157,7 +161,7 @@ describe('Session plugin routes (real sessionRoutes)', () => {
         source: 'community',
       }));
       await store.updateSession(SESSION_ID, {
-        activePlugins: ['core-narrator', 'optional-plugin', 'forged-core'],
+        activePlugins: ['narrator', 'optional-plugin', 'forged-core'],
         updatedAt: new Date().toISOString(),
       });
 
@@ -169,7 +173,7 @@ describe('Session plugin routes (real sessionRoutes)', () => {
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as { active: string[] };
-      expect(body.active).toEqual(['core-narrator', 'optional-plugin']);
+      expect(body.active).toEqual(['narrator', 'optional-plugin']);
     });
   });
 
