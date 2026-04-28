@@ -5,7 +5,7 @@
  *
  *   POST /api/sessions/:id/plugin-rpc
  *   {
- *     "pluginId": "core-codex",
+ *     "pluginId": "codex",
  *     "action": "regenerate",     // OR runtimeId, never both
  *     "payload": { ... }
  *   }

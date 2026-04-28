@@ -8,7 +8,7 @@ import { test, expect, type Page } from "@playwright/test";
  *   Round 2: Send manual message → AI responds → Assert guide plugin triggered
  *   Round 3: Send another message → AI responds → Assert guide plugin triggered
  *
- * Guide plugin (core-guide) triggers on "user.input" only.
+ * Guide plugin (guide) triggers on "user.input" only.
  * We verify it triggers stably across rounds 2 and 3.
  */
 

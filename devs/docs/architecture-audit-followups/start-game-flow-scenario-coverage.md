@@ -13,7 +13,7 @@ These follow-up tests pin the start-game lifecycle from bootstrap through charac
 2. `start_session` runs bootstrap and produces the character form.
 3. Bootstrap keeps player message history empty.
 4. Pending form keeps the session in setup state.
-5. Submitted form values resume `core-char-creator/player-init`.
+5. Submitted form values resume `char-creator/player-init`.
 6. Player creation writes the character record and the character panel mirror.
 7. Main-loop narrator runs in the same turn after player creation and setup completion.
 

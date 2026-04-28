@@ -10,7 +10,7 @@ interface RuntimeStatus {
   label: string;
   status: "running" | "llm" | "tool" | "completed" | "failed" | "skipped" | "suspended";
   detail?: string;
-  /** Qualified tool name when status is "tool" (e.g. "core-init-wizard:emit-character-form"). */
+  /** Qualified tool name when status is "tool" (e.g. "init-wizard:emit-character-form"). */
   toolName?: string;
   /** Duration in milliseconds (only set when completed or failed). */
   durationMs?: number;
@@ -25,8 +25,8 @@ function deriveStatuses(
   // / tool.calling transient states) is gone — the server doesn't emit those
   // through /api/actions today, and if it ever does they'll arrive as
   // separate UPSERT_EXECUTION_STEP patches carrying status:"llm"|"tool".
-  // Label resolution. Multi-runtime plugins (e.g. `core-npc-graph/rag-retriever`
-  // and `core-npc-graph/extractor`) must render distinct chips, so we show the
+  // Label resolution. Multi-runtime plugins (e.g. `npc-graph/rag-retriever`
+  // and `npc-graph/extractor`) must render distinct chips, so we show the
   // runtime suffix after the plugin display name when runtimeId !== pluginId.
   // Prefer an exact runtime-id override, then pluginDisplayName + "/" + suffix,
   // then the raw fallback.

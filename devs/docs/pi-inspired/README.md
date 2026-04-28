@@ -54,8 +54,8 @@ pi-mono 是一个极简但设计成熟的 coding-agent 框架。它的 extension
 
 | 禁止 | 替代做法 |
 |---|---|
-| 框架代码判断 `pluginId === 'core-narrator'` | 判断 `outputKind === 'story'` 或 capability `narrative` |
-| 框架代码读取固定 namespace，如 `core-world-init/schema` | 通过 capability `world-data-provider` 或 manifest-declared inject/provider 发现 |
+| 框架代码判断 `pluginId === 'narrator'` | 判断 `outputKind === 'story'` 或 capability `narrative` |
+| 框架代码读取固定 namespace，如 `world-init/schema` | 通过 capability `world-data-provider` 或 manifest-declared inject/provider 发现 |
 | 框架代码为某个插件特殊拼 prompt | 插件通过 `input.inject`、authorsNote、postHistory、context visibility 声明 |
 | 框架代码识别具体 block 类型 | block 用 `_eventType` 或 schema/capability 声明事件语义 |
 | 框架代码默认启用/禁用某个具体 runtime | session/world scope 用 resource ID/filter 声明，kernel 只执行通用过滤规则 |

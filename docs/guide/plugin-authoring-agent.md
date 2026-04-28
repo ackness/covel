@@ -190,7 +190,7 @@ execute: async (params) => ({
 
 通过 `input.inject` 声明依赖其他插件的输出。
 
-以 `core-char-creator` 为例——它需要读取 `core-narrator` 的开场叙事：
+以 `char-creator` 为例——它需要读取 `narrator` 的开场叙事：
 
 ```yaml
 trigger:
@@ -199,7 +199,7 @@ trigger:
   maxTriggerCount: 1
 input:
   inject:
-    - from: core-narrator        # 来源插件 ID
+    - from: narrator        # 来源插件 ID
       field: narrativeOutput     # 要提取的输出字段
       as: "<narrator-opening>"   # 包裹的 XML 标签名
 ```
@@ -208,7 +208,7 @@ input:
 
 ```markdown
 ## 主叙事开场
-<narrator-opening>{{ inputs.core-narrator.core-narrator.narrativeOutput }}</narrator-opening>
+<narrator-opening>{{ inputs.narrator.narrator.narrativeOutput }}</narrator-opening>
 ```
 
 **注意：**

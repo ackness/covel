@@ -58,7 +58,7 @@ console.log('refs OK');
 
 ## L3 — Lore 完整度(可选)
 
-`WORLD.md` 是给主叙事插件 (`core-narrator`) 当世界书塞进 prompt 的;`world.yaml` 是给所有插件 (`core-codex` / `core-npc-graph` / `core-world-init` 等) 结构化消费的。两者**应该**互相覆盖以下"关键名词":
+`WORLD.md` 是给主叙事插件 (`narrator`) 当世界书塞进 prompt 的;`world.yaml` 是给所有插件 (`codex` / `npc-graph` / `world-init` 等) 结构化消费的。两者**应该**互相覆盖以下"关键名词":
 
 - 所有 `dimensions.geography.regions[].name`
 - `dimensions.factions[].name`(至少 major)
@@ -96,8 +96,8 @@ if (missing.length){
 
 把世界包扔进 `worlds/`,启动 `pnpm dev`,在 UI 选这个世界跑 1-2 个 turn,看:
 
-1. `core-world-init/schema-gen` 能否正确识别(或填充)世界维度
-2. `core-narrator` 第一回合输出是否贴合 `openingScenario`
+1. `world-init/schema-gen` 能否正确识别(或填充)世界维度
+2. `narrator` 第一回合输出是否贴合 `openingScenario`
 3. `/debug` 页面 → Prompt Viewer 检查 `world.lore` 段是否完整
 4. 是否有 `requiredPlugins` 缺失警告
 

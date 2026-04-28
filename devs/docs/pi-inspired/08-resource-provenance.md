@@ -286,7 +286,7 @@ UI specs 当前由 manifest `ui.right/message/left` 指向相对路径。建议�
 
 ```json
 {
-  "pluginId": "core-npc-graph",
+  "pluginId": "npc-graph",
   "slot": "right",
   "path": "./ui/npc-graph-panel.json",
   "provenance": {...}

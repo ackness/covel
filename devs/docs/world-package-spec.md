@@ -80,11 +80,11 @@ tags: [dark-fantasy, mystery, exploration]  # 可选，genre/theme 标签
 
 # ── 插件依赖 ────────────────────────────────────
 requiredPlugins:                  # 可选
-  - core-persona
-  - core-narrator
+  - persona
+  - narrator
 recommendedPlugins:               # 可选
-  - core-guide
-  - core-inventory
+  - guide
+  - inventory
 
 # ── 结构化维度 ──────────────────────────────────
 dimensions:                       # 可选，WorldDimensions

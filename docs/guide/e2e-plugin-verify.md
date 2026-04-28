@@ -36,9 +36,9 @@ npx tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts
 npx tsx --env-file=.env --env-file=.env.llm \
   scripts/e2e-plugin-verify.ts --slot e2e_local --turns 5 --timeout 300
 
-# 3. 只聚焦 core-guide 这一个插件的表现
+# 3. 只聚焦 guide 这一个插件的表现
 npx tsx --env-file=.env --env-file=.env.llm \
-  scripts/e2e-plugin-verify.ts --plugin core-guide --turns 2
+  scripts/e2e-plugin-verify.ts --plugin guide --turns 2
 ```
 
 ## 命令行参数
@@ -135,11 +135,11 @@ A: `--slot` 只写 `[covel.xxx]` 里的 `xxx`。如果你的 toml 里是 `[covel
 **Q: Turn 4 开始一直 `WARNING: SSE stream terminated prematurely`？**
 A: 上游 LLM 会话被运营商断开，脚本会自动重读 turn 记录。只要 Runtime Timeline 里的 runtime 都是 `success`，可以当作正常通过。
 
-**Q: `core-codex ran but was not expected`？**
+**Q: `codex ran but was not expected`？**
 A: 脚本内置的 `interval=N` 触发预测公式对「起始 turn 计数」可能和调度器有 off-by-one，这类误判不影响插件本身行为。看 Runtime Timeline 中实际 runtime 是否 `success` 才是真相。
 
-**Q: 我想只跑 `core-guide` 的回归？**
-A: `--plugin core-guide --turns 2 --slot e2e_local`。其它 runtime 依然会运行保证依赖链完整，但断言统计只算 `core-guide` 的表现。
+**Q: 我想只跑 `guide` 的回归？**
+A: `--plugin guide --turns 2 --slot e2e_local`。其它 runtime 依然会运行保证依赖链完整，但断言统计只算 `guide` 的表现。
 
 ## 与 PLUGIN.md 声明的对齐检查
 

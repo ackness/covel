@@ -17,7 +17,7 @@
 
 Covel 的 `plugin_data` 表今天承担了**两种语义完全不同的角色**，但 schema 上没有区分：
 
-1. **要进 LLM context 的状态**：例如 `core-codex` 的术语条目、`core-npc-graph` 的关系图、`core-memory` 的 archival 块。这些通过 `input.inject: { kind: 'plugin-data', namespace, ... }` 在 PromptAssembler 装配时整段 inline 到 system prompt。
+1. **要进 LLM context 的状态**：例如 `codex` 的术语条目、`npc-graph` 的关系图、`memory` 的 archival 块。这些通过 `input.inject: { kind: 'plugin-data', namespace, ... }` 在 PromptAssembler 装配时整段 inline 到 system prompt。
 2. **不进 LLM context 的纯持久化状态**：例如 plugin 内部计数器、状态机当前态、上一次 trigger 的时间戳、人格化插件的"已说过的话清单"。今天要么硬塞进 namespace 然后被 inject 顺带 inline（污染 prompt），要么每次需要时调 `plugin-data-get` 工具（多一次 LLM 工具调用回合）。
 
 两种角色挤在同一张表里，结果是：
@@ -48,7 +48,7 @@ pi-mono 在它的 session JSONL 里把这件事拆得很清楚：`CustomEntry` =
 | Plugin 写入只走治理入口 | `CLAUDE.md` § Plugin authoring contract | visibility 字段通过 proposal / plugin-data tool / scoped pluginData writer 等既有治理入口写入，不引入绕过 commit/trace/trust 的旁路 |
 | 渐进迁移 + 默认值兼容 | `devs/docs/refactor-plan/` 系列普遍纪律 | 旧数据的 visibility 视为 `context-full`（兼容现行 inject 行为）；不强制 plugin 立刻升级 |
 | `pluginId` 是数据隔离边界 | `packages/context/src/prompt-internals.ts` 的 `resolvePluginDataInject` 注释 | visibility 不能跨 plugin 读取；只能影响“自己的 namespace 进 prompt 时怎么呈现” |
-| 框架不理解插件业务语义 | `devs/docs/pi-inspired/README.md` § 框架 ↔ 插件分离边界 | 框架不能按 `core-codex`/`core-guide` 等特例决定 visibility；只能执行插件声明和 store schema 规则 |
+| 框架不理解插件业务语义 | `devs/docs/pi-inspired/README.md` § 框架 ↔ 插件分离边界 | 框架不能按 `codex`/`guide` 等特例决定 visibility；只能执行插件声明和 store schema 规则 |
 
 ---
 
@@ -124,28 +124,28 @@ export interface PluginDataInjectDecl {
 
 | Plugin | 主要 namespace | 性质 | 今天怎么处理 |
 |---|---|---|---|
-| `core-codex` | `entries` | LLM 可见（术语条目） | inject `kind: plugin-data, namespace: entries` |
-| `core-npc-graph` | `relationships` | LLM 可见（NPC 关系） | 通过 RAG 摘要后 inject 给 narrator |
-| `core-memory` | `archival` | LLM 可见（archival memory） | inject `kind: plugin-data, namespace: archival` |
-| `core-world-init` | `lore-cache` | 半可见（生成中间产物） | 不 inject；通过 record.upsert 写入 world records 后才进 prompt |
-| `core-pregame` | `phase-state` | **应当私有**（pre-game 阶段进度） | 现状用 namespace 名 `phase-state` 当约定，inject 谨慎避开 |
-| `core-guide` | `last-options` | 半私有（上一轮选项缓存） | 仅 plugin 内部 read，不 inject |
+| `codex` | `entries` | LLM 可见（术语条目） | inject `kind: plugin-data, namespace: entries` |
+| `npc-graph` | `relationships` | LLM 可见（NPC 关系） | 通过 RAG 摘要后 inject 给 narrator |
+| `memory` | `archival` | LLM 可见（archival memory） | inject `kind: plugin-data, namespace: archival` |
+| `world-init` | `lore-cache` | 半可见（生成中间产物） | 不 inject；通过 record.upsert 写入 world records 后才进 prompt |
+| `pregame` | `phase-state` | **应当私有**（pre-game 阶段进度） | 现状用 namespace 名 `phase-state` 当约定，inject 谨慎避开 |
+| `guide` | `last-options` | 半私有（上一轮选项缓存） | 仅 plugin 内部 read，不 inject |
 
-**关键发现**：`core-pregame` 和 `core-guide` 已经在用"约定式私有 namespace"——靠 inject 配置的人小心避开。约定但无强制 = schema 漂移已经在发生。
+**关键发现**：`pregame` 和 `guide` 已经在用"约定式私有 namespace"——靠 inject 配置的人小心避开。约定但无强制 = schema 漂移已经在发生。
 
 ### 1.5 token 成本估算
 
 实测每个 PLUGIN.md 大小（lines）：
 
 ```
-core-narrator     78 lines
-core-codex       163 lines
-core-pregame      40 lines
-core-memory       17 lines
-core-guide        68 lines
-core-world-init   ~ (大文件，估 300+)
-core-char-creator (中等)
-core-npc-graph    (中等)
+narrator     78 lines
+codex       163 lines
+pregame      40 lines
+memory       17 lines
+guide        68 lines
+world-init   ~ (大文件，估 300+)
+char-creator (中等)
+npc-graph    (中等)
 ```
 
 折算 token：1 行 ~ 8–12 token，单 plugin 的 PLUGIN.md 单次进 prompt 范围在 100–4000 token。
@@ -280,7 +280,7 @@ store.listPluginData(sessionId, pluginId, { namespace, visibility: ['context-sum
 
 - 1 张表承担两种语义角色（LLM 可见 / plugin 私有），无强制区分
 - inject 时整 namespace 全量取出；plugin 作者要"私有"只能靠 namespace 命名约定
-- 实测 `core-pregame` / `core-guide` 已在用约定式私有 namespace（§ 1.4），约定漂移已经在发生
+- 实测 `pregame` / `guide` 已在用约定式私有 namespace（§ 1.4），约定漂移已经在发生
 
 **提议方案**
 
@@ -683,13 +683,13 @@ Data Explorer 顶部加 segmented control：`全部 | LLM 可见 | plugin 私有
 
 | Plugin | 主要 namespace | 目标 visibility |
 |---|---|---|
-| core-codex | entries | context-summary（同步加 summary 字段写入） |
-| core-npc-graph | relationships | context-summary（已有 RAG summary，复用） |
-| core-memory | archival | context-full（现行行为） |
-| core-pregame | phase-state | private（修正现状的"约定" → 强制） |
-| core-guide | last-options | private（同上） |
-| core-world-init | lore-cache | private |
-| core-char-creator | drafts | private |
+| codex | entries | context-summary（同步加 summary 字段写入） |
+| npc-graph | relationships | context-summary（已有 RAG summary，复用） |
+| memory | archival | context-full（现行行为） |
+| pregame | phase-state | private（修正现状的"约定" → 强制） |
+| guide | last-options | private（同上） |
+| world-init | lore-cache | private |
+| char-creator | drafts | private |
 
 每个 plugin 一个独立 PR；E2E 跑一遍 `scripts/e2e-plugin-verify.ts` 兜底。
 
@@ -725,7 +725,7 @@ Data Explorer 顶部加 segmented control：`全部 | LLM 可见 | plugin 私有
 
 | 时间窗 | 后果 | 成本 |
 |---|---|---|
-| 现在不做 | `core-pregame` / `core-guide` 继续靠命名约定避开污染；下一个第三方 plugin 复制约定，schema 漂移加深 | 0（短期）/ 大（半年后） |
+| 现在不做 | `pregame` / `guide` 继续靠命名约定避开污染；下一个第三方 plugin 复制约定，schema 漂移加深 | 0（短期）/ 大（半年后） |
 | 半年后做 | 已有 5–10 个 plugin 按约定写，每个迁移要单独 review；可能要一个"约定 → schema"的过渡期，工作量翻倍 | 2× 现在做的成本 |
 | 现在做 | schema 加 2 列；4 个 backend 实现 visibility filter；8 个 plugin 显式标记；耗时 ≈ 4 周 | 1× 基线 |
 
@@ -807,11 +807,11 @@ Data Explorer 顶部加 segmented control：`全部 | LLM 可见 | plugin 私有
 
 ```bash
 $ grep -rn "namespace:" plugins/ | grep -v node_modules | head -10
-plugins/core-codex/PLUGIN.md:        namespace: entries
-plugins/core-npc-graph/PLUGIN.md:    namespace: relationships
-plugins/core-memory/PLUGIN.md:       namespace: archival
-plugins/core-pregame/handler.js:     namespace: 'phase-state'
-plugins/core-guide/handler.js:       namespace: 'last-options'
+plugins/codex/PLUGIN.md:        namespace: entries
+plugins/npc-graph/PLUGIN.md:    namespace: relationships
+plugins/memory/PLUGIN.md:       namespace: archival
+plugins/pregame/handler.js:     namespace: 'phase-state'
+plugins/guide/handler.js:       namespace: 'last-options'
 
 $ wc -l packages/store/src/sqlite/sqlite-store-mappers.ts
 752 lines

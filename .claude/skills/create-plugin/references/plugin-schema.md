@@ -85,7 +85,7 @@ tools:
 input:
   inject:
     # (1) runtime kind — 读前序 runtime 的 output 字段
-    - from: core-narrator             # kind 省略即 runtime
+    - from: narrator             # kind 省略即 runtime
       field: narrativeOutput
       as: "<narrator-output>"
 
@@ -96,7 +96,7 @@ input:
       format: summary                 # summary(默认) / ids-only / full
       maxEntries: 50                  # 1–500,默认 50
   tools:
-    - plugin: core-world-init
+    - plugin: world-init
       runtime: schema-gen
 ```
 
@@ -166,7 +166,7 @@ Agent runtime 的 **LLM 工具调用** 不会自动看到 userSettings——如�
 hooks:
   - event: TurnStart               # TurnStart/PreRuntime/PostRuntime/PreToolUse/PostToolUse/PreStateCommit/PostStateCommit/TurnStop
     handler: ./hooks/audit.js
-    match: { runtimeId: "core-narrator" }    # 可选过滤
+    match: { runtimeId: "narrator" }    # 可选过滤
     timeoutMs: 5000
 ```
 

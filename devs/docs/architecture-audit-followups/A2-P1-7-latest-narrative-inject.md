@@ -13,7 +13,7 @@ dashscope-image-gen/prompt-generator 通过默认消息历史去找"当前画面
 - `input.inject` 已有两种 kind：
   - `runtime`（默认）：当前 turn 内 upstream runtime 的 output 字段。
   - `plugin-data`：自身插件命名空间的 plugin_data 摘要。
-- runtime_outputs 表里其实保留了历史 turn 的所有 runtime 输出，包括 `core-narrator`。
+- runtime_outputs 表里其实保留了历史 turn 的所有 runtime 输出，包括 `narrator`。
 - `packages/context/src/context-builder.ts` 的 `needsAsyncBuild()` 已经识别 `kind: 'plugin-data'` 走异步路径，是新增 kind 的天然落点。
 
 ## 实施方案
@@ -22,7 +22,7 @@ dashscope-image-gen/prompt-generator 通过默认消息历史去找"当前画面
    ```ts
    export const runtimeOutputHistoryInjectDeclSchema = z.object({
      kind: z.literal('runtime-output-history'),
-     from: z.string().min(1),       // upstream runtime id (e.g. core-narrator)
+     from: z.string().min(1),       // upstream runtime id (e.g. narrator)
      field: z.string().min(1),      // output 字段（如 narrativeOutput）
      mode: z.enum(['latest']).default('latest'),
      as: z.string().min(1),         // XML 包裹标签（<latest-narrative>）
@@ -54,7 +54,7 @@ dashscope-image-gen/prompt-generator 通过默认消息历史去找"当前画面
          format: ids-only
          maxEntries: 8
        - kind: runtime-output-history
-         from: core-narrator
+         from: narrator
          field: narrativeOutput
          mode: latest
          as: "<latest-narrative>"
@@ -67,11 +67,11 @@ dashscope-image-gen/prompt-generator 通过默认消息历史去找"当前画面
 
 - `runtime_outputs` 表如果还没有同时按 sessionId + runtimeId 的索引，`limit: 1` 查询性能可能差。先确认 `packages/store/**/runtime-outputs*.ts` 的索引设计，必要时加复合索引。
 - 跨 session 误读：reader 必须强制 `sessionId` 过滤，不允许在 schema 里暴露 `sessionId` 参数。
-- 若 `core-narrator` 在当前 session 还没有任何输出（首轮点击生成图），inject 可优雅降级（留空标签或不输出标签），prompt-generator 自己回退到默认行为。
+- 若 `narrator` 在当前 session 还没有任何输出（首轮点击生成图），inject 可优雅降级（留空标签或不输出标签），prompt-generator 自己回退到默认行为。
 
 ## 验收标准
 
-- 手动点击生成图片时 prompt 中包含明确 `<latest-narrative>` 标签，内容来自 `core-narrator` 最近一轮的 `narrativeOutput`。
+- 手动点击生成图片时 prompt 中包含明确 `<latest-narrative>` 标签，内容来自 `narrator` 最近一轮的 `narrativeOutput`。
 - prompt-generator 的图像 prompt 与画面叙事一致性显著提升（人工抽测 5 例）。
 - 新增 `packages/context/tests/runtime-output-history.test.ts`，覆盖空数据降级、跨 session 隔离、limit=1 路径。
 

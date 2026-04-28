@@ -81,9 +81,9 @@ describe('TurnExecutor E2E', () => {
   beforeEach(async () => {
     mockLLM = new MockLLM();
 
-    // Discover and load the core-narrator plugin
+    // Discover and load the narrator plugin
     const discoveries = await discoverPlugins(PLUGINS_DIR);
-    const narratorDiscovery = discoveries.find((d) => d.id === 'core-narrator');
+    const narratorDiscovery = discoveries.find((d) => d.id === 'narrator');
     expect(narratorDiscovery).toBeDefined();
 
     const manifests = await loadPluginManifest(narratorDiscovery!);
@@ -97,13 +97,13 @@ describe('TurnExecutor E2E', () => {
     };
   });
 
-  it('should discover core-narrator from plugins/', () => {
-    expect(narratorManifest.name).toBe('core-narrator');
+  it('should discover narrator from plugins/', () => {
+    expect(narratorManifest.name).toBe('narrator');
     expect(narratorManifest.priority).toBe(500);
     expect(narratorManifest.pluginType).toBe('core-plugin');
   });
 
-  it('should execute a turn with core-narrator and get narrative output', async () => {
+  it('should execute a turn with narrator and get narrative output', async () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
@@ -123,7 +123,7 @@ describe('TurnExecutor E2E', () => {
 
     const narratorResult = result.runtimeResults[0];
     expect(narratorResult.status).toBe('success');
-    expect(narratorResult.pluginId).toBe('core-narrator');
+    expect(narratorResult.pluginId).toBe('narrator');
     expect(narratorResult.output).toBeDefined();
     expect((narratorResult.output as Record<string, unknown>).narrativeOutput).toContain('黑暗的森林');
   });
@@ -193,7 +193,7 @@ describe('TurnExecutor E2E', () => {
 
     const deps: TurnExecutorDeps = {
       loadRuntime: async (manifest) => {
-        if (manifest.name === 'core-narrator') return narratorLoaded;
+        if (manifest.name === 'narrator') return narratorLoaded;
         if (manifest.name === 'pre-process') return preLoaded;
         return undefined;
       },
@@ -404,7 +404,7 @@ describe('TurnExecutor E2E', () => {
 
     // Only narrator should run (manual-only skipped because isManualTrigger is false)
     expect(result.runtimeResults).toHaveLength(1);
-    expect(result.runtimeResults[0].pluginId).toBe('core-narrator');
+    expect(result.runtimeResults[0].pluginId).toBe('narrator');
   });
 
   it('should save player and runtime messages to store when store is provided', async () => {
@@ -439,7 +439,7 @@ describe('TurnExecutor E2E', () => {
     const runtimeMsg = messages.find(m => m.sourceType === 'runtime');
     expect(runtimeMsg).toBeDefined();
     expect(runtimeMsg!.role).toBe('assistant');
-    expect(runtimeMsg!.name).toBe('core-narrator');
+    expect(runtimeMsg!.name).toBe('narrator');
     expect(runtimeMsg!.content).toContain('黑暗的森林');
   });
 
@@ -755,9 +755,9 @@ describe('TurnExecutor E2E', () => {
       sessionId: 'sess-hist',
       turnId: 'turn-0',
       sourceType: 'runtime',
-      sourcePluginId: 'core-narrator',
+      sourcePluginId: 'narrator',
       role: 'assistant',
-      name: 'core-narrator',
+      name: 'narrator',
       content: 'Previous narrator response',
       order: 500,
       createdAt: '2024-01-01T00:00:01Z',
@@ -806,7 +806,7 @@ describe('TurnExecutor _interaction protocol', () => {
   it('should detect _interaction from tool results and populate pendingInputs', async () => {
     const store = await createMainLoopStore('sess-1');
     const discoveries = await discoverPlugins(PLUGINS_DIR);
-    const charDiscovery = discoveries.find(d => d.id === 'core-char-creator')!;
+    const charDiscovery = discoveries.find(d => d.id === 'char-creator')!;
     const charManifests = await loadPluginManifest(charDiscovery);
     const charManifest = charManifests[0].manifest;
     const charLoaded = await loadRuntime(charDiscovery, charManifest.name);
@@ -852,9 +852,9 @@ describe('TurnExecutor _interaction protocol', () => {
     };
 
     // Strip upstreamRequired for this unit test — the real player-init
-    // declares `upstreamRequired: [core-pregame]` so the framework skips
+    // declares `upstreamRequired: [pregame]` so the framework skips
     // it when pregame isn't scheduled. This test focuses on the interaction
-    // protocol in isolation and doesn't need to wire in core-pregame.
+    // protocol in isolation and doesn't need to wire in pregame.
     const isolatedManifest = { ...charManifest, upstreamRequired: undefined };
     const result = await executeTurn(makeTurnInput(), [isolatedManifest], deps);
 

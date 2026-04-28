@@ -46,7 +46,7 @@ export const pluginDataSetTool: BuiltinTool = {
 };
 ```
 
-**证据 B** · [`plugins/core-codex/tools/unlock-codex-entries.js:52-80`](../../../plugins/core-codex/tools/unlock-codex-entries.js)
+**证据 B** · [`plugins/codex/tools/unlock-codex-entries.js:52-80`](../../../plugins/codex/tools/unlock-codex-entries.js)
 
 插件的 local tool 也这样写:
 
@@ -54,7 +54,7 @@ export const pluginDataSetTool: BuiltinTool = {
 // 每个 entry 直接 setPluginData
 await context.store.setPluginData({
   sessionId: context.sessionId,
-  pluginId: 'core-codex',
+  pluginId: 'codex',
   namespace: 'entries',
   key: shortId,
   value: entry,
@@ -208,18 +208,18 @@ export interface ToolCallResult {
 
 已迁移到 `withPendingProposals(...)` + `plugin.data(.batch)` proposal:
 
-- `plugins/core-codex/tools/unlock-codex-entries.js` (batch)
-- `plugins/core-codex/tools/update-codex-entry.js` (single)
-- `plugins/core-guide/tools/generate-guide.js` (batch)
-- `plugins/core-world-init/tools/set-world-schema.js` (single)
-- `plugins/core-world-init/tools/set-world-entries-batch.js` (batch;`lorebook_entries` 双写保留)
-- `plugins/core-npc-graph/tools/upsert-npc-graph.js` (batch)
+- `plugins/codex/tools/unlock-codex-entries.js` (batch)
+- `plugins/codex/tools/update-codex-entry.js` (single)
+- `plugins/guide/tools/generate-guide.js` (batch)
+- `plugins/world-init/tools/set-world-schema.js` (single)
+- `plugins/world-init/tools/set-world-entries-batch.js` (batch;`lorebook_entries` 双写保留)
+- `plugins/npc-graph/tools/upsert-npc-graph.js` (batch)
 
 验证:`grep -rn "store\.setPluginData" plugins/*/tools/` → 0 命中。
 
 ### 3.7 保留的直接调用(设计性例外)
 
-- **`plugins/core-world-init/guard.js`** 仍直接调 `s.setPluginData(Batch)`。Guard 是 `onPreGame` 生命周期钩子,在 runtime 回合之外运行、没有 `turnId`、不产出 `RuntimeResult`,无法走 proposal 管道。保留直接写是**有意选择** —— guard 是框架级同步初始化逻辑,不在 LLM 可达写路径上。
+- **`plugins/world-init/guard.js`** 仍直接调 `s.setPluginData(Batch)`。Guard 是 `onPreGame` 生命周期钩子,在 runtime 回合之外运行、没有 `turnId`、不产出 `RuntimeResult`,无法走 proposal 管道。保留直接写是**有意选择** —— guard 是框架级同步初始化逻辑,不在 LLM 可达写路径上。
 - **`store.setPluginData` 作为底层 API 保留** —— 新的 commit handler 本身、bootstrap fixture、admin API 路由都合法使用。未做弃用标记。
 
 ### 3.8 SSE 事件与 commit chain 解耦

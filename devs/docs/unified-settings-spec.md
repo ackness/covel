@@ -74,9 +74,9 @@ Flat key → value JSON. Dot-notation key names group related settings.
     "llm.paramOverrides": { "default": { "temperature": 0.8 } },
     "llm.capabilityOverrides": {},
 
-    "plugin.core-narrator.verbosity": "balanced",
-    "plugin.core-image.defaultStyle": "anime",
-    "plugin.core-narrator.runtime.narrator.priority": 520
+    "plugin.narrator.verbosity": "balanced",
+    "plugin.image.defaultStyle": "anime",
+    "plugin.narrator.runtime.narrator.priority": 520
   }
 }
 ```
@@ -122,7 +122,7 @@ New PLUGIN.md frontmatter field:
 
 ```yaml
 ---
-name: core-image
+name: image
 version: 1.0.0
 # ...
 userSettings:
@@ -172,7 +172,7 @@ The context wrapper automatically prefixes `plugin.<pluginId>.` — plugins neve
 ```ts
 // packages/shared/src/settings/types.ts
 
-export type SettingKey = string; // e.g. "ui.locale", "plugin.core-image.defaultStyle"
+export type SettingKey = string; // e.g. "ui.locale", "plugin.image.defaultStyle"
 
 export interface SettingEntry<T = unknown> {
   key: SettingKey;
@@ -298,8 +298,8 @@ Left nav + right content, inside the existing Dialog (retains current "overlay o
 │   Presets           │                                     │
 │   Advanced          │                                     │
 │ ▾ Plugins           │                                     │
-│   core-narrator     │                                     │
-│   core-image        │                                     │
+│   narrator     │                                     │
+│   image        │                                     │
 │   …                 │                                     │
 │ Desktop             │                                     │
 │ Data                │                                     │
@@ -318,7 +318,7 @@ Top-of-nav input filters the tree:
 
 ```ts
 openSettings("llm.slots.default");       // expands LLM > Slots, scrolls to "default" entry
-openSettings("plugin.core-image");       // expands Plugins > core-image group
+openSettings("plugin.image");       // expands Plugins > image group
 ```
 
 Exported as:
@@ -378,7 +378,7 @@ Widget styling rules (applies across all tabs):
   [✓] ui.appearance     modern → paper       (change)
   [✓] llm.slotConfig    (new 2 entries)      (new)
   [ ] llm.paramOverrides                     (already matches)
-  [✓] plugin.core-image.defaultStyle anime → realistic (change)
+  [✓] plugin.image.defaultStyle anime → realistic (change)
 
   [ ] Include API keys (3 found in bundle)
 
@@ -481,7 +481,7 @@ Incremental — not a single big-bang PR:
 1. **PR A: Core store, no consumers.** Add `packages/shared/src/settings/`, unit-test against both backends.
 2. **PR B: Registry + UI shell.** Register all core settings; new `SettingsDialog` renders but is behind a feature flag; old dialog still active.
 3. **PR C: Consumer migration.** Delete old hooks / functions. All call sites switch to `useSettings()`. Legacy cleanup runs on first boot.
-4. **PR D: Plugin userSettings.** Extend PLUGIN.md schema, runtime context injection, one plugin (e.g., core-image) adopts it as a demo.
+4. **PR D: Plugin userSettings.** Extend PLUGIN.md schema, runtime context injection, one plugin (e.g., image) adopts it as a demo.
 5. **PR E: Import / Export + Reset.** Ships the Data group.
 6. **PR F: Session runtimeBindings migration.** Deletes `localStorage` fallback path.
 

@@ -91,7 +91,7 @@ describe('TurnExecutor Resilience', () => {
     mockLLM = new MockLLM();
 
     const discoveries = await discoverPlugins(PLUGINS_DIR);
-    const narratorDiscovery = discoveries.find((d) => d.id === 'core-narrator');
+    const narratorDiscovery = discoveries.find((d) => d.id === 'narrator');
     expect(narratorDiscovery).toBeDefined();
 
     const manifests = await loadPluginManifest(narratorDiscovery!);

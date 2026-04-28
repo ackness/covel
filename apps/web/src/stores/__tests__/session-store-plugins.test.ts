@@ -92,8 +92,8 @@ describe("session-store plugin reducer", () => {
 
   it("LOAD_SESSION_PLUGINS: sets sessionPlugins in state", () => {
     const plugins: SessionPluginInfo[] = [
-      { id: "core-narrator", displayName: "Narrator", isActive: true },
-      { id: "core-memory", displayName: "Memory", isActive: false },
+      { id: "narrator", displayName: "Narrator", isActive: true },
+      { id: "memory", displayName: "Memory", isActive: false },
     ];
 
     // Pure reducer logic: given previous state, action produces new state
@@ -109,20 +109,20 @@ describe("session-store plugin reducer", () => {
     })();
 
     expect(newState.sessionPlugins).toHaveLength(2);
-    expect(newState.sessionPlugins[0].id).toBe("core-narrator");
+    expect(newState.sessionPlugins[0].id).toBe("narrator");
     expect(newState.sessionPlugins[0].isActive).toBe(true);
-    expect(newState.sessionPlugins[1].id).toBe("core-memory");
+    expect(newState.sessionPlugins[1].id).toBe("memory");
     expect(newState.sessionPlugins[1].isActive).toBe(false);
   });
 
   it("TOGGLE_SESSION_PLUGIN: optimistically flips isActive for matching plugin", () => {
     const plugins: SessionPluginInfo[] = [
-      { id: "core-narrator", displayName: "Narrator", isActive: true },
-      { id: "core-memory", displayName: "Memory", isActive: false },
+      { id: "narrator", displayName: "Narrator", isActive: true },
+      { id: "memory", displayName: "Memory", isActive: false },
     ];
 
     const prevState = { sessionPlugins: plugins };
-    const action = { type: "TOGGLE_SESSION_PLUGIN" as const, pluginId: "core-memory", isActive: true };
+    const action = { type: "TOGGLE_SESSION_PLUGIN" as const, pluginId: "memory", isActive: true };
 
     const newState = (() => {
       if (action.type === "TOGGLE_SESSION_PLUGIN") {
@@ -142,13 +142,13 @@ describe("session-store plugin reducer", () => {
 
   it("TOGGLE_SESSION_PLUGIN: does not mutate other plugins", () => {
     const plugins: SessionPluginInfo[] = [
-      { id: "core-narrator", displayName: "Narrator", isActive: true },
-      { id: "core-persona", displayName: "Persona", isActive: true },
-      { id: "core-memory", displayName: "Memory", isActive: true },
+      { id: "narrator", displayName: "Narrator", isActive: true },
+      { id: "persona", displayName: "Persona", isActive: true },
+      { id: "memory", displayName: "Memory", isActive: true },
     ];
 
     const prevState = { sessionPlugins: plugins };
-    const action = { type: "TOGGLE_SESSION_PLUGIN" as const, pluginId: "core-narrator", isActive: false };
+    const action = { type: "TOGGLE_SESSION_PLUGIN" as const, pluginId: "narrator", isActive: false };
 
     const newState = (() => {
       if (action.type === "TOGGLE_SESSION_PLUGIN") {
@@ -171,7 +171,7 @@ describe("session-store plugin reducer", () => {
 
   it("TOGGLE_SESSION_PLUGIN: no-op when pluginId not found", () => {
     const plugins: SessionPluginInfo[] = [
-      { id: "core-narrator", displayName: "Narrator", isActive: true },
+      { id: "narrator", displayName: "Narrator", isActive: true },
     ];
 
     const prevState = { sessionPlugins: plugins };
@@ -196,7 +196,7 @@ describe("session-store plugin reducer", () => {
   it("LOAD_SESSION_PLUGINS: empty array clears all plugins", () => {
     const prevState = {
       sessionPlugins: [
-        { id: "core-narrator", displayName: "Narrator", isActive: true },
+        { id: "narrator", displayName: "Narrator", isActive: true },
       ] as SessionPluginInfo[],
     };
     const action = { type: "LOAD_SESSION_PLUGINS" as const, plugins: [] as SessionPluginInfo[] };
@@ -224,9 +224,9 @@ describe("loadSessionPlugins callback", () => {
 
   it("calls listSessionPlugins with the current sessionId", async () => {
     vi.mocked(apiMock.listSessionPlugins).mockResolvedValueOnce({
-      active: ["core-narrator"],
+      active: ["narrator"],
       available: [
-        { id: "core-narrator", displayName: "Narrator", isActive: true },
+        { id: "narrator", displayName: "Narrator", isActive: true },
       ],
     });
 
@@ -237,11 +237,11 @@ describe("loadSessionPlugins callback", () => {
 
   it("returns available plugins list from the server response", async () => {
     const mockResponse = {
-      active: ["core-narrator", "core-persona"],
+      active: ["narrator", "persona"],
       available: [
-        { id: "core-narrator", displayName: "Narrator", isActive: true },
-        { id: "core-persona", displayName: "Persona", isActive: true },
-        { id: "core-memory", displayName: "Memory", isActive: false },
+        { id: "narrator", displayName: "Narrator", isActive: true },
+        { id: "persona", displayName: "Persona", isActive: true },
+        { id: "memory", displayName: "Memory", isActive: false },
       ],
     };
     vi.mocked(apiMock.listSessionPlugins).mockResolvedValueOnce(mockResponse);
@@ -249,8 +249,8 @@ describe("loadSessionPlugins callback", () => {
     const result = await apiMock.listSessionPlugins("test-session");
 
     expect(result.available).toHaveLength(3);
-    expect(result.active).toContain("core-narrator");
-    expect(result.available.find((p) => p.id === "core-memory")?.isActive).toBe(false);
+    expect(result.active).toContain("narrator");
+    expect(result.available.find((p) => p.id === "memory")?.isActive).toBe(false);
   });
 });
 
@@ -267,38 +267,38 @@ describe("toggleSessionPlugin callback", () => {
   it("calls enableSessionPlugin when enable=true", async () => {
     vi.mocked(apiMock.enableSessionPlugin).mockResolvedValueOnce({
       ok: true,
-      active: ["core-narrator", "core-memory"],
+      active: ["narrator", "memory"],
     });
 
-    const result = await apiMock.enableSessionPlugin("session-1", "core-memory");
+    const result = await apiMock.enableSessionPlugin("session-1", "memory");
 
-    expect(apiMock.enableSessionPlugin).toHaveBeenCalledWith("session-1", "core-memory");
+    expect(apiMock.enableSessionPlugin).toHaveBeenCalledWith("session-1", "memory");
     expect(result.ok).toBe(true);
-    expect(result.active).toContain("core-memory");
+    expect(result.active).toContain("memory");
   });
 
   it("calls disableSessionPlugin when enable=false", async () => {
     vi.mocked(apiMock.disableSessionPlugin).mockResolvedValueOnce({
       ok: true,
-      active: ["core-narrator"],
+      active: ["narrator"],
     });
 
-    const result = await apiMock.disableSessionPlugin("session-1", "core-memory");
+    const result = await apiMock.disableSessionPlugin("session-1", "memory");
 
-    expect(apiMock.disableSessionPlugin).toHaveBeenCalledWith("session-1", "core-memory");
+    expect(apiMock.disableSessionPlugin).toHaveBeenCalledWith("session-1", "memory");
     expect(result.ok).toBe(true);
-    expect(result.active).not.toContain("core-memory");
+    expect(result.active).not.toContain("memory");
   });
 
   it("disableSessionPlugin returns updated active list excluding the disabled plugin", async () => {
     vi.mocked(apiMock.disableSessionPlugin).mockResolvedValueOnce({
       ok: true,
-      active: ["core-narrator", "core-persona"],
+      active: ["narrator", "persona"],
     });
 
-    const result = await apiMock.disableSessionPlugin("session-1", "core-memory");
+    const result = await apiMock.disableSessionPlugin("session-1", "memory");
 
-    expect(result.active).toEqual(["core-narrator", "core-persona"]);
+    expect(result.active).toEqual(["narrator", "persona"]);
   });
 });
 
@@ -307,12 +307,12 @@ describe("toggleSessionPlugin callback", () => {
 describe("plugin toggle edge cases", () => {
   it("toggle state is immutable: does not mutate the original plugins array", () => {
     const original: SessionPluginInfo[] = [
-      { id: "core-narrator", displayName: "Narrator", isActive: true },
+      { id: "narrator", displayName: "Narrator", isActive: true },
     ];
     const originalRef = original[0];
 
     const updated = original.map((p) =>
-      p.id === "core-narrator" ? { ...p, isActive: false } : p,
+      p.id === "narrator" ? { ...p, isActive: false } : p,
     );
 
     // Original array and object should not be mutated
@@ -325,7 +325,7 @@ describe("plugin toggle edge cases", () => {
   it("loadSessionPlugins response with i18n displayName (object) is preserved", async () => {
     const plugins: SessionPluginInfo[] = [
       {
-        id: "core-narrator",
+        id: "narrator",
         displayName: { "zh-CN": "叙述者", "en-US": "Narrator" },
         isActive: true,
       },

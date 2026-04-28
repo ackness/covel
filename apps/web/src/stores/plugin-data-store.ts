@@ -225,7 +225,7 @@ const EMPTY_JOBS: readonly PluginJobRecord[] = Object.freeze([]);
  * plugin declares `capabilities: [world-data-provider]`. The schema lives
  * under the well-known path `(*, 'schema', 'character-attributes')`, so we
  * scan across all pluginIds and return the first match instead of hardcoding
- * `core-world-init` (framework/plugin isolation rule).
+ * `world-init` (framework/plugin isolation rule).
  *
  * Returns `null` when no world has produced a schema yet.
  */

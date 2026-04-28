@@ -110,16 +110,16 @@ const prompt = interpolate(template, { locale: "zh-CN" });
 
 | # | 当前位置 | 目标文件 | 模板变量 |
 |---|---------|---------|---------|
-| 3 | `core-persona/server/context/persona-context.ts` | `core-persona/prompts/persona-rules.{zh,en}.md` | 无（纯静态） |
-| 4 | `core-guide/server/context/guide-context.ts` | `core-guide/prompts/guide-instructions.{zh,en}.md` | 无 |
-| 5 | `core-combat/server/context-provider.ts` | `core-combat/prompts/combat-rules.{zh,en}.md` | 无 |
+| 3 | `persona/server/context/persona-context.ts` | `persona/prompts/persona-rules.{zh,en}.md` | 无（纯静态） |
+| 4 | `guide/server/context/guide-context.ts` | `guide/prompts/guide-instructions.{zh,en}.md` | 无 |
+| 5 | `combat/server/context-provider.ts` | `combat/prompts/combat-rules.{zh,en}.md` | 无 |
 
 ### C. 插件逻辑 Prompt
 
 | # | 当前位置 | 目标文件 | 模板变量 |
 |---|---------|---------|---------|
-| 6 | `core-memory/server/logic.ts` `buildSummaryPrompt()` | `core-memory/prompts/summary-prompt.{zh,en}.md` | `{{existingSummary}}`, `{{narrative}}`, `{{eventLines}}` |
-| 7 | `core-init-wizard/server/logic.ts` `buildTransitionPrompt()` | `core-init-wizard/prompts/transition-prompt.{zh,en}.md` | `{{narrative}}` |
+| 6 | `memory/server/logic.ts` `buildSummaryPrompt()` | `memory/prompts/summary-prompt.{zh,en}.md` | `{{existingSummary}}`, `{{narrative}}`, `{{eventLines}}` |
+| 7 | `init-wizard/server/logic.ts` `buildTransitionPrompt()` | `init-wizard/prompts/transition-prompt.{zh,en}.md` | `{{narrative}}` |
 | 8 | `core-char-tracker/server/logic.ts` `buildFieldExtractionPrompt()` | `core-char-tracker/prompts/field-extraction.{zh,en}.md` | `{{fieldDescriptions}}`, `{{existingInfo}}`, `{{narrative}}` |
 
 ### D. 小清理
@@ -150,14 +150,14 @@ const prompt = interpolate(template, { locale: "zh-CN" });
 - 更新两个路由文件使用 `loadPrompt()` + `interpolate()`
 
 ### Phase 3: 插件 Context Provider Prompt 外部化
-- `core-persona/prompts/persona-rules.{zh,en}.md`
-- `core-guide/prompts/guide-instructions.{zh,en}.md`
-- `core-combat/prompts/combat-rules.{zh,en}.md`
+- `persona/prompts/persona-rules.{zh,en}.md`
+- `guide/prompts/guide-instructions.{zh,en}.md`
+- `combat/prompts/combat-rules.{zh,en}.md`
 - 更新各 context provider 使用 `loadPrompt()`
 
 ### Phase 4: 插件逻辑 Prompt 外部化
-- `core-memory/prompts/summary-prompt.{zh,en}.md`
-- `core-init-wizard/prompts/transition-prompt.{zh,en}.md`
+- `memory/prompts/summary-prompt.{zh,en}.md`
+- `init-wizard/prompts/transition-prompt.{zh,en}.md`
 - `core-char-tracker/prompts/field-extraction.{zh,en}.md`
 - 更新各 logic 模块使用 `loadPrompt()` + `interpolate()`
 

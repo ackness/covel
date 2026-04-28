@@ -18,7 +18,7 @@ import { createMemoryStore, type DataStore } from '@covel/store';
 import { loadSessionConfig } from '../../src/routes/api/load-session-config.js';
 
 const SESSION_ID = 'load-cfg-sess';
-const PLUGIN_ID = 'core-world-init';
+const PLUGIN_ID = 'world-init';
 
 async function seedSession(store: DataStore): Promise<void> {
   await store.createSession({

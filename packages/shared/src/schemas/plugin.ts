@@ -364,7 +364,7 @@ export const runtimeManifestSchema = z
      * `status: 'skipped'` before the guard / LLM pipeline. Use this for
      * plugins whose prompt is meaningless without fresh narrative context
      * (guide, codex, char-creator/character-tracker, npc-graph/extractor
-     * all depend on core-narrator succeeding).
+     * all depend on narrator succeeding).
      */
     upstreamRequired: z.array(z.string().min(1)).optional(),
     trigger: triggerConfigSchema.optional(),

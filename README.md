@@ -76,14 +76,14 @@ pnpm dev                            # web :5173 + server :3001 (SQLite)
 
 | 插件 | 类型 | 作用 |
 |------|:-:|------|
-| `core-narrator`     | Agent    | 主叙事 |
-| `core-guide`        | Agent    | 行动引导 + 选项生成 |
-| `core-npc-graph`    | Agent    | NPC 关系图抽取 + 2-hop 检索 |
-| `core-codex`        | Agent    | 世界知识典籍 |
-| `core-char-creator` | Agent    | 角色卡创建流程 |
-| `core-world-init`   | Agent    | 世界维度初始化 |
-| `core-pregame`      | Function | 开局前置（不走 LLM） |
-| `core-memory`       | UI       | 记忆面板 |
+| `narrator`     | Agent    | 主叙事 |
+| `guide`        | Agent    | 行动引导 + 选项生成 |
+| `npc-graph`    | Agent    | NPC 关系图抽取 + 2-hop 检索 |
+| `codex`        | Agent    | 世界知识典籍 |
+| `char-creator` | Agent    | 角色卡创建流程 |
+| `world-init`   | Agent    | 世界维度初始化 |
+| `pregame`      | Function | 开局前置（不走 LLM） |
+| `memory`       | UI       | 记忆面板 |
 
 示例世界包:`cloudmere`、`mistport`、`neonridge`。
 

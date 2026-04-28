@@ -63,7 +63,7 @@ export function normalizeOutput(
   // `plugin` runtimes that happen to return `narrativeOutput` (e.g. a
   // tool-less LLM response on a non-story plugin) must NOT pollute the
   // chat stream — their text is still available via RuntimeResult.output
-  // for trace and debug consumers. This blocks the core-guide failure
+  // for trace and debug consumers. This blocks the guide failure
   // mode where the LLM ignored `generate-guide` and wrote a narrative
   // continuation that the framework silently committed alongside
   // narrator's real output.

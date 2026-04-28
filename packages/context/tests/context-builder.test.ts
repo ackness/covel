@@ -264,7 +264,7 @@ describe('buildContext', () => {
   it('should include message history before current user message', () => {
     const history: MessageHistoryRecord[] = [
       { role: 'user', content: 'I enter the cave' },
-      { role: 'assistant', content: 'The cave is dark and damp.', name: 'core-narrator' },
+      { role: 'assistant', content: 'The cave is dark and damp.', name: 'narrator' },
     ];
 
     const params: ContextBuildParams = {
@@ -280,13 +280,13 @@ describe('buildContext', () => {
 
     expect(ctx.messages).toHaveLength(3);
     expect(ctx.messages[0]).toEqual({ role: 'user', content: 'I enter the cave' });
-    expect(ctx.messages[1]).toEqual({ role: 'assistant', content: 'The cave is dark and damp.', name: 'core-narrator' });
+    expect(ctx.messages[1]).toEqual({ role: 'assistant', content: 'The cave is dark and damp.', name: 'narrator' });
     expect(ctx.messages[2]).toEqual({ role: 'user', content: 'I look around' });
   });
 
   it('should preserve name field on history messages', () => {
     const history: MessageHistoryRecord[] = [
-      { role: 'assistant', content: 'A story begins.', name: 'core-narrator' },
+      { role: 'assistant', content: 'A story begins.', name: 'narrator' },
     ];
 
     const params: ContextBuildParams = {
@@ -299,7 +299,7 @@ describe('buildContext', () => {
     };
 
     const ctx = buildContext(params);
-    expect(ctx.messages[0]).toEqual({ role: 'assistant', content: 'A story begins.', name: 'core-narrator' });
+    expect(ctx.messages[0]).toEqual({ role: 'assistant', content: 'A story begins.', name: 'narrator' });
   });
 
   it('should behave as before when no message history provided', () => {

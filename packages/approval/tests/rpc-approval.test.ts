@@ -19,7 +19,7 @@ describe('createRpcApprovalGate (PR-7)', () => {
     const gate = createRpcApprovalGate();
     const result = gate.evaluate({
       sessionId: 'sess-1',
-      pluginId: 'core-codex',
+      pluginId: 'codex',
       action: 'regenerate',
       payload: {},
       trustLevel: 'official',

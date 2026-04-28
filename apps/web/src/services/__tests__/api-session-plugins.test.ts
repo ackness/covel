@@ -48,21 +48,21 @@ describe("listSessionPlugins", () => {
   it("should call GET /sessions/:id/plugins and return the response", async () => {
     // Mock the raw server response (uses `active` and `name`, not `isActive`/`displayName`)
     const serverResponse = {
-      active: ["core-narrator", "core-persona"],
+      active: ["narrator", "persona"],
       available: [
         {
-          id: "core-narrator",
+          id: "narrator",
           name: "Narrator",
           description: "Main narrative generation",
           active: true,
         },
         {
-          id: "core-persona",
+          id: "persona",
           name: "Persona",
           active: true,
         },
         {
-          id: "core-memory",
+          id: "memory",
           name: "Memory",
           description: "Memory summarizer",
           active: false,
@@ -75,7 +75,7 @@ describe("listSessionPlugins", () => {
     const result = await listSessionPlugins("session-123");
 
     // API layer maps: active→isActive, name→displayName
-    expect(result.active).toEqual(["core-narrator", "core-persona"]);
+    expect(result.active).toEqual(["narrator", "persona"]);
     expect(result.available).toHaveLength(3);
     expect(result.available[0].isActive).toBe(true);
     expect(result.available[0].displayName).toBe("Narrator");
@@ -108,10 +108,10 @@ describe("enableSessionPlugin", () => {
   });
 
   it("should call POST /sessions/:id/plugins/enable with pluginId body", async () => {
-    const mockResponse = { ok: true, active: ["core-narrator", "core-memory"] };
+    const mockResponse = { ok: true, active: ["narrator", "memory"] };
     mockFetchOnce(mockResponse);
 
-    const result = await enableSessionPlugin("session-abc", "core-memory");
+    const result = await enableSessionPlugin("session-abc", "memory");
 
     expect(result).toEqual(mockResponse);
     const fetchMock = vi.mocked(globalThis.fetch);
@@ -120,7 +120,7 @@ describe("enableSessionPlugin", () => {
 
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body as string)).toEqual({ pluginId: "core-memory" });
+    expect(JSON.parse(init.body as string)).toEqual({ pluginId: "memory" });
   });
 
   it("should throw when server returns 404 (plugin not found)", async () => {
@@ -143,10 +143,10 @@ describe("disableSessionPlugin", () => {
   });
 
   it("should call POST /sessions/:id/plugins/disable with pluginId body", async () => {
-    const mockResponse = { ok: true, active: ["core-narrator"] };
+    const mockResponse = { ok: true, active: ["narrator"] };
     mockFetchOnce(mockResponse);
 
-    const result = await disableSessionPlugin("session-abc", "core-memory");
+    const result = await disableSessionPlugin("session-abc", "memory");
 
     expect(result).toEqual(mockResponse);
     const fetchMock = vi.mocked(globalThis.fetch);
@@ -155,19 +155,19 @@ describe("disableSessionPlugin", () => {
 
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body as string)).toEqual({ pluginId: "core-memory" });
+    expect(JSON.parse(init.body as string)).toEqual({ pluginId: "memory" });
   });
 
   it("should throw on network error", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValueOnce(new Error("Network error")));
 
-    await expect(disableSessionPlugin("session-abc", "core-memory")).rejects.toThrow("Network error");
+    await expect(disableSessionPlugin("session-abc", "memory")).rejects.toThrow("Network error");
   });
 
   it("should URL-encode the sessionId", async () => {
     mockFetchOnce({ ok: true, active: [] });
 
-    await disableSessionPlugin("session with spaces", "core-memory");
+    await disableSessionPlugin("session with spaces", "memory");
 
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/sessions/session%20with%20spaces/plugins/disable");
@@ -184,13 +184,13 @@ describe("listPackages", () => {
     mockFetchOnce({
       packages: [
         {
-          name: "core-narrator",
+          name: "narrator",
           enabled: true,
           pluginType: "core-plugin",
           source: "builtin",
           runtimes: [
             {
-              id: "core-narrator",
+              id: "narrator",
               kind: "agent",
               priority: 500,
               trigger: { type: "event", topic: "story.ready" },

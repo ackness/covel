@@ -31,21 +31,21 @@ describe('scheduleByDag', () => {
 
   it('parallelises all narrator downstreams after narrator completes', () => {
     const input = [
-      mk('core-npc-graph/rag-retriever', 490),
-      mk('core-narrator', 500, {
-        input: { inject: [{ kind: 'runtime', from: 'core-npc-graph/rag-retriever', field: 'npcContext', as: '<npc>' }] },
+      mk('npc-graph/rag-retriever', 490),
+      mk('narrator', 500, {
+        input: { inject: [{ kind: 'runtime', from: 'npc-graph/rag-retriever', field: 'npcContext', as: '<npc>' }] },
       } as Partial<RuntimeManifest>),
-      mk('core-guide', 550, {
-        input: { inject: [{ kind: 'runtime', from: 'core-narrator', field: 'narrativeOutput', as: '<n>' }] },
+      mk('guide', 550, {
+        input: { inject: [{ kind: 'runtime', from: 'narrator', field: 'narrativeOutput', as: '<n>' }] },
       } as Partial<RuntimeManifest>),
-      mk('core-npc-graph/extractor', 620, {
-        input: { inject: [{ kind: 'runtime', from: 'core-narrator', field: 'narrativeOutput', as: '<n>' }] },
+      mk('npc-graph/extractor', 620, {
+        input: { inject: [{ kind: 'runtime', from: 'narrator', field: 'narrativeOutput', as: '<n>' }] },
       } as Partial<RuntimeManifest>),
-      mk('core-codex', 650, {
-        input: { inject: [{ kind: 'runtime', from: 'core-narrator', field: 'narrativeOutput', as: '<n>' }] },
+      mk('codex', 650, {
+        input: { inject: [{ kind: 'runtime', from: 'narrator', field: 'narrativeOutput', as: '<n>' }] },
       } as Partial<RuntimeManifest>),
-      mk('core-char-creator/character-tracker', 750, {
-        input: { inject: [{ kind: 'runtime', from: 'core-narrator', field: 'narrativeOutput', as: '<n>' }] },
+      mk('char-creator/character-tracker', 750, {
+        input: { inject: [{ kind: 'runtime', from: 'narrator', field: 'narrativeOutput', as: '<n>' }] },
       } as Partial<RuntimeManifest>),
     ];
 
@@ -54,18 +54,18 @@ describe('scheduleByDag', () => {
     expect(groups.length).toBe(3);
 
     // Level 0: rag (no deps)
-    expect(groups[0]!.runtimes.map((r) => r.name)).toEqual(['core-npc-graph/rag-retriever']);
+    expect(groups[0]!.runtimes.map((r) => r.name)).toEqual(['npc-graph/rag-retriever']);
 
     // Level 1: narrator (depends on rag)
-    expect(groups[1]!.runtimes.map((r) => r.name)).toEqual(['core-narrator']);
+    expect(groups[1]!.runtimes.map((r) => r.name)).toEqual(['narrator']);
 
     // Level 2: everything that depends only on narrator — all parallel.
     expect(groups[2]!.runtimes.map((r) => r.name).sort()).toEqual(
       [
-        'core-char-creator/character-tracker',
-        'core-codex',
-        'core-guide',
-        'core-npc-graph/extractor',
+        'char-creator/character-tracker',
+        'codex',
+        'guide',
+        'npc-graph/extractor',
       ].sort(),
     );
   });

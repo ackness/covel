@@ -51,9 +51,9 @@ Covel 框架承担的是 **Agent 编排层**。
 
 这条原则意味着：
 
-- guide 的建议样式属于 `core-guide`
-- codex 的摘要与图鉴属于 `core-codex`
-- 关系图谱的命名、面板说明、节点呈现属于 `core-npc-graph`
+- guide 的建议样式属于 `guide`
+- codex 的摘要与图鉴属于 `codex`
+- 关系图谱的命名、面板说明、节点呈现属于 `npc-graph`
 
 ### 1.3 适配位置
 
@@ -138,8 +138,8 @@ Covel 当前的工具层分成两类：
 
 当前 core 插件已经有这类样例：
 
-- `plugins/core-codex/tests/codex.test.js`
-- `plugins/core-npc-graph/tests/npc-graph.test.js`
+- `plugins/codex/tests/codex.test.js`
+- `plugins/npc-graph/tests/npc-graph.test.js`
 - `packages/runtime/tests/session-kernel.test.ts`
 
 ---
@@ -246,14 +246,14 @@ Covel 当前的工具层分成两类：
 
 1. runtime 分析 narrator 输出
 2. tool 生成三类建议
-3. tool 把 `topic`、`category1Label`、`category1Suggestion1` 等写入 `plugin_data[core-guide][message]`
-4. `plugins/core-guide/ui/action-guide-block.json` 从 `message` namespace 读取并渲染
+3. tool 把 `topic`、`category1Label`、`category1Suggestion1` 等写入 `plugin_data[guide][message]`
+4. `plugins/guide/ui/action-guide-block.json` 从 `message` namespace 读取并渲染
 
 #### Codex
 
 1. runtime 从 narrator 文本提取术语
-2. handler 把完整词条写入 `plugin_data[core-codex][entries]`
-3. 同时把本轮摘要写入 `plugin_data[core-codex][message]`
+2. handler 把完整词条写入 `plugin_data[codex][entries]`
+3. 同时把本轮摘要写入 `plugin_data[codex][message]`
 4. `ui.message` 只显示关键词摘要
 5. `ui.right` 显示完整图鉴
 
@@ -319,7 +319,7 @@ submitBehavior: {
 
 `form` 类提交（`submitForm` → `submitInteraction`）走另一条路径：原始字段值已经直接烘焙进 disabled 表单 spec，所以框架**不会**再额外渲染 footer。
 
-插件作者无需特殊适配——只要按 [`core-guide/ui/action-guide-block.json`](../../plugins/core-guide/ui/action-guide-block.json) 的方式使用 `draftMessage` 等动作，玩家选择就会被自动记录与回放。
+插件作者无需特殊适配——只要按 [`guide/ui/action-guide-block.json`](../../plugins/guide/ui/action-guide-block.json) 的方式使用 `draftMessage` 等动作，玩家选择就会被自动记录与回放。
 
 ---
 
@@ -390,7 +390,7 @@ submitBehavior: {
 
 ### 7.1 当前图谱适合什么
 
-当前 `core-npc-graph` 模型适合：
+当前 `npc-graph` 模型适合：
 
 - 个人 `individual`
 - 群体 `group`
@@ -453,16 +453,16 @@ submitBehavior: {
 
 推荐默认插件集：
 
-- `core-pregame`
-- `core-world-init`
-- `core-narrator`
-- `core-char-creator`
+- `pregame`
+- `world-init`
+- `narrator`
+- `char-creator`
 
 扩展插件建议手动启用：
 
-- `core-guide`
-- `core-codex`
-- `core-npc-graph/extractor`
+- `guide`
+- `codex`
+- `npc-graph/extractor`
 
 这样起始体验更干净：
 

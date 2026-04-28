@@ -11,12 +11,12 @@ tags:
   - noir
   - thriller
 requiredPlugins:
-  - core-persona
-  - core-narrator
+  - persona
+  - narrator
 recommendedPlugins:
-  - core-guide
-  - core-inventory
-  - core-combat
+  - guide
+  - inventory
+  - combat
 
 dimensionSources:
   geography: ./dimensions/geography.yaml

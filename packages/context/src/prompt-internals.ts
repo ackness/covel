@@ -354,8 +354,8 @@ export function assemblePromptVariables(
   for (const [key, result] of completedResults) {
     if (!result.output) continue;
     const slashIdx = key.indexOf('/');
-    // Single-runtime: name = "core-narrator" → pluginId = runtimeId = "core-narrator"
-    // Multi-runtime:  name = "core-world-init/schema-gen" → pluginId = "core-world-init", runtimeId = "schema-gen"
+    // Single-runtime: name = "narrator" → pluginId = runtimeId = "narrator"
+    // Multi-runtime:  name = "world-init/schema-gen" → pluginId = "world-init", runtimeId = "schema-gen"
     const pluginId = slashIdx >= 0 ? key.slice(0, slashIdx) : key;
     const runtimeId = slashIdx >= 0 ? key.slice(slashIdx + 1) : key;
     if (!inputsMap[pluginId]) {

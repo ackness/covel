@@ -40,7 +40,7 @@ Covel 框架能力注册表与 API 参考。内容与 `@covel/shared`、`@covel/
 
 | 文档 | 描述 |
 |------|------|
-| [plugins.md](plugins.md) | 插件注册表 — 所有已实现的插件（含 core-world-init 多 runtime）、元信息、触发方式、依赖关系 |
+| [plugins.md](plugins.md) | 插件注册表 — 所有已实现的插件（含 world-init 多 runtime）、元信息、触发方式、依赖关系 |
 | [tools.md](tools.md) | 工具注册表 — 所有可用工具（含 plugin-data 工具）、短 ID 系统、审批策略、创建指南 |
 
 ## 相关目录

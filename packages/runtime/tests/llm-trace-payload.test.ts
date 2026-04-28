@@ -16,8 +16,8 @@ import {
 import type { LLMMessage, LLMResponse, LLMToolDefinition } from '../src/llm-adapter.js';
 
 const baseIdentity = {
-  runtimeId: 'core-narrator/main',
-  pluginId: 'core-narrator',
+  runtimeId: 'narrator/main',
+  pluginId: 'narrator',
 };
 
 describe('buildLlmCallingPayload', () => {
@@ -38,8 +38,8 @@ describe('buildLlmCallingPayload', () => {
     });
 
     expect(payload).toMatchObject({
-      runtimeId: 'core-narrator/main',
-      pluginId: 'core-narrator',
+      runtimeId: 'narrator/main',
+      pluginId: 'narrator',
       slot: 'default',
       model: 'default',
       provider: 'deepseek',
@@ -105,8 +105,8 @@ describe('buildLlmRespondedSuccessPayload', () => {
       attempt: 0,
     });
     expect(payload).toMatchObject({
-      runtimeId: 'core-narrator/main',
-      pluginId: 'core-narrator',
+      runtimeId: 'narrator/main',
+      pluginId: 'narrator',
       text: 'hi',
       finishReason: 'stop',
       usage: { inputTokens: 10, outputTokens: 5 },

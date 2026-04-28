@@ -159,7 +159,7 @@ describe('shouldTrigger', () => {
 
 describe('shouldTrigger — preGameCompleted gate', () => {
   it('skips runtime whose name is in preGameCompleted', () => {
-    const rt = { name: 'core-pregame', pluginId: 'core-pregame', description: 'pre-game', priority: 10, trigger: { type: 'auto' } } as RuntimeManifest;
+    const rt = { name: 'pregame', pluginId: 'pregame', description: 'pre-game', priority: 10, trigger: { type: 'auto' } } as RuntimeManifest;
     const ctx: TriggerContext = {
       sessionId: 'sess-1',
       turnNumber: 0,
@@ -168,13 +168,13 @@ describe('shouldTrigger — preGameCompleted gate', () => {
       pendingEventTopics: [],
       hasUpstreamFailure: false,
       isManualTrigger: false,
-      preGameCompleted: ['core-pregame'],
+      preGameCompleted: ['pregame'],
     };
     expect(shouldTrigger(rt, ctx)).toBe(false);
   });
 
   it('passes runtime whose name is NOT in preGameCompleted', () => {
-    const rt = { name: 'core-pregame', pluginId: 'core-pregame', description: 'pre-game', priority: 10, trigger: { type: 'auto' } } as RuntimeManifest;
+    const rt = { name: 'pregame', pluginId: 'pregame', description: 'pre-game', priority: 10, trigger: { type: 'auto' } } as RuntimeManifest;
     const ctx: TriggerContext = {
       sessionId: 'sess-1',
       turnNumber: 0,
@@ -189,7 +189,7 @@ describe('shouldTrigger — preGameCompleted gate', () => {
   });
 
   it('does not affect runtimes not in the preGameCompleted list', () => {
-    const rt = { name: 'core-narrator', pluginId: 'core-narrator', description: 'narrator', priority: 500, trigger: { type: 'auto' } } as RuntimeManifest;
+    const rt = { name: 'narrator', pluginId: 'narrator', description: 'narrator', priority: 500, trigger: { type: 'auto' } } as RuntimeManifest;
     const ctx: TriggerContext = {
       sessionId: 'sess-1',
       turnNumber: 5,
@@ -198,7 +198,7 @@ describe('shouldTrigger — preGameCompleted gate', () => {
       pendingEventTopics: [],
       hasUpstreamFailure: false,
       isManualTrigger: false,
-      preGameCompleted: ['core-pregame', 'core-world-init/schema-gen'],
+      preGameCompleted: ['pregame', 'world-init/schema-gen'],
     };
     expect(shouldTrigger(rt, ctx)).toBe(true);
   });

@@ -26,11 +26,11 @@ plugins/my-narrator/
 1. **YAML frontmatter**（`---` 包裹）— 告诉框架"这个插件是什么、何时运行"
 2. **Markdown 正文** — 直接作为 LLM 的 system prompt 发送
 
-以 `core-narrator`（主叙事插件）为例，这就是一个**零代码**插件的完整实现：
+以 `narrator`（主叙事插件）为例，这就是一个**零代码**插件的完整实现：
 
 ```markdown
 ---
-name: core-narrator
+name: narrator
 description: 主叙事生成器，负责根据玩家输入和世界观设定生成故事内容。每个 Turn 自动执行。
 pluginType: core-plugin
 priority: 500
@@ -96,10 +96,10 @@ trigger:
 
 | 区间 | 用途 | 示例 |
 |------|------|------|
-| 0-99 | Pre-Game 初始化（首轮 turnNumber=0 才会被调度） | core-pregame (10), core-world-init/schema-gen (40), core-char-creator/player-init (50) |
-| 100-499 | pre-narrator / 本轮只读准备 | core-persona (100), core-codex (450) |
-| 500 | narrator | core-narrator (500) |
-| 501-1000 | post-narrator / 状态写入与后台任务 | core-codex/post (650), core-image (800), core-memory (900) |
+| 0-99 | Pre-Game 初始化（首轮 turnNumber=0 才会被调度） | pregame (10), world-init/schema-gen (40), char-creator/player-init (50) |
+| 100-499 | pre-narrator / 本轮只读准备 | persona (100), codex (450) |
+| 500 | narrator | narrator (500) |
+| 501-1000 | post-narrator / 状态写入与后台任务 | codex/post (650), image (800), memory (900) |
 
 > **band 边界由 scheduler 强制**：`turnNumber === 0` 只调度 priority `<= 99`，`turnNumber >= 1` 只调度 priority `> 99`。把初始化插件放到 100-199 会让它们在主循环里运行，而不是 Pre-Game。500 前后只读/写入是推荐的语义约定，由插件作者遵守，框架不做强制检查。
 
@@ -257,14 +257,14 @@ Covel 的 turn pipeline 把每一轮拆成三段：
 
 | 插件 | pre runtime（只读）| post runtime（写）|
 |---|---|---|
-| `core-npc-graph` | `rag-retriever` (490) — 查图谱注入 npcContext | `extractor` (620) — 基于叙事 upsert 节点和边 |
+| `npc-graph` | `rag-retriever` (490) — 查图谱注入 npcContext | `extractor` (620) — 基于叙事 upsert 节点和边 |
 
 **例外是 OK 的**：
 
 如果一个 runtime 内部的"读"只是**自身去重**而非"为别的 runtime 注入 context"，单 runtime 既读又写没问题：
 
-- `core-codex` (650) 是 agent runtime，通过 `input.inject: plugin-data` 让框架在 prompt 构建时把已有条目自动塞进 `<existing-entries>` 块，LLM 一次调用就决定 unlock 或 update。读没有跨 runtime 消费方，不需要拆。
-- `core-char-creator/character-tracker` (750) 是 agent runtime，先 `list-characters` 给自己看现有角色 id 列表，再决定 create/update。同理不需要拆。
+- `codex` (650) 是 agent runtime，通过 `input.inject: plugin-data` 让框架在 prompt 构建时把已有条目自动塞进 `<existing-entries>` 块，LLM 一次调用就决定 unlock 或 update。读没有跨 runtime 消费方，不需要拆。
+- `char-creator/character-tracker` (750) 是 agent runtime，先 `list-characters` 给自己看现有角色 id 列表，再决定 create/update。同理不需要拆。
 
 判断标准：**这次"读"的结果有没有被别的 runtime 消费？**
 - 是 → 拆出 pre runtime，通过 `input.inject` 显式声明数据流
@@ -283,7 +283,7 @@ Covel 的 turn pipeline 把每一轮拆成三段：
 ```yaml
 input:
   inject:
-    - from: core-narrator
+    - from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
     - kind: plugin-data
@@ -373,7 +373,7 @@ narrativeTemplate: "你的名字叫 {{characterName}}，拥有 {{spiritRoot}} �
 
 > 你的名字叫 林清风，拥有 水 灵根。
 
-完整示例参见 `plugins/core-char-creator/PLUGIN.md`。
+完整示例参见 `plugins/char-creator/PLUGIN.md`。
 
 ### create-choices — 创建选项列表
 
@@ -412,7 +412,7 @@ tools:
 - `message`: 通知内容
 ```
 
-例如 `core-codex` 每解锁一个图鉴条目就发一条通知：
+例如 `codex` 每解锁一个图鉴条目就发一条通知：
 
 ```markdown
 ### create-notification
@@ -521,12 +521,12 @@ tags:
   - adventure
 
 requiredPlugins:
-  - core-persona
-  - core-narrator
+  - persona
+  - narrator
 recommendedPlugins:
-  - core-guide
-  - core-inventory
-  - core-combat
+  - guide
+  - inventory
+  - combat
 
 dimensions:
   geography:

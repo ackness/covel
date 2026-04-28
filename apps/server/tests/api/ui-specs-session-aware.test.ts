@@ -69,12 +69,12 @@ describe('GET /api/ui-specs session-aware filter', () => {
 
     // Register two plugins, each with a right-panel spec
     registry.register(makeEntry({
-      id: 'core-codex',
-      summary: makeSummary({ id: 'core-codex', name: 'Codex', pluginType: 'core-plugin' }),
+      id: 'codex',
+      summary: makeSummary({ id: 'codex', name: 'Codex', pluginType: 'core-plugin' }),
       loadedRuntimes: new Map([
-        ['core-codex', makeLoadedRuntime({
-          name: 'core-codex',
-          pluginId: 'core-codex',
+        ['codex', makeLoadedRuntime({
+          name: 'codex',
+          pluginId: 'codex',
           uiSpecs: { right: [{ id: 'codex', label: 'Codex', component: 'Stack', view: {} }] },
         })],
       ]),
@@ -98,7 +98,7 @@ describe('GET /api/ui-specs session-aware filter', () => {
       turnCount: 1,
       preGameCompleted: [],
       presetId: null,
-      activePlugins: ['core-codex'], // only core-codex active in this session
+      activePlugins: ['codex'], // only codex active in this session
       createdAt: new Date().toISOString(),
     });
 
@@ -117,7 +117,7 @@ describe('GET /api/ui-specs session-aware filter', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { right: Array<{ pluginId: string }> };
     expect(body.right).toHaveLength(1);
-    expect(body.right[0].pluginId).toBe('core-codex');
+    expect(body.right[0].pluginId).toBe('codex');
   });
 
   it('falls back to all specs if sessionId does not match a session', async () => {

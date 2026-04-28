@@ -402,7 +402,7 @@ function reducer(state: SessionState, action: Action): SessionState {
       // would be wiped. Re-apply the surface for every plugin that declared a
       // `ui.message` spec AND already has populated namespace state. Without
       // this, plugins whose only chat output is the json-render surface (e.g.
-      // core-guide) never show up on page refresh after hydration+snapshot
+      // guide) never show up on page refresh after hydration+snapshot
       // race to completion in the unfavourable order.
       let nextState: SessionState = { ...state, messages: action.messages };
       for (const entry of nextState.messageUiSpecs) {

@@ -768,7 +768,7 @@ export async function executeTurn(
     // Reload so messageHistory includes the current player message.
     // This ensures turnsSinceLastTrigger counts the current turn correctly —
     // without this, cooldownTurns checks always see 0 player messages after
-    // the last runtime message, blocking plugins like core-guide on every
+    // the last runtime message, blocking plugins like guide on every
     // subsequent turn.
     messageHistory = await deps.store.listTurnMessages(input.sessionId);
   }
@@ -791,8 +791,8 @@ export async function executeTurn(
   //    Each runtime gets its own triggerContext with accurate triggerCount from store.
   // Build a map of runtimeId → number of times it has been triggered (from message history)
   // We use TurnMessages with sourceType='runtime' as the trigger count source.
-  // Key by sourceRuntimeId (e.g. "core-world-init/schema-gen") to match rt.name used in lookup,
-  // since sourcePluginId stores the plugin package ID (e.g. "core-world-init") which differs for
+  // Key by sourceRuntimeId (e.g. "world-init/schema-gen") to match rt.name used in lookup,
+  // since sourcePluginId stores the plugin package ID (e.g. "world-init") which differs for
   // multi-runtime plugins.
   const runtimeTriggerCounts = new Map<string, number>();
   for (const msg of messageHistory) {
@@ -1267,15 +1267,15 @@ export async function executeTurn(
   //
   //   1. Its output reports `preGameDone: true`
   //        - Used by runtimes that complete deterministically in one turn
-  //          (e.g. `core-pregame` handler returns `{ preGameDone: true }`
+  //          (e.g. `pregame` handler returns `{ preGameDone: true }`
   //          after writing the welcome notification).
   //        - Also used by runtimes whose guard triggers completion after the
-  //          player submits an interactive form (e.g. `core-char-creator/
+  //          player submits an interactive form (e.g. `char-creator/
   //          player-init` only returns `preGameDone: true` in the guard
   //          branch that observes a submitted character form).
   //
   //   2. Its guard returned `{ skip: true }`
-  //        - Covers `core-world-init/schema-gen` when a prior session of
+  //        - Covers `world-init/schema-gen` when a prior session of
   //          the same world has already generated and persisted schema
   //          + entries; the guard skips the LLM call entirely.
   //
@@ -2621,7 +2621,7 @@ async function executeOneRuntime(
     );
 
     // Per-runtime maxSteps override. Plugins that should call a tool once and
-    // stop (e.g. core-guide) set `maxSteps: 2` in their frontmatter to prevent
+    // stop (e.g. guide) set `maxSteps: 2` in their frontmatter to prevent
     // the LLM from running the same tool in a loop after it already succeeds.
     const effectiveMaxSteps = manifest.maxSteps ?? maxSteps;
 

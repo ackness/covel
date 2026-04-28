@@ -30,7 +30,7 @@ const VALID_SCOPES = new Set(['player', 'story', 'shared']);
 // Gated by COVEL_MEMORY_V1=1. Read-only convenience endpoint for the UI panel.
 //
 // Path was renamed from `/:id/core-memory` (2026-04-27) to avoid collision with
-// the `core-memory` plugin id and follow the framework-plugin isolation rule.
+// the `memory` plugin id and follow the framework-plugin isolation rule.
 workingMemoryRoutes.get('/:id/memory-blocks', async (c) => {
   if (!isEnvEnabled('COVEL_MEMORY_V1')) {
     return c.json({ error: 'Memory system is disabled (set COVEL_MEMORY_V1=1)' }, 404);

@@ -2,7 +2,7 @@
  * E2E test: Complete narrator game flow through the API.
  *
  * Flow:
- *   POST /api/sessions           → create session, activate core-narrator
+ *   POST /api/sessions           → create session, activate narrator
  *   POST /api/sessions/:id/turn  → execute turn with narrator
  *   store assertions             → verify narrative output and turn history
  */
@@ -67,16 +67,16 @@ describe('E2E: Narrator game flow', () => {
     app = result.app;
     store = result.store;
 
-    // Activate core-narrator for all sessions globally
-    result.registry.activate('core-narrator', '__global__');
+    // Activate narrator for all sessions globally
+    result.registry.activate('narrator', '__global__');
   });
 
   async function markPreGameComplete(sessionId: string) {
     await store.updateSession(sessionId, {
       preGameCompleted: [
-        'core-pregame',
-        'core-world-init/schema-gen',
-        'core-char-creator/player-init',
+        'pregame',
+        'world-init/schema-gen',
+        'char-creator/player-init',
       ],
       turnCount: 1,
       updatedAt: new Date().toISOString(),
@@ -88,7 +88,7 @@ describe('E2E: Narrator game flow', () => {
     const startRes = await app.request('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ locale: 'zh-CN', plugins: ['core-narrator'] }),
+      body: JSON.stringify({ locale: 'zh-CN', plugins: ['narrator'] }),
     });
     expect(startRes.status).toBe(200);
 
@@ -120,9 +120,9 @@ describe('E2E: Narrator game flow', () => {
 
     expect(turnBody.turnId).toBeDefined();
 
-    const narratorResult = turnBody.runtimeResults.find((result) => result.pluginId === 'core-narrator');
+    const narratorResult = turnBody.runtimeResults.find((result) => result.pluginId === 'narrator');
     expect(narratorResult).toBeDefined();
-    expect(narratorResult!.pluginId).toBe('core-narrator');
+    expect(narratorResult!.pluginId).toBe('narrator');
     expect(narratorResult!.status).toBe('success');
     expect(narratorResult!.output.narrativeOutput).toContain('走进了黑暗的森林');
     expect(narratorResult!.output.narrativeOutput).toContain('泥土气息');
@@ -144,7 +144,7 @@ describe('E2E: Narrator game flow', () => {
     const startRes = await app.request('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plugins: ['core-narrator'] }),
+      body: JSON.stringify({ plugins: ['narrator'] }),
     });
     const session = await startRes.json() as { id: string };
 
@@ -177,12 +177,12 @@ describe('E2E: Narrator game flow', () => {
     expect(res.status).toBe(404);
   });
 
-  it('should list core-narrator in plugins', async () => {
+  it('should list narrator in plugins', async () => {
     const res = await app.request('/api/plugins');
     expect(res.status).toBe(200);
 
     const body = await res.json() as { plugins: Array<{ id: string; pluginType: string }> };
-    const narrator = body.plugins.find((p) => p.id === 'core-narrator');
+    const narrator = body.plugins.find((p) => p.id === 'narrator');
     expect(narrator).toBeDefined();
     expect(narrator!.pluginType).toBe('core-plugin');
   });

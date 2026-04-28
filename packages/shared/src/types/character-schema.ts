@@ -1,9 +1,9 @@
 /**
  * Character Attribute Schema — defines per-world character attributes.
  *
- * Created by the `world-data-provider` plugin (core-world-init) during session
+ * Created by the `world-data-provider` plugin (world-init) during session
  * initialization. Consumed by:
- *   - core-char-creator: generates form fields matching attribute IDs
+ *   - char-creator: generates form fields matching attribute IDs
  *   - submit-inputs: merges default values into new characters
  *   - right panel: renders structured attribute display
  *   - narrator context: injects player attributes for narrative adaptation

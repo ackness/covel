@@ -5,18 +5,18 @@ import {
 } from '../src/session-scope.js';
 
 describe('SessionPluginScope', () => {
-  const corePlugins = new Set(['core-narrator', 'core-persona']);
+  const corePlugins = new Set(['narrator', 'persona']);
   let scope: SessionPluginScope;
 
   beforeEach(() => {
-    scope = createSessionScope('sess-1', ['a', 'b', 'core-narrator'], corePlugins);
+    scope = createSessionScope('sess-1', ['a', 'b', 'narrator'], corePlugins);
   });
 
   describe('initial plugins active', () => {
     it('should have all initial plugins active', () => {
       expect(scope.isActive('a')).toBe(true);
       expect(scope.isActive('b')).toBe(true);
-      expect(scope.isActive('core-narrator')).toBe(true);
+      expect(scope.isActive('narrator')).toBe(true);
     });
   });
 
@@ -38,9 +38,9 @@ describe('SessionPluginScope', () => {
 
   describe('disable core-plugin fails', () => {
     it('should return false when trying to disable a core plugin', () => {
-      const result = scope.disable('core-narrator');
+      const result = scope.disable('narrator');
       expect(result).toBe(false);
-      expect(scope.isActive('core-narrator')).toBe(true);
+      expect(scope.isActive('narrator')).toBe(true);
     });
   });
 
@@ -70,14 +70,14 @@ describe('SessionPluginScope', () => {
   describe('activePluginIds', () => {
     it('should reflect the current active set', () => {
       expect(scope.activePluginIds).toEqual(
-        new Set(['a', 'b', 'core-narrator']),
+        new Set(['a', 'b', 'narrator']),
       );
 
       scope.enable('c');
       scope.disable('b');
 
       expect(scope.activePluginIds).toEqual(
-        new Set(['a', 'c', 'core-narrator']),
+        new Set(['a', 'c', 'narrator']),
       );
     });
   });

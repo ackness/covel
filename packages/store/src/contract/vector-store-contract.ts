@@ -92,7 +92,7 @@ export function runVectorStoreContractTests(
       const vec = seededVector(dim, 1);
       await store.upsertVector({
         sessionId: "s1",
-        pluginId: "core-npc-graph",
+        pluginId: "npc-graph",
         namespace: "edges",
         key: "edge-1",
         embedding: vec,
@@ -106,7 +106,7 @@ export function runVectorStoreContractTests(
       });
       expect(results).toHaveLength(1);
       expect(results[0].key).toBe("edge-1");
-      expect(results[0].pluginId).toBe("core-npc-graph");
+      expect(results[0].pluginId).toBe("npc-graph");
       expect(results[0].namespace).toBe("edges");
       expect(results[0].payload).toBe("hello world");
     });
@@ -137,9 +137,9 @@ export function runVectorStoreContractTests(
       await setupSessionWithModel(store, "s1", dim);
       // Three pluginId/namespace combos, same vectors
       const combos = [
-        { pluginId: "core-npc-graph", namespace: "edges" },
-        { pluginId: "core-npc-graph", namespace: "nodes" },
-        { pluginId: "core-codex", namespace: "entries" },
+        { pluginId: "npc-graph", namespace: "edges" },
+        { pluginId: "npc-graph", namespace: "nodes" },
+        { pluginId: "codex", namespace: "entries" },
       ];
       for (let i = 0; i < combos.length; i += 1) {
         await store.upsertVector({
@@ -156,7 +156,7 @@ export function runVectorStoreContractTests(
         sessionId: "s1",
         query,
         topK: 10,
-        pluginId: "core-npc-graph",
+        pluginId: "npc-graph",
         namespace: "edges",
       });
       expect(narrowed).toHaveLength(1);
@@ -166,10 +166,10 @@ export function runVectorStoreContractTests(
         sessionId: "s1",
         query,
         topK: 10,
-        pluginId: "core-npc-graph",
+        pluginId: "npc-graph",
       });
       expect(pluginOnly).toHaveLength(2);
-      expect(pluginOnly.every((r) => r.pluginId === "core-npc-graph")).toBe(true);
+      expect(pluginOnly.every((r) => r.pluginId === "npc-graph")).toBe(true);
     });
 
     it("isolates by session_id", async () => {
@@ -237,7 +237,7 @@ export function runVectorStoreContractTests(
       for (let i = 0; i < 4; i += 1) {
         await store.upsertVector({
           sessionId: "s1",
-          pluginId: i < 2 ? "core-npc-graph" : "core-codex",
+          pluginId: i < 2 ? "npc-graph" : "codex",
           namespace: "ns",
           key: `k${i}`,
           embedding: seededVector(dim, i),
@@ -245,7 +245,7 @@ export function runVectorStoreContractTests(
       }
       await store.deleteVectors({
         sessionId: "s1",
-        pluginId: "core-npc-graph",
+        pluginId: "npc-graph",
       });
 
       const remaining = await store.searchVectors({
@@ -253,7 +253,7 @@ export function runVectorStoreContractTests(
         query: seededVector(dim, 0),
         topK: 10,
       });
-      expect(remaining.every((r) => r.pluginId === "core-codex")).toBe(true);
+      expect(remaining.every((r) => r.pluginId === "codex")).toBe(true);
       expect(remaining).toHaveLength(2);
     });
 

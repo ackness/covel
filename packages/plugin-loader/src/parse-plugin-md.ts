@@ -86,7 +86,7 @@ function deriveFixHint(error: unknown): string {
     return 'Ensure the PLUGIN.md file begins with `---` and contains valid YAML frontmatter.';
   }
   if (path === 'name') {
-    return 'Set `name` to a lowercase kebab-case id (e.g. `core-narrator` or `core-plugin/runtime-name`).';
+    return 'Set `name` to a lowercase kebab-case id (e.g. `narrator` or `my-plugin/runtime-name`).';
   }
   if (path === 'description') {
     return 'Add a `description:` field — either a single string or an i18n map like `description: { en-US: "...", zh-CN: "..." }`.';
@@ -319,7 +319,7 @@ export function parsePluginMd(content: string, filePath: string): ParsedPluginMd
     }
 
     const parsed = runtimeManifestSchema.parse(dataToValidate);
-    // Derive pluginId from name: "core-world-init/schema-gen" → "core-world-init"
+    // Derive pluginId from name: "world-init/schema-gen" → "world-init"
     // Single-runtime plugins: pluginId === name
     const slashIdx = parsed.name.indexOf('/');
     const pluginId = slashIdx >= 0 ? parsed.name.slice(0, slashIdx) : parsed.name;

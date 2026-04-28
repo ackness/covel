@@ -585,7 +585,7 @@ importers:
         specifier: ^4.1.4
         version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
-  plugins/core-char-creator:
+  plugins/char-creator:
     devDependencies:
       '@covel/context':
         specifier: workspace:*
@@ -612,7 +612,7 @@ importers:
         specifier: ^4.1.4
         version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
-  plugins/core-codex:
+  plugins/codex:
     devDependencies:
       '@covel/context':
         specifier: workspace:*
@@ -633,7 +633,7 @@ importers:
         specifier: ^4.1.4
         version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
-  plugins/core-guide:
+  plugins/guide:
     devDependencies:
       '@covel/context':
         specifier: workspace:*
@@ -654,9 +654,9 @@ importers:
         specifier: ^4.1.4
         version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
-  plugins/core-memory: {}
+  plugins/memory: {}
 
-  plugins/core-narrator:
+  plugins/narrator:
     devDependencies:
       '@covel/context':
         specifier: workspace:*
@@ -671,7 +671,7 @@ importers:
         specifier: ^4.1.4
         version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
-  plugins/core-npc-graph:
+  plugins/npc-graph:
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*
@@ -686,9 +686,9 @@ importers:
         specifier: ^4.1.4
         version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
-  plugins/core-pregame: {}
+  plugins/pregame: {}
 
-  plugins/core-world-init:
+  plugins/world-init:
     dependencies:
       '@covel/tools':
         specifier: workspace:*

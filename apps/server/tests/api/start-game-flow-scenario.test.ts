@@ -112,12 +112,12 @@ async function drainActionStream(res: Response): Promise<ActionEnvelope[]> {
 
 function makeLoadedRuntimes(store: DataStore): Map<string, LoadedRuntime> {
   const manifests = [
-    fnManifest('core-pregame', 10),
-    fnManifest('core-world-init/schema-gen', 85),
-    fnManifest('core-char-creator/player-init', 90, {
-      upstreamRequired: ['core-pregame', 'core-world-init/schema-gen'],
+    fnManifest('pregame', 10),
+    fnManifest('world-init/schema-gen', 85),
+    fnManifest('char-creator/player-init', 90, {
+      upstreamRequired: ['pregame', 'world-init/schema-gen'],
     }),
-    fnManifest('core-narrator', 500, { outputKind: 'story' }),
+    fnManifest('narrator', 500, { outputKind: 'story' }),
   ];
   const loaded = new Map<string, LoadedRuntime>();
 
@@ -127,13 +127,13 @@ function makeLoadedRuntimes(store: DataStore): Map<string, LoadedRuntime> {
       promptTemplate: '',
       references: [],
       handler: async () => {
-        if (manifest.name === 'core-pregame') {
+        if (manifest.name === 'pregame') {
           return { narrativeOutput: 'pregame ready', preGameDone: true };
         }
-        if (manifest.name === 'core-world-init/schema-gen') {
+        if (manifest.name === 'world-init/schema-gen') {
           return { narrativeOutput: 'world ready', preGameDone: true };
         }
-        if (manifest.name === 'core-char-creator/player-init') {
+        if (manifest.name === 'char-creator/player-init') {
           const inputs = await store.listPlayerInputs('sess-start-flow-api');
           const latest = inputs.at(-1);
           const values = latest?.values && typeof latest.values === 'object'
@@ -170,7 +170,7 @@ function makeLoadedRuntimes(store: DataStore): Map<string, LoadedRuntime> {
           await store.setPluginData({
             id: 'player-1',
             sessionId: 'sess-start-flow-api',
-            pluginId: 'core-char-creator',
+            pluginId: 'char-creator',
             namespace: 'characters',
             key: 'player-1',
             value: character,
@@ -239,7 +239,7 @@ describe('start-game API lifecycle scenario', () => {
       worldId: 'world-1',
       presetId: null,
       status: 'active',
-      activePlugins: ['core-pregame', 'core-world-init', 'core-char-creator', 'core-narrator'],
+      activePlugins: ['pregame', 'world-init', 'char-creator', 'narrator'],
       turnCount: 0,
       preGameCompleted: [],
       createdAt: new Date().toISOString(),
@@ -320,7 +320,7 @@ describe('start-game API lifecycle scenario', () => {
 
     const mirrored = await store.getPluginData(
       'sess-start-flow-api',
-      'core-char-creator',
+      'char-creator',
       'characters',
       'player-1',
     );
@@ -328,8 +328,8 @@ describe('start-game API lifecycle scenario', () => {
 
     const runtimeRows = await store.listRuntimeResults('sess-start-flow-api', followupTurnId);
     const runtimeIds = runtimeRows.map((row) => row.runtimeId);
-    expect(runtimeIds).toEqual(expect.arrayContaining(['core-char-creator/player-init']));
-    expect(runtimeIds.filter((runtimeId) => runtimeId === 'core-narrator')).toHaveLength(1);
+    expect(runtimeIds).toEqual(expect.arrayContaining(['char-creator/player-init']));
+    expect(runtimeIds.filter((runtimeId) => runtimeId === 'narrator')).toHaveLength(1);
 
     const session = await store.getSession('sess-start-flow-api');
     expect(session?.turnCount).toBe(1);

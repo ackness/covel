@@ -14,16 +14,16 @@ describe('parsePluginMd', () => {
     it('should parse name, description, priority and body', () => {
       const content = md(
         [
-          'name: core-narrator',
+          'name: narrator',
           'description: Main narrative generation',
           'priority: 400',
         ].join('\n'),
         '\nYou are the narrator of an RPG story.\n',
       );
 
-      const result = parsePluginMd(content, 'plugins/core-narrator/PLUGIN.md');
+      const result = parsePluginMd(content, 'plugins/narrator/PLUGIN.md');
 
-      expect(result.manifest.name).toBe('core-narrator');
+      expect(result.manifest.name).toBe('narrator');
       expect(result.manifest.description).toBe('Main narrative generation');
       expect(result.manifest.priority).toBe(400);
       expect(result.promptTemplate).toBe(
@@ -31,7 +31,7 @@ describe('parsePluginMd', () => {
       );
       expect(result.referenceLinks).toEqual([]);
       expect(result.rawFrontmatter).toEqual({
-        name: 'core-narrator',
+        name: 'narrator',
         description: 'Main narrative generation',
         priority: 400,
       });
@@ -42,7 +42,7 @@ describe('parsePluginMd', () => {
     it('should parse all optional fields', () => {
       const content = md(
         [
-          'name: core-combat',
+          'name: combat',
           'description: Structured turn-based combat',
           'priority: 420',
           'version: "1.0.0"',
@@ -58,7 +58,7 @@ describe('parsePluginMd', () => {
           '    - roll-dice',
           'input:',
           '  inject:',
-          '    - from: core-narrator',
+          '    - from: narrator',
           '      field: narrativeOutput',
           '      as: narrativeContext',
           'output:',
@@ -78,9 +78,9 @@ describe('parsePluginMd', () => {
         '\nHandle combat encounters.\n',
       );
 
-      const result = parsePluginMd(content, 'plugins/core-combat/PLUGIN.md');
+      const result = parsePluginMd(content, 'plugins/combat/PLUGIN.md');
 
-      expect(result.manifest.name).toBe('core-combat');
+      expect(result.manifest.name).toBe('combat');
       expect(result.manifest.version).toBe('1.0.0');
       expect(result.manifest.model).toBe('balance');
       expect(result.manifest.trigger).toEqual({
@@ -96,7 +96,7 @@ describe('parsePluginMd', () => {
           {
             // Legacy shape auto-normalised by schema preprocess.
             kind: 'runtime',
-            from: 'core-narrator',
+            from: 'narrator',
             field: 'narrativeOutput',
             as: 'narrativeContext',
           },
@@ -122,7 +122,7 @@ describe('parsePluginMd', () => {
     it('parses a plugin-data inject with explicit format and maxEntries', () => {
       const content = md(
         [
-          'name: core-codex',
+          'name: codex',
           'description: Knowledge codex',
           'priority: 650',
           'input:',
@@ -136,7 +136,7 @@ describe('parsePluginMd', () => {
         '\ncodex body\n',
       );
 
-      const result = parsePluginMd(content, 'plugins/core-codex/PLUGIN.md');
+      const result = parsePluginMd(content, 'plugins/codex/PLUGIN.md');
 
       expect(result.manifest.input).toEqual({
         inject: [
@@ -154,7 +154,7 @@ describe('parsePluginMd', () => {
     it('fills plugin-data defaults when format / maxEntries omitted', () => {
       const content = md(
         [
-          'name: core-codex',
+          'name: codex',
           'description: Knowledge codex',
           'priority: 650',
           'input:',
@@ -166,7 +166,7 @@ describe('parsePluginMd', () => {
         '\ncodex body\n',
       );
 
-      const result = parsePluginMd(content, 'plugins/core-codex/PLUGIN.md');
+      const result = parsePluginMd(content, 'plugins/codex/PLUGIN.md');
 
       expect(result.manifest.input?.inject?.[0]).toEqual({
         kind: 'plugin-data',
@@ -180,12 +180,12 @@ describe('parsePluginMd', () => {
     it('allows mixing runtime + plugin-data injects in one list', () => {
       const content = md(
         [
-          'name: core-codex',
+          'name: codex',
           'description: Knowledge codex',
           'priority: 650',
           'input:',
           '  inject:',
-          '    - from: core-narrator',
+          '    - from: narrator',
           '      field: narrativeOutput',
           '      as: "<narrator-output>"',
           '    - kind: plugin-data',
@@ -197,12 +197,12 @@ describe('parsePluginMd', () => {
         '\ncodex body\n',
       );
 
-      const result = parsePluginMd(content, 'plugins/core-codex/PLUGIN.md');
+      const result = parsePluginMd(content, 'plugins/codex/PLUGIN.md');
       const injects = result.manifest.input?.inject ?? [];
       expect(injects).toHaveLength(2);
       expect(injects[0]).toMatchObject({
         kind: 'runtime',
-        from: 'core-narrator',
+        from: 'narrator',
         field: 'narrativeOutput',
       });
       expect(injects[1]).toMatchObject({
@@ -216,7 +216,7 @@ describe('parsePluginMd', () => {
     it('rejects maxEntries outside [1, 500]', () => {
       const content = md(
         [
-          'name: core-codex',
+          'name: codex',
           'description: Knowledge codex',
           'priority: 650',
           'input:',
@@ -229,14 +229,14 @@ describe('parsePluginMd', () => {
         '\nbody\n',
       );
       expect(() =>
-        parsePluginMd(content, 'plugins/core-codex/PLUGIN.md'),
+        parsePluginMd(content, 'plugins/codex/PLUGIN.md'),
       ).toThrow();
     });
 
     it('rejects invalid namespace characters', () => {
       const content = md(
         [
-          'name: core-codex',
+          'name: codex',
           'description: Knowledge codex',
           'priority: 650',
           'input:',
@@ -248,7 +248,7 @@ describe('parsePluginMd', () => {
         '\nbody\n',
       );
       expect(() =>
-        parsePluginMd(content, 'plugins/core-codex/PLUGIN.md'),
+        parsePluginMd(content, 'plugins/codex/PLUGIN.md'),
       ).toThrow();
     });
   });
@@ -257,7 +257,7 @@ describe('parsePluginMd', () => {
     it('should extract references/xxx.md links from body', () => {
       const content = md(
         [
-          'name: core-codex',
+          'name: codex',
           'description: Knowledge codex',
           'priority: 700',
         ].join('\n'),
@@ -272,7 +272,7 @@ describe('parsePluginMd', () => {
         ].join('\n'),
       );
 
-      const result = parsePluginMd(content, 'plugins/core-codex/PLUGIN.md');
+      const result = parsePluginMd(content, 'plugins/codex/PLUGIN.md');
 
       expect(result.referenceLinks).toEqual([
         'references/combat-rules.md',
@@ -295,14 +295,14 @@ describe('parsePluginMd', () => {
 
       const content = md(
         [
-          'name: core-guide',
+          'name: guide',
           'description: Story guidance',
           'priority: 600',
         ].join('\n'),
         body,
       );
 
-      const result = parsePluginMd(content, 'plugins/core-guide/PLUGIN.md');
+      const result = parsePluginMd(content, 'plugins/guide/PLUGIN.md');
 
       expect(result.promptTemplate).toContain(
         '{{ inputs.narrator.main.narrativeOutput }}',
@@ -1049,7 +1049,7 @@ describe('parsePluginMd', () => {
     it('parses summaryFocus as array of strings', () => {
       const content = md(
         [
-          'name: core-narrator',
+          'name: narrator',
           'description: Main narrative',
           'priority: 500',
           'summaryFocus:',
@@ -1060,28 +1060,28 @@ describe('parsePluginMd', () => {
         '\nBody.\n',
       );
 
-      const result = parsePluginMd(content, 'plugins/core-narrator/PLUGIN.md');
+      const result = parsePluginMd(content, 'plugins/narrator/PLUGIN.md');
       expect(result.manifest.summaryFocus).toEqual(['narrative', 'character-state', 'world-facts']);
     });
 
     it('summaryFocus is optional — omitting it yields undefined', () => {
       const content = md(
         [
-          'name: core-narrator',
+          'name: narrator',
           'description: Main narrative',
           'priority: 500',
         ].join('\n'),
         '\nBody.\n',
       );
 
-      const result = parsePluginMd(content, 'plugins/core-narrator/PLUGIN.md');
+      const result = parsePluginMd(content, 'plugins/narrator/PLUGIN.md');
       expect(result.manifest.summaryFocus).toBeUndefined();
     });
 
     it('accepts empty summaryFocus array', () => {
       const content = md(
         [
-          'name: core-narrator',
+          'name: narrator',
           'description: Main narrative',
           'priority: 500',
           'summaryFocus: []',
@@ -1089,7 +1089,7 @@ describe('parsePluginMd', () => {
         '\nBody.\n',
       );
 
-      const result = parsePluginMd(content, 'plugins/core-narrator/PLUGIN.md');
+      const result = parsePluginMd(content, 'plugins/narrator/PLUGIN.md');
       expect(result.manifest.summaryFocus).toEqual([]);
     });
   });

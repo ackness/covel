@@ -2,11 +2,11 @@
 
 ---
 
-## core-narrator（主叙事，优先级 500，auto 触发）
+## narrator（主叙事，优先级 500，auto 触发）
 
 ```markdown
 ---
-name: core-narrator
+name: narrator
 description: 主叙事生成器，负责根据玩家输入和世界观设定生成故事内容。每个 Turn 自动执行。
 pluginType: core-plugin
 priority: 500
@@ -22,16 +22,16 @@ trigger:
 
 ---
 
-## core-codex（知识图鉴，优先级 650，auto 触发，含本地工具）
+## codex（知识图鉴，优先级 650，auto 触发，含本地工具）
 
 ```markdown
 ---
-name: core-codex
+name: codex
 description: 知识图鉴系统。分析叙事文本，记录玩家发现的怪物、道具、地点、传说和人物。
 pluginType: plugin
 priority: 650
 model: plugin
-upstreamRequired: [core-narrator]
+upstreamRequired: [narrator]
 trigger:
   type: auto
 tools:
@@ -42,7 +42,7 @@ tools:
     - create-notification
 input:
   inject:
-    - from: core-narrator
+    - from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
     - kind: plugin-data
@@ -57,11 +57,11 @@ input:
 
 ---
 
-## core-char-creator（角色创建，优先级 700，仅首轮，含 builtin 工具）
+## char-creator（角色创建，优先级 700，仅首轮，含 builtin 工具）
 
 ```markdown
 ---
-name: core-char-creator
+name: char-creator
 description: 角色创建引导。在游戏首轮生成角色创建表单，玩家填写后生成个性化角色引入叙事。
 pluginType: core-plugin
 priority: 700
@@ -75,7 +75,7 @@ tools:
     - create-form
 input:
   inject:
-    - from: core-narrator
+    - from: narrator
       field: narrativeOutput
       as: "<narrator-opening>"
 ---
@@ -139,7 +139,7 @@ trigger:
 execution: sync                 # 生成 prompt 很快,不需要后台
 input:
   inject:
-    - from: core-narrator
+    - from: narrator
       field: narrativeOutput
       as: "<current-scene>"
 # 事件链由 agent 在 runtime output 里声明,框架 normalizeOutput 会把
@@ -406,15 +406,15 @@ tag = "image"
 
 | Runtime | 优先级 | 触发 | 类型 | 说明 |
 |---------|--------|------|------|------|
-| core-pregame | 10 | scheduled(首轮) | function | 游戏初始化 |
-| core-world-init/schema-gen | 40 | scheduled(首轮) | agent + guard | 世界维度生成,guard 已存在则跳过 |
-| core-char-creator/player-init | 50 | scheduled(首轮) | agent | 玩家建角表单 |
-| core-npc-graph/rag-retriever | 400 | auto | function | 给 narrator 拉 NPC 结构化检索 |
-| core-narrator | 500 | auto | agent | 主叙事 |
-| core-codex | 600 | auto | agent | 知识图鉴 |
-| core-guide | 600 | auto | agent | 行动引导 |
-| core-npc-graph/extractor | 600 | auto | agent | NPC 关系抽取 |
-| core-char-creator/character-tracker | 600 | auto | agent | 角色状态跟踪 |
-| core-memory | — | UI only | UI | 仅前端面板 |
+| pregame | 10 | scheduled(首轮) | function | 游戏初始化 |
+| world-init/schema-gen | 40 | scheduled(首轮) | agent + guard | 世界维度生成,guard 已存在则跳过 |
+| char-creator/player-init | 50 | scheduled(首轮) | agent | 玩家建角表单 |
+| npc-graph/rag-retriever | 400 | auto | function | 给 narrator 拉 NPC 结构化检索 |
+| narrator | 500 | auto | agent | 主叙事 |
+| codex | 600 | auto | agent | 知识图鉴 |
+| guide | 600 | auto | agent | 行动引导 |
+| npc-graph/extractor | 600 | auto | agent | NPC 关系抽取 |
+| char-creator/character-tracker | 600 | auto | agent | 角色状态跟踪 |
+| memory | — | UI only | UI | 仅前端面板 |
 | dashscope-image-gen/prompt-generator | 600 | manual | agent | 手动触发 prompt 生成(未在仓库内,样例) |
 | dashscope-image-gen/image-generator | 610 | event | function (background) | 调 DashScope wan2.x 生图(未在仓库内,样例) |

@@ -364,10 +364,10 @@
 - [ ] 架构文档更新
 
 ### 核心插件重写
-- [ ] core-narrator（主叙事）
-- [ ] core-persona（AI 人格）
+- [ ] narrator（主叙事）
+- [ ] persona（AI 人格）
 - [ ] core-audit（冲突裁决）
-- [ ] core-init-wizard（角色创建引导）
+- [ ] init-wizard（角色创建引导）
 - [ ] 其他插件迁移到新格式
 
 ### 迁移与清理
@@ -473,5 +473,5 @@ Phase 1 ──→ Phase 2 ──→ Phase 3 ──→ Phase 6
 - [ ] IdbStore 实现（浏览器端）
 - [ ] SSE 事件流接线到 EventBus
 - [ ] 前端适配新 V2 API
-- [ ] 核心插件全部重写（目前只有 core-narrator）
+- [ ] 核心插件全部重写（目前只有 narrator）
 - [ ] 删除 v1 备份代码（*.v1.bak 目录）

@@ -173,7 +173,7 @@ describe('Session Routes', () => {
       const res = await app.request('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plugins: ['core-narrator', 'core-combat'] }),
+        body: JSON.stringify({ plugins: ['narrator', 'combat'] }),
       });
 
       // Empty registry → both IDs are unknown → 400

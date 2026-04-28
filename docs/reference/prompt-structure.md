@@ -60,7 +60,7 @@ V2 下，插件可以通过 `PLUGIN.md` frontmatter 声明以下字段：
 
 ```yaml
 ---
-name: core-narrator
+name: narrator
 promptVersion: 2
 
 # Segment 9 — Author's Note
@@ -169,13 +169,13 @@ export COVEL_PROMPT_CACHE_V1=1
 
 | 插件 | Runtime(s) | 迁移 commit | Parity 测试 |
 |------|------------|-------------|--------------|
-| `core-narrator` | (单) | Wave B-2 `bbf2889` | 6 cases |
-| `core-guide` | (单) | Wave B-2 `bbf2889` | 6 cases |
-| `core-codex` | (单) | Wave C-1 | pending |
-| `core-char-creator` | `player-init`, `character-tracker` | Wave C-1 | pending |
-| `core-world-init` | `schema-gen` | Wave C-1 (FU-8) | — |
-| `core-pregame` | (function runtime — 不用 LLM) | 不适用 | — |
-| `core-npc-graph` | — | 未迁移 | — |
+| `narrator` | (单) | Wave B-2 `bbf2889` | 6 cases |
+| `guide` | (单) | Wave B-2 `bbf2889` | 6 cases |
+| `codex` | (单) | Wave C-1 | pending |
+| `char-creator` | `player-init`, `character-tracker` | Wave C-1 | pending |
+| `world-init` | `schema-gen` | Wave C-1 (FU-8) | — |
+| `pregame` | (function runtime — 不用 LLM) | 不适用 | — |
+| `npc-graph` | — | 未迁移 | — |
 
 ## 7. 相关文件
 

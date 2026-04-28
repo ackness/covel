@@ -33,7 +33,7 @@ interface ParsedTableName {
  * Break long internal table names into a display-friendly tuple.
  *
  *   `session`                                 → core
- *   `plugin_data/core-codex:__ui_right__`     → plugin · core-codex · ui_right
+ *   `plugin_data/codex:__ui_right__`     → plugin · codex · ui_right
  *   `plugin_data/dashscope-image-gen:gallery` → plugin · dashscope-image-gen · gallery
  *
  * Surrounding `__` markers (used internally to namespace UI mounts) are

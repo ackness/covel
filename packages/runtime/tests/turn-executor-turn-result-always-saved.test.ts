@@ -66,7 +66,7 @@ describe('executeTurn: saveTurnResult invariant', () => {
       getConfig: () => ({}),
       store,
     };
-    await executeTurn({ sessionId: 'sess-happy', turnId: 't-1', playerMessage: '' }, [fnManifest('core-pregame', 10)], deps);
+    await executeTurn({ sessionId: 'sess-happy', turnId: 't-1', playerMessage: '' }, [fnManifest('pregame', 10)], deps);
     expect(await store.listTurnResults('sess-happy')).toHaveLength(1);
   });
 
@@ -85,7 +85,7 @@ describe('executeTurn: saveTurnResult invariant', () => {
       getConfig: () => ({}),
       store,
     };
-    await executeTurn({ sessionId: 'sess-fail', turnId: 't-1', playerMessage: '' }, [fnManifest('core-pregame', 10)], deps);
+    await executeTurn({ sessionId: 'sess-fail', turnId: 't-1', playerMessage: '' }, [fnManifest('pregame', 10)], deps);
 
     const results = await store.listTurnResults('sess-fail');
     expect(results).toHaveLength(1);
@@ -119,7 +119,7 @@ describe('executeTurn: saveTurnResult invariant', () => {
       getConfig: () => ({}),
       store,
     };
-    await executeTurn({ sessionId: 'sess-paused', turnId: 't-1', playerMessage: '' }, [fnManifest('core-pregame', 10)], deps);
+    await executeTurn({ sessionId: 'sess-paused', turnId: 't-1', playerMessage: '' }, [fnManifest('pregame', 10)], deps);
     expect(await store.listTurnResults('sess-paused')).toHaveLength(0);
   });
 });

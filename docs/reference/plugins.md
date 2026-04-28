@@ -7,24 +7,24 @@
 按 **Turn Band**（见 [优先级分带](#优先级分带turn-bands)）分组，点击直达。
 
 ### Pre-Game（priority 0–99）
-- [`core-pregame`](#core-pregame) — 游戏初始化 function runtime
-- [`core-char-creator/player-init`](#core-char-creatorplayer-init) — 玩家建角 agent runtime
-- [`core-world-init/schema-gen`](#core-world-initschema-gen) — 世界维度 agent runtime（guard 门控）
+- [`pregame`](#pregame) — 游戏初始化 function runtime
+- [`char-creator/player-init`](#char-creatorplayer-init) — 玩家建角 agent runtime
+- [`world-init/schema-gen`](#world-initschema-gen) — 世界维度 agent runtime（guard 门控）
 
 ### Narrator-prep（priority 400）
-- [`core-npc-graph/rag-retriever`](#core-npc-graphrag-retriever) — NPC 图谱结构化检索
+- [`npc-graph/rag-retriever`](#npc-graphrag-retriever) — NPC 图谱结构化检索
 
 ### Narrator（priority 500）
-- [`core-narrator`](#core-narrator) — 主叙事生成器
+- [`narrator`](#narrator) — 主叙事生成器
 
 ### After-Turn / Narrator-downstream（priority 600）
-- [`core-codex`](#core-codex) — 知识图鉴 agent
-- [`core-guide`](#core-guide) — 行动引导 agent
-- [`core-npc-graph/extractor`](#core-npc-graphextractor) — NPC 关系图抽取 agent
-- [`core-char-creator/character-tracker`](#core-char-creatorcharacter-tracker) — NPC 发现与状态跟踪 agent
+- [`codex`](#codex) — 知识图鉴 agent
+- [`guide`](#guide) — 行动引导 agent
+- [`npc-graph/extractor`](#npc-graphextractor) — NPC 关系图抽取 agent
+- [`char-creator/character-tracker`](#char-creatorcharacter-tracker) — NPC 发现与状态跟踪 agent
 
 ### UI-only（无 runtime，仅出现在[概览表](#概览)）
-- `core-memory` — 长期记忆摘要面板，不占调度槽位
+- `memory` — 长期记忆摘要面板，不占调度槽位
 
 ### 参考章节
 - [概览表](#概览) · [调度层级说明](#调度层级) · [插件结构规范](#插件结构规范) · [超时与智能重试](#超时与智能重试) · [优先级分带](#优先级分带turn-bands) · [框架–插件隔离规则](#框架插件隔离规则)
@@ -41,11 +41,11 @@
 
 | 层 | priority | Runtime | 说明 |
 |---|---|---|---|
-| Narrator-prep | 400 | `core-npc-graph/rag-retriever` | narrator 的依赖上游（function runtime，无 LLM） |
-| Narrator | 500 | `core-narrator` | 主叙事生成器 |
-| Narrator-downstream | 600 | `core-guide` · `core-codex` · `core-npc-graph/extractor` · `core-char-creator/character-tracker` | 四者都只依赖 narrator，彼此独立 → **同层并行执行** |
+| Narrator-prep | 400 | `npc-graph/rag-retriever` | narrator 的依赖上游（function runtime，无 LLM） |
+| Narrator | 500 | `narrator` | 主叙事生成器 |
+| Narrator-downstream | 600 | `guide` · `codex` · `npc-graph/extractor` · `char-creator/character-tracker` | 四者都只依赖 narrator，彼此独立 → **同层并行执行** |
 
-Pre-Game band（priority `0-99`，由 `packages/runtime/src/scheduler.ts` 强制）仍走 priority 串行：`core-pregame(10) → core-world-init/schema-gen(40) → core-char-creator/player-init(50)`。Pre-Game 插件之间存在隐式 config 依赖（player-init 读取 world-init 写的 `plugin_data[schema]` 经由 `loadSessionConfig` 注入）；目前在 DAG 里不表达，所以靠 priority 顺序确保 schema 先生成、再让 player-init 读到。
+Pre-Game band（priority `0-99`，由 `packages/runtime/src/scheduler.ts` 强制）仍走 priority 串行：`pregame(10) → world-init/schema-gen(40) → char-creator/player-init(50)`。Pre-Game 插件之间存在隐式 config 依赖（player-init 读取 world-init 写的 `plugin_data[schema]` 经由 `loadSessionConfig` 注入）；目前在 DAG 里不表达，所以靠 priority 顺序确保 schema 先生成、再让 player-init 读到。
 
 ---
 
@@ -53,26 +53,26 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/scheduler.ts` 强制
 
 | ID | 类型 | 优先级 | 触发方式 | 模型 slot | 描述 |
 |----|------|--------|----------|-----------|------|
-| core-pregame | core-plugin | 10 | scheduled（仅首轮） | — | 游戏初始化（function runtime） |
-| core-world-init/schema-gen | core-plugin | 40 | scheduled（仅首轮） | `plugin` | 世界维度初始化（guard + agent，Pre-Game 第二步） |
-| core-char-creator/player-init | core-plugin | 50 | auto（guard 门控） | `plugin` | 玩家角色创建（agent runtime；依赖 schema-gen 写出的 worldSchema） |
-| core-npc-graph/rag-retriever | plugin | 400 | scheduled（interval=1，function runtime） | — | Narrator-prep 层：NPC 图谱结构化检索器，向 narrator 注入相关关系事实 |
-| core-narrator | core-plugin | 500 | auto | `story` | Narrator 层：主叙事生成器 |
-| core-guide | plugin | 600 | scheduled（interval=1, cooldown=1） | `plugin` | Narrator-downstream 层：行动引导 + 聊天内建议面 |
-| core-codex | plugin | 600 | auto（每轮，紧跟 narrator 之后） | `plugin` | Narrator-downstream 层：知识图鉴系统（agent runtime） |
-| core-npc-graph/extractor | plugin | 600 | scheduled（interval=1, cooldown=1） | `plugin` | Narrator-downstream 层：NPC 关系图抽取器 |
-| core-char-creator/character-tracker | core-plugin | 600 | scheduled（interval=1, cooldown=1） | `plugin` | Narrator-downstream 层：NPC 发现 + 角色状态跟踪 |
-| core-memory | core-plugin | — | UI-only（无 runtime） | — | 长期记忆摘要面板（UI 呈现，无独立 runtime） |
+| pregame | core-plugin | 10 | scheduled（仅首轮） | — | 游戏初始化（function runtime） |
+| world-init/schema-gen | core-plugin | 40 | scheduled（仅首轮） | `plugin` | 世界维度初始化（guard + agent，Pre-Game 第二步） |
+| char-creator/player-init | core-plugin | 50 | auto（guard 门控） | `plugin` | 玩家角色创建（agent runtime；依赖 schema-gen 写出的 worldSchema） |
+| npc-graph/rag-retriever | plugin | 400 | scheduled（interval=1，function runtime） | — | Narrator-prep 层：NPC 图谱结构化检索器，向 narrator 注入相关关系事实 |
+| narrator | core-plugin | 500 | auto | `story` | Narrator 层：主叙事生成器 |
+| guide | plugin | 600 | scheduled（interval=1, cooldown=1） | `plugin` | Narrator-downstream 层：行动引导 + 聊天内建议面 |
+| codex | plugin | 600 | auto（每轮，紧跟 narrator 之后） | `plugin` | Narrator-downstream 层：知识图鉴系统（agent runtime） |
+| npc-graph/extractor | plugin | 600 | scheduled（interval=1, cooldown=1） | `plugin` | Narrator-downstream 层：NPC 关系图抽取器 |
+| char-creator/character-tracker | core-plugin | 600 | scheduled（interval=1, cooldown=1） | `plugin` | Narrator-downstream 层：NPC 发现 + 角色状态跟踪 |
+| memory | core-plugin | — | UI-only（无 runtime） | — | 长期记忆摘要面板（UI 呈现，无独立 runtime） |
 
 ---
 
-## core-pregame
+## pregame
 
 🔵 core · ⚙ pure function
 
 **Quick use**：如果你要在 session 首轮（先于任何 LLM 调用）跑一段确定性的初始化逻辑——读世界观、发欢迎通知、写 welcome banner——挂这个插件。
 
-**路径**: `plugins/core-pregame/`
+**路径**: `plugins/pregame/`
 
 | 字段 | 值 |
 |------|----|
@@ -89,17 +89,17 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/scheduler.ts` 强制
 
 ---
 
-## core-world-init
+## world-init
 
 🔵 core · 🧠 uses LLM（guard 可能跳过）
 
 **Quick use**：如果你想让 LLM 在首轮根据 `WORLD.md` 自动派生一套"角色属性 schema + 世界词条"并写进 session lorebook，挂这个插件。已有 schema 时 guard 会直接 skip，零 LLM 开销。
 
-**路径**: `plugins/core-world-init/`
+**路径**: `plugins/world-init/`
 
 单 runtime 插件，使用 `guard` 机制实现无 LLM 开销的前置门控。
 
-### core-world-init/schema-gen
+### world-init/schema-gen
 
 | 字段 | 值 |
 |------|----|
@@ -132,13 +132,13 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/scheduler.ts` 强制
 
 ---
 
-## core-narrator
+## narrator
 
 🔵 core · 🧠 uses LLM
 
 **Quick use**：你想要默认的主叙事引擎——每轮读 `{{ player.message }}` + 世界观 + 历史，输出 `outputKind: story` 的第二人称叙事。换掉它就是换掉整个故事基调。
 
-**路径**: `plugins/core-narrator/`
+**路径**: `plugins/narrator/`
 
 | 字段 | 值 |
 |------|----|
@@ -149,7 +149,7 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/scheduler.ts` 强制
 | model | `story` |
 | capabilities | `[narrative]` |
 | tools.builtin | `world-dimension-get` |
-| input.inject | `core-npc-graph/rag-retriever` → `npcContext` → `<npc-relationships>` |
+| input.inject | `npc-graph/rag-retriever` → `npcContext` → `<npc-relationships>` |
 
 **职责**: 根据玩家输入、世界观和历史上下文生成主线叙事。输出 `narrativeOutput` 字段供其他插件引用；需要精确世界字段时调用 `world-dimension-get` 按需读取。
 
@@ -169,32 +169,32 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/scheduler.ts` 强制
 
 ---
 
-## core-npc-graph
+## npc-graph
 
 ⚪ optional · ⚙ pure function（rag-retriever）· 🧠 uses LLM（extractor）
 
 **Quick use**：你想要一张会话级的 NPC 关系图——叙事里提到的人物、势力、欠债 / 结盟 / 背叛关系自动抽取并持久化，narrator 下轮能沿 2-hop 邻居看到"跟这个人相关的所有事实"。
 
-**路径**: `plugins/core-npc-graph/`
+**路径**: `plugins/npc-graph/`
 
 多 runtime 插件。包含两个协作的子 runtime：
 
-### core-npc-graph/rag-retriever
+### npc-graph/rag-retriever
 
 | 字段 | 值 |
 |------|----|
 | pluginType | `plugin` |
 | runtimeType | `function`（无 LLM 调用，纯结构化检索） |
 | handler | `./runtimes/rag-retriever/handler.js` |
-| priority | 400（Narrator-prep 层，在 `core-narrator=500` **之前**） |
+| priority | 400（Narrator-prep 层，在 `narrator=500` **之前**） |
 | capabilities | `[npc-graph, graph-rag]` |
 | trigger | `scheduled`，`interval: 1` |
 
-每个非 Pre-Game 回合开始时自动运行：从 `playerMessage` 中匹配 NPC 节点名（含别名，case-insensitive），沿邻接索引做 2-hop BFS，过滤 `invalidAt` 已到期的边，按 `(validAt, |strength|)` 排序后取 top-20，输出 markdown 列表到 `npcContext` 字段。`core-narrator` 通过 `input.inject` 把这段文本作为 `<npc-relationships>` 块注入 prompt 末尾。
+每个非 Pre-Game 回合开始时自动运行：从 `playerMessage` 中匹配 NPC 节点名（含别名，case-insensitive），沿邻接索引做 2-hop BFS，过滤 `invalidAt` 已到期的边，按 `(validAt, |strength|)` 排序后取 top-20，输出 markdown 列表到 `npcContext` 字段。`narrator` 通过 `input.inject` 把这段文本作为 `<npc-relationships>` 块注入 prompt 末尾。
 
 **Phase 3.5 升级路径**：当 framework 层向 function handler 暴露 gateway 后，将升级为"先 embed 查询 → vector search → 子图扩展"的混合检索。当前为纯结构化版本。
 
-### core-npc-graph/extractor
+### npc-graph/extractor
 
 | 字段 | 值 |
 |------|----|
@@ -203,7 +203,7 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/scheduler.ts` 强制
 | priority | 600（Narrator-downstream 层，与 guide / codex / character-tracker 并行执行） |
 | capabilities | `[npc-graph, relationship-tracking]` |
 | trigger | `scheduled`，`interval: 1`，`cooldownTurns: 1` |
-| input.inject | `core-narrator.narrative` → `<narrator-output>` |
+| input.inject | `narrator.narrative` → `<narrator-output>` |
 | model slot | `plugin` |
 | tools.local | `upsert-npc-graph`（批量写节点+边）、`list-npc-graph`（列出现有图） |
 | tools.builtin | `plugin-data-list`、`plugin-data-get` |
@@ -236,25 +236,25 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 ---
 
-## core-codex
+## codex
 
 ⚪ optional · 🧠 uses LLM
 
 **Quick use**：你想要一本自动更新的世界百科——LLM 读每轮叙事识别新地点/人物/势力/物品，unlock 成卡片；重复出现时补充原有条目而不是新建。
 
-**路径**: `plugins/core-codex/`
+**路径**: `plugins/codex/`
 
 | 字段 | 值 |
 |------|----|
 | pluginType | `plugin`（可禁用） |
 | priority | 600（Narrator-downstream 层） |
 | runtimeType | `agent`（默认，LLM 驱动） |
-| trigger | `auto`（每轮触发；`upstreamRequired: [core-narrator]` 保证在 narrator 失败时 skip，不会用空 `<narrator-output>` 幻觉） |
+| trigger | `auto`（每轮触发；`upstreamRequired: [narrator]` 保证在 narrator 失败时 skip，不会用空 `<narrator-output>` 幻觉） |
 | model | `plugin` |
 | tools.local | `unlock-codex-entries`, `update-codex-entry` |
 | ui.right | `./ui/codex-panel.json` |
 | ui.message | `./ui/codex-message.json` |
-| input.inject | `core-narrator` → `narrativeOutput` → `<narrator-output>`<br>`plugin-data[entries]` → `<existing-entries>`（`format: summary`，`maxEntries: 100`） |
+| input.inject | `narrator` → `narrativeOutput` → `<narrator-output>`<br>`plugin-data[entries]` → `<existing-entries>`（`format: summary`，`maxEntries: 100`） |
 
 **职责**: 分析叙事文本，识别并登记本轮出现的知识条目（地点 / 人物 / 势力 / 物品 / 技能 / 传闻 / 怪物）。对"没有新发现"的回合直接结束。prompt 里同时看到本轮叙事 `<narrator-output>` 和已登记条目 `<existing-entries>`，所以 LLM 一次调用即可决定是 `unlock-codex-entries`（新增）还是 `update-codex-entry`（补充已有），无需额外调用 `plugin-data-list` 往返。
 
@@ -266,17 +266,17 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 ---
 
-## core-char-creator（角色子系统）
+## char-creator（角色子系统）
 
 🔵 core · ⚙ pure function（player-init）· 🧠 uses LLM（character-tracker）
 
 **Quick use**：你要玩家在首轮填一张"角色创建表单"生成主角；并且每轮自动跟踪叙事里出现的 NPC、角色状态变化（受伤、死亡、装备、关系）并写进 `characters` 表。两个子 runtime 共用同一个 `character-panel.json` 侧边栏。
 
-**路径**: `plugins/core-char-creator/`
+**路径**: `plugins/char-creator/`
 
 多 runtime 插件。player-init 负责玩家角色创建，character-tracker 负责持续跟踪 NPC 和角色状态变化。两者共用同一个 `character-panel.json` 侧边栏面板（通过 `group: "character"` 聚合）。
 
-### core-char-creator/player-init
+### char-creator/player-init
 
 | 字段 | 值 |
 |------|----|
@@ -304,7 +304,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 **当前代码状态**: 这一条路径已经保持在插件包内部，实现位于 `runtimes/player-init/handler.js`。如果后续希望统一 deterministic runtime 的 trace 与工具链，可以把这条流程收敛到 builtin character tools。
 
-### core-char-creator/character-tracker
+### char-creator/character-tracker
 
 | 字段 | 值 |
 |------|----|
@@ -313,8 +313,8 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | trigger | `scheduled`，`interval: 1`，`cooldownTurns: 1` |
 | model | `plugin` |
 | tools.builtin | `create-character`, `update-character`, `list-characters`, `get-character` |
-| input.inject | `core-narrator` → `narrativeOutput` → `<narrator-output>` |
-| upstreamRequired | `[core-narrator]` — 框架在 narrator 失败时 skip |
+| input.inject | `narrator` → `narrativeOutput` → `<narrator-output>` |
+| upstreamRequired | `[narrator]` — 框架在 narrator 失败时 skip |
 
 **职责**: 每轮扫描 narrator 输出，发现新的有名字 NPC → `create-character(type="npc")`；检测叙事中的角色状态变化（受伤、死亡、装备、关系）→ `update-character(fields: {...})`。工作流：
 1. `list-characters` 获取现有角色（避免重复）
@@ -325,13 +325,13 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 ---
 
-## core-guide
+## guide
 
 ⚪ optional · 🧠 uses LLM
 
 **Quick use**：你要让 LLM 在每轮叙事之后给玩家提三组行动建议（safe / aggressive / creative）并接入聊天输入框——让 narrator 专注叙事、选择引导交给这个插件。
 
-**路径**: `plugins/core-guide/`
+**路径**: `plugins/guide/`
 
 | 字段 | 值 |
 |------|----|
@@ -341,8 +341,8 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | model | `plugin` |
 | tools.local | `generate-guide` |
 | ui.message | `./ui/action-guide-block.json` |
-| input.inject | `core-narrator` → `narrativeOutput` → `<narrator-output>` |
-| upstreamRequired | `[core-narrator]` |
+| input.inject | `narrator` → `narrativeOutput` → `<narrator-output>` |
+| upstreamRequired | `[narrator]` |
 
 **职责**: 在叙事推进后，分析当前情境，为玩家生成分风格的行动建议。让 narrator 专注叙事，选择引导交由本插件。
 
@@ -361,11 +361,11 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 | 插件 | 预期优先级 | 描述 |
 |------|-----------|------|
-| core-persona | 100 | AI 人格配置 |
-| core-combat | 420 | 回合制战斗 |
-| core-inventory | 600 | 物品/装备管理 |
+| persona | 100 | AI 人格配置 |
+| combat | 420 | 回合制战斗 |
+| inventory | 600 | 物品/装备管理 |
 | core-quest | 650 | 任务追踪 |
-| core-image | 800 | 故事配图生成 |
+| image | 800 | 故事配图生成 |
 
 ---
 
@@ -403,7 +403,7 @@ plugins/<plugin-id>/
 └── tools/                 # 可选：所有子运行时共享的工具
 ```
 
-> 真实多 runtime 范例见 `plugins/core-npc-graph/`（`extractor` agent + `rag-retriever` function）和 `plugins/core-char-creator/`（`player-init` 首轮 agent + `character-tracker` 持续 agent）。`core-world-init` 当前是单 runtime（`schema-gen`）+ 一个 `guard` 文件，不算多 runtime。
+> 真实多 runtime 范例见 `plugins/npc-graph/`（`extractor` agent + `rag-retriever` function）和 `plugins/char-creator/`（`player-init` 首轮 agent + `character-tracker` 持续 agent）。`world-init` 当前是单 runtime（`schema-gen`）+ 一个 `guard` 文件，不算多 runtime。
 
 子运行时之间可通过 `input.inject` 传递数据（上游输出 → 下游 prompt 注入）。
 
@@ -553,7 +553,7 @@ execution: background  # wan2.x 文生图需要几十秒,不阻塞 UI
 
 **API 暴露**: Session plugins API（`GET /api/sessions/:id/plugins`）在响应中返回每个插件的 `capabilities` 字段（从所有子 runtime 的 manifest 中聚合），前端可据此发现插件能力。示例响应片段：
 ```json
-{ "id": "core-world-init", "pluginType": "core-plugin", "active": true, "capabilities": ["world-data-provider"] }
+{ "id": "world-init", "pluginType": "core-plugin", "active": true, "capabilities": ["world-data-provider"] }
 ```
 
 示例 frontmatter：
@@ -613,11 +613,11 @@ V2 的路由需要**同时**满足两个条件：
 
 | 插件 | promptVersion | 迁移 ticket |
 |------|---------------|-------------|
-| core-narrator | 2 | S2-T4 |
-| core-guide | 2 | S2-T4 |
-| core-codex | 2 | S3-T5a |
-| core-char-creator/player-init | 2 | S3-T5a |
-| core-char-creator/character-tracker | 2 | S3-T5a |
+| narrator | 2 | S2-T4 |
+| guide | 2 | S2-T4 |
+| codex | 2 | S3-T5a |
+| char-creator/player-init | 2 | S3-T5a |
+| char-creator/character-tracker | 2 | S3-T5a |
 
 示例 frontmatter：
 
@@ -759,7 +759,7 @@ rpc:
 input:
   inject:
     # Legacy runtime inject（不写 kind，自动 normalise）
-    - from: core-narrator
+    - from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
     # 新 plugin-data inject
@@ -831,10 +831,10 @@ Covel 的核心设计原则是**插件承载游戏逻辑，框架提供原语和
 
 在框架代码（`packages/`、`apps/server/src/`、`apps/web/src/`）中：
 
-- ❌ `pluginId === 'core-narrator'` — 不得通过插件 ID 判断行为
-- ❌ `store.listPluginData(sessionId, 'core-world-init', ...)` — 不得硬编码数据来源插件
-- ❌ `p.id === "core-image"` — 不得通过插件 ID 控制 UI
-- ❌ 在常量集合中列出插件名（如 `KNOWN_KEYS.has("core-codex")`）
+- ❌ `pluginId === 'narrator'` — 不得通过插件 ID 判断行为
+- ❌ `store.listPluginData(sessionId, 'world-init', ...)` — 不得硬编码数据来源插件
+- ❌ `p.id === "image"` — 不得通过插件 ID 控制 UI
+- ❌ 在常量集合中列出插件名（如 `KNOWN_KEYS.has("codex")`）
 
 ### 正确做法
 

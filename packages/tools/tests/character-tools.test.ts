@@ -83,7 +83,7 @@ function createMockStore() {
   };
 }
 
-function ctx(pluginId = 'core-char-creator', sessionId = 'sess-1'): ToolExecutionContext {
+function ctx(pluginId = 'char-creator', sessionId = 'sess-1'): ToolExecutionContext {
   return {
     sessionId,
     turnId: 'turn-1',
@@ -129,8 +129,8 @@ describe('builtin character tools', () => {
       updatedAt: '2026-04-25T00:00:00.000Z',
     };
 
-    await mirrorCharacterToPluginData(store, 'sess-1', 'core-char-creator', character);
-    await mirrorCharacterToPluginData(store, 'sess-1', 'core-char-creator', {
+    await mirrorCharacterToPluginData(store, 'sess-1', 'char-creator', character);
+    await mirrorCharacterToPluginData(store, 'sess-1', 'char-creator', {
       ...character,
       fields: { hp: 90 },
       version: 2,
@@ -141,7 +141,7 @@ describe('builtin character tools', () => {
     expect(store.pluginData[0]).toMatchObject({
       id: 'char-mirror-char-player-1',
       sessionId: 'sess-1',
-      pluginId: 'core-char-creator',
+      pluginId: 'char-creator',
       namespace: 'characters',
       key: 'char-player-1',
     });
@@ -190,13 +190,13 @@ describe('builtin character tools', () => {
       const t = findByName(tools, 'create-character');
       const result = await t.execute(
         { name: 'Alice', type: 'npc' },
-        ctx('core-char-creator', 'sess-1'),
+        ctx('char-creator', 'sess-1'),
       );
       const charId = (result as { characterId: string }).characterId;
 
       expect(store.pluginData).toHaveLength(1);
       const mirror = store.pluginData[0];
-      expect(mirror.pluginId).toBe('core-char-creator');
+      expect(mirror.pluginId).toBe('char-creator');
       expect(mirror.namespace).toBe('characters');
       expect(mirror.key).toBe(charId);
       expect((mirror.value as { name: string }).name).toBe('Alice');
@@ -465,11 +465,11 @@ describe('builtin character tools', () => {
       const create = findByName(tools, 'create-character');
       await create.execute(
         { name: 'NarratorGhost', type: 'npc' },
-        ctx('core-narrator'),
+        ctx('narrator'),
       );
 
       const t = findByName(tools, 'list-characters');
-      const result = await t.execute({}, ctx('core-char-creator')) as { _text: string; count: number };
+      const result = await t.execute({}, ctx('char-creator')) as { _text: string; count: number };
       expect(result.count).toBe(4);
       expect(result._text).toContain('NarratorGhost');
     });

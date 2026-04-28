@@ -52,7 +52,7 @@ function seedPluginData(
   );
 }
 
-function ctx(sessionId = 'sess-1', pluginId = 'core-narrator'): ToolExecutionContext {
+function ctx(sessionId = 'sess-1', pluginId = 'narrator'): ToolExecutionContext {
   return {
     sessionId,
     turnId: 'turn-1',
@@ -74,7 +74,7 @@ describe('builtin world dimension tools', () => {
 
   beforeEach(() => {
     store = createMockStore();
-    findWorldDataPluginId = vi.fn(() => 'core-world-init');
+    findWorldDataPluginId = vi.fn(() => 'world-init');
     tools = createWorldDimensionTools(store, { findWorldDataPluginId });
 
     store.sessions.set('sess-1', {
@@ -115,7 +115,7 @@ describe('builtin world dimension tools', () => {
   it('prefers plugin_data entries over world metadata', async () => {
     seedPluginData(store, {
       sessionId: 'sess-1',
-      pluginId: 'core-world-init',
+      pluginId: 'world-init',
       namespace: 'entries',
       key: 'tone',
       value: {

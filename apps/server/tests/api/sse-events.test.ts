@@ -90,12 +90,12 @@ describe('V2 SSE Events', () => {
           topic: 'routed.event',
           payload: { x: 1 },
           sessionId: 'sess-1',
-          targetRuntime: 'core-narrator/narrator',
+          targetRuntime: 'narrator/narrator',
         }),
       });
 
       expect(received).toHaveLength(1);
-      expect(received[0].targetRuntime).toBe('core-narrator/narrator');
+      expect(received[0].targetRuntime).toBe('narrator/narrator');
     });
   });
 

@@ -571,14 +571,14 @@ describe('callLLMWithRetry trace emissions', () => {
       policy: { maxRetries: 0, callTimeoutMs: 10_000, firstTokenTimeoutMs: 5_000, loopDetectionThreshold: 3 },
       deadline: Date.now() + 30_000,
       emitter,
-      runtimeId: 'core-narrator/main',
-      pluginId: 'core-narrator',
+      runtimeId: 'narrator/main',
+      pluginId: 'narrator',
     });
 
     expect(emitter.events.map(e => e.type)).toEqual(['llm.calling', 'llm.responded']);
     expect(emitter.events[0].payload).toMatchObject({
-      runtimeId: 'core-narrator/main',
-      pluginId: 'core-narrator',
+      runtimeId: 'narrator/main',
+      pluginId: 'narrator',
       slot: 'default',
       attempt: 0,
     });
@@ -628,8 +628,8 @@ describe('streamLLMWithRetry trace emissions', () => {
       policy: { maxRetries: 0, callTimeoutMs: 10_000, firstTokenTimeoutMs: 5_000, loopDetectionThreshold: 3 },
       deadline: Date.now() + 30_000,
       emitter,
-      runtimeId: 'core-narrator/main',
-      pluginId: 'core-narrator',
+      runtimeId: 'narrator/main',
+      pluginId: 'narrator',
     });
 
     expect(emitter.events.map(e => e.type)).toEqual(['llm.calling', 'llm.responded']);

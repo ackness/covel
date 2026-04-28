@@ -81,7 +81,7 @@ stateDiagram-v2
 
 **权威状态模型** = `(status, turnCount, preGameCompleted)`：
 
-- **Pre-Game**：`status === 'active' && turnCount === 0`。调度器只会挑选 priority `0–99` 的 Pre-Game band runtime；每个声明 `preGameDone: true` 的 runtime 完成后会被追加进 `preGameCompleted`，玩家可以多次提交表单/消息迭代（例如 `core-char-creator` 的 submit-inputs）。
+- **Pre-Game**：`status === 'active' && turnCount === 0`。调度器只会挑选 priority `0–99` 的 Pre-Game band runtime；每个声明 `preGameDone: true` 的 runtime 完成后会被追加进 `preGameCompleted`，玩家可以多次提交表单/消息迭代（例如 `char-creator` 的 submit-inputs）。
 - **Turn 0 → 1**：所有 Pre-Game band runtime 的 id 都已出现在 `preGameCompleted` 时，Kernel 把 `turnCount` 从 0 推到 1，进入主循环。
 - **Playing**：`status === 'active' && turnCount >= 1`。每次 `POST /api/actions` 触发一轮完整 Turn pipeline，只调度 priority `100–1000` 的 runtime。
 - **Paused / Ended**：`status === 'paused' | 'ended'`。调度器直接返回空，`/api/actions` 被服务端拒绝。Paused 可 `resumeSession()` 恢复，Ended 是终态。
@@ -127,7 +127,7 @@ flowchart TB
 
 | turnCount | 可调度 priority 区间 | 语义 |
 |-----------|----------------------|------|
-| `0`       | `0–99`               | Pre-Game band（如 `core-pregame`、`core-world-init`、`core-char-creator`） |
+| `0`       | `0–99`               | Pre-Game band（如 `pregame`、`world-init`、`char-creator`） |
 | `>= 1`    | `100–1000`           | 主循环（narrator `500` / guide `550` / codex `650` / extractor / char-tracker …） |
 
 **Proposal 类型**（全部过 commit chain）：`narrative.append`、`interaction.request`、`state.patch`、`event.emit`、`plugin.data` / `plugin.data.batch`、`working_memory.set`、`lorebook.upsert`。runtime 输出若带 legacy `phase` 字段会被 `normalizeOutput` 静默忽略（兼容老插件，不报错、不产生 proposal）。
@@ -272,18 +272,18 @@ plugins/my-plugin/
 ```
 插件不直接通信。通过框架中介：
 
-  core-narrator (P500)                  core-guide (P550)
+  narrator (P500)                  guide (P550)
   ────────────────────                  ─────────────────
   输出: { narrativeOutput: "..." }       PLUGIN.md 声明:
           │                              input.inject:
-          │                                - from: core-narrator
+          │                                - from: narrator
           │                                  field: narrativeOutput
           │                                  as: "<narrator-output>"
           │                                     │
           ▼                                     ▼
   completedResults Map                   Context Builder
   ┌────────────────────┐                 注入:
-  │ "core-narrator" →  │ ───────────────► <narrator-output>
+  │ "narrator" →  │ ───────────────► <narrator-output>
   │  { narrativeOutput │                   沼泽的雾气...
   │    : "沼泽的雾气"}  │                  </narrator-output>
   └────────────────────┘
@@ -379,7 +379,7 @@ plugins/my-plugin/
     topic: "plugin",                或 /actions 流
     _subType: "plugin-data.changed",
     payload: {
-      pluginId: "core-codex",
+      pluginId: "codex",
       changes: [{
         namespace: "entries",
         key: "codex-fire-magic",
@@ -395,7 +395,7 @@ plugins/my-plugin/
                                   applyChanges(pluginId, changes)
                                        │
                                        ▼
-                                  pluginData["core-codex"]["entries"]["codex-fire-magic"]
+                                  pluginData["codex"]["entries"]["codex-fire-magic"]
                                   = { title: "火焰魔法", ... }
                                        │
                                        ▼
@@ -421,14 +421,14 @@ plugins/my-plugin/
   │                                                                 │
   │  Turn 1 (turnCount === 0, Pre-Game band, priority 0–99):        │
   │  ┌────────────────────────────────────────────────────────────┐ │
-  │  │ P10  core-pregame      → 初始化会话级元数据                │ │
-  │  │ P85  core-world-init   → 生成/复用世界维度 schema          │ │
+  │  │ P10  pregame      → 初始化会话级元数据                │ │
+  │  │ P85  world-init   → 生成/复用世界维度 schema          │ │
   │  │      (P500/P700 在 turnCount === 0 不会被调度——下一段    │ │
   │  │       Pre-Game 循环内继续派发剩余 runtime)                 │ │
   │  └────────────────────────────────────────────────────────────┘ │
   │  ┌────────────────────────────────────────────────────────────┐ │
-  │  │ 随后几个 Pre-Game 子轮：core-narrator → 开场叙事            │ │
-  │  │                         core-char-creator → create-form    │ │
+  │  │ 随后几个 Pre-Game 子轮：narrator → 开场叙事            │ │
+  │  │                         char-creator → create-form    │ │
   │  │                         (它们的 priority 也在 0–99 段)     │ │
   │  └────────────────────────────────────────────────────────────┘ │
   │                          │                                      │
@@ -516,24 +516,24 @@ plugin_data 表 (核心持久化接口):
   │  Primary Key: (sessionId, pluginId, namespace, key)      │
   │                                                          │
   │  session-1                                               │
-  │  ├── core-codex                                          │
+  │  ├── codex                                          │
   │  │   └── entries                                         │
   │  │       ├── codex-fire-magic → { title, category, ... } │
   │  │       ├── codex-ice-shield → { ... }                  │
   │  │       └── codex-dragon    → { ... }                   │
-  │  ├── core-world-init                                     │
+  │  ├── world-init                                     │
   │  │   ├── schema                                          │
   │  │   │   └── character-attributes → { attributes: [...] }│
   │  │   └── entries                                         │
   │  │       ├── geography → { regions: [...] }              │
   │  │       ├── factions  → { ... }                         │
   │  │       └── history   → { ... }                         │
-  │  └── core-char-creator                                   │
+  │  └── char-creator                                   │
   │      └── character                                       │
   │          └── player → { name, attributes, ... }          │
   │                                                          │
   │  session-2 (同 world, 不同 session)                       │
-  │  ├── core-world-init                                     │
+  │  ├── world-init                                     │
   │  │   └── (guard 从 session-1 复制 → 跳过 LLM)            │
   │  └── ...                                                 │
   └──────────────────────────────────────────────────────────┘

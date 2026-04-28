@@ -14,7 +14,7 @@
  * plugins this equals `pluginId`; for multi-runtime plugins it is
  * `pluginId/runtimeName`. The resolver only consults the exact key — there
  * is intentionally no plugin-level fan-out, so an override on
- * `core-codex/unlocker` does not silently apply to `core-codex/retriever`.
+ * `codex/unlocker` does not silently apply to `codex/retriever`.
  */
 
 import type { RuntimeManifest } from '@covel/shared';

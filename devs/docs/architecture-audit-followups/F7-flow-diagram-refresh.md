@@ -18,7 +18,7 @@
   - `preGameCompleted` 集齐时 `turnCount 0 → 1` 的判定节点
   - Proposal 类型列表改为**实际存在**的: `narrative.append / interaction.request / state.patch / event.emit / plugin.data / plugin.data.batch / working_memory.set / lorebook.upsert` (F7 原草稿里写的 `ui.render / record.upsert / asset.generate` 在当前代码里不是 ProposalType, 已更正)
   - 补优先级 band 表: turn 0 → `0–99`, turn ≥ 1 → `100–1000`
-- **§ 5.3 表单交互** — ASCII 外框保留但清理 phase 标签: `P10 core-pregame → 初始化, phase → character_creation` 改为 `core-pregame → 初始化会话级元数据`; 明确标注"`turnCount === 0, Pre-Game band, priority 0–99`"。
+- **§ 5.3 表单交互** — ASCII 外框保留但清理 phase 标签: `P10 pregame → 初始化, phase → character_creation` 改为 `pregame → 初始化会话级元数据`; 明确标注"`turnCount === 0, Pre-Game band, priority 0–99`"。
 - **§ 七 完整游戏流程时序图** — 长 ASCII 时序图 → Mermaid `sequenceDiagram`:
   - 参与者: Player / Web / Server / Kernel / Plugin / LLM
   - 使用**真实** SSE 事件名: `execution.started / runtime.started / narrative.delta / narrative.completed / interaction.requested / plugin-data.changed / state.changed / event.emitted / record.updated / runtime.completed { status } / execution.completed`

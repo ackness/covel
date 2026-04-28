@@ -76,14 +76,14 @@ Open http://localhost:5173; debug page at `/debug`.
 
 | Plugin | Kind | Role |
 |--------|:-:|------|
-| `core-narrator`     | Agent    | Main narration |
-| `core-guide`        | Agent    | Action guidance + option generation |
-| `core-npc-graph`    | Agent    | NPC graph extraction + 2-hop retrieval |
-| `core-codex`        | Agent    | World-knowledge codex |
-| `core-char-creator` | Agent    | Character-creation flow |
-| `core-world-init`   | Agent    | World-dimension initialisation |
-| `core-pregame`      | Function | Pre-game bootstrap (no LLM call) |
-| `core-memory`       | UI       | Memory panel |
+| `narrator`     | Agent    | Main narration |
+| `guide`        | Agent    | Action guidance + option generation |
+| `npc-graph`    | Agent    | NPC graph extraction + 2-hop retrieval |
+| `codex`        | Agent    | World-knowledge codex |
+| `char-creator` | Agent    | Character-creation flow |
+| `world-init`   | Agent    | World-dimension initialisation |
+| `pregame`      | Function | Pre-game bootstrap (no LLM call) |
+| `memory`       | UI       | Memory panel |
 
 Sample world packs: `cloudmere`, `mistport`, `neonridge`.
 

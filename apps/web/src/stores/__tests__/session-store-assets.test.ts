@@ -74,7 +74,7 @@ function makeAsset(overrides: Partial<AssetGenerateView> = {}): AssetGenerateVie
     type: "asset.generate",
     sessionId: "sess-1",
     turnId: "turn-1",
-    source: { pluginId: "core-image", runtimeId: "core-image/runner" },
+    source: { pluginId: "image", runtimeId: "image/runner" },
     ref: { id: "a".repeat(64), mime: "image/png", size: 16, url: "https://cdn/x.png" },
     modality: "image",
     createdAt: "2026-04-26T00:00:00.000Z",

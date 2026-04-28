@@ -39,7 +39,7 @@ describe('deriveSseEventName', () => {
       timestamp: new Date().toISOString(),
       payload: {
         _subType: 'plugin-data.changed',
-        pluginId: 'core-codex',
+        pluginId: 'codex',
         changes: [
           { namespace: 'entries', key: 'codex-1', value: { title: 'x' }, operation: 'set' },
         ],
@@ -103,8 +103,8 @@ describe('deriveSseEventName', () => {
       payload: {
         _subTopic: 'runtime',
         _subType: 'runtime.started',
-        runtimeId: 'core-narrator',
-        pluginId: 'core-narrator',
+        runtimeId: 'narrator',
+        pluginId: 'narrator',
         priority: 500,
       },
     });

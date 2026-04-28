@@ -21,10 +21,10 @@
 | **list-characters** | builtin | — | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见） |
 | **get-character** | builtin | — | auto-allow | 按 id 或 name 查找单个角色 |
 | **world-dimension-get** | builtin | — | auto-allow | 按需读取当前 session 世界的结构化维度字段 |
-| set-world-schema | local | core-world-init | auto-allow | 定义世界角色属性 Schema |
-| set-world-entries-batch | local | core-world-init | auto-allow | 批量写入世界词条 |
-| unlock-codex-entries | local | core-codex | auto-allow | 批量解锁图鉴条目 |
-| update-codex-entry | local | core-codex | auto-allow | 更新已有图鉴条目 |
+| set-world-schema | local | world-init | auto-allow | 定义世界角色属性 Schema |
+| set-world-entries-batch | local | world-init | auto-allow | 批量写入世界词条 |
+| unlock-codex-entries | local | codex | auto-allow | 批量解锁图鉴条目 |
+| update-codex-entry | local | codex | auto-allow | 更新已有图鉴条目 |
 
 ---
 
@@ -94,7 +94,7 @@ Local 工具承接插件自己的业务封装，例如：
 **FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue? }`
 - type: `text` | `textarea` | `select` | `checkbox` | `number`
 
-**使用者**: core-char-creator
+**使用者**: char-creator
 
 ---
 
@@ -111,7 +111,7 @@ Local 工具承接插件自己的业务封装，例如：
 **Choice**: `{ id, label, description?, category? }`
 - category: `safe` | `aggressive` | `creative` | `wild` 等
 
-**使用者**: 通用交互插件。当前 `core-guide` 采用 `generate-guide + ui.message` 路径来承接更完整的插件自定义 UI。
+**使用者**: 通用交互插件。当前 `guide` 采用 `generate-guide + ui.message` 路径来承接更完整的插件自定义 UI。
 
 ---
 
@@ -126,7 +126,7 @@ Local 工具承接插件自己的业务封装，例如：
 | message | string | ✓ | 通知内容 |
 | icon | string | | 图标名称 |
 
-**使用者**: core-codex
+**使用者**: codex
 
 ---
 
@@ -343,7 +343,7 @@ Created npc "苏婉" as char-abc123. — 青萍宗外门首席弟子，冰灵根
 Character "苏婉" (npc) already exists as char-abc123. No new record created. Use update-character to modify it.
 ```
 
-**使用者**: `core-char-creator/player-init`（创建 player 角色，建角完成后输出 `preGameDone: true`）、`core-char-creator/character-tracker`（只创建 NPC）
+**使用者**: `char-creator/player-init`（创建 player 角色，建角完成后输出 `preGameDone: true`）、`char-creator/character-tracker`（只创建 NPC）
 
 > **Turn-band 重构注记**：`create-character` 原本接受 `transitionPhase` 参数并通过 `CharacterToolHooks.onPhaseTransition` 驱动 SSE `phase.changed` 广播。该路径在 turn-band 重构中被移除——`SessionRecord.phase` 字段已去除，Pre-Game 段落的完成由 runtime 输出 `preGameDone: true` 累加到 `session.preGameCompleted` 集合表达。现在 `create-character` 只写 `characters` 表（并镜像到调用方 plugin-data 的 `characters` namespace），不再触发任何 phase / status 副作用。
 
@@ -437,7 +437,7 @@ Attributes:
 
 ### set-world-schema
 
-**所属**: core-world-init (`plugins/core-world-init/tools/set-world-schema.js`)
+**所属**: world-init (`plugins/world-init/tools/set-world-schema.js`)
 
 定义世界角色属性 Schema。一次调用传入所有属性定义，存储到 `plugin_data` 的 `schema/character-attributes`。
 
@@ -460,13 +460,13 @@ Attributes:
 
 **输出**: `{ success, attributeCount, categories }`
 
-**使用者**: core-world-init/schema-gen
+**使用者**: world-init/schema-gen
 
 ---
 
 ### set-world-entries-batch
 
-**所属**: core-world-init (`plugins/core-world-init/tools/set-world-entries-batch.js`)
+**所属**: world-init (`plugins/world-init/tools/set-world-entries-batch.js`)
 
 批量写入世界词条。一次调用传入所有词条（地理、阵营、货币等）。
 
@@ -488,13 +488,13 @@ Attributes:
 
 **输出**: `{ success, count, keys }`
 
-**使用者**: core-world-init/schema-gen
+**使用者**: world-init/schema-gen
 
 ---
 
 ### unlock-codex-entries
 
-**所属**: core-codex (`plugins/core-codex/tools/unlock-codex-entries.js`)
+**所属**: codex (`plugins/codex/tools/unlock-codex-entries.js`)
 
 批量解锁图鉴条目，每个条目生成一张"知识发现"UI 卡片。
 
@@ -522,7 +522,7 @@ Attributes:
 
 ### update-codex-entry
 
-**所属**: core-codex (`plugins/core-codex/tools/update-codex-entry.js`)
+**所属**: codex (`plugins/codex/tools/update-codex-entry.js`)
 
 更新已有图鉴条目，追加新发现的信息。
 

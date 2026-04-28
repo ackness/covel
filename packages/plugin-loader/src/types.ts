@@ -339,8 +339,8 @@ export interface FunctionHandlerContext {
  *
  * Core / official plugins (`pluginType: 'core-plugin'`) keep the full
  * `DataStore` because they implement framework primitives that need it
- * (e.g. `core-world-init`'s guard imports historic sessions, `core-
- * char-creator`'s guard upserts the player Character record). The
+ * (e.g. `world-init`'s guard imports historic sessions,
+ * `char-creator`'s guard upserts the player Character record). The
  * runtime decides which surface to inject based on the manifest's
  * trust signal.
  *

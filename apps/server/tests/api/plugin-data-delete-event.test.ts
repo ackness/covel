@@ -18,7 +18,7 @@ describe('deletePluginData emits plugin-data.changed', () => {
   let eventBus: EventBus;
   let wrappedStore: DataStore;
   const sessionId = 'sess-1';
-  const pluginId = 'core-codex';
+  const pluginId = 'codex';
 
   beforeEach(async () => {
     const baseStore: DataStore = createMemoryStore();

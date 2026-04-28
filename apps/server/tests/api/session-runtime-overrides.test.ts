@@ -44,7 +44,7 @@ function makeSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
     turnCount: 3,
     preGameCompleted: [],
     locale: 'zh-CN',
-    activePlugins: ['core-narrator'],
+    activePlugins: ['narrator'],
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -68,8 +68,8 @@ describe('PATCH /api/sessions/:id runtimeModelOverrides (PR-6)', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         runtimeModelOverrides: {
-          'core-narrator': 'balance',
-          'core-codex/unlocker': 'fast',
+          'narrator': 'balance',
+          'codex/unlocker': 'fast',
         },
       }),
     });
@@ -77,8 +77,8 @@ describe('PATCH /api/sessions/:id runtimeModelOverrides (PR-6)', () => {
 
     const fresh = await store.getSession('sess-overrides-1');
     expect(fresh?.runtimeModelOverrides).toEqual({
-      'core-narrator': 'balance',
-      'core-codex/unlocker': 'fast',
+      'narrator': 'balance',
+      'codex/unlocker': 'fast',
     });
   });
 
@@ -88,10 +88,10 @@ describe('PATCH /api/sessions/:id runtimeModelOverrides (PR-6)', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         runtimeModelOverrides: {
-          'core-narrator': 'balance',
+          'narrator': 'balance',
           '': 'fast',
-          'core-codex': 123,
-          'core-guide': '',
+          'codex': 123,
+          'guide': '',
         },
       }),
     });
@@ -99,7 +99,7 @@ describe('PATCH /api/sessions/:id runtimeModelOverrides (PR-6)', () => {
 
     const fresh = await store.getSession('sess-overrides-1');
     expect(fresh?.runtimeModelOverrides).toEqual({
-      'core-narrator': 'balance',
+      'narrator': 'balance',
     });
   });
 
@@ -138,10 +138,10 @@ describe('PATCH /api/sessions/:id runtimeModelOverrides (PR-6)', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         runtimeModelOverrides: {
-          'core-narrator': 'balance',
+          'narrator': 'balance',
           '<script>alert(1)</script>': 'fast',
           'Bad-Caps': 'fast',
-          'core-codex/unlocker': 'fast',
+          'codex/unlocker': 'fast',
         },
       }),
     });
@@ -149,8 +149,8 @@ describe('PATCH /api/sessions/:id runtimeModelOverrides (PR-6)', () => {
 
     const fresh = await store.getSession('sess-overrides-1');
     expect(fresh?.runtimeModelOverrides).toEqual({
-      'core-narrator': 'balance',
-      'core-codex/unlocker': 'fast',
+      'narrator': 'balance',
+      'codex/unlocker': 'fast',
     });
   });
 
@@ -176,7 +176,7 @@ describe('PATCH /api/sessions/:id runtimeModelOverrides (PR-6)', () => {
 
   it('clearing with empty object removes overrides', async () => {
     await store.updateSession('sess-overrides-1', {
-      runtimeModelOverrides: { 'core-narrator': 'fast' },
+      runtimeModelOverrides: { 'narrator': 'fast' },
       updatedAt: new Date().toISOString(),
     });
 

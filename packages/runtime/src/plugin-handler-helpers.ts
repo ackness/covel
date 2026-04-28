@@ -157,7 +157,7 @@ export function createPluginLogger(
  *
  * Core plugins (`pluginType: 'core-plugin'`) keep the full DataStore
  * because their guard / handler logic implements framework primitives
- * (e.g. `core-world-init`'s historical-session reuse, `core-char-creator`'s
+ * (e.g. `world-init`'s historical-session reuse, `char-creator`'s
  * deterministic player upsert). The runtime decides which to inject.
  */
 export function createFunctionStoreView(

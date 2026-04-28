@@ -42,7 +42,7 @@ describe('normalizeOutput', () => {
     });
 
     it('does NOT emit narrative.append for non-story runtimes (kind defaults to "plugin")', () => {
-      // Regression (2026-04-24): core-guide runtimes whose LLM forgot to call
+      // Regression (2026-04-24): guide runtimes whose LLM forgot to call
       // the mandatory tool and instead wrote prose were silently polluting the
       // narrator feed. Only `outputKind: "story"` may append narrative.
       const output = { narrativeOutput: 'Hallucinated plugin prose.' };
@@ -361,7 +361,7 @@ describe('normalizeOutput', () => {
   });
 
   describe('notifications', () => {
-    // core-pregame and similar plugins return a `notifications[]` array of
+    // pregame and similar plugins return a `notifications[]` array of
     // { level, title, message } objects to surface system-level messages to
     // the player (welcome banner, world intro, etc.). Before this change the
     // kernel silently dropped them. We map each notification to a
@@ -783,7 +783,7 @@ describe('createCommitPipeline', () => {
       const proposal = makeProposal('character.upsert', {
         id: 'char-2',
         name: 'Mira',
-        mirrorPluginId: 'core-char-creator',
+        mirrorPluginId: 'char-creator',
       });
 
       const result = await pipeline.commit(proposal);
@@ -792,7 +792,7 @@ describe('createCommitPipeline', () => {
       expect(store.setPluginData).toHaveBeenCalledOnce();
       expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
         sessionId: SESSION_ID,
-        pluginId: 'core-char-creator',
+        pluginId: 'char-creator',
         namespace: 'characters',
         key: 'char-2',
         value: expect.objectContaining({ id: 'char-2', name: 'Mira', type: 'npc', version: 1 }),
@@ -1141,14 +1141,14 @@ describe('processRuntimeResult', () => {
     const store = createMockStore();
     const result = makeRuntimeResult(
       { narrativeOutput: 'Text.' },
-      { pluginId: 'core-narrator', runtimeId: 'core-narrator' },
+      { pluginId: 'narrator', runtimeId: 'narrator' },
     );
 
     const { events } = await processRuntimeResult(result, store as any, SESSION_ID, 'story');
 
-    expect(events[0].source).toEqual({ pluginId: 'core-narrator', runtimeId: 'core-narrator' });
+    expect(events[0].source).toEqual({ pluginId: 'narrator', runtimeId: 'narrator' });
     const msgArg = store.addMessage.mock.calls[0][0];
-    expect(msgArg.metadata.runtimeId).toBe('core-narrator');
+    expect(msgArg.metadata.runtimeId).toBe('narrator');
   });
 
   it('commits a fake runtime asset output through the event and trace path', async () => {
@@ -1453,14 +1453,14 @@ describe('createTraceRecorder', () => {
     const store = createMockStore();
     const recorder = createTraceRecorder(store as any, SESSION_ID, TURN_ID);
 
-    await recorder.runtimeStarted({ runtimeId: 'core-narrator', pluginId: 'core-narrator', priority: 500 });
+    await recorder.runtimeStarted({ runtimeId: 'narrator', pluginId: 'narrator', priority: 500 });
 
     expect(store.addTraceEvent).toHaveBeenCalledOnce();
     const arg = store.addTraceEvent.mock.calls[0][0];
     expect(arg.type).toBe('runtime.started');
     expect(arg.sessionId).toBe(SESSION_ID);
     expect(arg.turnId).toBe(TURN_ID);
-    expect(arg.payload.runtimeId).toBe('core-narrator');
+    expect(arg.payload.runtimeId).toBe('narrator');
     expect(arg.payload.priority).toBe(500);
   });
 
@@ -1468,7 +1468,7 @@ describe('createTraceRecorder', () => {
     const store = createMockStore();
     const recorder = createTraceRecorder(store as any, SESSION_ID, TURN_ID);
 
-    await recorder.runtimeCompleted({ runtimeId: 'core-narrator', pluginId: 'core-narrator', status: 'success', durationMs: 1500 });
+    await recorder.runtimeCompleted({ runtimeId: 'narrator', pluginId: 'narrator', status: 'success', durationMs: 1500 });
 
     expect(store.addTraceEvent).toHaveBeenCalledOnce();
     const arg = store.addTraceEvent.mock.calls[0][0];

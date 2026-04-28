@@ -46,7 +46,7 @@ export interface BudgetResult<M> {
 - `PLUGIN.md` body 花了多少；
 - `plugin-data inject` 花了多少；
 - 哪个 namespace 最贵；
-- world/lorebook/working-memory/core-memory 花了多少；
+- world/lorebook/working-memory/memory 花了多少；
 - V2 segment 9 authorsNote / segment 10 postHistory 花了多少；
 - #01 的 `context-summary` 是否真的省 token；
 - prompt viewer 里为什么某个 turn 变贵。
@@ -124,7 +124,7 @@ readonly contextBudget?: Omit<BudgetOptions, 'estimator'>;
 - 不让 plugin 自己决定全局 prompt budget；plugin 只可看到只读 budget view（后续）。
 - 不改变 compactor 策略。
 - 不改变 `applyBudget()` 的裁剪算法。
-- 不做 `core-codex`、`core-memory` 等插件特例预算；如果某插件需要预算上限，应通过 manifest/visibility/namespace 通用声明表达。
+- 不做 `codex`、`memory` 等插件特例预算；如果某插件需要预算上限，应通过 manifest/visibility/namespace 通用声明表达。
 
 ---
 

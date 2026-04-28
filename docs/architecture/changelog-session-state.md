@@ -19,7 +19,7 @@
 
 ### 新增：Schema-Driven 角色创建
 
-- `core-char-creator/PLUGIN.md` 读取 `{{ config.worldSchema }}` 生成表单字段
+- `char-creator/PLUGIN.md` 读取 `{{ config.worldSchema }}` 生成表单字段
 - 字段 `name` 与 world schema attribute `id` 对齐（如 `lingGen`、`background`）
 - `submit-inputs.ts` 角色创建时合并 schema 默认值（hp、mp、cultivation_layer 等）
 
@@ -107,7 +107,7 @@ trigger:
 运行时输出中包含 `phase` 字段时，turn-executor 自动持久化到 session：
 
 ```
-core-pregame 输出 { phase: 'character_creation' }
+pregame 输出 { phase: 'character_creation' }
 → turn-executor 调用 store.updateSession(sessionId, { phase: 'character_creation' })
 → 同 turn 内后续运行时看到更新后的 phase
 ```
@@ -134,7 +134,7 @@ Server 在 SSE 流中，每发一条事件同步写入 `messages` 表，确保�
   "role": "assistant",
   "content": "叙事文本...",
   "turnId": "...",
-  "runtimeId": "core-narrator",
+  "runtimeId": "narrator",
   "kind": "story",
   "block": null,
   "createdAt": "..."
@@ -158,17 +158,17 @@ createCharacter: z.boolean().optional()
 
 ### 6. 插件改动
 
-**core-narrator**：
+**narrator**：
 - 新增 `{{ player.character }}` 注入
 - 叙事规则中说明可以融入角色背景
 
-**core-char-creator**：
+**char-creator**：
 - 表单字段上限从 6 个降到 4 个
 - 优先使用选择题（combobox）而非文本输入
 - `createCharacter: true` 为必需参数
 - 保留对 narrator 输出的依赖（input.inject）
 
-**core-pregame**：
+**pregame**：
 - 新增 `store.updateSession()` 持久化 phase 到 DB
 
 ### 7. 前端修复
@@ -215,7 +215,7 @@ createCharacter: z.boolean().optional()
 | C2 | **状态面板为空** | SSE `state.patch.applied` payload 结构与前端解析不匹配 | 对齐 server 发送格式与前端解析格式 |
 | C3 | **事件面板为空** | events 数据不通过 SSE 推送到前端 | 需要在 turn 执行后推送 event 汇总 |
 | C4 | **图鉴面板为空** | codex 数据存在 plugin_data 中，但面板未从 API 加载 | 面板需通过 `GET /api/sessions/:id/plugin-data/:pluginId/:namespace` 加载 |
-| C5 | **世界观面板为空** | 需要 `world-data-provider` capability 的插件且面板正确加载 | 验证 core-world-init 的 capability 声明和面板数据加载路径 |
+| C5 | **世界观面板为空** | 需要 `world-data-provider` capability 的插件且面板正确加载 | 验证 world-init 的 capability 声明和面板数据加载路径 |
 | C6 | **知识库面板为空** | 同 C4，依赖 plugin_data API | 需要面板组件正确调用 API |
 
 ### D. 推送机制与事件系统

@@ -16,11 +16,11 @@ tags:
   - adventure
   - political-intrigue
 requiredPlugins:
-  - core-narrator
+  - narrator
 recommendedPlugins:
-  - core-guide
-  - core-inventory
-  - core-combat
+  - guide
+  - inventory
+  - combat
 
 dimensions:
   geography:

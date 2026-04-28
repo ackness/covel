@@ -4,8 +4,8 @@ import { resolveRuntimeSlot } from '../src/runtime-slot-resolver.js';
 
 function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   return {
-    name: 'core-narrator',
-    pluginId: 'core-narrator',
+    name: 'narrator',
+    pluginId: 'narrator',
     description: 'test',
     priority: 500,
     ...overrides,
@@ -14,55 +14,55 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
 
 describe('resolveRuntimeSlot (PR-6)', () => {
   it('returns session override when runtime ID matches', () => {
-    const manifest = makeManifest({ name: 'core-narrator', model: 'fast' });
-    const slot = resolveRuntimeSlot(manifest, { 'core-narrator': 'balance' });
+    const manifest = makeManifest({ name: 'narrator', model: 'fast' });
+    const slot = resolveRuntimeSlot(manifest, { 'narrator': 'balance' });
     expect(slot).toBe('balance');
   });
 
   it('falls back to manifest.model when no session override', () => {
-    const manifest = makeManifest({ name: 'core-narrator', model: 'fast' });
+    const manifest = makeManifest({ name: 'narrator', model: 'fast' });
     const slot = resolveRuntimeSlot(manifest, {});
     expect(slot).toBe('fast');
   });
 
   it('returns undefined when neither session override nor manifest model is set', () => {
-    const manifest = makeManifest({ name: 'core-narrator' });
+    const manifest = makeManifest({ name: 'narrator' });
     const slot = resolveRuntimeSlot(manifest, undefined);
     expect(slot).toBeUndefined();
   });
 
   it('matches multi-runtime plugin IDs by full runtime name', () => {
     const manifest = makeManifest({
-      name: 'core-codex/unlocker',
-      pluginId: 'core-codex',
+      name: 'codex/unlocker',
+      pluginId: 'codex',
       model: 'fast',
     });
     const slot = resolveRuntimeSlot(manifest, {
-      'core-codex/unlocker': 'balance',
-      'core-codex/retriever': 'fast',
+      'codex/unlocker': 'balance',
+      'codex/retriever': 'fast',
     });
     expect(slot).toBe('balance');
   });
 
   it('does not fan out plugin-level overrides to individual runtimes', () => {
     const manifest = makeManifest({
-      name: 'core-codex/unlocker',
-      pluginId: 'core-codex',
+      name: 'codex/unlocker',
+      pluginId: 'codex',
       model: 'fast',
     });
-    // Override key is just "core-codex" — should not match "core-codex/unlocker".
-    const slot = resolveRuntimeSlot(manifest, { 'core-codex': 'balance' });
+    // Override key is just "codex" — should not match "codex/unlocker".
+    const slot = resolveRuntimeSlot(manifest, { 'codex': 'balance' });
     expect(slot).toBe('fast');
   });
 
   it('treats empty-string overrides as absent', () => {
-    const manifest = makeManifest({ name: 'core-narrator', model: 'fast' });
-    const slot = resolveRuntimeSlot(manifest, { 'core-narrator': '' });
+    const manifest = makeManifest({ name: 'narrator', model: 'fast' });
+    const slot = resolveRuntimeSlot(manifest, { 'narrator': '' });
     expect(slot).toBe('fast');
   });
 
   it('handles undefined sessionOverrides without throwing', () => {
-    const manifest = makeManifest({ name: 'core-narrator', model: 'fast' });
+    const manifest = makeManifest({ name: 'narrator', model: 'fast' });
     expect(resolveRuntimeSlot(manifest, undefined)).toBe('fast');
   });
 });

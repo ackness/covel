@@ -189,7 +189,7 @@ export interface RightPanelProps {
  *   2. Plugin-driven tabs (from /api/ui-specs) — rendered below a thin divider.
  *
  * The hardcoded 角色 and 世界观 tabs were removed because they duplicated
- * plugin contributions (core-char-creator "角色" and core-world-init
+ * plugin contributions (char-creator "角色" and world-init
  * "世界维度"); the pretty world-dimensions rendering moved into the
  * plugin tab via the `WorldDimensions` covelRegistry component.
  */

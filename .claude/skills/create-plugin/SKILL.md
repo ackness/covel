@@ -227,7 +227,7 @@ trigger:
 ### 硬门控 upstream
 
 ```yaml
-upstreamRequired: [core-narrator]   # 上游本 turn 非 success → 本 runtime 直接 skipped
+upstreamRequired: [narrator]   # 上游本 turn 非 success → 本 runtime 直接 skipped
 ```
 
 ## References

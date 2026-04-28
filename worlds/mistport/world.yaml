@@ -16,11 +16,11 @@ tags:
   - mystery
   - exploration
 requiredPlugins:
-  - core-persona
-  - core-narrator
+  - persona
+  - narrator
 recommendedPlugins:
-  - core-guide
-  - core-inventory
+  - guide
+  - inventory
 
 dimensions:
   geography:

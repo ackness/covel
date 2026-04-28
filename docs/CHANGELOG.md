@@ -18,7 +18,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - monorepo 全量版本号 `0.0.1-beta` → `0.0.1`（root + 4 apps + 12 packages + 7 plugins + 2 templates + Tauri 3 处）
 - `electron-builder.yml` 增加 `publish: null` 抑制 update manifest
 - `docs/guide/plugin-authoring.md` 附录 B 插件清单按 `plugins/**/PLUGIN.md` 真实 frontmatter 重列（priority、runtime 类型与仓库实际一致）
-- `docs/reference/plugins.md` 多 runtime 目录示例改为中性占位，避免与真实 `core-world-init/schema-gen` 单 runtime 现状混淆
+- `docs/reference/plugins.md` 多 runtime 目录示例改为中性占位，避免与真实 `world-init/schema-gen` 单 runtime 现状混淆
 - README/web 首页 demo 资源刷新为最新 dev 视频（3× 速、去音轨、800px GIF + 1280p MP4）
 
 ### Fixed
@@ -33,7 +33,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - 多 Provider LLM 抽象：DeepSeek / Qwen (DashScope) / OpenAI / Anthropic
 - 2597 模型能力数据库（LiteLLM 同步），自动识别多模态 / function-calling / reasoning
 - 存储后端：Memory / SQLite / IndexedDB / PostgreSQL（Drizzle ORM）
-- 核心插件集：`core-pregame`、`core-world-init`、`core-char-creator`、`core-narrator`、`core-guide`、`core-npc-graph`、`core-codex`
+- 核心插件集：`pregame`、`world-init`、`char-creator`、`narrator`、`guide`、`npc-graph`、`codex`
 - 声明式 UI：`json-render` + plugin-owned `ui/*.json`，无硬编码 Tab
 - Electron 桌面版：macOS (arm64/x64)、Windows (x64/arm64 NSIS + portable)
 - 外部化 prompt 模板与世界包（markdown + yaml）

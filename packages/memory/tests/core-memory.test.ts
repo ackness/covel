@@ -156,7 +156,7 @@ describe('CoreMemoryManager', () => {
   describe('plugin-data mirror', () => {
     let mirrorStore: ReturnType<typeof createMockStore>;
     let mirrorManager: ReturnType<typeof createMemoryManager>;
-    const PLUGIN_ID = 'core-memory';
+    const PLUGIN_ID = 'memory';
 
     beforeEach(() => {
       mirrorStore = createMockStore();

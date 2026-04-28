@@ -133,7 +133,7 @@ function makeStateChange(overrides?: Partial<StateChangeRecord>): StateChangeRec
     tableName: 'stats',
     fieldName: 'hp',
     value: 80,
-    changedBy: 'core-combat',
+    changedBy: 'combat',
     turnId: 'turn-1',
     createdAt: ts(),
     ...overrides,
@@ -193,7 +193,7 @@ function makePluginConfig(overrides?: Partial<PluginConfigRecord>): PluginConfig
   return {
     id: id(),
     sessionId: 'sess-1',
-    pluginId: 'core-narrator',
+    pluginId: 'narrator',
     config: { tone: 'dramatic' },
     updatedAt: ts(),
     ...overrides,
@@ -229,8 +229,8 @@ function makeRuntimeOutput(overrides?: Partial<RuntimeOutputRecord>): RuntimeOut
     sessionId: 'sess-1',
     turnId: 'turn-1',
     runtimeResultId: id(),
-    pluginId: 'core-narrator',
-    runtimeId: 'core-narrator',
+    pluginId: 'narrator',
+    runtimeId: 'narrator',
     timestamp: ts(),
     results: [{ text: 'hello world', structured: { narrative: 'hello world' } }],
     metaData: {
@@ -458,24 +458,24 @@ export function runStoreContractTests(
         await store.createSession({
           ...session,
           runtimeModelOverrides: {
-            'core-narrator': 'balance',
-            'core-codex/unlocker': 'fast',
+            'narrator': 'balance',
+            'codex/unlocker': 'fast',
           },
         });
 
         const created = await store.getSession(session.id);
         expect(created?.runtimeModelOverrides).toEqual({
-          'core-narrator': 'balance',
-          'core-codex/unlocker': 'fast',
+          'narrator': 'balance',
+          'codex/unlocker': 'fast',
         });
 
         await store.updateSession(session.id, {
-          runtimeModelOverrides: { 'core-narrator': 'fast' },
+          runtimeModelOverrides: { 'narrator': 'fast' },
           updatedAt: ts(),
         });
         const updated = await store.getSession(session.id);
         expect(updated?.runtimeModelOverrides).toEqual({
-          'core-narrator': 'fast',
+          'narrator': 'fast',
         });
       });
 
@@ -483,7 +483,7 @@ export function runStoreContractTests(
         const session = makeSession();
         await store.createSession({
           ...session,
-          runtimeModelOverrides: { 'core-narrator': 'fast' },
+          runtimeModelOverrides: { 'narrator': 'fast' },
         });
         await store.updateSession(session.id, {
           runtimeModelOverrides: {},
@@ -760,9 +760,9 @@ export function runStoreContractTests(
 
     describe('PluginConfigs', () => {
       it('should save and retrieve plugin config', async () => {
-        const config = makePluginConfig({ sessionId: 'sess-1', pluginId: 'core-narrator' });
+        const config = makePluginConfig({ sessionId: 'sess-1', pluginId: 'narrator' });
         await store.savePluginConfig(config);
-        const result = await store.getPluginConfig('sess-1', 'core-narrator');
+        const result = await store.getPluginConfig('sess-1', 'narrator');
         expect(result).toEqual(config);
       });
 
@@ -779,7 +779,7 @@ export function runStoreContractTests(
         const record = {
           id: 'pd-1',
           sessionId: 'sess-1',
-          pluginId: 'core-world-init',
+          pluginId: 'world-init',
           namespace: 'schema',
           key: 'dimensions',
           value: { hp: { type: 'number', max: 100 }, name: { type: 'string' } },
@@ -787,7 +787,7 @@ export function runStoreContractTests(
           updatedAt: new Date().toISOString(),
         };
         await store.setPluginData(record);
-        const result = await store.getPluginData('sess-1', 'core-world-init', 'schema', 'dimensions');
+        const result = await store.getPluginData('sess-1', 'world-init', 'schema', 'dimensions');
         expect(result).not.toBeNull();
         expect(result!.key).toBe('dimensions');
         expect(result!.value).toEqual(record.value);
@@ -1024,7 +1024,7 @@ export function runStoreContractTests(
         const fetched = await store.getRuntimeOutput('sess-1', ro.id);
         expect(fetched).toBeTruthy();
         expect(fetched?.id).toBe(ro.id);
-        expect(fetched?.runtimeId).toBe('core-narrator');
+        expect(fetched?.runtimeId).toBe('narrator');
       });
 
       it('should return null for unknown runtime output', async () => {
@@ -1042,26 +1042,26 @@ export function runStoreContractTests(
 
       it('should filter by runtimeId', async () => {
         await store.saveRuntimeOutput(
-          makeRuntimeOutput({ sessionId: 'sess-1', runtimeId: 'core-narrator' }),
+          makeRuntimeOutput({ sessionId: 'sess-1', runtimeId: 'narrator' }),
         );
         await store.saveRuntimeOutput(
-          makeRuntimeOutput({ sessionId: 'sess-1', runtimeId: 'core-guide' }),
+          makeRuntimeOutput({ sessionId: 'sess-1', runtimeId: 'guide' }),
         );
-        const list = await store.listRuntimeOutputs('sess-1', { runtimeId: 'core-guide' });
+        const list = await store.listRuntimeOutputs('sess-1', { runtimeId: 'guide' });
         expect(list).toHaveLength(1);
-        expect(list[0]!.runtimeId).toBe('core-guide');
+        expect(list[0]!.runtimeId).toBe('guide');
       });
 
       it('should filter by pluginId', async () => {
         await store.saveRuntimeOutput(
-          makeRuntimeOutput({ sessionId: 'sess-1', pluginId: 'core-narrator' }),
+          makeRuntimeOutput({ sessionId: 'sess-1', pluginId: 'narrator' }),
         );
         await store.saveRuntimeOutput(
-          makeRuntimeOutput({ sessionId: 'sess-1', pluginId: 'core-guide' }),
+          makeRuntimeOutput({ sessionId: 'sess-1', pluginId: 'guide' }),
         );
-        const list = await store.listRuntimeOutputs('sess-1', { pluginId: 'core-guide' });
+        const list = await store.listRuntimeOutputs('sess-1', { pluginId: 'guide' });
         expect(list).toHaveLength(1);
-        expect(list[0]!.pluginId).toBe('core-guide');
+        expect(list[0]!.pluginId).toBe('guide');
       });
 
       it('should return results in newest-first order', async () => {
@@ -1919,7 +1919,7 @@ export function runStoreContractTests(
         expect(await store.listMessages(sessionId)).toHaveLength(0);
         expect(await store.listCharacters(sessionId)).toHaveLength(0);
         expect(
-          await store.getPluginConfig(sessionId, 'core-narrator'),
+          await store.getPluginConfig(sessionId, 'narrator'),
         ).toBeNull();
         expect(await store.listTraceEvents(sessionId)).toHaveLength(0);
         expect(await store.listRuntimeOutputs(sessionId)).toHaveLength(0);

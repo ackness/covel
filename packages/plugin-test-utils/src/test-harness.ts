@@ -59,7 +59,7 @@ export interface TestHarness {
  * const harness = await createTestHarness({
  *   pluginsDir: './plugins',
  *   llm: new MockLLM({ defaultResponse: { content: 'Hello!', toolCalls: [], finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5 } } }),
- *   activePlugins: ['core-narrator'],
+ *   activePlugins: ['narrator'],
  * });
  *
  * const result = await harness.executeTurn('Start the adventure');

@@ -78,7 +78,7 @@ describe('my-tool', () => {
 });
 ```
 
-> 实战参考:`plugins/core-codex/tests/codex.test.js`、`plugins/core-npc-graph/tests/npc-graph.test.js`。
+> 实战参考:`plugins/codex/tests/codex.test.js`、`plugins/npc-graph/tests/npc-graph.test.js`。
 
 ### 模板:测一个 function runtime handler
 

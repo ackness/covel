@@ -186,10 +186,10 @@ describe('POST /api/actions — phase.changed hygiene (Finding 4 regression)', (
   });
 
   it('keeps turnCount at setup value when start_session leaves Pre-Game pending', async () => {
-    const PREGAME_ID = 'core-char-creator/player-init';
+    const PREGAME_ID = 'char-creator/player-init';
     const loaded = makeFakeLoadedRuntime({
       name: PREGAME_ID,
-      pluginId: 'core-char-creator',
+      pluginId: 'char-creator',
       outputKind: 'plugin',
       pluginType: 'core-plugin',
     });
@@ -201,7 +201,7 @@ describe('POST /api/actions — phase.changed hygiene (Finding 4 regression)', (
       },
     };
     loadedByName.set(PREGAME_ID, pregameLoaded);
-    registry.register(makeEntry({ id: 'core-char-creator', loaded: pregameLoaded }));
+    registry.register(makeEntry({ id: 'char-creator', loaded: pregameLoaded }));
 
     const pendingSessionId = 'sess-pending-pregame';
     await store.createSession({
@@ -209,7 +209,7 @@ describe('POST /api/actions — phase.changed hygiene (Finding 4 regression)', (
       worldId: null,
       status: 'active',
       presetId: null,
-      activePlugins: ['core-char-creator'],
+      activePlugins: ['char-creator'],
       turnCount: 0,
       preGameCompleted: [],
       createdAt: new Date().toISOString(),

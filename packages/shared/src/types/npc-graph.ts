@@ -1,13 +1,13 @@
 /**
  * NPC relationship graph types.
  *
- * Data model for the `core-npc-graph` plugin. Nodes represent individuals
+ * Data model for the `npc-graph` plugin. Nodes represent individuals
  * and groups; edges carry relationship facts with timestamps so the graph
  * can evolve across turns. Facts are the unit of Graph-RAG retrieval —
  * when a future turn needs context, it embeds a query, finds the most
  * similar edge facts, and walks k hops outward.
  *
- * Storage layout (in `plugin_data` under pluginId=`core-npc-graph`):
+ * Storage layout (in `plugin_data` under pluginId=`npc-graph`):
  *
  *   namespace "nodes"  → key=nodeId,  value=NpcNode
  *   namespace "edges"  → key=edgeId,  value=NpcEdge

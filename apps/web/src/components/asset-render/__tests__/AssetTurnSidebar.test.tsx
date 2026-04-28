@@ -72,7 +72,7 @@ function makeView(overrides: Partial<AssetGenerateView> = {}): AssetGenerateView
     type: "asset.generate",
     sessionId: "sess-1",
     turnId: "turn-1",
-    source: { pluginId: "core-image", runtimeId: "core-image/runner" },
+    source: { pluginId: "image", runtimeId: "image/runner" },
     ref: {
       id: "a".repeat(64),
       mime: "image/png",

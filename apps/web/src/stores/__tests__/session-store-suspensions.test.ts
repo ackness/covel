@@ -186,8 +186,8 @@ const makeSuspension = (overrides: Partial<SuspensionRecord> = {}): SuspensionRe
   id: "susp-1",
   sessionId: "sess-1",
   turnId: "turn-1",
-  runtimeId: "core-image-gen",
-  pluginId: "core-image-gen",
+  runtimeId: "image-gen",
+  pluginId: "image-gen",
   suspendedAt: "2026-04-21T10:00:00.000Z",
   reason: "Waiting for fal.ai job",
   resumeSchema: { type: "object" },
@@ -257,8 +257,8 @@ describe("session-store — F4 suspensions slice", () => {
       ...empty,
       executionSteps: [
         {
-          runtimeId: "core-image-gen",
-          pluginId: "core-image-gen",
+          runtimeId: "image-gen",
+          pluginId: "image-gen",
           status: "running",
           turnId: "turn-1",
         },
@@ -268,8 +268,8 @@ describe("session-store — F4 suspensions slice", () => {
     const next = reduce(started, {
       type: "UPSERT_EXECUTION_STEP",
       step: {
-        runtimeId: "core-image-gen",
-        pluginId: "core-image-gen",
+        runtimeId: "image-gen",
+        pluginId: "image-gen",
         status,
         durationMs: 42,
         turnId: "turn-1",
@@ -300,10 +300,10 @@ describe("session-store — F4 suspensions slice", () => {
   it("resume response: replays returned events into the active tab and completes the runtime row", () => {
     const state: State = {
       ...empty,
-      suspensions: [makeSuspension({ id: "img-1", runtimeId: "core-image-gen", turnId: "turn-1" })],
+      suspensions: [makeSuspension({ id: "img-1", runtimeId: "image-gen", turnId: "turn-1" })],
       executionSteps: [{
-        runtimeId: "core-image-gen",
-        pluginId: "core-image-gen",
+        runtimeId: "image-gen",
+        pluginId: "image-gen",
         status: "suspended",
         turnId: "turn-1",
       }],
@@ -311,8 +311,8 @@ describe("session-store — F4 suspensions slice", () => {
 
     const next = applyResumeResponse(state, "img-1", {
       result: {
-        pluginId: "core-image-gen",
-        runtimeId: "core-image-gen",
+        pluginId: "image-gen",
+        runtimeId: "image-gen",
         turnId: "turn-1",
         status: "success",
         durationMs: 84,
@@ -322,7 +322,7 @@ describe("session-store — F4 suspensions slice", () => {
           type: "narrative.completed",
           turnId: "turn-1",
           timestamp: "2026-04-22T10:00:01.000Z",
-          source: { pluginId: "core-image-gen", runtimeId: "core-image-gen" },
+          source: { pluginId: "image-gen", runtimeId: "image-gen" },
           payload: {
             content: "Image generation resumed successfully.",
             kind: "story",
@@ -333,7 +333,7 @@ describe("session-store — F4 suspensions slice", () => {
           type: "interaction.requested",
           turnId: "turn-1",
           timestamp: "2026-04-22T10:00:02.000Z",
-          source: { pluginId: "core-image-gen", runtimeId: "core-image-gen" },
+          source: { pluginId: "image-gen", runtimeId: "image-gen" },
           payload: {
             block: {
               id: "block-1",
@@ -352,12 +352,12 @@ describe("session-store — F4 suspensions slice", () => {
       expect.objectContaining({
         id: "msg-1",
         content: "Image generation resumed successfully.",
-        runtimeId: "core-image-gen",
+        runtimeId: "image-gen",
       }),
       expect.objectContaining({
         id: "block-1",
         content: "",
-        runtimeId: "core-image-gen",
+        runtimeId: "image-gen",
         block: expect.objectContaining({ type: "ui-spec" }),
       }),
     ]);

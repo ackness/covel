@@ -50,7 +50,7 @@ function makeAssetGenerateView(
     type: 'asset.generate',
     sessionId: 'sess-1',
     turnId: 'turn-1',
-    source: { pluginId: 'core-image', runtimeId: 'core-image/generator' },
+    source: { pluginId: 'image', runtimeId: 'image/generator' },
     ref: makeMediaRef(),
     modality: 'image',
     createdAt: new Date('2026-04-26T00:00:00Z').toISOString(),

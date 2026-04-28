@@ -44,16 +44,16 @@
 
 | Runtime | 优先级 | 触发 | 类型 | 工具 / 关键能力 | 学习价值 |
 |---------|--------|------|------|----------------|---------|
-| `core-pregame` | 10 | scheduled(首轮) | function | 无 | 最简 function runtime,纯初始化 |
-| `core-world-init/schema-gen` | 40 | scheduled(首轮) | agent + guard | local 工具 | guard 在 LLM 前跳过门控,零开销 |
-| `core-char-creator/player-init` | 50 | scheduled(首轮) | agent | builtin (create-form) | 首轮表单 + Pre-Game 闸门 |
-| `core-npc-graph/rag-retriever` | 400 | auto | function | — | 给 narrator 预拉结构化检索 |
-| `core-narrator` | 500 | auto | agent | 无 | 零代码主叙事 |
-| `core-codex` | 600 | auto | agent | local + builtin | JS 工具 + plugin-data inject |
-| `core-guide` | 600 | auto | agent | builtin | inject narrator output 生成选项 |
-| `core-npc-graph/extractor` | 600 | auto | agent | local | NPC 关系抽取 + 写入图谱 |
-| `core-char-creator/character-tracker` | 600 | auto | agent | local | 跟踪 NPC 状态变化 |
-| `core-memory` | — | UI only | UI | — | 纯前端面板,不占调度槽 |
+| `pregame` | 10 | scheduled(首轮) | function | 无 | 最简 function runtime,纯初始化 |
+| `world-init/schema-gen` | 40 | scheduled(首轮) | agent + guard | local 工具 | guard 在 LLM 前跳过门控,零开销 |
+| `char-creator/player-init` | 50 | scheduled(首轮) | agent | builtin (create-form) | 首轮表单 + Pre-Game 闸门 |
+| `npc-graph/rag-retriever` | 400 | auto | function | — | 给 narrator 预拉结构化检索 |
+| `narrator` | 500 | auto | agent | 无 | 零代码主叙事 |
+| `codex` | 600 | auto | agent | local + builtin | JS 工具 + plugin-data inject |
+| `guide` | 600 | auto | agent | builtin | inject narrator output 生成选项 |
+| `npc-graph/extractor` | 600 | auto | agent | local | NPC 关系抽取 + 写入图谱 |
+| `char-creator/character-tracker` | 600 | auto | agent | local | 跟踪 NPC 状态变化 |
+| `memory` | — | UI only | UI | — | 纯前端面板,不占调度槽 |
 
 完整注册表（含 priority bands、capabilities、frontmatter 全字段）见 [docs/reference/plugins.md](../reference/plugins.md)。
 

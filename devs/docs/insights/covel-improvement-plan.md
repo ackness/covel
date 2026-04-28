@@ -86,7 +86,7 @@
 #### P1-1 · World Info / Lorebook 子系统（**最重要的 RPG 能力缺失**）
 > 这是 compass_artifact 完全漏掉，但**每一个主流 RPG 前端都必备**的机制。
 
-- **动机**：Covel 现在把世界设定整块塞进 `{{ config.worldEntries }}`（来自 `core-world-init` 的 plugin_data）。随着世界复杂度上升，这会吃光预算，而且每回合都注入所有条目——低效且污染上下文。
+- **动机**：Covel 现在把世界设定整块塞进 `{{ config.worldEntries }}`（来自 `world-init` 的 plugin_data）。随着世界复杂度上升，这会吃光预算，而且每回合都注入所有条目——低效且污染上下文。
 - **方案**：新建 `packages/lorebook/`（或并入 context 包），实现下列最小可行集：
   - **Entry 模型**：`{ id, keys[], secondaryKeys[], selectiveLogic, content, position, insertionOrder, probability, scanDepth, budgetCap, stickyTurns, cooldownTurns, delayTurns, inclusionGroup, groupWeight, strategy: 'constant'|'selective'|'vectorized' }`。这是 SillyTavern / NovelAI 的最小公集。
   - **Position 枚举**：`before_char_defs | after_char_defs | before_examples | after_examples | author_note_top | author_note_bottom | at_depth:N`。
@@ -327,7 +327,7 @@
 | S2-T1 三段式 Prompt assembler | ✅ `df820eb` | 段 1/3/5/7 基础；段 9/10 见 S3-T4 |
 | S2-T2 Compactor + `session_summaries` | ✅ `cca779c` + `ee6db4d` (I4 fix) | loadPrompt 已就绪 |
 | S2-T3 Prompt cache + Anthropic `cache_control` | ✅ `35a0374..0b70cd9` merge `6036141` | PUA sentinel 方案；段 1/3/6 打 3 个 breakpoint；第 4 个 mid-history 留作 FU-5 |
-| S2-T4 core-narrator + core-guide 迁 V2 | ✅ `bbf2889` merge Wave B | `promptVersion: 2` 双重 gate；6+6 parity tests；V1/V2 语义等价 |
+| S2-T4 narrator + guide 迁 V2 | ✅ `bbf2889` merge Wave B | `promptVersion: 2` 双重 gate；6+6 parity tests；V1/V2 语义等价 |
 | S2-T5 `prompt-structure.md` 文档 | ✅ `a3618ec` merge Wave C | 10 段结构 + 迁移 playbook + 已迁移插件清单 |
 
 **Sprint 3 — Lorebook + Working Memory + Author's Note** — 6/6 ✅（S3-T2 含 FU-8 double-write 兜底）
@@ -335,7 +335,7 @@
 | 票号 | 状态 | 备注 |
 |---|---|---|
 | S3-T1 Lorebook 核心 | ✅ `4dec3b5` | — |
-| S3-T2 core-world-init 迁 Lorebook | ✅ `4ebf79a` + `207307c` (store/runtime) + `85d0d8a..347428b` (插件 double-write + context-builder) merge Wave B/C | Store + commit handler + snapshot FU-4 + `set-world-entries-batch.js` 双写 lorebook + plugin_data；context-builder `{{ config.worldEntries }}` lorebook-first fallback，通过 `world-data-provider` capability 发现插件 id，无硬编码 |
+| S3-T2 world-init 迁 Lorebook | ✅ `4ebf79a` + `207307c` (store/runtime) + `85d0d8a..347428b` (插件 double-write + context-builder) merge Wave B/C | Store + commit handler + snapshot FU-4 + `set-world-entries-batch.js` 双写 lorebook + plugin_data；context-builder `{{ config.worldEntries }}` lorebook-first fallback，通过 `world-data-provider` capability 发现插件 id，无硬编码 |
 | S3-T3 Working Memory 表 + 段 2 | ✅ `916cba6` + `fe0264d` (B1) | WM 实际 inject 到 context |
 | S3-T4 段 9/10 Author's Note + Post-History | ✅ `9bcb0ee..e1a3997` merge `973c112` | RuntimeManifest 加 authorsNote / postHistory；14 + 9 新测试 |
 | S3-T5 其余 core 插件 V2 迁移 | ✅ `85d0d8a..347428b` merge Wave C | 5a: codex (6 parity) + char-creator 双 runtime (12 parity)；5b: world-init 并入 S3-T2 |
@@ -397,7 +397,7 @@
 | FU-5 | **S2-T3 第 4 个 Anthropic breakpoint**：`§A15` 规定 4 个 breakpoint，其中 "段 7 中部"（messages 中段）需要 turn-executor 改动。A-1 留作 follow-up，因为 S2-T3 scope 不碰 runtime。Wave B / Wave C 顺手 |
 | FU-6 | **Wave A-3 session.forked SSE 前端消费**：后端已发 SSE 事件，但 `apps/web/src/services/subscription.ts` 未在 topic 路由里处理 `session.forked`，等 fork UI（Sprint 5 或 S3-T6）实装时再接。S4-T5 把 `state.snapshot.created` 加进同一组，前端挂载时一次性接 2 条 |
 | FU-7 | **流式重试事件未接 SSE**：`packages/ai-provider/src/adapters/http.ts:postJson` 的 S1-T3 retry 路径是**静默** fallback，没有 callback / event hook。S4-T5 调研后确认无法在不改 ai-provider gateway 的前提下接出 `stream.interrupted` / `stream.resumed`。需在 `gateway.ts` / `context-builder` 层插一个 EventBus 注入点（或回调），让 retry 触发时通过 turn-executor 的 `eventBus` 广播。Wave B 或 Sprint 5 单独处理。本 ticket **未** 把这两个 type 加入 `ProtocolEventType`，等真有发射点再加 |
-| FU-8 | **`core-world-init` 插件迁移到 `lorebook.upsert`**：Wave B-1 agent rate limit 在 store 层完成后中断；runtime commit handler + snapshot FU-4 wiring 由主干补齐。还缺最后一步：`plugins/core-world-init/server/*.ts` 的 schema-gen runtime 改为 emit `lorebook.upsert` proposal（而非写 plugin_data），`packages/context/src/context-builder.ts` 把 `{{ config.worldEntries }}` 的值源从 plugin_data 改为 `listSessionLorebookEntries`。单文件级别的插件改动，Wave C 顺手或 Sprint 5 清理即可 |
+| FU-8 | **`world-init` 插件迁移到 `lorebook.upsert`**：Wave B-1 agent rate limit 在 store 层完成后中断；runtime commit handler + snapshot FU-4 wiring 由主干补齐。还缺最后一步：`plugins/world-init/server/*.ts` 的 schema-gen runtime 改为 emit `lorebook.upsert` proposal（而非写 plugin_data），`packages/context/src/context-builder.ts` 把 `{{ config.worldEntries }}` 的值源从 plugin_data 改为 `listSessionLorebookEntries`。单文件级别的插件改动，Wave C 顺手或 Sprint 5 清理即可 |
 
 ### 8.4 Progress ledger 更新规则
 
@@ -437,22 +437,22 @@ Wave 0 全绿后再启动 Wave A。
 
 | 票号 | 依赖 | 说明 |
 |---|---|---|
-| S3-T2 core-world-init 迁 Lorebook | Wave A 完 + S3-T1 | **合并 S3-T5b** 一起做，world-init 只迁一次 |
-| S2-T4 core-narrator + core-guide 迁 V2 | Wave A 的 S2-T3 | cache 注入需要 V2 路径 |
+| S3-T2 world-init 迁 Lorebook | Wave A 完 + S3-T1 | **合并 S3-T5b** 一起做，world-init 只迁一次 |
+| S2-T4 narrator + guide 迁 V2 | Wave A 的 S2-T3 | cache 注入需要 V2 路径 |
 | S4-T5 SSE 协议扩展 | Wave A 的 S4-T2 | `session.forked` 事件需要 fork 路由已 ready |
 
 ### 9.4 Wave C（依赖 Wave B）
 
 | 票号 | 依赖 | 说明 |
 |---|---|---|
-| S3-T5a core-codex + core-char-creator 迁 V2 | Wave B 完 | 不碰 world-init（已在 S3-T2 完成） |
+| S3-T5a codex + char-creator 迁 V2 | Wave B 完 | 不碰 world-init（已在 S3-T2 完成） |
 | S3-T6 Lorebook 玩家 UI (`apps/web`) | Wave B 完 | 依赖 `/api/ui-specs` |
 | S2-T5 `prompt-structure.md` 文档 | Wave A+B 完 | 模式已稳定 |
 
 ### 9.5 冲突守卫（critical）
 
-1. **`core-world-init` 只迁一次**：把 S3-T5 拆成 S3-T5a (codex+char-creator) 和 S3-T5b (world-init)，S3-T5b 并入 S3-T2 的同一 PR。规划表里 §附录 B 的 S3-T5 描述应同步改。
-2. **`core-narrator` 不双写**：S2-T4 先做 V2 迁移；任何后续票若需要 narrator 读 lorebook，走 S3-T5a 的同一 PR。
+1. **`world-init` 只迁一次**：把 S3-T5 拆成 S3-T5a (codex+char-creator) 和 S3-T5b (world-init)，S3-T5b 并入 S3-T2 的同一 PR。规划表里 §附录 B 的 S3-T5 描述应同步改。
+2. **`narrator` 不双写**：S2-T4 先做 V2 迁移；任何后续票若需要 narrator 读 lorebook，走 S3-T5a 的同一 PR。
 3. **`turn-executor.ts` 热点文件**：S4-T2 `Snapshot` 需要在 `postCommit` 插 snapshot 写入点；S4-T5 需要发 SSE——两者都动 `turn-executor.ts` 的相邻行，要求 S4-T2 先合再起 S4-T5。
 4. **`prompt-assembler.ts` 段扩展**：S3-T4 和 S2-T3 都改它，但段位不重叠（S3-T4 加段 9/10，S2-T3 只加 `cache_control` 标记）——可并行但 rebase 时注意。
 
@@ -551,7 +551,7 @@ summaryFocus:                  # 供 Compactor 使用，见 A5
 **合并顺序（从低到高优先级，后写入的越靠近 prompt 末尾）：**
 `world → plugin → session(imported) → session(runtime-written) → session(player-edited)`
 
-**`core-world-init` 的迁移路径：**
+**`world-init` 的迁移路径：**
 - 现状：它把世界维度作为一整块 `worldEntries` 字符串注入到 `{{ config.worldEntries }}`。
 - 目标：它仍然负责 LLM 生成世界维度，但**写出的结果通过 `lorebook.upsert` 进入 session-level lorebook**，每个维度成为一条 `constant` 条目（保持现有语义）。
 - 过渡期：保留 `{{ config.worldEntries }}` 模板变量，值改为从 session-level lorebook 拼接；插件不用改。
@@ -589,7 +589,7 @@ interface LorebookEntry {
 5. 按 `insertionOrder` 填入，遇预算耗尽即停。
 6. 更新 sticky/cooldown 状态到 `plugin_data` 下的 `__lorebook_state__` namespace（无需新表）。
 
-**影响面：** P1-1 新建、`core-world-init` 迁移、`buildContext` 加 lorebook pass、`docs/reference/plugins.md` 说明加载路径。
+**影响面：** P1-1 新建、`world-init` 迁移、`buildContext` 加 lorebook pass、`docs/reference/plugins.md` 说明加载路径。
 
 ---
 
@@ -712,7 +712,7 @@ CREATE TABLE suspensions (
 |---|---|---|
 | 0 | P0 完全追加式（budget、pruning、retry）。不改 systemPrompt 结构 | 零 |
 | 1 | 引入 `COVEL_PROMPT_V2` 环境变量，默认 `off`。v2 走三段式，v1 走老逻辑。PLUGIN.md 新增 `promptVersion: 2` 字段可逐插件切换 | 零（不声明就走 v1） |
-| 2 | 核心插件（core-narrator / core-guide / core-codex / core-world-init / core-char-creator）逐个迁移到 v2 | 逐个迁移 |
+| 2 | 核心插件（narrator / guide / codex / world-init / char-creator）逐个迁移到 v2 | 逐个迁移 |
 | 3 | 文档宣布 v1 deprecated，保留 1 个 minor release | 提醒作者升级 |
 | 4 | 下个 minor 删除 v1 代码路径 | 需全部升级 |
 
@@ -949,7 +949,7 @@ observability: "新增 trace 字段 context.budgetUsed / budgetRemaining / prune
 | S2-T1 | 三段式 Prompt assembler（A2） | S1-T1, S1-T2 | `packages/context/src/prompt-assembler.ts` (新) 实现段 1–10，但只处理段 1/3/5/7；其他段占位 | `COVEL_PROMPT_V2` |
 | S2-T2 | Compactor + `session_summaries` 表（A5） | S1-T1, S2-T1 | `packages/context/src/compactor.ts` (新)，`packages/store/` 所有 backend 加 summaries 表 + contract test | `COVEL_COMPACTOR_V1` |
 | S2-T3 | Prompt cache 抽象 + Anthropic `cache_control` 注入（A15） | S2-T1 | `ai-provider/src/adapters/anthropic.ts`，新增 `cacheStrategy` 字段 | `COVEL_PROMPT_CACHE_V1` |
-| S2-T4 | core 插件的 V2 迁移（第一批：core-narrator + core-guide） | S2-T1 | `plugins/core-narrator/PLUGIN.md` + `core-guide/PLUGIN.md` 加 `promptVersion: 2` | — |
+| S2-T4 | core 插件的 V2 迁移（第一批：narrator + guide） | S2-T1 | `plugins/narrator/PLUGIN.md` + `guide/PLUGIN.md` 加 `promptVersion: 2` | — |
 | S2-T5 | 文档同步：`docs/reference/prompt-structure.md`（新） | S2-T1 | 新文档 | — |
 
 **Acceptance：**
@@ -966,16 +966,16 @@ observability: "新增 trace 字段 context.budgetUsed / budgetRemaining / prune
 | 票号 | 标题 | 依赖 | 关键文件 | Feature flag |
 |---|---|---|---|---|
 | S3-T1 | Lorebook 核心（constant + selective）（A3 + A4） | S2-T1 | 新包 `packages/lorebook/`、新表 `lorebook_entries`、contract test | `COVEL_LOREBOOK_V1` |
-| S3-T2 | `core-world-init` 迁移到 Lorebook API（A3 的过渡） | S3-T1 | `plugins/core-world-init/server/*.ts` | — |
+| S3-T2 | `world-init` 迁移到 Lorebook API（A3 的过渡） | S3-T1 | `plugins/world-init/server/*.ts` | — |
 | S3-T3 | Working Memory 表 + 段 2 注入（A9） | S2-T1 | 新表 `working_memory`，`packages/store/` + contract，新 Proposal `working_memory.set` | `COVEL_WORKING_MEMORY_V1` |
 | S3-T4 | Author's Note 段 9 + Post-History 段 10（A2 的剩余段） | S2-T1 | `prompt-assembler.ts` 补全段 8/9/10 | — |
-| S3-T5 | 其余 core 插件的 V2 迁移（core-codex, core-char-creator, core-world-init） | S3-T1..T4 | 各 PLUGIN.md | — |
+| S3-T5 | 其余 core 插件的 V2 迁移（codex, char-creator, world-init） | S3-T1..T4 | 各 PLUGIN.md | — |
 | S3-T6 | Lorebook 玩家 UI（panel 编辑 session-level entries） | S3-T1 | `apps/web/src/components/session/lorebook-panel.tsx` | — |
 
 **Acceptance：**
 - 全部 core 插件跑在 V2 路径
 - 演示场景：预置一个世界包，带 ≥10 条 lorebook。玩家输入包含关键词时，prompt trace 中能看到对应条目被注入
-- `core-world-init` 生成的世界维度自动变成 constant lorebook 条目，可在 UI 中查看
+- `world-init` 生成的世界维度自动变成 constant lorebook 条目，可在 UI 中查看
 
 ---
 

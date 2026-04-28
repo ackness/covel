@@ -10,15 +10,15 @@ describe('PluginRpcRegistry (PR-3)', () => {
   it('registers a plugin action and looks it up by (pluginId, action)', () => {
     const registry = createPluginRpcRegistry();
     registry.registerPluginAction(
-      'core-codex',
+      'codex',
       'regenerate',
       { handler: './rpc/regenerate.js' },
       'official',
     );
-    const entry = registry.getPluginAction('core-codex', 'regenerate');
+    const entry = registry.getPluginAction('codex', 'regenerate');
     expect(entry).toBeDefined();
     expect(entry?.action).toBe('regenerate');
-    expect(entry?.pluginId).toBe('core-codex');
+    expect(entry?.pluginId).toBe('codex');
     expect(entry?.trustLevel).toBe('official');
     expect(entry?.handlerPath).toBe('./rpc/regenerate.js');
   });
@@ -111,7 +111,7 @@ describe('PluginRpcRegistry (PR-3)', () => {
     const registry = createPluginRpcRegistry();
     registry.registerFrameworkDefault('submit-form', async () => null);
     registry.registerPluginAction(
-      'core-codex',
+      'codex',
       'regenerate',
       { handler: './h.js' },
       'official',
@@ -150,35 +150,35 @@ describe('createRpcExecutor (PR-3)', () => {
   it('dispatches a plugin-declared action via lazy loader', async () => {
     const { registry, executor, loadHandler } = makeExecutor();
     registry.registerPluginAction(
-      'core-codex',
+      'codex',
       'regenerate',
       { handler: './rpc/regenerate.js' },
       'official',
     );
 
     const result = await executor.dispatch(
-      { pluginId: 'core-codex', action: 'regenerate', payload: null },
+      { pluginId: 'codex', action: 'regenerate', payload: null },
       { sessionId: 'sess-1', store: {} as never },
     );
-    expect(loadHandler).toHaveBeenCalledWith('core-codex', './rpc/regenerate.js');
+    expect(loadHandler).toHaveBeenCalledWith('codex', './rpc/regenerate.js');
     expect(result.result).toBe('loaded-result');
   });
 
   it('caches the loaded handler module across calls', async () => {
     const { registry, executor, loadHandler } = makeExecutor();
     registry.registerPluginAction(
-      'core-codex',
+      'codex',
       'regenerate',
       { handler: './rpc/regenerate.js' },
       'official',
     );
 
     await executor.dispatch(
-      { pluginId: 'core-codex', action: 'regenerate', payload: null },
+      { pluginId: 'codex', action: 'regenerate', payload: null },
       { sessionId: 'sess-1', store: {} as never },
     );
     await executor.dispatch(
-      { pluginId: 'core-codex', action: 'regenerate', payload: null },
+      { pluginId: 'codex', action: 'regenerate', payload: null },
       { sessionId: 'sess-1', store: {} as never },
     );
     expect(loadHandler).toHaveBeenCalledTimes(1);
@@ -190,14 +190,14 @@ describe('createRpcExecutor (PR-3)', () => {
     });
     registry.registerFrameworkDefault('submit-form', async () => 'framework-version');
     registry.registerPluginAction(
-      'core-codex',
+      'codex',
       'submit-form',
       { handler: './rpc/submit-form.js' },
       'official',
     );
 
     const result = await executor.dispatch(
-      { pluginId: 'core-codex', action: 'submit-form', payload: null },
+      { pluginId: 'codex', action: 'submit-form', payload: null },
       { sessionId: 'sess-1', store: {} as never },
     );
     expect(result.result).toBe('plugin-version');

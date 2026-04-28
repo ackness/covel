@@ -80,12 +80,12 @@ async function runPregameTurn(
 
 describe('Pre-Game completion contract', () => {
   it('marks a runtime done when output.preGameDone === true', async () => {
-    const m = pregameManifest('core-pregame', { priority: 10 });
+    const m = pregameManifest('pregame', { priority: 10 });
     const { store } = await runPregameTurn(
       'sess-done',
       [m],
       {
-        'core-pregame': async () => ({
+        'pregame': async () => ({
           narrativeOutput: 'welcome',
           preGameDone: true,
         }),
@@ -93,7 +93,7 @@ describe('Pre-Game completion contract', () => {
     );
 
     const session = await store.getSession('sess-done');
-    expect(session?.preGameCompleted).toEqual(['core-pregame']);
+    expect(session?.preGameCompleted).toEqual(['pregame']);
     // Only Pre-Game runtime present, so everyone's done → advance to turn 1.
     expect(session?.turnCount).toBe(1);
   });
@@ -101,7 +101,7 @@ describe('Pre-Game completion contract', () => {
   it('marks an AGENT runtime done when its guard returns skip:true', async () => {
     // Guard is only consulted on the agent-runtime code path (function
     // runtimes use a plain handler). schema-gen is agent by default.
-    const m = pregameManifest('core-world-init/schema-gen', {
+    const m = pregameManifest('world-init/schema-gen', {
       priority: 85,
       runtimeType: 'agent',
     });
@@ -111,28 +111,28 @@ describe('Pre-Game completion contract', () => {
       {}, // no handler — guard must short-circuit before execution.
       {
         guards: {
-          'core-world-init/schema-gen': async () => ({ skip: true, reason: 'already-initialised' }),
+          'world-init/schema-gen': async () => ({ skip: true, reason: 'already-initialised' }),
         },
       },
     );
 
     const session = await store.getSession('sess-guard');
-    expect(session?.preGameCompleted).toEqual(['core-world-init/schema-gen']);
+    expect(session?.preGameCompleted).toEqual(['world-init/schema-gen']);
     expect(session?.turnCount).toBe(1);
   });
 
   it('does NOT advance turnCount when any Pre-Game runtime is unfinished', async () => {
-    const pregame = pregameManifest('core-pregame', { priority: 10 });
+    const pregame = pregameManifest('pregame', { priority: 10 });
     // player-init simulates "form shown, waiting for submission": handler
     // returns without preGameDone so the framework keeps it open across turns.
-    const playerInit = pregameManifest('core-char-creator/player-init', { priority: 50 });
+    const playerInit = pregameManifest('char-creator/player-init', { priority: 50 });
 
     const { store } = await runPregameTurn(
       'sess-open',
       [pregame, playerInit],
       {
-        'core-pregame': async () => ({ preGameDone: true }),
-        'core-char-creator/player-init': async () => ({
+        'pregame': async () => ({ preGameDone: true }),
+        'char-creator/player-init': async () => ({
           ui: [{ type: 'form', interactionId: 'char' }],
           // preGameDone intentionally absent — form not yet submitted.
         }),
@@ -141,14 +141,14 @@ describe('Pre-Game completion contract', () => {
 
     const session = await store.getSession('sess-open');
     // Pregame recorded; player-init NOT recorded.
-    expect(session?.preGameCompleted).toEqual(['core-pregame']);
+    expect(session?.preGameCompleted).toEqual(['pregame']);
     // Pre-Game still in progress → turnCount stays at 0.
     expect(session?.turnCount).toBe(0);
   });
 
   it('keeps bootstrap outside player history while setup is unfinished', async () => {
-    const pregame = pregameManifest('core-pregame', { priority: 10 });
-    const playerInit = pregameManifest('core-char-creator/player-init', { priority: 50 });
+    const pregame = pregameManifest('pregame', { priority: 10 });
+    const playerInit = pregameManifest('char-creator/player-init', { priority: 50 });
     const store = await freshStore('sess-bootstrap');
     const input = {
       sessionId: 'sess-bootstrap',
@@ -162,7 +162,7 @@ describe('Pre-Game completion contract', () => {
         promptTemplate: '',
         references: [],
         handler: async () => (
-          m.name === 'core-pregame'
+          m.name === 'pregame'
             ? { preGameDone: true }
             : { form: { formId: 'character-form' } }
         ),
@@ -179,17 +179,17 @@ describe('Pre-Game completion contract', () => {
     );
     const session = await store.getSession('sess-bootstrap');
     expect(playerMessages).toHaveLength(0);
-    expect(session?.preGameCompleted).toEqual(['core-pregame']);
+    expect(session?.preGameCompleted).toEqual(['pregame']);
     expect(session?.turnCount).toBe(0);
   });
 
   it('continues pending setup scheduling after player history exists', async () => {
-    const pregame = pregameManifest('core-pregame', { priority: 10 });
-    const playerInit = pregameManifest('core-char-creator/player-init', { priority: 50 });
-    const narrator = pregameManifest('core-narrator', { priority: 500 });
+    const pregame = pregameManifest('pregame', { priority: 10 });
+    const playerInit = pregameManifest('char-creator/player-init', { priority: 50 });
+    const narrator = pregameManifest('narrator', { priority: 500 });
     const store = await freshStore('sess-resume');
     await store.updateSession('sess-resume', {
-      preGameCompleted: ['core-pregame'],
+      preGameCompleted: ['pregame'],
       updatedAt: new Date().toISOString(),
     });
     await store.appendTurnMessage({
@@ -209,7 +209,7 @@ describe('Pre-Game completion contract', () => {
         promptTemplate: '',
         references: [],
         handler: async () => {
-          if (m.name === 'core-narrator') {
+          if (m.name === 'narrator') {
             return { narrativeOutput: 'main loop started' };
           }
           return { preGameDone: true };
@@ -228,26 +228,26 @@ describe('Pre-Game completion contract', () => {
 
     const session = await store.getSession('sess-resume');
     expect(result.runtimeResults.map((r) => r.runtimeId)).toEqual([
-      'core-char-creator/player-init',
-      'core-narrator',
+      'char-creator/player-init',
+      'narrator',
     ]);
     expect(session?.preGameCompleted?.slice().sort()).toEqual(
-      ['core-pregame', 'core-char-creator/player-init'].sort(),
+      ['pregame', 'char-creator/player-init'].sort(),
     );
     expect(session?.turnCount).toBe(1);
   });
 
   it('does not mark framework upstream skips as Pre-Game completion', async () => {
-    const playerInit = pregameManifest('core-char-creator/player-init', {
+    const playerInit = pregameManifest('char-creator/player-init', {
       priority: 50,
-      upstreamRequired: ['core-pregame'],
+      upstreamRequired: ['pregame'],
     });
 
     const { store, result } = await runPregameTurn(
       'sess-upstream-skip',
       [playerInit],
       {
-        'core-char-creator/player-init': async () => ({ preGameDone: true }),
+        'char-creator/player-init': async () => ({ preGameDone: true }),
       },
     );
 
@@ -264,31 +264,31 @@ describe('Pre-Game completion contract', () => {
     // When both plugins complete in turn 0 (e.g. pregame completes on first
     // hit, schema-gen guard skips because schema already exists), the kernel
     // must atomically record both in preGameCompleted AND bump turnCount to 1.
-    const pregame = pregameManifest('core-pregame', { priority: 10 });
-    const playerInit = pregameManifest('core-char-creator/player-init', { priority: 50 });
+    const pregame = pregameManifest('pregame', { priority: 10 });
+    const playerInit = pregameManifest('char-creator/player-init', { priority: 50 });
 
     const { store } = await runPregameTurn(
       'sess-both',
       [pregame, playerInit],
       {
-        'core-pregame': async () => ({ preGameDone: true }),
-        'core-char-creator/player-init': async () => ({ preGameDone: true }),
+        'pregame': async () => ({ preGameDone: true }),
+        'char-creator/player-init': async () => ({ preGameDone: true }),
       },
     );
 
     const session = await store.getSession('sess-both');
     expect(session?.preGameCompleted?.slice().sort()).toEqual(
-      ['core-char-creator/player-init', 'core-pregame'].sort(),
+      ['char-creator/player-init', 'pregame'].sort(),
     );
     expect(session?.turnCount).toBe(1);
   });
 
   it('treats maxTriggerCount-exhausted runtimes as done (does not block advancement)', async () => {
     // A runtime that already hit its trigger budget in a previous turn must
-    // not hold up Pre-Game forever. In practice `core-pregame` has
+    // not hold up Pre-Game forever. In practice `pregame` has
     // `maxTriggerCount: 1`; after its first turn the kernel should accept
     // exhaustion as "done".
-    const pregame = pregameManifest('core-pregame', {
+    const pregame = pregameManifest('pregame', {
       priority: 10,
       trigger: { type: 'scheduled', interval: 1, maxTriggerCount: 1 },
     });
@@ -301,8 +301,8 @@ describe('Pre-Game completion contract', () => {
       sessionId: 'sess-exh',
       turnId: 'turn--1',
       sourceType: 'runtime',
-      sourcePluginId: 'core-pregame',
-      sourceRuntimeId: 'core-pregame',
+      sourcePluginId: 'pregame',
+      sourceRuntimeId: 'pregame',
       role: 'assistant',
       content: 'prior pregame output',
       order: 10,
@@ -325,7 +325,7 @@ describe('Pre-Game completion contract', () => {
     await executeTurn({ sessionId: 'sess-exh', turnId: 'turn-0', playerMessage: '' }, [pregame], deps);
 
     const session = await store.getSession('sess-exh');
-    expect(session?.preGameCompleted).toEqual(['core-pregame']);
+    expect(session?.preGameCompleted).toEqual(['pregame']);
     expect(session?.turnCount).toBe(1);
   });
 });

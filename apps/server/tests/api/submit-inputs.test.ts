@@ -60,7 +60,7 @@ describe('submit-inputs route — history hygiene', () => {
       sessionId,
       turnId,
       sourceType: 'runtime',
-      sourcePluginId: 'core-char-creator',
+      sourcePluginId: 'char-creator',
       role: 'assistant',
       name: 'form-template',
       content: 'Player name is {{name}}',

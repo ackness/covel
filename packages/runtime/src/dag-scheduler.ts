@@ -3,9 +3,9 @@
  *
  * Priority scheduling treats every same-priority bucket as parallel and
  * everything else as strictly serial by number, which forces independent
- * branches to wait on each other (e.g. `core-codex` blocking on
- * `core-npc-graph/extractor` just because 620 < 650, even though they
- * both only depend on `core-narrator`).
+ * branches to wait on each other (e.g. `codex` blocking on
+ * `npc-graph/extractor` just because 620 < 650, even though they
+ * both only depend on `narrator`).
  *
  * The DAG scheduler derives dependencies from each manifest's declared
  * injects (`input.inject[].from` where `kind === 'runtime'`) and explicit

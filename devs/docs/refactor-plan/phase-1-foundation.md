@@ -26,8 +26,8 @@ packages/
   server/           # Hono API 服务器
 
 plugins/            # 所有游戏插件（重写）
-  core-narrator/
-  core-persona/
+  narrator/
+  persona/
   ...
 
 apps/

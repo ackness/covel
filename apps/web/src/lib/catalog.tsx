@@ -567,7 +567,7 @@ const JsonView: ComponentRenderer = ({ element }) => {
 //
 // Schema-aware renderer for a character's `fields` object.
 //
-// The world-data-provider plugin (currently core-world-init) publishes an
+// The world-data-provider plugin (currently world-init) publishes an
 // attribute schema under `(*, 'schema', 'character-attributes')`. When that
 // schema is present we pick the matching definition for each field id and
 // render:

@@ -39,8 +39,8 @@ function makeRuntimeOutput(
     sessionId: 'sess-1',
     turnId: 'turn-1',
     runtimeResultId: crypto.randomUUID(),
-    pluginId: 'core-narrator',
-    runtimeId: 'core-narrator',
+    pluginId: 'narrator',
+    runtimeId: 'narrator',
     timestamp: now,
     results: [{ text: 'hello', structured: { narrative: 'hello' } }],
     metaData: {
@@ -117,15 +117,15 @@ describe('runtime-outputs API', () => {
     });
 
     it('filters by runtimeId', async () => {
-      await store.saveRuntimeOutput(makeRuntimeOutput({ runtimeId: 'core-narrator' }));
-      await store.saveRuntimeOutput(makeRuntimeOutput({ runtimeId: 'core-guide' }));
+      await store.saveRuntimeOutput(makeRuntimeOutput({ runtimeId: 'narrator' }));
+      await store.saveRuntimeOutput(makeRuntimeOutput({ runtimeId: 'guide' }));
 
       const res = await app.request(
-        '/api/sessions/sess-1/runtime-outputs?runtimeId=core-guide',
+        '/api/sessions/sess-1/runtime-outputs?runtimeId=guide',
       );
       const body = (await res.json()) as { items: RuntimeOutputRecord[] };
       expect(body.items).toHaveLength(1);
-      expect(body.items[0]!.runtimeId).toBe('core-guide');
+      expect(body.items[0]!.runtimeId).toBe('guide');
     });
 
     it('respects limit', async () => {

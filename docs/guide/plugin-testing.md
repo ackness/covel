@@ -77,7 +77,7 @@ it('narrator emits a narrative.append proposal', async () => {
 
   const harness = await createTestHarness({
     pluginsDir: PLUGINS_DIR,
-    activePlugins: ['core-narrator'],
+    activePlugins: ['narrator'],
     llm,
   });
 
@@ -356,7 +356,7 @@ Snapshots are useful when a runtime emits a large structured JSON blob (e.g. a c
 it('matches the codex snapshot', async () => {
   const harness = await createTestHarness({
     pluginsDir: PLUGINS_DIR,
-    activePlugins: ['core-codex'],
+    activePlugins: ['codex'],
     llm: new MockLLM({
       defaultResponse: {
         content: null,
@@ -373,7 +373,7 @@ it('matches the codex snapshot', async () => {
 
   const entries = await harness.store.listPluginData(
     'sess-harness',
-    'core-codex',
+    'codex',
     'entries',
   );
 

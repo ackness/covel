@@ -248,7 +248,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
       manifestCache.set(discovery.id, manifests);
 
       // Sanity check: `trigger.type: 'manual'` runtimes (UI-only plugins like
-      // core-memory) must leave `priority` undefined so the scheduler never
+      // memory) must leave `priority` undefined so the scheduler never
       // considers them. A stray priority + manual trigger will be filtered
       // today (shouldTrigger returns isManualTrigger=false for auto flows),
       // but the combination is almost certainly a manifest typo and will

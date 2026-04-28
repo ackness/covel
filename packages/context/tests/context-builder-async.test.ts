@@ -27,8 +27,8 @@ import type { DataStore, PluginDataRecord } from '@covel/store';
 
 function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   return {
-    name: 'core-codex',
-    pluginId: 'core-codex',
+    name: 'codex',
+    pluginId: 'codex',
     description: 'test codex',
     priority: 650,
     ...overrides,
@@ -46,8 +46,8 @@ function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
 
 function makeRuntimeResult(output: Record<string, unknown>): RuntimeResult {
   return {
-    pluginId: 'core-narrator',
-    runtimeId: 'core-narrator',
+    pluginId: 'narrator',
+    runtimeId: 'narrator',
     runId: 'run-1',
     turnId: 'turn-1',
     status: 'success',
@@ -67,7 +67,7 @@ function makeEntry(
   return {
     id: `id-${key}`,
     sessionId: 'sess-1',
-    pluginId: 'core-codex',
+    pluginId: 'codex',
     namespace: 'entries',
     key,
     value,
@@ -109,7 +109,7 @@ describe('needsAsyncBuild', () => {
         inject: [
           {
             kind: 'runtime',
-            from: 'core-narrator',
+            from: 'narrator',
             field: 'narrativeOutput',
             as: '<narrator-output>',
           },
@@ -125,7 +125,7 @@ describe('needsAsyncBuild', () => {
         inject: [
           {
             kind: 'runtime',
-            from: 'core-narrator',
+            from: 'narrator',
             field: 'narrativeOutput',
             as: '<narrator-output>',
           },
@@ -152,7 +152,7 @@ describe('buildContextAsync — runtime inject regression', () => {
         inject: [
           {
             kind: 'runtime',
-            from: 'core-narrator',
+            from: 'narrator',
             field: 'narrativeOutput',
             as: '<narrator-output>',
           },
@@ -160,7 +160,7 @@ describe('buildContextAsync — runtime inject regression', () => {
       },
     });
     const results = new Map<string, RuntimeResult>([
-      ['core-narrator', makeRuntimeResult({ narrativeOutput: '你走到了山脚下。' })],
+      ['narrator', makeRuntimeResult({ narrativeOutput: '你走到了山脚下。' })],
     ]);
 
     const params: ContextBuildParams = {

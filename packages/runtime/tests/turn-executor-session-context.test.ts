@@ -294,7 +294,7 @@ describe('turn-executor → SessionContextSnapshot wiring', () => {
       worldId,
       status: 'active',
       turnCount: 0,
-      preGameCompleted: ['core-pregame', 'core-world-init/schema-gen'],
+      preGameCompleted: ['pregame', 'world-init/schema-gen'],
       locale: 'zh-CN',
       activePlugins: [],
       createdAt: ts(),
@@ -310,18 +310,18 @@ describe('turn-executor → SessionContextSnapshot wiring', () => {
     });
 
     const playerInit: RuntimeManifest = {
-      name: 'core-char-creator/player-init',
-      pluginId: 'core-char-creator',
+      name: 'char-creator/player-init',
+      pluginId: 'char-creator',
       description: 'create player',
       priority: 90,
       runtimeType: 'function',
       handler: './handler.js',
       trigger: { type: 'auto' },
-      upstreamRequired: ['core-pregame', 'core-world-init/schema-gen'],
+      upstreamRequired: ['pregame', 'world-init/schema-gen'],
     } as RuntimeManifest;
     const narrator = makeManifest({
-      name: 'core-narrator',
-      pluginId: 'core-narrator',
+      name: 'narrator',
+      pluginId: 'narrator',
       priority: 500,
       promptVersion: 1,
       trigger: { type: 'auto' },
@@ -373,8 +373,8 @@ describe('turn-executor → SessionContextSnapshot wiring', () => {
     );
 
     expect(result.runtimeResults.map((runtime) => runtime.runtimeId)).toEqual([
-      'core-char-creator/player-init',
-      'core-narrator',
+      'char-creator/player-init',
+      'narrator',
     ]);
     expect(llm.captured.systemPrompts[0]).toContain('Player: Aria.');
     const session = await store.getSession(sessionId);

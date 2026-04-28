@@ -189,7 +189,7 @@ All panels/blocks render through [json-render](https://github.com/vercel-labs/js
 **框架代码（`packages/`、`apps/server/src/`、`apps/web*/src/`）禁止硬编码任何具体插件 ID 或名称。**
 
 Violations:
-- `pluginId === 'core-narrator'` · `store.listPluginData(sessionId, 'core-world-init', ...)` · `p.id === 'core-image'`.
+- `pluginId === 'narrator'` · `store.listPluginData(sessionId, 'world-init', ...)` · `p.id === 'image'`.
 
 Correct approach:
 - Dispatch on `RuntimeManifest.outputKind` (`story` / `plugin` / `system`).
@@ -207,8 +207,8 @@ Correct approach:
 ### Identity model: pluginId vs runtimeId
 
 `RuntimeManifest` carries two IDs:
-- `pluginId` — package ID (e.g. `core-world-init`), derived from `name` before `/`. Used for data isolation, tool scoping, trust.
-- `name` (= runtimeId) — full runtime name (e.g. `core-world-init/schema-gen`). Used for LLM traces and logs.
+- `pluginId` — package ID (e.g. `world-init`), derived from `name` before `/`. Used for data isolation, tool scoping, trust.
+- `name` (= runtimeId) — full runtime name (e.g. `world-init/schema-gen`). Used for LLM traces and logs.
 
 All store writes key on `pluginId`; all trace logs key on `runtimeId`.
 

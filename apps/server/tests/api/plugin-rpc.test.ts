@@ -128,7 +128,7 @@ describe('POST /api/sessions/:id/plugin-rpc (PR-3)', () => {
       body: JSON.stringify({
         pluginId: 'framework',
         action: 'echo',
-        runtimeId: 'core-narrator',
+        runtimeId: 'narrator',
       }),
     });
     expect(res.status).toBe(400);
@@ -142,8 +142,8 @@ describe('POST /api/sessions/:id/plugin-rpc (PR-3)', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        pluginId: 'core-codex',
-        runtimeId: 'core-codex',
+        pluginId: 'codex',
+        runtimeId: 'codex',
         payload: {},
       }),
     });
@@ -170,7 +170,7 @@ describe('POST /api/sessions/:id/plugin-rpc (PR-3)', () => {
 
   it('dispatches a plugin-declared action via lazy loader', async () => {
     registry.registerPluginAction(
-      'core-codex',
+      'codex',
       'regenerate',
       { handler: './rpc/regenerate.js' },
       'official',
@@ -180,7 +180,7 @@ describe('POST /api/sessions/:id/plugin-rpc (PR-3)', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        pluginId: 'core-codex',
+        pluginId: 'codex',
         action: 'regenerate',
         payload: { card: 'shrine' },
       }),
@@ -213,7 +213,7 @@ describe('POST /api/sessions/:id/plugin-rpc (PR-3)', () => {
       sessionId: 'sess-rpc-1',
       turnId: 'turn-1',
       sourceType: 'runtime',
-      sourcePluginId: 'core-char-creator',
+      sourcePluginId: 'char-creator',
       role: 'assistant',
       name: 'form-template',
       content: 'Player name is {{name}}',
@@ -252,13 +252,13 @@ describe('POST /api/sessions/:id/plugin-rpc (PR-3)', () => {
   });
 
   it('rejects framework actions when pluginId is not the canonical sentinel (LOW-3)', async () => {
-    // `echo` is a framework default but the request uses pluginId="core-codex".
+    // `echo` is a framework default but the request uses pluginId="codex".
     // The canonical sentinel is "framework" — anything else gets 404.
     const res = await app.request('/api/sessions/sess-rpc-1/plugin-rpc', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        pluginId: 'core-codex',
+        pluginId: 'codex',
         action: 'echo',
         payload: {},
       }),

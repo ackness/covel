@@ -73,7 +73,7 @@ describe('TurnExecutor EventBus Bridge', () => {
     eventBus = createEventBus();
 
     const discoveries = await discoverPlugins(PLUGINS_DIR);
-    const narratorDiscovery = discoveries.find((d) => d.id === 'core-narrator');
+    const narratorDiscovery = discoveries.find((d) => d.id === 'narrator');
     expect(narratorDiscovery).toBeDefined();
 
     const manifests = await loadPluginManifest(narratorDiscovery!);
@@ -131,11 +131,11 @@ describe('TurnExecutor EventBus Bridge', () => {
 
     expect(runtimeStarted).toBeDefined();
     expect(runtimeStarted!.topic).toBe('runtime');
-    expect((runtimeStarted!.payload as Record<string, unknown>).runtimeId).toBe('core-narrator');
+    expect((runtimeStarted!.payload as Record<string, unknown>).runtimeId).toBe('narrator');
 
     expect(runtimeCompleted).toBeDefined();
     expect(runtimeCompleted!.topic).toBe('runtime');
-    expect((runtimeCompleted!.payload as Record<string, unknown>).runtimeId).toBe('core-narrator');
+    expect((runtimeCompleted!.payload as Record<string, unknown>).runtimeId).toBe('narrator');
     expect((runtimeCompleted!.payload as Record<string, unknown>).status).toBe('success');
   });
 

@@ -129,7 +129,7 @@ TurnStop
 - 优先级 band（0-99 pregame、400-1000 main loop）
 - `upstreamRequired` 声明
 - `trigger.type: event` 事件触发（图像插件用）
-- `guard.js` 决策（core-char-creator 用）
+- `guard.js` 决策（char-creator 用）
 
 **这让 § 5.3 Hook 语义改动成为 P1 的低风险项**——当前没有现存插件代码依赖旧 hook 行为。详见附录 C。
 
@@ -1123,16 +1123,16 @@ packages/tools/src/client.ts                   ← ToolClient 接口
 
 | 插件 / Runtime | pluginType | runtimeType | priority | hooks | 关键行为 |
 |---|---|---|---|---|---|
-| core-pregame | core-plugin | function | 10 | 0 | scheduled, maxTriggerCount=1 |
-| core-world-init/schema-gen | core-plugin | agent | 40 | 0 | 仅首轮，写 plugin-data |
-| core-char-creator/player-init | core-plugin | agent | 50 | 0 | guard 控制三分支 |
-| core-npc-graph/rag-retriever | plugin | function | 400 | 0 | 给 narrator 注入 npcContext |
-| core-narrator | core-plugin | agent | 500 | 0 | 主叙事生成 |
-| core-guide | plugin | agent | 600 | 0 | 行动建议（并发层） |
-| core-codex | plugin | agent | 600 | 0 | 知识图鉴（并发层） |
-| core-char-creator/character-tracker | core-plugin | agent | 600 | 0 | 写 character record（并发层） |
-| core-npc-graph/extractor | plugin | agent | 600 | 0 | 写 npc-graph nodes/edges（并发层） |
-| core-memory | core-plugin | manual UI | — | 0 | 三层记忆面板，UI 事件驱动 |
+| pregame | core-plugin | function | 10 | 0 | scheduled, maxTriggerCount=1 |
+| world-init/schema-gen | core-plugin | agent | 40 | 0 | 仅首轮，写 plugin-data |
+| char-creator/player-init | core-plugin | agent | 50 | 0 | guard 控制三分支 |
+| npc-graph/rag-retriever | plugin | function | 400 | 0 | 给 narrator 注入 npcContext |
+| narrator | core-plugin | agent | 500 | 0 | 主叙事生成 |
+| guide | plugin | agent | 600 | 0 | 行动建议（并发层） |
+| codex | plugin | agent | 600 | 0 | 知识图鉴（并发层） |
+| char-creator/character-tracker | core-plugin | agent | 600 | 0 | 写 character record（并发层） |
+| npc-graph/extractor | plugin | agent | 600 | 0 | 写 npc-graph nodes/edges（并发层） |
+| memory | core-plugin | manual UI | — | 0 | 三层记忆面板，UI 事件驱动 |
 | dashscope-image-gen/prompt-generator | plugin | agent | — | 0 | manual trigger，生成 prompt + emit event |
 | dashscope-image-gen/image-generator | plugin | function | 610 | 0 | event trigger, execution=background |
 | openai-image-gen/prompt-generator | plugin | agent | — | 0 | 同上，不同 topic |

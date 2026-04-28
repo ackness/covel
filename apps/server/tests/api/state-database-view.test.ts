@@ -43,8 +43,8 @@ describe('GET /api/sessions/:id/state — database view', () => {
       turnCount: 2,
       status: 'active',
       locale: 'zh-CN',
-      activePlugins: ['core-narrator', 'core-codex'],
-      preGameCompleted: ['core-pregame'],
+      activePlugins: ['narrator', 'codex'],
+      preGameCompleted: ['pregame'],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -60,8 +60,8 @@ describe('GET /api/sessions/:id/state — database view', () => {
     expect(sess.data.id).toBe(sessionId);
     expect(sess.data.worldId).toBe('cloudmere');
     expect(sess.data.turnCount).toBe(2);
-    expect(sess.data.activePlugins).toEqual(['core-narrator', 'core-codex']);
-    expect(sess.data.preGameCompleted).toEqual(['core-pregame']);
+    expect(sess.data.activePlugins).toEqual(['narrator', 'codex']);
+    expect(sess.data.preGameCompleted).toEqual(['pregame']);
     // Auto-generated schema lists every session field.
     expect(sess.schema.fields.map((f) => f.name)).toEqual(
       expect.arrayContaining(['id', 'worldId', 'turnCount', 'status', 'activePlugins']),
@@ -72,15 +72,15 @@ describe('GET /api/sessions/:id/state — database view', () => {
     const now = new Date().toISOString();
     await store.setPluginDataBatch([
       {
-        id: 'pd-1', sessionId, pluginId: 'core-codex', namespace: 'entries',
+        id: 'pd-1', sessionId, pluginId: 'codex', namespace: 'entries',
         key: 'codex-1', value: { title: '百灵沼泽' }, createdAt: now, updatedAt: now,
       },
       {
-        id: 'pd-2', sessionId, pluginId: 'core-codex', namespace: 'entries',
+        id: 'pd-2', sessionId, pluginId: 'codex', namespace: 'entries',
         key: 'codex-2', value: { title: '兽皮地图' }, createdAt: now, updatedAt: now,
       },
       {
-        id: 'pd-3', sessionId, pluginId: 'core-guide', namespace: 'message',
+        id: 'pd-3', sessionId, pluginId: 'guide', namespace: 'message',
         key: 'topic', value: '子时出发', createdAt: now, updatedAt: now,
       },
     ]);
@@ -88,12 +88,12 @@ describe('GET /api/sessions/:id/state — database view', () => {
     const res = await app.request(`/api/sessions/${sessionId}/state`);
     const body = await res.json() as { tables: Record<string, { data: Record<string, unknown>; schema: { fields: { name: string }[] } }> };
 
-    const codex = body.tables['plugin_data/core-codex:entries'];
+    const codex = body.tables['plugin_data/codex:entries'];
     expect(codex).toBeDefined();
     expect(Object.keys(codex.data).sort()).toEqual(['codex-1', 'codex-2']);
     expect((codex.data['codex-1'] as Record<string, unknown>).title).toBe('百灵沼泽');
 
-    const guide = body.tables['plugin_data/core-guide:message'];
+    const guide = body.tables['plugin_data/guide:message'];
     expect(guide).toBeDefined();
     expect(guide.data.topic).toBe('子时出发');
   });

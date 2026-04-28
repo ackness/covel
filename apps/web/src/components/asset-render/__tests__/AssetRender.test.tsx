@@ -55,7 +55,7 @@ function makeView(overrides: Partial<AssetGenerateView> = {}): AssetGenerateView
     type: "asset.generate",
     sessionId: "sess-1",
     turnId: "turn-1",
-    source: { pluginId: "core-image", runtimeId: "core-image/runner" },
+    source: { pluginId: "image", runtimeId: "image/runner" },
     ref: {
       id: "a".repeat(64),
       mime: "image/png",
@@ -78,7 +78,7 @@ describe("<AssetRender> modality routing", () => {
     const stub = screen.getByTestId("media-stub");
     expect(stub.getAttribute("data-as")).toBe("image");
     // Subtitle should expose the runtime id so authors can trace the asset.
-    expect(screen.getByText(/core-image\/runner/)).toBeTruthy();
+    expect(screen.getByText(/image\/runner/)).toBeTruthy();
   });
 
   it("routes `audio` to AssetAudio (figure with audio-as Media)", () => {

@@ -1,6 +1,6 @@
 # NPC Graph + Graph-RAG Architecture
 
-> Single-page reference for the `core-npc-graph` plugin and its
+> Single-page reference for the `npc-graph` plugin and its
 > supporting infrastructure across `@covel/ai-provider`, `@covel/store`,
 > `@covel/shared`, and `@covel/web`. For implementation history see
 > the Phase 0–4 commits on this branch.
@@ -27,7 +27,7 @@ self-contained **session-scoped knowledge graph** that:
         │
         ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  priority 490 — core-npc-graph/rag-retriever (function runtime)      │
+│  priority 490 — npc-graph/rag-retriever (function runtime)      │
 │                                                                      │
 │  • reads playerMessage                                               │
 │  • loads nodes/edges/index from plugin_data                          │
@@ -40,7 +40,7 @@ self-contained **session-scoped knowledge graph** that:
         │
         ▼ injected via input.inject as <npc-relationships>
 ┌──────────────────────────────────────────────────────────────────────┐
-│  priority 500 — core-narrator (agent runtime)                        │
+│  priority 500 — narrator (agent runtime)                        │
 │                                                                      │
 │  • sees prior facts in <npc-relationships> tag                       │
 │  • generates narrative consistent with established trust/enmity      │
@@ -48,7 +48,7 @@ self-contained **session-scoped knowledge graph** that:
         │
         ▼ narrative output
 ┌──────────────────────────────────────────────────────────────────────┐
-│  priority 620 — core-npc-graph/extractor (agent runtime)             │
+│  priority 620 — npc-graph/extractor (agent runtime)             │
 │                                                                      │
 │  • LLM reads <narrator-output> + existing graph snapshot             │
 │  • calls list-npc-graph to inspect, then upsert-npc-graph to write   │
@@ -60,7 +60,7 @@ self-contained **session-scoped knowledge graph** that:
 │  apps/web right panel: GraphCanvas (lazy)                            │
 │                                                                      │
 │  • react-force-graph-2d, lazy-loaded chunk                           │
-│  • reads pluginData[core-npc-graph][nodes/edges] live                │
+│  • reads pluginData[npc-graph][nodes/edges] live                │
 │  • node colour by type, edge colour by sign of strength              │
 │  • click → in-panel detail card                                      │
 └──────────────────────────────────────────────────────────────────────┘
@@ -100,7 +100,7 @@ interface NpcEdge {
 
 ## Storage Layout
 
-All persisted via `plugin_data` under `pluginId = 'core-npc-graph'`:
+All persisted via `plugin_data` under `pluginId = 'npc-graph'`:
 
 | namespace | key | value |
 |-----------|-----|-------|
@@ -115,7 +115,7 @@ retriever can do O(1) neighbour lookups instead of scanning all edges.
 
 ## Plugin Tools
 
-`plugins/core-npc-graph/tools/`:
+`plugins/npc-graph/tools/`:
 
 - **`list-npc-graph.js`** — returns compact summaries of nodes and
   edges so the LLM can avoid duplicate creates without paging through
@@ -175,7 +175,7 @@ when the user opens the panel. It reads from the live pluginData
 store, so SSE-driven mutations re-render automatically.
 
 The plugin's right-panel spec lives at
-`plugins/core-npc-graph/runtimes/extractor/ui/npc-graph-panel.json`:
+`plugins/npc-graph/runtimes/extractor/ui/npc-graph-panel.json`:
 
 ```json
 {
@@ -185,7 +185,7 @@ The plugin's right-panel spec lives at
   "view": {
     "component": "GraphCanvas",
     "props": {
-      "pluginId": "core-npc-graph",
+      "pluginId": "npc-graph",
       "nodesNamespace": "nodes",
       "edgesNamespace": "edges",
       "height": 480
@@ -231,11 +231,11 @@ without breaking the existing tests, the cleanest path is:
    `packages/plugin-loader/src/types.ts`) with an optional `gateway`
    reference, surfaced from `apps/server/src/routes/api/bootstrap.ts`
    alongside the existing `store` injection.
-2. In `core-npc-graph/extractor`, after `upsert-npc-graph` returns,
+2. In `npc-graph/extractor`, after `upsert-npc-graph` returns,
    embed each newly-written `edge.fact` via `gateway.embed()` and
    call `store.upsertVector()` (using `supportsVector(store)` as a
    feature flag). Skip silently when the store can't store vectors.
-3. In `core-npc-graph/rag-retriever`, prepend a vector search step:
+3. In `npc-graph/rag-retriever`, prepend a vector search step:
    embed `playerMessage` once, query `store.searchVectors()` for the
    top-20 edge IDs, then use those edge endpoints as additional seeds
    for the existing BFS expansion.
@@ -252,6 +252,6 @@ deployments keep working.
 - `docs/reference/ui-panels.md` — GraphCanvas catalog entry
 - `docs/reference/tools.md` — upsert-npc-graph and list-npc-graph
 - `packages/shared/src/types/npc-graph.ts` — type source of truth
-- `plugins/core-npc-graph/` — the plugin itself
+- `plugins/npc-graph/` — the plugin itself
 - `apps/web/src/lib/graph-canvas.tsx` — visualization component
 - `scripts/embedding-bench/` — Phase 0 validation harness

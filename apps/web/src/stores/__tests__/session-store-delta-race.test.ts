@@ -59,14 +59,14 @@ describe("delta buffer — session switch guard", () => {
     buffer.set("turn-1_narrator", {
       turnId: "turn-1",
       runtimeId: "narrator",
-      pluginId: "core-narrator",
+      pluginId: "narrator",
       text: "Hello ",
       flushSessionId: "session-a",
     });
     buffer.set("turn-1_codex", {
       turnId: "turn-1",
       runtimeId: "codex",
-      pluginId: "core-codex",
+      pluginId: "codex",
       text: "world.",
       flushSessionId: "session-a",
     });
@@ -79,14 +79,14 @@ describe("delta buffer — session switch guard", () => {
       type: "APPEND_DELTA",
       turnId: "turn-1",
       runtimeId: "narrator",
-      pluginId: "core-narrator",
+      pluginId: "narrator",
       delta: "Hello ",
     });
     expect(dispatch).toHaveBeenNthCalledWith(2, {
       type: "APPEND_DELTA",
       turnId: "turn-1",
       runtimeId: "codex",
-      pluginId: "core-codex",
+      pluginId: "codex",
       delta: "world.",
     });
     expect(buffer.size).toBe(0);
@@ -97,7 +97,7 @@ describe("delta buffer — session switch guard", () => {
     buffer.set("turn-1_narrator", {
       turnId: "turn-1",
       runtimeId: "narrator",
-      pluginId: "core-narrator",
+      pluginId: "narrator",
       text: "stale token",
       flushSessionId: "session-a", // captured during session A
     });
@@ -115,7 +115,7 @@ describe("delta buffer — session switch guard", () => {
     buffer.set("turn-1_narrator", {
       turnId: "turn-1",
       runtimeId: "narrator",
-      pluginId: "core-narrator",
+      pluginId: "narrator",
       text: "from A",
       flushSessionId: "session-a",
     });
@@ -125,7 +125,7 @@ describe("delta buffer — session switch guard", () => {
     buffer.set("turn-2_narrator", {
       turnId: "turn-2",
       runtimeId: "narrator",
-      pluginId: "core-narrator",
+      pluginId: "narrator",
       text: "from B",
       flushSessionId: "session-b",
     });
@@ -138,7 +138,7 @@ describe("delta buffer — session switch guard", () => {
       type: "APPEND_DELTA",
       turnId: "turn-2",
       runtimeId: "narrator",
-      pluginId: "core-narrator",
+      pluginId: "narrator",
       delta: "from B",
     });
   });
@@ -148,7 +148,7 @@ describe("delta buffer — session switch guard", () => {
     buffer.set("turn-1_narrator", {
       turnId: "turn-1",
       runtimeId: "narrator",
-      pluginId: "core-narrator",
+      pluginId: "narrator",
       text: "pending",
       flushSessionId: "session-a",
     });
@@ -168,7 +168,7 @@ describe("delta buffer — session switch guard", () => {
     buffer.set("turn-1_narrator", {
       turnId: "turn-1-session-1",
       runtimeId: "narrator",
-      pluginId: "core-narrator",
+      pluginId: "narrator",
       text: "...narrative from session 1",
       flushSessionId: "session-1",
     });

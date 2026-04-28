@@ -63,18 +63,18 @@ describe('executeTurn main-loop DAG scheduler', () => {
     // priority order — this test forces them to overlap by making each handler
     // take ≥ 40ms and asserting the wall-clock time of the downstream level is
     // less than 3× the per-runtime delay.
-    const narrator = manifest('core-narrator', 500);
-    const guide = manifest('core-guide', 550, {
-      input: { inject: [{ kind: 'runtime', from: 'core-narrator', field: 'narrativeOutput', as: '<n>' }] },
+    const narrator = manifest('narrator', 500);
+    const guide = manifest('guide', 550, {
+      input: { inject: [{ kind: 'runtime', from: 'narrator', field: 'narrativeOutput', as: '<n>' }] },
     } as Partial<RuntimeManifest>);
-    const extractor = manifest('core-npc-graph/extractor', 620, {
-      input: { inject: [{ kind: 'runtime', from: 'core-narrator', field: 'narrativeOutput', as: '<n>' }] },
+    const extractor = manifest('npc-graph/extractor', 620, {
+      input: { inject: [{ kind: 'runtime', from: 'narrator', field: 'narrativeOutput', as: '<n>' }] },
     } as Partial<RuntimeManifest>);
-    const codex = manifest('core-codex', 650, {
-      input: { inject: [{ kind: 'runtime', from: 'core-narrator', field: 'narrativeOutput', as: '<n>' }] },
+    const codex = manifest('codex', 650, {
+      input: { inject: [{ kind: 'runtime', from: 'narrator', field: 'narrativeOutput', as: '<n>' }] },
     } as Partial<RuntimeManifest>);
-    const charTracker = manifest('core-char-creator/character-tracker', 750, {
-      input: { inject: [{ kind: 'runtime', from: 'core-narrator', field: 'narrativeOutput', as: '<n>' }] },
+    const charTracker = manifest('char-creator/character-tracker', 750, {
+      input: { inject: [{ kind: 'runtime', from: 'narrator', field: 'narrativeOutput', as: '<n>' }] },
     } as Partial<RuntimeManifest>);
 
     const DELAY = 60;
@@ -110,8 +110,8 @@ describe('executeTurn main-loop DAG scheduler', () => {
     expect(result.runtimeResults.every((r) => r.status === 'success')).toBe(true);
 
     // Narrator finished before any downstream started.
-    const nEnd = timings['core-narrator'].end;
-    const downstreams = ['core-guide', 'core-npc-graph/extractor', 'core-codex', 'core-char-creator/character-tracker'];
+    const nEnd = timings['narrator'].end;
+    const downstreams = ['guide', 'npc-graph/extractor', 'codex', 'char-creator/character-tracker'];
     for (const d of downstreams) {
       expect(timings[d].start).toBeGreaterThanOrEqual(nEnd);
     }

@@ -62,7 +62,7 @@ curl -X POST http://localhost:3001/api/sessions \
   -d '{
     "worldId": "cloudmere",
     "locale": "zh-CN",
-    "plugins": ["core-pregame", "core-narrator", "core-codex"]
+    "plugins": ["pregame", "narrator", "codex"]
   }'
 ```
 
@@ -286,7 +286,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | GET | `/api/sessions/:id/working-memory` | 列出该 session 的所有工作记忆条目 |
 | PUT | `/api/sessions/:id/working-memory/:scope/:key` | 写入/更新工作记忆（scope: player \| story \| shared） |
 | DELETE | `/api/sessions/:id/working-memory/:scope/:key` | 删除工作记忆条目 |
-| GET | `/api/sessions/:id/memory-blocks` | 只读返回 Letta 风格的 memory blocks（story scope，需 `COVEL_MEMORY_V1=1`）。2026-04-27 从 `/:id/core-memory` 重命名以避免与 `core-memory` 插件 id 冲突。 |
+| GET | `/api/sessions/:id/memory-blocks` | 只读返回 Letta 风格的 memory blocks（story scope，需 `COVEL_MEMORY_V1=1`）。2026-04-27 从 `/:id/memory` 重命名以避免与 `memory` 插件 id 冲突。 |
 
 ### Lorebook（S3-T6）
 
@@ -414,7 +414,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 {
   "right": [
     {
-      "pluginId": "core-codex",
+      "pluginId": "codex",
       "specs": [{
         "id": "codex",
         "group": "codex",
@@ -649,7 +649,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
       "turnCount": 0,
       "preGameCompleted": [],
       "locale": "zh-CN",
-      "activePlugins": ["core-pregame", "core-narrator"],
+      "activePlugins": ["pregame", "narrator"],
       "createdAt": "2025-01-15T10:00:00.000Z",
       "updatedAt": "2025-01-15T10:00:00.000Z"
     }
@@ -667,7 +667,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 {
   "worldId": "cloudmere",
   "locale": "zh-CN",
-  "plugins": ["core-pregame", "core-narrator", "core-codex"]
+  "plugins": ["pregame", "narrator", "codex"]
 }
 ```
 
@@ -688,7 +688,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
   "status": "active",
   "turnCount": 0,
   "preGameCompleted": [],
-  "activePlugins": ["core-pregame", "core-narrator", "core-codex"],
+  "activePlugins": ["pregame", "narrator", "codex"],
   "createdAt": "2025-01-15T10:00:00.000Z",
   "updatedAt": "2025-01-15T10:00:00.000Z"
 }
@@ -720,9 +720,9 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
   "worldId": "cloudmere",
   "status": "active",
   "turnCount": 3,
-  "preGameCompleted": ["core-pregame", "core-world-init/schema-gen", "core-char-creator/player-init"],
+  "preGameCompleted": ["pregame", "world-init/schema-gen", "char-creator/player-init"],
   "locale": "zh-CN",
-  "activePlugins": ["core-pregame", "core-narrator"],
+  "activePlugins": ["pregame", "narrator"],
   "createdAt": "2025-01-15T10:00:00.000Z",
   "updatedAt": "2025-01-15T10:05:00.000Z"
 }
@@ -752,8 +752,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 {
   "status": "paused",
   "runtimeModelOverrides": {
-    "core-narrator": "balance",
-    "core-codex/unlocker": "fast"
+    "narrator": "balance",
+    "codex/unlocker": "fast"
   }
 }
 ```
@@ -837,7 +837,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
   "sessionId": "cloudmere-a1b2c3d4",
   "runtimeResults": [
     {
-      "pluginId": "core-narrator",
+      "pluginId": "narrator",
       "runtimeId": "narrator-main",
       "output": "你缓缓拔出腰间的长剑，剑刃在微弱的光芒中闪烁...",
       "toolCalls": [],
@@ -1028,7 +1028,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ```json
 {
-  "pluginId": "core-codex",
+  "pluginId": "codex",
   "action": "regenerate",
   "payload": { "cardId": "shrine-of-stars" }
 }
@@ -1343,7 +1343,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 {
   "plugins": [
     {
-      "id": "core-narrator",
+      "id": "narrator",
       "name": { "zh-CN": "核心叙事者", "en-US": "Narrator" },
       "description": "主要叙事生成插件",
       "pluginType": "core-plugin",
@@ -1376,13 +1376,13 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 | 参数 | 位置 | 说明 |
 |------|------|------|
-| `id` | 路径 | 插件 ID（如 `core-narrator`） |
+| `id` | 路径 | 插件 ID（如 `narrator`） |
 
 **响应 200:**
 
 ```json
 {
-  "id": "core-narrator",
+  "id": "narrator",
   "name": { "zh-CN": "核心叙事者", "en-US": "Narrator" },
   "description": "主要叙事生成插件",
   "pluginType": "core-plugin",
@@ -1398,7 +1398,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 ```json
 {
-  "error": "Plugin \"core-narrator\" not found"
+  "error": "Plugin \"narrator\" not found"
 }
 ```
 
@@ -1414,10 +1414,10 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 ```json
 {
-  "active": ["core-pregame", "core-narrator"],
+  "active": ["pregame", "narrator"],
   "available": [
     {
-      "id": "core-narrator",
+      "id": "narrator",
       "name": "核心叙事者",
       "description": "主要叙事生成插件",
       "pluginType": "runtime",
@@ -1435,13 +1435,13 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 **请求体:**
 
 ```json
-{ "pluginId": "core-codex" }
+{ "pluginId": "codex" }
 ```
 
 **响应:**
 
 ```json
-{ "ok": true, "active": ["core-pregame", "core-narrator", "core-codex"] }
+{ "ok": true, "active": ["pregame", "narrator", "codex"] }
 ```
 
 #### `POST /api/sessions/:id/plugins/disable`
@@ -1451,19 +1451,19 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 **请求体:**
 
 ```json
-{ "pluginId": "core-codex" }
+{ "pluginId": "codex" }
 ```
 
 **响应 200:**
 
 ```json
-{ "ok": true, "active": ["core-pregame", "core-narrator"] }
+{ "ok": true, "active": ["pregame", "narrator"] }
 ```
 
 **响应 403:**
 
 ```json
-{ "error": "Cannot disable core plugin \"core-narrator\"" }
+{ "error": "Cannot disable core plugin \"narrator\"" }
 ```
 
 ---
@@ -1577,7 +1577,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 | 参数 | 位置 | 说明 |
 |------|------|------|
 | `id` | 路径 | 会话 ID |
-| `pluginId` | 路径 | 插件 ID（如 `core-world-init`） |
+| `pluginId` | 路径 | 插件 ID（如 `world-init`） |
 | `namespace` | 路径 | 数据命名空间（如 `schema`, `entries`） |
 
 **响应:**
@@ -1992,7 +1992,7 @@ id: evt-002
   "topic": "combat.start",
   "payload": { "enemyId": "goblin-01", "terrain": "forest" },
   "sessionId": "cloudmere-a1b2c3d4",
-  "targetRuntime": "core-combat"
+  "targetRuntime": "combat"
 }
 ```
 

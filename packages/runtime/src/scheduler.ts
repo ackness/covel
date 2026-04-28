@@ -13,7 +13,7 @@ import type { ScheduledGroup } from './types.js';
 const PRE_GAME_BAND_MAX = 99;
 
 function isInBand(priority: number | undefined, turnNumber: number): boolean {
-  // UI-only runtimes (e.g. core-memory, trigger.type='manual' with no
+  // UI-only runtimes (e.g. memory, trigger.type='manual' with no
   // priority) are never scheduled. This is the defence that keeps
   // manifest typos from accidentally enqueueing a pure-UI plugin and
   // tripping the LLM pipeline on a runtime that has no handler or prompt.

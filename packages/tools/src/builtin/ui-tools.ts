@@ -4,7 +4,7 @@
  * These are framework-level primitives. Plugins combine them via prompt
  * instructions without writing code:
  *   - char-creator calls `create-form` to build a character creation form
- *   - core-guide calls `create-choices` to show action options
+ *   - guide calls `create-choices` to show action options
  *   - any plugin can call `create-notification` to show alerts
  */
 

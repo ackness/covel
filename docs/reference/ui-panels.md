@@ -55,15 +55,15 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 
 | 插件/runtime | 面板 ID | 图标 | group | 数据 namespace | 描述 |
 |------|---------|------|-------|---------------|------|
-| core-char-creator/player-init | character | users | character | characters | 角色列表（player + NPC + companion） |
-| core-codex | codex | book-open | codex | entries | 知识图鉴 |
-| core-npc-graph/extractor | npc-graph | network | npc-graph | nodes + edges | NPC 关系图（force-directed 可视化） |
-| core-world-init/schema-gen | world-entries | book-marked | world-data | entries | 世界词条 |
-| core-world-init/schema-gen | world-schema | sliders-horizontal | world-data | schema | 角色属性 schema |
+| char-creator/player-init | character | users | character | characters | 角色列表（player + NPC + companion） |
+| codex | codex | book-open | codex | entries | 知识图鉴 |
+| npc-graph/extractor | npc-graph | network | npc-graph | nodes + edges | NPC 关系图（force-directed 可视化） |
+| world-init/schema-gen | world-entries | book-marked | world-data | entries | 世界词条 |
+| world-init/schema-gen | world-schema | sliders-horizontal | world-data | schema | 角色属性 schema |
 
-> `core-world-init` 的 schema-gen runtime 注册两个 spec，通过相同 `group: "world-data"` + `groupLabel` 合并为单个 activity-bar tab "世界维度"，内部横向子 Tab 切换 `词条 / 属性`。
-> `core-char-creator` 的 character-panel 由 player-init runtime 声明，character-tracker runtime 共享同一个 namespace `characters`（由 `create-character` / `update-character` builtin 工具写入）。
-> `core-npc-graph/extractor` 的 npc-graph-panel 引用 `GraphCanvas` 组件读取 `nodes` + `edges` 两个 namespace，呈现 force-directed 关系图（react-force-graph-2d 懒加载）。
+> `world-init` 的 schema-gen runtime 注册两个 spec，通过相同 `group: "world-data"` + `groupLabel` 合并为单个 activity-bar tab "世界维度"，内部横向子 Tab 切换 `词条 / 属性`。
+> `char-creator` 的 character-panel 由 player-init runtime 声明，character-tracker runtime 共享同一个 namespace `characters`（由 `create-character` / `update-character` builtin 工具写入）。
+> `npc-graph/extractor` 的 npc-graph-panel 引用 `GraphCanvas` 组件读取 `nodes` + `edges` 两个 namespace，呈现 force-directed 关系图（react-force-graph-2d 懒加载）。
 
 ### 世界文档（框架自持 Tab）
 
@@ -233,8 +233,8 @@ type I18nText = string | Record<LocaleTag, string>;
 ```
 
 **核心用例**：
-- 单插件多 runtime：`core-char-creator/player-init` + `core-char-creator/character-tracker` 共享 `character-panel.json`
-- 跨插件组合：`core-char-creator` 贡献角色列表，未来 `core-inventory` 贡献背包，都声明 `group: "character"`，自动汇聚到同一个"角色"外层 Tab
+- 单插件多 runtime：`char-creator/player-init` + `char-creator/character-tracker` 共享 `character-panel.json`
+- 跨插件组合：`char-creator` 贡献角色列表，未来 `inventory` 贡献背包，都声明 `group: "character"`，自动汇聚到同一个"角色"外层 Tab
 
 **合并规则**：
 | 字段 | 行为 |
@@ -292,7 +292,7 @@ ui:
 ### 行动引导交互
 
 ```
-core-guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
+guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
   → `ui.message` 渲染三组策略卡 + 自定义输入
   → 玩家点击建议后进入待发送区
   → InputBar 统一发送待发送草稿与手写输入
@@ -359,7 +359,7 @@ core-guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 ### 可视化
 | 组件 | 用途 |
 |------|------|
-| GraphCanvas | 力导向关系图（react-force-graph-2d）。读取 `pluginId` 下两个 namespace 的数据（节点 + 边），按 `node.type` 着色，按边的 `strength` 正负染色。点击节点弹出档案。基于 lazy import，仅在打开面板时加载 ~60KB gzip 的额外 chunk。Props: `pluginId`, `nodesNamespace`, `edgesNamespace`, `height?`。当前由 `core-npc-graph` 使用。 |
+| GraphCanvas | 力导向关系图（react-force-graph-2d）。读取 `pluginId` 下两个 namespace 的数据（节点 + 边），按 `node.type` 着色，按边的 `strength` 正负染色。点击节点弹出档案。基于 lazy import，仅在打开面板时加载 ~60KB gzip 的额外 chunk。Props: `pluginId`, `nodesNamespace`, `edgesNamespace`, `height?`。当前由 `npc-graph` 使用。 |
 
 ## 数据流
 

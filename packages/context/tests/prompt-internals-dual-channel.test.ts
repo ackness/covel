@@ -266,17 +266,17 @@ describe('assemblePromptVariables — dual-channel', () => {
       turnInput: makeTurnInput({ playerMessage: 'enter the cave' }),
       completedResults: new Map([
         [
-          'core-narrator',
+          'narrator',
           makeRuntimeResult({
-            pluginId: 'core-narrator',
-            runtimeId: 'core-narrator',
+            pluginId: 'narrator',
+            runtimeId: 'narrator',
             output: { narrativeOutput: 'the story unfolds' },
           }),
         ],
         [
-          'core-world-init/schema-gen',
+          'world-init/schema-gen',
           makeRuntimeResult({
-            pluginId: 'core-world-init',
+            pluginId: 'world-init',
             runtimeId: 'schema-gen',
             output: { schema: { version: 1 } },
           }),
@@ -317,12 +317,12 @@ describe('assemblePromptVariables — dual-channel', () => {
     });
     expect(
       (snapshotVars.inputs as Record<string, Record<string, unknown>>)[
-        'core-narrator'
+        'narrator'
       ],
-    ).toEqual({ 'core-narrator': { narrativeOutput: 'the story unfolds' } });
+    ).toEqual({ 'narrator': { narrativeOutput: 'the story unfolds' } });
     expect(
       (snapshotVars.inputs as Record<string, Record<string, unknown>>)[
-        'core-world-init'
+        'world-init'
       ],
     ).toEqual({ 'schema-gen': { schema: { version: 1 } } });
   });
