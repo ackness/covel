@@ -224,6 +224,7 @@ Covel 当前的工具层分成两类：
 - 用它承接 message 面中被压缩掉的细节
 - 面板命名直接反映数据模型
 - 例如 `人物图谱` 改成 `关系图谱`，更贴合“角色 / 群体 / 势力关系”
+- activity-bar 默认取 `label` 前两个汉字；若截断后识别力弱（如 `核心记忆` → `核心`），在 spec 顶层显式声明 `shortLabel`（如 `{ "zh": "记忆", "en": "Memory" }`），见 [ui-panels.md](../reference/ui-panels.md#activity-bar-短标签)
 
 ---
 

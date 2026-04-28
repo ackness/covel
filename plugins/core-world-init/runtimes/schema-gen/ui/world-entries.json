@@ -2,6 +2,7 @@
   "id": "world-entries",
   "group": "world-data",
   "groupLabel": { "zh": "世界维度", "en": "World Data" },
+  "shortLabel": { "zh": "维度", "en": "World" },
   "label": { "zh": "词条", "en": "Entries" },
   "icon": "book-marked",
   "dataSource": { "namespace": "entries" },

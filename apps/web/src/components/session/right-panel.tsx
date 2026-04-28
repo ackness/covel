@@ -35,6 +35,7 @@ interface SubPanel {
   id: string;
   pluginId: string;
   label: string;
+  shortLabel?: string;
   icon: string;
   spec: Record<string, unknown>;
 }
@@ -42,6 +43,7 @@ interface SubPanel {
 interface PluginTabGroup {
   id: string;
   label: string;
+  shortLabel?: string;
   icon: string;
   order: number;
   subPanels: SubPanel[];
@@ -51,6 +53,7 @@ interface RightPanelTabItem {
   id: string;
   value: string;
   label: string;
+  shortLabel?: string;
   icon: LucideIcon;
   title?: string;
 }
@@ -76,13 +79,20 @@ function resolvePluginIcon(name: string): Icons.LucideIcon {
 }
 
 /**
- * Strip the common `core-` / `xxx-image-gen` boilerplate from a pluginId so
- * the duplicate-tab disambiguation stays short. Falls back to the raw id
- * when nothing matches.
+ * Resolve a short, human-readable label for a plugin in the provider switcher
+ * row. Prefers the manifest's locale-aware `displayName`; falls back to the
+ * raw pluginId if no manifest is loaded yet. Framework code does not bake in
+ * any plugin naming convention (e.g. `core-` prefix or `-image-gen` suffix).
  */
-function shortPluginId(pluginId: string): string {
-  const stripped = pluginId.replace(/^core-/, '').replace(/-image-gen$/, '');
-  return stripped.length > 0 ? stripped : pluginId;
+function pluginShortLabel(
+  pluginId: string,
+  sessionPlugins: readonly { id: string; displayName: unknown }[],
+  locale: string,
+): string {
+  const plugin = sessionPlugins.find((p) => p.id === pluginId);
+  if (!plugin) return pluginId;
+  const label = resolveI18n(plugin.displayName as Parameters<typeof resolveI18n>[0], locale);
+  return label.length > 0 ? label : pluginId;
 }
 
 function compactTabLabel(label: string): string {
@@ -116,10 +126,12 @@ function aggregateSpecsIntoGroups(
       const specId = spec.id ?? `${entry.pluginId}-${counter++}`;
       const groupKey = spec.group ?? `${entry.pluginId}::${specId}`;
 
+      const subShort = resolveI18n(spec.shortLabel, locale) || undefined;
       const sub: SubPanel = {
         id: specId,
         pluginId: entry.pluginId,
         label: resolveI18n(spec.label, locale),
+        shortLabel: subShort,
         icon: spec.icon ?? "layout",
         spec: spec as unknown as Record<string, unknown>,
       };
@@ -146,6 +158,7 @@ function aggregateSpecsIntoGroups(
         groupMap.set(groupKey, {
           id: groupKey,
           label: resolveI18n(spec.groupLabel, locale) || sub.label,
+          shortLabel: subShort,
           icon: sub.icon,
           order: spec.groupOrder ?? 500,
           subPanels: [sub],
@@ -222,6 +235,7 @@ export function RightPanel({
         id: `plugin-${group.id}`,
         value: `plugin-${group.id}`,
         label: group.label,
+        shortLabel: group.shortLabel,
         icon: resolvePluginIcon(group.icon),
       })),
     ],
@@ -298,7 +312,7 @@ export function RightPanel({
                   <span className="flex h-full w-full flex-col items-center justify-center gap-0.5 overflow-hidden px-1">
                     <ItemIcon className="w-4 h-4 shrink-0" />
                     <span className="block w-full max-w-full truncate text-center text-[9px] leading-none whitespace-nowrap">
-                      {compactTabLabel(item.label)}
+                      {item.shortLabel ?? compactTabLabel(item.label)}
                     </span>
                   </span>
                 </TabsTrigger>
@@ -393,7 +407,7 @@ export function RightPanel({
                           }`}
                           title={p.pluginId}
                         >
-                          {shortPluginId(p.pluginId)}
+                          {compactTabLabel(pluginShortLabel(p.pluginId, sessionState.sessionPlugins, i18n.language))}
                         </button>
                       );
                     })}

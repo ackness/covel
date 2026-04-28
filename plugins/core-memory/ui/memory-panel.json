@@ -1,6 +1,7 @@
 {
   "id": "memory",
   "label": { "zh": "核心记忆", "en": "Core Memory" },
+  "shortLabel": { "zh": "记忆", "en": "Memory" },
   "icon": "brain",
   "groupOrder": 800,
   "dataSource": { "namespace": "blocks" },

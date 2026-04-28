@@ -121,10 +121,32 @@ ui:
 - `group` — 同 group 的面板合并为一个外层 Tab
 - `groupLabel` — 合并后外层 Tab 的显示名（可选，省略时用第一个 spec 的 `label`）
 - `label` — 面板自身名（在子 Tab 上显示）
+- `shortLabel` — activity-bar 垂直 Tab 条上的短标签（可选，见下方「activity-bar 短标签」章节）
 - `icon` — Lucide 图标名（kebab-case）
 - `dataSource.namespace` — 从 `pluginData[pluginId][namespace]` 读取数据
 - `emptyState.message` — 数据为空时显示的提示文字（见下方"空状态渲染"章节）
 - `view` — json-render nested spec，使用框架 catalog 中的组件
+
+### activity-bar 短标签
+
+activity-bar（右侧垂直 Tab 条）每个 Tab 只能显示极窄的文字。框架默认对 `groupLabel`（或 `label`）做机械截断：
+
+- 中文 ≥2 个汉字 → 取**前两个汉字**（"核心记忆" → "核心"）
+- 多个英文词 → 每个词首字母大写、最多 3 个（"Core Memory" → "CM"）
+- 否则 → 取前 4 个字符
+
+当截断结果识别力弱（前缀通用、与其他 Tab 撞名）时，在 spec 顶层声明 `shortLabel` 显式覆盖：
+
+```json
+{
+  "label":      { "zh": "核心记忆", "en": "Core Memory" },
+  "shortLabel": { "zh": "记忆",     "en": "Memory" }
+}
+```
+
+合并规则与 `groupLabel` 一致——同 `group` 内首个声明者赢；为 robustness 建议同 group 的所有 spec 都重复声明同一 `shortLabel`，避免依赖加载顺序。
+
+实现位置：`apps/web/src/components/session/right-panel.tsx` 的 `compactTabLabel()` 与 `aggregateSpecsIntoGroups()`。
 
 ### 空状态渲染
 
@@ -153,7 +175,7 @@ ui:
 
 ### 插件 UI 文本 I18nText 规范
 
-**所有**面向用户的 UI 字符串（`label` / `groupLabel` / `emptyState.message` / `searchPlaceholder` / `emptyMessage` / `footer` 以及 json-render spec 内 `Text/Button/Badge/FormField/Alert/...` 的 `content` / `label` / `placeholder` / `title` / `message`）必须使用 `I18nText` 对象：
+**所有**面向用户的 UI 字符串（`label` / `groupLabel` / `shortLabel` / `emptyState.message` / `searchPlaceholder` / `emptyMessage` / `footer` 以及 json-render spec 内 `Text/Button/Badge/FormField/Alert/...` 的 `content` / `label` / `placeholder` / `title` / `message`）必须使用 `I18nText` 对象：
 
 ```ts
 type I18nText = string | Record<LocaleTag, string>;
@@ -219,7 +241,7 @@ type I18nText = string | Record<LocaleTag, string>;
 |------|------|
 | 相同 `group` | 合并为一个外层 Tab（横向子 Tab 切换） |
 | 不同 `group` 或省略 | 独立外层 Tab（兜底 key 为 `${pluginId}::${specId}`） |
-| `groupLabel` / `icon` / `groupOrder` | 冲突时"**首个声明者赢**"，按 `/api/ui-specs` 返回顺序（插件加载顺序） |
+| `groupLabel` / `shortLabel` / `icon` / `groupOrder` | 冲突时"**首个声明者赢**"，按 `/api/ui-specs` 返回顺序（插件加载顺序） |
 | `groupOrder` | 外层 Tab 在 activity bar 中的排序（数字小的排前，默认 500） |
 
 **命名空间约定**：跨插件 group key 与 CSS class name 同理 —— 作者自觉使用命名空间前缀（`core.character`、`myorg.combat`）避免冲突，框架不做 magic 前缀。

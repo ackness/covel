@@ -1443,6 +1443,7 @@ export async function getPluginData(
 export interface UISlotSpec {
   id?: string;
   label: unknown;
+  shortLabel?: unknown;
   icon?: string;
   group?: string;
   groupLabel?: unknown;

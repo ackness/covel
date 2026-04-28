@@ -2,6 +2,7 @@
   "id": "codex",
   "group": "codex",
   "label": { "zh": "知识图鉴", "en": "Codex" },
+  "shortLabel": { "zh": "图鉴", "en": "Codex" },
   "icon": "book-open",
   "groupOrder": 700,
   "dataSource": { "namespace": "entries" },

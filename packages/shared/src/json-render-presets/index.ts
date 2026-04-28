@@ -15,6 +15,15 @@ export interface JsonRenderPanelPreset {
   readonly groupLabel?: I18nText;
   readonly groupOrder?: number;
   readonly label: I18nText;
+  /**
+   * Optional short label for the right-rail vertical tab strip.
+   * When provided, it is used verbatim; otherwise the framework
+   * compacts `label` (first two CJK chars / multi-word initials).
+   * Author this when the auto-truncation produces a weak token
+   * (e.g. "核心记忆" → "核心" loses the discriminating word; supply
+   * `shortLabel: { zh: "记忆", en: "Mem" }` instead).
+   */
+  readonly shortLabel?: I18nText;
   readonly icon?: string;
   readonly dataSource: {
     readonly namespace: string;

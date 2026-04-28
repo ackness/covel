@@ -2,6 +2,7 @@
   "id": "world-schema",
   "group": "world-data",
   "groupLabel": { "zh": "世界维度", "en": "World Data" },
+  "shortLabel": { "zh": "维度", "en": "World" },
   "label": { "zh": "属性", "en": "Schema" },
   "icon": "sliders-horizontal",
   "dataSource": { "namespace": "schema" },
