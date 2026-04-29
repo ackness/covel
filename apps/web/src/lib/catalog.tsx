@@ -27,6 +27,7 @@ import { useCharacterAttributeSchema } from "@/stores/plugin-data-store.js";
 import { WorldDimensionsPanel } from "@/components/session/world-dimensions-panel.js";
 import { ImageGalleryPanel, ImageJobsPanel } from "@/components/session/image-plugin-panels.js";
 import { Media as MediaComponent } from "@/components/Media.js";
+import { AudioPlayer as AudioPlayerComponent } from "@/components/AudioPlayer.js";
 import {
   AssetRender as AssetRenderComponent,
   AssetTurnSidebar as AssetTurnSidebarComponent,
@@ -1775,6 +1776,54 @@ const MediaCatalogComponent: ComponentRenderer = ({ element }) => {
   );
 };
 
+/**
+ * `AudioPlayer` registry entry — theme-aware self-drawn audio player for
+ * plugin specs. Replaces native `<audio controls>` chrome (which never
+ * inherits theme tokens) with a flat playlist row. Plugin specs use:
+ *   `{ "component": "AudioPlayer", "props": { "ref": <MediaRef>, "alt": "…" } }`
+ *
+ * Falls back to a compact "audio unavailable" tile when the bound MediaRef
+ * is missing — so a row in the audio Tab whose `ref` hasn't been written
+ * yet renders harmlessly instead of an oversized empty block.
+ */
+const AudioPlayerCatalogComponent: ComponentRenderer = ({ element }) => {
+  const sessionId = useActiveSessionId();
+  const props = element.props ?? {};
+  const ref = extractMediaRef(props);
+  const alt = (props.alt as string | undefined) ?? "";
+  const downloadName = (props.downloadName as string | undefined) ?? undefined;
+  const className = (props.className as string | undefined) ?? undefined;
+
+  const overrideSession =
+    typeof props.sessionId === "string" && props.sessionId.length > 0
+      ? (props.sessionId as string)
+      : sessionId;
+
+  if (!ref) {
+    return (
+      <div
+        className="flex items-center gap-2 px-3 py-2 border border-border rounded-[var(--radius-card)] bg-muted/40 w-full"
+        role="status"
+        aria-label={alt ? `${alt} unavailable` : "audio unavailable"}
+      >
+        <span className="text-xs font-mono text-muted-foreground">
+          audio unavailable
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <AudioPlayerComponent
+      src={ref}
+      sessionId={overrideSession}
+      alt={alt}
+      downloadName={downloadName}
+      className={className}
+    />
+  );
+};
+
 /** Source — subtle source attribution label. */
 const ImageGallery: ComponentRenderer = ({ element }) => {
   const pluginId = element.props?.pluginId as string | undefined;
@@ -1900,6 +1949,7 @@ export const covelRegistry: Record<string, ComponentRenderer> = {
   Source,
   Image: ImageComponent,
   Media: MediaCatalogComponent,
+  AudioPlayer: AudioPlayerCatalogComponent,
   ImageGallery,
   ImageJobs,
   // Data

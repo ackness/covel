@@ -101,6 +101,7 @@ I18nText 字段（`label` / `content` / `placeholder` / `title` / `message`）�
 | `Source` | 出处小标签 | `label`: string |
 | `Image` | 图片，从 MediaRef 解析 | `ref`: MediaRef, `alt`, `aspectRatio` (default `1/1`), `rounded`: `none`/`sm`/`md`/`lg`, `fit`: `cover`/`contain` |
 | `Media` | **通用多媒体**——按 mime 自动渲染图/音/视频/下载链接 | `ref`: MediaRef, `as`: `auto`/`image`/`audio`/`video`, `alt`, `aspectRatio`, `rounded`, `fit` |
+| `AudioPlayer` | **音频专用**——theme 适配自绘播放器：play/pause、可拖动进度条、时间显示、速度选择 (0.75–2×)、下载按钮。优先用它而不是 `Media as="audio"`，因为后者是浏览器原生 chrome 不读 theme | `ref`: MediaRef, `alt`: string (也用作 download filename 的 stem), `downloadName`: string, `className` |
 | `ImageGallery` | 框架自带画廊（专门给图像生成插件用） | `pluginId`: string |
 | `ImageJobs` | 框架自带 jobs 视图（async 任务进度） | `pluginId`: string |
 
@@ -209,7 +210,10 @@ I18nText 字段（`label` / `content` / `placeholder` / `title` / `message`）�
 { "component": "Media", "props": { "ref": { "$item": "value/ref" }, "as": "auto" } }
 ```
 
-> **⚠️ 已知限制**：`Media`/`Image` 都**没有** `autoPlay` / `controls`(默认就有) / playback-speed prop——浏览器原生 `<audio controls>` 已自带播放/暂停/拖动时间轴，右键可以调速，overflow 菜单可下载。要做"narrator 完成自动播放"目前还需要前端 framework 改进；插件可以把 `autoPlay: true` 写进 plugin-data，等 prop 落地。
+> **⚠️ 音频场景注意**：
+> 1. **优先用 `AudioPlayer`，不要 `Media as="audio"`**：`Media` 渲染的是浏览器原生 `<audio controls>`，chrome 由浏览器画，dark mode 下灰药丸不跟 theme。`AudioPlayer` 是 framework 的自绘播放器，进度条/按钮/时间用 theme tokens 上色。
+> 2. **没有 autoPlay prop**：浏览器静默 autoplay 默认被拦，未来要加自动播放需要 framework 加 user-gesture 触发 + prop。插件可以把 `autoPlay: true` 写进 plugin-data，等 prop 落地。
+> 3. **ref 为空时降级**：`AudioPlayer` 在 ref 缺失或解析失败时显示紧凑 "audio unavailable" 占位，**不会**撑出大空框。但最佳实践仍是 handler **pending 阶段不写 plugin-data**，让 Tab 只展示 done/failed entry；pending 进度通过 `ctx.logger` / SSE trace 暴露。
 
 ## 完整 spec 样例
 

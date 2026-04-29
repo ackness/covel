@@ -61,6 +61,29 @@ vi.mock("@/components/Media.js", () => ({
     />
   ),
 }));
+// AssetAudio now routes through AudioPlayer (theme-aware) rather than
+// `<Media as="audio">`. Mirror the stub shape so existing assertions on
+// `data-testid="media-stub"` keep working.
+vi.mock("@/components/AudioPlayer.js", () => ({
+  AudioPlayer: ({
+    src,
+    sessionId,
+    alt,
+  }: {
+    src: { id?: string; mime?: string };
+    sessionId: string;
+    alt?: string;
+  }) => (
+    <div
+      data-testid="media-stub"
+      data-as="audio"
+      data-session-id={sessionId}
+      data-alt={alt}
+      data-mime={src?.mime ?? ""}
+      data-id={src?.id ?? ""}
+    />
+  ),
+}));
 
 import { AssetTurnSidebar } from "../AssetTurnSidebar.js";
 

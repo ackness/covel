@@ -17,9 +17,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import type { AssetGenerateView } from "@covel/shared";
 
-// Stub `<Media>` before importing the asset-render bundle — `vi.mock` is
-// hoisted to the top of the file by vitest, so the stub is in place by the
-// time `AssetRender` resolves its imports.
+// Stub `<Media>` and `<AudioPlayer>` before importing the asset-render
+// bundle — `vi.mock` is hoisted to the top of the file by vitest, so the
+// stubs are in place by the time `AssetRender` resolves its imports.
+//
+// AssetAudio routes through `<AudioPlayer>` (theme-aware self-drawn
+// player); the other modalities still route through `<Media>`.  Both
+// stubs expose the same `data-testid="media-stub"` shape so the routing
+// assertions below stay focused on `data-as` / mime instead of which
+// concrete component was picked.
 vi.mock("@/components/Media.js", () => ({
   Media: ({
     src,
@@ -35,6 +41,26 @@ vi.mock("@/components/Media.js", () => ({
     <div
       data-testid="media-stub"
       data-as={as}
+      data-session-id={sessionId}
+      data-alt={alt}
+      data-mime={src?.mime ?? ""}
+      data-id={src?.id ?? ""}
+    />
+  ),
+}));
+vi.mock("@/components/AudioPlayer.js", () => ({
+  AudioPlayer: ({
+    src,
+    sessionId,
+    alt,
+  }: {
+    src: { id?: string; mime?: string };
+    sessionId: string;
+    alt?: string;
+  }) => (
+    <div
+      data-testid="media-stub"
+      data-as="audio"
       data-session-id={sessionId}
       data-alt={alt}
       data-mime={src?.mime ?? ""}

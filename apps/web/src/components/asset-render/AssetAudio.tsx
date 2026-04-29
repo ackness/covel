@@ -2,15 +2,16 @@
  * `<AssetAudio>` — default renderer for `asset.generate{ modality: 'audio' }`.
  *
  * Mirrors `<AssetImage>` for the audio modality: a small caption strip above
- * the native `<audio controls>` element. `<Media as="audio">` handles
- * blob-cache + signed-URL resolution for us.
+ * a theme-aware `<AudioPlayer>` (replaces the previous native
+ * `<audio controls>` chrome which never inherited theme tokens).
+ * `<AudioPlayer>` handles MediaRef resolution + blob-cache for us.
  *
  * SPEC §5.7 — modality routing default for `'audio'`.
  */
 
 import type { ReactElement } from "react";
 import type { AssetGenerateView } from "@covel/shared";
-import { Media } from "@/components/Media.js";
+import { AudioPlayer } from "@/components/AudioPlayer.js";
 
 export interface AssetAudioProps {
   readonly view: AssetGenerateView;
@@ -34,11 +35,10 @@ export function AssetAudio({ view, sessionId }: AssetAudioProps): ReactElement {
         <span className="text-foreground/80">{title}</span>
         {subtitle ? <span className="opacity-60">· {subtitle}</span> : null}
       </figcaption>
-      <Media
+      <AudioPlayer
         src={view.ref}
         sessionId={sessionId}
         alt={prompt ?? `${view.modality} asset`}
-        as="audio"
       />
     </figure>
   );
