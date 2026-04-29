@@ -70,14 +70,16 @@ Apply config changes
 说明文案：
 
 ```text
-重启本地 Electron 后端并刷新界面。编辑 llm.toml、keys.env、config.toml 或安装插件后请点击此按钮。
+重启本地 Electron 后端并刷新界面。编辑 llm.toml、keys.env，或安装 / 修改插件后请点击此按钮。
 ```
 
 英文：
 
 ```text
-Restart the local Electron backend and refresh the app. Use this after editing llm.toml, keys.env, config.toml, or installing plugins.
+Restart the local Electron backend and refresh the app. Use this after editing llm.toml, keys.env, or installing / modifying plugins.
 ```
+
+`config.toml:data_root` 属于路径拓扑变更，通常仍应提示重启整个应用，而不是只重启 sidecar。
 
 ## 预期行为
 
@@ -89,11 +91,12 @@ Restart the local Electron backend and refresh the app. Use this after editing l
 4. Electron main 停止当前 server sidecar。
 5. Electron main 重新执行 `startServer(paths)`。
 6. sidecar 重新读取：
-   - `.env` / `.env.llm`（dev）
+   - `.env` / `.env.llm`（dev，来自 Electron main 本次 `startServer()` 前的 `loadEnvFiles(projectRoot)`）
    - `~/.covel/keys.env`
    - `~/.covel/llm.toml`
-   - `~/.covel/config.toml` 中的路径配置（由 Electron paths 初始化阶段决定；见注意事项）
-   - `~/.covel/plugins/`
+   - 当前 `paths.pluginsDirs` 指向的插件目录内容（例如 `~/.covel/plugins/`）
+
+   注意：这里的 `paths` 对象是 Electron main 首次启动时 `ensureUserPaths()` 得到的快照；仅重启 sidecar 不会自动重新解析 `config.toml` 中会改变路径拓扑的字段（详见下方 `config.toml:data_root` 注意事项）。
 7. Electron main 等待 `/api/health` 成功。
 8. Renderer 执行 `window.location.reload()`。
 9. 前端 boot 重新拉取 `/api/presets`、`/api/packages`、`/api/llm-config` 等。
@@ -351,15 +354,29 @@ canReloadBackend()
 
 ### `config.toml:data_root`
 
-`data_root` 是 Electron main 在启动阶段解析的路径。当前“一键重载”重启的是 sidecar server，不一定重新执行 Electron main 的完整 `ensureUserPaths()` 初始化逻辑。
+`data_root` 是 Electron main 在启动阶段解析的路径。当前“一键重载”重启的是 sidecar server，`covel:restart-server` handler 继续使用闭包中已有的 `paths` 对象调用 `startServer(paths)`，不会重新执行完整 `ensureUserPaths()`。
 
 因此：
 
-- 如果用户通过现有 UI `pickDataDir()` 修改 data_root，该路径由 Electron main 写入 `config.toml`，当前代码提示“Restart the app to apply”。
-- 若只重启 sidecar 而不重启 Electron main，是否能完整应用新的 `data_root` 取决于 `paths` 对象是否重新计算。
-- 本方案建议文案中保守表达：编辑 `config.toml` 后点击可重启后端，但 `data_root` 这类路径变更必要时仍提示重启应用。
+- 如果用户通过现有 UI `pickDataDir()` 修改 data_root，该路径由 Electron main 写入 `config.toml`，当前代码提示“Restart the app to apply”。这个提示是正确的。
+- 仅重启 sidecar 可以重新读取 `llm.toml`、`keys.env`、以及既有插件目录下的插件文件；但不能可靠应用新的 `data_root`、DB 路径、logs 路径、worlds 目录等路径拓扑变更。
+- 文案不应承诺“编辑 config.toml 后点击即可完全生效”。应将 `data_root` 归类为“需要重启整个应用”。
 
-如果要让 data_root 也通过“一键重载”可靠生效，需要单独改 Electron main，使 `covel:restart-server` 在重启前重新执行 `ensureUserPaths()` 并更新 IPC info 中的 paths。这不属于本阶段最小改动。
+如果要让 data_root 也通过“一键重载”可靠生效，需要单独改 Electron main，使 `covel:restart-server` 在重启前重新执行 `ensureUserPaths()`、更新 IPC info 中的 paths，并确保旧 sidecar 完全退出后再启动新 sidecar。这不属于本阶段最小改动。
+
+### sidecar 重启竞态
+
+当前 Electron main 的 `covel:restart-server` 流程是：
+
+```ts
+stopServer();
+restartAttempts = 0;
+await startServer(paths);
+```
+
+`stopServer()` 会发送 `SIGTERM` 并立即把 `serverProcess = null`，但不会等待旧进程真正退出。通常新 sidecar 会使用新的空闲端口，所以端口冲突风险较低；但旧进程可能还短暂持有 SQLite / 文件句柄。
+
+MVP 可以接受该现状；如果后续发现“一键重载”偶发 SQLite lock 或启动失败，应把 `stopServer()` 改成可 await 的 graceful shutdown：等待旧进程 exit，超时后再 `SIGKILL`，然后再调用 `startServer()`。
 
 ### Tauri 暂不处理
 
