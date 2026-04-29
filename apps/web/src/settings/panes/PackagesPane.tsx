@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Package, Upload, Globe, Puzzle, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
-import { isDesktopApp, reloadServerAndWait } from "@/lib/desktop-bridge.js";
+import { hasElectronIpc, reloadServerAndWait } from "@/lib/desktop-bridge.js";
 
 type InstallKind = "plugin" | "world";
 
@@ -115,7 +115,7 @@ export function PackagesPane() {
       {lastResult?.restartRequired && (
         <div className="flex items-start gap-3 text-xs px-3 py-2.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300">
           <div className="flex-1">{t("settings.packages.restartHint")}</div>
-          {isDesktopApp() && (
+          {hasElectronIpc() && (
             <Button
               size="sm"
               variant="outline"

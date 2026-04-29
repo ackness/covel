@@ -82,12 +82,16 @@ export function DesktopPane() {
   }
 
   async function handleRestart() {
+    if (!hasElectronIpc()) {
+      setToast(t("settings.desktopRestartElectronOnly"));
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
     setBusy("restart");
     try {
-      const ok = await reloadServerAndWait({
+      await reloadServerAndWait({
         message: t("reload.reloadingServer", "Restarting backend…"),
       });
-      if (!ok) setToast(t("settings.desktopRestartWebHint"));
     } catch (err) {
       setToast(err instanceof Error ? err.message : "Restart failed");
       setBusy(null);
@@ -259,19 +263,21 @@ export function DesktopPane() {
           {t("settings.desktopRestartHint")}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleRestart}
-            disabled={busy !== null}
-          >
-            {busy === "restart" ? (
-              <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
-            ) : (
-              <RotateCw className="w-3 h-3 mr-1.5" />
-            )}
-            {t("settings.desktopRestart")}
-          </Button>
+          {hasElectronIpc() && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleRestart}
+              disabled={busy !== null}
+            >
+              {busy === "restart" ? (
+                <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+              ) : (
+                <RotateCw className="w-3 h-3 mr-1.5" />
+              )}
+              {t("settings.desktopApplyConfigChanges")}
+            </Button>
+          )}
           <Button
             size="sm"
             variant="outline"
