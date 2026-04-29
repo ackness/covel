@@ -400,6 +400,79 @@ tag = "image"
 
 ---
 
+## mimo-tts（自动 + 手动 + 多媒体音频范式）
+
+跟 dashscope-image-gen 同形态，但产出 audio 而不是 image，并演示「auto-trigger 接 narrator」+ 「ui.message 内嵌按钮」+ 「provider 用自定义 header」三个新点。完整代码：`~/.covel/plugins/mimo-tts/`。
+
+### 目录
+
+```
+~/.covel/plugins/mimo-tts/
+├── package.json
+├── PLUGIN.md                          # 包级摘要(name/description/pluginType)
+├── README.md
+├── lib/
+│   └── mimo-tts.js                    # 共享 wire(api-key 头 + base64 解码) + persistTrack
+├── runtimes/
+│   ├── auto-narrate/
+│   │   ├── PLUGIN.md                  # function · auto · upstreamRequired:[narrator] · priority 700
+│   │   ├── handler.js
+│   │   └── ui/audio-tab.json          # 右侧 Tab,Media as=audio,纯原生控件
+│   └── manual-narrate/
+│       ├── PLUGIN.md                  # function · manual · execution: background · priority 750
+│       ├── handler.js
+│       └── ui/play-button.json        # ui.message 嵌入消息流(像「插入图像」)
+└── tests/                             # vitest L2,mock fetch + ctx.media
+    ├── mimo-tts-wire.test.js
+    └── handlers.test.js
+```
+
+### 关键决策点
+
+1. **自动 + 手动 = 两个 runtime 共享 lib**。auto runtime `trigger.type: auto` + `upstreamRequired:[narrator]` + `priority: 700` 让它跑在 narrator 之后；manual runtime `trigger.type: manual` + `execution: background`，按钮点击 → POST /plugin-rpc → 框架立即返回 jobId，handler 后台跑。两边都写到同一个 `tracks` namespace,所以右侧 Tab 是统一时间轴。
+2. **Provider 自管 wire**。MiMo 用 `api-key: <KEY>` 头(不是 `Authorization: Bearer`),且文本要塞在 `messages: [{role: 'assistant', content}]`(违反 OpenAI 习惯)。所以 handler 里直接 `await fetch(slot.baseUrl + '/v1/chat/completions', { headers: { 'api-key': slot.apiKey } ... })`,不调 `gateway.generateText`。`ctx.gateway.resolveSlot({presetId, fallbackTag: 'speech'})` 只用来取配置,**不**触发框架的统一 wire。
+3. **音频字节 → MediaStore**。
+
+   ```js
+   const ref = await ctx.media.put(bytes, mime, { plugin: 'mimo-tts', turnId, ... });
+   return {
+     pluginData: [{ namespace: 'tracks', key: trackId, value: { ref, status: 'done', ... } }],
+     assets:     [{ ref, modality: 'audio', meta: { turnId, model, voice, ... } }],
+   };
+   ```
+
+   `assets[]` 让框架 emit `asset.generate` proposal,trace + SSE + render 链路自动广播。
+4. **UI 渲染靠 `<Media as="audio">`**。json-render spec:
+
+   ```json
+   {
+     "component": "Media",
+     "props": {
+       "ref": { "$item": "value/ref" },
+       "as": "audio",
+       "alt": { "$item": "value/text" }
+     }
+   }
+   ```
+
+   浏览器原生 `<audio controls>` 就给了播放/暂停/时间轴拖动;overflow 菜单可下载,右键改速度。autoplay / 速度按钮 / 流式播放都是后续路线图(README 已写明)。
+5. **按钮放消息流**。manual runtime 的 `ui.message: [./ui/play-button.json]` 把按钮渲染到剧情泡里,跟「插入图像」交互一致;auto runtime 的 `ui.right: [./ui/audio-tab.json]` 把全部音轨列表放右侧 Tab。
+
+### Slot 配置（用户侧）
+
+```toml
+[covel.tts]
+provider = "mimo"
+baseUrl  = "https://api.xiaomimimo.com"
+apiKey   = "${env:MIMO_API_KEY}"
+model    = "mimo-v2.5-tts"
+tag      = "speech"
+```
+
+`MIMO_API_KEY` 写到 `~/.covel/keys.env`(desktop)或 localStorage(web)。`tag: speech` 让任何后续未配置的 speech slot 自动 fallback 到这里。
+
+---
+
 ## 现有插件一览（截至 v0.0.1）
 
 来源:`plugins/**/PLUGIN.md` 真实 frontmatter。priority 数字若与本表对不上,以仓库实际为准。
@@ -416,5 +489,7 @@ tag = "image"
 | npc-graph/extractor | 600 | auto | agent | NPC 关系抽取 |
 | char-creator/character-tracker | 600 | auto | agent | 角色状态跟踪 |
 | memory | — | UI only | UI | 仅前端面板 |
-| dashscope-image-gen/prompt-generator | 600 | manual | agent | 手动触发 prompt 生成(未在仓库内,样例) |
-| dashscope-image-gen/image-generator | 610 | event | function (background) | 调 DashScope wan2.x 生图(未在仓库内,样例) |
+| dashscope-image-gen/prompt-generator | 600 | manual | agent | 手动触发 prompt 生成(`~/.covel/plugins/`,样例) |
+| dashscope-image-gen/image-generator | 610 | event | function (background) | 调 DashScope wan2.x 生图(`~/.covel/plugins/`,样例) |
+| mimo-tts/auto-narrate | 700 | auto + upstream:[narrator] | function | narrator 后自动 TTS,写 tracks namespace(`~/.covel/plugins/`,样例) |
+| mimo-tts/manual-narrate | 750 | manual | function (background) | 手动「朗读」按钮,ui.message 嵌入消息流(`~/.covel/plugins/`,样例) |

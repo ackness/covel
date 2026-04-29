@@ -279,7 +279,7 @@ Each SQL backend splits into two files by convention:
 
 ## Security & Operations
 
-- **SSRF guard**: `validateBaseUrl()` in `ai-provider/adapters/http.ts` whitelists known providers + localhost + `COVEL_ALLOWED_LLM_HOSTS`, blocks RFC1918 / metadata IPs.
+- **SSRF guard**: `validateBaseUrl()` in `ai-provider/adapters/http.ts` is **open by default** — any public https host is allowed. Blocks: RFC1918 / link-local IPs (`10.x` / `172.16-31.x` / `192.168.x` / `169.254.x` / `fc00::` / `fe80::`), cloud metadata hostnames (`metadata.google.internal`, `metadata.internal`), non-https on remote hosts, non-http(s) protocols. Loopback (`localhost` / `127.0.0.1` / `::1`) bypasses the https requirement for Ollama-style local dev. `COVEL_ALLOWED_LLM_HOSTS` appears in env-registry as `status: 'documented'` but **is not read** by the guard — third-party plugin authors targeting custom provider hosts do not need any env shim.
 - **Session IDs**: `{worldId}-{uuid8}` via `crypto.randomUUID()` — enumeration-resistant.
 - **worldId**: `/^[a-z0-9_-]{1,64}$/i` regex whitelist.
 - **Rate limiting**: `middleware/rate-limit.ts` (`rateLimiter()`, `singleFlight()`).

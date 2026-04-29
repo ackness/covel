@@ -8,21 +8,34 @@ user_invocable: true
 
 根据用户需求，直接生成完整的插件文件并写入目标目录（默认 `plugins/`，用户指定第三方插件时写 `~/.covel/plugins/`）。
 
-## 核心事实（不用读框架代码）
+## 文档承诺：写插件不用读框架源码
+
+`references/` 下的 4 份合约文档**承诺**覆盖第三方插件作者的所有需求：
+
+- [`runtime-context.md`](references/runtime-context.md) — `ctx` 全字段（gateway/media/utils/pluginData/logger 等）+ handler 返回值 normalizeOutput 契约
+- [`llm-toml-slots.md`](references/llm-toml-slots.md) — slot schema 全字段、所有枚举值、`tag` 自动推断踩雷点、apiKey 解析规则、SSRF 真相
+- [`ui-components-quickref.md`](references/ui-components-quickref.md) — 36 个 UI 组件 + 全部 props + binding 语法（`$item` / `$state` / `repeat`）+ 5 个 `on.click.action`
+- [`provider-quirks.md`](references/provider-quirks.md) — 自管 wire 决策树、鉴权头差异表、body 形态差异表、响应解析差异表
+
+如果按上面 4 份文档生成的插件还需要去翻 `packages/`，那就是 skill 的 bug——**记下来再来修 skill**。
+
+## 核心事实
 
 - **插件 = 一组 Runtime**。每个 runtime 是一个独立调度单元，有自己的 `PLUGIN.md`（frontmatter + Markdown）。
   - 单 runtime：根目录只放一个 `PLUGIN.md`。
   - 多 runtime：把每个 runtime 放到 `runtimes/<sub>/PLUGIN.md`。框架自动扫描。**强烈建议**额外在根目录放一份**摘要级** `PLUGIN.md`（仅含 `name` / `description` / `pluginType`，**不**作为 runtime），框架用它做包级 displayName 和简介。**没有**根 PLUGIN.md 时 UI 会回退显示 plugin id（如 `dashscope-image-gen`），不直观。
 - **Runtime 类型**
   - `agent`（默认）：LLM 驱动，正文就是 system prompt。支持 `model` slot。
-  - `function`：纯 JS handler，不跑 LLM，由 `handler: ./handler.js` 指向入口。可访问 `ctx.gateway` 调 LLM/图像。
-- **触发**：`auto`（每轮）/ `manual`（仅 `POST /plugin-rpc`）/ `scheduled` / `event` / `conditional` / `error-retry`。
-- **手动触发按钮**：UI JSON 里设 `on.click.action: "invokeRuntime"` + `params.runtimeId`，框架默认 handler 会自动 POST `/plugin-rpc`，插件**不需要**写 React 代码。
+  - `function`：纯 JS handler，不跑 LLM，由 `handler: ./handler.js` 指向入口。可访问 `ctx`（详见 [`runtime-context.md`](references/runtime-context.md)）。
+- **触发**：`auto`（每轮）/ `manual`（仅 `POST /plugin-rpc`）/ `scheduled` / `event` / `error-retry`。
+- **手动触发按钮**：UI JSON 里设 `on.click.action: "invokeRuntime"` + `params.runtimeId`，框架默认 handler 会自动 POST `/plugin-rpc`，插件**不需要**写 React 代码。所有 `on.click.action` 见 [`ui-components-quickref.md`](references/ui-components-quickref.md)。
 - **同步 / 后台执行**（仅手动触发）：`execution: sync`（默认，阻塞 turn）/ `background`（202 + `jobId`，框架在 `_jobs/<jobId>` 写状态，前端通过 `plugin-data.changed` SSE 感知）。
-  - 插件**禁止**主动写 `_jobs/*`，框架会覆盖。
-- **事件链**：agent runtime 在返回里带 `output.events: [{topic, data}]`，下游 `trigger: {type: event, topic}` runtime 在同 turn 被拉起。
-- **存储**：runtime 返回里带 `pluginData: [{namespace, key, value}, ...]`，框架自动转成 `plugin.data` / `plugin.data.batch` Proposal，写到 `plugin_data` 表 `(sessionId, pluginId, namespace, key)`。namespace 以 `_` 开头（如 `_jobs`）是框架保留。
-- **UI**：`ui: { right | message | left: [./ui/xxx.json] }` 指向 json-render spec。`dataSource.namespace` 让 spec 自动从本插件的 plugin-data 读数据。
+  - 插件**禁止**主动写 `_jobs/*` / `_logs/*`，框架会覆盖。
+- **事件链**：runtime 在返回里带 `events: [{topic, data}]`，下游 `trigger: {type: event, topic}` runtime 在同 turn 被拉起。
+- **存储**：runtime 返回里带 `pluginData: [{namespace, key, value}, ...]`，框架自动转成 `plugin.data` / `plugin.data.batch` Proposal，写到 `plugin_data` 表 `(sessionId, pluginId, namespace, key)`。也可以用 `ctx.pluginData.set(...)` 立即落库（前端立刻通过 SSE 看到），适合 placeholder。
+- **多媒体（图像 / 音频 / 视频 / 文件）**：用 `ctx.media`（不是 `pluginData` 直接塞 bytes）。`ctx.media.put(bytes, mime, meta) → MediaRef`；`ctx.media.ingestUrl(url, {allowedMimes})` 从 URL 拉取到 MediaStore。把 ref 写进 `pluginData.value.ref`，并在 runtime output 返回 `assets: [{ref, modality, meta}]` 让框架 emit `asset.generate` proposal。前端用 `<Media as="auto" ref={…}>` 渲染（自动按 mime 选 `<img>/<audio>/<video>/<a>` 控件）。完整契约见 [`runtime-context.md`](references/runtime-context.md) §`ctx.media`。
+- **UI**：`ui: { right | message | left: [./ui/xxx.json] }` 指向 json-render spec。`dataSource.namespace` 让 spec 自动从本插件的 plugin-data 读数据。所有组件 + binding 见 [`ui-components-quickref.md`](references/ui-components-quickref.md)。
+- **Gateway 不暴露的能力**：`ctx.gateway` 只有 `generateText` / `generateObject` / `resolveSlot`——**没有** `generateImage` / `generateAudio` / `embed` / `streamText`。图像 / 音频 / 视频 / embed / 转录一律 `resolveSlot` + 自管 wire，详见 [`provider-quirks.md`](references/provider-quirks.md)。
 
 ## 流程
 
@@ -230,13 +243,53 @@ trigger:
 upstreamRequired: [narrator]   # 上游本 turn 非 success → 本 runtime 直接 skipped
 ```
 
-## References
+### 多媒体 / 音频 / 视频（mimo-tts、dashscope-image-gen 范式）
 
-- `references/plugin-schema.md` — 全量 frontmatter schema（strict）
-- `references/example-plugins.md` — 现有插件 + 多 runtime / 手动 / 后台 / 图像 综合样例
-- `references/tool-factory.md` — 自定义本地工具的工厂模式
-- `references/plugin-testing.md` — 4 层测试指引（schema / 单元 / harness 集成 / 真实 LLM E2E），含 vitest + MockLLM + createTestHarness 模板
+任何"生成内容并要播放/展示"的插件流程：
 
-**当用户需求超过基础 auto-trigger agent 插件（例如手动按钮、多 runtime、后台任务、function runtime、图像生成、复杂 UI）时，一定要先读 `references/example-plugins.md` 的 dashscope-image-gen 小节再动手。**
+1. **拿字节** — `ctx.gateway.resolveSlot({presetId, fallbackTag})` 取 `baseUrl/apiKey/model`，自己 `fetch` 拿到原始字节。短链 URL 用 `ctx.media.ingestUrl(url, {allowedMimes})`。
+2. **存进 MediaStore** — `ref = await ctx.media.put(bytes, mime, meta)`。
+3. **发 plugin-data + assets**：
+   ```js
+   return {
+     pluginData: [{ namespace: 'tracks'|'images'|..., key: turnId, value: { ref, status:'done', ... } }],
+     assets:     [{ ref, modality: 'audio'|'image'|'video'|'file', meta: { ... } }],
+   };
+   ```
+4. **UI** — spec 里用 `Media`（自动按 mime 选控件）或 `Image`。
 
-**当插件含本地 JS（`tools/*.js` / `handler.js` / `hooks/*.js`）或多 runtime 协作时，写完后必读 `references/plugin-testing.md`，按决策树补一层测试。**
+完整 ctx + 返回字段契约见 [`runtime-context.md`](references/runtime-context.md) §Handler 返回值。组件 props + binding 语法见 [`ui-components-quickref.md`](references/ui-components-quickref.md)。已知限制（autoPlay / 流式 / 速度按钮）也都在那里。
+
+### Provider 用「自定义 header / 怪 wire」时
+
+如果 provider 不是 `Authorization: Bearer …`（如 MiMo TTS 用 `api-key`，DashScope wan2.x 用 async submit + poll），**插件自管 wire**：用 `ctx.gateway.resolveSlot()` 取 `baseUrl/apiKey/model`，自己 `fetch`，把共享代码放 `<plugin>/lib/*.js`（不在 `runtimes/*` 下避免被当 runtime 扫到，handler 用相对路径 `../../lib/...` import）。
+
+完整决策树 + 鉴权头差异表 + body 形态差异表 + 响应解析差异表 + 失败处理范式见 [`provider-quirks.md`](references/provider-quirks.md)。
+
+## References（按需阅读）
+
+**SDK 级合约（独立于源码）**——任何场景都能查：
+
+- [`runtime-context.md`](references/runtime-context.md) — function handler `ctx` 全字段 + 返回值 normalizeOutput 契约 + cheatsheet
+- [`llm-toml-slots.md`](references/llm-toml-slots.md) — 用户 slot 配置全字段 + 枚举值表 + 4 个常见踩雷点 + apiKey 解析规则 + SSRF 真相
+- [`ui-components-quickref.md`](references/ui-components-quickref.md) — 36 个 json-render 组件 + 全 props + 5 个 `on.click.action` + binding cheatsheet + 完整 spec 样例
+- [`provider-quirks.md`](references/provider-quirks.md) — 自管 wire 决策树 + 鉴权/body/响应差异表 + 排查流程
+
+**Plugin 包级（PLUGIN.md / 工具 / 测试）**：
+
+- [`plugin-schema.md`](references/plugin-schema.md) — `PLUGIN.md` frontmatter 全字段（strict）
+- [`example-plugins.md`](references/example-plugins.md) — 现有插件 + 多 runtime / 手动 / 后台 / 图像 / 音频综合样例
+- [`tool-factory.md`](references/tool-factory.md) — 自定义本地工具的工厂模式
+- [`plugin-testing.md`](references/plugin-testing.md) — 4 层测试指引（schema / 单元 / harness / 真实 LLM）
+
+**何时读哪份**：
+
+| 场景 | 必读 |
+|------|------|
+| 写任何 function runtime handler | runtime-context |
+| 写自管 wire（图像/音频/视频/embedding/非 Bearer 鉴权） | provider-quirks + runtime-context |
+| 写 UI spec（panel / button / form / gallery） | ui-components-quickref |
+| 用户报"slot 配置错"或要写 README 配置块 | llm-toml-slots |
+| 写 `PLUGIN.md` frontmatter | plugin-schema |
+| 写 `tools/*.js` 自定义工具 | tool-factory |
+| 写完后想加测试 | plugin-testing |
