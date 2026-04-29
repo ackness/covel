@@ -13,15 +13,24 @@
 import { mkdtemp, mkdir, access, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import yazl from 'yazl';
 import { installRoutes } from '../../src/routes/api/install.js';
+import { createRequestBodyLimitMiddleware } from '../../src/middleware/request-body-limit.js';
 
 // ── Env override helpers ────────────────────────────────────────
 
 function createTestApp(): Hono {
   const app = new Hono();
+  app.route('/api/install', installRoutes);
+  return app;
+}
+
+function createBodyLimitedTestApp(): Hono {
+  const app = new Hono();
+  app.use('*', createRequestBodyLimitMiddleware());
   app.route('/api/install', installRoutes);
   return app;
 }
@@ -150,6 +159,9 @@ let prevPluginsDir: string | undefined;
 let prevWorldsDir: string | undefined;
 let prevUserPluginsDir: string | undefined;
 let prevUserWorldsDir: string | undefined;
+let prevDesktopRestToken: string | undefined;
+let prevInstallApiEnabled: string | undefined;
+let prevNodeEnv: string | undefined;
 
 beforeEach(async () => {
   tempRoot = await mkdtemp(path.join(tmpdir(), 'covel-install-'));
@@ -162,6 +174,9 @@ beforeEach(async () => {
   prevWorldsDir = process.env.COVEL_WORLDS_DIR;
   prevUserPluginsDir = process.env.COVEL_USER_PLUGINS_DIR;
   prevUserWorldsDir = process.env.COVEL_USER_WORLDS_DIR;
+  prevDesktopRestToken = process.env.COVEL_DESKTOP_REST_TOKEN;
+  prevInstallApiEnabled = process.env.COVEL_INSTALL_API_ENABLED;
+  prevNodeEnv = process.env.NODE_ENV;
 
   // The install routes prefer userPluginsDir/userWorldsDir; force those via env.
   process.env.COVEL_USER_PLUGINS_DIR = pluginsDir;
@@ -169,6 +184,8 @@ beforeEach(async () => {
   // Clear the non-user-scoped vars so the resolve order is unambiguous.
   delete process.env.COVEL_PLUGINS_DIR;
   delete process.env.COVEL_WORLDS_DIR;
+  delete process.env.COVEL_DESKTOP_REST_TOKEN;
+  delete process.env.COVEL_INSTALL_API_ENABLED;
 });
 
 afterEach(async () => {
@@ -181,11 +198,75 @@ afterEach(async () => {
   else process.env.COVEL_USER_PLUGINS_DIR = prevUserPluginsDir;
   if (prevUserWorldsDir === undefined) delete process.env.COVEL_USER_WORLDS_DIR;
   else process.env.COVEL_USER_WORLDS_DIR = prevUserWorldsDir;
+  if (prevDesktopRestToken === undefined) delete process.env.COVEL_DESKTOP_REST_TOKEN;
+  else process.env.COVEL_DESKTOP_REST_TOKEN = prevDesktopRestToken;
+  if (prevInstallApiEnabled === undefined) delete process.env.COVEL_INSTALL_API_ENABLED;
+  else process.env.COVEL_INSTALL_API_ENABLED = prevInstallApiEnabled;
+  if (prevNodeEnv === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = prevNodeEnv;
 });
 
 // ── Plugin install ──────────────────────────────────────────────
 
 describe('POST /api/install/plugin', () => {
+  it('requires the desktop bearer token when configured', async () => {
+    process.env.COVEL_DESKTOP_REST_TOKEN = 'install-token';
+    const app = createTestApp();
+    const zip = await buildZip({
+      'PLUGIN.md': VALID_PLUGIN_MD,
+      'package.json': VALID_PACKAGE_JSON,
+    });
+
+    expect((await postZip(app, '/api/install/plugin', zip)).status).toBe(401);
+    const wrong = new FormData();
+    wrong.append('file', new Blob([zip], { type: 'application/zip' }), 'upload.zip');
+    expect((await app.request('/api/install/plugin', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer wrong-token' },
+      body: wrong,
+    })).status).toBe(401);
+
+    const ok = new FormData();
+    ok.append('file', new Blob([zip], { type: 'application/zip' }), 'upload.zip');
+    const res = await app.request('/api/install/plugin', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer install-token' },
+      body: ok,
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('requires explicit production opt-in when no bearer token is configured', async () => {
+    process.env.NODE_ENV = 'production';
+    const app = createTestApp();
+    const zip = await buildZip({
+      'PLUGIN.md': VALID_PLUGIN_MD,
+      'package.json': VALID_PACKAGE_JSON,
+    });
+
+    const blocked = await postZip(app, '/api/install/plugin', zip);
+    expect(blocked.status).toBe(403);
+
+    process.env.COVEL_INSTALL_API_ENABLED = '1';
+    const enabledApp = createTestApp();
+    const allowed = await postZip(enabledApp, '/api/install/plugin', zip);
+    expect(allowed.status).toBe(200);
+  });
+
+  it('accepts uploads above the global body limit on the install branch', async () => {
+    const app = createBodyLimitedTestApp();
+    const zip = new yazl.ZipFile();
+    zip.addBuffer(Buffer.from(VALID_PACKAGE_JSON, 'utf-8'), 'package.json');
+    zip.addBuffer(Buffer.from(VALID_PLUGIN_MD, 'utf-8'), 'PLUGIN.md');
+    zip.addBuffer(randomBytes(2 * 1024 * 1024), 'payload.bin');
+    const zipBuf = await zipToBuffer(zip);
+
+    expect(zipBuf.byteLength).toBeGreaterThan(1 * 1024 * 1024);
+    expect(zipBuf.byteLength).toBeLessThan(20 * 1024 * 1024);
+    const res = await postZip(app, '/api/install/plugin', zipBuf);
+    expect(res.status).toBe(200);
+  });
+
   it('accepts a valid single-runtime plugin package', async () => {
     const app = createTestApp();
     const zip = await buildZip({

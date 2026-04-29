@@ -10,6 +10,7 @@ COPY pnpm-lock.yaml package.json pnpm-workspace.yaml ./
 # manifest present for --frozen-lockfile to succeed, even if we don't
 # actually use the app in the final image)
 COPY apps/desktop/package.json apps/desktop/
+COPY apps/desktop-tauri/package.json apps/desktop-tauri/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
 
@@ -26,16 +27,18 @@ COPY packages/runtime/package.json packages/runtime/
 COPY packages/shared/package.json packages/shared/
 COPY packages/state/package.json packages/state/
 COPY packages/store/package.json packages/store/
+COPY packages/test-runtime/package.json packages/test-runtime/
 COPY packages/tools/package.json packages/tools/
 
 # Plugins (workspace members, need manifests for pnpm install)
-COPY plugins/core-char-creator/package.json plugins/core-char-creator/
-COPY plugins/core-codex/package.json plugins/core-codex/
-COPY plugins/core-guide/package.json plugins/core-guide/
-COPY plugins/core-narrator/package.json plugins/core-narrator/
-COPY plugins/core-npc-graph/package.json plugins/core-npc-graph/
-COPY plugins/core-pregame/package.json plugins/core-pregame/
-COPY plugins/core-world-init/package.json plugins/core-world-init/
+COPY plugins/char-creator/package.json plugins/char-creator/
+COPY plugins/codex/package.json plugins/codex/
+COPY plugins/guide/package.json plugins/guide/
+COPY plugins/memory/package.json plugins/memory/
+COPY plugins/narrator/package.json plugins/narrator/
+COPY plugins/npc-graph/package.json plugins/npc-graph/
+COPY plugins/pregame/package.json plugins/pregame/
+COPY plugins/world-init/package.json plugins/world-init/
 
 RUN pnpm install --frozen-lockfile
 

@@ -19,47 +19,21 @@
  */
 
 import { Hono } from "hono";
-import type { Context, MiddlewareHandler } from "hono";
 import { resolve, join, dirname, isAbsolute } from "node:path";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { spawn } from "node:child_process";
 import { normalizeProviderKeyMap, providerKeyToId, readRuntimeEnv, toApiKeyEnvMap } from "@covel/shared";
+import { makeDesktopRestTokenGuard } from "./privileged-auth.js";
 
 export interface ConfigApiDeps {
   /** Mutable map shared with the gateway adapter. PUT handlers mutate in-place. */
   apiKeys: Record<string, string>;
 }
 
-/**
- * Per-launch bearer token gate.
- *
- * The desktop shell generates a `COVEL_DESKTOP_REST_TOKEN` at startup and
- * injects it into the sidecar env. The renderer fetches the same value over
- * IPC and attaches `Authorization: Bearer <token>` on privileged calls.
- *
- * When the token is absent we run open — that's the path for `pnpm dev:web`,
- * pure-web tiers, and CI. The endpoint set itself is still gated by
- * `resolveCovelHome()` so a remote client without `COVEL_HOME` cannot reach
- * the writes regardless of the token.
- */
-function makeTokenGuard(): MiddlewareHandler {
-  return async (c: Context, next) => {
-    const expected = readRuntimeEnv().desktopRestToken;
-    if (!expected) return next();
-    const header = c.req.header("authorization") ?? "";
-    const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-    const provided = match?.[1]?.trim();
-    if (!provided || provided !== expected) {
-      return c.json({ error: "Desktop REST token missing or invalid" }, 401);
-    }
-    return next();
-  };
-}
-
 export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   const app = new Hono();
-  const requireToken = makeTokenGuard();
+  const requireToken = makeDesktopRestTokenGuard();
 
   app.get("/api/config/info", (c) => {
     const covelHome = resolveCovelHome();
@@ -77,7 +51,8 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       worldsDir: env.userWorldsDir ?? null,
       // True when the desktop shell injected a per-launch bearer token. The
       // renderer must attach `Authorization: Bearer <token>` on privileged
-      // writes (PUT keys/settings/data-root, POST open-folder).
+      // config calls (settings read/write, key writes, data-root writes,
+      // open-folder).
       requiresAuth: !!env.desktopRestToken,
     });
   });
@@ -144,7 +119,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   // Tauri / self-deploy uses this in place of the Electron `covel:settings:*`
   // IPC channels. Web deployments never see `isDesktop: true` so this never
   // leaks on production web tiers.
-  app.get("/api/config/settings", (c) => {
+  app.get("/api/config/settings", requireToken, (c) => {
     const covelHome = resolveCovelHome();
     if (!covelHome) {
       return c.json({ schemaVersion: 1, savedAt: "", entries: {} });

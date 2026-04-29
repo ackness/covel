@@ -212,9 +212,8 @@ describe('config API env and file contracts', () => {
   //
   // When the desktop shell injects COVEL_DESKTOP_REST_TOKEN into the sidecar
   // env, every privileged write must carry a matching `Authorization: Bearer
-  // <token>` header. Reads stay open: the token only protects mutating
-  // surface area, and `/api/config/info` advertises `requiresAuth: true` so
-  // the renderer knows to attach the header.
+  // <token>` header. `/api/config/info` advertises `requiresAuth: true` so
+  // the renderer attaches the header for privileged calls.
   describe('desktop REST bearer token guard', () => {
     const TOKEN = 'token-deadbeefcafebabe';
 
@@ -314,16 +313,32 @@ describe('config API env and file contracts', () => {
       expect(openRes.status).toBe(401);
     });
 
-    it('keeps reads open even when the token is required', async () => {
+    it('gates GET /api/config/settings with the same token', async () => {
+      process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
+      fs.writeFileSync(
+        path.join(tmpHome, 'settings.json'),
+        JSON.stringify({ schemaVersion: 1, savedAt: 'now', entries: { importedSecret: 'sk-test' } }),
+      );
+      const app = buildApp(apiKeys);
+
+      expect((await app.request('/api/config/settings')).status).toBe(401);
+      const okRes = await app.request('/api/config/settings', {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+      expect(okRes.status).toBe(200);
+      await expect(okRes.json()).resolves.toMatchObject({
+        entries: { importedSecret: 'sk-test' },
+      });
+    });
+
+    it('keeps public config reads available when the token is required', async () => {
       process.env.COVEL_HOME = tmpHome;
       process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
       const app = buildApp(apiKeys);
 
-      // GET /api/config/info, GET /api/config/keys, GET /api/config/settings
-      // should all work without Authorization. Reads do not change state.
       expect((await app.request('/api/config/info')).status).toBe(200);
       expect((await app.request('/api/config/keys')).status).toBe(200);
-      expect((await app.request('/api/config/settings')).status).toBe(200);
     });
   });
 });

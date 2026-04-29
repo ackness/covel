@@ -186,6 +186,15 @@ export const COVEL_ENV_REGISTRY = [
       'Enables the destructive POST /api/media/cleanup endpoint. Off by default; never enable in DEPLOYMENT_TIER=commercial without an admin auth layer (the route forces 503 there).',
   },
   {
+    name: 'COVEL_INSTALL_API_ENABLED',
+    group: 'server',
+    type: 'boolean',
+    status: 'active',
+    defaultValue: 'false',
+    description:
+      'Explicit production opt-in for POST /api/install/plugin and POST /api/install/world when no desktop bearer token is configured.',
+  },
+  {
     name: 'APP_PORT',
     group: 'server',
     type: 'integer',
@@ -820,6 +829,7 @@ export function readRuntimeEnv(source: EnvSource = defaultSource()) {
     deploymentTier: readEnvString('DEPLOYMENT_TIER', 'self', source)!,
     corsOrigins: readEnvCsv('CORS_ORIGIN', source),
     debugRoutes: isEnvTruthy('ENABLE_DEBUG_PAGE', source),
+    installApiEnabled: isEnvTruthy('COVEL_INSTALL_API_ENABLED', source),
     rateLimitRpm: readEnvInt('RATE_LIMIT_RPM', 60, source),
     covelHome: readEnvString('COVEL_HOME', undefined, source),
     dataRoot: readEnvString('COVEL_DATA_ROOT', undefined, source),

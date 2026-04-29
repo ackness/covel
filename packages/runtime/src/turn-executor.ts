@@ -36,7 +36,7 @@ import {
 } from '@covel/tools';
 import type { EventBus } from '@covel/events';
 import { shouldTrigger } from './trigger.js';
-import { scheduleByPriority } from './scheduler.js';
+import { isMainLoopPriority, isPreGamePriority, scheduleByPriority } from './scheduler.js';
 import { scheduleByDag } from './dag-scheduler.js';
 import {
   buildContext,
@@ -929,14 +929,10 @@ export async function executeTurn(
       runtimes: [manualTarget],
     }];
   } else if (isPreGamePending) {
-    const preGameTriggered = triggered.filter(
-      (rt) => rt.priority !== undefined && rt.priority <= 99,
-    );
+    const preGameTriggered = triggered.filter((rt) => isPreGamePriority(rt.priority));
     groups = scheduleByPriority(preGameTriggered, 0);
   } else {
-    const mainLoop = triggered.filter(
-      (rt) => rt.priority !== undefined && rt.priority > 99,
-    );
+    const mainLoop = triggered.filter((rt) => isMainLoopPriority(rt.priority));
     const dag = scheduleByDag(mainLoop);
     if (dag.error) {
       console.warn(
@@ -1131,7 +1127,7 @@ export async function executeTurn(
     : false;
   if (completedPreGameThisTurn && !manualTarget) {
     const mainLoop = triggered.filter(
-      (rt) => rt.priority !== undefined && rt.priority > 99 && !completedResults.has(rt.name),
+      (rt) => isMainLoopPriority(rt.priority) && !completedResults.has(rt.name),
     );
     const dag = scheduleByDag(mainLoop);
     const followupGroups = dag.error ? scheduleByPriority(mainLoop, turnNumber) : dag.groups;

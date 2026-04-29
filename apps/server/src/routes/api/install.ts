@@ -33,8 +33,10 @@ import {
 } from '@covel/shared';
 import { BUILTIN_PLUGIN_IDS } from '@covel/plugin-loader';
 import yauzl, { type Entry, type ZipFile } from 'yauzl';
+import { makeInstallApiGuard } from '../privileged-auth.js';
 
 export const installRoutes = new Hono();
+installRoutes.use('*', makeInstallApiGuard());
 
 // ── Limits (defensive against zip bombs) ────────────────────────
 
@@ -513,4 +515,3 @@ installRoutes.post('/world', async (c) => {
     return c.json(body, status as 400 | 409 | 413 | 500);
   }
 });
-

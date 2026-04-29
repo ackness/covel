@@ -45,6 +45,16 @@ describe('scheduleByPriority — exact boundary 99 vs 100', () => {
     const m = rt('audit', 1000);
     expect(scheduleByPriority([m], 7).flatMap((g) => g.runtimes.map((r) => r.name))).toEqual(['audit']);
   });
+
+  it('priority 1001 is outside the main-loop band', () => {
+    const m = rt('future-band', 1001);
+    expect(scheduleByPriority([m], 7).flatMap((g) => g.runtimes.map((r) => r.name))).toEqual([]);
+  });
+
+  it('negative priority is outside the Pre-Game band', () => {
+    const m = rt('negative', -1);
+    expect(scheduleByPriority([m], 0).flatMap((g) => g.runtimes.map((r) => r.name))).toEqual([]);
+  });
 });
 
 describe('scheduleByPriority — priority undefined safeguard', () => {

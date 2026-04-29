@@ -10,7 +10,22 @@
 import type { RuntimeManifest } from '@covel/shared';
 import type { ScheduledGroup } from './types.js';
 
+const PRE_GAME_BAND_MIN = 0;
 const PRE_GAME_BAND_MAX = 99;
+const MAIN_BAND_MIN = 100;
+const MAIN_BAND_MAX = 1000;
+
+export function isPreGamePriority(priority: number | undefined): priority is number {
+  return priority !== undefined
+    && priority >= PRE_GAME_BAND_MIN
+    && priority <= PRE_GAME_BAND_MAX;
+}
+
+export function isMainLoopPriority(priority: number | undefined): priority is number {
+  return priority !== undefined
+    && priority >= MAIN_BAND_MIN
+    && priority <= MAIN_BAND_MAX;
+}
 
 function isInBand(priority: number | undefined, turnNumber: number): boolean {
   // UI-only runtimes (e.g. memory, trigger.type='manual' with no
@@ -18,8 +33,8 @@ function isInBand(priority: number | undefined, turnNumber: number): boolean {
   // manifest typos from accidentally enqueueing a pure-UI plugin and
   // tripping the LLM pipeline on a runtime that has no handler or prompt.
   if (priority === undefined) return false;
-  if (turnNumber === 0) return priority <= PRE_GAME_BAND_MAX;
-  return priority > PRE_GAME_BAND_MAX;
+  if (turnNumber === 0) return isPreGamePriority(priority);
+  return isMainLoopPriority(priority);
 }
 
 /**

@@ -10,7 +10,6 @@ import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { bodyLimit } from "hono/body-limit";
 import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -38,6 +37,7 @@ import { createModelDbRoutes } from "./routes/model-db.js";
 import { createMiscApiRoutes } from "./routes/misc-api.js";
 import { createConfigApiRoutes } from "./routes/config-api.js";
 import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
+import { createRequestBodyLimitMiddleware } from "./middleware/request-body-limit.js";
 import {
   providerApiKeysFromEnv,
   providerIdToApiKeyEnvName,
@@ -139,7 +139,7 @@ app.use("*", async (c, next) => {
   return honoLogger(c, next);
 });
 app.use("*", secureHeaders());
-app.use("*", bodyLimit({ maxSize: 1 * 1024 * 1024 }));
+app.use("*", createRequestBodyLimitMiddleware());
 
 // Guard any /api/debug/* or /api/internal/* route in production so that an
 // accidentally-mounted diagnostic endpoint can never leak in a released
