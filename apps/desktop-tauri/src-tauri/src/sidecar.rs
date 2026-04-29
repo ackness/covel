@@ -43,7 +43,9 @@ pub struct SidecarPaths {
     pub log_max_files: u32,
     /// ~/.covel/plugins — user plugins merged on top of bundled.
     pub user_plugins_dir: PathBuf,
-    /// <data_root>/worlds — user-created worlds.
+    /// ~/.covel/worlds — user-created worlds. Lives alongside config (NOT under
+    /// data_root) so redirecting heavy storage doesn't strand world packages.
+    /// Mirrors `apps/desktop/src/paths.ts: userWorldsDir()`.
     pub user_worlds_dir: PathBuf,
     /// ~/.covel — passed through as COVEL_HOME + COVEL_USER_CONFIG_DIR.
     pub covel_home: PathBuf,

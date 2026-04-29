@@ -5,7 +5,7 @@
 > **读完你能做到**
 > - 写一个只靠 `PLUGIN.md` 就能运行的插件
 > - 根据场景选对触发类型（`auto` / `scheduled` / `event` / `manual`）
-> - 用框架内置的三个 UI 工具（`create-form` / `create-choices` / `create-notification`）产生玩家可交互块
+> - 用框架内置的四个 UI 工具（`render-ui` / `create-form` / `create-choices` / `create-notification`）产生玩家可交互块。`render-ui` 是通用的 parts 模型（详见 [docs/reference/tools.md#render-ui](../reference/tools.md#render-ui)），后三个是 form / choices / notification 的语义糖。
 > - 通过 `references/` 目录按关键词按需注入参考资料，避免每轮烧 token
 > - 用 `config` 字段暴露玩家可调参数
 > - 打包一个 `worlds/<id>/` 世界包并指定 `requiredPlugins` / `recommendedPlugins`

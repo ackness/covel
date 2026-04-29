@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Covel is an AI RPG plugin-based framework (modular monolith). Core philosophy: **plugins carry gameplay logic, the kernel provides primitives and orchestration**. Each plugin is a self-contained Agent Runtime that declares its own trigger rules, context injection, tool whitelist, and write proxies; the kernel routes turns, assembles context, drives LLM tool-calls, and commits proposals.
 
-Deployable as Web, Electron, or Tauri (the two desktop shells share the same Node sidecar).
+Deployable as Web or Electron (recommended for desktop). A Tauri shell exists at `apps/desktop-tauri/` mirroring the same Node sidecar contract, but is **not officially supported today** — open compat issues around macOS multi-window, signing, and `tauri-plugin-log` mean it is for tinkerers only. Production desktop builds should use `pnpm build:electron`.
 
 ## Documentation Index
 
@@ -44,9 +44,9 @@ Before changing anything non-trivial, consult the matching reference doc — the
 ```bash
 # Install & dev
 pnpm install
-pnpm dev              # web (5173) + server (3001), MemoryStore
+pnpm dev              # web (5173) + server (3001), SqliteStore (default, ./data/covel.db)
 pnpm dev:web          # web only
-pnpm dev:server       # server only (MemoryStore)
+pnpm dev:server       # server only (SqliteStore default; STORE_BACKEND=memory for ephemeral)
 pnpm dev:pg           # server only, STORE_BACKEND=pg (needs pnpm db:up first)
 
 # Build & check
@@ -69,7 +69,6 @@ pnpm e2e:ui
 pnpm e2e:docker       # full Docker stack + E2E + teardown
 
 # Real-LLM E2E scripts (need .env.llm)
-npx tsx --env-file=.env --env-file=.env.llm scripts/test-full-3plugins.ts
 npx tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts --slot e2e_local --turns 3
 
 # Docker (full stack)
@@ -100,7 +99,7 @@ Provider API keys flow through the `SettingsStore` too: writes end up in `keys.e
 
 ## Monorepo Structure
 
-- pnpm workspaces + Turborepo. `pnpm@10.7.0`, Node ≥ 22.
+- pnpm workspaces + Turborepo. `pnpm@10.33.2`, Node ≥ 22.
 - ESM-only (`"type": "module"`), TypeScript strict, ES2022, NodeNext module resolution — **use `.js` extensions in TS imports**.
 - Packages export TS source directly (`"import": "./src/index.ts"`) — no build step for dev.
 
@@ -111,9 +110,9 @@ apps/
   desktop/          Electron shell (sidecar)
   desktop-tauri/    Tauri shell (same sidecar contract)
 
-packages/           13 internal packages: shared, context, ai-provider,
+packages/           14 internal packages: shared, context, ai-provider,
                     plugin-loader, runtime, store, state, events, tools,
-                    approval, memory, create, plugin-test-utils
+                    approval, memory, create, plugin-test-utils, test-runtime
 
 plugins/            8 core plugins (see docs/reference/plugins.md)
 prompts/            Externalised prompt templates (locale-aware markdown)
@@ -143,9 +142,9 @@ Input/Event → Trigger Router → Priority Scheduler → [per priority group:]
 → Follow-up Events (may re-enter Router)
 ```
 
-- **Trigger modes**: `always`, `interval`, `manual`, `event`.
+- **Trigger modes**: `auto`, `manual`, `scheduled`, `conditional`, `event`, `error-retry` (see `TriggerType` in `packages/shared/src/types/plugin.ts`). `scheduled` carries `interval` / `maxTriggerCount` / `cooldownTurns` / `startTurn`.
 - **Runtime types**: `agent` (default, loads PLUGIN.md and drives LLM tool-calls) or `function` (pure JS handler, no LLM).
-- **Proposal envelopes**: `narrative.append`, `state.patch`, `event.emit`, `record.upsert`, `ui.render`, `asset.generate`. **All writes flow through validate → commit — plugins never touch the DB directly.**
+- **Proposal envelopes** (registered `ProposalType`s): `narrative.append`, `narrative.template`, `state.patch`, `event.emit`, `record.upsert`, `interaction.request`, `ui.render`, `asset.generate`, `plugin.data`, `plugin.data.batch`, `character.upsert`, `working_memory.set`, `lorebook.upsert`. Full reference in [docs/reference/tools.md](./docs/reference/tools.md#proposal-类型). **All writes flow through validate → commit — plugins never touch the DB directly.**
 - **Hook lifecycle**: `TurnStart`, `PreToolUse`, `PostToolUse`, `PreStateCommit`, `PostStateCommit`, `TurnStop`.
 
 ### Priority bands (kernel-enforced)
@@ -254,7 +253,7 @@ Locale enters the execution chain via `KernelInput.locale` → `RuntimeContextVi
 
 Core objects (never collapse into a single JSON blob): **Run, Branch, Snapshot, State, Event, Record, Character, PluginData**.
 
-Store backends (`@covel/store`): `MemoryStore` (dev/test), `SqliteStore` (desktop/default), `IdbStore` (browser IDB), `PgStore` (production PG via Drizzle). Selection at server startup uses `STORE_BACKEND` with default `sqlite`; `STORE_BACKEND=pg` requires `DATABASE_URL`. World seeds load from `COVEL_WORLDS_DIR` (default `worlds/`).
+Store backends (`@covel/store`): `MemoryStore` (dev/test), `SqliteStore` (desktop/default), `IdbStore` (browser IDB), `PgStore` (production PG via Drizzle). Selection at server startup uses `STORE_BACKEND` with default `sqlite`; `STORE_BACKEND=pg` requires `DATABASE_URL`. World seeds load from `COVEL_WORLDS_DIR` (default `worlds/`). Desktop shells additionally pass `COVEL_USER_WORLDS_DIR=~/.covel/worlds` (Electron via `paths.worldsDirs[]`, Tauri via the env var directly) so user-authored worlds live next to config and survive a `data_root` redirect.
 
 Each SQL backend splits into two files by convention:
 - `*-store-mappers.ts` — DDL + Row→Record conversion.

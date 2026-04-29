@@ -454,16 +454,25 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 {
   "status": "ok",
   "version": "1.0.0",
-  "storeBackend": "memory",
+  "storeBackend": "sqlite",
   "bootId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "timestamp": "2025-01-15T10:00:00.000Z"
+  "timestamp": "2025-01-15T10:00:00.000Z",
+  "vector": {
+    "capable": true,
+    "driver": "sqlite-vss",
+    "modelCount": 0,
+    "tableCount": 0
+  }
 }
 ```
 
 | 字段 | 说明 |
 |------|------|
-| `storeBackend` | 当前存储后端（`memory` / `pg`），前端据此选择 `LocalDataService` 或 `RemoteDataService` |
+| `storeBackend` | 当前存储后端（`memory` / `sqlite` / `pg`），前端据此选择 `LocalDataService` 或 `RemoteDataService`。默认 `sqlite`。 |
 | `bootId` | 服务器启动 ID（UUID），每次重启变化，可用于检测服务器重启 |
+| `vector.capable` | 当前后端是否支持向量检索（受 store 类型 + 编译时 vector 扩展可用性影响） |
+| `vector.driver` | `sqlite-vss` / `pgvector` / `in-memory` / `none` |
+| `vector.modelCount` / `vector.tableCount` | 已注册的 embedding 模型数量及对应物理表数量（每个模型一张表） |
 
 ---
 
@@ -2037,12 +2046,35 @@ id: evt-002
   "sessionId": "cloudmere-a1b2c3d4",
   "locale": "zh-CN",
   "payload": {
-    "message": "我拔出剑，准备迎战"
+    "content": "我拔出剑，准备迎战"
   }
 }
 ```
 
-**响应:** SSE 事件流，使用 `ProtocolEventType` 类型。详见下方「SSE 协议」章节。
+| `payload` 字段 | 适用 `type` | 说明 |
+|----------------|-------------|------|
+| `content` | `send_message` | 玩家自然语言输入。`actions.ts` 优先读取此字段。 |
+| `command` | `execute_command` | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。 |
+
+> 旧版示例曾使用 `payload.message`，但服务端从未读取该字段，已统一为 `content` / `command`。
+
+**响应:** SSE 事件流，使用 **data-only** SSE 帧（无 `event:` 命名头），每条 `data:` 是一个 `SseEnvelope` 对象（不是 `ProtocolEvent`）：
+
+```ts
+interface SseEnvelope {
+  type: string;            // 事件子类型，参见下方「SSE 协议」
+  requestId: string;       // 请求关联 ID（来自请求体）
+  traceId: string;         // 本回合的 trace ID
+  sessionId: string;
+  turnId?: string;
+  flowId: string;          // 等于 traceId
+  seq: number;             // 该流内自增
+  timestamp: string;
+  payload: Record<string, unknown>;
+}
+```
+
+客户端用 `fetch()` + `ReadableStream` 解析（见 `apps/web/src/services/api.ts: sendAction`），不能用 `EventSource.addEventListener('<type>', …)` —— 因为帧没有命名 event 头。`/api/events/stream` 才使用命名事件。
 
 ---
 
@@ -2242,9 +2274,18 @@ COVEL_MEDIA_CLEANUP_ENABLED=true \
 
 ## SSE 协议
 
-Covel 使用 `ProtocolEventType` 定义 server → client 的实时事件。Actions 端点 (`POST /api/actions`) 和事件流 (`GET /api/events/stream`) 均使用此协议。
+Covel 有两条独立的 SSE 流，**信封格式和帧格式都不同**：
 
-### 事件类型
+| 端点 | 帧形态 | 信封 | 客户端 | 说明 |
+|------|--------|------|--------|------|
+| `POST /api/actions` | data-only（`data: {...}`，无 `event:` 头） | `SseEnvelope`（带 `requestId/traceId/flowId/seq`） | `fetch()` + `ReadableStream`（`api.ts:sendAction`） | 回合内主流：narrative / runtime lifecycle / 工具调用 trace 等 |
+| `GET /api/events/stream` | 命名事件（`event: <type>\ndata: {...}`） | `ProtocolEvent`（带 `id/source`），并由 server 经 EventBus 广播 | `EventSource` + `addEventListener('<type>')`（`subscription.ts`） | 回合外辅助通道：跨 session 通知 / 持久订阅 / 重连补放 |
+
+> 关键差异：`/api/actions` 使用 data-only 帧，前端**无法**通过 `EventSource.addEventListener` 订阅；`/api/events/stream` 才是命名事件。
+
+### 事件类型枚举（`ProtocolEventType`）
+
+完整定义见 `packages/shared/src/types/protocol.ts`。
 
 | 类型 | 分类 | 说明 |
 |------|------|------|
@@ -2252,8 +2293,12 @@ Covel 使用 `ProtocolEventType` 定义 server → client 的实时事件。Acti
 | `narrative.completed` | 叙事 | 叙事文本完成 |
 | `interaction.requested` | 交互 | 请求玩家输入（表单/选择/确认） |
 | `interaction.completed` | 交互 | 玩家交互完成 |
+| `ui.rendered` | UI | `ui.render` proposal commit 后发出 |
+| `ui.part.update` | UI | UI part 状态更新（每个 part 一条） |
 | `state.changed` | 状态 | 游戏状态变更 |
 | `state.snapshot` | 状态 | 状态快照 |
+| `state.snapshot.created` | 状态 | 自动 / 手动 / fork 写入 snapshot 后发出（需 `COVEL_SNAPSHOTS_V1=1`） |
+| `session.forked` | 会话 | `POST /api/sessions/:id/fork` 物化子 session 后发出 |
 | `execution.started` | 执行生命周期 | Turn 执行开始 |
 | `runtime.started` | 执行生命周期 | 单个 Runtime 开始执行 |
 | `runtime.completed` | 执行生命周期 | 单个 Runtime 执行完成 |
@@ -2261,12 +2306,45 @@ Covel 使用 `ProtocolEventType` 定义 server → client 的实时事件。Acti
 | `execution.completed` | 执行生命周期 | Turn 执行完成 |
 | `record.updated` | 会话生命周期 | 记录更新（角色、任务等） |
 | `event.emitted` | 会话生命周期 | 事件发射 |
-| `error.occurred` | 系统 | 错误发生 |
+| `asset.progress` | 资产 | 多模态生成进度（`0..100`） |
+| `asset.generated` | 资产 | `asset.generate` proposal commit 后发出 |
+| `world.dimensions.changed` | 世界 | 世界维度文件变更（热更新） |
+| `plugin-data.changed` | 插件数据 | `plugin-data-set` / DELETE / batch 等所有写路径 |
+| `turn.suspended` | 流程控制 | `suspend()` 工具序列化 pendingContinuation（需 `COVEL_SUSPEND_V1=1`） |
+| `turn.resumed` | 流程控制 | `POST /api/sessions/:id/resume` 重启 runtime |
+| `error.occurred` | 系统 | 执行错误 |
 | `connection.restored` | 系统 | 连接恢复 |
 
-### 事件格式
+### 实现私有事件（不在 `ProtocolEventType` 内）
+
+下列事件**只**经 `/api/actions` 流转发，未来稳定后才会进 enum。当前消费方需做兼容性处理：
+
+| 事件 | 来源 | 说明 |
+|------|------|------|
+| `runtime.skipped` | `actions.ts` | runtime 因 cooldown / startTurn / maxTriggerCount 跳过 |
+| `character.upserted` | `session-kernel.ts` | `character.upsert` proposal commit 后发出（与 `record.updated` 平行） |
+| `tool.calling` / `tool.completed` / `tool.failed` | TurnEmitter | 工具调用 trace（debug timeline 用） |
+| `llm.calling` / `llm.responded` / `message.completed` | TurnEmitter | LLM 调用 trace |
+| `block.emitted` / `state.patch.applied` | TurnEmitter | 块发出 / state patch 应用 trace |
+| `hook.fired` / `hook.rewrote` / `hook.aborted` | TurnEmitter | Hook 行为 trace |
+
+### 信封格式
 
 ```typescript
+// /api/actions data-only 帧每条 data: 的形态
+interface SseEnvelope {
+  type: string;            // 见上表 + 实现私有事件
+  requestId: string;
+  traceId: string;
+  sessionId: string;
+  turnId?: string;
+  flowId: string;          // = traceId
+  seq: number;             // 该流内自增
+  timestamp: string;
+  payload: Record<string, unknown>;
+}
+
+// /api/events/stream 命名事件帧的 data 形态
 interface ProtocolEvent {
   id: string;
   type: ProtocolEventType;
@@ -2288,16 +2366,16 @@ Covel 支持三种部署层级 (Deployment Tier)，每种层级使用不同的�
 
 ### T1: 自部署 (Self-Deploy)
 
-- **服务器存储**: Memory（默认）或 SQLite
+- **服务器存储**: SQLite（默认，`./data/covel.db`）；可显式切换 Memory（仅用于一次性测试）
 - **前端存储**: 浏览器 IndexedDB
-- **数据流**: 前端在每次操作前通过 `syncToServer()` 将 IndexedDB 数据推送到服务器的 MemoryStore，让无状态服务器能处理 Turn
+- **数据流**: 前端在每次操作前通过 `syncToServer()` 将 IndexedDB 数据推送到服务器的本地 store，让服务器能处理 Turn
 - **API 密钥**: 用户自行管理，存储在浏览器 localStorage
 - **认证**: 无
 
 ```bash
 # 启动方式
-pnpm dev:server                    # Memory 后端
-STORE_BACKEND=sqlite pnpm dev:server  # SQLite 后端
+pnpm dev:server                       # SQLite 后端（默认）
+STORE_BACKEND=memory pnpm dev:server  # 临时 Memory 后端（重启即丢失）
 ```
 
 ### T2: 演示托管 (Demo Host)

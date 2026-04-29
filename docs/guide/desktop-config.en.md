@@ -1,10 +1,12 @@
 # Desktop config & data layout
 
-Applies to both [`apps/desktop/`](../../apps/desktop/) (Electron) and [`apps/desktop-tauri/`](../../apps/desktop-tauri/) (Tauri). Both shells share the same Node sidecar; their config and data layout are identical.
+Applies to both [`apps/desktop/`](../../apps/desktop/) (Electron) and [`apps/desktop-tauri/`](../../apps/desktop-tauri/) (Tauri). Both launchers boot the same Node sidecar bundle and feed it the same env-var contract documented below; the two implementations are mirrored and must stay in sync.
+
+> **Recommended entry: Electron.** The Tauri shell now follows the same contract, but still has open compatibility issues around macOS multi-window, code signing, and `tauri-plugin-log` swap-out. **It is not an officially supported distribution channel today** — use `pnpm build:electron` artifacts for shipping; Tauri is for tinkerers only.
 
 ## Directory structure
 
-On first launch the desktop app creates `~/.covel/`. Small config lives here; runtime data and logs default to `~/.covel/data/`. The two are decoupled through `config.toml` — redirect the data root (SQLite, worlds, logs) to an external drive with a one-line change.
+On first launch the desktop app creates `~/.covel/`. Config, user plugins, and user worlds live here; the heavy bits (SQLite, logs) live in `~/.covel/data/` by default and can be redirected to an external drive — that way relocating data does not strand `worlds/` or `keys.env`.
 
 ```
 ~/.covel/                    ← config root (small, version-stable)
@@ -12,10 +14,11 @@ On first launch the desktop app creates `~/.covel/`. Small config lives here; ru
   llm.toml                   ← LLM slot config (provider / model / baseUrl)
   keys.env                   ← provider API keys, plain KEY=VALUE lines
   plugins/                   ← user plugins (merged on top of bundled cores)
+  worlds/                    ← user-created worlds (NOT under data_root, so
+                               redirecting data_root does not strand them)
 
 <data_root>/                 ← default ~/.covel/data; redirectable
   covel.db                   ← SQLite database
-  worlds/                    ← user-created worlds
   logs/                      ← app logs (auto-rotated)
     tauri-main*.log          ← Tauri main process
     electron-*.log           ← Electron main process

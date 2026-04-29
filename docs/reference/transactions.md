@@ -92,12 +92,18 @@ store locked.
 
 ### IdbStore
 
-Eager per-object-store snapshot via `IDBDatabase.transaction().objectStore(name).getAll()`
-plus `structuredClone`, mirroring the MemoryStore strategy. On
-`rollbackTx()` it clears each object store and refills it from the
-snapshot. The snapshot handle is released inside a `finally` block so a
-mid-restore failure leaves the store in a half-restored-but-not-locked
-state that a subsequent `beginTx()` can recover from.
+Lazy first-touch snapshot. `beginTx()` 不会预先 `getAll()` 全部 object
+store —— 那样会和并发的 SSE / interval / 其他 tab 写入冲突。它只初始化
+两个跟踪结构：`idbSnapshot: Map<storeName, rows[]>` 与
+`touchedStores: Set<storeName>`。每次 `put` / `delete` 通过
+`ensureStoreSnapshot(name)` 检查 `touchedStores`：首次 mutation 时调用
+`db.getAll(name)` + `structuredClone` 把当前 rows 抓进 `idbSnapshot`
+并把 name 加进 set，后续 mutation 命中 set 直接跳过。`rollbackTx()`
+只 clear + refill `touchedStores` 中的 object store，未触碰的 store
+完全不动 —— 因此事务开启后落入未触碰 store 的并发写入不会被 rollback
+覆盖。`commitTx()` / `rollbackTx()` 都在 `finally` 块清空 `idbSnapshot`
+和 `touchedStores`，保证一次失败的 commit/rollback 不会卡住下一次
+`beginTx()`。
 
 - File: `packages/store/src/indexeddb/idb-store.ts`
 - Runtime environment: browser IndexedDB plus `fake-indexeddb` polyfill

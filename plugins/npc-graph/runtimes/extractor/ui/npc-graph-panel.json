@@ -4,6 +4,12 @@
   "label": { "zh": "关系图谱", "en": "Relationship Graph" },
   "icon": "network",
   "dataSource": { "namespace": "nodes" },
+  "emptyState": {
+    "message": {
+      "zh": "尚未识别到角色或势力关系，narrator 推进剧情后将自动浮现……",
+      "en": "No characters or factions extracted yet — relationships will appear once the narrator advances the story."
+    }
+  },
   "view": {
     "component": "Stack",
     "props": { "gap": "sm" },

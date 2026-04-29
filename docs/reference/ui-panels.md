@@ -57,13 +57,16 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 |------|---------|------|-------|---------------|------|
 | char-creator/player-init | character | users | character | characters | 角色列表（player + NPC + companion） |
 | codex | codex | book-open | codex | entries | 知识图鉴 |
+| memory | memory | brain | memory | （框架托管） | 核心记忆面板：剧情摘要 / 当前场景 / 角色关系 / 玩家状态。纯 UI，由 `@covel/memory` 在每轮结束后写入 |
 | npc-graph/extractor | npc-graph | network | npc-graph | nodes + edges | NPC 关系图（force-directed 可视化） |
+| world-init/schema-gen | world-overview | layout-dashboard | world-data | (汇总) | 世界总览（词条 + 维度的概览页） |
 | world-init/schema-gen | world-entries | book-marked | world-data | entries | 世界词条 |
 | world-init/schema-gen | world-schema | sliders-horizontal | world-data | schema | 角色属性 schema |
 
-> `world-init` 的 schema-gen runtime 注册两个 spec，通过相同 `group: "world-data"` + `groupLabel` 合并为单个 activity-bar tab "世界维度"，内部横向子 Tab 切换 `词条 / 属性`。
+> `world-init` 的 schema-gen runtime 注册三个 spec（`world-overview` / `world-entries` / `world-schema`），通过相同 `group: "world-data"` + `groupLabel` 合并为单个 activity-bar tab "世界维度"，内部横向子 Tab 在总览 / 词条 / 属性 之间切换。
 > `char-creator` 的 character-panel 由 player-init runtime 声明，character-tracker runtime 共享同一个 namespace `characters`（由 `create-character` / `update-character` builtin 工具写入）。
 > `npc-graph/extractor` 的 npc-graph-panel 引用 `GraphCanvas` 组件读取 `nodes` + `edges` 两个 namespace，呈现 force-directed 关系图（react-force-graph-2d 懒加载）。
+> `memory` 是纯 UI 插件（`pluginType: core-plugin`，`trigger.type: manual`）：插件自身不写入 plugin-data，框架的 Memory System (`@covel/memory`) 负责在每轮结束后落 working memory / recall / archival，spec 直接读取这些表。
 
 ### 世界文档（框架自持 Tab）
 
@@ -162,16 +165,20 @@ activity-bar（右侧垂直 Tab 条）每个 Tab 只能显示极窄的文字。�
 }
 ```
 
-**约定**：所有插件面板 spec **必须**声明 `emptyState.message`，使用与面板业务语境匹配的提示语，而非通用文字。已内置 `emptyState` 的面板：
+**约定**：所有依赖 namespace 数据渲染的右侧面板 spec **必须**声明 `emptyState.message`，使用与面板业务语境匹配的提示语，而非通用文字。已内置 `emptyState` 的面板：
 
 | 面板 spec | 空状态提示 |
 |-----------|-----------|
 | `character-panel.json` | 尚未创建角色，完成角色创建流程后将在此显示…… |
 | `codex-panel.json` | 图鉴暂无词条，等待 narrator 发现新知识…… |
+| `memory-panel.json` | （核心记忆，由 `@covel/memory` 在每轮结束后写入）|
+| `npc-graph-panel.json` | 尚未识别到角色或势力关系，narrator 推进剧情后将自动浮现…… |
 | `world-schema.json` | 角色属性定义尚未生成，等待世界初始化…… |
 | `world-entries.json` | 世界维度词条尚未生成，等待初始化完成…… |
 
-**实现位置**：`apps/web/src/components/session/plugin-panel.tsx` 的 `PluginPanel` 组件（`isEmpty` 分支）。
+**`alwaysRender: true` 豁免**：spec 顶层声明 `"alwaysRender": true`（或 `view.component` 是 `ImageGallery` / `ImageJobs`，由 `specUsesComponent` 隐式判定）的 panel 不依赖 namespace 数据渲染——例如 `world-overview.json` 的 `WorldDimensions` 直接读 session 上下文，`gallery.json` / `jobs.json` 的 `ImageGallery` / `ImageJobs` 自行处理空态。这类 spec **可省略 `emptyState.message`**：前端 `PluginPanel` 根本不会进入空态分支。
+
+**实现位置**：`apps/web/src/components/session/plugin-panel.tsx` 的 `PluginPanel` 组件（`isEmpty` 判断与 `alwaysRender` 短路）。
 
 ### 插件 UI 文本 I18nText 规范
 

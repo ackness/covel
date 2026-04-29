@@ -1,10 +1,12 @@
 # 桌面版配置与数据目录
 
-适用于 [`apps/desktop/`](../../apps/desktop/)（Electron）与 [`apps/desktop-tauri/`](../../apps/desktop-tauri/)（Tauri）两种桌面壳。两者共享同一个 Node sidecar，配置与数据布局完全一致。
+适用于 [`apps/desktop/`](../../apps/desktop/)（Electron）与 [`apps/desktop-tauri/`](../../apps/desktop-tauri/)（Tauri）两种桌面壳。两者启动同一个 Node sidecar bundle，并按下文统一的目录契约喂入环境变量；两个 launcher 各自维护一份等价实现，必须保持一致。
+
+> **当前推荐入口：Electron**。Tauri 壳已经按相同契约对齐，但与现有 plugin / sidecar 生态在 macOS 多窗口、code signing、`tauri-plugin-log` 切换等场景下仍有兼容性问题，**暂不作为官方支持的发行入口**，仅供想自行折腾的开发者。生产分发请使用 `pnpm build:electron` 产物。
 
 ## 目录结构
 
-桌面版首次启动会自动创建 `~/.covel/`。配置小文件放这里，数据和日志默认放 `~/.covel/data/`。两者可通过 `config.toml` 解耦 —— 想把庞大的 SQLite 搬到外置硬盘，改一行即可。
+桌面版首次启动会自动创建 `~/.covel/`。配置小文件、用户插件与用户世界都放这里；占空间的 SQLite 与日志默认放 `~/.covel/data/`，可通过 `config.toml` 重定向到外置硬盘——这样换盘不会带走 `worlds/` 与 `keys.env`。
 
 ```
 ~/.covel/                    ← 配置根（小文件，随应用版本稳定）
@@ -12,10 +14,11 @@
   llm.toml                   ← LLM slot 配置（provider / model / baseUrl）
   keys.env                   ← provider API key，KEY=VALUE 纯文本
   plugins/                   ← 用户插件（和 app bundle 内的核心插件合并）
+  worlds/                    ← 用户创建的世界（**不**位于 data_root 下；
+                               重定向 data_root 不会带走这里）
 
 <data_root>/                 ← 默认 ~/.covel/data；可改到任意路径
   covel.db                   ← SQLite 数据库
-  worlds/                    ← 用户创建的世界
   logs/                      ← 应用日志（按尺寸轮转，NDJSON 一行一记录）
     desktop.log              ← Electron 主进程事件（窗口 / IPC / sidecar 监督 / 启动失败）
     server.log               ← Node sidecar 的 stdout/stderr（bootstrap 输出 + Hono 请求日志）

@@ -71,17 +71,20 @@ fn resolve_sidecar_paths(app: &AppHandle) -> Result<SidecarPaths, String> {
 
     // New layout: all config under ~/.covel/, data under <data_root> (default
     // ~/.covel/data, user can redirect via [paths] data_root in config.toml).
-    // See apps/desktop/src/paths.ts for the canonical contract; this mirror
-    // must stay in sync.
+    // User-authored worlds live alongside config (`~/.covel/worlds`), NOT under
+    // <data_root> — this matches `apps/desktop/src/paths.ts: userWorldsDir()`
+    // so users can redirect heavy storage (covel.db, logs) without losing their
+    // world packages. The two layouts must stay in sync.
     let home = covel_home();
     let user_config = UserConfig::load(&home);
     let data_root = user_config.resolved_data_root(&home);
+    let user_worlds_dir = home.join("worlds");
 
     for dir in [
         &home,
         &home.join("plugins"),
+        &user_worlds_dir,
         &data_root,
-        &data_root.join("worlds"),
         &data_root.join("logs"),
     ] {
         fs::create_dir_all(dir).map_err(|e| format!("mkdir {}: {}", dir.display(), e))?;
@@ -120,13 +123,13 @@ fn resolve_sidecar_paths(app: &AppHandle) -> Result<SidecarPaths, String> {
         log_max_size_mb: user_config.log_max_size_mb(),
         log_max_files: user_config.log_max_files(),
         user_plugins_dir: home.join("plugins"),
-        user_worlds_dir: data_root.join("worlds"),
+        user_worlds_dir,
         covel_home: home,
     })
 }
 
 const DEFAULT_CONFIG_TOML: &str = r#"# Covel user config.
-# Edit [paths] data_root to move user data (SQLite db, worlds, logs) to
+# Edit [paths] data_root to move heavy data (SQLite db, logs) to
 # another drive. Relative paths are resolved against this file's directory.
 
 [paths]

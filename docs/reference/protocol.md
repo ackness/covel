@@ -7,25 +7,35 @@
 所有通讯分为三类，各有统一的格式和约定：
 
 ```
-┌────────────────────────────────────────────────────┐
-│ Command (Client → Server)                          │
-│   POST 请求，触发状态变更                            │
-│   两种响应模式：JSON（即时）或 SSE（流式）            │
-├────────────────────────────────────────────────────┤
-│ Event (Server → Client)                            │
-│   所有服务端推送使用 ProtocolEvent 格式               │
-│   唯一通道：/actions SSE（回合内）                    │
-│   辅助通道：/events/stream（回合外，仅 plugin 事件）  │
-├────────────────────────────────────────────────────┤
-│ Query (Client → Server)                            │
-│   GET 请求，只读数据获取                             │
-│   标准 REST JSON 响应                               │
-└────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ Command (Client → Server)                                       │
+│   POST 请求，触发状态变更                                         │
+│   两种响应模式：JSON（即时）或 SSE（流式）                         │
+├─────────────────────────────────────────────────────────────────┤
+│ Event (Server → Client) — 两条独立流，信封形态不同                │
+│   主通道 POST /api/actions:                                      │
+│     · data-only SSE 帧（无 event: 头）                            │
+│     · 信封 = SseEnvelope（requestId/traceId/flowId/seq/...）      │
+│     · 客户端用 fetch + ReadableStream 解析（services/api.ts）     │
+│   辅助通道 GET /api/events/stream:                               │
+│     · 命名 SSE 事件（event: <type>\ndata: ...）                   │
+│     · 信封 = ProtocolEvent（id/source/...）                      │
+│     · 客户端 EventSource + addEventListener                       │
+│     · topic: runtime / state / game / plugin / session / store /  │
+│             system，含 system.connected + 30s system.heartbeat   │
+│             与 lastEventId 重连补放                               │
+├─────────────────────────────────────────────────────────────────┤
+│ Query (Client → Server)                                         │
+│   GET 请求，只读数据获取                                          │
+│   标准 REST JSON 响应                                            │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+> 关键差异：`/api/actions` **没有** `event:` 命名头，因此 `EventSource.addEventListener('narrative.delta', …)` 在 actions 流上**永远不会**触发。回合内事件请使用 `services/api.ts: sendAction` 的 ReadableStream 解析路径，或自行用 `fetch()` 读取 `data:` 行；命名事件订阅只对 `/api/events/stream` 有效。
 
 ## 一、事件类型（ProtocolEventType）
 
-所有 SSE 推送使用以下标准事件类型，服务端和前端必须一致使用：
+下表列出 `ProtocolEventType` enum 中的稳定事件类型。`/api/events/stream` 始终以命名事件帧（`event: <type>\ndata: ...`）发送；`/api/actions` 也使用同一组 `type` 字符串，但作为 `SseEnvelope.type` 包在 data-only 帧里。除此之外 `/api/actions` 还会转发若干**实现私有事件**（见末尾「实现私有事件」小节），它们暂未进 enum。
 
 ### 叙事事件
 
@@ -182,11 +192,31 @@ Provider 图片输入矩阵：
 | `working_memory.changed` | commit chain 提交 `working_memory.set` proposal 后 | `KernelEvent`（runtime 内部事件） | `{ scope, key }`（顶层带有 sessionId/turnId/source） | kernel-only by design，UI 应通过 `state.changed` 感知 |
 | `context.compacted` | Compactor 完成摘要写入后 | `trace_events` 表 | `{ summaryId, messagesCompacted, tokenSavings, focusSections }` | trace-only by design，仅可通过 `/api/traces/:sessionId` 离线查询 |
 
-### SSE 命名事件订阅注意事项
+### SSE 帧格式按通道区分
 
-所有 ProtocolEventType 在 SSE 流上都以**命名事件**（`event: <type>\ndata: ...`）形式发送，**不会**触发 `EventSource.onmessage` 默认 handler。前端必须为每个关心的事件类型显式注册 `addEventListener('<type>', handler)`，否则事件会被静默丢弃。`apps/web/src/services/subscription.ts` 已为 `narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等关键事件挂载监听。新增事件类型时**必须同步更新该文件**。
+| 通道 | 帧形态 | 客户端订阅方式 | 文件 |
+|------|--------|----------------|------|
+| `POST /api/actions` | data-only（`data: <SseEnvelope JSON>`，**无 `event:` 头**） | `fetch()` + `ReadableStream`，按行扫 `data:` 解 JSON 后看 `envelope.type` | `apps/web/src/services/api.ts: sendAction` |
+| `GET /api/events/stream` | 命名事件（`event: <type>\ndata: <ProtocolEvent JSON>`） | `EventSource` + `addEventListener('<type>', handler)` —— 不监听就被静默丢弃 | `apps/web/src/services/subscription.ts` |
+
+`/api/events/stream` 在连接建立时先发一条 `system.connected`，每 30s 发 `system.heartbeat`；带 `lastEventId` 时会先回放 EventBus 缓存中 `seq > lastEventId` 的事件再切到实时。
+
+`apps/web/src/services/subscription.ts` 默认订阅 topic `runtime / state / game / plugin / session / system`（不含 `store`），并按 `event.topic` 路由分发；新增 topic 或 enum 事件时**必须同步更新该文件**。`/api/actions` 的回合内事件（`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）在 actions 流里以 data-only 帧推送，由 `services/api.ts: sendAction` 的回调消费，不经过 `subscription.ts`。
 
 > S4-T5 注意：`state.snapshot.created` / `session.forked` 服务端已经发出但前端尚未挂载 listener（FU-6 / 等 fork & save UI 落地）。此 follow-up 是已知的，与 framework 实现无关。
+
+### 实现私有事件（仅 `/api/actions` 转发，**未进入 `ProtocolEventType`**）
+
+下列事件由 server 透过 actions SSE 流转发用于 debug / trace，但当前**不**在 `packages/shared/src/types/protocol.ts` 的 `ProtocolEventType` 枚举中。TS 客户端如果只接受 `ProtocolEventType`，需要单独放宽或定义私有 union；未来 enum 化前不建议生产消费方依赖。
+
+| 事件 | 来源 | 用途 |
+|------|------|------|
+| `runtime.skipped` | `apps/server/src/routes/api/actions.ts` | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过 |
+| `character.upserted` | `packages/runtime/src/session-kernel.ts`（`character.upsert` proposal commit） | 与 `record.updated` 平行的角色快照事件 |
+| `tool.calling` / `tool.completed` / `tool.failed` | TurnEmitter | LLM 工具调用 trace |
+| `llm.calling` / `llm.responded` / `message.completed` | TurnEmitter | LLM 调用 trace |
+| `block.emitted` / `state.patch.applied` | TurnEmitter | 块发出 / state patch 应用 trace |
+| `hook.fired` / `hook.rewrote` / `hook.aborted` | TurnEmitter | Hook 行为 trace |
 
 ## 二、命令类型（CommandType）
 

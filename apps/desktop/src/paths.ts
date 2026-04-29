@@ -8,10 +8,11 @@
  *     llm.toml                    ← user-editable LLM slot config
  *     keys.env                    ← API keys (KEY=VALUE plain text)
  *     plugins/                    ← user-installed plugins
+ *     worlds/                     ← user-created worlds (NOT under data_root,
+ *                                   so redirecting heavy storage keeps these)
  *
  *   <data_root>/                  ← default ~/.covel/data; user can redirect via config.toml
  *     covel.db                    ← SQLite
- *     worlds/                     ← user-created worlds
  *     logs/
  *       server-*.log              ← pino-roll output (10MB × 10 by default)
  *       electron-*.log            ← main-process log

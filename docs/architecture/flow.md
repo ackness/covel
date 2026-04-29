@@ -128,7 +128,7 @@ flowchart TB
 | turnCount | 可调度 priority 区间 | 语义 |
 |-----------|----------------------|------|
 | `0`       | `0–99`               | Pre-Game band（如 `pregame`、`world-init`、`char-creator`） |
-| `>= 1`    | `100–1000`           | 主循环（narrator `500` / guide `550` / codex `650` / extractor / char-tracker …） |
+| `>= 1`    | `100–1000`           | 主循环（narrator `500` / guide / codex / npc-graph extractor / character-tracker 同 `600` …）。同优先级的下游 runtime 通过 `upstreamRequired` + `input.inject` 声明依赖，由 DAG 调度器并发执行 |
 
 **Proposal 类型**（全部过 commit chain）：`narrative.append`、`interaction.request`、`state.patch`、`event.emit`、`plugin.data` / `plugin.data.batch`、`working_memory.set`、`lorebook.upsert`。runtime 输出若带 legacy `phase` 字段会被 `normalizeOutput` 静默忽略（兼容老插件，不报错、不产生 proposal）。
 
@@ -272,9 +272,10 @@ plugins/my-plugin/
 ```
 插件不直接通信。通过框架中介：
 
-  narrator (P500)                  guide (P550)
-  ────────────────────                  ─────────────────
+  narrator (P500)                  guide / codex / extractor / char-tracker (P600)
+  ────────────────────                  ──────────────────────────────────
   输出: { narrativeOutput: "..." }       PLUGIN.md 声明:
+          │                              upstreamRequired: [narrator]
           │                              input.inject:
           │                                - from: narrator
           │                                  field: narrativeOutput
@@ -288,7 +289,10 @@ plugins/my-plugin/
   │    : "沼泽的雾气"}  │                  </narrator-output>
   └────────────────────┘
 
-  框架保证：P500 先执行完，P550 才开始
+  关键点：framework 的执行顺序不是靠数字优先级（P500 < P550）保证的，
+  而是靠 DAG 调度器读 `upstreamRequired` + `input.inject.from` 计算前驱。
+  同 priority 600 的 guide / codex / extractor / character-tracker 互相
+  独立，会并发执行；它们都 wait narrator 完成后才能开始。
   → completedResults 里已有 narrator 的输出
 ```
 
