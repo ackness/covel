@@ -226,7 +226,10 @@ function RootLayout() {
           </div>
         </footer>}
       </div>
-      {import.meta.env.DEV && <TanStackRouterDevtools position="bottom-right" />}
+      {import.meta.env.DEV &&
+        import.meta.env.VITE_ROUTER_DEVTOOLS !== "false" && (
+          <TanStackRouterDevtools position="bottom-right" />
+        )}
     </>
   );
 }

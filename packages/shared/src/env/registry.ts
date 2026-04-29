@@ -494,6 +494,15 @@ export const COVEL_ENV_REGISTRY = [
     description: 'Typed browser env placeholder from vite-env.d.ts.',
   },
   {
+    name: 'VITE_ROUTER_DEVTOOLS',
+    group: 'web',
+    type: 'boolean',
+    status: 'active',
+    defaultValue: 'true',
+    description:
+      'Toggles the TanStack Router devtools floating button in dev. Defaults on; set to false to hide.',
+  },
+  {
     name: 'E2E_BASE_URL',
     group: 'test',
     type: 'url',
