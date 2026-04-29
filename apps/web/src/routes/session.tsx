@@ -51,30 +51,31 @@ function SessionPage() {
   const { sid } = Route.useSearch();
   const navigate = useNavigate();
   const autoResumeAttempted = useRef(false);
-  // Track whether a stale session existed at mount (before any user action on this page).
-  // If the component mounts with a session but no sid in URL, the session is stale
-  // (carried over from a previous navigation). Sessions created by startGame() on
-  // this page won't be flagged because staleSessionRef is set only once at mount.
-  const staleSessionRef = useRef<string | null>(
-    // At mount: if session exists but URL has no sid, it's stale
-    null,
-  );
+  // Tracks the session id currently reflected in the URL. Updated whenever
+  // state.session.id matches the URL sid (URL/state are in sync). When the URL
+  // drops its sid while state.session still references the matching id, the
+  // user navigated back to world select and we clear the session.
+  //
+  // Initialised from state.session?.id so a stale session carried over from a
+  // previous navigation (e.g. user clicked the brand back to /session) is
+  // recognised at mount and dropped on the first sync pass.
+  const lastSyncedSessionIdRef = useRef<string | null>(state.session?.id ?? null);
   useEffect(() => {
-    // Run once: if we mounted with a session but no sid, mark it as stale
-    if (state.session && !sid && staleSessionRef.current === null) {
-      staleSessionRef.current = state.session.id;
+    if (state.session?.id && state.session.id === sid) {
+      lastSyncedSessionIdRef.current = state.session.id;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [state.session?.id, sid]);
 
   // Sync URL with session state
   useEffect(() => {
     if (state.session && state.session.id !== sid) {
-      if (!sid && state.session.id === staleSessionRef.current) {
-        // Navigated to /session without sid (e.g. from homepage) while a stale
-        // session is still in state — clear it so the user lands on world select.
+      if (!sid && state.session.id === lastSyncedSessionIdRef.current) {
+        // URL dropped its sid while state.session still references the matching
+        // session — user navigated back to world select. Drop the session.
+        // Without this the transient render between TanStack Router's URL
+        // commit and the queued dispatch would push the sid right back.
         backToWorldSelect();
-        staleSessionRef.current = null;
+        lastSyncedSessionIdRef.current = null;
       } else {
         navigate({ to: "/session", search: { sid: state.session.id }, replace: true });
       }
