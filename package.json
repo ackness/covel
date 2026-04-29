@@ -10,7 +10,7 @@
     "dev:pg:preflight": "node ./scripts/dev-pg-preflight.mjs",
     "dev:pg": "pnpm run dev:pg:preflight && node ./scripts/dev-supervisor.mjs turbo dev:pg --filter=@covel/server",
     "stop": "node ./scripts/stop-dev.mjs",
-    "build": "turbo build",
+    "build": "turbo build --filter=!@covel/desktop-tauri",
     "lint": "turbo lint",
     "lint:ci": "node ./scripts/lint-ci.mjs",
     "clean": "turbo clean",

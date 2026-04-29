@@ -14,7 +14,7 @@
  *   node scripts/prepare-sidecar.mjs --target aarch64-apple-darwin
  */
 import { execSync } from "node:child_process";
-import { createWriteStream } from "node:fs";
+import { createWriteStream, existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,6 +26,7 @@ const repoRoot = path.resolve(desktopTauriRoot, "../..");
 const srcTauri = path.join(desktopTauriRoot, "src-tauri");
 const binariesDir = path.join(srcTauri, "binaries");
 const cacheDir = path.join(binariesDir, ".cache");
+const npmCacheDir = path.join(cacheDir, "npm");
 const stagingServer = path.join(repoRoot, "apps/desktop/staging/server");
 const stagingWebDist = path.join(repoRoot, "apps/desktop/staging/web-dist");
 const resourcesDir = path.join(srcTauri, "resources");
@@ -266,10 +267,25 @@ async function copyDir(src, dest) {
 function rebuildBetterSqlite3(serverDir, nodeBinDir) {
   const isWin = process.platform === "win32";
   const sep = isWin ? ";" : ":";
+  const nodeGypCmd = resolveNodeGypCommand(serverDir, isWin);
+  const nodeRootDir = path.basename(nodeBinDir) === "bin"
+    ? path.dirname(nodeBinDir)
+    : nodeBinDir;
+  const pathParts = [
+    nodeBinDir,
+    path.join(serverDir, "node_modules/.bin"),
+    path.dirname(nodeGypCmd),
+    process.env.PATH ?? "",
+  ].filter(Boolean);
   const env = {
     ...process.env,
-    PATH: `${nodeBinDir}${sep}${process.env.PATH ?? ""}`,
-    // Force npm to use the bundled node, not the host one.
+    PATH: pathParts.join(sep),
+    npm_config_cache: npmCacheDir,
+    npm_config_devdir: path.join(npmCacheDir, "node-gyp"),
+    npm_config_nodedir: nodeRootDir,
+    npm_config_node_gyp: nodeGypCmd,
+    npm_config_update_notifier: "false",
+    // Force npm to use the bundled node.
     npm_config_node_version: NODE_VERSION,
   };
 
@@ -289,10 +305,23 @@ function rebuildBetterSqlite3(serverDir, nodeBinDir) {
     console.warn(
       "[prepare-sidecar] npm rebuild failed, trying node-gyp directly",
     );
-    execSync(
-      `"${path.join(nodeBinDir, isWin ? "node.exe" : "node")}" ` +
-        `"${path.join(bsqlDir, "node_modules/.bin/node-gyp-build")}"`,
-      { cwd: bsqlDir, env, stdio: "inherit" },
-    );
+    execSync(`"${nodeGypCmd}" rebuild --release`, {
+      cwd: bsqlDir,
+      env,
+      stdio: "inherit",
+    });
   }
+}
+
+function resolveNodeGypCommand(serverDir, isWin) {
+  const binName = isWin ? "node-gyp.cmd" : "node-gyp";
+  const candidates = [
+    path.join(serverDir, "node_modules/.bin", binName),
+    path.join(repoRoot, "node_modules/.pnpm/node_modules/.bin", binName),
+    path.join(repoRoot, "node_modules/.bin", binName),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  throw new Error(`node-gyp command not found; checked: ${candidates.join(", ")}`);
 }
