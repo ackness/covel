@@ -30,9 +30,17 @@ const ALLOW_COMMENT = /\bi18n-allow\b/;
 
 // Files that are explicitly allowed to contain CJK. Paths are relative
 // to apps/web and matched with `startsWith`.
+//
+// Bilingual `{ "zh-CN": ..., "en-US": ... }` config objects in settings /
+// theme registries are i18n data themselves — the literal IS the locale
+// value. They go on this list rather than getting per-line `// i18n-allow`
+// comments cluttering every label entry.
 const WHITELIST_PREFIXES = [
   "src/i18n/locales/",
   "src/services/data-service.ts", // I18nText data model (not UI strings)
+  "src/settings/navigation.ts", // bilingual group/subgroup labels
+  "src/settings/registry/", // bilingual SettingEntry registries (core, llm, keys)
+  "src/theme-system/registry.ts", // bilingual appearance/theme registry
 ];
 
 // Directory suffixes to skip outright.

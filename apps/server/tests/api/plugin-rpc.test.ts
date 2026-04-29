@@ -591,18 +591,34 @@ describe('POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)', () => {
       }),
     });
 
-    expect(res.status).toBe(200);
+    // expectsBackgroundFollower switches the runtime to async-job mode:
+    // the route returns 202 immediately with a pending _jobs/<jobId>, then
+    // setImmediate runs the prompt-builder. When no follower is emitted, the
+    // job row settles to status:'failed' with a 'expected-background-follower-missing' reason.
+    expect(res.status).toBe(202);
     const body = (await res.json()) as {
       status: string;
-      failedJobs?: ReadonlyArray<{ jobId: string; runtimeId: string }>;
+      jobId: string;
+      pending: boolean;
+      runtimeId: string;
+      phase: string;
     };
-    expect(body.status).toBe('ok');
-    expect(body.failedJobs).toHaveLength(1);
-    expect(body.failedJobs?.[0]?.runtimeId).toBe(SYNC_RUNTIME);
+    expect(body.status).toBe('accepted');
+    expect(body.pending).toBe(true);
+    expect(body.runtimeId).toBe(SYNC_RUNTIME);
+    expect(body.phase).toBe('prompt');
+    expect(typeof body.jobId).toBe('string');
 
+    await waitFor(async () => {
+      const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, '_jobs');
+      return (
+        rows.length === 1 &&
+        (rows[0]?.value as { status?: string } | undefined)?.status === 'failed'
+      );
+    });
     const jobs = await store.listPluginData(SESSION_ID, PLUGIN_ID, '_jobs');
     expect(jobs).toHaveLength(1);
-    expect(jobs[0]?.key).toBe(body.failedJobs?.[0]?.jobId);
+    expect(jobs[0]?.key).toBe(body.jobId);
     expect(jobs[0]?.value).toMatchObject({
       status: 'failed',
       progress: 100,

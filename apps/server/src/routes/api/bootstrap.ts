@@ -437,29 +437,21 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   // Load plugin local tools from tools/ directories
   // SECURITY: Only auto-load tools from trusted plugins (builtin/official).
   // Community plugins register metadata only; their tools are deferred until
-  // explicit approval via the plugin management API.
+  // explicit approval via the plugin management API. The activation path is
+  // wired below as `activatePluginLocalTools(pluginId)` — called by both
+  // `/api/approvals/:approvalId/decision` (after `allow`) and the plugin-rpc
+  // route (just-in-time, in case a previous approval is still cached but
+  // tools haven't been imported into this process yet).
   //
-  // STATUS (audit P0-4): the post-approval import path is NOT yet wired —
-  // approving a community plugin currently allows runtime invocation but
-  // does not register its `tools.local` modules into `toolMap`. That means
-  // a community runtime that declares local tools will see them resolved
-  // by `findTool` to `undefined` and the tool call will fail at execution
-  // time. Until the dedicated lifecycle (discovered → approved → import →
-  // active → revoked) lands, third-party plugins MUST stick to
-  // `tools.builtin` only. The intentional lifecycle plan lives in
-  // `audits/2026-04-25-docs-code-framework-alignment/RECOMMENDATIONS.md`
-  // §P0-4. See also `pluginToolAccess` below — that map IS populated for
-  // community plugins from manifest metadata, so when import lands the
-  // executor scoping will already work.
-  for (const [pluginId, discovery] of discoveryMap) {
-    const trust = getPluginTrustInfo(pluginId, discovery.source);
-    if (!trust.autoLoad) {
-      // Community plugin — skip import(), tools registered on approval
-      continue;
-    }
-
+  // `loadLocalToolsForPlugin` is the single source of truth for path
+  // containment, file-existence checks, and factory/ToolModule resolution.
+  // Called both eagerly here and lazily from the activator.
+  async function loadLocalToolsForPlugin(pluginId: string): Promise<readonly ToolModule[]> {
+    const discovery = discoveryMap.get(pluginId);
+    if (!discovery) return [];
     const manifests = manifestCache.get(pluginId);
-    if (!manifests) continue;
+    if (!manifests) return [];
+    const collected: ToolModule[] = [];
     for (const parsed of manifests) {
       const localPaths = parsed.manifest.tools?.local ?? [];
       for (let i = 0; i < localPaths.length; i += 1) {
@@ -476,8 +468,6 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
             );
             continue;
           }
-          // Surface file-not-found with a targeted hint before import() emits
-          // a cryptic ERR_MODULE_NOT_FOUND from Node.
           if (!fsSync.existsSync(fullPath)) {
             console.warn(
               `[plugin-loader] ${pluginRelPath}: tool file not found — ${fullPath} (declared in tools.local[${i}] as "${localPath}")\n` +
@@ -489,22 +479,15 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
           const exported = mod.default ?? Object.values(mod)[0];
 
           let toolModule: ToolModule | undefined;
-
           if (typeof exported === 'function') {
-            // Factory function: export default function({ tool, z }) { ... }
             const result = exported(toolInjection);
             if (result && (result as Record<string, unknown>)._type === 'covel-tool') {
               toolModule = result as ToolModule;
             }
           } else if (exported && (exported as Record<string, unknown>)._type === 'covel-tool') {
-            // Direct ToolModule export (legacy/TS style)
             toolModule = exported as ToolModule;
           }
-
-          if (toolModule) {
-            toolMap.set(toolModule.name, toolModule);
-            localToolNames.add(toolModule.name);
-          }
+          if (toolModule) collected.push(toolModule);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           console.warn(
@@ -514,7 +497,52 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
         }
       }
     }
+    return collected;
   }
+
+  // Eager-load: builtin / official plugins.
+  for (const [pluginId, discovery] of discoveryMap) {
+    const trust = getPluginTrustInfo(pluginId, discovery.source);
+    if (!trust.autoLoad) continue;  // Community plugin — deferred to approval
+    for (const t of await loadLocalToolsForPlugin(pluginId)) {
+      toolMap.set(t.name, t);
+      localToolNames.add(t.name);
+    }
+  }
+
+  // Lazy-activation registry for community plugins. Once a pluginId enters
+  // `activatedPluginIds`, subsequent calls are no-ops.
+  const activatedPluginIds = new Set<string>();
+  const activationInFlight = new Map<string, Promise<void>>();
+
+  const activatePluginLocalTools = async (pluginId: string): Promise<void> => {
+    if (activatedPluginIds.has(pluginId)) return;
+    const inFlight = activationInFlight.get(pluginId);
+    if (inFlight) return inFlight;
+
+    const discovery = discoveryMap.get(pluginId);
+    if (!discovery) return;
+    const trust = getPluginTrustInfo(pluginId, discovery.source);
+    if (trust.autoLoad) {
+      // Builtin / official already loaded eagerly; nothing to do.
+      activatedPluginIds.add(pluginId);
+      return;
+    }
+
+    const promise = (async () => {
+      try {
+        for (const t of await loadLocalToolsForPlugin(pluginId)) {
+          toolMap.set(t.name, t);
+          localToolNames.add(t.name);
+        }
+        activatedPluginIds.add(pluginId);
+      } finally {
+        activationInFlight.delete(pluginId);
+      }
+    })();
+    activationInFlight.set(pluginId, promise);
+    return promise;
+  };
 
   // Approval: whitelist builtin + known local tools, deny unknown third-party
   const approvalRules: PermissionRule[] = [
@@ -846,6 +874,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     c.set('rpcApprovalGate', rpcApprovalGate);
     c.set('sessionLock', sessionLock);
     c.set('prepareToolsForSession', prepareToolsForSession);
+    c.set('activatePluginLocalTools', activatePluginLocalTools);
     if (config.ensureEmbeddingLock) {
       c.set('ensureEmbeddingLock', config.ensureEmbeddingLock);
     }

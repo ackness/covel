@@ -8,6 +8,7 @@ import { createConfigApiRoutes } from '../../src/routes/config-api.js';
 const ENV_KEYS = [
   'COVEL_HOME',
   'COVEL_DESKTOP_REST',
+  'COVEL_DESKTOP_REST_TOKEN',
   'COVEL_DATA_ROOT',
   'SQLITE_PATH',
   'COVEL_LOGS_DIR',
@@ -205,5 +206,124 @@ describe('config API env and file contracts', () => {
 
     const configToml = fs.readFileSync(path.join(tmpHome, 'config.toml'), 'utf-8');
     expect(configToml).toContain(`[paths]\ndata_root = ${JSON.stringify(absolutePath)}`);
+  });
+
+  // ── Desktop REST bearer token guard ────────────────────────────
+  //
+  // When the desktop shell injects COVEL_DESKTOP_REST_TOKEN into the sidecar
+  // env, every privileged write must carry a matching `Authorization: Bearer
+  // <token>` header. Reads stay open: the token only protects mutating
+  // surface area, and `/api/config/info` advertises `requiresAuth: true` so
+  // the renderer knows to attach the header.
+  describe('desktop REST bearer token guard', () => {
+    const TOKEN = 'token-deadbeefcafebabe';
+
+    it('advertises requiresAuth on /api/config/info when token is set', async () => {
+      process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
+      const app = buildApp(apiKeys);
+
+      const body = await (await app.request('/api/config/info')).json() as { requiresAuth?: boolean };
+      expect(body.requiresAuth).toBe(true);
+    });
+
+    it('reports requiresAuth: false when token is absent', async () => {
+      process.env.COVEL_HOME = tmpHome;
+      const app = buildApp(apiKeys);
+
+      const body = await (await app.request('/api/config/info')).json() as { requiresAuth?: boolean };
+      expect(body.requiresAuth).toBe(false);
+    });
+
+    it('rejects PUT /api/config/keys without Authorization header', async () => {
+      process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
+      const app = buildApp(apiKeys);
+
+      const res = await app.request('/api/config/keys', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deepseek: 'sk-test' }),
+      });
+
+      expect(res.status).toBe(401);
+      expect(apiKeys).toEqual({});
+      expect(fs.existsSync(path.join(tmpHome, 'keys.env'))).toBe(false);
+    });
+
+    it('rejects PUT /api/config/keys with a wrong token', async () => {
+      process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
+      const app = buildApp(apiKeys);
+
+      const res = await app.request('/api/config/keys', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer wrong-token',
+        },
+        body: JSON.stringify({ deepseek: 'sk-test' }),
+      });
+
+      expect(res.status).toBe(401);
+      expect(apiKeys).toEqual({});
+    });
+
+    it('accepts PUT /api/config/keys with the correct bearer token', async () => {
+      process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
+      const app = buildApp(apiKeys);
+
+      const res = await app.request('/api/config/keys', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${TOKEN}`,
+        },
+        body: JSON.stringify({ deepseek: 'sk-test' }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(apiKeys).toEqual({ deepseek: 'sk-test' });
+    });
+
+    it('gates settings, data-root, and open-folder writes with the same token', async () => {
+      process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
+      const app = buildApp(apiKeys);
+
+      const settingsRes = await app.request('/api/config/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries: { theme: 'dark' } }),
+      });
+      expect(settingsRes.status).toBe(401);
+
+      const dataRootRes = await app.request('/api/config/data-root', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: path.join(tmpHome, 'new-data') }),
+      });
+      expect(dataRootRes.status).toBe(401);
+
+      const openRes = await app.request('/api/config/open-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: 'config' }),
+      });
+      expect(openRes.status).toBe(401);
+    });
+
+    it('keeps reads open even when the token is required', async () => {
+      process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
+      const app = buildApp(apiKeys);
+
+      // GET /api/config/info, GET /api/config/keys, GET /api/config/settings
+      // should all work without Authorization. Reads do not change state.
+      expect((await app.request('/api/config/info')).status).toBe(200);
+      expect((await app.request('/api/config/keys')).status).toBe(200);
+      expect((await app.request('/api/config/settings')).status).toBe(200);
+    });
   });
 });

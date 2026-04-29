@@ -3,7 +3,7 @@
 **用 Agent 编排一切的 AI 角色扮演游戏框架。**
 叙事、行动引导、NPC 关系、世界知识、角色卡 —— 每个玩法机制都是一个**自主 Agent**，自己决定何时触发、读什么上下文、调什么工具、写什么状态。一个回合可以多个 Agent 串联协作。
 
-[![Version](https://img.shields.io/badge/version-v0.0.1-8b5cf6)](https://github.com/AcKnEsS/covel/releases)
+[![Version](https://img.shields.io/badge/version-v0.0.2-8b5cf6)](https://github.com/AcKnEsS/covel/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)]()
 

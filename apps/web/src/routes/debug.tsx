@@ -704,7 +704,7 @@ function TurnCard({
           {manualTrigger ? (
             <>
               <span className="font-display font-bold text-xs uppercase tracking-wider shrink-0 text-violet-500">
-                {t("debugger.pluginInvocation", { defaultValue: "插件调用" })}
+                {t("debugger.pluginInvocation")}
               </span>
               <span className="font-mono text-[10px] text-violet-500/80 shrink-0 truncate">
                 {manualTrigger.runtimeId}

@@ -23,6 +23,7 @@ import {
 } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
 
@@ -505,6 +506,12 @@ let manualStop = false;
 let restartAttempts = 0;
 const MAX_RESTART_ATTEMPTS = 3;
 
+// Per-launch bearer token for privileged /api/config/* writes. Generated
+// once at app startup and reused across sidecar restarts so the renderer's
+// stored token stays valid through "save data root → restart sidecar".
+// Regenerated only on a full app relaunch.
+const desktopRestToken = randomUUID();
+
 function broadcastProgress(label: string): void {
   writeLog("info", `progress: ${label}`);
   for (const win of BrowserWindow.getAllWindows()) {
@@ -553,6 +560,7 @@ async function startServer(paths: ReturnType<typeof ensureUserPaths>): Promise<n
     COVEL_HOME: paths.covelHome,
     COVEL_DATA_ROOT: paths.dataRoot,
     COVEL_DESKTOP_REST: "1",
+    COVEL_DESKTOP_REST_TOKEN: desktopRestToken,
     COVEL_PLUGINS_DIR: paths.pluginsDirs[0] ?? "",
     COVEL_WORLDS_DIR: paths.worldsDirs[0] ?? "",
     COVEL_USER_WORLDS_DIR: paths.userWorldsDir,
@@ -734,23 +742,76 @@ function stopHealthHeartbeat(): void {
   }
 }
 
-function stopServer(): void {
+/**
+ * Graceful shutdown.
+ *
+ * Returns a promise that resolves once the child process has actually exited
+ * (or 5 s has passed and SIGKILL has been sent). The previous implementation
+ * fire-and-forgot SIGTERM, then immediately set `serverProcess = null`,
+ * which let `startServer()` race the still-alive sidecar for the SQLite
+ * file, listening port, and plugin file handles.
+ *
+ * Concurrent calls share the same in-flight promise — the second restart
+ * click while shutdown is mid-flight does not double-send signals.
+ */
+let pendingStop: Promise<void> | null = null;
+
+function stopServer(): Promise<void> {
+  if (pendingStop) return pendingStop;
+
   manualStop = true;
   stopHealthHeartbeat();
   if (restartTimer) {
     clearTimeout(restartTimer);
     restartTimer = null;
   }
-  if (serverProcess) {
-    writeLog("info", "Stopping server");
-    serverProcess.kill("SIGTERM");
-    setTimeout(() => {
-      if (serverProcess && !serverProcess.killed) {
-        serverProcess.kill("SIGKILL");
+
+  const child = serverProcess;
+  if (!child) {
+    pendingStop = Promise.resolve();
+    return pendingStop;
+  }
+
+  pendingStop = new Promise<void>((resolveStop) => {
+    let resolved = false;
+    const finish = (): void => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(killTimer);
+      // Only clear `serverProcess` if it's still pointing at the child we
+      // just stopped. Defensive: in pathological races a new spawn could
+      // have already replaced it.
+      if (serverProcess === child) serverProcess = null;
+      resolveStop();
+    };
+
+    child.once("exit", finish);
+    child.once("error", finish);
+
+    writeLog("info", "Stopping server (SIGTERM)");
+    try {
+      child.kill("SIGTERM");
+    } catch (err) {
+      writeLog("warn", "SIGTERM threw — assuming child already gone:", err);
+      finish();
+      return;
+    }
+
+    const killTimer = setTimeout(() => {
+      if (resolved) return;
+      writeLog("warn", "Server did not exit in 5s — sending SIGKILL");
+      try {
+        child.kill("SIGKILL");
+      } catch (err) {
+        writeLog("warn", "SIGKILL threw:", err);
+        finish();
       }
     }, 5000);
-    serverProcess = null;
-  }
+  }).finally(() => {
+    pendingStop = null;
+  });
+
+  return pendingStop;
 }
 
 // ── IPC handlers ────────────────────────────────────────────────
@@ -771,6 +832,11 @@ function registerIpcHandlers(paths: ReturnType<typeof ensureUserPaths>): void {
     llmTomlPath: paths.userLlmTomlPath,
     keysEnvPath: paths.userKeysEnvPath,
     serverPort,
+    // The renderer attaches `Authorization: Bearer <restToken>` on
+    // privileged calls (PUT /api/config/{keys,settings,data-root},
+    // POST /api/config/open-folder). The sidecar enforces it via
+    // COVEL_DESKTOP_REST_TOKEN.
+    restToken: desktopRestToken,
   }));
 
   ipcMain.handle("covel:retry-startup", () => {
@@ -795,10 +861,16 @@ function registerIpcHandlers(paths: ReturnType<typeof ensureUserPaths>): void {
 
   ipcMain.handle("covel:restart-server", async (_event: IpcMainInvokeEvent) => {
     writeLog("info", "User requested server restart via IPC");
-    stopServer();
-    restartAttempts = 0;
-    await startServer(paths);
-    return { port: serverPort };
+    try {
+      await stopServer();
+      restartAttempts = 0;
+      await startServer(paths);
+      return { ok: true as const, port: serverPort };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      writeLog("error", "Restart failed:", msg);
+      return { ok: false as const, port: serverPort, error: msg };
+    }
   });
 
   // Pick a directory for the next data_root. Does NOT move data — that's
@@ -1081,6 +1153,72 @@ function attachTitleSync(win: BrowserWindow): void {
   });
 }
 
+// ── External link guard ─────────────────────────────────────────
+
+/**
+ * Decide whether a `window.open()` / target=_blank link should be handed off
+ * to the system browser. Layered policy (audit Stage 7):
+ *
+ *   - `https:` → silently opened, host audited to desktop.log
+ *   - `http:`  → user confirm dialog (plaintext is the real risk surface)
+ *   - everything else (`javascript:`, `file:`, `chrome-extension:`, custom
+ *     schemes) → blocked, no log spam unless it looks intentional
+ *
+ * Loopback `http://localhost`/`http://127.0.0.1` URLs auto-allow so dev
+ * tools and self-hosted plugin assets don't trigger a confirm storm.
+ */
+function handleExternalLinkRequest(parent: BrowserWindow, linkUrl: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(linkUrl);
+  } catch {
+    writeLog("warn", `[external-link] blocked unparseable URL: ${linkUrl}`);
+    return;
+  }
+
+  const protocol = parsed.protocol;
+  const host = parsed.host;
+
+  if (protocol === "https:") {
+    writeLog("info", `[external-link] https → ${host}`);
+    void shell.openExternal(linkUrl);
+    return;
+  }
+
+  if (protocol === "http:") {
+    const isLoopback = host === "localhost" || host.startsWith("127.") || host === "[::1]";
+    if (isLoopback) {
+      writeLog("info", `[external-link] http loopback → ${host}`);
+      void shell.openExternal(linkUrl);
+      return;
+    }
+    // Synchronously prompt — `setWindowOpenHandler` returns immediately
+    // either way, but the user gets a chance to opt out before the system
+    // browser launches. `dialog.showMessageBoxSync` blocks the main process
+    // briefly which is fine for an explicit user action.
+    const choice = dialog.showMessageBoxSync(parent, {
+      type: "warning",
+      buttons: ["Open", "Cancel"],
+      defaultId: 1,
+      cancelId: 1,
+      title: "Open external link?",
+      message: `Open ${host} in your browser?`,
+      detail: `${linkUrl}\n\nThis link uses unencrypted http. Only proceed if you trust the source.`,
+    });
+    if (choice === 0) {
+      writeLog("info", `[external-link] http (user-confirmed) → ${host}`);
+      void shell.openExternal(linkUrl);
+    } else {
+      writeLog("info", `[external-link] http (user-cancelled) → ${host}`);
+    }
+    return;
+  }
+
+  // Hard block for all other protocols. Log only when the URL was clearly
+  // meant to be a link (not e.g. an empty about:blank).
+  writeLog("warn", `[external-link] blocked protocol ${protocol} (${host || linkUrl.slice(0, 80)})`);
+}
+
 // ── Window ──────────────────────────────────────────────────────
 
 let mainWindow: BrowserWindow | null = null;
@@ -1139,7 +1277,7 @@ function createMainWindow(titleSuffix?: string): BrowserWindow {
   attachTitleSync(win);
   attachWindowStateTracking(win);
   win.webContents.setWindowOpenHandler(({ url: linkUrl }) => {
-    if (linkUrl.startsWith("http")) shell.openExternal(linkUrl);
+    handleExternalLinkRequest(win, linkUrl);
     return { action: "deny" };
   });
   win.on("closed", () => {
@@ -1188,7 +1326,7 @@ async function productionStartup(
         pendingRetrySignal = () => resolve();
       });
 
-      stopServer();
+      await stopServer();
       restartAttempts = 0;
       loadSplashInto(win);
       await attemptStart();
@@ -1225,12 +1363,14 @@ async function devStartup(paths: ReturnType<typeof ensureUserPaths>): Promise<vo
 // ── App lifecycle ───────────────────────────────────────────────
 
 app.on("window-all-closed", () => {
-  stopServer();
+  // App is exiting; fire-and-forget the stop. The kernel will reap the
+  // child when our process dies even if the SIGTERM grace period overruns.
+  void stopServer();
   app.quit();
 });
 
 app.on("before-quit", () => {
-  stopServer();
+  void stopServer();
 });
 
 app.whenReady().then(async () => {

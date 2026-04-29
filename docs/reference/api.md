@@ -1146,11 +1146,12 @@ For plugins with `capabilities: ["image-generation"]`, a successful completed ru
   "jobId": "a3c9-...",
   "pending": true,
   "turnId": "7f3e-...",
-  "runtimeId": "dashscope-image-gen/image-generator"
+  "runtimeId": "dashscope-image-gen/image-generator",
+  "phase": "prompt"
 }
 ```
 
-当请求体包含 `expectsBackgroundFollower: true` 时，sync prompt-builder 也会使用同样的 202 形态立即返回；此时 `_jobs/{jobId}` 先以 `phase: "prompt"` / `message: "Generating image prompt..."` 写入，prompt 完成并排入后续 background follower 后会更新为 `status: "done"` 且包含 `deferredJobs`。
+当请求体包含 `expectsBackgroundFollower: true` 时，sync prompt-builder 也会使用同样的 202 形态立即返回（响应中 `phase: "prompt"`）；此时 `_jobs/{jobId}` 先以 `phase: "prompt"` / `message: "Generating image prompt..."` 写入，prompt 完成并排入后续 background follower 后会更新为 `status: "done"` 且包含 `deferredJobs`。如果 prompt-builder 返回但**没有**触发任何 background follower，框架会把 `_jobs/{jobId}` 标记为 `status: "failed"` 并附带 `reason: "expected-background-follower-missing"`。
 
 **`_jobs` 命名空间协议(background 模式):**
 
@@ -1174,6 +1175,7 @@ value         : {
   message?: string,
   progress?: number,
   error?: string,                             // status=failed
+  reason?: "expected-background-follower-missing" | string, // status=failed 时的细分原因
   abortReason?: string
 }
 ```

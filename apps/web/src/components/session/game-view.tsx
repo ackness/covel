@@ -312,9 +312,7 @@ export function GameView({
         // map). Both sides agree on the same translation table, so we resolve
         // the same key here to match whichever locale is active.
         const targetLabel =
-          event === "open-images"
-            ? t("nav.images", "图像")
-            : t("session.database", "数据库");
+          event === "open-images" ? t("nav.images") : t("session.database");
         const activate = () => {
           const tab = document.querySelector<HTMLElement>(
             `button[role="tab"][aria-label="${targetLabel}"]`,

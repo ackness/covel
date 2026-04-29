@@ -1567,6 +1567,13 @@ export type PluginRpcResponse =
         readonly jobId: string;
         readonly runtimeId: string;
       }[];
+      /**
+       * @deprecated Server no longer emits this — `expectsBackgroundFollower`
+       * paths return 202 `accepted` instead and the failure surfaces on
+       * `_jobs/<jobId>` with `reason: 'expected-background-follower-missing'`.
+       * Kept on the type so older clients compile; remove once no UI branch
+       * reads it (Q3-2026 follow-up).
+       */
       readonly failedJobs?: readonly {
         readonly jobId: string;
         readonly runtimeId: string;
@@ -1578,6 +1585,12 @@ export type PluginRpcResponse =
       readonly pending: true;
       readonly turnId: string;
       readonly runtimeId: string;
+      /**
+       * Which phase of the runtime was accepted. For `expectsBackgroundFollower`
+       * sync runtimes that act as prompt-builders, this is `"prompt"`. The
+       * subsequent follower job appears separately on `_jobs` with its own id.
+       */
+      readonly phase?: string;
     }
   | {
       readonly status: "approval-required";

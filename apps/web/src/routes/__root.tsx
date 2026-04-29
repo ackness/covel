@@ -85,11 +85,11 @@ function RootLayout() {
   const goDebug = () => navigate({ to: "/debug", search: navSearch });
 
   const navItems: Array<{ id: NavId; label: string; onClick: () => void; disabled?: boolean }> = [
-    { id: "world",   label: t("nav.world",   "世界"),  onClick: goWorld },
-    { id: "session", label: t("nav.session", "会话"),  onClick: goSession, disabled: !hasSession },
-    { id: "plugins", label: t("nav.plugins", "插件"),  onClick: goPlugins, disabled: !hasSession },
-    { id: "images",  label: t("nav.images",  "图像"),  onClick: goImages,  disabled: !hasSession },
-    { id: "debug",   label: t("nav.debug",   "调试"),  onClick: goDebug },
+    { id: "world",   label: t("nav.world"),   onClick: goWorld },
+    { id: "session", label: t("nav.session"), onClick: goSession, disabled: !hasSession },
+    { id: "plugins", label: t("nav.plugins"), onClick: goPlugins, disabled: !hasSession },
+    { id: "images",  label: t("nav.images"),  onClick: goImages,  disabled: !hasSession },
+    { id: "debug",   label: t("nav.debug"),   onClick: goDebug },
   ];
 
   // Electron / Tauri both hide the native title bar so the in-app header can

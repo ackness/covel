@@ -202,4 +202,122 @@ describe('Plugin RPC approval flow (PR-7)', () => {
     expect(res.status).toBe(404);
   });
 
+  // Stage 4 regression: when bootstrap wires the activator, an `allow`
+  // decision must invoke it for the approved pluginId. `deny` must not.
+  // We stub the activator into the context and assert call shape.
+  describe('community plugin tools.local activation hook', () => {
+    function setupWithActivator(): {
+      app: Hono;
+      store: DataStore;
+      gate: RpcApprovalGate;
+      activatorCalls: string[];
+    } {
+      const store = createMemoryStore();
+      const registry = createPluginRpcRegistry();
+      registry.registerPluginAction(
+        'untrusted',
+        'do-thing',
+        { handler: './rpc/do-thing.js', description: 'Run the thing' },
+        'community',
+      );
+      const executor = createRpcExecutor({
+        registry,
+        loadHandler: async () => async () => ({ ok: true }),
+      });
+      const gate = createRpcApprovalGate();
+      const activatorCalls: string[] = [];
+      const app = new Hono<Env & { Variables: { activatePluginLocalTools?: (id: string) => Promise<void> } }>();
+      app.use('*', async (c, next) => {
+        c.set('store', store);
+        c.set('rpcExecutor', executor);
+        c.set('rpcRegistry', registry);
+        c.set('rpcApprovalGate', gate);
+        c.set('activatePluginLocalTools', async (pluginId: string) => {
+          activatorCalls.push(pluginId);
+        });
+        await next();
+      });
+      app.route('/api/sessions', pluginRpcRoutes);
+      app.route('/api/sessions', sessionApprovalRoutes);
+      app.route('/api/approvals', approvalRoutes);
+      return { app, store, gate, activatorCalls };
+    }
+
+    it('calls activatePluginLocalTools(pluginId) on allow decision', async () => {
+      const { app, store, activatorCalls } = setupWithActivator();
+      await seedSession(store);
+
+      const initial = await dispatchRpc(app, 'sess-approval-1');
+      const { approvalId } = (await initial.json()) as { approvalId: string };
+
+      await app.request(`/api/approvals/${approvalId}/decision`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ decision: 'allow', scope: 'session' }),
+      });
+
+      expect(activatorCalls).toEqual(['untrusted']);
+    });
+
+    it('does NOT call activator on deny', async () => {
+      const { app, store, activatorCalls } = setupWithActivator();
+      await seedSession(store);
+
+      const initial = await dispatchRpc(app, 'sess-approval-1');
+      const { approvalId } = (await initial.json()) as { approvalId: string };
+
+      await app.request(`/api/approvals/${approvalId}/decision`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ decision: 'deny' }),
+      });
+
+      expect(activatorCalls).toEqual([]);
+    });
+
+    it('survives activator throwing — decision still committed', async () => {
+      const store = createMemoryStore();
+      const registry = createPluginRpcRegistry();
+      registry.registerPluginAction(
+        'untrusted',
+        'do-thing',
+        { handler: './rpc/do-thing.js', description: 'Run the thing' },
+        'community',
+      );
+      const executor = createRpcExecutor({
+        registry,
+        loadHandler: async () => async () => ({ ok: true }),
+      });
+      const gate = createRpcApprovalGate();
+      const app = new Hono<Env & { Variables: { activatePluginLocalTools?: (id: string) => Promise<void> } }>();
+      app.use('*', async (c, next) => {
+        c.set('store', store);
+        c.set('rpcExecutor', executor);
+        c.set('rpcRegistry', registry);
+        c.set('rpcApprovalGate', gate);
+        c.set('activatePluginLocalTools', async () => {
+          throw new Error('boom');
+        });
+        await next();
+      });
+      app.route('/api/sessions', pluginRpcRoutes);
+      app.route('/api/sessions', sessionApprovalRoutes);
+      app.route('/api/approvals', approvalRoutes);
+      await seedSession(store);
+
+      const initial = await dispatchRpc(app, 'sess-approval-1');
+      const { approvalId } = (await initial.json()) as { approvalId: string };
+
+      const res = await app.request(`/api/approvals/${approvalId}/decision`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ decision: 'allow', scope: 'session' }),
+      });
+      // Decision succeeds even though activation threw — the user's intent
+      // is recorded and the next plugin-rpc retries activation just-in-time.
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { ok: boolean };
+      expect(body.ok).toBe(true);
+    });
+  });
 });

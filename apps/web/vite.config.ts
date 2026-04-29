@@ -57,6 +57,56 @@ export default defineConfig({
   },
   build: {
     outDir: fileURLToPath(new URL("../../dist/web", import.meta.url)),
-    emptyOutDir: true
+    emptyOutDir: true,
+    // Bundle budget: warn (don't fail) when any chunk exceeds 600 kB raw.
+    // The main chunk currently sits ~350 kB raw after manualChunks; bumping
+    // this floor higher would hide regressions, lower would noise on
+    // every CI run.
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        // Stage 6 (audit): split heavy vendors and feature surfaces out of
+        // the main chunk so the first-paint critical path doesn't ship
+        // dependencies the homepage / session view never touches.
+        //
+        // Naming convention:
+        //   - `react-vendor`: React + react-dom (always needed at root)
+        //   - `router-vendor`: TanStack Router (always needed at root)
+        //   - `i18n-vendor`: i18next + react-i18next (used everywhere)
+        //   - `markdown-vendor`: react-markdown + remark/rehype (lazy on
+        //                       message render)
+        //   - `graph-vendor`: react-force-graph + three (debug page only)
+        //   - `motion-vendor`: framer-motion (animation surfaces)
+        //   - `tanstack-query-vendor`: TanStack Query
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          // Match against the path AFTER node_modules/ to be resilient to
+          // pnpm's `.pnpm/<pkg>@<ver>/node_modules/<pkg>/` layout.
+          const after = id.split("node_modules/").pop() ?? "";
+          if (/^(?:\.pnpm\/[^/]+\/node_modules\/)?(react|react-dom|scheduler)\//.test(after)) {
+            return "react-vendor";
+          }
+          if (/(?:^|\/)@tanstack\/(?:react-)?router/.test(after)) {
+            return "router-vendor";
+          }
+          if (/(?:^|\/)@tanstack\/(?:react-)?query/.test(after)) {
+            return "tanstack-query-vendor";
+          }
+          if (/(?:^|\/)(react-i18next|i18next|i18next-browser-languagedetector)\//.test(after)) {
+            return "i18n-vendor";
+          }
+          if (/(?:^|\/)(react-markdown|remark-|rehype-|hast-util|mdast-util|micromark)/.test(after)) {
+            return "markdown-vendor";
+          }
+          if (/(?:^|\/)(react-force-graph|three|d3-)/.test(after)) {
+            return "graph-vendor";
+          }
+          if (/(?:^|\/)(framer-motion|motion)\//.test(after)) {
+            return "motion-vendor";
+          }
+          return undefined;
+        },
+      },
+    },
   }
 });

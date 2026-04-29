@@ -98,7 +98,7 @@ export function LeftPanel({
           {/* ── Current Session ── */}
           <div className="ui-panel-section border-b border-border space-y-2">
             <span className="ui-eyebrow">
-              {t("session.currentWorld", "当前会话")}
+              {t("session.currentWorld")}
             </span>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 min-w-0">

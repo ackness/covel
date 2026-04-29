@@ -167,6 +167,45 @@ jobs:
       RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
 
     steps:
+      - name: Checkout (for CHANGELOG extraction)
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          # We only need the working tree for docs/CHANGELOG.md, no history.
+          fetch-depth: 1
+
+      - name: Extract CHANGELOG section for this tag
+        # Pull the lines between `## [<version>]` and the next `## [` header
+        # in docs/CHANGELOG.md and write them to release/notes.md so the
+        # GitHub Release body shows the same notes maintainers wrote in the
+        # repo. Falls back to a generic "see CHANGELOG.md" line when the
+        # section is missing — the auto-generated PR list still gets
+        # appended below by `generate_release_notes: true`.
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          version="${RELEASE_TAG#v}"
+          if [ ! -f docs/CHANGELOG.md ]; then
+            echo "_See [docs/CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${RELEASE_TAG}/docs/CHANGELOG.md)._" > release/notes.md
+            echo "::warning::docs/CHANGELOG.md missing — release body will only carry auto-generated PR notes."
+            exit 0
+          fi
+          # `awk` is more reliable than sed for "between two markers" on
+          # macOS+linux. Stop printing the moment we hit the next `## [` header.
+          awk -v ver="$version" '
+            $0 ~ "^## \\[" ver "\\]" { capture=1; print; next }
+            capture && /^## \[/ { exit }
+            capture { print }
+          ' docs/CHANGELOG.md > release/notes.md
+          if [ ! -s release/notes.md ]; then
+            echo "## ${RELEASE_TAG}" > release/notes.md
+            echo "" >> release/notes.md
+            echo "_No CHANGELOG entry found for ${RELEASE_TAG}. See [docs/CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${RELEASE_TAG}/docs/CHANGELOG.md)._" >> release/notes.md
+            echo "::warning::No CHANGELOG section matched version $version — using fallback body."
+          fi
+          echo "── release/notes.md ──"
+          cat release/notes.md
+
       - name: Download Electron artifacts
         uses: actions/download-artifact@v4
         with:
@@ -208,6 +247,11 @@ jobs:
           draft: false
           # `-rc1`, `-beta` etc. are pre-releases. Plain `v0.0.1` is stable.
           prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
+          # `body_path` populates the top of the release body with the
+          # CHANGELOG section authored in `docs/CHANGELOG.md`.
+          # `generate_release_notes: true` then appends the auto-generated
+          # "What's Changed" / "New Contributors" sections beneath it.
+          body_path: release/notes.md
           generate_release_notes: true
           fail_on_unmatched_files: true
           # cleanup-artifacts.mjs leaves only the two distributables behind.

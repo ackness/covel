@@ -1,6 +1,6 @@
 [package]
 name = "covel-desktop-tauri"
-version = "0.0.1"
+version = "0.0.2"
 description = "Covel desktop shell (Tauri)"
 authors = ["Covel"]
 edition = "2021"

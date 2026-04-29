@@ -25,6 +25,11 @@ import type { RpcApprovalDecision } from '@covel/shared';
 type Env = {
   Variables: {
     rpcApprovalGate: RpcApprovalGate;
+    /**
+     * Lazy activator for community plugins' `tools.local` modules. Wired
+     * by bootstrap; absent in narrow test harnesses (use optional chaining).
+     */
+    activatePluginLocalTools?: (pluginId: string) => Promise<void>;
   };
 };
 
@@ -72,6 +77,24 @@ approvalRoutes.post('/:approvalId/decision', async (c) => {
   const result = gate.decide(decision);
   if (!result.ok) {
     return c.json({ error: result.error }, 404);
+  }
+
+  // After an `allow` decision, eagerly activate the plugin's local tools so
+  // the renderer's retry of the original RPC doesn't pay the import cost on
+  // the hot path. No-op for `deny` decisions and for plugins whose tools
+  // are already loaded. Idempotent.
+  if (decision.decision === 'allow') {
+    try {
+      await c.get('activatePluginLocalTools')?.(result.pending.pluginId);
+    } catch (err) {
+      // Activation failure is logged but does not roll back the approval —
+      // the user's decision stands, and the next plugin-rpc call will retry
+      // activation just-in-time.
+      console.warn(
+        `[approvals] tools.local activation failed for ${result.pending.pluginId}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 
   return c.json({

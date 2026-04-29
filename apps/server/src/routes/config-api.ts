@@ -19,6 +19,7 @@
  */
 
 import { Hono } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
 import { resolve, join, dirname, isAbsolute } from "node:path";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir, platform } from "node:os";
@@ -30,8 +31,35 @@ export interface ConfigApiDeps {
   apiKeys: Record<string, string>;
 }
 
+/**
+ * Per-launch bearer token gate.
+ *
+ * The desktop shell generates a `COVEL_DESKTOP_REST_TOKEN` at startup and
+ * injects it into the sidecar env. The renderer fetches the same value over
+ * IPC and attaches `Authorization: Bearer <token>` on privileged calls.
+ *
+ * When the token is absent we run open — that's the path for `pnpm dev:web`,
+ * pure-web tiers, and CI. The endpoint set itself is still gated by
+ * `resolveCovelHome()` so a remote client without `COVEL_HOME` cannot reach
+ * the writes regardless of the token.
+ */
+function makeTokenGuard(): MiddlewareHandler {
+  return async (c: Context, next) => {
+    const expected = readRuntimeEnv().desktopRestToken;
+    if (!expected) return next();
+    const header = c.req.header("authorization") ?? "";
+    const match = /^Bearer\s+(.+)$/i.exec(header.trim());
+    const provided = match?.[1]?.trim();
+    if (!provided || provided !== expected) {
+      return c.json({ error: "Desktop REST token missing or invalid" }, 401);
+    }
+    return next();
+  };
+}
+
 export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   const app = new Hono();
+  const requireToken = makeTokenGuard();
 
   app.get("/api/config/info", (c) => {
     const covelHome = resolveCovelHome();
@@ -47,6 +75,10 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       keysEnvPath: covelHome ? join(covelHome, "keys.env") : null,
       pluginsDir: env.userPluginsDir ?? null,
       worldsDir: env.userWorldsDir ?? null,
+      // True when the desktop shell injected a per-launch bearer token. The
+      // renderer must attach `Authorization: Bearer <token>` on privileged
+      // writes (PUT keys/settings/data-root, POST open-folder).
+      requiresAuth: !!env.desktopRestToken,
     });
   });
 
@@ -70,7 +102,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
 
   // PUT /api/config/keys — body: { [provider]: value }
   // Empty string / null value → remove that provider's key.
-  app.put("/api/config/keys", async (c) => {
+  app.put("/api/config/keys", requireToken, async (c) => {
     const covelHome = resolveCovelHome();
     if (!covelHome) {
       return c.json(
@@ -142,7 +174,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   // Atomically rewrites the bundle. Mode 0600 to match `keys.env` — even
   // though `settings.json` should not contain secrets, the user might
   // import/export with `includeSecrets: true`.
-  app.put("/api/config/settings", async (c) => {
+  app.put("/api/config/settings", requireToken, async (c) => {
     const covelHome = resolveCovelHome();
     if (!covelHome) {
       return c.json({ error: "Not a desktop deployment" }, 400);
@@ -177,7 +209,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   // Rewrites `[paths] data_root` in `~/.covel/config.toml`. Does NOT move
   // existing data: the contract is "new location, fresh start; old data
   // stays where it is". Caller must restart the server to pick up.
-  app.put("/api/config/data-root", async (c) => {
+  app.put("/api/config/data-root", requireToken, async (c) => {
     const covelHome = resolveCovelHome();
     if (!covelHome) {
       return c.json({ error: "Not a desktop deployment" }, 400);
@@ -217,7 +249,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   // POST /api/config/open-folder — body: { target: "config" | "data" | "logs" | "llm.toml" | "keys.env" }
   // Opens the requested folder or file in the platform default application.
   // The whitelist keeps callers from reaching arbitrary filesystem paths.
-  app.post("/api/config/open-folder", async (c) => {
+  app.post("/api/config/open-folder", requireToken, async (c) => {
     let body: unknown;
     try {
       body = await c.req.json();

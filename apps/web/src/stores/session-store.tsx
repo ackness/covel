@@ -20,6 +20,8 @@ import {
   type PluginDataChange,
 } from "@/stores/plugin-data-store.js";
 import { emitToast } from "@/lib/toast-channel.js";
+import { getSettings, registerKnownProviders } from "@/settings/store.js";
+import { registerPluginUserSettings } from "@/settings/registry/plugin.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -918,10 +920,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // Register plugin-declared user settings from PLUGIN.md frontmatter.
       // Each plugin with `userSettings:` shows up under Plugins > <pluginId>
       // in the Settings UI, with values stored under `plugin.<pluginId>.<key>`.
-      const { registerPluginUserSettings } = await import(
-        "@/settings/registry/plugin.js"
-      );
-      const { getSettings } = await import("@/settings/store.js");
+      // (Static imports — the modules are eagerly loaded by main.tsx anyway,
+      // so the dynamic form was an "ineffective dynamic import" Vite warning.)
       for (const pkg of packagesRes.packages) {
         if (pkg.userSettings && pkg.userSettings.length > 0) {
           registerPluginUserSettings(
@@ -934,9 +934,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // Register known providers discovered from llm.toml so the Settings UI
       // shows a secret input per provider.
       if (llmConfig?.providers && llmConfig.providers.length > 0) {
-        const { registerKnownProviders } = await import(
-          "@/settings/store.js"
-        );
         registerKnownProviders(llmConfig.providers);
       }
       dispatch({

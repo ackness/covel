@@ -226,6 +226,13 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
     );
 
     await prepareToolsForSession?.(sessionId);
+    // Just-in-time activation: community plugins skip eager tool import in
+    // bootstrap. Now that the approval gate has cleared this RPC, ensure the
+    // plugin's `tools.local` are registered before the runtime executes —
+    // otherwise tool calls would resolve to `undefined` in the executor.
+    // No-op for builtin/official plugins (already loaded at boot) and for
+    // already-activated community plugins (idempotent).
+    await c.get('activatePluginLocalTools')?.(body.pluginId);
 
     const turnId = crypto.randomUUID();
 

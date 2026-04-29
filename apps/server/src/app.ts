@@ -159,8 +159,13 @@ const defaultAllowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
 ];
-const isLoopbackOrigin = (origin: string): boolean =>
-  /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+// Sidecar's own port. Electron renderer loads from `http://127.0.0.1:<port>/`
+// in production, so we must always allow same-origin requests there even
+// when the user pinned `CORS_ORIGIN` to a single domain.
+const sidecarOrigins = [
+  `http://localhost:${env.serverPort}`,
+  `http://127.0.0.1:${env.serverPort}`,
+];
 app.use(
   "*",
   cors({
@@ -168,7 +173,7 @@ app.use(
       if (!origin) return origin;
       const configured = env.corsOrigins.length > 0 ? env.corsOrigins : defaultAllowedOrigins;
       if (configured.includes(origin)) return origin;
-      if (isLoopbackOrigin(origin)) return origin;
+      if (sidecarOrigins.includes(origin)) return origin;
       return null;
     },
     allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH"],

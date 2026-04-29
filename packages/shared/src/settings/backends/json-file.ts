@@ -17,6 +17,13 @@ interface JsonFileBackendOptions {
   readonly restSecretsEndpoint?: string;
   /** Optional fetch override for testing. */
   readonly fetchImpl?: typeof fetch;
+  /**
+   * Returns headers to merge into every privileged REST call. Used to
+   * attach `Authorization: Bearer <token>` when the desktop shell injected
+   * `COVEL_DESKTOP_REST_TOKEN` into the sidecar. Returning `{}` is fine —
+   * the server gate is also no-op when the token env var is absent.
+   */
+  readonly getAuthHeaders?: () => Record<string, string>;
 }
 
 /**
@@ -32,6 +39,7 @@ export function createJsonFileBackend(
   const endpoint = opts.restEndpoint ?? '/api/config/settings';
   const secretsEndpoint = opts.restSecretsEndpoint ?? '/api/config/keys';
   const fetchImpl = opts.fetchImpl ?? fetch;
+  const authHeaders = (): Record<string, string> => opts.getAuthHeaders?.() ?? {};
 
   return {
     async load(): Promise<Record<SettingKey, unknown>> {
@@ -61,7 +69,7 @@ export function createJsonFileBackend(
       }
       await fetchImpl(endpoint, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ entries }),
       });
     },
@@ -93,7 +101,7 @@ export function createJsonFileBackend(
       }
       await fetchImpl(secretsEndpoint, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(keys),
       });
     },

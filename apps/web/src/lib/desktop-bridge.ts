@@ -9,6 +9,8 @@
  * and no listeners fire.
  */
 
+import { showReloadOverlay, hideReloadOverlay } from "@/components/reload-overlay.js";
+
 type CleanupFn = () => void;
 
 type DesktopPlatform =
@@ -80,12 +82,39 @@ export function isTauriApp(): boolean {
 // meaningless.
 let restDesktopCapable = false;
 
+// Per-launch bearer token for privileged REST writes. Sourced from the
+// Electron IPC `covel:get-info` response (or future Tauri equivalent). On
+// pure web / dev, no token is set — the server-side guard also stays open
+// in that case, so the absence is consistent on both ends.
+let desktopRestToken: string | null = null;
+
+/** Headers to merge into fetches that hit `/api/config/{keys,settings,data-root,open-folder}`. */
+export function getDesktopRestAuthHeaders(): Record<string, string> {
+  return desktopRestToken ? { Authorization: `Bearer ${desktopRestToken}` } : {};
+}
+
+async function ensureDesktopRestToken(): Promise<void> {
+  if (desktopRestToken) return;
+  const ipc = getCovelIpc();
+  if (!ipc) return;
+  try {
+    const info = (await ipc.invoke("covel:get-info")) as { restToken?: string };
+    if (info?.restToken) desktopRestToken = info.restToken;
+  } catch {
+    // Token absence is non-fatal — the server-side guard treats missing token
+    // env as "no enforcement", so dev/web flows still work.
+  }
+}
+
 /**
  * Detect whether the server thinks we're running as a desktop deployment
  * (i.e. it has access to `~/.covel/`). Call once at boot; cheap to re-call
  * (it skips the network probe after the first success).
  */
 export async function probeDesktopMode(): Promise<void> {
+  // Always try to seed the desktop REST token first — the IPC bridge has it
+  // even when restDesktopCapable was already true.
+  await ensureDesktopRestToken();
   if (getCovelIpc() || restDesktopCapable) return;
   try {
     const res = await fetch("/api/config/info");
@@ -201,7 +230,7 @@ export function initDesktopBridge(handlers: DesktopBridgeHandlers): CleanupFn {
 async function postOpenFolder(target: "config" | "data" | "logs"): Promise<void> {
   const res = await fetch("/api/config/open-folder", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getDesktopRestAuthHeaders() },
     body: JSON.stringify({ target }),
   });
   if (!res.ok) {
@@ -232,7 +261,7 @@ export async function openDataDir(): Promise<void> {
 export async function openLlmToml(): Promise<void> {
   const res = await fetch("/api/config/open-folder", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getDesktopRestAuthHeaders() },
     body: JSON.stringify({ target: "llm.toml" }),
   });
   if (!res.ok) {
@@ -245,7 +274,7 @@ export async function openLlmToml(): Promise<void> {
 export async function openKeysEnv(): Promise<void> {
   const res = await fetch("/api/config/open-folder", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getDesktopRestAuthHeaders() },
     body: JSON.stringify({ target: "keys.env" }),
   });
   if (!res.ok) {
@@ -271,7 +300,7 @@ export async function pickDataDir(manualPath?: string): Promise<string | null> {
   if (!manualPath) return null;
   const res = await fetch("/api/config/data-root", {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getDesktopRestAuthHeaders() },
     body: JSON.stringify({ path: manualPath }),
   });
   if (!res.ok) {
@@ -281,11 +310,15 @@ export async function pickDataDir(manualPath?: string): Promise<string | null> {
   return manualPath;
 }
 
+type RestartResult =
+  | { readonly ok: true; readonly port: number }
+  | { readonly ok: false; readonly port: number; readonly error: string };
+
 /** Convenience helper: restart the backend server. */
-export async function restartServer(): Promise<{ port: number } | null> {
+export async function restartServer(): Promise<RestartResult | null> {
   const ipc = getCovelIpc();
   if (!ipc) return null;
-  return ipc.invoke<{ port: number }>("covel:restart-server");
+  return ipc.invoke<RestartResult>("covel:restart-server");
 }
 
 /**
@@ -306,13 +339,13 @@ export async function reloadServerAndWait(opts?: {
   const ipc = getCovelIpc();
   if (!ipc) return false;
 
-  const { showReloadOverlay, hideReloadOverlay } = await import(
-    "@/components/reload-overlay.js"
-  );
-
   showReloadOverlay(opts?.message);
   try {
-    await ipc.invoke<{ port: number }>("covel:restart-server");
+    const result = await ipc.invoke<RestartResult>("covel:restart-server");
+    if (!result.ok) {
+      hideReloadOverlay();
+      throw new Error(result.error || "Sidecar restart failed");
+    }
     // Sidecar is healthy again; reload the page so all clients rebuild
     // cleanly. The overlay stays visible through the navigation.
     window.location.reload();

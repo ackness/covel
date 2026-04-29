@@ -13,6 +13,12 @@ type GetConfigFn = (pluginId: string, runtimeId: string) => Readonly<Record<stri
 type ResolveModelFn = (manifest: RuntimeManifest, apiOverride?: string) => string | undefined;
 type EnsureEmbeddingLockFn = (sessionId: string) => Promise<void>;
 type PrepareToolsForSessionFn = (sessionId: string) => Promise<void>;
+/**
+ * Activate a community plugin's `tools.local` modules — only loaded after
+ * approval. Idempotent: returns immediately on the second call. No-op for
+ * builtin/official plugins (their tools are loaded at boot).
+ */
+type ActivatePluginLocalToolsFn = (pluginId: string) => Promise<void>;
 
 // (sessionScopes context var removed 2026-04-12 — see audit Finding 2)
 
@@ -70,5 +76,14 @@ declare module 'hono' {
      * handlers must use optional-chaining: `await c.get('prepareToolsForSession')?.(sid)`.
      */
     prepareToolsForSession?: PrepareToolsForSessionFn;
+    /**
+     * Activates a community plugin's `tools.local` modules. Called from the
+     * plugin-rpc executor right before a runtime runs (so the tools resolve)
+     * and from the approvals decision route after `allow` (so the tools are
+     * pre-loaded before the renderer retries the original RPC).
+     *
+     * Optional so tests with hand-built DI middleware don't have to wire it.
+     */
+    activatePluginLocalTools?: ActivatePluginLocalToolsFn;
   }
 }

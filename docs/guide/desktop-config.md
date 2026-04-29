@@ -73,6 +73,12 @@ server 会按 `*_API_KEY` 扫描所有条目注入 provider 运行时。Key 名 
 
 **Settings → Desktop** tab 暴露所有路径、一键打开目录、切换 `data_root`。不想改文件就在 UI 里点。
 
+## 桌面 REST 写接口的 token 门
+
+桌面版 sidecar 会在每次启动时生成一个一次性 bearer token，并以 `COVEL_DESKTOP_REST_TOKEN` 注入子进程环境。所有写接口（`PUT /api/config/keys`、`PUT /api/config/settings`、`PUT /api/config/data-root`、`POST /api/config/open-folder`）会校验请求头 `Authorization: Bearer <token>`，缺失或不匹配返回 `401`。读接口（`GET /api/config/info`、`GET /api/config/keys`（仅返回 provider 列表）、`GET /api/config/settings`）保持开放。
+
+`GET /api/config/info` 的响应里增加了 `requiresAuth` 字段，前端据此决定是否需要附带 Authorization 头。Electron 渲染进程通过 `covel:get-info` IPC 拿到 `restToken` 字段，自动注入到所有写请求。开发模式下若未设置该 env，token 门不启用，纯 web tier 与 `pnpm dev:web` 流程保持原样。
+
 ## 相关文档
 
 - [README · 快速开始](../../README.md#-快速开始) — 下载与首次启动

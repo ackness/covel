@@ -10,6 +10,7 @@ import {
   registerProviderKeys,
 } from "./registry/index.js";
 import { cleanupLegacyLocalStorage } from "./legacy-cleanup.js";
+import { getDesktopRestAuthHeaders } from "@/lib/desktop-bridge";
 
 function isDesktopBridge(): boolean {
   if (typeof window === "undefined") return false;
@@ -21,7 +22,7 @@ let readyPromise: Promise<void> | null = null;
 
 function createStore(): SettingsStore {
   const adapter = isDesktopBridge()
-    ? createJsonFileBackend()
+    ? createJsonFileBackend({ getAuthHeaders: getDesktopRestAuthHeaders })
     : createLocalStorageBackend();
   const store = new SettingsStore(adapter);
   registerCoreSettings(store);

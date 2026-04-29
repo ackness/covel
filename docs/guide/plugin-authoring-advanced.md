@@ -172,6 +172,8 @@ const result = pipeline.check(
 
 新插件只需在 PLUGIN.md 中声明 `tools.local`，bootstrap 自动发现、注册并归类，无需手动修改白名单。
 
+**社区（community）信任级别的特殊处理：** 框架 bootstrap 不会立即 import community 插件的 `tools.local`，而是延后到首次 `POST /api/approvals/:approvalId/decision` 决策为 `allow` 时（或下一次 plugin-rpc 执行时 just-in-time），通过 `activatePluginLocalTools(pluginId)` 一次性导入并注册到 toolMap。激活是幂等的，社区插件作者无需做额外配置——声明 `tools.local` + 通过审批后即可执行。
+
 ## 4. 多 Runtime 插件
 
 一个插件可以包含多个 runtime（每个 runtime 一份独立的 PLUGIN.md），适用于复杂的游戏系统：

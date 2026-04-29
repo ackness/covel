@@ -148,7 +148,10 @@ export function DatabasePanel({ sessionId, refreshKey = 0 }: DatabasePanelProps)
     <div className="space-y-4 min-w-0">
       <header className="flex items-center justify-between gap-2 min-w-0 pb-2 border-b border-[var(--rule-color)]">
         <span className="ui-folio truncate">
-          DATABASE&nbsp;&nbsp;<em className="not-italic">共 {tables.length} 卷</em>
+          DATABASE&nbsp;&nbsp;
+          <em className="not-italic">
+            {t("session.dbVolumes", { count: tables.length })}
+          </em>
         </span>
         <Button
           variant="ghost"
@@ -195,7 +198,7 @@ export function DatabasePanel({ sessionId, refreshKey = 0 }: DatabasePanelProps)
       )}
 
       {core.length > 0 && (
-        <Section ord="§ 核心" title="State" count={core.length}>
+        <Section ord={`§ ${t("session.dbCoreSection")}`} title="State" count={core.length}>
           <RowList>
             {core.map(({ table, parsed }) => (
               <TableRow key={table.name} table={table} parsed={parsed} />
@@ -206,7 +209,7 @@ export function DatabasePanel({ sessionId, refreshKey = 0 }: DatabasePanelProps)
 
       {plugins.length > 0 && (
         <Section
-          ord="§ 插件"
+          ord={`§ ${t("session.dbPluginsSection")}`}
           title="Plugin Data"
           count={plugins.reduce((acc, g) => acc + g.rows.length, 0)}
           subCount={plugins.length}
