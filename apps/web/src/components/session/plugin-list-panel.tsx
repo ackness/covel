@@ -447,7 +447,7 @@ function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, session
   return (
     <div className="border border-border rounded-[var(--radius-card)] overflow-hidden">
       {/* Header — flex row with expand button and toggle as siblings (no nested buttons) */}
-      <div className="flex items-center gap-0 hover:bg-muted/50 transition-colors">
+      <div className="flex flex-wrap items-center gap-y-1 hover:bg-muted/50 transition-colors">
         <button
           type="button"
           className="flex-1 flex items-center gap-2 px-2.5 py-2 text-left min-w-0"
@@ -457,7 +457,7 @@ function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, session
             className={`w-3 h-3 shrink-0 text-muted-foreground transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
           />
           <Puzzle className="w-3.5 h-3.5 shrink-0 text-primary/60" />
-          <span className="text-xs font-medium truncate flex-1">
+          <span className="text-xs font-medium truncate flex-1 min-w-0">
             {displayName}
           </span>
           {plugin.priority !== undefined && (
@@ -490,7 +490,7 @@ function SessionPluginItem({ plugin, executing, onToggle, resolvedSlots, session
               disabled={executing}
               title={t("plugin.modelOverrideHint", "Override active — next turn will use this model")}
               aria-label={t("plugin.modelBinding", "Model")}
-              className="ui-input-shell shrink-0 mr-2 max-w-[140px] text-[9px] bg-background border border-border px-1 py-0.5 disabled:opacity-50"
+              className="ui-input-shell min-w-0 flex-shrink mr-2 max-w-[140px] text-[9px] bg-background border border-border px-1 py-0.5 disabled:opacity-50"
             >
               <option value="">
                 {plugin.model ? `auto · ${plugin.model}` : "auto"}

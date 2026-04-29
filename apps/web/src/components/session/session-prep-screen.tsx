@@ -479,7 +479,7 @@ export function SessionPrepScreen({
                             : "border-border bg-muted/20 opacity-60"
                         }`}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
                           {/* Toggle */}
                           <button
                             type="button"
@@ -498,7 +498,7 @@ export function SessionPrepScreen({
                           </button>
 
                           {/* Name + badges */}
-                          <span className="text-xs font-medium truncate flex-1">{displayName}</span>
+                          <span className="text-xs font-medium truncate flex-1 min-w-0">{displayName}</span>
                           {isCore && (
                             <span
                               title={t("plugin.locked")}
@@ -536,7 +536,7 @@ export function SessionPrepScreen({
                             <select
                               value={primaryBinding.slotName}
                               onChange={(e) => bindingState.setBinding(primaryBinding.qualifiedId, e.target.value)}
-                              className="shrink-0 text-[11px] bg-background border border-border rounded px-2 py-1 max-w-[240px]"
+                              className="min-w-[100px] flex-shrink text-[11px] bg-background border border-border rounded px-2 py-1 max-w-[240px]"
                               aria-label={t("plugin.modelBindingAria", "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.")}
                               title={t("plugin.modelBindingAria", "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.")}
                             >
@@ -598,9 +598,9 @@ export function SessionPrepScreen({
                               const missingDefault = isMissingDeclaredSlot(declaredSlot);
                               const showPicker = pluginBindings.length > 1 || missingDefault || resolvedSlots.length > 1;
                               return (
-                                <div key={binding.qualifiedId} className="flex items-center gap-2.5 text-[11px] text-muted-foreground">
+                                <div key={binding.qualifiedId} className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground min-w-0">
                                   <Cpu className="w-3 h-3 shrink-0" />
-                                  <span className="font-mono truncate max-w-[240px]" title={binding.qualifiedId}>
+                                  <span className="font-mono truncate min-w-0 max-w-[240px]" title={binding.qualifiedId}>
                                     {binding.qualifiedId}
                                   </span>
                                   <Badge
@@ -619,7 +619,7 @@ export function SessionPrepScreen({
                                     <select
                                       value={binding.slotName}
                                       onChange={(e) => bindingState.setBinding(binding.qualifiedId, e.target.value)}
-                                      className="ml-auto shrink-0 text-[11px] bg-background border border-border rounded px-2 py-1 max-w-[280px]"
+                                      className="ml-auto min-w-[120px] flex-shrink text-[11px] bg-background border border-border rounded px-2 py-1 max-w-[280px]"
                                       aria-label={t("plugin.modelBindingAria", "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.")}
                                     >
                                       <option value="">
