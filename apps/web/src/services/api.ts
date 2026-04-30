@@ -14,6 +14,7 @@ import {
 } from "@covel/shared";
 import { getSettings, registerKnownProviders } from "@/settings/store";
 import { emitToast } from "@/lib/toast-channel";
+export { getDesktopRestToken } from "@/lib/desktop-bridge";
 import i18n from "@/i18n";
 
 // ── Types ──────────────────────────────────────────────────────────

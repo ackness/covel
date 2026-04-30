@@ -19,6 +19,7 @@ import { isEnvEnabled } from '@covel/shared';
 import type {
   AssetProgressInput,
   LoadedRuntime,
+  PluginSource,
   PluginRuntimeGateway,
   PluginRuntimeUtils,
 } from '@covel/plugin-loader';
@@ -129,6 +130,12 @@ export interface TurnExecutorDeps {
    * the P0-a MediaStore Core package.
    */
   readonly mediaStore?: MediaStoreLike;
+  /**
+   * Resolve trust from plugin discovery source. Registry/bootstrap wires this
+   * from the directory a plugin was loaded from, which is stronger than the
+   * author-supplied `pluginType` manifest field.
+   */
+  readonly getPluginSource?: (pluginId: string) => PluginSource | undefined;
   /** Get effective config for a plugin/runtime. */
   readonly getConfig: (pluginId: string, runtimeId: string) => Readonly<Record<string, unknown>>;
   /** Optional DataStore for persisting results. */
@@ -325,6 +332,15 @@ function emitSubEvent(
     timestamp: new Date().toISOString(),
     payload: { ...payload, _subTopic: subTopic, _subType: subType },
   });
+}
+
+function isTrustedPluginSource(
+  deps: TurnExecutorDeps,
+  manifest: RuntimeManifest,
+): boolean {
+  const source = deps.getPluginSource?.(manifest.pluginId);
+  if (source) return source === 'builtin' || source === 'official';
+  return manifest.pluginType === 'core-plugin';
 }
 
 function createAssetProgressEmitter(
@@ -2168,16 +2184,9 @@ async function executeOneRuntime(
             pluginId: manifest.pluginId,
           })
         : undefined;
-      // Audit P0-3: third-party (community) function runtimes get a
-      // narrowed `FunctionStoreView` so they can't quietly call
-      // `setPluginData` / `upsertCharacter` / `setPluginDataBatch` to
-      // bypass the proposal pipeline and tool approval. Core plugins
-      // keep the full DataStore — their guards / handlers implement
-      // framework primitives (e.g. world-init reusing historical
-      // sessions) that genuinely need the wider surface.
-      const isCorePlugin = manifest.pluginType === 'core-plugin';
+      const isTrustedSource = isTrustedPluginSource(deps, manifest);
       const handlerStore = deps.store
-        ? isCorePlugin
+        ? isTrustedSource
           ? deps.store
           : createFunctionStoreView(deps.store, helperCtx)
         : undefined;
@@ -2350,19 +2359,36 @@ async function executeOneRuntime(
           ? input.manualTrigger.payload
           : undefined;
       const guardUserSettings = resolveUserSettings(manifest, input.userSettings);
+      const guardHelperCtx = {
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        pluginId: manifest.pluginId,
+        runtimeId: manifest.name,
+      };
       const guardAssetProgress = createAssetProgressEmitter(deps.emitter, {
         sessionId: input.sessionId,
         turnId: input.turnId,
         pluginId: manifest.pluginId,
         runtimeId: manifest.name,
       });
+      const guardStore = deps.store
+        ? isTrustedPluginSource(deps, manifest)
+          ? deps.store
+          : createFunctionStoreView(deps.store, guardHelperCtx)
+        : undefined;
+      const guardPluginDataHandle = deps.store
+        ? createPluginDataWriter(deps.store, guardHelperCtx)
+        : undefined;
+      const guardLoggerHandle = deps.store
+        ? createPluginLogger(deps.store, guardHelperCtx)
+        : undefined;
       const guardOutput = await loaded.guard({
         sessionId: input.sessionId,
         turnId: input.turnId,
         pluginId: manifest.pluginId,
         playerMessage: input.playerMessage,
         locale: input.locale,
-        store: deps.store,
+        store: guardStore,
         completedResults,
         config: guardConfig,
         recursiveCall: createRecursiveCall(),
@@ -2374,6 +2400,8 @@ async function executeOneRuntime(
         ...(guardManualPayload ? { manualPayload: guardManualPayload } : {}),
         ...(triggerEvent ? { triggerEvent } : {}),
         ...(guardUserSettings ? { userSettings: guardUserSettings } : {}),
+        ...(guardPluginDataHandle ? { pluginData: guardPluginDataHandle } : {}),
+        ...(guardLoggerHandle ? { logger: guardLoggerHandle } : {}),
       });
 
       if (guardOutput.skip === true) {

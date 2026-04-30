@@ -93,6 +93,10 @@ export function getDesktopRestAuthHeaders(): Record<string, string> {
   return desktopRestToken ? { Authorization: `Bearer ${desktopRestToken}` } : {};
 }
 
+export function getDesktopRestToken(): string | null {
+  return desktopRestToken;
+}
+
 async function ensureDesktopRestToken(): Promise<void> {
   if (desktopRestToken) return;
   const ipc = getCovelIpc();

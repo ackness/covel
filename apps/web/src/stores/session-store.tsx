@@ -949,7 +949,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // Auto-load server-configured provider keys (from .env.llm).
       // Only fills if user hasn't manually configured keys in browser.
       try {
-        const res = await fetch("/api/provider-keys");
+        const token = api.getDesktopRestToken?.();
+        const res = await fetch("/api/provider-keys", token
+          ? { headers: { Authorization: `Bearer ${token}` } }
+          : undefined);
         if (res.ok) {
           const { keys } = await res.json();
           if (keys && typeof keys === "object" && !Array.isArray(keys)) {

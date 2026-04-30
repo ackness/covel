@@ -4,13 +4,15 @@
  * RED phase: all tests should FAIL before fixes are applied.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
 import { createStateManager, type StateManager } from '@covel/state';
 import { createPluginRegistry, type PluginRegistry } from '@covel/plugin-loader';
 import { createMemoryStore, type DataStore } from '@covel/store';
 import { sessionRoutes } from '../../src/routes/api/session.js';
 import { stateRoutes } from '../../src/routes/api/state.js';
+import { rateLimiter } from '../../src/middleware/rate-limit.js';
+import { createMiscApiRoutes } from '../../src/routes/misc-api.js';
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -124,6 +126,114 @@ describe('[CRITICAL] PUT /state-snapshot returns 501', () => {
     expect(body.error).toBeDefined();
   });
 });
+
+describe('[P2] rate limiter proxy trust', () => {
+  let savedTrustedProxyIps: string | undefined;
+
+  beforeEach(() => {
+    savedTrustedProxyIps = process.env.TRUSTED_PROXY_IPS;
+  });
+
+  afterEach(() => {
+    if (savedTrustedProxyIps === undefined) delete process.env.TRUSTED_PROXY_IPS;
+    else process.env.TRUSTED_PROXY_IPS = savedTrustedProxyIps;
+  });
+
+  function requestFrom(remote: string, forwarded: string): Request {
+    const req = new Request('http://localhost/limited', {
+      headers: { 'X-Forwarded-For': forwarded },
+    });
+    Object.defineProperty(req, 'connInfo', {
+      value: { remote: { address: remote } },
+    });
+    return req;
+  }
+
+  it('ignores forged forwarded headers when the remote address is untrusted', async () => {
+    delete process.env.TRUSTED_PROXY_IPS;
+    const app = new Hono();
+    app.use('/limited', rateLimiter({ max: 1, windowMs: 60_000 }));
+    app.get('/limited', (c) => c.text('ok'));
+
+    const first = await app.request(requestFrom('203.0.113.10', '198.51.100.1'));
+    const second = await app.request(requestFrom('203.0.113.10', '198.51.100.2'));
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(429);
+  });
+
+  it('uses forwarded headers when the remote address is explicitly trusted', async () => {
+    process.env.TRUSTED_PROXY_IPS = '127.0.0.1';
+    const app = new Hono();
+    app.use('/limited', rateLimiter({ max: 1, windowMs: 60_000 }));
+    app.get('/limited', (c) => c.text('ok'));
+
+    const first = await app.request(requestFrom('127.0.0.1', '198.51.100.1'));
+    const second = await app.request(requestFrom('127.0.0.1', '198.51.100.2'));
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+  });
+});
+
+describe('[P2] provider keys raw exposure', () => {
+  let savedEnv: Record<string, string | undefined>;
+
+  beforeEach(() => {
+    savedEnv = {
+      COVEL_DESKTOP_REST_TOKEN: process.env.COVEL_DESKTOP_REST_TOKEN,
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    };
+  });
+
+  afterEach(() => {
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  it('returns masked availability without desktop bearer token', async () => {
+    process.env.COVEL_DESKTOP_REST_TOKEN = 'desktop-token';
+    process.env.OPENAI_API_KEY = 'sk-openai-secret';
+    const app = new Hono();
+    app.route('/', createMiscApiRoutes(makeAiStackStub(), createPluginRegistry(), createMemoryStore()));
+
+    const res = await app.request('http://localhost/api/provider-keys');
+    const body = await res.json() as { keys: Record<string, string>; providers: Record<string, { configured: boolean; masked: string }> };
+
+    expect(res.status).toBe(200);
+    expect(body.keys).toEqual({});
+    expect(body.providers.openai).toMatchObject({ configured: true });
+    expect(body.providers.openai.masked).toContain('...');
+  });
+
+  it('returns raw keys with the desktop bearer token', async () => {
+    process.env.COVEL_DESKTOP_REST_TOKEN = 'desktop-token';
+    process.env.OPENAI_API_KEY = 'sk-openai-secret';
+    const app = new Hono();
+    app.route('/', createMiscApiRoutes(makeAiStackStub(), createPluginRegistry(), createMemoryStore()));
+
+    const res = await app.request('http://localhost/api/provider-keys', {
+      headers: { Authorization: 'Bearer desktop-token' },
+    });
+    const body = await res.json() as { keys: Record<string, string> };
+
+    expect(res.status).toBe(200);
+    expect(body.keys.openai).toBe('sk-openai-secret');
+  });
+});
+
+function makeAiStackStub() {
+  return {
+    slotRegistry: {
+      listSlots: () => ({}),
+    },
+    presetRegistry: {
+      listPresets: () => [],
+    },
+  } as never;
+}
 
 // ── HIGH: plugins/disable must validate pluginId ────────────────
 

@@ -1,5 +1,5 @@
 import type { DataStore, MediaStore } from '@covel/store';
-import type { PluginRegistry, LoadedRuntime, PluginRuntimeGateway, PluginRuntimeUtils } from '@covel/plugin-loader';
+import type { PluginRegistry, LoadedRuntime, PluginRuntimeGateway, PluginRuntimeUtils, PluginSource } from '@covel/plugin-loader';
 import type { StateManager } from '@covel/state';
 import type { EventBus } from '@covel/events';
 import type { LLMAdapter, ToolExecutor, RpcExecutor, PluginRpcRegistry, HookPipeline } from '@covel/runtime';
@@ -13,6 +13,7 @@ type GetConfigFn = (pluginId: string, runtimeId: string) => Readonly<Record<stri
 type ResolveModelFn = (manifest: RuntimeManifest, apiOverride?: string) => string | undefined;
 type EnsureEmbeddingLockFn = (sessionId: string) => Promise<void>;
 type PrepareToolsForSessionFn = (sessionId: string) => Promise<void>;
+type GetPluginSourceFn = (pluginId: string) => PluginSource | undefined;
 /**
  * Activate a community plugin's `tools.local` modules — only loaded after
  * approval. Idempotent: returns immediately on the second call. No-op for
@@ -76,6 +77,7 @@ declare module 'hono' {
      * handlers must use optional-chaining: `await c.get('prepareToolsForSession')?.(sid)`.
      */
     prepareToolsForSession?: PrepareToolsForSessionFn;
+    getPluginSource?: GetPluginSourceFn;
     /**
      * Activates a community plugin's `tools.local` modules. Called from the
      * plugin-rpc executor right before a runtime runs (so the tools resolve)

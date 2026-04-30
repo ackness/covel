@@ -389,7 +389,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 | GET | `/api/block-schemas` | 列出插件 block schema |
 | GET | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件 |
 | GET | `/api/llm-config` | 返回 slot 配置与能力信息 |
-| GET | `/api/provider-keys` | 返回服务器配置的 API 密钥（仅 T1） |
+| GET | `/api/provider-keys` | 桌面 bearer client 返回原始 provider key；其他请求返回 masked availability |
 | GET | `/api/config/info` | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等） |
 | GET | `/api/config/keys` | 仅桌面：列出已配置的 provider（不返回值） |
 | PUT | `/api/config/keys` | 仅桌面：写入 `<covelHome>/keys.env`；body `{ provider: value }` |

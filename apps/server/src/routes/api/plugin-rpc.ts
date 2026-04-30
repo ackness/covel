@@ -38,6 +38,7 @@ import {
   executeTurn,
   processRuntimeResult,
   createTurnEmitter,
+  createRpcHandlerStoreView,
 } from '@covel/runtime';
 import { RpcDispatchError, RpcValidationError } from '@covel/runtime';
 import { getPluginTrustInfo } from '@covel/plugin-loader';
@@ -127,7 +128,8 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
     const pluginRegistry = c.get('pluginRegistry');
     const llmAdapter = c.get('llmAdapter');
     const pluginGateway = c.get('pluginGateway');
-  const pluginUtils = c.get('pluginUtils');
+    const pluginUtils = c.get('pluginUtils');
+    const getPluginSource = c.get('getPluginSource');
     const loadRuntimeFn = c.get('loadRuntimeFn');
     const toolExecutor = c.get('toolExecutor');
     const resolveModel = c.get('resolveModel');
@@ -298,7 +300,8 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
           loadRuntime: loadRuntimeFn,
           llm: llmAdapter,
           ...(pluginGateway ? { gateway: pluginGateway } : {}),
-        ...(pluginUtils ? { utils: pluginUtils } : {}),
+          ...(pluginUtils ? { utils: pluginUtils } : {}),
+          ...(getPluginSource ? { getPluginSource } : {}),
           getConfig: turnGetConfig,
           store,
           ...(mediaStore ? { mediaStore } : {}),
@@ -426,6 +429,7 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
             llm: llmAdapter,
             ...(pluginGateway ? { gateway: pluginGateway } : {}),
             ...(pluginUtils ? { utils: pluginUtils } : {}),
+            ...(getPluginSource ? { getPluginSource } : {}),
             getConfig: turnGetConfig,
             store,
             ...(mediaStore ? { mediaStore } : {}),
@@ -1027,13 +1031,19 @@ pluginRpcRoutes.post('/:id/plugin-rpc', async (c) => {
 
   // Action-level dispatch.
   try {
+    const rpcStore = entryTrust === 'builtin' || entryTrust === 'official'
+      ? store
+      : createRpcHandlerStoreView(store, {
+          sessionId,
+          pluginId: body.pluginId,
+        });
     const dispatch = await executor.dispatch(
       {
         pluginId: body.pluginId,
         action: body.action!,
         payload: body.payload,
       },
-      { sessionId, store },
+      { sessionId, store: rpcStore },
     );
     return c.json({ status: 'ok', result: dispatch.result });
   } catch (err) {

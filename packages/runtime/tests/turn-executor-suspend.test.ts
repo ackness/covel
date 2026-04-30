@@ -541,6 +541,69 @@ describe('TurnExecutor — function runtime suspend', () => {
     // The output goes through as normal success (status field is just output data)
     expect(result.runtimeResults[0]!.status).toBe('success');
   });
+
+  it('community function handler with forged core-plugin manifest gets a scoped store', async () => {
+    const manifest = makeFunctionManifest({ pluginType: 'core-plugin' });
+    let capturedStore: unknown;
+    const loaded: LoadedRuntime = {
+      manifest,
+      promptTemplate: '',
+      references: [],
+      handler: async (ctx) => {
+        capturedStore = ctx.store;
+        const writable = ctx.store as { setPluginData?: unknown };
+        return { canWriteDirectly: typeof writable.setPluginData === 'function' };
+      },
+    };
+
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => loaded,
+      llm: { generate: vi.fn().mockResolvedValue({ content: '', toolCalls: [], finishReason: 'stop', usage: { inputTokens: 0, outputTokens: 0 } }) },
+      getConfig: () => ({}),
+      getPluginSource: () => 'community',
+      store,
+      eventBus,
+    };
+
+    const result = await executeTurn(makeTurnInput(), [manifest], deps);
+
+    expect((result.runtimeResults[0]!.output as Record<string, unknown>).canWriteDirectly).toBe(false);
+    expect(capturedStore).toHaveProperty('getPluginData');
+    expect(capturedStore).toHaveProperty('listTurnMessages');
+  });
+
+  it('community agent guard gets scoped store helpers', async () => {
+    const manifest = makeManifest({ pluginType: 'core-plugin' });
+    let capturedStore: unknown;
+    let capturedPluginData: unknown;
+    const loaded: LoadedRuntime = {
+      manifest,
+      promptTemplate: 'guarded',
+      references: [],
+      guard: async (ctx) => {
+        capturedStore = ctx.store;
+        capturedPluginData = ctx.pluginData;
+        const writable = ctx.store as { setPluginData?: unknown };
+        return { skip: true, canWriteDirectly: typeof writable.setPluginData === 'function' };
+      },
+    };
+
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => loaded,
+      llm: { generate: vi.fn().mockResolvedValue({ content: '', toolCalls: [], finishReason: 'stop', usage: { inputTokens: 0, outputTokens: 0 } }) },
+      getConfig: () => ({}),
+      getPluginSource: () => 'community',
+      store,
+      eventBus,
+    };
+
+    const result = await executeTurn(makeTurnInput(), [manifest], deps);
+
+    expect(result.runtimeResults[0]!.status).toBe('skipped');
+    expect((result.runtimeResults[0]!.output as Record<string, unknown>).canWriteDirectly).toBe(false);
+    expect(capturedStore).toHaveProperty('getPluginData');
+    expect(capturedPluginData).toHaveProperty('set');
+  });
 });
 
 // ── resumeSuspendedRuntime ────────────────────────────────────────

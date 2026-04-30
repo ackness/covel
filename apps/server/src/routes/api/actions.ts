@@ -66,6 +66,7 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
   const llmAdapter = c.get('llmAdapter');
   const pluginGateway = c.get('pluginGateway');
   const pluginUtils = c.get('pluginUtils');
+  const getPluginSource = c.get('getPluginSource');
   const loadRuntimeFn = c.get('loadRuntimeFn');
   const toolExecutor = c.get('toolExecutor');
   const getConfigFn = c.get('getConfigFn');
@@ -323,6 +324,7 @@ actionRoutes.post('/', rateLimiter({ max: 30 }), async (c) => {
           llm: llmAdapter,
           ...(pluginGateway ? { gateway: pluginGateway } : {}),
         ...(pluginUtils ? { utils: pluginUtils } : {}),
+        ...(getPluginSource ? { getPluginSource } : {}),
           getConfig: turnGetConfig,
           store,
           ...(mediaStore ? { mediaStore } : {}),

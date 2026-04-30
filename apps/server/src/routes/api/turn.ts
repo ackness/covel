@@ -39,6 +39,7 @@ turnRoutes.post('/:id/turn', rateLimiter({ max: 30 }), async (c) => {
   const llmAdapter = c.get('llmAdapter');
   const pluginGateway = c.get('pluginGateway');
   const pluginUtils = c.get('pluginUtils');
+  const getPluginSource = c.get('getPluginSource');
   const loadRuntimeFn = c.get('loadRuntimeFn');
   const resolveModel = c.get('resolveModel');
   const getConfigFn = c.get('getConfigFn');
@@ -122,6 +123,7 @@ turnRoutes.post('/:id/turn', rateLimiter({ max: 30 }), async (c) => {
         llm: llmAdapter,
         ...(pluginGateway ? { gateway: pluginGateway } : {}),
         ...(pluginUtils ? { utils: pluginUtils } : {}),
+        ...(getPluginSource ? { getPluginSource } : {}),
         getConfig: turnGetConfig,
         store,
         ...(mediaStore ? { mediaStore } : {}),
@@ -172,4 +174,3 @@ turnRoutes.post('/:id/turn', rateLimiter({ max: 30 }), async (c) => {
 
   return c.json(result);
 });
-

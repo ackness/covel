@@ -35,6 +35,12 @@ const UI_NAMESPACE_BY_SLOT: Record<UiSlotName, string> = {
   left: '__ui_left__',
 };
 
+function bearerToken(c: { req: { header(name: string): string | undefined } }): string | undefined {
+  const header = c.req.header('authorization') ?? '';
+  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
+  return match?.[1]?.trim();
+}
+
 /**
  * All plugin directories the server should scan — bundled first, user
  * install dir second. Mirrors `apps/server/src/app.ts:199` so `/api/ui-specs`
@@ -580,17 +586,13 @@ export function createMiscApiRoutes(
     });
   });
 
-  // GET /api/provider-keys — return server-configured API keys (T1 self-deploy only)
+  // GET /api/provider-keys — return server-configured API keys to desktop bearer clients only.
   app.get('/api/provider-keys', (c) => {
     const KNOWN_PROVIDERS = ['DEEPSEEK', 'DASHSCOPE', 'OPENAI', 'ANTHROPIC', 'OPENROUTER'] as const;
 
-    // Security: allowlist approach — expose raw keys only for local self-tier
-    // requests so the onboarding UI can hydrate provider settings.
-    // All other cases return provider availability booleans + masked metadata.
-    const tier = readRuntimeEnv().deploymentTier;
-    const host = new URL(c.req.url).hostname;
-    const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
-    const allowRawKeys = (tier === 'T1' || tier === 'self') && isLocalhost;
+    const env = readRuntimeEnv();
+    const allowRawKeys =
+      !!env.desktopRestToken && bearerToken(c) === env.desktopRestToken;
 
     if (allowRawKeys) {
       const keys: Record<string, string> = {};

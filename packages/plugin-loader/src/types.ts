@@ -242,7 +242,7 @@ export interface FunctionHandlerContext {
    * value (proposal pipeline). Core plugins receive the full `DataStore`
    * (typed as `unknown` here to keep this package free of a
    * @covel/store import) because they implement framework primitives.
-   * The runtime decides which to inject based on `manifest.pluginType`.
+   * The runtime decides which to inject based on discovery-source trust.
    */
   readonly store: FunctionStoreView | unknown;
   readonly completedResults: ReadonlyMap<string, unknown>;
@@ -337,12 +337,11 @@ export interface FunctionHandlerContext {
  * plugins bypass proposal/tool governance and write into any other
  * plugin's data through `setPluginData(...)`.
  *
- * Core / official plugins (`pluginType: 'core-plugin'`) keep the full
- * `DataStore` because they implement framework primitives that need it
+ * Builtin / official plugins keep the full `DataStore` because they
+ * implement framework primitives that need it
  * (e.g. `world-init`'s guard imports historic sessions,
  * `char-creator`'s guard upserts the player Character record). The
- * runtime decides which surface to inject based on the manifest's
- * trust signal.
+ * runtime decides which surface to inject based on discovery-source trust.
  *
  * Plugins that want to write data should use `ctx.pluginData.set(...)`
  * (placeholders) or return `{ pluginData: [...] }` from the handler so

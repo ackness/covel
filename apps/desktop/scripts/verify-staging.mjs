@@ -95,6 +95,14 @@ async function poll(url, timeoutMs) {
 
 const port = await findFreePort();
 const tmpDb = path.join(desktopRoot, "staging", `.smoke-${port}.db`);
+const tmpUserRoot = path.join(stagingDir, `.smoke-user-${port}`);
+const userPluginsDir = path.join(tmpUserRoot, "plugins");
+const userWorldsDir = path.join(tmpUserRoot, "worlds");
+const userConfigDir = path.join(tmpUserRoot, "config");
+const logsDir = path.join(tmpUserRoot, "logs");
+for (const dir of [userPluginsDir, userWorldsDir, userConfigDir, logsDir]) {
+  fs.mkdirSync(dir, { recursive: true });
+}
 
 // The smoke env intentionally avoids any DEEPSEEK_API_KEY or similar: we're
 // verifying the server *boots* with whatever config it finds (or doesn't).
@@ -104,6 +112,15 @@ const env = {
   STORE_BACKEND: "sqlite",
   SQLITE_PATH: tmpDb,
   NODE_ENV: "production",
+  COVEL_DESKTOP_REST: "1",
+  COVEL_DESKTOP_REST_TOKEN: `smoke-${port}`,
+  COVEL_PLUGINS_DIR: path.join(serverStaging, "plugins"),
+  COVEL_WORLDS_DIR: path.join(serverStaging, "worlds"),
+  COVEL_USER_PLUGINS_DIR: userPluginsDir,
+  COVEL_USER_WORLDS_DIR: userWorldsDir,
+  COVEL_USER_CONFIG_DIR: userConfigDir,
+  COVEL_LOGS_DIR: logsDir,
+  STATIC_DIR: path.join(stagingDir, "web-dist"),
 };
 
 console.log(
@@ -146,13 +163,22 @@ function cleanupDb() {
       const p = tmpDb + suffix;
       if (fs.existsSync(p)) fs.rmSync(p, { force: true });
     }
+    if (fs.existsSync(tmpUserRoot)) fs.rmSync(tmpUserRoot, { recursive: true, force: true });
   } catch {
     /* best effort */
   }
 }
 
+function assertNoStartupPathErrors() {
+  const stderr = stderrBuf.join("");
+  if (/\bENOENT\b|\bENOTDIR\b/.test(stderr)) {
+    throw new Error(`server reported startup path errors\n--- stderr tail ---\n${stderrBuf.slice(-80).join("")}`);
+  }
+}
+
 try {
   await poll(`http://127.0.0.1:${port}/api/health`, TIMEOUT_MS);
+  assertNoStartupPathErrors();
   booted = true;
   console.log("[smoke] ✓ /api/health OK");
 } catch (err) {

@@ -106,5 +106,6 @@ export {
   createPluginDataWriter,
   createPluginLogger,
   createFunctionStoreView,
+  createRpcHandlerStoreView,
 } from './plugin-handler-helpers.js';
 export type { HandlerHelperContext } from './plugin-handler-helpers.js';

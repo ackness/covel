@@ -20,6 +20,47 @@ interface WindowEntry {
   resetAt: number;
 }
 
+function parseTrustedProxyIps(raw: string | undefined): ReadonlySet<string> {
+  return new Set(
+    (raw ?? '')
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean),
+  );
+}
+
+function normalizeIp(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith('::ffff:')) return trimmed.slice('::ffff:'.length);
+  return trimmed;
+}
+
+function requestRemoteAddr(c: { req: { raw?: Request } }): string | undefined {
+  const raw = c.req.raw as (Request & {
+    readonly connInfo?: { readonly remote?: { readonly address?: string } };
+  }) | undefined;
+  return normalizeIp(raw?.connInfo?.remote?.address);
+}
+
+function clientIp(c: { req: { header(name: string): string | undefined; raw?: Request } }): string {
+  const env = readRuntimeEnv();
+  const remote = requestRemoteAddr(c);
+  const trustedProxyIps = parseTrustedProxyIps(env.trustedProxyIps);
+  const canTrustForwarded = !!remote && trustedProxyIps.has(remote);
+
+  if (canTrustForwarded) {
+    const forwarded = c.req.header('x-forwarded-for')?.split(',')[0];
+    return normalizeIp(forwarded)
+      ?? normalizeIp(c.req.header('x-real-ip'))
+      ?? remote
+      ?? 'unknown';
+  }
+
+  return remote ?? 'unknown';
+}
+
 export function rateLimiter(opts: RateLimitOptions = {}): MiddlewareHandler {
   const max = opts.max ?? readRuntimeEnv().rateLimitRpm;
   const windowMs = opts.windowMs ?? 60_000;
@@ -40,10 +81,7 @@ export function rateLimiter(opts: RateLimitOptions = {}): MiddlewareHandler {
       }
     }
 
-    const ip = c.req.header('x-forwarded-for')
-      ?? c.req.header('x-real-ip')
-      ?? 'unknown';
-
+    const ip = clientIp(c);
     const key = `${ip}:${c.req.path}`;
     const entry = windows.get(key);
 

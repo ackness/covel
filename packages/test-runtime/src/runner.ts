@@ -737,7 +737,6 @@ async function runDeferredFollower(args: {
     runtimeId: args.follower.runtimeId,
   };
   try {
-    const isCorePlugin = manifest.pluginType === 'core-plugin';
     const mediaHandle = createRuntimeMediaContext(args.mediaStore, args.utils, {
       sessionId: args.sessionId,
       pluginId: args.follower.pluginId,
@@ -748,7 +747,7 @@ async function runDeferredFollower(args: {
       pluginId: args.follower.pluginId,
       playerMessage: '',
       locale: args.locale,
-      store: isCorePlugin ? args.store : createFunctionStoreView(args.store, helperCtx),
+      store: createFunctionStoreView(args.store, helperCtx),
       completedResults: new Map(),
       config: args.config,
       recursiveCall: async () => {
@@ -939,6 +938,7 @@ export async function runRuntimeDebug(
       gateway: liveAdapters?.gateway ?? makeGateway(options),
       utils: PLUGIN_UTILS,
       mediaStore,
+      getPluginSource: () => discovery.source,
       getConfig: () => options.config ?? {},
       store,
       toolExecutor: createToolExecutor({

@@ -620,6 +620,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
   //    Actual config pre-loading happens in route handlers (actions.ts, turn.ts)
   //    before calling executeTurn, bridging async store reads to sync getConfig interface.
   const getConfigFn = config.getConfigFn ?? ((_pluginId: string, _runtimeId: string): Readonly<Record<string, unknown>> => ({}));
+  const getPluginSource = (pluginId: string) => registry.get(pluginId)?.source;
 
   // 7c. PR-3: Plugin RPC registry + executor.
   //
@@ -874,6 +875,7 @@ export async function bootstrapApi(config: ApiBootstrapConfig): Promise<ApiBoots
     c.set('rpcApprovalGate', rpcApprovalGate);
     c.set('sessionLock', sessionLock);
     c.set('prepareToolsForSession', prepareToolsForSession);
+    c.set('getPluginSource', getPluginSource);
     c.set('activatePluginLocalTools', activatePluginLocalTools);
     if (config.ensureEmbeddingLock) {
       c.set('ensureEmbeddingLock', config.ensureEmbeddingLock);

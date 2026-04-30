@@ -164,8 +164,8 @@ export const COVEL_ENV_REGISTRY = [
     name: 'TRUSTED_PROXY_IPS',
     group: 'server',
     type: 'string',
-    status: 'documented',
-    description: 'Documented proxy allowlist for future rate-limit hardening.',
+    status: 'active',
+    description: 'Comma-separated proxy IP allowlist used before trusting X-Forwarded-For / X-Real-IP for rate limiting.',
   },
   {
     name: 'COVEL_MEDIA_TOKEN_SECRET',
@@ -831,6 +831,7 @@ export function readRuntimeEnv(source: EnvSource = defaultSource()) {
     debugRoutes: isEnvTruthy('ENABLE_DEBUG_PAGE', source),
     installApiEnabled: isEnvTruthy('COVEL_INSTALL_API_ENABLED', source),
     rateLimitRpm: readEnvInt('RATE_LIMIT_RPM', 60, source),
+    trustedProxyIps: readEnvString('TRUSTED_PROXY_IPS', undefined, source),
     covelHome: readEnvString('COVEL_HOME', undefined, source),
     dataRoot: readEnvString('COVEL_DATA_ROOT', undefined, source),
     desktopRest: isEnvTruthy('COVEL_DESKTOP_REST', source),

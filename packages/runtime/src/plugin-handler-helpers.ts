@@ -13,6 +13,7 @@ import type {
   PluginLogger,
   FunctionStoreView,
 } from '@covel/plugin-loader';
+import type { RpcHandlerStore } from '@covel/shared';
 
 export interface HandlerHelperContext {
   readonly sessionId: string;
@@ -155,8 +156,8 @@ export function createPluginLogger(
  * misuse loudly instead of letting third-party code silently bypass
  * proposal/tool governance.
  *
- * Core plugins (`pluginType: 'core-plugin'`) keep the full DataStore
- * because their guard / handler logic implements framework primitives
+ * Builtin / official plugins keep the full DataStore because their guard /
+ * handler logic implements framework primitives
  * (e.g. `world-init`'s historical-session reuse, `char-creator`'s
  * deterministic player upsert). The runtime decides which to inject.
  */
@@ -182,6 +183,51 @@ export function createFunctionStoreView(
         ctx.sessionId,
         typeof limit === 'number' ? { limit } : undefined,
       );
+    },
+  };
+}
+
+/**
+ * Build a scoped store for community action-level RPC handlers. The method
+ * shapes stay compatible with `RpcHandlerStore`, while session/plugin
+ * arguments are bound to the current request so handler code cannot reach a
+ * different session or plugin namespace by supplying alternate ids.
+ */
+export function createRpcHandlerStoreView(
+  store: DataStore,
+  ctx: Pick<HandlerHelperContext, 'sessionId' | 'pluginId'>,
+): RpcHandlerStore {
+  return {
+    getSession() {
+      return store.getSession(ctx.sessionId);
+    },
+    listTurnMessages(_sessionId: string) {
+      return store.listTurnMessages(ctx.sessionId);
+    },
+    savePlayerInput(input) {
+      return store.savePlayerInput({
+        ...input,
+        sessionId: ctx.sessionId,
+      });
+    },
+    async setPluginData(record) {
+      const now = new Date().toISOString();
+      await store.setPluginData({
+        id: `${ctx.sessionId}:${ctx.pluginId}:${record.namespace}:${record.key}`,
+        sessionId: ctx.sessionId,
+        pluginId: ctx.pluginId,
+        namespace: record.namespace,
+        key: record.key,
+        value: record.value,
+        createdAt: record.createdAt ?? now,
+        updatedAt: record.updatedAt ?? now,
+      });
+    },
+    getPluginData(_sessionId, _pluginId, namespace, key) {
+      return store.getPluginData(ctx.sessionId, ctx.pluginId, namespace, key);
+    },
+    async listPluginData(_sessionId, _pluginId, namespace) {
+      return store.listPluginData(ctx.sessionId, ctx.pluginId, namespace);
     },
   };
 }
