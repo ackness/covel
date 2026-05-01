@@ -234,6 +234,8 @@ All store writes key on `pluginId`; all trace logs key on `runtimeId`.
 | Add/change PLUGIN.md frontmatter field | `docs/reference/plugins.md` + `docs/guide/plugin-authoring.md` |
 | Add/change RPC action / framework default | `docs/reference/api.md` (plugin-rpc) + `docs/reference/protocol.md` |
 | Add/change approval flow / trust level | `docs/reference/api.md` + `docs/reference/protocol.md` |
+| Modify `README.md` (English, primary) | `README.zh-CN.md` (must sync in same PR) |
+| Modify `README.zh-CN.md` | `README.md` (must sync in same PR) |
 
 ### Plugin authoring contract
 

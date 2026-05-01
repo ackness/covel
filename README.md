@@ -1,95 +1,90 @@
 # Covel
 
-**用 Agent 编排一切的 AI 角色扮演游戏框架。**
-叙事、行动引导、NPC 关系、世界知识、角色卡 —— 每个玩法机制都是一个**自主 Agent**，自己决定何时触发、读什么上下文、调什么工具、写什么状态。一个回合可以多个 Agent 串联协作。
+**A modern, agentic AI RPG. Customize every mechanic with a plugin.**
+
+**English** · [简体中文](./README.zh-CN.md)
 
 [![Version](https://img.shields.io/badge/version-v0.0.2-8b5cf6)](https://github.com/AcKnEsS/covel/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)]()
 
-[English](./README.en.md) · 中文
-
 ![Covel demo](./.assets/images/demo.gif)
 
-> ⚠️ **早期阶段**：API、数据格式、插件 frontmatter 都会随版本破坏性变化。目前只有 macOS Apple Silicon 预编译包。请勿存放重要存档。
+> ⚠️ **Early access.** APIs, data formats, and plugin frontmatter may break between versions. Only macOS Apple Silicon prebuilt binaries ship today. Don't keep anything important in it yet.
 
 ---
 
-## Covel 是什么
+## What is Covel
 
-主流 AI RPG（SillyTavern / RisuAI 等）的核心是**一次 LLM 调用** —— 把角色卡、lorebook、提示模板拼成一个大 prompt 发出去。
+Covel is an AI-driven role-playing game where every gameplay mechanic — narration, NPC relationships, world lore, character creation, memory — runs as its own **autonomous agent**. A single turn can chain several agents together. Each agent is a plugin: install one, swap one, or write your own.
 
-Covel 把"一次调用"拆成 **Agentic Pipeline**：
+## See it in action
 
-```
-Trigger → Priority Schedule → [Agent₁ → Agent₂ → … → Agentₙ] → Validate → Commit → SSE
-                              ↑ 每个 Agent 独立决定触发、上下文、工具与写入
-```
+The gif above is one normal turn. While the narrator writes the scene, four other agents work in parallel:
 
-**结果**：玩法复杂度沉淀在插件里，而不是塞进一个怪物级 system prompt。叙事、NPC 关系、知识典籍、角色创建都可装可卸。
+- **Narrator + Guide** — drive the story and offer next actions
+- **NPC Graph** — extracts relationships and surfaces who-knows-whom
+- **Codex** — accumulates world lore as you play
+- **Memory** — keeps long-range context across the session
 
-## 快速开始
+Every agent is its own plugin. Disable one, swap one, or write your own.
 
-### A. 下载试玩（macOS Apple Silicon）
+## Quick start
 
-到 [Releases](https://github.com/AcKnEsS/covel/releases) 下载 `Covel-electron-<version>-mac-arm64.dmg`，安装后进 Settings 填一个 LLM API Key 即可。
+### Play it
 
-**配置文件位置**（首次启动自动创建）：
+Grab the latest **macOS Apple Silicon** build from [Releases](https://github.com/AcKnEsS/covel/releases) — `Covel-electron-<version>-mac-arm64.dmg`.
 
-```
-~/.covel/
-├── config.toml      ← 数据目录指针 + 日志轮转
-├── llm.toml         ← 模型 / provider / baseUrl
-├── keys.env         ← API Key（一行一个 KEY=VALUE，权限 0600）
-└── data/
-    ├── covel.db     ← SQLite
-    ├── worlds/      ← 自定义世界
-    └── logs/        ← electron / server 日志
-```
+Open Settings, paste an LLM API key, pick one of the three sample worlds (`cloudmere` / `mistport` / `neonridge`), and play.
 
-应用内 Settings 面板和这些文件双向同步，喜欢哪种用哪种。完整字段参考 → [`docs/guide/desktop-config.md`](./docs/guide/desktop-config.md)。
+Your data lives at `~/.covel/` — config, keys, SQLite, custom worlds, logs. Full schema → [`docs/guide/desktop-config.en.md`](./docs/guide/desktop-config.en.md).
 
-### B. 从源码跑（Node ≥ 22, pnpm 10+）
+> Windows / Intel Mac / Linux are not officially shipped — build from source. The Tauri shell is on hold.
+
+### Run from source
 
 ```bash
 pnpm install
-cp llm.toml.example llm.toml        # 模型与端点
-cp .env.llm.example .env.llm        # provider API Key
+cp llm.toml.example llm.toml        # model IDs and endpoints
+cp .env.llm.example .env.llm        # provider API keys
 pnpm dev                            # web :5173 + server :3001 (SQLite)
 ```
 
-打开 http://localhost:5173，调试页在 `/debug`。
+Open <http://localhost:5173>; debug page at `/debug`.
 
-**配置文件位置**（与桌面版**不同**，不要混淆）：
+Need PostgreSQL, in-memory mode, or alternative paths? See [`docs/guide/env-registry.md`](./docs/guide/env-registry.md).
 
-| 文件 | 位置 | 作用 |
-|------|------|------|
-| `llm.toml` | 仓库根 | 模型 slot 配置 |
-| `.env.llm` | 仓库根 | provider API Key（dev server 启动时加载） |
-| Web 端 LLM Key | `localStorage: covel:keys` | 浏览器内 Settings 面板写入 |
-| Web 端用户偏好 | `localStorage: covel:settings` | 同上 |
-| SQLite | `./data/covel.db` | 设 `STORE_BACKEND=memory` 可用纯内存 |
+## Make your own
 
-> Windows / Intel Mac / Linux 暂无官方包，需要自行构建。Tauri 壳暂时搁置。
+You don't need to write code. This repo ships **two Claude Code skills** that turn a conversation into a working plugin or world pack:
 
-## 内置插件
+- **`/create-plugin`** — describe the agent you want; the skill generates a `PLUGIN.md` (frontmatter + skill prompt) and a minimal `package.json`.
+- **`/create-world`** — describe a setting; the skill produces `world.yaml` + `WORLD.md` ready to drop into `~/.covel/worlds/`.
 
-| 插件 | 类型 | 作用 |
-|------|:-:|------|
-| `narrator`     | Agent    | 主叙事 |
-| `guide`        | Agent    | 行动引导 + 选项生成 |
-| `npc-graph`    | Agent    | NPC 关系图抽取 + 2-hop 检索 |
-| `codex`        | Agent    | 世界知识典籍 |
-| `char-creator` | Agent    | 角色卡创建流程 |
-| `world-init`   | Agent    | 世界维度初始化 |
-| `pregame`      | Function | 开局前置（不走 LLM） |
-| `memory`       | UI       | 记忆面板 |
+Open Claude Code in this repository, type `/create-plugin` or `/create-world`, and have a conversation.
 
-示例世界包:`cloudmere`、`mistport`、`neonridge`。
+> An official community for sharing plugins and world packs is on the roadmap. For now, share via Gist or fork.
 
-## 写一个插件
+## Develop
 
-最小形态 = `PLUGIN.md` + `package.json`。frontmatter 声明触发与工具,markdown 正文就是 Agent 的 skill prompt:
+For hand-writing plugins, debugging the runtime, or extending the kernel.
+
+### Bundled plugins
+
+| Plugin | Kind | Role |
+|--------|:-:|------|
+| `narrator`     | Agent    | Main narration |
+| `guide`        | Agent    | Action guidance + option generation |
+| `npc-graph`    | Agent    | NPC graph extraction + 2-hop retrieval |
+| `codex`        | Agent    | World-knowledge codex |
+| `char-creator` | Agent    | Character-creation flow |
+| `world-init`   | Agent    | World-dimension initialisation |
+| `pregame`      | Function | Pre-game bootstrap (no LLM call) |
+| `memory`       | UI       | Memory panel |
+
+### Write a plugin manually
+
+Minimum: `PLUGIN.md` + `package.json`. Frontmatter declares trigger and tools; the markdown body is the agent's skill prompt.
 
 ```yaml
 ---
@@ -101,47 +96,52 @@ tools:
   builtin: [create-form, plugin-data-set]
 ---
 
-你是一个 XXX agent。本回合需要……
+You are an XXX agent. On this turn you need to…
 ```
 
-完整教程 → [插件作者指南](./docs/guide/plugin-authoring.md)
-现有插件可以参考 [`plugins/`](./plugins/) · [插件注册表](./docs/reference/plugins.md) · [工具注册表](./docs/reference/tools.md)
+Full walkthrough → [Plugin authoring guide](./docs/guide/plugin-authoring.md). Existing plugins under [`plugins/`](./plugins/) are good references too. See also: [plugin registry](./docs/reference/plugins.md) · [tool registry](./docs/reference/tools.md).
 
-## 仓库结构
+### Repo layout
 
 ```
 covel/
 ├── apps/
-│   ├── web/              前端 (React 19 + Vite)
-│   ├── server/           后端 (Hono + Drizzle)
-│   └── desktop/          Electron 壳
-├── packages/             内部包 (runtime / context / ai-provider / store / memory / tools / …)
-├── plugins/              核心插件
-├── worlds/               世界包
-├── prompts/              外部化 prompt 模板
-└── docs/                 参考文档与作者指南
+│   ├── web/              Frontend (React 19 + Vite)
+│   ├── server/           Backend (Hono + Drizzle)
+│   └── desktop/          Electron shell
+├── packages/             Internal packages (runtime / context / ai-provider / store / memory / tools / …)
+├── plugins/              Core plugins
+├── worlds/               World packs
+├── prompts/              Externalised prompt templates
+└── docs/                 Reference docs and author guides
 ```
 
-pnpm workspaces + Turborepo · ESM-only · TypeScript strict
-完整包清单见 [`CLAUDE.md`](./CLAUDE.md#monorepo-structure)
+pnpm workspaces + Turborepo · ESM-only · TypeScript strict. Full package list → [`CLAUDE.md`](./CLAUDE.md#monorepo-structure).
 
-## 文档
+### Documentation
 
-| 主题 | 链接 |
-|------|------|
-| 架构与回合管线 | [`docs/architecture/flow.md`](./docs/architecture/flow.md) |
-| 写插件         | [`docs/guide/plugin-authoring.md`](./docs/guide/plugin-authoring.md) |
-| 插件 / 工具注册表 | [`docs/reference/plugins.md`](./docs/reference/plugins.md) · [`docs/reference/tools.md`](./docs/reference/tools.md) |
-| API / SSE 协议 | [`docs/reference/api.md`](./docs/reference/api.md) · [`docs/reference/protocol.md`](./docs/reference/protocol.md) |
-| 桌面端配置     | [`docs/guide/desktop-config.md`](./docs/guide/desktop-config.md) |
-| 桌面打包       | [`apps/desktop/PACKAGING.md`](./apps/desktop/PACKAGING.md) |
+| Topic | Link |
+|-------|------|
+| Architecture & turn pipeline | [`docs/architecture/flow.md`](./docs/architecture/flow.md) |
+| Writing plugins              | [`docs/guide/plugin-authoring.md`](./docs/guide/plugin-authoring.md) |
+| Plugin / tool registries     | [`docs/reference/plugins.md`](./docs/reference/plugins.md) · [`docs/reference/tools.md`](./docs/reference/tools.md) |
+| API / SSE protocol           | [`docs/reference/api.md`](./docs/reference/api.md) · [`docs/reference/protocol.md`](./docs/reference/protocol.md) |
+| Desktop config               | [`docs/guide/desktop-config.en.md`](./docs/guide/desktop-config.en.md) |
+| Desktop packaging            | [`apps/desktop/PACKAGING.md`](./apps/desktop/PACKAGING.md) |
 
-完整索引 → [`docs/README.md`](./docs/README.md)
+Full index → [`docs/README.md`](./docs/README.md). The in-app debug page at `/debug` shows session timeline, runtime traces, and prompt diffs.
 
-## 贡献与发布
+## Roadmap
 
-- Issue / PR 都欢迎,先读 [`docs/CONTRIBUTING.md`](./docs/CONTRIBUTING.md)
-- 发版由 Git tag 驱动:推 `v*` tag → [`.github/workflows/release.yml`](./.github/workflows/release.yml) 自动在 macOS runner 构建 Electron arm64 安装包并发布 Release
+- Windows / Linux / Intel Mac builds
+- Official community for sharing plugins and world packs
+- Plugin marketplace inside the desktop app
+- Tauri shell parity (currently on hold)
+
+## Contributing & releases
+
+- Issues and PRs welcome — please read [`docs/CONTRIBUTING.en.md`](./docs/CONTRIBUTING.en.md) first.
+- Releases are driven by Git tags: pushing a `v*` tag triggers [`.github/workflows/release.yml`](./.github/workflows/release.yml) to build the Electron arm64 installer on a macOS runner and publish a GitHub Release.
 
 ## License
 
