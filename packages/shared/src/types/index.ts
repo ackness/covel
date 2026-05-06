@@ -172,6 +172,70 @@ export type {
 } from './character-schema.js';
 
 export type {
+  CharacterBlueprintRole,
+  CharacterBlueprintI18nText,
+  CharacterBlueprintPersona,
+  CharacterBlueprintDialogueExample,
+  CharacterBlueprintScenarioDefaults,
+  CharacterBlueprintRule,
+  CharacterBlueprintMediaRefs,
+  CharacterBlueprintInstantiation,
+  CharacterBlueprint,
+  CharacterBlueprintRecord,
+  CharacterBlueprintImportPayload,
+  CharacterBlueprintImportResult,
+} from './character-blueprint.js';
+
+export {
+  characterBlueprintToCharacterUpsert,
+} from './character-blueprint.js';
+
+export type {
+  PlayerIdentityCoordinate,
+  PlayerIdentityProfile,
+  PlayerIdentityRecord,
+  PlayerIdentityBinding,
+  PlayerIdentitySavePayload,
+  PlayerIdentitySaveResult,
+} from './player-identity.js';
+
+export type {
+  BranchReplyAction,
+  BranchReplyCandidate,
+  BranchReplyTurnRecord,
+  BranchReplyMessageState,
+  BranchReplyCreateCandidatesPayload,
+  BranchReplyAcceptCandidatePayload,
+  BranchReplyManualPayload,
+  BranchReplyRuntimeResult,
+} from './branch-reply.js';
+
+export {
+  playerIdentityToCharacterUpsert,
+} from './player-identity.js';
+
+export type {
+  CharacterPresenceMediaRefs,
+  CharacterPresence,
+  CharacterPresenceRecord,
+  CharacterPresenceSavePayload,
+  CharacterPresenceSaveResult,
+} from './character-presence.js';
+
+export type {
+  LivingWorldRuleKind,
+  LivingWorldRuleCategory,
+  LivingWorldRulePosition,
+  LivingWorldRuleBudgetClass,
+  LivingWorldRuleCoordinate,
+  LivingWorldRuleOwner,
+  LivingWorldRule,
+  LivingWorldRuleRecord,
+  LivingWorldRuleSavePayload,
+  LivingWorldRuleSaveResult,
+} from './living-world-rules.js';
+
+export type {
   RuntimeOutput,
   RuntimeOutputResult,
   RuntimeOutputToolCall,

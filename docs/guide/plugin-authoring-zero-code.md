@@ -521,12 +521,24 @@ tags:
   - adventure
 
 requiredPlugins:
-  - persona
+  - pregame
+  - world-init
+  - char-creator
   - narrator
 recommendedPlugins:
   - guide
-  - inventory
-  - combat
+  - codex
+  - npc-graph
+  - player-identity
+  - living-world-rules
+excludedPlugins:
+  - chat-mode-narrator
+  - scene-cast
+  - scene-prompts
+  - branch-reply
+
+characterBlueprintSources:
+  - ./characters/main-cast.json
 
 dimensions:
   geography:
@@ -576,7 +588,9 @@ dimensions:
 
 **WORLD.md** 是默认的世界观长文本，框架通过 `{{ world.lore }}` 注入到插件提示词中。支持多语言：`WORLD.zh.md`、`WORLD.en.md`。
 
-**`requiredPlugins`** 和 **`recommendedPlugins`** 会在创建会话时自动激活对应的插件。
+**`requiredPlugins`** 是世界运行依赖，前端准备页会锁定这些插件。**`recommendedPlugins`** 会在准备页默认选中，**`excludedPlugins`** 会在准备页默认关闭。创建会话时，前端会把最终选择的插件列表传给 `POST /api/sessions`。
+
+**`characterBlueprintSources`** 指向世界包内的角色卡 JSON 文件。文件可以是一张角色卡对象，也可以是角色卡数组。创建 session 时，服务器会把这些角色卡写入 `plugin_data[character-blueprint]["blueprints"]`，并实例化为 `characters` 表中的 NPC，同时镜像到 `plugin_data[character-blueprint]["characters"]`，让 `scene-cast`、角色面板和角色卡插件在首轮就能读到主要角色。
 
 ## 9. 完整的零代码插件示例
 

@@ -87,6 +87,46 @@ describe('Session plugin routes (real sessionRoutes)', () => {
       summary: makeSummary({ id: 'optional-plugin', name: 'Optional Plugin', pluginType: 'plugin' }),
       source: 'community',
     }));
+    registry.register(makeEntry({
+      id: 'chat-mode-narrator',
+      summary: makeSummary({ id: 'chat-mode-narrator', name: 'Chat Mode Narrator', pluginType: 'plugin' }),
+      source: 'builtin',
+    }));
+    registry.register(makeEntry({
+      id: 'scene-cast',
+      summary: makeSummary({ id: 'scene-cast', name: 'Scene Cast', pluginType: 'plugin' }),
+      source: 'builtin',
+    }));
+    registry.register(makeEntry({
+      id: 'scene-prompts',
+      summary: makeSummary({ id: 'scene-prompts', name: 'Scene Prompts', pluginType: 'plugin' }),
+      source: 'builtin',
+    }));
+    registry.register(makeEntry({
+      id: 'character-blueprint',
+      summary: makeSummary({ id: 'character-blueprint', name: 'Character Blueprint', pluginType: 'plugin' }),
+      source: 'builtin',
+    }));
+    registry.register(makeEntry({
+      id: 'character-presence',
+      summary: makeSummary({ id: 'character-presence', name: 'Character Presence', pluginType: 'plugin' }),
+      source: 'builtin',
+    }));
+    registry.register(makeEntry({
+      id: 'player-identity',
+      summary: makeSummary({ id: 'player-identity', name: 'Player Identity', pluginType: 'plugin' }),
+      source: 'builtin',
+    }));
+    registry.register(makeEntry({
+      id: 'living-world-rules',
+      summary: makeSummary({ id: 'living-world-rules', name: 'Living World Rules', pluginType: 'plugin' }),
+      source: 'builtin',
+    }));
+    registry.register(makeEntry({
+      id: 'branch-reply',
+      summary: makeSummary({ id: 'branch-reply', name: 'Branch Reply', pluginType: 'plugin' }),
+      source: 'builtin',
+    }));
 
     // Create a session with both plugins active
     await store.createSession({
@@ -118,6 +158,127 @@ describe('Session plugin routes (real sessionRoutes)', () => {
 
       const session = await store.getSession('sess-core-create');
       expect(session?.activePlugins).toEqual(expect.arrayContaining(['narrator', 'optional-plugin']));
+    });
+
+    it('uses chat-mode-narrator instead of the default narrator when requested', async () => {
+      const res = await app.request('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: 'sess-chat-create',
+          plugins: ['chat-mode-narrator', 'optional-plugin'],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { activePlugins: string[] };
+      expect(body.activePlugins).toContain('chat-mode-narrator');
+      expect(body.activePlugins).toContain('scene-cast');
+      expect(body.activePlugins).toContain('scene-prompts');
+      expect(body.activePlugins).toContain('character-blueprint');
+      expect(body.activePlugins).toContain('character-presence');
+      expect(body.activePlugins).toContain('player-identity');
+      expect(body.activePlugins).toContain('living-world-rules');
+      expect(body.activePlugins).toContain('branch-reply');
+      expect(body.activePlugins).toContain('optional-plugin');
+      expect(body.activePlugins).not.toContain('narrator');
+
+      const session = await store.getSession('sess-chat-create');
+      expect(session?.activePlugins).toContain('chat-mode-narrator');
+      expect(session?.activePlugins).toContain('scene-cast');
+      expect(session?.activePlugins).toContain('scene-prompts');
+      expect(session?.activePlugins).toContain('character-blueprint');
+      expect(session?.activePlugins).toContain('character-presence');
+      expect(session?.activePlugins).toContain('player-identity');
+      expect(session?.activePlugins).toContain('living-world-rules');
+      expect(session?.activePlugins).toContain('branch-reply');
+      expect(session?.activePlugins).not.toContain('narrator');
+    });
+
+    it('imports world character blueprints when creating a session', async () => {
+      await store.upsertWorld({
+        id: 'academy-world',
+        name: 'Academy World',
+        description: 'Test world',
+        metadata: {
+          characterBlueprints: [
+            {
+              schemaVersion: 1,
+              id: 'test-heroine',
+              name: 'Test Heroine',
+              role: 'npc',
+              description: 'A seeded NPC.',
+              attributes: { affection: 10 },
+              instantiate: {
+                characterId: 'npc-test-heroine',
+                type: 'npc',
+              },
+            },
+          ],
+        },
+        createdAt: new Date().toISOString(),
+      });
+
+      const res = await app.request('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: 'sess-academy',
+          worldId: 'academy-world',
+          plugins: ['chat-mode-narrator'],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const characters = await store.listCharacters('sess-academy');
+      expect(characters).toEqual([
+        expect.objectContaining({
+          id: 'npc-test-heroine',
+          name: 'Test Heroine',
+          type: 'npc',
+          description: 'A seeded NPC.',
+          fields: { affection: 10 },
+        }),
+      ]);
+
+      const blueprint = await store.getPluginData(
+        'sess-academy',
+        'character-blueprint',
+        'blueprints',
+        'test-heroine',
+      );
+      expect(blueprint?.value).toMatchObject({
+        sourceWorldId: 'academy-world',
+        instantiatedCharacterId: 'npc-test-heroine',
+        blueprint: {
+          id: 'test-heroine',
+          name: 'Test Heroine',
+        },
+      });
+    });
+
+    it('enabling chat-mode-narrator replaces default narrator and adds the chat mode bundle', async () => {
+      const res = await app.request(`/api/sessions/${SESSION_ID}/plugins/enable`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pluginId: 'chat-mode-narrator' }),
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { active: string[] };
+      expect(body.active).toContain('chat-mode-narrator');
+      expect(body.active).toContain('scene-cast');
+      expect(body.active).toContain('scene-prompts');
+      expect(body.active).toContain('character-blueprint');
+      expect(body.active).toContain('character-presence');
+      expect(body.active).toContain('player-identity');
+      expect(body.active).toContain('living-world-rules');
+      expect(body.active).toContain('branch-reply');
+      expect(body.active).toContain('optional-plugin');
+      expect(body.active).not.toContain('narrator');
+
+      const session = await store.getSession(SESSION_ID);
+      expect(session?.activePlugins).toEqual(body.active);
     });
 
     it('should return 403 when attempting to disable a core-plugin', async () => {

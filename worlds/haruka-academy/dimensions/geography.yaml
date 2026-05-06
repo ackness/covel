@@ -1,0 +1,24 @@
+overview: 位于青砾町海边坡地的私立高中，教学楼、社团楼、图书馆和通往海堤的樱坂构成主要活动范围。
+regions:
+  - name: 二年 B 组
+    description: 玩家转入的班级，靠窗最后一排能看见操场和远处海面。
+    climate: 春季通风明亮，午后常有海风吹动窗帘。
+    landmarks:
+      - name: 靠窗座位
+        description: 玩家最初的座位，也是许多课间对话的起点。
+      - name: 黑板旁公告栏
+        description: 贴着学园祭值班表、社团招募和补考名单。
+  - name: 社团楼
+    description: 老旧三层木造楼，放学后会被各社团的声音填满。
+    climate: 傍晚偏冷，楼道里常有乐器声和咖啡香。
+    landmarks:
+      - name: 文艺部活动室
+        description: 一间堆满旧书和手写稿的房间，正面临合并危机。
+      - name: 轻音部练习室
+        description: 隔音效果一般，吉他声会漏到走廊。
+  - name: 樱坂海堤
+    description: 从校门通往海边的坡道，春天樱花沿路开放。
+    climate: 风大，雨后路面反光，适合放学后并肩走。
+    landmarks:
+      - name: 自动贩卖机
+        description: 学生常在这里买热饮，交换不方便在教室说的话。

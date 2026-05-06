@@ -208,6 +208,8 @@ export const worldManifestSchema = z.object({
   tags: z.array(z.string()).optional(),
   requiredPlugins: z.array(z.string()).optional(),
   recommendedPlugins: z.array(z.string()).optional(),
+  excludedPlugins: z.array(z.string()).optional(),
+  characterBlueprintSources: z.array(z.string().min(1)).optional(),
   dimensions: worldDimensionsSchema.optional(),
   /** Map of dimension key → relative file path for external dimension files. */
   dimensionSources: z.record(z.string(), z.string().min(1)).optional(),

@@ -29,6 +29,17 @@
 ### 参考章节
 - [概览表](#概览) · [调度层级说明](#调度层级) · [插件结构规范](#插件结构规范) · [超时与智能重试](#超时与智能重试) · [优先级分带](#优先级分带turn-bands) · [框架–插件隔离规则](#框架插件隔离规则)
 
+### 世界插件推荐字段
+
+`world.yaml` 可以声明 `requiredPlugins`、`recommendedPlugins`、`excludedPlugins` 和 `characterBlueprintSources`。加载后这些值进入 `WorldRecord.metadata`：
+
+- `requiredPlugins`：准备页锁定启用。
+- `recommendedPlugins`：准备页默认启用。
+- `excludedPlugins`：准备页默认关闭。
+- `characterBlueprintSources`：世界包内角色卡 JSON 路径；创建 session 时自动写入 `character-blueprint` 插件数据，并实例化为 NPC character。
+
+对话模式世界通常启用 `chat-mode-narrator`、`scene-cast`、`scene-prompts`、`character-blueprint`、`character-presence`、`player-identity`、`living-world-rules`、`branch-reply`，并排除默认 `narrator`、`guide` 以及包级旧下游插件。多 runtime 插件当前按包选择；例如 `npc-graph/rag-retriever` 和 `npc-graph/extractor` 同属 `npc-graph` 包，准备页会一起启用或关闭。
+
 ## 徽章说明 / Badge legend
 
 🔵 core（`pluginType: core-plugin`，不可禁用） · ⚪ optional（`pluginType: plugin`，可禁用） · 🧠 uses LLM（`agent` runtime） · ⚙ pure function（`runtimeType: function`，零 token） · 🖼 UI only（只提供面板，无 runtime）
@@ -357,15 +368,16 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 ---
 
-## 待迁移插件（待开发）
+## 规划中插件（待开发）
 
 | 插件 | 预期优先级 | 描述 |
 |------|-----------|------|
-| persona | 100 | AI 人格配置 |
 | combat | 420 | 回合制战斗 |
 | inventory | 600 | 物品/装备管理 |
 | core-quest | 650 | 任务追踪 |
 | image | 800 | 故事配图生成 |
+
+当前世界包推荐使用现有插件组合：`pregame`、`world-init`、`char-creator`、`narrator` 作为传统叙事主线；`guide`、`codex`、`npc-graph`、`player-identity`、`living-world-rules` 作为增强项。对话模式世界使用 `chat-mode-narrator`、`scene-cast`、`scene-prompts`，并通过 `excludedPlugins` 关闭传统叙事主线中的冲突项。
 
 ---
 

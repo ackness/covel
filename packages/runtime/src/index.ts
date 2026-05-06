@@ -3,6 +3,7 @@ export { shouldTrigger } from './trigger.js';
 
 // ── Scheduler ────────────────────────────────────────────────────
 export { scheduleByPriority } from './scheduler.js';
+export { scheduleByDag } from './dag-scheduler.js';
 
 // ── Context Builder (re-exported from @covel/context) ───────────
 export { interpolateTemplate, buildInjectBlocks, buildContext } from '@covel/context';

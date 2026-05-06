@@ -1,0 +1,16 @@
+{
+  "name": "@covel/plugin-scene-prompts",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@covel/plugin-loader": "workspace:*",
+    "@covel/shared": "workspace:*",
+    "@covel/tools": "workspace:*",
+    "vitest": "^4.1.4"
+  }
+}

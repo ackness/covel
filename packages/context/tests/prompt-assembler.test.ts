@@ -4,6 +4,7 @@ import {
   buildContextV2,
   type ContextBuildParams,
   type MessageHistoryRecord,
+  type SessionContextSnapshot,
   type TokenEstimator,
 } from '@covel/context';
 import {
@@ -60,6 +61,26 @@ function baselineParams(
     turnInput: makeTurnInput(),
     completedResults: new Map(),
     config: {},
+    ...overrides,
+  };
+}
+
+function makeSessionContext(
+  overrides?: Partial<SessionContextSnapshot>,
+): SessionContextSnapshot {
+  return {
+    sessionId: 'sess-1',
+    turnNumber: 1,
+    locale: 'zh-CN',
+    sessionMeta: { turnNumber: 1, characters: [] },
+    world: { id: '' },
+    characters: [],
+    workingMemory: [],
+    coreMemoryBlocks: [],
+    loreEntries: [],
+    summaries: [],
+    legacyConfigView: {},
+    contributions: [],
     ...overrides,
   };
 }
@@ -189,6 +210,139 @@ describe('prompt-assembler V2', () => {
           '执行当前手动触发的 runtime：dashscope-image-gen/prompt-generator。严格遵循系统提示中的输出格式，产出该 runtime 的结果。',
       },
     ]);
+  });
+
+  it('prepends active persona contributions to segment 3', () => {
+    const params = baselineParams({
+      promptTemplate: 'Plugin body.',
+      sessionContext: makeSessionContext({
+        activePersona: {
+          id: 'wanderer',
+          name: 'Wanderer',
+          description: 'A cautious outsider.',
+        },
+        contributions: [
+          {
+            kind: 'persona_description',
+            sourceType: 'persona',
+            sourceId: 'wanderer',
+            content: '[Player Persona]\nName: Wanderer\nDescription: A cautious outsider.',
+            position: 'seg3_prepend',
+            order: 0,
+            budgetClass: 'sticky',
+          },
+        ],
+      }),
+    });
+
+    const v2 = buildContextV2(params);
+
+    expect(v2.systemPrompt.indexOf('[Player Persona]')).toBeGreaterThanOrEqual(0);
+    expect(v2.systemPrompt.indexOf('Plugin body.')).toBeGreaterThan(
+      v2.systemPrompt.indexOf('[Player Persona]'),
+    );
+  });
+
+  it('inserts at-depth persona contributions into the message stack', () => {
+    const params = baselineParams({
+      messageHistory: [
+        { role: 'user', content: 'u1' },
+        { role: 'assistant', content: 'a1' },
+        { role: 'user', content: 'u2' },
+      ],
+      turnInput: makeTurnInput({ playerMessage: 'current' }),
+      sessionContext: makeSessionContext({
+        contributions: [
+          {
+            kind: 'persona_description',
+            sourceType: 'persona',
+            sourceId: 'wanderer',
+            content: '[Player Persona]\nName: Wanderer',
+            position: 'at_depth',
+            depth: 1,
+            role: 'system',
+            order: 0,
+          },
+        ],
+      }),
+    });
+
+    const v2 = buildContextV2(params);
+    const personaIdx = v2.messages.findIndex((message) =>
+      message.content === '[Player Persona]\nName: Wanderer',
+    );
+
+    expect(personaIdx).toBe(3);
+    expect(v2.messages[personaIdx]?.role).toBe('system');
+    expect(v2.messages[v2.messages.length - 1]?.content).toBe('current');
+  });
+
+  it('renders lore_entry contributions into Prompt V2 world-info segments', () => {
+    const params = baselineParams({
+      promptTemplate: 'Plugin body.',
+      sessionContext: makeSessionContext({
+        contributions: [
+          {
+            kind: 'lore_entry',
+            sourceType: 'world',
+            sourceId: 'rain-market',
+            content: '[World Rule: Rain Market]\nNo true names in the rain market.',
+            position: 'before_plugin',
+            order: 10,
+          },
+          {
+            kind: 'lore_entry',
+            sourceType: 'world',
+            sourceId: 'sealed-door',
+            content: '[World Rule: Sealed Door]\nThe sealed door answers moonlight.',
+            position: 'after_plugin',
+            order: 20,
+          },
+        ],
+      }),
+    });
+
+    const v2 = buildContextV2(params);
+
+    expect(v2.systemPrompt.indexOf('[World Rule: Rain Market]')).toBeGreaterThan(
+      v2.systemPrompt.indexOf('Plugin body.'),
+    );
+    expect(v2.systemPrompt.indexOf('[World Rule: Sealed Door]')).toBeGreaterThan(
+      v2.systemPrompt.indexOf('[World Rule: Rain Market]'),
+    );
+  });
+
+  it('inserts at-depth lore_entry contributions into the message stack', () => {
+    const params = baselineParams({
+      messageHistory: [
+        { role: 'user', content: 'u1' },
+        { role: 'assistant', content: 'a1' },
+        { role: 'user', content: 'u2' },
+      ],
+      turnInput: makeTurnInput({ playerMessage: 'current' }),
+      sessionContext: makeSessionContext({
+        contributions: [
+          {
+            kind: 'lore_entry',
+            sourceType: 'world',
+            sourceId: 'sealed-door',
+            content: '[World Rule: Sealed Door]\nThe sealed door answers moonlight.',
+            position: 'at_depth',
+            depth: 2,
+            role: 'system',
+            order: 0,
+          },
+        ],
+      }),
+    });
+
+    const v2 = buildContextV2(params);
+    const loreIdx = v2.messages.findIndex((message) =>
+      message.content === '[World Rule: Sealed Door]\nThe sealed door answers moonlight.',
+    );
+
+    expect(loreIdx).toBe(2);
+    expect(v2.messages[loreIdx]?.role).toBe('system');
   });
 
   it('respects the budget-pruning pass when estimator + contextBudget + COVEL_CONTEXT_BUDGET_V1=1 are provided', () => {

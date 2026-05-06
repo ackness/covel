@@ -1,0 +1,18 @@
+{
+  "name": "@covel/plugin-player-identity",
+  "version": "0.0.2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@covel/shared": "workspace:*",
+    "@covel/tools": "workspace:*"
+  },
+  "devDependencies": {
+    "@covel/plugin-loader": "workspace:*",
+    "vitest": "^4.1.4"
+  }
+}

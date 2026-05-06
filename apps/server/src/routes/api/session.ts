@@ -20,10 +20,25 @@ import type { PluginRegistry, PluginRegistryEntry } from '@covel/plugin-loader';
 import type { DataStore, MediaStore, SessionRecord } from '@covel/store';
 import { supportsVector } from '@covel/store';
 import { buildSessionSnapshot } from '@covel/runtime';
+import { characterBlueprintToCharacterUpsert } from '@covel/shared';
+import type { CharacterBlueprint } from '@covel/shared';
 import { signMediaTokenForSession } from '../../middleware/media-token.js';
 
 const SAFE_WORLD_ID_RE = /^[a-z0-9_-]{1,64}$/i;
 const SAFE_SESSION_ID_RE = /^[a-z0-9_-]{1,128}$/i;
+const CHAT_MODE_PLUGIN_IDS = [
+  'chat-mode-narrator',
+  'scene-cast',
+  'scene-prompts',
+  'character-blueprint',
+  'character-presence',
+  'player-identity',
+  'living-world-rules',
+  'branch-reply',
+] as const;
+
+const WORLD_BLUEPRINT_PLUGIN_ID = 'character-blueprint';
+const WORLD_BLUEPRINT_NAMESPACE = 'blueprints';
 
 type Env = {
   Variables: {
@@ -44,6 +59,116 @@ function requiredCorePluginIds(pluginRegistry: PluginRegistry): string[] {
   return [...pluginRegistry.getAll().values()]
     .filter(isRequiredCorePlugin)
     .map((entry) => entry.id);
+}
+
+function resolveSessionPlugins(
+  requestedPlugins: readonly string[],
+  pluginRegistry: PluginRegistry,
+): string[] {
+  const requested = new Set(requestedPlugins);
+  const corePlugins = requiredCorePluginIds(pluginRegistry);
+  const active = new Set([...requestedPlugins, ...corePlugins]);
+
+  if (requested.has('chat-mode-narrator') && pluginRegistry.get('chat-mode-narrator')) {
+    for (const pluginId of CHAT_MODE_PLUGIN_IDS) {
+      if (pluginRegistry.get(pluginId)) {
+        active.add(pluginId);
+      }
+    }
+    active.delete('narrator');
+  }
+
+  return [...active];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeWorldCharacterBlueprint(value: unknown): CharacterBlueprint | null {
+  if (!isRecord(value)) return null;
+  if (value.schemaVersion !== 1) return null;
+  if (typeof value.id !== 'string' || value.id.length === 0) return null;
+  if (typeof value.name !== 'string' || value.name.length === 0) return null;
+  return value as unknown as CharacterBlueprint;
+}
+
+async function importWorldCharacterBlueprints(
+  store: DataStore,
+  sessionId: string,
+  worldId: string | undefined,
+  now: string,
+): Promise<void> {
+  if (!worldId) return;
+  const world = await store.getWorld(worldId);
+  const rawBlueprints = isRecord(world?.metadata)
+    && Array.isArray(world.metadata.characterBlueprints)
+    ? world.metadata.characterBlueprints
+    : [];
+  const blueprints = rawBlueprints
+    .map(normalizeWorldCharacterBlueprint)
+    .filter((blueprint): blueprint is CharacterBlueprint => blueprint !== null);
+  if (blueprints.length === 0) return;
+
+  const pluginRecords = blueprints.map((blueprint) => {
+    const upsert = characterBlueprintToCharacterUpsert(blueprint, {
+      now,
+      mirrorPluginId: WORLD_BLUEPRINT_PLUGIN_ID,
+    });
+    return {
+      id: randomUUID(),
+      sessionId,
+      pluginId: WORLD_BLUEPRINT_PLUGIN_ID,
+      namespace: WORLD_BLUEPRINT_NAMESPACE,
+      key: blueprint.id,
+      value: {
+        blueprint,
+        importedAt: now,
+        sourceWorldId: worldId,
+        instantiatedCharacterId: upsert.id,
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+  });
+  await store.setPluginDataBatch(pluginRecords);
+
+  for (const blueprint of blueprints) {
+    const upsert = characterBlueprintToCharacterUpsert(blueprint, {
+      now,
+      mirrorPluginId: WORLD_BLUEPRINT_PLUGIN_ID,
+    });
+    const characterRecord = {
+      id: upsert.id,
+      sessionId,
+      name: upsert.name,
+      type: upsert.type ?? 'npc',
+      ...(upsert.description !== undefined ? { description: upsert.description } : {}),
+      ...(upsert.fields !== undefined ? { fields: upsert.fields } : {}),
+      version: upsert.version ?? 1,
+      createdAt: upsert.createdAt ?? now,
+      updatedAt: now,
+    };
+    await store.upsertCharacter(characterRecord);
+    await store.setPluginData({
+      id: randomUUID(),
+      sessionId,
+      pluginId: WORLD_BLUEPRINT_PLUGIN_ID,
+      namespace: 'characters',
+      key: characterRecord.id,
+      value: characterRecord,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
+function resolveEnabledSessionPlugins(
+  currentPlugins: readonly string[],
+  pluginId: string,
+  pluginRegistry: PluginRegistry,
+): string[] {
+  return resolveSessionPlugins([...currentPlugins, pluginId], pluginRegistry);
 }
 
 /**
@@ -179,7 +304,7 @@ sessionRoutes.post('/', async (c) => {
     return c.json({ error: `Unknown plugin IDs: ${unknownPlugins.join(', ')}` }, 400);
   }
 
-  const plugins = [...new Set([...requestedPlugins, ...requiredCorePluginIds(pluginRegistry)])];
+  const plugins = resolveSessionPlugins(requestedPlugins, pluginRegistry);
 
   const now = new Date().toISOString();
   const session: SessionRecord = {
@@ -196,6 +321,7 @@ sessionRoutes.post('/', async (c) => {
 
   // Persist BEFORE activating plugins to avoid registry/store inconsistency
   await store.createSession(session);
+  await importWorldCharacterBlueprints(store, id, rawWorldId, now);
 
   for (const pluginId of plugins) {
     if (typeof pluginId === 'string' && pluginRegistry.get(pluginId)) {
@@ -450,8 +576,15 @@ sessionRoutes.post('/:id/plugins/enable', async (c) => {
     return c.json({ error: `Plugin "${body.pluginId}" not found` }, 404);
   }
 
-  pluginRegistry.activate(body.pluginId, id);
-  const active = [...new Set([...(session.activePlugins ?? []), body.pluginId])];
+  const active = resolveEnabledSessionPlugins(session.activePlugins ?? [], body.pluginId, pluginRegistry);
+  for (const activePluginId of active) {
+    pluginRegistry.activate(activePluginId, id);
+  }
+  for (const previousPluginId of session.activePlugins ?? []) {
+    if (!active.includes(previousPluginId)) {
+      pluginRegistry.deactivate(previousPluginId, id);
+    }
+  }
   await store.updateSession(id, { activePlugins: active, updatedAt: new Date().toISOString() });
   return c.json({ ok: true, active });
 });

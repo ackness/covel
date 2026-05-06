@@ -40,6 +40,7 @@ import { shouldTrigger } from './trigger.js';
 import { isMainLoopPriority, isPreGamePriority, scheduleByPriority } from './scheduler.js';
 import { scheduleByDag } from './dag-scheduler.js';
 import {
+  applyBranchReplyAcceptedCandidates,
   buildContext,
   buildContextAsync,
   buildSessionContextSnapshot,
@@ -866,6 +867,15 @@ export async function executeTurn(
   const promptHistory = messageHistory.filter(
     (msg) => !(msg.turnId === input.turnId && msg.sourceType === 'player'),
   );
+  let projectedPromptHistory: readonly TurnMessageRecord[] = promptHistory;
+  if (deps.store) {
+    try {
+      const branchReplyTurns = await deps.store.listPluginData(input.sessionId, 'branch-reply', 'turns');
+      projectedPromptHistory = applyBranchReplyAcceptedCandidates(promptHistory, branchReplyTurns);
+    } catch {
+      projectedPromptHistory = promptHistory;
+    }
+  }
   const preGameRuntimes = activeRuntimes.filter(
     (rt) => rt.priority !== undefined && rt.priority <= 99,
   );
@@ -1026,6 +1036,7 @@ export async function executeTurn(
         worldDataPluginId: deps.worldDataPluginId,
         coreMemoryBlocks,
         summaries: sessionSummaries,
+        playerMessage: input.playerMessage,
       });
     } catch (err) {
       // Non-critical: snapshot build failures must not abort the turn.
@@ -1129,7 +1140,7 @@ export async function executeTurn(
         manualTarget && manualTriggerEventPayload && manifest.name === manualTarget.name
           ? manualTriggerEventPayload
           : undefined;
-      return executeOneRuntime(manifest, input, activeRuntimes, completedResults, deps, maxSteps, defaultTimeoutMs, promptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory, coreMemoryBlocks, sessionContext, triggerEventForRuntime, options, recursionDepth);
+      return executeOneRuntime(manifest, input, activeRuntimes, completedResults, deps, maxSteps, defaultTimeoutMs, projectedPromptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory, coreMemoryBlocks, sessionContext, triggerEventForRuntime, options, recursionDepth);
     });
 
     // Merge results
@@ -1149,7 +1160,7 @@ export async function executeTurn(
     const followupGroups = dag.error ? scheduleByPriority(mainLoop, turnNumber) : dag.groups;
     for (const group of followupGroups) {
       const results = await executeParallel(group.runtimes, async (manifest) => {
-        return executeOneRuntime(manifest, input, activeRuntimes, completedResults, deps, maxSteps, defaultTimeoutMs, promptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory, coreMemoryBlocks, sessionContext, undefined, options, recursionDepth);
+        return executeOneRuntime(manifest, input, activeRuntimes, completedResults, deps, maxSteps, defaultTimeoutMs, projectedPromptHistory, sessionMeta, deps.hookPipeline, sessionSummaries, workingMemory, coreMemoryBlocks, sessionContext, undefined, options, recursionDepth);
       });
       for (const [name, result] of results) {
         completedResults.set(name, result);
@@ -1248,7 +1259,7 @@ export async function executeTurn(
         deps,
         maxSteps,
         defaultTimeoutMs,
-        promptHistory,
+        projectedPromptHistory,
         sessionMeta,
         deps.hookPipeline,
         sessionSummaries,

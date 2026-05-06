@@ -36,6 +36,54 @@ export function isLockedCorePackage(pkg: Pick<api.PackageSummary, "pluginType" |
   return pkg.pluginType === "core-plugin" && (pkg.source === undefined || pkg.source === "builtin");
 }
 
+function stringArrayFromMetadata(
+  metadata: api.WorldRecord["metadata"] | undefined,
+  key: string,
+): string[] {
+  const value = metadata?.[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.length > 0)
+    : [];
+}
+
+export function defaultSelectedPluginIdsForWorld(
+  world: api.WorldRecord,
+  packages: readonly api.PackageSummary[],
+): Set<string> {
+  const required = new Set(stringArrayFromMetadata(world.metadata, "requiredPlugins"));
+  const recommended = new Set(stringArrayFromMetadata(world.metadata, "recommendedPlugins"));
+  const excluded = new Set(stringArrayFromMetadata(world.metadata, "excludedPlugins"));
+  const hasWorldPolicy = required.size > 0 || recommended.size > 0 || excluded.size > 0;
+  const available = new Set(packages.map((pkg) => pkg.name));
+
+  if (hasWorldPolicy) {
+    return new Set(
+      packages
+        .filter((pkg) =>
+          isLockedCorePackage(pkg) ||
+          required.has(pkg.name) ||
+          recommended.has(pkg.name),
+        )
+        .filter((pkg) => available.has(pkg.name) && !excluded.has(pkg.name))
+        .map((pkg) => pkg.name),
+    );
+  }
+
+  return new Set(
+    packages
+      .filter((pkg) => pkg.enabled || isLockedCorePackage(pkg))
+      .map((pkg) => pkg.name),
+  );
+}
+
+function requiredPluginIdsForWorld(world: api.WorldRecord): Set<string> {
+  return new Set(stringArrayFromMetadata(world.metadata, "requiredPlugins"));
+}
+
+function excludedPluginIdsForWorld(world: api.WorldRecord): Set<string> {
+  return new Set(stringArrayFromMetadata(world.metadata, "excludedPlugins"));
+}
+
 // Reusable collapsible card header
 function CollapsibleCardHeader({
   expanded,
@@ -87,14 +135,23 @@ export function SessionPrepScreen({
     () => new Set(packages.filter(isLockedCorePackage).map((p) => p.name)),
     [packages],
   );
+  const worldRequiredPluginIds = useMemo(() => requiredPluginIdsForWorld(world), [world]);
+  const worldExcludedPluginIds = useMemo(() => excludedPluginIdsForWorld(world), [world]);
+  const lockedPluginIds = useMemo(
+    () => new Set([
+      ...[...corePluginIds].filter((pluginId) => !worldExcludedPluginIds.has(pluginId)),
+      ...worldRequiredPluginIds,
+    ]),
+    [corePluginIds, worldRequiredPluginIds, worldExcludedPluginIds],
+  );
 
-  // Plugin selection state — default all enabled
+  // Plugin selection state — world metadata can provide a playstyle preset.
   const [selectedPlugins, setSelectedPlugins] = useState<Set<string>>(() =>
-    new Set(packages.filter((p) => p.enabled || isLockedCorePackage(p)).map((p) => p.name)),
+    defaultSelectedPluginIdsForWorld(world, packages),
   );
   const selectedPackages = useMemo(
-    () => packages.filter((p) => selectedPlugins.has(p.name) || corePluginIds.has(p.name)),
-    [packages, selectedPlugins, corePluginIds],
+    () => packages.filter((p) => selectedPlugins.has(p.name) || lockedPluginIds.has(p.name)),
+    [packages, selectedPlugins, lockedPluginIds],
   );
   // Prep bindings live in the SettingsStore under llm.prepRuntimeBindings
   // keyed by worldId. The hook keeps them in sync via `onPersist`.
@@ -240,9 +297,9 @@ export function SessionPrepScreen({
   }, [resolvedSlots]);
 
   const handleStart = useCallback(() => {
-    const pluginIds = [...new Set([...selectedPlugins, ...corePluginIds])];
+    const pluginIds = [...new Set([...selectedPlugins, ...lockedPluginIds])];
     onStart(pluginIds.length > 0 ? pluginIds : undefined);
-  }, [selectedPlugins, corePluginIds, onStart]);
+  }, [selectedPlugins, lockedPluginIds, onStart]);
 
   return (
     <div className="flex h-full w-full overflow-hidden">
@@ -455,6 +512,7 @@ export function SessionPrepScreen({
                     const displayName = text(pkg.displayName) || pkg.name;
                     const description = text(pkg.description);
                     const isSelected = selectedPlugins.has(pkg.name);
+                    const isLocked = lockedPluginIds.has(pkg.name);
                     const isCore = corePluginIds.has(pkg.name);
                     const runtimes = pkg.runtimes ?? [];
                     const tools = pkg.tools ?? [];
@@ -485,12 +543,12 @@ export function SessionPrepScreen({
                             type="button"
                             role="switch"
                             aria-checked={isSelected}
-                            disabled={isCore}
-                            title={isCore ? t("plugin.locked") : undefined}
+                            disabled={isLocked}
+                            title={isLocked ? t("plugin.locked") : undefined}
                             className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full border-2 border-transparent transition-colors ${
                               isSelected ? "bg-primary" : "bg-input"
-                            } ${isCore ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-                            onClick={() => !isCore && togglePlugin(pkg.name)}
+                            } ${isLocked ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                            onClick={() => !isLocked && togglePlugin(pkg.name)}
                           >
                             <span className={`pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow-sm transition ${
                               isSelected ? "translate-x-3" : "translate-x-0"

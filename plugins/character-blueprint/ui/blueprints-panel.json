@@ -1,0 +1,102 @@
+{
+  "id": "character-blueprint",
+  "label": {
+    "zh": "角色蓝图",
+    "en": "Character Blueprints"
+  },
+  "shortLabel": {
+    "zh": "蓝图",
+    "en": "Blueprints"
+  },
+  "icon": "id-card",
+  "group": "chat-mode",
+  "groupLabel": {
+    "zh": "Chat Mode",
+    "en": "Chat Mode"
+  },
+  "groupOrder": 450,
+  "dataSource": { "namespace": "blueprints" },
+  "alwaysRender": true,
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "md" },
+    "children": [
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "粘贴角色蓝图 JSON，导入后会保存为会话蓝图；勾选实例化时会创建 Covel Character。",
+            "en": "Paste Character Blueprint JSON. Import saves it as a session blueprint; instantiate also creates a Covel Character."
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "Textarea",
+        "props": {
+          "label": {
+            "zh": "蓝图 JSON",
+            "en": "Blueprint JSON"
+          },
+          "placeholder": "{ \"schemaVersion\": 1, \"id\": \"mentor-lin\", \"name\": \"Lin Yue\", \"role\": \"npc\" }",
+          "value": { "$bindState": "/draftJson" },
+          "rows": 10
+        }
+      },
+      {
+        "component": "Switch",
+        "props": {
+          "label": {
+            "zh": "导入后实例化为角色",
+            "en": "Instantiate after import"
+          },
+          "checked": { "$bindState": "/instantiate" }
+        }
+      },
+      {
+        "component": "Button",
+        "props": {
+          "label": {
+            "zh": "导入蓝图",
+            "en": "Import Blueprint"
+          },
+          "variant": "primary",
+          "size": "compact"
+        },
+        "on": {
+          "click": {
+            "action": "invokeRuntime",
+            "params": {
+              "runtimeId": "character-blueprint",
+              "payload": {
+                "blueprintJson": { "$bindState": "/draftJson" },
+                "instantiate": { "$bindState": "/instantiate" }
+              }
+            }
+          }
+        }
+      },
+      {
+        "component": "Separator"
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "已导入蓝图",
+            "en": "Imported blueprints"
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "JsonView",
+        "props": {
+          "value": { "$state": "/entries" }
+        }
+      }
+    ]
+  }
+}

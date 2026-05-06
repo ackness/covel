@@ -1,0 +1,20 @@
+classes:
+  - name: 转学生
+    rank: 1
+    description: 玩家初始身份，容易被关注，也容易被传闻包围。
+  - name: 班级干部
+    rank: 2
+    description: 负责班级事务，掌握活动安排和同学关系。
+  - name: 社团核心成员
+    rank: 3
+    description: 推动学园祭企划的人，常把私人情绪藏进工作里。
+  - name: 学生会成员
+    rank: 4
+    description: 代表规则与秩序，也承受来自老师和学生的双重压力。
+races:
+  - name: 普通学生
+    description: 没有超自然身份，情绪、成绩、家庭和未来选择构成主要矛盾。
+    traits:
+      - 对他人的评价敏感
+      - 在集体生活中隐藏真实想法
+notes: 角色关系以班级、社团、学生会和放学后路线交织。公开关系变化会引发传闻。

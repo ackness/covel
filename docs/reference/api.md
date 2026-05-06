@@ -492,7 +492,13 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
       "name": "云溟界",
       "description": "一个漂浮于云层之上的奇幻世界...",
       "locale": "zh-CN",
-      "metadata": {},
+      "metadata": {
+        "source": "file",
+        "requiredPlugins": ["pregame", "world-init", "char-creator"],
+        "recommendedPlugins": ["narrator", "guide"],
+        "excludedPlugins": ["chat-mode-narrator"],
+        "characterBlueprintSources": ["./characters/main-cast.json"]
+      },
       "createdAt": "2025-01-15T10:00:00.000Z",
       "updatedAt": "2025-01-15T10:00:00.000Z"
     }
@@ -518,7 +524,15 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
   "name": "云溟界",
   "description": "一个漂浮于云层之上的奇幻世界...",
   "locale": "zh-CN",
-  "metadata": {},
+  "metadata": {
+    "source": "file",
+    "dimensions": {},
+    "requiredPlugins": ["pregame", "world-init", "char-creator"],
+    "recommendedPlugins": ["narrator", "guide"],
+    "excludedPlugins": ["chat-mode-narrator"],
+    "characterBlueprintSources": ["./characters/main-cast.json"],
+    "characterBlueprints": []
+  },
   "createdAt": "2025-01-15T10:00:00.000Z",
   "updatedAt": "2025-01-15T10:00:00.000Z"
 }
@@ -686,6 +700,13 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 | `locale` | string | 否 | 语言区域，默认 `zh-CN` |
 | `plugins` | string[] | 否 | 要激活的插件 ID 列表 |
 | `id` | string | 否 | 客户端自定义会话 ID（如不提供则自动生成 `{worldId}-{uuid8}`） |
+
+世界包字段会影响准备页和 session 初始化：
+
+- `metadata.requiredPlugins`：准备页锁定启用。
+- `metadata.recommendedPlugins`：准备页默认启用。
+- `metadata.excludedPlugins`：准备页默认关闭。
+- `metadata.characterBlueprints`：创建 session 时自动导入到 `character-blueprint` 插件数据，并实例化为 NPC character。
 
 **响应:**
 

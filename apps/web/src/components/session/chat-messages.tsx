@@ -454,6 +454,20 @@ export function ChatMessages({
       );
     }
 
+    if (blockType === "branch_reply" || blockType === "branch-reply") {
+      return (
+        <div key={msg.id} className="flex flex-col gap-1.5">
+          {viewMode === "detailed" && (
+            <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
+              branch-reply{msg.runtimeId && <span className="ml-1.5 opacity-60">· {msg.runtimeId}</span>}
+            </span>
+          )}
+          <BranchReplyBlock block={block} />
+          <SubmittedSelectionFooter values={submittedValues} />
+        </div>
+      );
+    }
+
     const assetView = isAssetGenerateView(block.data) ? block.data : null;
     if (blockType === "asset.generate" && sessionId && assetView) {
       return (
@@ -680,9 +694,10 @@ function PluginMessageBlock({
       const text = String(params.text ?? "").trim();
       if (!text) return;
       const selectionGroup = typeof params.selectionGroup === "string" ? params.selectionGroup : undefined;
+      const sourceKey = turnId || sourceBlockId;
       upsertInteractionDraft({
-        id: selectionGroup ? `${turnId || "plugin"}:${selectionGroup}` : `plugin-draft:${text}`,
-        turnId: turnId || "plugin",
+        id: selectionGroup ? `${sourceKey}:${selectionGroup}` : `plugin-draft:${sourceBlockId}:${text}`,
+        turnId: sourceKey,
         interactionId: selectionGroup ?? `plugin-draft:${text}`,
         type: "suggestion",
         label: text,
@@ -779,6 +794,23 @@ function normalizeNestedSpec(node: Record<string, unknown>): Record<string, unkn
     } else out[key] = value;
   }
   return out;
+}
+
+function BranchReplyBlock({ block }: { block: Record<string, unknown> }) {
+  const data = (block.data ?? block) as Record<string, unknown>;
+  const spec = useMemo(() => nestedToFlat({
+    type: "BranchReplyCandidates",
+    props: {
+      value: data,
+      pluginId: "branch-reply",
+    },
+  }), [data]);
+
+  return (
+    <JSONUIProvider registry={covelRegistry} initialState={{}} handlers={{}}>
+      <Renderer spec={spec} registry={covelRegistry} />
+    </JSONUIProvider>
+  );
 }
 
 // ── MessageBlockRenderer ────────────────────────────────────────

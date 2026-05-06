@@ -1,0 +1,43 @@
+schemaVersion: "1.0"
+id: haruka-academy
+name: 遥风学园・春日薄荷
+version: "0.1.0"
+summary: 一所海边私立高中，社团、考试、传闻与未说出口的喜欢交织成青春日常。
+defaultLocale: zh-CN
+supportedLocales:
+  - zh-CN
+tags:
+  - school
+  - romance
+  - slice-of-life
+  - chat-mode
+requiredPlugins:
+  - pregame
+  - world-init
+  - char-creator
+recommendedPlugins:
+  - chat-mode-narrator
+  - scene-cast
+  - scene-prompts
+  - character-blueprint
+  - character-presence
+  - player-identity
+  - living-world-rules
+  - branch-reply
+excludedPlugins:
+  - narrator
+  - guide
+  - codex
+characterBlueprintSources:
+  - ./characters/main-cast.json
+
+dimensionSources:
+  geography: ./dimensions/geography.yaml
+  factions: ./dimensions/factions.yaml
+  powerSystem: ./dimensions/power-system.yaml
+  history: ./dimensions/history.yaml
+  economy: ./dimensions/economy.yaml
+  socialStructure: ./dimensions/social-structure.yaml
+  tone: ./dimensions/tone.yaml
+  mechanics: ./dimensions/mechanics.yaml
+  startingConditions: ./dimensions/starting-conditions.yaml

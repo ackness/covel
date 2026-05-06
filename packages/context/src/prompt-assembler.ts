@@ -47,7 +47,7 @@ import {
   renderCoreMemory,
   renderWorkingMemory,
 } from './prompt-internals.js';
-import type { AssembledContext, ContextBuildParams, LLMMessage, MessageHistoryRecord, SummaryRecord } from './types.js';
+import type { AssembledContext, ContextBuildParams, ContextContribution, LLMMessage, MessageHistoryRecord, SummaryRecord } from './types.js';
 
 /** Default Author's Note insertion depth (SillyTavern default). */
 const DEFAULT_AUTHORS_NOTE_DEPTH = 4;
@@ -61,6 +61,13 @@ interface RenderedAuthorsNote {
   readonly role: 'system' | 'user' | 'assistant';
   readonly depth: number;
   readonly content: string;
+}
+
+interface RenderedDepthContribution {
+  readonly role: 'system' | 'user' | 'assistant';
+  readonly depth: number;
+  readonly content: string;
+  readonly order: number;
 }
 
 // ── Summary substitution helper (mirrors context-builder.ts) ────
@@ -151,6 +158,67 @@ export interface PromptSegments {
    * very end of the message array.
    */
   readonly postHistoryInstructions: readonly LLMMessage[];
+  readonly depthContributions: readonly RenderedDepthContribution[];
+}
+
+function activeContributions(params: ContextBuildParams): readonly ContextContribution[] {
+  return params.sessionContext?.contributions ?? [];
+}
+
+function renderSystemPersonaContributions(
+  contributions: readonly ContextContribution[],
+  position: 'seg3_prepend' | 'seg3_append',
+): string {
+  const lines = contributions
+    .filter((contribution) =>
+      contribution.kind === 'persona_description' &&
+      contribution.position === position &&
+      contribution.content.trim().length > 0,
+    )
+    .map((contribution, index) => ({ contribution, index }))
+    .sort((a, b) =>
+      (a.contribution.order ?? 0) - (b.contribution.order ?? 0) ||
+      a.index - b.index,
+    )
+    .map(({ contribution }) => contribution.content.trim());
+  return lines.join('\n\n');
+}
+
+function renderSystemLoreContributions(
+  contributions: readonly ContextContribution[],
+  position: 'before_plugin' | 'after_plugin',
+): string {
+  const lines = contributions
+    .filter((contribution) =>
+      contribution.kind === 'lore_entry' &&
+      contribution.position === position &&
+      contribution.content.trim().length > 0,
+    )
+    .map((contribution, index) => ({ contribution, index }))
+    .sort((a, b) =>
+      (a.contribution.order ?? 0) - (b.contribution.order ?? 0) ||
+      a.index - b.index,
+    )
+    .map(({ contribution }) => contribution.content.trim());
+  return lines.join('\n\n');
+}
+
+function collectDepthContributions(
+  contributions: readonly ContextContribution[],
+): readonly RenderedDepthContribution[] {
+  return contributions
+    .filter((contribution) =>
+      (contribution.kind === 'persona_description' || contribution.kind === 'lore_entry') &&
+      contribution.position === 'at_depth' &&
+      contribution.content.trim().length > 0,
+    )
+    .map((contribution) => ({
+      role: contribution.role ?? 'system',
+      depth: contribution.depth ?? DEFAULT_AUTHORS_NOTE_DEPTH,
+      content: contribution.content.trim(),
+      order: contribution.order ?? 0,
+    }))
+    .sort((a, b) => a.depth - b.depth || a.order - b.order);
 }
 
 /**
@@ -336,6 +404,16 @@ function buildPromptSegmentsCommon(
     params.promptTemplate,
     variables,
   );
+  const contributions = activeContributions(params);
+  const personaPrepend = renderSystemPersonaContributions(contributions, 'seg3_prepend');
+  const personaAppend = renderSystemPersonaContributions(contributions, 'seg3_append');
+  const worldInfoBeforePlugin = renderSystemLoreContributions(contributions, 'before_plugin');
+  const worldInfoAfterPlugin = renderSystemLoreContributions(contributions, 'after_plugin');
+  const pluginInstructionsWithPersona = [
+    personaPrepend,
+    pluginInstructions,
+    personaAppend,
+  ].filter(Boolean).join('\n\n');
 
   // Interpolate inject blocks too, mirroring V1 (which interpolates the
   // concatenated `template + injectBlocks` as one string). This keeps
@@ -366,13 +444,14 @@ function buildPromptSegmentsCommon(
   return {
     frameworkPreamble,
     workingMemory,
-    pluginInstructions,
-    worldInfoBeforePlugin: '',
+    pluginInstructions: pluginInstructionsWithPersona,
+    worldInfoBeforePlugin,
     upstreamInjects,
-    worldInfoAfterPlugin: '',
+    worldInfoAfterPlugin,
     worldInfoAtDepth: '',
     authorsNotes,
     postHistoryInstructions,
+    depthContributions: collectDepthContributions(contributions),
   };
 }
 
@@ -488,7 +567,13 @@ function finalizeV2(
   ];
 
   // Segment 9 — insert author's notes at their declared depth.
-  const withAuthorsNotes = insertAuthorsNotes(baseMessages, segments.authorsNotes);
+  const withDepthContributions = insertDepthContributions(
+    baseMessages,
+    segments.depthContributions,
+  );
+
+  // Segment 9 — insert author's notes at their declared depth.
+  const withAuthorsNotes = insertAuthorsNotes(withDepthContributions, segments.authorsNotes);
 
   // Segment 10 — append post-history instructions after everything else.
   const messages: readonly LLMMessage[] = segments.postHistoryInstructions.length > 0
@@ -509,4 +594,18 @@ function finalizeV2(
   }
 
   return { systemPrompt, messages };
+}
+
+function insertDepthContributions(
+  messages: readonly LLMMessage[],
+  contributions: readonly RenderedDepthContribution[],
+): LLMMessage[] {
+  if (contributions.length === 0) return [...messages];
+
+  const notes = contributions.map((contribution) => ({
+    role: contribution.role,
+    depth: contribution.depth,
+    content: contribution.content,
+  }));
+  return insertAuthorsNotes(messages, notes);
 }

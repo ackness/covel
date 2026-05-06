@@ -29,6 +29,15 @@ export function resolveDynamicParam(
     if (typeof ref.$bindState === "string") {
       return getState(ref.$bindState);
     }
+    return Object.fromEntries(
+      Object.entries(ref).map(([key, nested]) => [
+        key,
+        resolveDynamicParam(nested, getState),
+      ]),
+    );
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => resolveDynamicParam(item, getState));
   }
   return value;
 }
@@ -59,7 +68,7 @@ export function matchesPendingDraft(
 ): boolean {
   const group = params.selectionGroup;
   const text = params.text ?? params.label;
-  const choiceId = params.choiceId;
+  const choiceId = params.choiceId ?? params.candidateId;
 
   for (const draft of drafts) {
     // Heuristic 1: selectionGroup + label/text match
@@ -75,10 +84,20 @@ export function matchesPendingDraft(
     // Heuristic 2: choiceId match against values.selectedId
     if (choiceId !== undefined && draft.values) {
       const values = draft.values as Record<string, unknown>;
-      if (
-        values.selectedId !== undefined &&
-        String(values.selectedId) === String(choiceId)
-      ) {
+      const selectedId = values.selectedId ?? values.candidateId;
+      if (selectedId !== undefined && String(selectedId) === String(choiceId)) {
+        return true;
+      }
+    }
+
+    // Heuristic 3: plain draft text match. Candidate reply blocks can use
+    // draft/send/accept action names with only a text payload, while older
+    // guide specs use selection groups. This keeps both shapes visually
+    // selectable through shared draft metadata.
+    if (text !== undefined && draft.values) {
+      const values = draft.values as Record<string, unknown>;
+      const draftText = values.text ?? draft.label;
+      if (draftText !== undefined && String(draftText) === String(text)) {
         return true;
       }
     }

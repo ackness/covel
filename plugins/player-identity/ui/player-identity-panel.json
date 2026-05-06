@@ -1,0 +1,93 @@
+{
+  "id": "player-identity",
+  "label": {
+    "zh": "玩家身份",
+    "en": "Player Identity"
+  },
+  "shortLabel": {
+    "zh": "身份",
+    "en": "Identity"
+  },
+  "icon": "user-round-cog",
+  "group": "chat-mode",
+  "groupLabel": {
+    "zh": "Chat Mode",
+    "en": "Chat Mode"
+  },
+  "groupOrder": 440,
+  "dataSource": { "namespace": "profiles" },
+  "alwaysRender": true,
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "md" },
+    "children": [
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "粘贴玩家身份 JSON，保存后会成为当前会话 Persona，并可同步到 player Character。",
+            "en": "Paste Player Identity JSON. Saving activates it as the session persona and can sync it to the player Character."
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "Textarea",
+        "props": {
+          "label": {
+            "zh": "身份 JSON",
+            "en": "Identity JSON"
+          },
+          "placeholder": "{ \"schemaVersion\": 1, \"id\": \"wanderer\", \"name\": \"Wanderer\", \"description\": \"A cautious outsider.\" }",
+          "value": { "$bindState": "/draftJson" },
+          "rows": 9
+        }
+      },
+      {
+        "component": "Button",
+        "props": {
+          "label": {
+            "zh": "保存身份",
+            "en": "Save Identity"
+          },
+          "variant": "primary",
+          "size": "compact"
+        },
+        "on": {
+          "click": {
+            "action": "invokeRuntime",
+            "params": {
+              "runtimeId": "player-identity",
+              "payload": {
+                "profileJson": { "$bindState": "/draftJson" },
+                "activate": true,
+                "bindToPlayer": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "component": "Separator"
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "已保存身份",
+            "en": "Saved identities"
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "JsonView",
+        "props": {
+          "value": { "$state": "/entries" }
+        }
+      }
+    ]
+  }
+}

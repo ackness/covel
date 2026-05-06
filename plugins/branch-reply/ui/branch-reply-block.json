@@ -1,0 +1,16 @@
+{
+  "id": "branch-reply",
+  "dataSource": { "namespace": "message" },
+  "view": {
+    "component": "BranchReplyCandidates",
+    "props": {
+      "pluginId": "branch-reply",
+      "value": { "$state": "/" },
+      "title": { "zh": "回复候选", "en": "Reply candidates" },
+      "draftLabel": { "zh": "草稿", "en": "Draft" },
+      "sendLabel": { "zh": "发送", "en": "Send" },
+      "acceptLabel": { "zh": "采用", "en": "Accept" },
+      "regenerateLabel": { "zh": "重生成", "en": "Regenerate" }
+    }
+  }
+}

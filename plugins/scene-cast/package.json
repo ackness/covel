@@ -1,0 +1,17 @@
+{
+  "name": "@covel/plugin-scene-cast",
+  "version": "0.0.2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@covel/plugin-loader": "workspace:*",
+    "@covel/runtime": "workspace:*",
+    "@covel/shared": "workspace:*",
+    "@covel/tools": "workspace:*",
+    "vitest": "^4.1.4"
+  }
+}

@@ -207,6 +207,13 @@ export async function loadSingleWorld(worldDir: string): Promise<WorldRecord | n
   const lore = await readLore(worldDir, defaultLocale);
   const now = new Date().toISOString();
 
+  const characterBlueprintSources = Array.isArray(manifest.characterBlueprintSources)
+    ? manifest.characterBlueprintSources as string[]
+    : undefined;
+  const characterBlueprints = characterBlueprintSources
+    ? await loadCharacterBlueprints(worldDir, characterBlueprintSources)
+    : undefined;
+
   return {
     id: worldId,
     name: resolveText(manifest.name as string | Record<string, string>, defaultLocale),
@@ -220,10 +227,31 @@ export async function loadSingleWorld(worldDir: string): Promise<WorldRecord | n
       dimensionSources: dimensionSources,
       requiredPlugins: manifest.requiredPlugins as string[] | undefined,
       recommendedPlugins: manifest.recommendedPlugins as string[] | undefined,
+      excludedPlugins: manifest.excludedPlugins as string[] | undefined,
+      characterBlueprintSources,
+      characterBlueprints,
     },
     createdAt: now,
     updatedAt: now,
   };
+}
+
+async function loadCharacterBlueprints(
+  worldDir: string,
+  sources: readonly string[],
+): Promise<unknown[]> {
+  const blueprints: unknown[] = [];
+  for (const source of sources) {
+    const fullPath = resolveSafePath(worldDir, source);
+    if (!fullPath) {
+      throw new Error(`characterBlueprintSources path escapes world dir: ${source}`);
+    }
+    const raw = await readFile(fullPath, 'utf-8');
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) blueprints.push(...parsed);
+    else blueprints.push(parsed);
+  }
+  return blueprints;
 }
 
 /**

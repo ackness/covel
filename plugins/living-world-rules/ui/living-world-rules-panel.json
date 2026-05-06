@@ -1,0 +1,91 @@
+{
+  "id": "living-world-rules",
+  "label": {
+    "zh": "世界规则",
+    "en": "World Rules"
+  },
+  "shortLabel": {
+    "zh": "规则",
+    "en": "Rules"
+  },
+  "icon": "book-marked",
+  "group": "chat-mode",
+  "groupLabel": {
+    "zh": "Chat Mode",
+    "en": "Chat Mode"
+  },
+  "groupOrder": 430,
+  "dataSource": { "namespace": "rules" },
+  "alwaysRender": true,
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "md" },
+    "children": [
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "粘贴世界规则 JSON，保存后会写入 Covel lorebook，并在 Prompt V2 中按坐标注入。",
+            "en": "Paste World Rule JSON. Saving writes it to the Covel lorebook and injects it through Prompt V2 coordinates."
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "Textarea",
+        "props": {
+          "label": {
+            "zh": "规则 JSON",
+            "en": "Rule JSON"
+          },
+          "placeholder": "{ \"schemaVersion\": 1, \"id\": \"rain-market\", \"content\": \"雨市里没人会直接说出真实姓名。\", \"kind\": \"constant\", \"coordinate\": { \"position\": \"before_plugin\" } }",
+          "value": { "$bindState": "/draftJson" },
+          "rows": 10
+        }
+      },
+      {
+        "component": "Button",
+        "props": {
+          "label": {
+            "zh": "保存规则",
+            "en": "Save Rule"
+          },
+          "variant": "primary",
+          "size": "compact"
+        },
+        "on": {
+          "click": {
+            "action": "invokeRuntime",
+            "params": {
+              "runtimeId": "living-world-rules",
+              "payload": {
+                "ruleJson": { "$bindState": "/draftJson" }
+              }
+            }
+          }
+        }
+      },
+      {
+        "component": "Separator"
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "已保存规则",
+            "en": "Saved rules"
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "JsonView",
+        "props": {
+          "value": { "$state": "/entries" }
+        }
+      }
+    ]
+  }
+}

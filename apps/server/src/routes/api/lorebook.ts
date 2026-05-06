@@ -22,6 +22,20 @@ type Env = {
 
 export const lorebookRoutes = new Hono<Env>();
 
+const entryBodySchema = z.object({
+  id: z.string().min(1).max(160).regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/),
+  pluginId: z.string().min(1).max(128).optional(),
+  content: z.string().min(1).max(65_536),
+  keys: z.array(z.string().max(128)).max(64).optional(),
+  strategy: z.enum(['constant', 'selective']).optional(),
+  position: z.string().min(1).max(64).optional(),
+  insertionOrder: z.number().finite().optional(),
+  enabled: z.boolean().optional(),
+  extra: z.unknown().optional(),
+});
+
+type EntryBody = z.infer<typeof entryBodySchema>;
+
 // GET /sessions/:id/lorebook
 lorebookRoutes.get('/:id/lorebook', async (c) => {
   const store = c.get('store');
@@ -31,6 +45,54 @@ lorebookRoutes.get('/:id/lorebook', async (c) => {
 
   const entries = await store.listSessionLorebookEntries(sessionId);
   return c.json({ entries });
+});
+
+// POST /sessions/:id/lorebook
+lorebookRoutes.post('/:id/lorebook', async (c) => {
+  const store = c.get('store');
+  const sessionId = c.req.param('id');
+  const session = await store.getSession(sessionId);
+  if (!session) return c.json({ error: 'Session not found' }, 404);
+
+  const raw = await c.req.json<unknown>().catch(() => null);
+  const parsed = entryBodySchema.safeParse(raw);
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid lorebook entry body' }, 400);
+  }
+
+  const now = new Date().toISOString();
+  const entry = toLorebookRecord(sessionId, parsed.data, now, now);
+  await store.upsertLorebookEntries([entry]);
+  return c.json({ entry }, 201);
+});
+
+// PUT /sessions/:id/lorebook/:entryId
+lorebookRoutes.put('/:id/lorebook/:entryId', async (c) => {
+  const store = c.get('store');
+  const sessionId = c.req.param('id');
+  const session = await store.getSession(sessionId);
+  if (!session) return c.json({ error: 'Session not found' }, 404);
+
+  const entryId = c.req.param('entryId');
+  const raw = await c.req.json<unknown>().catch(() => null);
+  const parsed = entryBodySchema.safeParse({ ...(raw as Record<string, unknown>), id: entryId });
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid lorebook entry body' }, 400);
+  }
+
+  const existing = (await store.listSessionLorebookEntries(sessionId)).find(
+    (e) => e.id === entryId,
+  );
+  const now = new Date().toISOString();
+  const entry = toLorebookRecord(
+    sessionId,
+    parsed.data,
+    existing?.createdAt ?? now,
+    now,
+    existing,
+  );
+  await store.upsertLorebookEntries([entry]);
+  return c.json({ entry });
 });
 
 // PATCH /sessions/:id/lorebook/:entryId
@@ -87,3 +149,34 @@ lorebookRoutes.delete('/:id/lorebook/:entryId', async (c) => {
   await store.deleteLorebookEntry(sessionId, entryId);
   return c.json({ success: true });
 });
+
+function toLorebookRecord(
+  sessionId: string,
+  body: EntryBody,
+  createdAt: string,
+  updatedAt: string,
+  existing?: {
+    readonly pluginId: string;
+    readonly keys: readonly string[];
+    readonly strategy: 'constant' | 'selective';
+    readonly position: string;
+    readonly insertionOrder: number;
+    readonly enabled: boolean;
+    readonly extra?: unknown;
+  },
+) {
+  return {
+    id: body.id,
+    sessionId,
+    pluginId: body.pluginId ?? existing?.pluginId ?? 'manual-lorebook',
+    keys: body.keys ?? existing?.keys ?? [],
+    content: body.content,
+    strategy: body.strategy ?? existing?.strategy ?? 'constant',
+    position: body.position ?? existing?.position ?? 'after_plugin',
+    insertionOrder: body.insertionOrder ?? existing?.insertionOrder ?? 500,
+    enabled: body.enabled ?? existing?.enabled ?? true,
+    ...(body.extra !== undefined ? { extra: body.extra } : existing?.extra !== undefined ? { extra: existing.extra } : {}),
+    createdAt,
+    updatedAt,
+  };
+}

@@ -1,0 +1,91 @@
+{
+  "id": "character-presence",
+  "label": {
+    "zh": "角色存在感",
+    "en": "Character Presence"
+  },
+  "shortLabel": {
+    "zh": "存在感",
+    "en": "Presence"
+  },
+  "icon": "image-plus",
+  "group": "chat-mode",
+  "groupLabel": {
+    "zh": "Chat Mode",
+    "en": "Chat Mode"
+  },
+  "groupOrder": 430,
+  "dataSource": { "namespace": "presence" },
+  "alwaysRender": true,
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "md" },
+    "children": [
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "粘贴角色存在感 JSON，保存头像、立绘、语音与媒体引用。",
+            "en": "Paste Character Presence JSON to save avatar, sprite, voice, and media refs."
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "Textarea",
+        "props": {
+          "label": {
+            "zh": "存在感 JSON",
+            "en": "Presence JSON"
+          },
+          "placeholder": "{ \"schemaVersion\": 1, \"characterId\": \"mentor-lin\", \"avatar\": { \"id\": \"...\", \"mime\": \"image/png\", \"size\": 1234 } }",
+          "value": { "$bindState": "/draftJson" },
+          "rows": 10
+        }
+      },
+      {
+        "component": "Button",
+        "props": {
+          "label": {
+            "zh": "保存存在感",
+            "en": "Save Presence"
+          },
+          "variant": "primary",
+          "size": "compact"
+        },
+        "on": {
+          "click": {
+            "action": "invokeRuntime",
+            "params": {
+              "runtimeId": "character-presence",
+              "payload": {
+                "presenceJson": { "$bindState": "/draftJson" }
+              }
+            }
+          }
+        }
+      },
+      {
+        "component": "Separator"
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "已保存存在感",
+            "en": "Saved presence"
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "JsonView",
+        "props": {
+          "value": { "$state": "/entries" }
+        }
+      }
+    ]
+  }
+}

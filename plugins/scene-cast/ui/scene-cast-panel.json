@@ -1,0 +1,56 @@
+{
+  "id": "scene-cast",
+  "label": {
+    "zh": "场景演员",
+    "en": "Scene Cast"
+  },
+  "shortLabel": {
+    "zh": "演员",
+    "en": "Cast"
+  },
+  "icon": "users-round",
+  "group": "chat-mode",
+  "groupLabel": {
+    "zh": "Chat Mode",
+    "en": "Chat Mode"
+  },
+  "groupOrder": 450,
+  "dataSource": { "namespace": "active-cast" },
+  "emptyState": {
+    "message": {
+      "zh": "等待场景演员选择。",
+      "en": "Waiting for scene cast selection."
+    }
+  },
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "sm" },
+    "children": [
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "当前活跃演员",
+            "en": "Current active cast"
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "JsonView",
+        "props": {
+          "value": { "$state": "/current/speakers" }
+        }
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": { "$state": "/current/reason" },
+          "variant": "muted",
+          "size": "xs"
+        }
+      }
+    ]
+  }
+}

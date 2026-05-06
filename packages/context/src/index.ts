@@ -55,5 +55,8 @@ export type {
 export { buildSessionContextSnapshot } from './session-context.js';
 export type { BuildSessionContextSnapshotOpts } from './session-context.js';
 
+// ── Branch Reply History Projection ─────────────────────────────
+export { applyBranchReplyAcceptedCandidates } from './branch-reply-history.js';
+
 // ── Narrow store interface (layering boundary) ──────────────────
 export type { SessionContextStore } from './session-context-store.js';

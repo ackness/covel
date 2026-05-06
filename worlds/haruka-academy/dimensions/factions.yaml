@@ -1,0 +1,40 @@
+- id: student-council
+  name: 遥风学生会
+  description: 负责学园祭、社团预算和校内纪律，表面严谨，内部也有对理想校园生活的分歧。
+  type: political
+  influence: major
+  leader: 学生会长・三枝遥
+  headquarters: 行政楼二层・学生会室
+  relations:
+    - targetId: literature-club
+      type: oversight
+      description: 因人数不足，学生会正在评估文艺部是否保留独立活动室。
+- id: literature-club
+  name: 文艺部
+  description: 老牌小社团，成员少但坚持制作学园祭刊物。
+  type: guild
+  influence: minor
+  leader: 神代澪
+  headquarters: 社团楼三层・文艺部活动室
+  relations:
+    - targetId: news-club
+      type: friendly-rivalry
+      description: 常因刊物选题与新闻部争抢采访对象。
+- id: news-club
+  name: 新闻部
+  description: 掌握校内传闻和学园祭报道权，行动力强，界限感时好时坏。
+  type: guild
+  influence: minor
+  leader: 朝仓凛
+  headquarters: 社团楼二层・新闻部编辑室
+  relations:
+    - targetId: student-council
+      type: negotiated
+      description: 需要学生会批准采访权限，也常让学生会头疼。
+- id: light-music-club
+  name: 轻音部
+  description: 以学园祭舞台为目标的乐队社团，气氛自由但排练压力很大。
+  type: guild
+  influence: minor
+  leader: 椎名夏帆
+  headquarters: 社团楼一层・练习室

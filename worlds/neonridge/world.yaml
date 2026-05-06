@@ -11,12 +11,21 @@ tags:
   - noir
   - thriller
 requiredPlugins:
-  - persona
+  - pregame
+  - world-init
+  - char-creator
   - narrator
 recommendedPlugins:
   - guide
-  - inventory
-  - combat
+  - codex
+  - npc-graph
+  - player-identity
+  - living-world-rules
+excludedPlugins:
+  - chat-mode-narrator
+  - scene-cast
+  - scene-prompts
+  - branch-reply
 
 dimensionSources:
   geography: ./dimensions/geography.yaml

@@ -3,6 +3,8 @@
  *
  * Tests the framework-owned session lorebook viewer endpoints:
  *   GET    /api/sessions/:id/lorebook
+ *   POST   /api/sessions/:id/lorebook
+ *   PUT    /api/sessions/:id/lorebook/:entryId
  *   PATCH  /api/sessions/:id/lorebook/:entryId  (toggle enabled)
  *   DELETE /api/sessions/:id/lorebook/:entryId
  */
@@ -99,6 +101,91 @@ describe('Lorebook API routes', () => {
     it('returns 404 when session does not exist', async () => {
       const res = await app.request('/api/sessions/nope/lorebook');
       expect(res.status).toBe(404);
+    });
+  });
+
+  describe('POST /api/sessions/:id/lorebook', () => {
+    it('creates a session lorebook entry', async () => {
+      const res = await app.request(`/api/sessions/${SESSION_ID}/lorebook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: 'manual-rule',
+          content: 'Manual rule content',
+          keys: ['manual'],
+          strategy: 'selective',
+          position: 'before_plugin',
+          insertionOrder: 12,
+          extra: { coordinate: { position: 'before_plugin' } },
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      const body = await res.json<{ entry: LorebookEntryRecord }>();
+      expect(body.entry).toMatchObject({
+        id: 'manual-rule',
+        sessionId: SESSION_ID,
+        pluginId: 'manual-lorebook',
+        content: 'Manual rule content',
+        keys: ['manual'],
+        strategy: 'selective',
+        position: 'before_plugin',
+        insertionOrder: 12,
+        enabled: true,
+        extra: { coordinate: { position: 'before_plugin' } },
+      });
+
+      const entries = await store.listSessionLorebookEntries(SESSION_ID);
+      expect(entries).toHaveLength(1);
+      expect(entries[0].id).toBe('manual-rule');
+    });
+
+    it('returns 400 for invalid create body', async () => {
+      const res = await app.request(`/api/sessions/${SESSION_ID}/lorebook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: '../bad', content: '' }),
+      });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('PUT /api/sessions/:id/lorebook/:entryId', () => {
+    it('updates a session lorebook entry while preserving stable fields', async () => {
+      await store.upsertLorebookEntries([
+        makeEntry(SESSION_ID, 'e1', {
+          pluginId: 'owner-plugin',
+          keys: ['old'],
+          content: 'old content',
+          strategy: 'selective',
+          position: 'after_plugin',
+          insertionOrder: 9,
+          enabled: false,
+        }),
+      ]);
+
+      const res = await app.request(`/api/sessions/${SESSION_ID}/lorebook/e1`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: 'new content',
+          keys: ['new'],
+          position: 'at_depth',
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json<{ entry: LorebookEntryRecord }>();
+      expect(body.entry).toMatchObject({
+        id: 'e1',
+        pluginId: 'owner-plugin',
+        content: 'new content',
+        keys: ['new'],
+        strategy: 'selective',
+        position: 'at_depth',
+        insertionOrder: 9,
+        enabled: false,
+      });
     });
   });
 

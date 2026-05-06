@@ -1,0 +1,17 @@
+{
+  "name": "@covel/plugin-character-presence",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@covel/tools": "workspace:*"
+  },
+  "devDependencies": {
+    "@covel/plugin-loader": "workspace:*",
+    "vitest": "^4.1.4"
+  }
+}

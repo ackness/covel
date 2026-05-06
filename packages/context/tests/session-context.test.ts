@@ -299,6 +299,155 @@ describe('buildSessionContextSnapshot — memory + summaries wiring', () => {
   });
 });
 
+describe('buildSessionContextSnapshot — player identity wiring', () => {
+  it('loads active player identity from plugin data and compiles a persona contribution', async () => {
+    const store = createMemoryStore();
+    await store.createSession(makeSession());
+    await store.setPluginData(
+      makePluginData({
+        pluginId: 'player-identity',
+        namespace: 'profiles',
+        key: 'wanderer',
+        value: {
+          profile: {
+            schemaVersion: 1,
+            id: 'wanderer',
+            name: 'Wanderer',
+            description: 'A cautious outsider with a hidden map.',
+            promptCoordinate: { position: 'seg3_prepend', order: 2 },
+          },
+          updatedAt: ts(),
+        },
+      }),
+    );
+    await store.setPluginData(
+      makePluginData({
+        pluginId: 'player-identity',
+        namespace: 'session-binding',
+        key: 'current',
+        value: {
+          profileId: 'wanderer',
+          characterId: 'player-wanderer',
+          updatedAt: ts(),
+        },
+      }),
+    );
+
+    const snapshot = await buildSessionContextSnapshot(store, 'sess-1', {
+      locale: 'zh-CN',
+      turnNumber: 4,
+    });
+
+    expect(snapshot.activePersona).toEqual({
+      id: 'wanderer',
+      name: 'Wanderer',
+      description: 'A cautious outsider with a hidden map.',
+      promptCoordinate: { position: 'seg3_prepend', order: 2 },
+    });
+    expect(snapshot.contributions).toEqual([
+      {
+        kind: 'persona_description',
+        sourceType: 'persona',
+        sourceId: 'wanderer',
+        content: [
+          '[Player Persona]',
+          'Name: Wanderer',
+          'Description: A cautious outsider with a hidden map.',
+        ].join('\n'),
+        position: 'seg3_prepend',
+        order: 2,
+        budgetClass: 'sticky',
+      },
+    ]);
+  });
+});
+
+describe('buildSessionContextSnapshot — lorebook contributions', () => {
+  it('compiles enabled constant lorebook entries into lore contributions', async () => {
+    const store = createMemoryStore();
+    await store.createSession(makeSession());
+    await store.upsertLorebookEntries([
+      makeLorebookEntry({
+        id: 'rule-before',
+        pluginId: 'living-world-rules',
+        content: '雨市里没人会直接说出真实姓名。',
+        position: 'before_plugin',
+        insertionOrder: 20,
+        extra: {
+          title: 'Rain Market',
+          coordinate: { position: 'before_plugin' },
+          budgetClass: 'sticky',
+          sourceRuleId: 'rain-market',
+        },
+      }),
+    ]);
+
+    const snapshot = await buildSessionContextSnapshot(store, 'sess-1', {
+      locale: 'zh-CN',
+      turnNumber: 4,
+    });
+
+    expect(snapshot.contributions).toContainEqual({
+      kind: 'lore_entry',
+      sourceType: 'world',
+      sourceId: 'rule-before',
+      content: '[World Rule: Rain Market]\n雨市里没人会直接说出真实姓名。',
+      position: 'before_plugin',
+      order: 20,
+      budgetClass: 'sticky',
+      debugTrace: {
+        pluginId: 'living-world-rules',
+        strategy: 'constant',
+        keys: [],
+        sourceRuleId: 'rain-market',
+      },
+    });
+  });
+
+  it('activates selective lorebook entries from the current player message', async () => {
+    const store = createMemoryStore();
+    await store.createSession(makeSession());
+    await store.upsertLorebookEntries([
+      makeLorebookEntry({
+        id: 'sealed-door',
+        pluginId: 'living-world-rules',
+        content: '封印门只回应血脉、月光和旧誓。',
+        strategy: 'selective',
+        keys: ['封印门'],
+        position: 'at_depth',
+        insertionOrder: 30,
+        extra: {
+          coordinate: { position: 'at_depth', depth: 2 },
+        },
+      }),
+      makeLorebookEntry({
+        id: 'silent-rule',
+        pluginId: 'living-world-rules',
+        content: 'Unmatched rule',
+        strategy: 'selective',
+        keys: ['不会命中'],
+        insertionOrder: 40,
+      }),
+    ]);
+
+    const snapshot = await buildSessionContextSnapshot(store, 'sess-1', {
+      locale: 'zh-CN',
+      turnNumber: 4,
+      playerMessage: '我检查封印门上的月光痕迹。',
+    });
+
+    const loreContributions = snapshot.contributions.filter(
+      (contribution) => contribution.kind === 'lore_entry',
+    );
+    expect(loreContributions.map((contribution) => contribution.sourceId)).toEqual(['sealed-door']);
+    expect(loreContributions[0]).toMatchObject({
+      position: 'at_depth',
+      depth: 2,
+      content: '[World Rule: 封印门]\n封印门只回应血脉、月光和旧誓。',
+    });
+  });
+});
+
 // ── Test D: Graceful degradation ────────────────────────────────
 
 describe('buildSessionContextSnapshot — graceful degradation', () => {

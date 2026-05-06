@@ -30,7 +30,10 @@ import {
 import type { RuntimeManifest } from '@covel/shared';
 import { createEventBus } from '@covel/events';
 import { pluginRpcRoutes } from '../../src/routes/api/plugin-rpc.js';
+import { sessionRoutes } from '../../src/routes/api/session.js';
+import { turnRoutes } from '../../src/routes/api/turn.js';
 import { createInProcessSessionLock } from '../../src/lib/session-lock.js';
+import branchReplyHandler from '../../../../plugins/branch-reply/handler.js';
 
 type Env = {
   Variables: {
@@ -285,6 +288,21 @@ describe('POST /api/sessions/:id/plugin-rpc (PR-3)', () => {
 // ── Runtime-mode integration tests (plugin-rpc-runtime-pipeline M8b) ─────
 
 type FakeLlm = { generate: (...a: unknown[]) => Promise<unknown> };
+type CapturedLlmMessage = { readonly role: string; readonly content: unknown };
+
+class CapturingLlm {
+  readonly calls: CapturedLlmMessage[][] = [];
+
+  async generate(params: { readonly messages: readonly CapturedLlmMessage[] }) {
+    this.calls.push([...params.messages]);
+    return {
+      content: 'Next narrator output.',
+      toolCalls: [],
+      finishReason: 'stop',
+      usage: { inputTokens: 10, outputTokens: 5 },
+    };
+  }
+}
 
 function makeSummary(id: string): PluginSummary {
   return {
@@ -356,6 +374,48 @@ function makeFunctionEntry(args: {
     source: args.source ?? 'builtin',
   } as PluginRegistryEntry;
 
+  return { entry, loaded };
+}
+
+function makeAgentEntry(args: {
+  pluginId: string;
+  runtimeId: string;
+  outputKind?: 'story' | 'plugin' | 'system';
+  priority?: number;
+  source?: PluginSource;
+  trigger?: RuntimeManifest['trigger'];
+}): { entry: PluginRegistryEntry; loaded: LoadedRuntime } {
+  const manifest: RuntimeManifest = {
+    name: args.runtimeId,
+    pluginId: args.pluginId,
+    description: 'test agent runtime',
+    priority: args.priority ?? 500,
+    runtimeType: 'agent',
+    outputKind: args.outputKind ?? 'story',
+    pluginType: 'plugin',
+    trigger: args.trigger ?? { type: 'manual' },
+  } as RuntimeManifest;
+
+  const loaded: LoadedRuntime = {
+    manifest,
+    promptTemplate: 'You are a test narrator.',
+    references: [],
+  };
+  const parsed = {
+    manifest,
+    promptTemplate: loaded.promptTemplate,
+    referenceLinks: [],
+    rawFrontmatter: {},
+  };
+  const entry: PluginRegistryEntry = {
+    id: args.pluginId,
+    summary: makeSummary(args.pluginId),
+    manifest: parsed,
+    manifests: [parsed],
+    loadedRuntimes: new Map([[args.runtimeId, loaded]]),
+    status: 'registered',
+    source: args.source ?? 'builtin',
+  } as PluginRegistryEntry;
   return { entry, loaded };
 }
 
@@ -533,6 +593,155 @@ describe('POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)', () => {
     // Sync path must NOT write anything into the reserved _jobs namespace.
     const jobs = await store.listPluginData(SESSION_ID, PLUGIN_ID, '_jobs');
     expect(jobs).toHaveLength(0);
+  });
+
+  it('simulates branch-reply create/accept through API and uses the accepted candidate in the next narrator prompt', async () => {
+    const store = createMemoryStore();
+    const pluginRegistry = createPluginRegistry();
+    const { entry: branchEntry, loaded: branchLoaded } = makeFunctionEntry({
+      pluginId: 'branch-reply',
+      runtimeId: 'branch-reply',
+      execution: 'sync',
+      handler: branchReplyHandler as FunctionHandler,
+      priority: undefined,
+    });
+    const { entry: narratorEntry, loaded: narratorLoaded } = makeAgentEntry({
+      pluginId: 'chat-mode-narrator',
+      runtimeId: 'chat-mode-narrator',
+      outputKind: 'story',
+      trigger: { type: 'auto' },
+    });
+    pluginRegistry.register(branchEntry);
+    pluginRegistry.register(narratorEntry);
+
+    const rpcRegistry = createPluginRpcRegistry();
+    const rpcExecutor = createRpcExecutor({
+      registry: rpcRegistry,
+      loadHandler: async () => async () => ({}),
+    });
+    const gate = createRpcApprovalGate();
+    const eventBus = createEventBus(store);
+    const sessionLock = createInProcessSessionLock();
+    const llm = new CapturingLlm();
+    const loadRuntimeFn = async (manifest: RuntimeManifest): Promise<LoadedRuntime | undefined> => {
+      if (manifest.name === 'branch-reply') return branchLoaded;
+      if (manifest.name === 'chat-mode-narrator') return narratorLoaded;
+      return undefined;
+    };
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('store', store);
+      c.set('pluginRegistry', pluginRegistry);
+      c.set('rpcExecutor', rpcExecutor);
+      c.set('rpcRegistry', rpcRegistry);
+      c.set('rpcApprovalGate', gate);
+      c.set('llmAdapter', llm);
+      c.set('loadRuntimeFn', loadRuntimeFn);
+      c.set('toolExecutor', undefined);
+      c.set('resolveModel', () => undefined);
+      c.set('eventBus', eventBus);
+      c.set('compactorRunner', { async run() { /* noop */ } });
+      c.set('sessionLock', sessionLock);
+      c.set('prepareToolsForSession', async () => undefined);
+      await next();
+    });
+    app.route('/api/sessions', sessionRoutes);
+    app.route('/api/sessions', pluginRpcRoutes);
+    app.route('/api/sessions', turnRoutes);
+
+    const createSession = await app.request('/api/sessions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'sess-branch-api',
+        plugins: ['chat-mode-narrator'],
+        locale: 'zh-CN',
+      }),
+    });
+    expect(createSession.status).toBe(200);
+    const session = (await createSession.json()) as { id: string; activePlugins: string[] };
+    expect(session.activePlugins).toEqual(expect.arrayContaining(['chat-mode-narrator', 'branch-reply']));
+
+    await store.appendTurnMessage({
+      id: 'tm-player-1',
+      sessionId: session.id,
+      turnId: 'turn-story-1',
+      sourceType: 'player',
+      role: 'user',
+      content: 'Open the sealed door.',
+      order: 0,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    await store.appendTurnMessage({
+      id: 'tm-story-1',
+      sessionId: session.id,
+      turnId: 'turn-story-1',
+      sourceType: 'runtime',
+      sourcePluginId: 'chat-mode-narrator',
+      sourceRuntimeId: 'chat-mode-narrator',
+      role: 'assistant',
+      name: 'chat-mode-narrator',
+      content: 'Original narrator text.',
+      order: 500,
+      createdAt: '2026-01-01T00:00:01.000Z',
+    });
+
+    const createCandidates = await app.request(`/api/sessions/${session.id}/plugin-rpc`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        pluginId: 'branch-reply',
+        runtimeId: 'branch-reply',
+        payload: {
+          action: 'createCandidates',
+          turnId: 'turn-story-1',
+          candidates: [
+            'Candidate one text.',
+            'Accepted branch text.',
+          ],
+          count: 2,
+        },
+      }),
+    });
+    expect(createCandidates.status).toBe(200);
+
+    const acceptCandidate = await app.request(`/api/sessions/${session.id}/plugin-rpc`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        pluginId: 'branch-reply',
+        runtimeId: 'branch-reply',
+        payload: {
+          action: 'acceptCandidate',
+          turnId: 'turn-story-1',
+          candidateId: 'turn-story-1-candidate-2',
+        },
+      }),
+    });
+    expect(acceptCandidate.status).toBe(200);
+
+    const branchTurns = await store.listPluginData(session.id, 'branch-reply', 'turns');
+    expect(branchTurns[0]?.value).toMatchObject({
+      turnId: 'turn-story-1',
+      status: 'accepted',
+      acceptedCandidateId: 'turn-story-1-candidate-2',
+      acceptedText: 'Accepted branch text.',
+    });
+
+    const nextTurn = await app.request(`/api/sessions/${session.id}/turn`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ message: 'Continue from there.' }),
+    });
+    expect(nextTurn.status).toBe(200);
+
+    const lastCall = llm.calls[llm.calls.length - 1] ?? [];
+    const assistantHistory = lastCall.filter((message) => message.role === 'assistant');
+    expect(assistantHistory.map((message) => message.content)).toContain('Accepted branch text.');
+    expect(assistantHistory.map((message) => message.content)).not.toContain('Original narrator text.');
+
+    const persistedHistory = await store.listTurnMessages(session.id);
+    expect(persistedHistory.find((message) => message.id === 'tm-story-1')?.content).toBe('Original narrator text.');
   });
 
   it('injects ctx.media into sync runtime-mode handlers', async () => {
