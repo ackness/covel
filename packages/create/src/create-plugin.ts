@@ -18,68 +18,72 @@
  * in scripts/create-plugin.ts.
  */
 
-import { mkdir, writeFile, stat } from 'node:fs/promises';
-import path from 'node:path';
+import { mkdir, writeFile, stat } from "node:fs/promises";
+import path from "node:path";
 
-export type PluginTemplate = 'zero-code' | 'agent' | 'function';
+export type PluginTemplate = "zero-code" | "agent" | "function";
 
 export interface CreatePluginOptions {
-  /** Plugin id — must match /^[a-z][a-z0-9-]{1,63}$/ and be unique on disk. */
-  readonly name: string;
-  /** Which template to scaffold. */
-  readonly template: PluginTemplate;
-  /** Human-readable description (defaults to "{{name}} plugin"). */
-  readonly description?: string;
-  /** Parent directory to write into — will contain `<name>/`. */
-  readonly outputDir: string;
-  /** Priority band (defaults per template). */
-  readonly priority?: number;
-  /** Overwrite an existing directory. Defaults to false. */
-  readonly force?: boolean;
+	/** Plugin id — must match /^[a-z][a-z0-9-]{1,63}$/ and be unique on disk. */
+	readonly name: string;
+	/** Which template to scaffold. */
+	readonly template: PluginTemplate;
+	/** Human-readable description (defaults to "{{name}} plugin"). */
+	readonly description?: string;
+	/** Parent directory to write into — will contain `<name>/`. */
+	readonly outputDir: string;
+	/** Priority band (defaults per template). */
+	readonly priority?: number;
+	/** Overwrite an existing directory. Defaults to false. */
+	readonly force?: boolean;
 }
 
 export interface CreatePluginResult {
-  readonly success: boolean;
-  /** Absolute paths of files written. */
-  readonly files: readonly string[];
-  /** Final plugin directory (absolute). */
-  readonly pluginDir: string;
-  /** Normalised plugin name (== directory name). */
-  readonly name: string;
-  /** Non-fatal notes for the caller to surface. */
-  readonly notes: readonly string[];
+	readonly success: boolean;
+	/** Absolute paths of files written. */
+	readonly files: readonly string[];
+	/** Final plugin directory (absolute). */
+	readonly pluginDir: string;
+	/** Normalised plugin name (== directory name). */
+	readonly name: string;
+	/** Non-fatal notes for the caller to surface. */
+	readonly notes: readonly string[];
 }
 
 const NAME_RX = /^[a-z][a-z0-9-]{1,63}$/;
 
 function assertValidName(name: string): void {
-  if (!NAME_RX.test(name)) {
-    throw new Error(
-      `Invalid plugin name "${name}". Use 2–64 chars, lowercase letters, digits, or "-", starting with a letter.`,
-    );
-  }
+	if (!NAME_RX.test(name)) {
+		throw new Error(
+			`Invalid plugin name "${name}". Use 2–64 chars, lowercase letters, digits, or "-", starting with a letter.`,
+		);
+	}
 }
 
 async function pathExists(p: string): Promise<boolean> {
-  try {
-    await stat(p);
-    return true;
-  } catch {
-    return false;
-  }
+	try {
+		await stat(p);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 function defaultPriority(template: PluginTemplate): number {
-  // Stay inside After-Narrator band by default so new plugins pick up
-  // narrator output without fighting the narrator itself.
-  if (template === 'zero-code') return 700;
-  if (template === 'function') return 800;
-  return 600;
+	// Stay inside After-Narrator band by default so new plugins pick up
+	// narrator output without fighting the narrator itself.
+	if (template === "zero-code") return 700;
+	if (template === "function") return 800;
+	return 600;
 }
 
-function renderPluginMd(options: Required<Pick<CreatePluginOptions, 'name' | 'template' | 'priority'>> & { description: string }): string {
-  const { name, template, priority, description } = options;
-  const common = `---
+function renderPluginMd(
+	options: Required<
+		Pick<CreatePluginOptions, "name" | "template" | "priority">
+	> & { description: string },
+): string {
+	const { name, template, priority, description } = options;
+	const common = `---
 name: ${name}
 description:
   en: ${description}
@@ -87,10 +91,10 @@ description:
 pluginType: plugin
 priority: ${priority}
 `;
-  if (template === 'zero-code') {
-    return (
-      common +
-      `model: plugin
+	if (template === "zero-code") {
+		return (
+			common +
+			`model: plugin
 outputKind: system
 trigger:
   type: manual
@@ -102,12 +106,12 @@ Replace this prose with the skill you want the plugin runtime to perform.
 Triggering is manual — wire it up to a player command or another plugin's
 event before it will run.
 `
-    );
-  }
-  if (template === 'function') {
-    return (
-      common +
-      `outputKind: system
+		);
+	}
+	if (template === "function") {
+		return (
+			common +
+			`outputKind: system
 runtime:
   type: function
   handler: ./runtime.js
@@ -121,12 +125,12 @@ trigger:
 Pure-function runtime. Edit \`runtime.js\` to do whatever side-effect or
 data transformation you need. No LLM involved.
 `
-    );
-  }
-  // agent
-  return (
-    common +
-    `model: plugin
+		);
+	}
+	// agent
+	return (
+		common +
+		`model: plugin
 outputKind: system
 timeoutMs: 120000
 promptVersion: 2
@@ -149,33 +153,33 @@ Describe what this plugin is supposed to *do* in plain language. You can
 call \`${name}-tool\` (defined in \`tools/\`) and \`runtime-done\` when you're
 finished.
 `
-  );
+	);
 }
 
 function renderPackageJson(name: string): string {
-  return `${JSON.stringify(
-    {
-      name: `@covel/plugin-${name}`,
-      version: '0.0.1-beta',
-      private: true,
-      type: 'module',
-      scripts: {
-        test: 'vitest run --passWithNoTests',
-        'test:watch': 'vitest',
-      },
-      devDependencies: {
-        '@covel/plugin-test-utils': 'workspace:*',
-        '@covel/shared': 'workspace:*',
-        vitest: '^4.1.4',
-      },
-    },
-    null,
-    2,
-  )}\n`;
+	return `${JSON.stringify(
+		{
+			name: `@covel/plugin-${name}`,
+			version: "0.0.1-beta",
+			private: true,
+			type: "module",
+			scripts: {
+				test: "vitest run --passWithNoTests",
+				"test:watch": "vitest",
+			},
+			devDependencies: {
+				"@covel/plugin-test-utils": "workspace:*",
+				"@covel/shared": "workspace:*",
+				vitest: "^4.1.4",
+			},
+		},
+		null,
+		2,
+	)}\n`;
 }
 
 function renderAgentTool(name: string): string {
-  return `/**
+	return `/**
  * ${name}-tool — local tool wired into the ${name} plugin.
  *
  * Covel local tools expose (input) => output. Throw on invalid input;
@@ -202,7 +206,7 @@ export default {
 }
 
 function renderFunctionRuntime(name: string): string {
-  return `/**
+	return `/**
  * ${name} — pure function runtime.
  *
  * Return a \`RuntimeResult\` shape: { proposals?: Proposal[], output?: unknown }.
@@ -221,64 +225,58 @@ export default async function run(context) {
 }
 
 export async function createPlugin(
-  options: CreatePluginOptions,
+	options: CreatePluginOptions,
 ): Promise<CreatePluginResult> {
-  const { name, template, outputDir } = options;
-  assertValidName(name);
+	const { name, template, outputDir } = options;
+	assertValidName(name);
 
-  const pluginDir = path.resolve(outputDir, name);
-  const exists = await pathExists(pluginDir);
-  if (exists && !options.force) {
-    throw new Error(
-      `Directory already exists: ${pluginDir}\nUse force=true to overwrite.`,
-    );
-  }
+	const pluginDir = path.resolve(outputDir, name);
+	const exists = await pathExists(pluginDir);
+	if (exists && !options.force) {
+		throw new Error(
+			`Directory already exists: ${pluginDir}\nUse force=true to overwrite.`,
+		);
+	}
 
-  const priority = options.priority ?? defaultPriority(template);
-  const description = options.description?.trim() || `${name} plugin`;
+	const priority = options.priority ?? defaultPriority(template);
+	const description = options.description?.trim() || `${name} plugin`;
 
-  await mkdir(pluginDir, { recursive: true });
+	await mkdir(pluginDir, { recursive: true });
 
-  const files: string[] = [];
-  const writes: Array<[string, string]> = [
-    [
-      'PLUGIN.md',
-      renderPluginMd({ name, template, priority, description }),
-    ],
-    ['package.json', renderPackageJson(name)],
-  ];
+	const files: string[] = [];
+	const writes: Array<[string, string]> = [
+		["PLUGIN.md", renderPluginMd({ name, template, priority, description })],
+		["package.json", renderPackageJson(name)],
+	];
 
-  if (template === 'agent') {
-    writes.push([
-      path.join('tools', `${name}-tool.js`),
-      renderAgentTool(name),
-    ]);
-  } else if (template === 'function') {
-    writes.push(['runtime.js', renderFunctionRuntime(name)]);
-  }
+	if (template === "agent") {
+		writes.push([path.join("tools", `${name}-tool.js`), renderAgentTool(name)]);
+	} else if (template === "function") {
+		writes.push(["runtime.js", renderFunctionRuntime(name)]);
+	}
 
-  for (const [rel, content] of writes) {
-    const abs = path.join(pluginDir, rel);
-    await mkdir(path.dirname(abs), { recursive: true });
-    await writeFile(abs, content, 'utf8');
-    files.push(abs);
-  }
+	for (const [rel, content] of writes) {
+		const abs = path.join(pluginDir, rel);
+		await mkdir(path.dirname(abs), { recursive: true });
+		await writeFile(abs, content, "utf8");
+		files.push(abs);
+	}
 
-  const notes: string[] = [];
-  if (template === 'agent') {
-    notes.push(
-      'Agent template emits a local tool. Remember to install `zod` in your plugin package if you keep the schema validation.',
-    );
-  }
-  notes.push(
-    "Add the plugin to your dev config so it loads: either drop it under plugins/ in the repo, or point COVEL_PLUGINS_DIR at its parent folder.",
-  );
+	const notes: string[] = [];
+	if (template === "agent") {
+		notes.push(
+			"Agent template emits a local tool. Remember to install `zod` in your plugin package if you keep the schema validation.",
+		);
+	}
+	notes.push(
+		"Add the plugin to your dev config so it loads: either drop it under plugins/ in the repo, or point COVEL_PLUGINS_DIR at its parent folder.",
+	);
 
-  return {
-    success: true,
-    files,
-    pluginDir,
-    name,
-    notes,
-  };
+	return {
+		success: true,
+		files,
+		pluginDir,
+		name,
+		notes,
+	};
 }

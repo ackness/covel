@@ -10,6 +10,6 @@ export const DEFAULT_APPEARANCE = "paper";
  * variables cascade across the tree without needing React re-renders.
  */
 export function applyAppearance(appearance: Appearance): void {
-  if (typeof document === "undefined") return;
-  document.documentElement.setAttribute("data-theme", appearance);
+	if (typeof document === "undefined") return;
+	document.documentElement.setAttribute("data-theme", appearance);
 }

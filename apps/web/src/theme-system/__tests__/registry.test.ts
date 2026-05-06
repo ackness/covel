@@ -2,77 +2,97 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { SettingsStore, type SettingsBackendAdapter } from "@covel/shared";
 import { applyAppearance } from "@/lib/appearance.js";
 import {
-  deleteCustomTheme,
-  getRegisteredThemes,
-  primeThemeRegistry,
-  saveCustomTheme,
-  syncThemeRegistry,
+	deleteCustomTheme,
+	getRegisteredThemes,
+	primeThemeRegistry,
+	saveCustomTheme,
+	syncThemeRegistry,
 } from "../registry.js";
 import { CUSTOM_THEMES_KEY } from "../storage.js";
 
 class MemorySettingsAdapter implements SettingsBackendAdapter {
-  private entries: Record<string, unknown> = {};
-  private secrets: Record<string, string> = {};
+	private entries: Record<string, unknown> = {};
+	private secrets: Record<string, string> = {};
 
-  async load(): Promise<Record<string, unknown>> {
-    return { ...this.entries };
-  }
+	async load(): Promise<Record<string, unknown>> {
+		return { ...this.entries };
+	}
 
-  async save(entries: Record<string, unknown>): Promise<void> {
-    this.entries = { ...entries };
-  }
+	async save(entries: Record<string, unknown>): Promise<void> {
+		this.entries = { ...entries };
+	}
 
-  async loadSecrets(): Promise<Record<string, string>> {
-    return { ...this.secrets };
-  }
+	async loadSecrets(): Promise<Record<string, string>> {
+		return { ...this.secrets };
+	}
 
-  async saveSecrets(keys: Record<string, string>): Promise<void> {
-    this.secrets = { ...keys };
-  }
+	async saveSecrets(keys: Record<string, string>): Promise<void> {
+		this.secrets = { ...keys };
+	}
 }
 
 async function createStore(): Promise<SettingsStore> {
-  const store = new SettingsStore(new MemorySettingsAdapter());
-  await store.init();
-  primeThemeRegistry(store);
-  return store;
+	const store = new SettingsStore(new MemorySettingsAdapter());
+	await store.init();
+	primeThemeRegistry(store);
+	return store;
 }
 
 describe("theme registry", () => {
-  beforeEach(() => {
-    document.head.querySelectorAll("style[data-theme-style]").forEach((node) => node.remove());
-    document.documentElement.removeAttribute("data-theme");
-  });
+	beforeEach(() => {
+		document.head
+			.querySelectorAll("style[data-theme-style]")
+			.forEach((node) => node.remove());
+		document.documentElement.removeAttribute("data-theme");
+	});
 
-  it("hydrates builtin themes and mounts their css", async () => {
-    const store = await createStore();
-    const themes = syncThemeRegistry(store);
+	it("hydrates builtin themes and mounts their css", async () => {
+		const store = await createStore();
+		const themes = syncThemeRegistry(store);
 
-    expect(themes.map((theme) => theme.id)).toEqual(["paper", "modern", "abyss"]);
-    expect(document.head.querySelector('style[data-theme-style="paper"]')).toBeTruthy();
-  });
+		expect(themes.map((theme) => theme.id)).toEqual([
+			"paper",
+			"modern",
+			"abyss",
+		]);
+		expect(
+			document.head.querySelector('style[data-theme-style="paper"]'),
+		).toBeTruthy();
+	});
 
-  it("registers imported custom themes and removes them cleanly", async () => {
-    const store = await createStore();
+	it("registers imported custom themes and removes them cleanly", async () => {
+		const store = await createStore();
 
-    await saveCustomTheme(store, {
-      id: "ember",
-      label: "Ember",
-      source: "custom",
-      schemes: ["light", "dark"],
-      cssText: 'html[data-theme="ember"] { --color-background: #1f1512; }',
-    }, "ember.css");
+		await saveCustomTheme(
+			store,
+			{
+				id: "ember",
+				label: "Ember",
+				source: "custom",
+				schemes: ["light", "dark"],
+				cssText: 'html[data-theme="ember"] { --color-background: #1f1512; }',
+			},
+			"ember.css",
+		);
 
-    expect(getRegisteredThemes().some((theme) => theme.id === "ember")).toBe(true);
-    expect(store.get(CUSTOM_THEMES_KEY)).toBeTruthy();
-    expect(document.head.querySelector('style[data-theme-style="ember"]')).toBeTruthy();
+		expect(getRegisteredThemes().some((theme) => theme.id === "ember")).toBe(
+			true,
+		);
+		expect(store.get(CUSTOM_THEMES_KEY)).toBeTruthy();
+		expect(
+			document.head.querySelector('style[data-theme-style="ember"]'),
+		).toBeTruthy();
 
-    applyAppearance("ember");
-    expect(document.documentElement.getAttribute("data-theme")).toBe("ember");
+		applyAppearance("ember");
+		expect(document.documentElement.getAttribute("data-theme")).toBe("ember");
 
-    await deleteCustomTheme(store, "ember");
+		await deleteCustomTheme(store, "ember");
 
-    expect(getRegisteredThemes().some((theme) => theme.id === "ember")).toBe(false);
-    expect(document.head.querySelector('style[data-theme-style="ember"]')).toBeNull();
-  });
+		expect(getRegisteredThemes().some((theme) => theme.id === "ember")).toBe(
+			false,
+		);
+		expect(
+			document.head.querySelector('style[data-theme-style="ember"]'),
+		).toBeNull();
+	});
 });

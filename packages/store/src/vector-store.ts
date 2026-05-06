@@ -29,19 +29,19 @@ import type { DataStore } from "./types.js";
 
 /** Identity of an embedding model. Used as routing key. */
 export interface EmbeddingModelIdentity {
-  readonly provider: string;    // "openai", "ollama", etc.
-  readonly modelName: string;   // "text-embedding-3-small"
-  readonly dim: number;         // 1536, 768, 3072, etc.
-  /** Normalized: "${provider}/${modelName}" */
-  readonly modelId: string;
+	readonly provider: string; // "openai", "ollama", etc.
+	readonly modelName: string; // "text-embedding-3-small"
+	readonly dim: number; // 1536, 768, 3072, etc.
+	/** Normalized: "${provider}/${modelName}" */
+	readonly modelId: string;
 }
 
 /** A resolved vector routing target (what session is locked to). */
 export interface VectorTarget {
-  readonly modelRegistryId: number; // vector_models.id
-  readonly modelId: string;
-  readonly dim: number;
-  readonly tableName: string;       // "vec_mem_m{id}"
+	readonly modelRegistryId: number; // vector_models.id
+	readonly modelId: string;
+	readonly dim: number;
+	readonly tableName: string; // "vec_mem_m{id}"
 }
 
 // ── CRUD inputs ──────────────────────────────────────────────────
@@ -56,30 +56,30 @@ export interface VectorTarget {
  * declared dim, the backend throws.
  */
 export interface UpsertVectorInput {
-  readonly sessionId: string;
-  readonly pluginId: string;
-  readonly namespace: string;
-  readonly key: string;
-  /** L2-normalized or raw embedding, per the caller's embedding model. */
-  readonly embedding: Float32Array;
-  /**
-   * Optional round-trip payload — the original text chunk, a JSON blob,
-   * etc. Returned verbatim by `searchVectors`. Backends store it alongside
-   * the vector so KNN results do not require a JOIN to plugin_data.
-   */
-  readonly payload?: string;
+	readonly sessionId: string;
+	readonly pluginId: string;
+	readonly namespace: string;
+	readonly key: string;
+	/** L2-normalized or raw embedding, per the caller's embedding model. */
+	readonly embedding: Float32Array;
+	/**
+	 * Optional round-trip payload — the original text chunk, a JSON blob,
+	 * etc. Returned verbatim by `searchVectors`. Backends store it alongside
+	 * the vector so KNN results do not require a JOIN to plugin_data.
+	 */
+	readonly payload?: string;
 }
 
 /** Request to run a KNN search against the session's vector space. */
 export interface SearchVectorsInput {
-  readonly sessionId: string;
-  readonly query: Float32Array;
-  /** Top-k cap. Default: 8. Typical range: 3–30. */
-  readonly topK?: number;
-  /** Optional narrowing — only match rows with this pluginId. */
-  readonly pluginId?: string;
-  /** Optional narrowing — only match rows with this namespace. */
-  readonly namespace?: string;
+	readonly sessionId: string;
+	readonly query: Float32Array;
+	/** Top-k cap. Default: 8. Typical range: 3–30. */
+	readonly topK?: number;
+	/** Optional narrowing — only match rows with this pluginId. */
+	readonly pluginId?: string;
+	/** Optional narrowing — only match rows with this namespace. */
+	readonly namespace?: string;
 }
 
 /**
@@ -88,21 +88,21 @@ export interface SearchVectorsInput {
  * similar" uniformly).
  */
 export interface VectorSearchResult {
-  readonly sessionId: string;
-  readonly pluginId: string;
-  readonly namespace: string;
-  readonly key: string;
-  readonly distance: number;
-  readonly payload: string | null;
+	readonly sessionId: string;
+	readonly pluginId: string;
+	readonly namespace: string;
+	readonly key: string;
+	readonly distance: number;
+	readonly payload: string | null;
 }
 
 /** Scope for bulk deletion. Omit fields to widen the scope. */
 export interface DeleteVectorsInput {
-  readonly sessionId: string;
-  /** Required — prevents cross-plugin accidental deletion. */
-  readonly pluginId: string;
-  /** Optional — when omitted, wipes every namespace for the plugin. */
-  readonly namespace?: string;
+	readonly sessionId: string;
+	/** Required — prevents cross-plugin accidental deletion. */
+	readonly pluginId: string;
+	/** Optional — when omitted, wipes every namespace for the plugin. */
+	readonly namespace?: string;
 }
 
 // ── Capability interfaces ────────────────────────────────────────
@@ -112,46 +112,49 @@ export interface DeleteVectorsInput {
  * before calling any of these methods.
  */
 export interface VectorStoreCapability {
-  /** Insert or replace a vector keyed by (sessionId, pluginId, namespace, key). */
-  upsertVector(input: UpsertVectorInput): Promise<void>;
-  /** Top-k nearest neighbours for a query within the session's vector space. */
-  searchVectors(input: SearchVectorsInput): Promise<VectorSearchResult[]>;
-  /** Bulk delete by scope. */
-  deleteVectors(input: DeleteVectorsInput): Promise<void>;
+	/** Insert or replace a vector keyed by (sessionId, pluginId, namespace, key). */
+	upsertVector(input: UpsertVectorInput): Promise<void>;
+	/** Top-k nearest neighbours for a query within the session's vector space. */
+	searchVectors(input: SearchVectorsInput): Promise<VectorSearchResult[]>;
+	/** Bulk delete by scope. */
+	deleteVectors(input: DeleteVectorsInput): Promise<void>;
 }
 
 /** Operations for managing the vector_models registry and session embedding locks. */
 export interface VectorModelOps {
-  /**
-   * Register (or get existing) an embedding model.
-   * Creates physical table if not yet existing.
-   * Returns the model registry entry.
-   */
-  ensureVectorModel(identity: EmbeddingModelIdentity): Promise<VectorTarget>;
+	/**
+	 * Register (or get existing) an embedding model.
+	 * Creates physical table if not yet existing.
+	 * Returns the model registry entry.
+	 */
+	ensureVectorModel(identity: EmbeddingModelIdentity): Promise<VectorTarget>;
 
-  /**
-   * Lock a session's embedding model. One-time write only.
-   * Throws if session already has a lock.
-   */
-  lockSessionEmbeddingModel(sessionId: string, target: VectorTarget): Promise<void>;
+	/**
+	 * Lock a session's embedding model. One-time write only.
+	 * Throws if session already has a lock.
+	 */
+	lockSessionEmbeddingModel(
+		sessionId: string,
+		target: VectorTarget,
+	): Promise<void>;
 
-  /**
-   * Resolve the vector routing target for a session.
-   * Returns null if session has no embedding model (RAG disabled).
-   */
-  resolveSessionVectorTarget(sessionId: string): Promise<VectorTarget | null>;
+	/**
+	 * Resolve the vector routing target for a session.
+	 * Returns null if session has no embedding model (RAG disabled).
+	 */
+	resolveSessionVectorTarget(sessionId: string): Promise<VectorTarget | null>;
 
-  /** Get all registered vector models and their physical tables. */
-  listVectorModels(): Promise<
-    Array<
-      EmbeddingModelIdentity & {
-        id: number;
-        tableName: string;
-        createdAt: number;
-        lastUsedAt: number | null;
-      }
-    >
-  >;
+	/** Get all registered vector models and their physical tables. */
+	listVectorModels(): Promise<
+		Array<
+			EmbeddingModelIdentity & {
+				id: number;
+				tableName: string;
+				createdAt: number;
+				lastUsedAt: number | null;
+			}
+		>
+	>;
 }
 
 // ── Type guard ───────────────────────────────────────────────────
@@ -162,14 +165,14 @@ export interface VectorModelOps {
  * this rather than relying on backend-specific imports.
  */
 export function supportsVector(
-  store: DataStore,
+	store: DataStore,
 ): store is DataStore & VectorStoreCapability & VectorModelOps {
-  const candidate = store as Partial<VectorStoreCapability & VectorModelOps>;
-  return (
-    typeof candidate.upsertVector === "function" &&
-    typeof candidate.searchVectors === "function" &&
-    typeof candidate.deleteVectors === "function" &&
-    typeof candidate.ensureVectorModel === "function" &&
-    typeof candidate.resolveSessionVectorTarget === "function"
-  );
+	const candidate = store as Partial<VectorStoreCapability & VectorModelOps>;
+	return (
+		typeof candidate.upsertVector === "function" &&
+		typeof candidate.searchVectors === "function" &&
+		typeof candidate.deleteVectors === "function" &&
+		typeof candidate.ensureVectorModel === "function" &&
+		typeof candidate.resolveSessionVectorTarget === "function"
+	);
 }

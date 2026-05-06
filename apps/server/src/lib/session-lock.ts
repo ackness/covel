@@ -32,12 +32,12 @@
  */
 
 export interface SessionLock {
-  /**
-   * Acquire the lock for `sessionId`, run `fn`, release. Blocks until the
-   * lock is available. If `fn` throws, the lock is still released and the
-   * error propagates.
-   */
-  withLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T>;
+	/**
+	 * Acquire the lock for `sessionId`, run `fn`, release. Blocks until the
+	 * lock is available. If `fn` throws, the lock is still released and the
+	 * error propagates.
+	 */
+	withLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T>;
 }
 
 type ChainTail = Promise<unknown>;
@@ -55,41 +55,45 @@ type ChainTail = Promise<unknown>;
  * turn cannot poison every subsequent turn on the session.
  */
 export function createInProcessSessionLock(): SessionLock & {
-  /** Test-only: observe current lock count. */
-  readonly _sizeForTests: () => number;
+	/** Test-only: observe current lock count. */
+	readonly _sizeForTests: () => number;
 } {
-  const locks = new Map<string, ChainTail>();
+	const locks = new Map<string, ChainTail>();
 
-  return {
-    async withLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
-      const previousTail: ChainTail = locks.get(sessionId) ?? Promise.resolve();
+	return {
+		async withLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
+			const previousTail: ChainTail = locks.get(sessionId) ?? Promise.resolve();
 
-      let release: () => void = () => { };
-      const slot = new Promise<void>((resolve) => {
-        release = resolve;
-      });
+			let release: () => void = () => {};
+			const slot = new Promise<void>((resolve) => {
+				release = resolve;
+			});
 
-      // Chain this slot *after* the previous tail — use the rejected-branch
-      // handler to make the chain never reject so a failing predecessor
-      // cannot poison successors.
-      const chain: ChainTail = previousTail.then(() => slot, () => slot);
-      locks.set(sessionId, chain);
+			// Chain this slot *after* the previous tail — use the rejected-branch
+			// handler to make the chain never reject so a failing predecessor
+			// cannot poison successors.
+			const chain: ChainTail = previousTail.then(
+				() => slot,
+				() => slot,
+			);
+			locks.set(sessionId, chain);
 
-      try {
-        // Wait for our predecessor to finish (swallow their errors — they
-        // are already propagated to their own caller, we just need ordering).
-        await previousTail.catch(() => { /* isolate */ });
-        return await fn();
-      } finally {
-        release();
-        // If no one queued behind us, drop the map entry to prevent
-        // unbounded growth on cold sessions. Guard against racing inserts.
-        if (locks.get(sessionId) === chain) {
-          locks.delete(sessionId);
-        }
-      }
-    },
-    _sizeForTests: () => locks.size,
-  };
+			try {
+				// Wait for our predecessor to finish (swallow their errors — they
+				// are already propagated to their own caller, we just need ordering).
+				await previousTail.catch(() => {
+					/* isolate */
+				});
+				return await fn();
+			} finally {
+				release();
+				// If no one queued behind us, drop the map entry to prevent
+				// unbounded growth on cold sessions. Guard against racing inserts.
+				if (locks.get(sessionId) === chain) {
+					locks.delete(sessionId);
+				}
+			}
+		},
+		_sizeForTests: () => locks.size,
+	};
 }
-

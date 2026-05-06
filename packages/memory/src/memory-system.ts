@@ -6,28 +6,28 @@
  */
 
 import type {
-  CompactionConfig,
-  CompactionResult,
-  CoreMemoryConfig,
-  MemoryLLMAdapter,
-  MemoryManager,
-  MemorySystem,
-  MemorySystemDeps,
-  MemoryUpdater,
-  MemoryUpdaterConfig,
-  RecallSearcher,
-  ArchivalSearcher,
-} from './types.js';
-import { createMemoryManager } from './core-memory.js';
-import { createMemoryUpdater } from './updater.js';
-import { createKeywordRecallSearcher } from './recall-search.js';
-import { createKeywordArchivalSearcher } from './archival-search.js';
-import { createCompactor } from './compactor.js';
+	CompactionConfig,
+	CompactionResult,
+	CoreMemoryConfig,
+	MemoryLLMAdapter,
+	MemoryManager,
+	MemorySystem,
+	MemorySystemDeps,
+	MemoryUpdater,
+	MemoryUpdaterConfig,
+	RecallSearcher,
+	ArchivalSearcher,
+} from "./types.js";
+import { createMemoryManager } from "./core-memory.js";
+import { createMemoryUpdater } from "./updater.js";
+import { createKeywordRecallSearcher } from "./recall-search.js";
+import { createKeywordArchivalSearcher } from "./archival-search.js";
+import { createCompactor } from "./compactor.js";
 
 export interface CreateMemorySystemOptions {
-  readonly coreMemory?: CoreMemoryConfig;
-  readonly updater?: MemoryUpdaterConfig;
-  readonly compaction?: CompactionConfig;
+	readonly coreMemory?: CoreMemoryConfig;
+	readonly updater?: MemoryUpdaterConfig;
+	readonly compaction?: CompactionConfig;
 }
 
 /**
@@ -37,54 +37,58 @@ export interface CreateMemorySystemOptions {
  *   explicit option → memory → story.
  */
 export function createMemorySystem(
-  deps: MemorySystemDeps,
-  options?: CreateMemorySystemOptions,
+	deps: MemorySystemDeps,
+	options?: CreateMemorySystemOptions,
 ): MemorySystem {
-  const { store, llm, resolveSlot } = deps;
+	const { store, llm, resolveSlot } = deps;
 
-  const explicitModelSlot = options?.updater?.modelSlot ?? options?.compaction?.modelSlot;
-  const modelSlot = explicitModelSlot ?? resolveModelSlot(resolveSlot);
+	const explicitModelSlot =
+		options?.updater?.modelSlot ?? options?.compaction?.modelSlot;
+	const modelSlot = explicitModelSlot ?? resolveModelSlot(resolveSlot);
 
-  const manager: MemoryManager = createMemoryManager(store, options?.coreMemory);
+	const manager: MemoryManager = createMemoryManager(
+		store,
+		options?.coreMemory,
+	);
 
-  const updaterInstance = createMemoryUpdater(manager, llm, {
-    ...options?.updater,
-    modelSlot,
-  });
+	const updaterInstance = createMemoryUpdater(manager, llm, {
+		...options?.updater,
+		modelSlot,
+	});
 
-  const recall: RecallSearcher = createKeywordRecallSearcher(store);
-  const archival: ArchivalSearcher = createKeywordArchivalSearcher(store);
+	const recall: RecallSearcher = createKeywordRecallSearcher(store);
+	const archival: ArchivalSearcher = createKeywordArchivalSearcher(store);
 
-  const compactor = createCompactor(
-    { store, llm, memoryManager: manager },
-    { ...options?.compaction, modelSlot },
-  );
+	const compactor = createCompactor(
+		{ store, llm, memoryManager: manager },
+		{ ...options?.compaction, modelSlot },
+	);
 
-  return {
-    manager,
-    updater: updaterInstance,
-    recall,
-    archival,
+	return {
+		manager,
+		updater: updaterInstance,
+		recall,
+		archival,
 
-    async compact(params): Promise<CompactionResult> {
-      return compactor.compact(params);
-    },
-  };
+		async compact(params): Promise<CompactionResult> {
+			return compactor.compact(params);
+		},
+	};
 }
 
 /**
  * Resolve model slot with fallback chain: memory → story → undefined.
  */
 function resolveModelSlot(
-  resolveSlot?: (slot: string) => string | undefined,
+	resolveSlot?: (slot: string) => string | undefined,
 ): string | undefined {
-  if (!resolveSlot) return undefined;
+	if (!resolveSlot) return undefined;
 
-  const memoryModel = resolveSlot('memory');
-  if (memoryModel) return 'memory';
+	const memoryModel = resolveSlot("memory");
+	if (memoryModel) return "memory";
 
-  const storyModel = resolveSlot('story');
-  if (storyModel) return 'story';
+	const storyModel = resolveSlot("story");
+	if (storyModel) return "story";
 
-  return undefined;
+	return undefined;
 }

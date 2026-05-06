@@ -15,20 +15,23 @@ import { secureHeaders } from "hono/secure-headers";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createAiStack } from "./ai-setup.js";
 import {
-  createMemoryMediaStore,
-  createPgMediaStore,
-  createSqliteMediaStore,
-  createStoreFromEnv,
-  resolveBackendFromEnv,
-  type MediaStore,
+	createMemoryMediaStore,
+	createPgMediaStore,
+	createSqliteMediaStore,
+	createStoreFromEnv,
+	resolveBackendFromEnv,
+	type MediaStore,
 } from "@covel/store";
 import { createEmbeddingLockHelper } from "./embedding-lock.js";
-import { createGatewayAdapter, createPluginRuntimeGateway } from "@covel/runtime";
+import {
+	createGatewayAdapter,
+	createPluginRuntimeGateway,
+} from "@covel/runtime";
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
 import { bootstrapApi } from "./routes/api/bootstrap.js";
 import {
-  createInProcessSessionLock,
-  type SessionLock,
+	createInProcessSessionLock,
+	type SessionLock,
 } from "./lib/session-lock.js";
 import { createPgAdvisorySessionLock } from "./lib/pg-session-lock.js";
 import { seedWorlds } from "./world-seed-loader.js";
@@ -39,9 +42,9 @@ import { createConfigApiRoutes } from "./routes/config-api.js";
 import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
 import { createRequestBodyLimitMiddleware } from "./middleware/request-body-limit.js";
 import {
-  providerApiKeysFromEnv,
-  providerIdToApiKeyEnvName,
-  readRuntimeEnv,
+	providerApiKeysFromEnv,
+	providerIdToApiKeyEnvName,
+	readRuntimeEnv,
 } from "@covel/shared";
 
 /**
@@ -52,64 +55,66 @@ import {
  * Missing file is fine.
  */
 function loadKeysEnvInto(target: NodeJS.ProcessEnv): void {
-  const home = readRuntimeEnv(target).covelHome ?? join(homedir(), ".covel");
-  const file = join(home, "keys.env");
-  if (!existsSync(file)) return;
-  try {
-    for (const raw of readFileSync(file, "utf-8").split("\n")) {
-      const trimmed = raw.trim();
-      if (!trimmed || trimmed.startsWith("#")) continue;
-      const eq = trimmed.indexOf("=");
-      if (eq < 0) continue;
-      const key = trimmed.slice(0, eq).trim();
-      let val = trimmed.slice(eq + 1).trim();
-      if (
-        (val.startsWith('"') && val.endsWith('"')) ||
-        (val.startsWith("'") && val.endsWith("'"))
-      ) {
-        val = val.slice(1, -1);
-      }
-      const envKey = providerIdToApiKeyEnvName(key);
-      if (envKey && target[envKey] === undefined) target[envKey] = val;
-    }
-  } catch (err) {
-    console.warn(`[server] Could not read ${file}:`, err);
-  }
+	const home = readRuntimeEnv(target).covelHome ?? join(homedir(), ".covel");
+	const file = join(home, "keys.env");
+	if (!existsSync(file)) return;
+	try {
+		for (const raw of readFileSync(file, "utf-8").split("\n")) {
+			const trimmed = raw.trim();
+			if (!trimmed || trimmed.startsWith("#")) continue;
+			const eq = trimmed.indexOf("=");
+			if (eq < 0) continue;
+			const key = trimmed.slice(0, eq).trim();
+			let val = trimmed.slice(eq + 1).trim();
+			if (
+				(val.startsWith('"') && val.endsWith('"')) ||
+				(val.startsWith("'") && val.endsWith("'"))
+			) {
+				val = val.slice(1, -1);
+			}
+			const envKey = providerIdToApiKeyEnvName(key);
+			if (envKey && target[envKey] === undefined) target[envKey] = val;
+		}
+	} catch (err) {
+		console.warn(`[server] Could not read ${file}:`, err);
+	}
 }
 
 function resolvePreferredMemorySlot(slotRegistry: {
-  resolveSlot(slotId: string): string | undefined;
-  listSlotsByTag(tag: string): Array<{ slotId: string }>;
+	resolveSlot(slotId: string): string | undefined;
+	listSlotsByTag(tag: string): Array<{ slotId: string }>;
 }): string {
-  for (const candidate of ["memory", "plugin", "story"] as const) {
-    if (slotRegistry.resolveSlot(candidate)) return candidate;
-  }
-  return slotRegistry.listSlotsByTag("text")[0]?.slotId ?? "plugin";
+	for (const candidate of ["memory", "plugin", "story"] as const) {
+		if (slotRegistry.resolveSlot(candidate)) return candidate;
+	}
+	return slotRegistry.listSlotsByTag("text")[0]?.slotId ?? "plugin";
 }
 
 async function createMediaStoreForBackend(
-  backend: ReturnType<typeof resolveBackendFromEnv>,
-  runtimeEnv: ReturnType<typeof readRuntimeEnv>,
+	backend: ReturnType<typeof resolveBackendFromEnv>,
+	runtimeEnv: ReturnType<typeof readRuntimeEnv>,
 ): Promise<MediaStore | undefined> {
-  if (backend === "memory") {
-    console.log("[server] media store: memory");
-    return createMemoryMediaStore();
-  }
+	if (backend === "memory") {
+		console.log("[server] media store: memory");
+		return createMemoryMediaStore();
+	}
 
-  if (backend === "sqlite") {
-    const sqlitePath = resolve(runtimeEnv.sqlitePath);
-    const mediaRoot = join(dirname(sqlitePath), "media");
-    console.log(`[server] media store: sqlite (${mediaRoot})`);
-    return createSqliteMediaStore(sqlitePath, { mediaRoot });
-  }
+	if (backend === "sqlite") {
+		const sqlitePath = resolve(runtimeEnv.sqlitePath);
+		const mediaRoot = join(dirname(sqlitePath), "media");
+		console.log(`[server] media store: sqlite (${mediaRoot})`);
+		return createSqliteMediaStore(sqlitePath, { mediaRoot });
+	}
 
-  if (backend === "pg" && runtimeEnv.databaseUrl) {
-    console.log("[server] media store: pg");
-    return createPgMediaStore(runtimeEnv.databaseUrl);
-  }
+	if (backend === "pg" && runtimeEnv.databaseUrl) {
+		console.log("[server] media store: pg");
+		return createPgMediaStore(runtimeEnv.databaseUrl);
+	}
 
-  console.warn("[server] media store: unavailable for pg backend without DATABASE_URL");
-  return undefined;
+	console.warn(
+		"[server] media store: unavailable for pg backend without DATABASE_URL",
+	);
+	return undefined;
 }
 
 const app = new Hono();
@@ -118,9 +123,9 @@ const env = readRuntimeEnv();
 // ── Global error handler ────────────────────────────────────────
 const isDev = env.nodeEnv !== "production";
 app.onError((err, c) => {
-  const message = err instanceof Error ? err.message : String(err);
-  console.error(`[server] Unhandled error:`, err);
-  return c.json({ error: isDev ? message : "Internal server error" }, 500);
+	const message = err instanceof Error ? err.message : String(err);
+	console.error(`[server] Unhandled error:`, err);
+	return c.json({ error: isDev ? message : "Internal server error" }, 500);
 });
 
 // ── Middleware ────────────────────────────────────────────────────
@@ -128,15 +133,15 @@ app.onError((err, c) => {
 // probes). These routes are hit ~1×/s and would otherwise dwarf every other
 // signal in `server.log`. Override via COVEL_LOG_QUIET_PATHS (comma-separated).
 const QUIET_LOG_PATHS = new Set<string>(
-  (process.env.COVEL_LOG_QUIET_PATHS ?? "/api/health")
-    .split(",")
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0),
+	(process.env.COVEL_LOG_QUIET_PATHS ?? "/api/health")
+		.split(",")
+		.map((p) => p.trim())
+		.filter((p) => p.length > 0),
 );
 const honoLogger = logger();
 app.use("*", async (c, next) => {
-  if (QUIET_LOG_PATHS.has(c.req.path)) return next();
-  return honoLogger(c, next);
+	if (QUIET_LOG_PATHS.has(c.req.path)) return next();
+	return honoLogger(c, next);
 });
 app.use("*", secureHeaders());
 app.use("*", createRequestBodyLimitMiddleware());
@@ -144,11 +149,10 @@ app.use("*", createRequestBodyLimitMiddleware());
 // Guard any /api/debug/* or /api/internal/* route in production so that an
 // accidentally-mounted diagnostic endpoint can never leak in a released
 // build. ENABLE_DEBUG_PAGE=1 opts in (e.g. for self-hosted tiers).
-const allowDebugRoutes =
-  isDev || env.debugRoutes;
+const allowDebugRoutes = isDev || env.debugRoutes;
 if (!allowDebugRoutes) {
-  app.all("/api/debug/*", (c) => c.json({ error: "Not available" }, 403));
-  app.all("/api/internal/*", (c) => c.json({ error: "Not available" }, 403));
+	app.all("/api/debug/*", (c) => c.json({ error: "Not available" }, 403));
+	app.all("/api/internal/*", (c) => c.json({ error: "Not available" }, 403));
 }
 // CORS — default whitelist covers:
 //   - dev Vite server at localhost:5173 / 127.0.0.1:5173
@@ -156,28 +160,29 @@ if (!allowDebugRoutes) {
 //     used by the sidecar server. The Electron preload pins 127.0.0.1, so we
 //     allow any 127.0.0.1:port for loopback navigation.
 const defaultAllowedOrigins = [
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
+	"http://localhost:5173",
+	"http://127.0.0.1:5173",
 ];
 // Sidecar's own port. Electron renderer loads from `http://127.0.0.1:<port>/`
 // in production, so we must always allow same-origin requests there even
 // when the user pinned `CORS_ORIGIN` to a single domain.
 const sidecarOrigins = [
-  `http://localhost:${env.serverPort}`,
-  `http://127.0.0.1:${env.serverPort}`,
+	`http://localhost:${env.serverPort}`,
+	`http://127.0.0.1:${env.serverPort}`,
 ];
 app.use(
-  "*",
-  cors({
-    origin: (origin) => {
-      if (!origin) return origin;
-      const configured = env.corsOrigins.length > 0 ? env.corsOrigins : defaultAllowedOrigins;
-      if (configured.includes(origin)) return origin;
-      if (sidecarOrigins.includes(origin)) return origin;
-      return null;
-    },
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-  }),
+	"*",
+	cors({
+		origin: (origin) => {
+			if (!origin) return origin;
+			const configured =
+				env.corsOrigins.length > 0 ? env.corsOrigins : defaultAllowedOrigins;
+			if (configured.includes(origin)) return origin;
+			if (sidecarOrigins.includes(origin)) return origin;
+			return null;
+		},
+		allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+	}),
 );
 
 // Merge ~/.covel/keys.env (plain KEY=VALUE lines) into process.env BEFORE
@@ -207,20 +212,20 @@ const mediaStore = await createMediaStoreForBackend(storeBackend, env);
 // by construction, so the simpler lock is both sufficient and cheaper.
 let sessionLock: SessionLock;
 if (storeBackend === "pg" && env.databaseUrl) {
-  const { default: postgres } = await import("postgres");
-  // `max` sizes the lock pool. Each in-flight turn holds one reserved
-  // connection for the duration of executeTurn; 16 is well above the
-  // expected peak per pod and keeps PG connection usage bounded.
-  const lockSql = postgres(env.databaseUrl!, { max: 16 });
-  sessionLock = createPgAdvisorySessionLock(lockSql);
-  console.log(
-    "[server] session lock: pg-advisory (cross-pod mutual exclusion enabled)",
-  );
+	const { default: postgres } = await import("postgres");
+	// `max` sizes the lock pool. Each in-flight turn holds one reserved
+	// connection for the duration of executeTurn; 16 is well above the
+	// expected peak per pod and keeps PG connection usage bounded.
+	const lockSql = postgres(env.databaseUrl!, { max: 16 });
+	sessionLock = createPgAdvisorySessionLock(lockSql);
+	console.log(
+		"[server] session lock: pg-advisory (cross-pod mutual exclusion enabled)",
+	);
 } else {
-  sessionLock = createInProcessSessionLock();
-  console.log(
-    `[server] session lock: in-process (${storeBackend} backend — single-process scope)`,
-  );
+	sessionLock = createInProcessSessionLock();
+	console.log(
+		`[server] session lock: in-process (${storeBackend} backend — single-process scope)`,
+	);
 }
 
 // Collect all *_API_KEY env vars dynamically so any provider can be added
@@ -242,8 +247,8 @@ const pluginGateway = createPluginRuntimeGateway(ai.gateway, { apiKeys });
 // fetch / hand-rolled SSRF checks so the framework stays the single
 // source of truth for those policies.
 const pluginUtils = {
-  validateBaseUrl: validateBaseUrlForPlugin,
-  fetchWithRetry,
+	validateBaseUrl: validateBaseUrlForPlugin,
+	fetchWithRetry,
 };
 const preferredMemorySlot = resolvePreferredMemorySlot(ai.slotRegistry);
 
@@ -253,33 +258,32 @@ const preferredMemorySlot = resolvePreferredMemorySlot(ai.slotRegistry);
 // (typically `<userData>/plugins`). Bundled wins on id collision so user
 // plugins can augment but not shadow core functionality.
 const bundledPluginsDir =
-  env.pluginsDir ??
-  resolve(import.meta.dirname, "../../../plugins");
+	env.pluginsDir ?? resolve(import.meta.dirname, "../../../plugins");
 const userPluginsDir = env.userPluginsDir;
 const pluginsDirs = [bundledPluginsDir];
 if (userPluginsDir && userPluginsDir !== bundledPluginsDir) {
-  pluginsDirs.push(userPluginsDir);
+	pluginsDirs.push(userPluginsDir);
 }
 const ensureEmbeddingLock = createEmbeddingLockHelper({ store, ai, apiKeys });
 const perRequestLlm = createPerRequestLlmMiddleware({
-  ai,
-  envApiKeys: apiKeys,
-  defaultLlmAdapter: llmAdapter,
-  defaultPluginGateway: pluginGateway,
+	ai,
+	envApiKeys: apiKeys,
+	defaultLlmAdapter: llmAdapter,
+	defaultPluginGateway: pluginGateway,
 });
 const api = await bootstrapApi({
-  pluginsDir: bundledPluginsDir,
-  pluginsDirs,
-  llmAdapter,
-  pluginGateway,
-  pluginUtils,
-  store,
-  storeBackend,
-  mediaStore,
-  ensureEmbeddingLock,
-  preferredMemorySlot,
-  perRequestMiddleware: [perRequestLlm],
-  sessionLock,
+	pluginsDir: bundledPluginsDir,
+	pluginsDirs,
+	llmAdapter,
+	pluginGateway,
+	pluginUtils,
+	store,
+	storeBackend,
+	mediaStore,
+	ensureEmbeddingLock,
+	preferredMemorySlot,
+	perRequestMiddleware: [perRequestLlm],
+	sessionLock,
 });
 
 // ── Seed worlds ──────────────────────────────────────────────────
@@ -287,29 +291,28 @@ const api = await bootstrapApi({
 // (desktop app points it at userData/worlds), user-created worlds are
 // merged on top and hot-reloaded alongside.
 const bundledWorldsDir =
-  env.worldsDir ??
-  resolve(import.meta.dirname, "../../../worlds");
+	env.worldsDir ?? resolve(import.meta.dirname, "../../../worlds");
 const userWorldsDir = env.userWorldsDir;
 const worldsDirs = [bundledWorldsDir];
 if (userWorldsDir && userWorldsDir !== bundledWorldsDir) {
-  worldsDirs.push(userWorldsDir);
+	worldsDirs.push(userWorldsDir);
 }
 
 for (const dir of worldsDirs) {
-  try {
-    await seedWorlds(store, dir);
-  } catch (err) {
-    console.warn(`[server] Could not seed worlds from ${dir}:`, err);
-  }
+	try {
+		await seedWorlds(store, dir);
+	} catch (err) {
+		console.warn(`[server] Could not seed worlds from ${dir}:`, err);
+	}
 }
 
 // ── World file watcher (hot-reload) ─────────────────────────────
 const worldWatchers = worldsDirs.map((dir) =>
-  createWorldFileWatcher(dir, store, api.eventBus),
+	createWorldFileWatcher(dir, store, api.eventBus),
 );
 for (const watcher of worldWatchers) watcher.start();
 const stopWatchers = () => {
-  for (const watcher of worldWatchers) watcher.stop();
+	for (const watcher of worldWatchers) watcher.stop();
 };
 process.on("SIGTERM", stopWatchers);
 process.on("SIGINT", stopWatchers);
@@ -322,9 +325,9 @@ app.route("/", createConfigApiRoutes({ apiKeys }));
 
 // ── Static file serving (production) ─────────────────────────────
 if (env.serveStatic) {
-  const root = env.staticDir;
-  app.use("/*", serveStatic({ root }));
-  app.get("*", serveStatic({ root, path: "/index.html" }));
+	const root = env.staticDir;
+	app.use("/*", serveStatic({ root }));
+	app.get("*", serveStatic({ root, path: "/index.html" }));
 }
 
 export { app };

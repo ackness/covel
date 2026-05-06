@@ -15,207 +15,221 @@
  *      finishReason=error.
  */
 
-import { describe, it, expect } from 'vitest';
-import type { RuntimeManifest, TurnInput } from '@covel/shared';
-import type { LoadedRuntime } from '@covel/plugin-loader';
-import { createMemoryStore } from '@covel/store';
-import { tool } from '@covel/tools';
-import { z } from 'zod';
-import { executeTurn } from '../src/turn-executor.js';
-import type { TurnExecutorDeps } from '../src/turn-executor.js';
-import type { LLMAdapter } from '../src/llm-adapter.js';
-import { createToolExecutor } from '../src/tool-executor.js';
-import { makeEmitterSpy } from './_helpers/emitter-spy.js';
+import { describe, it, expect } from "vitest";
+import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import type { LoadedRuntime } from "@covel/plugin-loader";
+import { createMemoryStore } from "@covel/store";
+import { tool } from "@covel/tools";
+import { z } from "zod";
+import { executeTurn } from "../src/turn-executor.js";
+import type { TurnExecutorDeps } from "../src/turn-executor.js";
+import type { LLMAdapter } from "../src/llm-adapter.js";
+import { createToolExecutor } from "../src/tool-executor.js";
+import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 
-async function createMainLoopStore(sessionId = 'sess-1') {
-  const store = createMemoryStore();
-  await store.appendTurnMessage({
-    id: 'prior-player-0',
-    sessionId,
-    turnId: 'prior-turn',
-    sourceType: 'player',
-    role: 'user',
-    content: 'prior turn',
-    order: 0,
-    createdAt: '2024-01-01T00:00:00Z',
-  });
-  return store;
+async function createMainLoopStore(sessionId = "sess-1") {
+	const store = createMemoryStore();
+	await store.appendTurnMessage({
+		id: "prior-player-0",
+		sessionId,
+		turnId: "prior-turn",
+		sourceType: "player",
+		role: "user",
+		content: "prior turn",
+		order: 0,
+		createdAt: "2024-01-01T00:00:00Z",
+	});
+	return store;
 }
 
 function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
-  return {
-    sessionId: 'sess-1',
-    turnId: 'turn-1',
-    playerMessage: 'go',
-    ...overrides,
-  };
+	return {
+		sessionId: "sess-1",
+		turnId: "turn-1",
+		playerMessage: "go",
+		...overrides,
+	};
 }
 
-describe('turn-executor message.completed trace emission', () => {
-  it('emits message.completed for a story runtime with finalContent', async () => {
-    const manifest: RuntimeManifest = {
-      name: 'story-narrator',
-      pluginId: 'story-narrator',
-      description: 'Story runtime for message.completed trace test.',
-      priority: 500,
-      outputKind: 'story',
-    };
-    const loaded: LoadedRuntime = {
-      manifest,
-      promptTemplate: 'Tell a short story.',
-      references: [],
-    };
+describe("turn-executor message.completed trace emission", () => {
+	it("emits message.completed for a story runtime with finalContent", async () => {
+		const manifest: RuntimeManifest = {
+			name: "story-narrator",
+			pluginId: "story-narrator",
+			description: "Story runtime for message.completed trace test.",
+			priority: 500,
+			outputKind: "story",
+		};
+		const loaded: LoadedRuntime = {
+			manifest,
+			promptTemplate: "Tell a short story.",
+			references: [],
+		};
 
-    const narrative = 'The village was quiet under the morning mist.';
-    const llm: LLMAdapter = {
-      async generate() {
-        return {
-          content: narrative,
-          toolCalls: [],
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20 },
-        };
-      },
-    };
+		const narrative = "The village was quiet under the morning mist.";
+		const llm: LLMAdapter = {
+			async generate() {
+				return {
+					content: narrative,
+					toolCalls: [],
+					finishReason: "stop",
+					usage: { inputTokens: 10, outputTokens: 20 },
+				};
+			},
+		};
 
-    const emitter = makeEmitterSpy();
-    const store = await createMainLoopStore('sess-1');
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async () => loaded,
-      llm,
-      getConfig: () => ({}),
-      store,
-      emitter,
-    };
+		const emitter = makeEmitterSpy();
+		const store = await createMainLoopStore("sess-1");
+		const deps: TurnExecutorDeps = {
+			loadRuntime: async () => loaded,
+			llm,
+			getConfig: () => ({}),
+			store,
+			emitter,
+		};
 
-    await executeTurn(makeTurnInput(), [manifest], deps, { maxSteps: 2 });
+		await executeTurn(makeTurnInput(), [manifest], deps, { maxSteps: 2 });
 
-    const messageCompleted = emitter.events.find((e) => e.type === 'message.completed');
-    expect(messageCompleted).toBeDefined();
-    expect(messageCompleted!.payload).toMatchObject({
-      runtimeId: 'story-narrator',
-      pluginId: 'story-narrator',
-      content: narrative,
-      len: narrative.length,
-    });
-    expect(typeof messageCompleted!.payload.deltaCount).toBe('number');
-  });
+		const messageCompleted = emitter.events.find(
+			(e) => e.type === "message.completed",
+		);
+		expect(messageCompleted).toBeDefined();
+		expect(messageCompleted!.payload).toMatchObject({
+			runtimeId: "story-narrator",
+			pluginId: "story-narrator",
+			content: narrative,
+			len: narrative.length,
+		});
+		expect(typeof messageCompleted!.payload.deltaCount).toBe("number");
+	});
 
-  it('does not emit message.completed for plugin-output runtimes', async () => {
-    const manifest: RuntimeManifest = {
-      name: 'plugin-worker',
-      pluginId: 'plugin-worker',
-      description: 'Plugin runtime for message.completed negative test.',
-      priority: 200,
-      outputKind: 'plugin',
-    };
-    const loaded: LoadedRuntime = {
-      manifest,
-      promptTemplate: 'Return structured data.',
-      references: [],
-    };
+	it("does not emit message.completed for plugin-output runtimes", async () => {
+		const manifest: RuntimeManifest = {
+			name: "plugin-worker",
+			pluginId: "plugin-worker",
+			description: "Plugin runtime for message.completed negative test.",
+			priority: 200,
+			outputKind: "plugin",
+		};
+		const loaded: LoadedRuntime = {
+			manifest,
+			promptTemplate: "Return structured data.",
+			references: [],
+		};
 
-    const llm: LLMAdapter = {
-      async generate() {
-        return {
-          content: '{"data": "ok"}',
-          toolCalls: [],
-          finishReason: 'stop',
-          usage: { inputTokens: 5, outputTokens: 5 },
-        };
-      },
-    };
+		const llm: LLMAdapter = {
+			async generate() {
+				return {
+					content: '{"data": "ok"}',
+					toolCalls: [],
+					finishReason: "stop",
+					usage: { inputTokens: 5, outputTokens: 5 },
+				};
+			},
+		};
 
-    const emitter = makeEmitterSpy();
-    const store = await createMainLoopStore('sess-1');
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async () => loaded,
-      llm,
-      getConfig: () => ({}),
-      store,
-      emitter,
-    };
+		const emitter = makeEmitterSpy();
+		const store = await createMainLoopStore("sess-1");
+		const deps: TurnExecutorDeps = {
+			loadRuntime: async () => loaded,
+			llm,
+			getConfig: () => ({}),
+			store,
+			emitter,
+		};
 
-    await executeTurn(makeTurnInput(), [manifest], deps, { maxSteps: 2 });
+		await executeTurn(makeTurnInput(), [manifest], deps, { maxSteps: 2 });
 
-    expect(emitter.events.find((e) => e.type === 'message.completed')).toBeUndefined();
-  });
+		expect(
+			emitter.events.find((e) => e.type === "message.completed"),
+		).toBeUndefined();
+	});
 });
 
-describe('turn-executor direct-generate error trace pairing (Q1)', () => {
-  it('emits llm.responded with finishReason=error when malformed-args fallback also throws', async () => {
-    const fallbackTool = tool({
-      name: 'fallback-tool',
-      description: 'x',
-      parameters: z.object({ topic: z.string() }),
-      execute: async ({ topic }) => ({ topic }),
-    });
+describe("turn-executor direct-generate error trace pairing (Q1)", () => {
+	it("emits llm.responded with finishReason=error when malformed-args fallback also throws", async () => {
+		const fallbackTool = tool({
+			name: "fallback-tool",
+			description: "x",
+			parameters: z.object({ topic: z.string() }),
+			execute: async ({ topic }) => ({ topic }),
+		});
 
-    const manifest: RuntimeManifest = {
-      name: 'trace-fallback',
-      pluginId: 'trace-fallback',
-      description: 'Runtime exercising the malformed-args fallback error path.',
-      priority: 550,
-      tools: { local: ['./tools/fallback-tool.js'] },
-    };
-    const loaded: LoadedRuntime = {
-      manifest,
-      promptTemplate: 'Exercise fallback trace.',
-      references: [],
-    };
+		const manifest: RuntimeManifest = {
+			name: "trace-fallback",
+			pluginId: "trace-fallback",
+			description: "Runtime exercising the malformed-args fallback error path.",
+			priority: 550,
+			tools: { local: ["./tools/fallback-tool.js"] },
+		};
+		const loaded: LoadedRuntime = {
+			manifest,
+			promptTemplate: "Exercise fallback trace.",
+			references: [],
+		};
 
-    // Error text that matches shouldRetryMalformedToolArguments and causes
-    // the retry helper to throw with that classified cause, triggering the
-    // direct-generate fallback path.
-    const malformedArgsError = () => new Error(
-      '[openai-chat] HTTP 400 — <400> InternalError.Algo.InvalidParameter: The "function.arguments" parameter of the code model must be in JSON format.',
-    );
+		// Error text that matches shouldRetryMalformedToolArguments and causes
+		// the retry helper to throw with that classified cause, triggering the
+		// direct-generate fallback path.
+		const malformedArgsError = () =>
+			new Error(
+				'[openai-chat] HTTP 400 — <400> InternalError.Algo.InvalidParameter: The "function.arguments" parameter of the code model must be in JSON format.',
+			);
 
-    let callCount = 0;
-    const llm: LLMAdapter = {
-      async generate() {
-        callCount++;
-        // Every attempt throws a malformed-args-classified error.
-        // Helper path: throws → LLMRetryError with classified cause.
-        // Fallback direct call: throws → Q1 catch block runs here.
-        throw malformedArgsError();
-      },
-    };
+		let callCount = 0;
+		const llm: LLMAdapter = {
+			async generate() {
+				callCount++;
+				// Every attempt throws a malformed-args-classified error.
+				// Helper path: throws → LLMRetryError with classified cause.
+				// Fallback direct call: throws → Q1 catch block runs here.
+				throw malformedArgsError();
+			},
+		};
 
-    const emitter = makeEmitterSpy();
-    const store = await createMainLoopStore('sess-1');
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async () => loaded,
-      llm,
-      getConfig: () => ({}),
-      store,
-      emitter,
-      toolExecutor: createToolExecutor({
-        findTool: (name) => (name === 'fallback-tool' ? fallbackTool : undefined),
-        store,
-      }),
-    };
+		const emitter = makeEmitterSpy();
+		const store = await createMainLoopStore("sess-1");
+		const deps: TurnExecutorDeps = {
+			loadRuntime: async () => loaded,
+			llm,
+			getConfig: () => ({}),
+			store,
+			emitter,
+			toolExecutor: createToolExecutor({
+				findTool: (name) =>
+					name === "fallback-tool" ? fallbackTool : undefined,
+				store,
+			}),
+		};
 
-    await executeTurn(makeTurnInput(), [manifest], deps, { maxSteps: 2 });
-    // At least 2 calls: retry helper (1 attempt with maxRetries=0 by default, plus the fallback).
-    expect(callCount).toBeGreaterThanOrEqual(2);
+		await executeTurn(makeTurnInput(), [manifest], deps, { maxSteps: 2 });
+		// At least 2 calls: retry helper (1 attempt with maxRetries=0 by default, plus the fallback).
+		expect(callCount).toBeGreaterThanOrEqual(2);
 
-    // Every llm.calling must have a paired llm.responded — even on the
-    // direct-generate fallback error path (Q1 fix).
-    const callingEvents = emitter.events.filter(e => e.type === 'llm.calling');
-    const respondedEvents = emitter.events.filter(e => e.type === 'llm.responded');
-    expect(callingEvents.length).toBeGreaterThan(0);
-    expect(respondedEvents.length).toBe(callingEvents.length);
+		// Every llm.calling must have a paired llm.responded — even on the
+		// direct-generate fallback error path (Q1 fix).
+		const callingEvents = emitter.events.filter(
+			(e) => e.type === "llm.calling",
+		);
+		const respondedEvents = emitter.events.filter(
+			(e) => e.type === "llm.responded",
+		);
+		expect(callingEvents.length).toBeGreaterThan(0);
+		expect(respondedEvents.length).toBe(callingEvents.length);
 
-    // At least one llm.responded carries finishReason:error, usage, durationMs.
-    const errorResponded = respondedEvents.find(e => e.payload.finishReason === 'error');
-    expect(errorResponded).toBeDefined();
-    expect(errorResponded!.payload).toMatchObject({
-      finishReason: 'error',
-      usage: { inputTokens: 0, outputTokens: 0 },
-    });
-    expect(typeof errorResponded!.payload.durationMs).toBe('number');
-    expect(errorResponded!.payload.durationMs as number).toBeGreaterThanOrEqual(0);
-    expect(typeof errorResponded!.payload.error).toBe('string');
-  });
+		// At least one llm.responded carries finishReason:error, usage, durationMs.
+		const errorResponded = respondedEvents.find(
+			(e) => e.payload.finishReason === "error",
+		);
+		expect(errorResponded).toBeDefined();
+		expect(errorResponded!.payload).toMatchObject({
+			finishReason: "error",
+			usage: { inputTokens: 0, outputTokens: 0 },
+		});
+		expect(typeof errorResponded!.payload.durationMs).toBe("number");
+		expect(errorResponded!.payload.durationMs as number).toBeGreaterThanOrEqual(
+			0,
+		);
+		expect(typeof errorResponded!.payload.error).toBe("string");
+	});
 });

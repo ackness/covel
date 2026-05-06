@@ -26,28 +26,40 @@
  *      production must configure the env var explicitly.
  */
 
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { readEnvString, readRuntimeEnv } from '@covel/shared';
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { readEnvString, readRuntimeEnv } from "@covel/shared";
 
 /** Default short-lived TTL for media access tokens (5 minutes). */
 export const MEDIA_TOKEN_TTL_MS = 5 * 60 * 1000;
 
 export interface SignMediaTokenInput {
-  readonly id: string;
-  readonly sessionId: string;
-  /** Millis since epoch when this token expires. */
-  readonly exp: number;
+	readonly id: string;
+	readonly sessionId: string;
+	/** Millis since epoch when this token expires. */
+	readonly exp: number;
 }
 
 interface MediaTokenPayload {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly exp: number;
+	readonly id: string;
+	readonly sessionId: string;
+	readonly exp: number;
 }
 
 export type VerifyMediaTokenResult =
-  | { readonly ok: true; readonly id: string; readonly sessionId: string; readonly exp: number }
-  | { readonly ok: false; readonly reason: 'malformed' | 'expired' | 'bad_signature' | 'id_mismatch' };
+	| {
+			readonly ok: true;
+			readonly id: string;
+			readonly sessionId: string;
+			readonly exp: number;
+	  }
+	| {
+			readonly ok: false;
+			readonly reason:
+				| "malformed"
+				| "expired"
+				| "bad_signature"
+				| "id_mismatch";
+	  };
 
 // ── Secret resolution ────────────────────────────────────────────
 
@@ -65,30 +77,30 @@ let warnedAboutDevSecret = false;
  * when the secret is absent so the operator notices immediately.
  */
 export function getMediaTokenSecret(): string {
-  const fromEnv = readEnvString('COVEL_MEDIA_TOKEN_SECRET');
-  if (fromEnv && fromEnv.trim().length > 0) {
-    return fromEnv;
-  }
+	const fromEnv = readEnvString("COVEL_MEDIA_TOKEN_SECRET");
+	if (fromEnv && fromEnv.trim().length > 0) {
+		return fromEnv;
+	}
 
-  const isProd = readRuntimeEnv().nodeEnv === 'production';
-  if (isProd) {
-    throw new Error(
-      'COVEL_MEDIA_TOKEN_SECRET must be configured in production — refusing to issue media access tokens with an ephemeral secret.',
-    );
-  }
+	const isProd = readRuntimeEnv().nodeEnv === "production";
+	if (isProd) {
+		throw new Error(
+			"COVEL_MEDIA_TOKEN_SECRET must be configured in production — refusing to issue media access tokens with an ephemeral secret.",
+		);
+	}
 
-  if (!cachedDevSecret) {
-    cachedDevSecret = randomBytes(32).toString('base64url');
-  }
-  if (!warnedAboutDevSecret) {
-    warnedAboutDevSecret = true;
-    // eslint-disable-next-line no-console
-    console.warn(
-      '[media-token] COVEL_MEDIA_TOKEN_SECRET not set — generated a per-process random secret. ' +
-        'All issued tokens become invalid when this process restarts. Production MUST set COVEL_MEDIA_TOKEN_SECRET explicitly.',
-    );
-  }
-  return cachedDevSecret;
+	if (!cachedDevSecret) {
+		cachedDevSecret = randomBytes(32).toString("base64url");
+	}
+	if (!warnedAboutDevSecret) {
+		warnedAboutDevSecret = true;
+		// eslint-disable-next-line no-console
+		console.warn(
+			"[media-token] COVEL_MEDIA_TOKEN_SECRET not set — generated a per-process random secret. " +
+				"All issued tokens become invalid when this process restarts. Production MUST set COVEL_MEDIA_TOKEN_SECRET explicitly.",
+		);
+	}
+	return cachedDevSecret;
 }
 
 /**
@@ -97,29 +109,29 @@ export function getMediaTokenSecret(): string {
  * `index.ts`; tests reach into the module path directly.
  */
 export function _resetMediaTokenSecretForTests(): void {
-  cachedDevSecret = undefined;
-  warnedAboutDevSecret = false;
+	cachedDevSecret = undefined;
+	warnedAboutDevSecret = false;
 }
 
 // ── Encoding helpers ─────────────────────────────────────────────
 
 function toBase64Url(buf: Buffer): string {
-  return buf.toString('base64url');
+	return buf.toString("base64url");
 }
 
 function fromBase64Url(input: string): Buffer | null {
-  // Reject non-base64url chars early so malformed tokens don't decode to
-  // accidental garbage that just happens to verify.
-  if (!/^[A-Za-z0-9_-]+$/.test(input)) return null;
-  try {
-    return Buffer.from(input, 'base64url');
-  } catch {
-    return null;
-  }
+	// Reject non-base64url chars early so malformed tokens don't decode to
+	// accidental garbage that just happens to verify.
+	if (!/^[A-Za-z0-9_-]+$/.test(input)) return null;
+	try {
+		return Buffer.from(input, "base64url");
+	} catch {
+		return null;
+	}
 }
 
 function hmacSign(secret: string, body: string): Buffer {
-  return createHmac('sha256', secret).update(body).digest();
+	return createHmac("sha256", secret).update(body).digest();
 }
 
 // ── Public API ───────────────────────────────────────────────────
@@ -130,18 +142,21 @@ function hmacSign(secret: string, body: string): Buffer {
  * The caller is responsible for choosing `exp`. Helpers:
  * `signMediaTokenForSession()` below issues a default 5-minute TTL.
  */
-export function signMediaToken(input: SignMediaTokenInput, secret: string): string {
-  if (!secret) {
-    throw new Error('signMediaToken: secret is required');
-  }
-  const payload: MediaTokenPayload = {
-    id: input.id,
-    sessionId: input.sessionId,
-    exp: input.exp,
-  };
-  const body = toBase64Url(Buffer.from(JSON.stringify(payload), 'utf8'));
-  const sig = toBase64Url(hmacSign(secret, body));
-  return `${body}.${sig}`;
+export function signMediaToken(
+	input: SignMediaTokenInput,
+	secret: string,
+): string {
+	if (!secret) {
+		throw new Error("signMediaToken: secret is required");
+	}
+	const payload: MediaTokenPayload = {
+		id: input.id,
+		sessionId: input.sessionId,
+		exp: input.exp,
+	};
+	const body = toBase64Url(Buffer.from(JSON.stringify(payload), "utf8"));
+	const sig = toBase64Url(hmacSign(secret, body));
+	return `${body}.${sig}`;
 }
 
 /**
@@ -150,12 +165,15 @@ export function signMediaToken(input: SignMediaTokenInput, secret: string): stri
  * `getMediaTokenSecret()`.
  */
 export function signMediaTokenForSession(
-  id: string,
-  sessionId: string,
-  ttlMs: number = MEDIA_TOKEN_TTL_MS,
-  now: number = Date.now(),
+	id: string,
+	sessionId: string,
+	ttlMs: number = MEDIA_TOKEN_TTL_MS,
+	now: number = Date.now(),
 ): string {
-  return signMediaToken({ id, sessionId, exp: now + ttlMs }, getMediaTokenSecret());
+	return signMediaToken(
+		{ id, sessionId, exp: now + ttlMs },
+		getMediaTokenSecret(),
+	);
 }
 
 /**
@@ -164,58 +182,66 @@ export function signMediaTokenForSession(
  * client.
  */
 export function verifyMediaToken(
-  token: string,
-  expectedId: string,
-  secret: string,
-  now: number = Date.now(),
+	token: string,
+	expectedId: string,
+	secret: string,
+	now: number = Date.now(),
 ): VerifyMediaTokenResult {
-  if (typeof token !== 'string' || token.length === 0) {
-    return { ok: false, reason: 'malformed' };
-  }
-  const dot = token.indexOf('.');
-  if (dot <= 0 || dot === token.length - 1) {
-    return { ok: false, reason: 'malformed' };
-  }
-  const bodyEnc = token.slice(0, dot);
-  const sigEnc = token.slice(dot + 1);
+	if (typeof token !== "string" || token.length === 0) {
+		return { ok: false, reason: "malformed" };
+	}
+	const dot = token.indexOf(".");
+	if (dot <= 0 || dot === token.length - 1) {
+		return { ok: false, reason: "malformed" };
+	}
+	const bodyEnc = token.slice(0, dot);
+	const sigEnc = token.slice(dot + 1);
 
-  const bodyBuf = fromBase64Url(bodyEnc);
-  const sigBuf = fromBase64Url(sigEnc);
-  if (!bodyBuf || !sigBuf) {
-    return { ok: false, reason: 'malformed' };
-  }
+	const bodyBuf = fromBase64Url(bodyEnc);
+	const sigBuf = fromBase64Url(sigEnc);
+	if (!bodyBuf || !sigBuf) {
+		return { ok: false, reason: "malformed" };
+	}
 
-  // Verify signature first (constant time) so we don't leak token
-  // structure validity via early returns.
-  const expectedSig = hmacSign(secret, bodyEnc);
-  if (sigBuf.length !== expectedSig.length || !timingSafeEqual(sigBuf, expectedSig)) {
-    return { ok: false, reason: 'bad_signature' };
-  }
+	// Verify signature first (constant time) so we don't leak token
+	// structure validity via early returns.
+	const expectedSig = hmacSign(secret, bodyEnc);
+	if (
+		sigBuf.length !== expectedSig.length ||
+		!timingSafeEqual(sigBuf, expectedSig)
+	) {
+		return { ok: false, reason: "bad_signature" };
+	}
 
-  let payload: MediaTokenPayload;
-  try {
-    const decoded = JSON.parse(bodyBuf.toString('utf8')) as unknown;
-    if (
-      !decoded ||
-      typeof decoded !== 'object' ||
-      typeof (decoded as { id?: unknown }).id !== 'string' ||
-      typeof (decoded as { sessionId?: unknown }).sessionId !== 'string' ||
-      typeof (decoded as { exp?: unknown }).exp !== 'number' ||
-      !Number.isFinite((decoded as { exp: number }).exp)
-    ) {
-      return { ok: false, reason: 'malformed' };
-    }
-    payload = decoded as MediaTokenPayload;
-  } catch {
-    return { ok: false, reason: 'malformed' };
-  }
+	let payload: MediaTokenPayload;
+	try {
+		const decoded = JSON.parse(bodyBuf.toString("utf8")) as unknown;
+		if (
+			!decoded ||
+			typeof decoded !== "object" ||
+			typeof (decoded as { id?: unknown }).id !== "string" ||
+			typeof (decoded as { sessionId?: unknown }).sessionId !== "string" ||
+			typeof (decoded as { exp?: unknown }).exp !== "number" ||
+			!Number.isFinite((decoded as { exp: number }).exp)
+		) {
+			return { ok: false, reason: "malformed" };
+		}
+		payload = decoded as MediaTokenPayload;
+	} catch {
+		return { ok: false, reason: "malformed" };
+	}
 
-  if (payload.id !== expectedId) {
-    return { ok: false, reason: 'id_mismatch' };
-  }
-  if (payload.exp <= now) {
-    return { ok: false, reason: 'expired' };
-  }
+	if (payload.id !== expectedId) {
+		return { ok: false, reason: "id_mismatch" };
+	}
+	if (payload.exp <= now) {
+		return { ok: false, reason: "expired" };
+	}
 
-  return { ok: true, id: payload.id, sessionId: payload.sessionId, exp: payload.exp };
+	return {
+		ok: true,
+		id: payload.id,
+		sessionId: payload.sessionId,
+		exp: payload.exp,
+	};
 }

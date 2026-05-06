@@ -6,9 +6,10 @@
  */
 
 export function buildWorldPrompt(concept: string, locale: string): string {
-  const lang = locale === 'zh-CN' ? '中文' : locale === 'en-US' ? 'English' : locale;
+	const lang =
+		locale === "zh-CN" ? "中文" : locale === "en-US" ? "English" : locale;
 
-  return `You are a world-building specialist for the Covel AI RPG framework.
+	return `You are a world-building specialist for the Covel AI RPG framework.
 
 Given a concept, you autonomously create a complete, ready-to-use world package.
 You decide ALL details: id, name, tags, factions, power system, history, etc.

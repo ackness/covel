@@ -1,13 +1,13 @@
 export interface RuntimeBindingTargetLike {
-  qualifiedId: string;
-  providerTag: string;
-  /** Runtime kind (e.g. "story", "plugin") — used for slot name hinting when tags are ambiguous. */
-  kind?: string;
+	qualifiedId: string;
+	providerTag: string;
+	/** Runtime kind (e.g. "story", "plugin") — used for slot name hinting when tags are ambiguous. */
+	kind?: string;
 }
 
 export interface RuntimeBindingSlotLike {
-  slotId: string;
-  tag: string;
+	slotId: string;
+	tag: string;
 }
 
 /**
@@ -15,13 +15,15 @@ export interface RuntimeBindingSlotLike {
  * Empty-string values are preserved so an explicitly unbound runtime can stay unbound.
  */
 export function filterRuntimeBindingsForKnownRuntimes(
-  bindings: Record<string, string>,
-  knownRuntimeIds: Iterable<string>,
+	bindings: Record<string, string>,
+	knownRuntimeIds: Iterable<string>,
 ): Record<string, string> {
-  const knownIds = new Set(knownRuntimeIds);
-  return Object.fromEntries(
-    Object.entries(bindings).filter(([qualifiedId]) => knownIds.has(qualifiedId)),
-  );
+	const knownIds = new Set(knownRuntimeIds);
+	return Object.fromEntries(
+		Object.entries(bindings).filter(([qualifiedId]) =>
+			knownIds.has(qualifiedId),
+		),
+	);
 }
 
 /**
@@ -29,11 +31,13 @@ export function filterRuntimeBindingsForKnownRuntimes(
  * The server schema only accepts non-empty slot names.
  */
 export function sanitizeRuntimeBindingsForHeader(
-  bindings: Record<string, string>,
+	bindings: Record<string, string>,
 ): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(bindings).filter(([, slotName]) => typeof slotName === "string" && slotName.length > 0),
-  );
+	return Object.fromEntries(
+		Object.entries(bindings).filter(
+			([, slotName]) => typeof slotName === "string" && slotName.length > 0,
+		),
+	);
 }
 
 /**
@@ -53,67 +57,69 @@ export function sanitizeRuntimeBindingsForHeader(
  * 5. Default slot (slotId === "default") or first available slot
  */
 export function autoAssignRuntimeBindings(
-  bindings: Record<string, string>,
-  targets: readonly RuntimeBindingTargetLike[],
-  slots: readonly RuntimeBindingSlotLike[],
+	bindings: Record<string, string>,
+	targets: readonly RuntimeBindingTargetLike[],
+	slots: readonly RuntimeBindingSlotLike[],
 ): Record<string, string> {
-  if (slots.length === 0) return { ...bindings };
+	if (slots.length === 0) return { ...bindings };
 
-  const next = { ...bindings };
-  const defaultSlot = slots.find((s) => s.slotId === "default") ?? slots[0];
+	const next = { ...bindings };
+	const defaultSlot = slots.find((s) => s.slotId === "default") ?? slots[0];
 
-  // Check whether all slots have the same tag (ambiguous — rely on name hints)
-  const uniqueTags = new Set(slots.map((s) => s.tag));
-  const tagsAreAmbiguous = uniqueTags.size <= 1;
+	// Check whether all slots have the same tag (ambiguous — rely on name hints)
+	const uniqueTags = new Set(slots.map((s) => s.tag));
+	const tagsAreAmbiguous = uniqueTags.size <= 1;
 
-  for (const target of targets) {
-    if (next[target.qualifiedId]) continue;
+	for (const target of targets) {
+		if (next[target.qualifiedId]) continue;
 
-    let chosen: RuntimeBindingSlotLike | undefined;
+		let chosen: RuntimeBindingSlotLike | undefined;
 
-    // 0. Direct name match — slot named exactly as the providerTag takes highest priority
-    //    e.g. providerTag: "plugin" → slot named "plugin", providerTag: "image" → slot named "image"
-    chosen = slots.find((s) => s.slotId === target.providerTag);
+		// 0. Direct name match — slot named exactly as the providerTag takes highest priority
+		//    e.g. providerTag: "plugin" → slot named "plugin", providerTag: "image" → slot named "image"
+		chosen = slots.find((s) => s.slotId === target.providerTag);
 
-    // 1. `default` is a virtual slot name used by some plugins to mean
-    //    "the deployment's default text model". It does not require a literal
-    //    [covel.default] block; bind it to the configured default/first slot.
-    if (!chosen && target.providerTag === "default") {
-      chosen = defaultSlot;
-    }
+		// 1. `default` is a virtual slot name used by some plugins to mean
+		//    "the deployment's default text model". It does not require a literal
+		//    [covel.default] block; bind it to the configured default/first slot.
+		if (!chosen && target.providerTag === "default") {
+			chosen = defaultSlot;
+		}
 
-    // 2. Other non-legacy providerTags are concrete slot names from PLUGIN.md.
-    //    If missing, do NOT auto-bind to a fallback: leaving it unbound lets
-    //    the UI tell the user to add [covel.<slot>] to llm.toml.
-    if (!chosen && target.providerTag !== "text") {
-      continue;
-    }
+		// 2. Other non-legacy providerTags are concrete slot names from PLUGIN.md.
+		//    If missing, do NOT auto-bind to a fallback: leaving it unbound lets
+		//    the UI tell the user to add [covel.<slot>] to llm.toml.
+		if (!chosen && target.providerTag !== "text") {
+			continue;
+		}
 
-    // 2. For legacy providerTag="text" plugin runtimes, prefer "plugin"/"fast"
-    //    over the first generic text slot.
-    if (!chosen && target.kind !== "story" && target.kind !== "background") {
-      chosen = slots.find((s) => s.slotId === "plugin") ?? slots.find((s) => s.slotId === "fast");
-    }
+		// 2. For legacy providerTag="text" plugin runtimes, prefer "plugin"/"fast"
+		//    over the first generic text slot.
+		if (!chosen && target.kind !== "story" && target.kind !== "background") {
+			chosen =
+				slots.find((s) => s.slotId === "plugin") ??
+				slots.find((s) => s.slotId === "fast");
+		}
 
-    // 2. Exact tag match (only meaningful when tags are distinct)
-    if (!chosen && !tagsAreAmbiguous) {
-      chosen = slots.find((s) => s.tag === target.providerTag);
-    }
+		// 2. Exact tag match (only meaningful when tags are distinct)
+		if (!chosen && !tagsAreAmbiguous) {
+			chosen = slots.find((s) => s.tag === target.providerTag);
+		}
 
-    // 3. Slot name matches runtime kind
-    if (!chosen && target.kind) {
-      chosen = slots.find((s) => s.slotId === target.kind);
-    }
+		// 3. Slot name matches runtime kind
+		if (!chosen && target.kind) {
+			chosen = slots.find((s) => s.slotId === target.kind);
+		}
 
-    // 4. Fallback to default slot
-    if (!chosen) {
-      chosen = defaultSlot;
-    }
+		// 4. Fallback to default slot
+		if (!chosen) {
+			chosen = defaultSlot;
+		}
 
-    if (chosen) {
-      next[target.qualifiedId] = chosen.slotId;
-    }
-  }
+		if (chosen) {
+			next[target.qualifiedId] = chosen.slotId;
+		}
+	}
 
-  return next;
+	return next;
 }

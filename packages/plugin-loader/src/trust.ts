@@ -7,7 +7,7 @@
  * and therefore not a security boundary.
  */
 
-import type { PluginSource, PluginTrustInfo } from './types.js';
+import type { PluginSource, PluginTrustInfo } from "./types.js";
 
 /**
  * Reserved IDs for plugins shipped under `plugins/`. Third-party plugins
@@ -18,14 +18,14 @@ import type { PluginSource, PluginTrustInfo } from './types.js';
  * Keep this list in sync with the directory contents under `plugins/`.
  */
 export const BUILTIN_PLUGIN_IDS = new Set<string>([
-  'narrator',
-  'pregame',
-  'memory',
-  'codex',
-  'guide',
-  'char-creator',
-  'world-init',
-  'npc-graph',
+	"narrator",
+	"pregame",
+	"memory",
+	"codex",
+	"guide",
+	"char-creator",
+	"world-init",
+	"npc-graph",
 ]);
 
 /** Officially blessed but not shipped with the framework — empty for now. */
@@ -43,29 +43,32 @@ const OFFICIAL_IDS = new Set<string>([]);
  * everything else as community — it deliberately does NOT infer `builtin`
  * from the name, since names are author-controlled.
  */
-export function getPluginTrustInfo(pluginId: string, source?: PluginSource): PluginTrustInfo {
-  const resolvedSource = source ?? detectSource(pluginId);
+export function getPluginTrustInfo(
+	pluginId: string,
+	source?: PluginSource,
+): PluginTrustInfo {
+	const resolvedSource = source ?? detectSource(pluginId);
 
-  switch (resolvedSource) {
-    case 'builtin':
-    case 'official':
-      return {
-        source: resolvedSource,
-        autoLoad: true,
-        requiresApproval: false,
-      };
-    case 'community':
-      return {
-        source: 'community',
-        autoLoad: false,
-        requiresApproval: true,
-      };
-  }
+	switch (resolvedSource) {
+		case "builtin":
+		case "official":
+			return {
+				source: resolvedSource,
+				autoLoad: true,
+				requiresApproval: false,
+			};
+		case "community":
+			return {
+				source: "community",
+				autoLoad: false,
+				requiresApproval: true,
+			};
+	}
 }
 
 function detectSource(pluginId: string): PluginSource {
-  if (OFFICIAL_IDS.has(pluginId)) {
-    return 'official';
-  }
-  return 'community';
+	if (OFFICIAL_IDS.has(pluginId)) {
+		return "official";
+	}
+	return "community";
 }

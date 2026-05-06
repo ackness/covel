@@ -18,113 +18,131 @@
  * generic `ui-spec` convention, not anything about codex semantics.
  */
 
-import { withPendingProposals } from '@covel/tools';
-import { getCategoryMetadata } from '../category-metadata.js';
+import { withPendingProposals } from "@covel/tools";
+import { getCategoryMetadata } from "../category-metadata.js";
 
 export default function ({ tool, z, shortIdBatch, store }) {
-  const codexEntrySchema = z.object({
-    category: z.enum(['monster', 'item', 'location', 'lore', 'character', 'skill'])
-      .describe('知识类别'),
-    title: z.string().min(1).describe('条目标题'),
-    content: z.string().min(10).describe('2-3 句话的描述'),
-    tags: z.array(z.string()).min(1).max(5).describe('标签列表'),
-    rarity: z.enum(['common', 'uncommon', 'rare', 'legendary']).default('common')
-      .describe('稀有度，影响 UI 展示样式'),
-    imageHint: z.string().optional()
-      .describe('可选的视觉描述提示，用于后续图像生成'),
-  });
+	const codexEntrySchema = z.object({
+		category: z
+			.enum(["monster", "item", "location", "lore", "character", "skill"])
+			.describe("知识类别"),
+		title: z.string().min(1).describe("条目标题"),
+		content: z.string().min(10).describe("2-3 句话的描述"),
+		tags: z.array(z.string()).min(1).max(5).describe("标签列表"),
+		rarity: z
+			.enum(["common", "uncommon", "rare", "legendary"])
+			.default("common")
+			.describe("稀有度，影响 UI 展示样式"),
+		imageHint: z
+			.string()
+			.optional()
+			.describe("可选的视觉描述提示，用于后续图像生成"),
+	});
 
-  return tool({
-    name: 'unlock-codex-entries',
-    description: '批量解锁新的图鉴条目。条目会持久化存储并生成"知识发现"卡片。返回的 entryId（如 codex-fire-magic）可用于后续 update-codex-entry 调用。',
-    parameters: z.object({
-      entries: z.array(codexEntrySchema).min(1).describe('要解锁的图鉴条目列表'),
-    }),
-    execute: async (params, context) => {
-      const ids = shortIdBatch('codex', params.entries.map((e) => e.title), context.sessionId);
-      const now = new Date().toISOString();
+	return tool({
+		name: "unlock-codex-entries",
+		description:
+			'批量解锁新的图鉴条目。条目会持久化存储并生成"知识发现"卡片。返回的 entryId（如 codex-fire-magic）可用于后续 update-codex-entry 调用。',
+		parameters: z.object({
+			entries: z
+				.array(codexEntrySchema)
+				.min(1)
+				.describe("要解锁的图鉴条目列表"),
+		}),
+		execute: async (params, context) => {
+			const ids = shortIdBatch(
+				"codex",
+				params.entries.map((e) => e.title),
+				context.sessionId,
+			);
+			const now = new Date().toISOString();
 
-      const results = params.entries.map((entry, i) => ({
-        entryId: ids[i],
-        ...entry,
-        unlockedAt: now,
-      }));
+			const results = params.entries.map((entry, i) => ({
+				entryId: ids[i],
+				...entry,
+				unlockedAt: now,
+			}));
 
-      // Persist all entries to plugin-data store. The persisted `value`
-      // self-describes its category via `categoryMeta` so the UI doesn't
-      // need a framework-side category lookup table.
-      //
-      // `isNew: true` flags a fresh unlock so the UI can decorate the card
-      // (generic EntryCard prop). This panel keeps the NEW badge on
-      // indefinitely — there is no session-scoped "clear NEW" mechanism
-      // yet; downstream plugins can extend this if needed.
-      const records = results.map((entry) => ({
-        id: crypto.randomUUID(),
-        sessionId: context.sessionId,
-        pluginId: context.pluginId,
-        namespace: 'entries',
-        key: entry.entryId,
-        value: {
-          category: entry.category,
-          categoryMeta: getCategoryMetadata(entry.category),
-          title: entry.title,
-          content: entry.content,
-          tags: entry.tags,
-          rarity: entry.rarity,
-          imageHint: entry.imageHint,
-          unlockedAt: entry.unlockedAt,
-          isNew: true,
-        },
-        createdAt: now,
-        updatedAt: now,
-      }));
-      const ui = results.map((entry) => ({
-        type: 'ui-spec',
-        entryId: entry.entryId,
-        spec: {
-          type: 'EntryCard',
-          props: {
-            title: entry.title,
-            category: entry.category,
-            content: entry.content,
-            tags: entry.tags,
-            rarity: entry.rarity,
-            isNew: true,
-          },
-        },
-        // Keep raw payload alongside the spec so downstream debug tooling
-        // (raw JSON view, trace exports) can still see the source data.
-        meta: {
-          entryId: entry.entryId,
-          category: entry.category,
-          title: entry.title,
-          rarity: entry.rarity,
-          imageHint: entry.imageHint,
-        },
-      }));
+			// Persist all entries to plugin-data store. The persisted `value`
+			// self-describes its category via `categoryMeta` so the UI doesn't
+			// need a framework-side category lookup table.
+			//
+			// `isNew: true` flags a fresh unlock so the UI can decorate the card
+			// (generic EntryCard prop). This panel keeps the NEW badge on
+			// indefinitely — there is no session-scoped "clear NEW" mechanism
+			// yet; downstream plugins can extend this if needed.
+			const records = results.map((entry) => ({
+				id: crypto.randomUUID(),
+				sessionId: context.sessionId,
+				pluginId: context.pluginId,
+				namespace: "entries",
+				key: entry.entryId,
+				value: {
+					category: entry.category,
+					categoryMeta: getCategoryMetadata(entry.category),
+					title: entry.title,
+					content: entry.content,
+					tags: entry.tags,
+					rarity: entry.rarity,
+					imageHint: entry.imageHint,
+					unlockedAt: entry.unlockedAt,
+					isNew: true,
+				},
+				createdAt: now,
+				updatedAt: now,
+			}));
+			const ui = results.map((entry) => ({
+				type: "ui-spec",
+				entryId: entry.entryId,
+				spec: {
+					type: "EntryCard",
+					props: {
+						title: entry.title,
+						category: entry.category,
+						content: entry.content,
+						tags: entry.tags,
+						rarity: entry.rarity,
+						isNew: true,
+					},
+				},
+				// Keep raw payload alongside the spec so downstream debug tooling
+				// (raw JSON view, trace exports) can still see the source data.
+				meta: {
+					entryId: entry.entryId,
+					category: entry.category,
+					title: entry.title,
+					rarity: entry.rarity,
+					imageHint: entry.imageHint,
+				},
+			}));
 
-      return withPendingProposals(
-        {
-          unlocked: results.length,
-          entries: results,
-          ui,
-        },
-        [{
-          id: crypto.randomUUID(),
-          type: 'plugin.data.batch',
-          source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
-          turnId: context.turnId,
-          sessionId: context.sessionId,
-          payload: {
-            items: records.map((record) => ({
-              namespace: record.namespace,
-              key: record.key,
-              value: record.value,
-            })),
-          },
-          timestamp: now,
-        }],
-      );
-    },
-  });
+			return withPendingProposals(
+				{
+					unlocked: results.length,
+					entries: results,
+					ui,
+				},
+				[
+					{
+						id: crypto.randomUUID(),
+						type: "plugin.data.batch",
+						source: {
+							pluginId: context.pluginId,
+							runtimeId: context.runtimeId,
+						},
+						turnId: context.turnId,
+						sessionId: context.sessionId,
+						payload: {
+							items: records.map((record) => ({
+								namespace: record.namespace,
+								key: record.key,
+								value: record.value,
+							})),
+						},
+						timestamp: now,
+					},
+				],
+			);
+		},
+	});
 }

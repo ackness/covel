@@ -25,58 +25,63 @@
  *   `valueType`.
  */
 export type AttributeFieldType =
-  | 'string'
-  | 'number'
-  | 'boolean'
-  | 'enum'
-  | 'array'
-  | 'object'
-  | 'map';
+	| "string"
+	| "number"
+	| "boolean"
+	| "enum"
+	| "array"
+	| "object"
+	| "map";
 
-export type AttributeCategory = 'stats' | 'bio' | 'abilities' | 'equipment' | 'social';
+export type AttributeCategory =
+	| "stats"
+	| "bio"
+	| "abilities"
+	| "equipment"
+	| "social";
 
 // ── Single attribute definition ─────────────────────────────────
 
 export interface AttributeDefinition {
-  /** Machine key used in CharacterRecord.fields, e.g. "hp", "lingGen". */
-  readonly id: string;
-  /** Human-readable display name (locale-aware). */
-  readonly name: string;
-  /** Value type. */
-  readonly type: AttributeFieldType;
-  /** Minimum value (number type). */
-  readonly min?: number;
-  /** Maximum value (number type). */
-  readonly max?: number;
-  /** Default value for new characters. */
-  readonly defaultValue?: unknown;
-  /** Array element type (array type). */
-  readonly itemType?: 'string' | 'number';
-  /** Allowed values (enum type). */
-  readonly options?: readonly string[];
-  /**
-   * Nested attribute definitions (object type). Acts as a scoped mini-schema
-   * describing the object's required child keys.
-   */
-  readonly subSchema?: readonly AttributeDefinition[];
-  /**
-   * Element value type for free-key records (map type). When omitted, values
-   * default to strings.
-   */
-  readonly valueType?: 'string' | 'number' | 'boolean';
-  /** Grouping category for UI rendering and context organization. */
-  readonly category: AttributeCategory;
-  /** Optional description of this attribute. */
-  readonly description?: string;
+	/** Machine key used in CharacterRecord.fields, e.g. "hp", "lingGen". */
+	readonly id: string;
+	/** Human-readable display name (locale-aware). */
+	readonly name: string;
+	/** Value type. */
+	readonly type: AttributeFieldType;
+	/** Minimum value (number type). */
+	readonly min?: number;
+	/** Maximum value (number type). */
+	readonly max?: number;
+	/** Default value for new characters. */
+	readonly defaultValue?: unknown;
+	/** Array element type (array type). */
+	readonly itemType?: "string" | "number";
+	/** Allowed values (enum type). */
+	readonly options?: readonly string[];
+	/**
+	 * Nested attribute definitions (object type). Acts as a scoped mini-schema
+	 * describing the object's required child keys.
+	 */
+	readonly subSchema?: readonly AttributeDefinition[];
+	/**
+	 * Element value type for free-key records (map type). When omitted, values
+	 * default to strings.
+	 */
+	readonly valueType?: "string" | "number" | "boolean";
+	/** Grouping category for UI rendering and context organization. */
+	readonly category: AttributeCategory;
+	/** Optional description of this attribute. */
+	readonly description?: string;
 }
 
 // ── Full schema ─────────────────────────────────────────────────
 
 export interface CharacterAttributeSchema {
-  /** Schema version, incremented on re-initialization. */
-  readonly version: number;
-  /** Ordered attribute definitions (display order = array order). */
-  readonly attributes: readonly AttributeDefinition[];
+	/** Schema version, incremented on re-initialization. */
+	readonly version: number;
+	/** Ordered attribute definitions (display order = array order). */
+	readonly attributes: readonly AttributeDefinition[];
 }
 
 // ── Wire-format Character ───────────────────────────────────────
@@ -88,13 +93,13 @@ export interface CharacterAttributeSchema {
  * (and any future API client) without importing `@covel/store`.
  */
 export interface Character {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly name: string;
-  readonly type: string;
-  readonly description?: string;
-  readonly fields?: unknown;
-  readonly version: number;
-  readonly createdAt: string;
-  readonly updatedAt: string;
+	readonly id: string;
+	readonly sessionId: string;
+	readonly name: string;
+	readonly type: string;
+	readonly description?: string;
+	readonly fields?: unknown;
+	readonly version: number;
+	readonly createdAt: string;
+	readonly updatedAt: string;
 }

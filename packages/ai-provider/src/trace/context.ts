@@ -4,10 +4,10 @@
  * traceId → runId → branchId → turnId → runtimeId → pluginId
  */
 export interface TraceContext {
-  traceId: string;
-  runId?: string;
-  branchId?: string;
-  turnId?: string;
-  runtimeId?: string;
-  pluginId?: string;
+	traceId: string;
+	runId?: string;
+	branchId?: string;
+	turnId?: string;
+	runtimeId?: string;
+	pluginId?: string;
 }

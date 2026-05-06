@@ -2,25 +2,25 @@
  * Approval pipeline types for human-in-the-loop tool authorization.
  */
 
-export type ApprovalDecision = 'allow-once' | 'allow-session' | 'deny';
+export type ApprovalDecision = "allow-once" | "allow-session" | "deny";
 
 export interface ApprovalRequest {
-  readonly toolName: string;
-  readonly pluginId: string;
-  readonly runtimeId: string;
-  readonly input: Readonly<Record<string, unknown>>;
-  readonly turnId: string;
-  readonly sessionId: string;
+	readonly toolName: string;
+	readonly pluginId: string;
+	readonly runtimeId: string;
+	readonly input: Readonly<Record<string, unknown>>;
+	readonly turnId: string;
+	readonly sessionId: string;
 }
 
 export interface ApprovalRecord {
-  readonly approvalId: string;
-  readonly toolName: string;
-  readonly pluginId: string;
-  readonly decision: ApprovalDecision;
-  readonly decidedAt: string;
-  readonly turnId: string;
-  readonly sessionId: string;
+	readonly approvalId: string;
+	readonly toolName: string;
+	readonly pluginId: string;
+	readonly decision: ApprovalDecision;
+	readonly decidedAt: string;
+	readonly turnId: string;
+	readonly sessionId: string;
 }
 
 // ── PR-7: Plugin RPC approval ────────────────────────────────────
@@ -32,15 +32,15 @@ export interface ApprovalRecord {
  * shows a dialog, and posts the player decision back.
  */
 export interface RpcApprovalPending {
-  readonly approvalId: string;
-  readonly sessionId: string;
-  readonly pluginId: string;
-  readonly action: string;
-  readonly payload: unknown;
-  readonly trustLevel: 'builtin' | 'official' | 'community';
-  readonly requestedAt: string;
-  /** One-line description from `RpcActionDecl.description`, surfaced to the user. */
-  readonly description?: string;
+	readonly approvalId: string;
+	readonly sessionId: string;
+	readonly pluginId: string;
+	readonly action: string;
+	readonly payload: unknown;
+	readonly trustLevel: "builtin" | "official" | "community";
+	readonly requestedAt: string;
+	/** One-line description from `RpcActionDecl.description`, surfaced to the user. */
+	readonly description?: string;
 }
 
 /**
@@ -52,11 +52,11 @@ export interface RpcApprovalPending {
  *
  * `deny` rejects the request and is never cached.
  */
-export type RpcApprovalScope = 'once' | 'session';
+export type RpcApprovalScope = "once" | "session";
 
 export interface RpcApprovalDecision {
-  readonly approvalId: string;
-  readonly decision: 'allow' | 'deny';
-  readonly scope?: RpcApprovalScope;
-  readonly decidedAt: string;
+	readonly approvalId: string;
+	readonly decision: "allow" | "deny";
+	readonly scope?: RpcApprovalScope;
+	readonly decidedAt: string;
 }

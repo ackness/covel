@@ -7,30 +7,30 @@ import { DemoSection } from "@/components/landing/DemoSection";
 import { CTA } from "@/components/landing/CTA";
 
 export const Route = createFileRoute("/")({
-  component: HomePage,
+	component: HomePage,
 });
 
 function HomePage() {
-  // The app shell uses `<main className="overflow-hidden">`, so the home
-  // page provides its own scroll container. The container is also the
-  // IntersectionObserver root for the scrolly-telling sections.
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const [scrollRoot, setScrollRoot] = useState<HTMLElement | null>(null);
+	// The app shell uses `<main className="overflow-hidden">`, so the home
+	// page provides its own scroll container. The container is also the
+	// IntersectionObserver root for the scrolly-telling sections.
+	const scrollRef = useRef<HTMLDivElement | null>(null);
+	const [scrollRoot, setScrollRoot] = useState<HTMLElement | null>(null);
 
-  useEffect(() => {
-    setScrollRoot(scrollRef.current);
-  }, []);
+	useEffect(() => {
+		setScrollRoot(scrollRef.current);
+	}, []);
 
-  return (
-    <div
-      ref={scrollRef}
-      className="h-full w-full overflow-y-auto overflow-x-hidden bg-background"
-    >
-      <Hero />
-      <PipelineScrolly scrollRoot={scrollRoot} />
-      <PluginShowcase />
-      <DemoSection />
-      <CTA />
-    </div>
-  );
+	return (
+		<div
+			ref={scrollRef}
+			className="h-full w-full overflow-y-auto overflow-x-hidden bg-background"
+		>
+			<Hero />
+			<PipelineScrolly scrollRoot={scrollRoot} />
+			<PluginShowcase />
+			<DemoSection />
+			<CTA />
+		</div>
+	);
 }

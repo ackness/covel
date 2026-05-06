@@ -20,62 +20,64 @@
  */
 
 import type {
-  CharacterSummaryRecord,
-  LorebookEntryRecord,
-  PluginDataRecord,
-  PlayerInputRecord,
-  SessionRecord,
-  SessionSummaryRecord,
-  TraceEventRecord,
-  TurnMessageRecord,
-  WorkingMemoryRecord,
-  WorldRecord,
-} from './store-records.js';
+	CharacterSummaryRecord,
+	LorebookEntryRecord,
+	PluginDataRecord,
+	PlayerInputRecord,
+	SessionRecord,
+	SessionSummaryRecord,
+	TraceEventRecord,
+	TurnMessageRecord,
+	WorkingMemoryRecord,
+	WorldRecord,
+} from "./store-records.js";
 
 export interface SessionContextStore {
-  // ── Reads (session-context.ts / session-context-views.ts) ───────
-  getSession(sessionId: string): Promise<SessionRecord | null>;
-  getWorld(worldId: string): Promise<WorldRecord | null>;
-  listCharacters(sessionId: string): Promise<readonly CharacterSummaryRecord[]>;
-  listPlayerInputs(sessionId: string): Promise<readonly PlayerInputRecord[]>;
-  listPluginData(
-    sessionId: string,
-    pluginId: string,
-    namespace: string,
-  ): Promise<readonly PluginDataRecord[]>;
-  /**
-   * Optional — older mock stores in plugin tests may not implement this.
-   * Loader probes via `typeof === 'function'` before invoking.
-   */
-  listWorkingMemory?(sessionId: string): Promise<readonly WorkingMemoryRecord[]>;
-  /**
-   * Optional — same rationale as `listWorkingMemory`.
-   */
-  listSessionLorebookEntries?(
-    sessionId: string,
-  ): Promise<readonly LorebookEntryRecord[]>;
+	// ── Reads (session-context.ts / session-context-views.ts) ───────
+	getSession(sessionId: string): Promise<SessionRecord | null>;
+	getWorld(worldId: string): Promise<WorldRecord | null>;
+	listCharacters(sessionId: string): Promise<readonly CharacterSummaryRecord[]>;
+	listPlayerInputs(sessionId: string): Promise<readonly PlayerInputRecord[]>;
+	listPluginData(
+		sessionId: string,
+		pluginId: string,
+		namespace: string,
+	): Promise<readonly PluginDataRecord[]>;
+	/**
+	 * Optional — older mock stores in plugin tests may not implement this.
+	 * Loader probes via `typeof === 'function'` before invoking.
+	 */
+	listWorkingMemory?(
+		sessionId: string,
+	): Promise<readonly WorkingMemoryRecord[]>;
+	/**
+	 * Optional — same rationale as `listWorkingMemory`.
+	 */
+	listSessionLorebookEntries?(
+		sessionId: string,
+	): Promise<readonly LorebookEntryRecord[]>;
 
-  // ── Writes (compactor.ts) ───────────────────────────────────────
-  saveSessionSummary(record: SessionSummaryRecord): Promise<void>;
-  tagTurnMessagesCompacted(
-    sessionId: string,
-    messageIds: readonly string[],
-    summaryId: string,
-  ): Promise<void>;
-  addTraceEvent(record: TraceEventRecord): Promise<void>;
+	// ── Writes (compactor.ts) ───────────────────────────────────────
+	saveSessionSummary(record: SessionSummaryRecord): Promise<void>;
+	tagTurnMessagesCompacted(
+		sessionId: string,
+		messageIds: readonly string[],
+		summaryId: string,
+	): Promise<void>;
+	addTraceEvent(record: TraceEventRecord): Promise<void>;
 }
 
 // Re-export the local record shapes so existing imports inside
 // `@covel/context` keep working without a bare `@covel/store` reference.
 export type {
-  CharacterSummaryRecord,
-  LorebookEntryRecord,
-  PluginDataRecord,
-  PlayerInputRecord,
-  SessionRecord,
-  SessionSummaryRecord,
-  TraceEventRecord,
-  TurnMessageRecord,
-  WorkingMemoryRecord,
-  WorldRecord,
-} from './store-records.js';
+	CharacterSummaryRecord,
+	LorebookEntryRecord,
+	PluginDataRecord,
+	PlayerInputRecord,
+	SessionRecord,
+	SessionSummaryRecord,
+	TraceEventRecord,
+	TurnMessageRecord,
+	WorkingMemoryRecord,
+	WorldRecord,
+} from "./store-records.js";

@@ -5,45 +5,45 @@
  * for the HookPipeline. All types are framework-level — no plugin IDs here.
  */
 
-import type { EventBus } from '@covel/events';
+import type { EventBus } from "@covel/events";
 
 // ── Hook event names ─────────────────────────────────────────────
 
 export type HookEvent =
-  | 'TurnStart'
-  | 'PreRuntime'
-  | 'PostRuntime'
-  | 'PreToolUse'
-  | 'PostToolUse'
-  | 'PreStateCommit'
-  | 'PostStateCommit'
-  | 'TurnStop';
+	| "TurnStart"
+	| "PreRuntime"
+	| "PostRuntime"
+	| "PreToolUse"
+	| "PostToolUse"
+	| "PreStateCommit"
+	| "PostStateCommit"
+	| "TurnStop";
 
-export type HookSemantic = 'first' | 'sequential' | 'parallel' | 'stream';
+export type HookSemantic = "first" | "sequential" | "parallel" | "stream";
 
 export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
-  TurnStart: 'parallel',
-  PreRuntime: 'sequential',
-  PostRuntime: 'parallel',
-  PreToolUse: 'sequential',
-  PostToolUse: 'parallel',
-  PreStateCommit: 'sequential',
-  PostStateCommit: 'parallel',
-  TurnStop: 'parallel',
+	TurnStart: "parallel",
+	PreRuntime: "sequential",
+	PostRuntime: "parallel",
+	PreToolUse: "sequential",
+	PostToolUse: "parallel",
+	PreStateCommit: "sequential",
+	PostStateCommit: "parallel",
+	TurnStop: "parallel",
 };
 
-export type HookEnforce = 'pre' | 'normal' | 'post';
+export type HookEnforce = "pre" | "normal" | "post";
 
 // ── Hook context (read-only metadata about the current hook site) ──
 
 export interface HookContext {
-  readonly event: HookEvent;
-  readonly sessionId: string;
-  readonly turnId: string;
-  /** Owning plugin if plugin-scoped hook. */
-  readonly pluginId?: string;
-  /** Populated for PreRuntime / PostRuntime. */
-  readonly runtimeId?: string;
+	readonly event: HookEvent;
+	readonly sessionId: string;
+	readonly turnId: string;
+	/** Owning plugin if plugin-scoped hook. */
+	readonly pluginId?: string;
+	/** Populated for PreRuntime / PostRuntime. */
+	readonly runtimeId?: string;
 }
 
 // ── Hook result ──────────────────────────────────────────────────
@@ -56,47 +56,47 @@ export interface HookContext {
  * - `abort` — sequential hooks stop the pipeline; parallel hooks record the abort.
  */
 export type HookResult<P> =
-  | { readonly action: 'continue' }
-  | { readonly action: 'continue'; readonly replace: Partial<P> }
-  | { readonly action: 'abort'; readonly reason: string };
+	| { readonly action: "continue" }
+	| { readonly action: "continue"; readonly replace: Partial<P> }
+	| { readonly action: "abort"; readonly reason: string };
 
 // ── Hook handler ─────────────────────────────────────────────────
 
 export type HookHandler<P = unknown> = (
-  ctx: HookContext,
-  payload: P,
+	ctx: HookContext,
+	payload: P,
 ) => Promise<HookResult<P>>;
 
 // ── Hook registration ────────────────────────────────────────────
 
 export interface HookRegistration<P = unknown> {
-  /** Unique ID, e.g. `${pluginId}:${event}:${index}` or `global:${event}:${index}`. */
-  readonly id: string;
-  readonly event: HookEvent;
-  /** undefined = global/framework hook. */
-  readonly pluginId?: string;
-  /** Optional filter — only invoke this handler when match returns true. */
-  readonly match?: (payload: P) => boolean;
-  readonly handler: HookHandler<P>;
-  /** Per-handler timeout in ms. Default 5000. */
-  readonly timeoutMs?: number;
-  /** Ordering group. Default normal. */
-  readonly enforce?: HookEnforce;
+	/** Unique ID, e.g. `${pluginId}:${event}:${index}` or `global:${event}:${index}`. */
+	readonly id: string;
+	readonly event: HookEvent;
+	/** undefined = global/framework hook. */
+	readonly pluginId?: string;
+	/** Optional filter — only invoke this handler when match returns true. */
+	readonly match?: (payload: P) => boolean;
+	readonly handler: HookHandler<P>;
+	/** Per-handler timeout in ms. Default 5000. */
+	readonly timeoutMs?: number;
+	/** Ordering group. Default normal. */
+	readonly enforce?: HookEnforce;
 }
 
 // ── Hook pipeline interface ──────────────────────────────────────
 
 export interface HookPipelineRun<P> {
-  /**
-   * Run all registered handlers for the given event using HOOK_SEMANTICS.
-   * Sequential hooks return accumulated `replace`; parallel hooks return continue.
-   */
-  run<Q extends P>(
-    event: HookEvent,
-    ctx: HookContext,
-    payload: Q,
-    opts?: { readonly eventBus?: EventBus; readonly emitter?: unknown },
-  ): Promise<HookResult<Q>>;
+	/**
+	 * Run all registered handlers for the given event using HOOK_SEMANTICS.
+	 * Sequential hooks return accumulated `replace`; parallel hooks return continue.
+	 */
+	run<Q extends P>(
+		event: HookEvent,
+		ctx: HookContext,
+		payload: Q,
+		opts?: { readonly eventBus?: EventBus; readonly emitter?: unknown },
+	): Promise<HookResult<Q>>;
 }
 
 // ── Hook declaration (for PLUGIN.md frontmatter) ─────────────────
@@ -106,13 +106,13 @@ export interface HookPipelineRun<P> {
  * Handler resolution is deferred (lazy import on first invocation).
  */
 export interface HookDeclaration {
-  readonly event: HookEvent;
-  /** Relative path to the handler module inside the plugin package. */
-  readonly handler: string;
-  /** Optional simple equality filter: { tool: "create-character" } etc. */
-  readonly match?: Readonly<Record<string, string | number>>;
-  /** Per-handler timeout in ms. Default 5000. */
-  readonly timeoutMs?: number;
-  /** Ordering group. Default normal. */
-  readonly enforce?: HookEnforce;
+	readonly event: HookEvent;
+	/** Relative path to the handler module inside the plugin package. */
+	readonly handler: string;
+	/** Optional simple equality filter: { tool: "create-character" } etc. */
+	readonly match?: Readonly<Record<string, string | number>>;
+	/** Per-handler timeout in ms. Default 5000. */
+	readonly timeoutMs?: number;
+	/** Ordering group. Default normal. */
+	readonly enforce?: HookEnforce;
 }

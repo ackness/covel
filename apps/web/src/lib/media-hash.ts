@@ -20,10 +20,10 @@
 const HEX_LOOKUP = "0123456789abcdef";
 
 export function subtleAvailable(): boolean {
-  return (
-    typeof globalThis.crypto !== "undefined" &&
-    typeof globalThis.crypto.subtle?.digest === "function"
-  );
+	return (
+		typeof globalThis.crypto !== "undefined" &&
+		typeof globalThis.crypto.subtle?.digest === "function"
+	);
 }
 
 /**
@@ -33,16 +33,18 @@ export function subtleAvailable(): boolean {
  * tolerate degradation should guard with `subtleAvailable()` first.
  */
 export async function sha256Hex(buffer: ArrayBuffer): Promise<string> {
-  if (!subtleAvailable()) {
-    throw new Error("crypto.subtle.digest is not available in this environment");
-  }
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", buffer);
-  const view = new Uint8Array(digest);
-  let out = "";
-  for (let i = 0; i < view.length; i += 1) {
-    const byte = view[i] as number;
-    out += HEX_LOOKUP[byte >>> 4];
-    out += HEX_LOOKUP[byte & 0x0f];
-  }
-  return out;
+	if (!subtleAvailable()) {
+		throw new Error(
+			"crypto.subtle.digest is not available in this environment",
+		);
+	}
+	const digest = await globalThis.crypto.subtle.digest("SHA-256", buffer);
+	const view = new Uint8Array(digest);
+	let out = "";
+	for (let i = 0; i < view.length; i += 1) {
+		const byte = view[i] as number;
+		out += HEX_LOOKUP[byte >>> 4];
+		out += HEX_LOOKUP[byte & 0x0f];
+	}
+	return out;
 }

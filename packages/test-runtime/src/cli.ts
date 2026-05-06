@@ -1,29 +1,29 @@
 #!/usr/bin/env -S node --import tsx
 
-import { runRuntimeDebug, runRuntimeCases } from './runner.js';
+import { runRuntimeDebug, runRuntimeCases } from "./runner.js";
 
 interface CliOptions {
-  target?: string;
-  runtimeId?: string;
-  pluginId?: string;
-  pluginsDir?: string;
-  sessionId?: string;
-  locale?: string;
-  message?: string;
-  payload?: Record<string, unknown>;
-  config?: Record<string, unknown>;
-  userSettings?: Record<string, unknown>;
-  llmResponse?: Record<string, unknown>;
-  llmResponses?: readonly Record<string, unknown>[];
-  llmContent?: string;
-  llmObject?: Record<string, unknown>;
-  mockPresetId?: string;
-  showPrompts?: boolean;
-  ignoreUpstreams?: boolean;
-  expectsBackgroundFollower?: boolean;
-  mode?: 'mock' | 'live';
-  caseName?: string;
-  pretty?: boolean;
+	target?: string;
+	runtimeId?: string;
+	pluginId?: string;
+	pluginsDir?: string;
+	sessionId?: string;
+	locale?: string;
+	message?: string;
+	payload?: Record<string, unknown>;
+	config?: Record<string, unknown>;
+	userSettings?: Record<string, unknown>;
+	llmResponse?: Record<string, unknown>;
+	llmResponses?: readonly Record<string, unknown>[];
+	llmContent?: string;
+	llmObject?: Record<string, unknown>;
+	mockPresetId?: string;
+	showPrompts?: boolean;
+	ignoreUpstreams?: boolean;
+	expectsBackgroundFollower?: boolean;
+	mode?: "mock" | "live";
+	caseName?: string;
+	pretty?: boolean;
 }
 
 const HELP = `Usage:
@@ -64,136 +64,144 @@ Example:
 `;
 
 function parseJsonObject(raw: string, label: string): Record<string, unknown> {
-  const parsed = JSON.parse(raw) as unknown;
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(`${label} must be a JSON object`);
-  }
-  return parsed as Record<string, unknown>;
+	const parsed = JSON.parse(raw) as unknown;
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+		throw new Error(`${label} must be a JSON object`);
+	}
+	return parsed as Record<string, unknown>;
 }
 
 function parseArgs(argv: readonly string[]): CliOptions {
-  const options: CliOptions = {};
-  const positional: string[] = [];
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i]!;
-    const next = () => {
-      i += 1;
-      const value = argv[i];
-      if (!value) throw new Error(`${arg} requires a value`);
-      return value;
-    };
-    if (arg === '--') continue;
-    switch (arg) {
-      case '--help':
-      case '-h':
-        process.stdout.write(HELP);
-        process.exit(0);
-      case '--plugin':
-        options.pluginId = next();
-        break;
-      case '--plugins-dir':
-        options.pluginsDir = next();
-        break;
-      case '--session':
-        options.sessionId = next();
-        break;
-      case '--case':
-        options.caseName = next();
-        break;
-      case '--mode': {
-        const value = next();
-        if (value !== 'mock' && value !== 'live') {
-          throw new Error('--mode must be "mock" or "live"');
-        }
-        options.mode = value;
-        break;
-      }
-      case '--live':
-        options.mode = 'live';
-        break;
-      case '--locale':
-        options.locale = next();
-        break;
-      case '--message':
-        options.message = next();
-        break;
-      case '--payload':
-        options.payload = parseJsonObject(next(), '--payload');
-        break;
-      case '--config':
-        options.config = parseJsonObject(next(), '--config');
-        break;
-      case '--user-settings':
-        options.userSettings = parseJsonObject(next(), '--user-settings');
-        break;
-      case '--llm-response':
-        options.llmResponse = parseJsonObject(next(), '--llm-response');
-        break;
-      case '--llm-responses': {
-        const parsed = JSON.parse(next()) as unknown;
-        if (!Array.isArray(parsed) || parsed.some((item) => !item || typeof item !== 'object' || Array.isArray(item))) {
-          throw new Error('--llm-responses must be a JSON array of objects');
-        }
-        options.llmResponses = parsed as readonly Record<string, unknown>[];
-        break;
-      }
-      case '--llm-content':
-        options.llmContent = next();
-        break;
-      case '--llm-object':
-        options.llmObject = parseJsonObject(next(), '--llm-object');
-        break;
-      case '--mock-preset-id':
-        options.mockPresetId = next();
-        break;
-      case '--show-prompts':
-        options.showPrompts = true;
-        break;
-      case '--expects-background-follower':
-        options.expectsBackgroundFollower = true;
-        break;
-      case '--ignore-upstreams':
-        options.ignoreUpstreams = true;
-        break;
-      case '--pretty':
-        options.pretty = true;
-        break;
-      default:
-        if (arg.startsWith('--')) throw new Error(`Unknown option: ${arg}`);
-        positional.push(arg);
-    }
-  }
-  if (positional.length > 0) options.target = positional[0];
-  if (options.target) {
-    if (options.target.includes('/')) {
-      options.runtimeId = options.target;
-    } else {
-      options.pluginId = options.target;
-    }
-  }
-  if (!options.runtimeId && !options.pluginId) {
-    throw new Error('pluginId or runtimeId is required');
-  }
-  return options;
+	const options: CliOptions = {};
+	const positional: string[] = [];
+	for (let i = 0; i < argv.length; i += 1) {
+		const arg = argv[i]!;
+		const next = () => {
+			i += 1;
+			const value = argv[i];
+			if (!value) throw new Error(`${arg} requires a value`);
+			return value;
+		};
+		if (arg === "--") continue;
+		switch (arg) {
+			case "--help":
+			case "-h":
+				process.stdout.write(HELP);
+				process.exit(0);
+			case "--plugin":
+				options.pluginId = next();
+				break;
+			case "--plugins-dir":
+				options.pluginsDir = next();
+				break;
+			case "--session":
+				options.sessionId = next();
+				break;
+			case "--case":
+				options.caseName = next();
+				break;
+			case "--mode": {
+				const value = next();
+				if (value !== "mock" && value !== "live") {
+					throw new Error('--mode must be "mock" or "live"');
+				}
+				options.mode = value;
+				break;
+			}
+			case "--live":
+				options.mode = "live";
+				break;
+			case "--locale":
+				options.locale = next();
+				break;
+			case "--message":
+				options.message = next();
+				break;
+			case "--payload":
+				options.payload = parseJsonObject(next(), "--payload");
+				break;
+			case "--config":
+				options.config = parseJsonObject(next(), "--config");
+				break;
+			case "--user-settings":
+				options.userSettings = parseJsonObject(next(), "--user-settings");
+				break;
+			case "--llm-response":
+				options.llmResponse = parseJsonObject(next(), "--llm-response");
+				break;
+			case "--llm-responses": {
+				const parsed = JSON.parse(next()) as unknown;
+				if (
+					!Array.isArray(parsed) ||
+					parsed.some(
+						(item) => !item || typeof item !== "object" || Array.isArray(item),
+					)
+				) {
+					throw new Error("--llm-responses must be a JSON array of objects");
+				}
+				options.llmResponses = parsed as readonly Record<string, unknown>[];
+				break;
+			}
+			case "--llm-content":
+				options.llmContent = next();
+				break;
+			case "--llm-object":
+				options.llmObject = parseJsonObject(next(), "--llm-object");
+				break;
+			case "--mock-preset-id":
+				options.mockPresetId = next();
+				break;
+			case "--show-prompts":
+				options.showPrompts = true;
+				break;
+			case "--expects-background-follower":
+				options.expectsBackgroundFollower = true;
+				break;
+			case "--ignore-upstreams":
+				options.ignoreUpstreams = true;
+				break;
+			case "--pretty":
+				options.pretty = true;
+				break;
+			default:
+				if (arg.startsWith("--")) throw new Error(`Unknown option: ${arg}`);
+				positional.push(arg);
+		}
+	}
+	if (positional.length > 0) options.target = positional[0];
+	if (options.target) {
+		if (options.target.includes("/")) {
+			options.runtimeId = options.target;
+		} else {
+			options.pluginId = options.target;
+		}
+	}
+	if (!options.runtimeId && !options.pluginId) {
+		throw new Error("pluginId or runtimeId is required");
+	}
+	return options;
 }
 
 try {
-  const options = parseArgs(process.argv.slice(2));
-  const result = options.runtimeId
-    ? await runRuntimeDebug(options)
-    : await runRuntimeCases(options);
-  process.stdout.write(JSON.stringify(result, null, options.pretty ? 2 : 0));
-  process.stdout.write('\n');
-  const runtimeResults = 'runtimeResults' in result
-    ? result.runtimeResults
-    : result.cases.flatMap((item) => item.result.runtimeResults);
-  const caseFailed = 'cases' in result && result.cases.some((item) => item.status === 'failed');
-  const failed = 'cases' in result
-    ? caseFailed
-    : runtimeResults.some((r) => r.status === 'failed');
-  process.exitCode = failed ? 1 : 0;
+	const options = parseArgs(process.argv.slice(2));
+	const result = options.runtimeId
+		? await runRuntimeDebug(options)
+		: await runRuntimeCases(options);
+	process.stdout.write(JSON.stringify(result, null, options.pretty ? 2 : 0));
+	process.stdout.write("\n");
+	const runtimeResults =
+		"runtimeResults" in result
+			? result.runtimeResults
+			: result.cases.flatMap((item) => item.result.runtimeResults);
+	const caseFailed =
+		"cases" in result && result.cases.some((item) => item.status === "failed");
+	const failed =
+		"cases" in result
+			? caseFailed
+			: runtimeResults.some((r) => r.status === "failed");
+	process.exitCode = failed ? 1 : 0;
 } catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`${message}\n`);
-  process.exitCode = 2;
+	const message = error instanceof Error ? error.message : String(error);
+	process.stderr.write(`${message}\n`);
+	process.exitCode = 2;
 }

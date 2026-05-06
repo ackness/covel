@@ -17,12 +17,12 @@
 export type ProviderFamily = "openai" | "anthropic" | "deepseek" | "qwen";
 
 export interface EstimateTokensOptions {
-  /**
-   * Provider family used to apply a safety multiplier because each provider's
-   * real tokenizer may report more tokens than our base counter for the same
-   * text. Omit for OpenAI / default.
-   */
-  family?: ProviderFamily;
+	/**
+	 * Provider family used to apply a safety multiplier because each provider's
+	 * real tokenizer may report more tokens than our base counter for the same
+	 * text. Omit for OpenAI / default.
+	 */
+	family?: ProviderFamily;
 }
 
 /**
@@ -38,27 +38,27 @@ export type TokenCounter = (text: string) => number;
  * applied. Zero deps, synchronous.
  */
 export const approximateTokenCounter: TokenCounter = (text) => {
-  if (text === "") {
-    return 0;
-  }
+	if (text === "") {
+		return 0;
+	}
 
-  let cjk = 0;
-  let other = 0;
-  for (const ch of text) {
-    const cp = ch.codePointAt(0);
-    if (cp === undefined) continue;
-    if (
-      (cp >= 0x3000 && cp <= 0x9fff) || // CJK symbols + unified ideographs
-      (cp >= 0xac00 && cp <= 0xd7af) || // Hangul syllables
-      (cp >= 0xff00 && cp <= 0xffef) || // Halfwidth / fullwidth forms
-      (cp >= 0x20000 && cp <= 0x2ffff) // CJK extension B–F
-    ) {
-      cjk++;
-    } else {
-      other++;
-    }
-  }
-  return Math.ceil(cjk / 1.5 + other / 4);
+	let cjk = 0;
+	let other = 0;
+	for (const ch of text) {
+		const cp = ch.codePointAt(0);
+		if (cp === undefined) continue;
+		if (
+			(cp >= 0x3000 && cp <= 0x9fff) || // CJK symbols + unified ideographs
+			(cp >= 0xac00 && cp <= 0xd7af) || // Hangul syllables
+			(cp >= 0xff00 && cp <= 0xffef) || // Halfwidth / fullwidth forms
+			(cp >= 0x20000 && cp <= 0x2ffff) // CJK extension B–F
+		) {
+			cjk++;
+		} else {
+			other++;
+		}
+	}
+	return Math.ceil(cjk / 1.5 + other / 4);
 };
 
 let activeCounter: TokenCounter = approximateTokenCounter;
@@ -72,12 +72,12 @@ let activeCounter: TokenCounter = approximateTokenCounter;
  * call. Safety multipliers are still applied on top.
  */
 export function setTokenCounter(counter: TokenCounter): void {
-  activeCounter = counter;
+	activeCounter = counter;
 }
 
 /** Restore the built-in character-based approximation. */
 export function resetTokenCounter(): void {
-  activeCounter = approximateTokenCounter;
+	activeCounter = approximateTokenCounter;
 }
 
 /**
@@ -91,13 +91,14 @@ export function resetTokenCounter(): void {
  *   our o200k-flavoured baseline on long-form Chinese; 1.35 keeps budgeting
  *   conservative.
  */
-export const TOKEN_SAFETY_MULTIPLIERS: Readonly<Record<ProviderFamily, number>> =
-  Object.freeze({
-    openai: 1.0,
-    anthropic: 1.25,
-    deepseek: 1.35,
-    qwen: 1.35,
-  });
+export const TOKEN_SAFETY_MULTIPLIERS: Readonly<
+	Record<ProviderFamily, number>
+> = Object.freeze({
+	openai: 1.0,
+	anthropic: 1.25,
+	deepseek: 1.35,
+	qwen: 1.35,
+});
 
 /**
  * Estimate the number of tokens a given text will consume for the given
@@ -107,16 +108,16 @@ export const TOKEN_SAFETY_MULTIPLIERS: Readonly<Record<ProviderFamily, number>> 
  * Returns `0` for empty strings with no multiplier math.
  */
 export function estimateTokens(
-  text: string,
-  options?: EstimateTokensOptions,
+	text: string,
+	options?: EstimateTokensOptions,
 ): number {
-  if (text === "") {
-    return 0;
-  }
+	if (text === "") {
+		return 0;
+	}
 
-  const family: ProviderFamily = options?.family ?? "openai";
-  const multiplier = TOKEN_SAFETY_MULTIPLIERS[family];
-  const baseCount = activeCounter(text);
+	const family: ProviderFamily = options?.family ?? "openai";
+	const multiplier = TOKEN_SAFETY_MULTIPLIERS[family];
+	const baseCount = activeCounter(text);
 
-  return Math.ceil(baseCount * multiplier);
+	return Math.ceil(baseCount * multiplier);
 }

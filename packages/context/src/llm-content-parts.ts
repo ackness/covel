@@ -18,12 +18,12 @@
  */
 
 import {
-  type AssetGenerateView,
-  type ContentPart,
-  assetGenerateViewToLLM,
-  isAssetGenerateView,
-} from '@covel/shared';
-import type { MessageHistoryRecord } from './types.js';
+	type AssetGenerateView,
+	type ContentPart,
+	assetGenerateViewToLLM,
+	isAssetGenerateView,
+} from "@covel/shared";
+import type { MessageHistoryRecord } from "./types.js";
 
 /**
  * Resolve the `LLMMessage.content` value for a single history record.
@@ -38,20 +38,23 @@ import type { MessageHistoryRecord } from './types.js';
  * metadata stay byte-identical to the pre-bridge behaviour.
  */
 export function messageContentFromHistoryRecord(
-  record: Pick<MessageHistoryRecord, 'content' | 'metadata'>,
+	record: Pick<MessageHistoryRecord, "content" | "metadata">,
 ): string | readonly ContentPart[] {
-  const view = extractAssetGenerateView(record.metadata);
-  if (!view) return record.content;
-  return assetGenerateViewToLLM(view);
+	const view = extractAssetGenerateView(record.metadata);
+	if (!view) return record.content;
+	return assetGenerateViewToLLM(view);
 }
 
 function extractAssetGenerateView(metadata: unknown): AssetGenerateView | null {
-  if (!metadata || typeof metadata !== 'object') return null;
-  const meta = metadata as { readonly block?: unknown };
-  const block = meta.block;
-  if (!block || typeof block !== 'object') return null;
-  const candidate = (block as { readonly type?: unknown; readonly data?: unknown });
-  if (candidate.type !== 'asset.generate') return null;
-  if (!isAssetGenerateView(candidate.data)) return null;
-  return candidate.data;
+	if (!metadata || typeof metadata !== "object") return null;
+	const meta = metadata as { readonly block?: unknown };
+	const block = meta.block;
+	if (!block || typeof block !== "object") return null;
+	const candidate = block as {
+		readonly type?: unknown;
+		readonly data?: unknown;
+	};
+	if (candidate.type !== "asset.generate") return null;
+	if (!isAssetGenerateView(candidate.data)) return null;
+	return candidate.data;
 }

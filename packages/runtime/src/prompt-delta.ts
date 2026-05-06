@@ -21,11 +21,11 @@
  * (e.g. compaction).
  */
 
-import type { LLMMessageContent } from './llm-adapter.js';
+import type { LLMMessageContent } from "./llm-adapter.js";
 
 export interface PromptMessage {
-  readonly role: 'system' | 'user' | 'assistant' | 'tool';
-  readonly content: LLMMessageContent;
+	readonly role: "system" | "user" | "assistant" | "tool";
+	readonly content: LLMMessageContent;
 }
 
 /**
@@ -37,24 +37,24 @@ export interface PromptMessage {
  *          current array.
  */
 export function computePromptDelta(
-  previous: readonly PromptMessage[] | undefined,
-  current: readonly PromptMessage[],
+	previous: readonly PromptMessage[] | undefined,
+	current: readonly PromptMessage[],
 ): readonly PromptMessage[] {
-  if (!previous || previous.length === 0) {
-    return current.slice();
-  }
+	if (!previous || previous.length === 0) {
+		return current.slice();
+	}
 
-  // Find the first index where messages diverge or `previous` runs out.
-  const minLen = Math.min(previous.length, current.length);
-  let divergeIdx = minLen;
-  for (let i = 0; i < minLen; i++) {
-    if (!messagesEqual(previous[i]!, current[i]!)) {
-      divergeIdx = i;
-      break;
-    }
-  }
+	// Find the first index where messages diverge or `previous` runs out.
+	const minLen = Math.min(previous.length, current.length);
+	let divergeIdx = minLen;
+	for (let i = 0; i < minLen; i++) {
+		if (!messagesEqual(previous[i]!, current[i]!)) {
+			divergeIdx = i;
+			break;
+		}
+	}
 
-  return current.slice(divergeIdx);
+	return current.slice(divergeIdx);
 }
 
 /**
@@ -66,31 +66,31 @@ export function computePromptDelta(
  * that was actually sent on a given call.
  */
 export function applyPromptDelta(
-  base: readonly PromptMessage[],
-  delta: readonly PromptMessage[],
+	base: readonly PromptMessage[],
+	delta: readonly PromptMessage[],
 ): readonly PromptMessage[] {
-  // The delta is a suffix that replaces `base` from some point on. We
-  // don't store the diverge index — instead we assume the delta is the
-  // complete "new tail" and attach it to the longest matching prefix
-  // of `base` that doesn't overlap with `delta`.
-  //
-  // Simplest safe approach: if delta length >= base length, delta is the
-  // whole prompt. Otherwise the result is `base[0 .. base.length - delta.length]
-  // + delta`.
-  if (delta.length >= base.length) return delta.slice();
-  const prefix = base.slice(0, base.length - delta.length);
-  return [...prefix, ...delta];
+	// The delta is a suffix that replaces `base` from some point on. We
+	// don't store the diverge index — instead we assume the delta is the
+	// complete "new tail" and attach it to the longest matching prefix
+	// of `base` that doesn't overlap with `delta`.
+	//
+	// Simplest safe approach: if delta length >= base length, delta is the
+	// whole prompt. Otherwise the result is `base[0 .. base.length - delta.length]
+	// + delta`.
+	if (delta.length >= base.length) return delta.slice();
+	const prefix = base.slice(0, base.length - delta.length);
+	return [...prefix, ...delta];
 }
 
 function messagesEqual(a: PromptMessage, b: PromptMessage): boolean {
-  return a.role === b.role && contentEqual(a.content, b.content);
+	return a.role === b.role && contentEqual(a.content, b.content);
 }
 
 function contentEqual(a: LLMMessageContent, b: LLMMessageContent): boolean {
-  if (typeof a === 'string' || typeof b === 'string') return a === b;
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (JSON.stringify(a[i]) !== JSON.stringify(b[i])) return false;
-  }
-  return true;
+	if (typeof a === "string" || typeof b === "string") return a === b;
+	if (a.length !== b.length) return false;
+	for (let i = 0; i < a.length; i++) {
+		if (JSON.stringify(a[i]) !== JSON.stringify(b[i])) return false;
+	}
+	return true;
 }

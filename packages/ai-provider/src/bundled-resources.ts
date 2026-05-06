@@ -7,11 +7,11 @@ import { dirname, resolve } from "node:path";
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export const BUNDLED_DEFAULT_PRESET_PATH = resolve(
-  PACKAGE_ROOT,
-  "presets/default.toml",
+	PACKAGE_ROOT,
+	"presets/default.toml",
 );
 
 export const BUNDLED_MODEL_DB_PATH = resolve(
-  PACKAGE_ROOT,
-  "data/model-db.json",
+	PACKAGE_ROOT,
+	"data/model-db.json",
 );

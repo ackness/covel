@@ -1,4 +1,4 @@
-import { runStoreContractTests } from '../src/contract/store-contract.js';
-import { createMemoryStore } from '../src/memory/memory-store.js';
+import { runStoreContractTests } from "../src/contract/store-contract.js";
+import { createMemoryStore } from "../src/memory/memory-store.js";
 
-runStoreContractTests('MemoryStore', () => createMemoryStore());
+runStoreContractTests("MemoryStore", () => createMemoryStore());

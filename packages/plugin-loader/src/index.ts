@@ -1,45 +1,48 @@
 // ── Parsers ──────────────────────────────────────────────────────
-export { parsePluginMd } from './parse-plugin-md.js';
-export { parseReference, shouldInjectReference } from './parse-reference.js';
+export { parsePluginMd } from "./parse-plugin-md.js";
+export { parseReference, shouldInjectReference } from "./parse-reference.js";
 
 // ── Discovery & Loading ──────────────────────────────────────────
-export { discoverPlugins, discoverPluginsMulti } from './discover.js';
-export { loadPluginSummary, loadPluginManifest, loadRuntime } from './load.js';
+export { discoverPlugins, discoverPluginsMulti } from "./discover.js";
+export { loadPluginSummary, loadPluginManifest, loadRuntime } from "./load.js";
 
 // ── Registry ─────────────────────────────────────────────────────
-export { createPluginRegistry } from './registry.js';
-export type { PluginRegistry, PluginRegistryOptions } from './registry.js';
+export { createPluginRegistry } from "./registry.js";
+export type { PluginRegistry, PluginRegistryOptions } from "./registry.js";
 
 // ── Session Scope ────────────────────────────────────────────────
-export { createSessionScope } from './session-scope.js';
-export type { SessionPluginScope } from './session-scope.js';
+export { createSessionScope } from "./session-scope.js";
+export type { SessionPluginScope } from "./session-scope.js";
 
 // ── Trust ────────────────────────────────────────────────────────
-export { getPluginTrustInfo, BUILTIN_PLUGIN_IDS } from './trust.js';
+export { getPluginTrustInfo, BUILTIN_PLUGIN_IDS } from "./trust.js";
 
 // ── Plugin LLM Config ────────────────────────────────────────────
-export { loadPluginLlmConfig, parsePluginLlmToml } from './plugin-llm-config.js';
-export type { PluginLlmConfig, PluginLlmSlot } from './plugin-llm-config.js';
+export {
+	loadPluginLlmConfig,
+	parsePluginLlmToml,
+} from "./plugin-llm-config.js";
+export type { PluginLlmConfig, PluginLlmSlot } from "./plugin-llm-config.js";
 
 // ── Types ────────────────────────────────────────────────────────
 export type {
-  ParsedPluginMd,
-  ParsedReference,
-  PluginDiscoveryResult,
-  PluginSummary,
-  LoadedRuntime,
-  PluginEntryStatus,
-  PluginRegistryEntry,
-  RegistryChangeEvent,
-  PluginSource,
-  PluginTrustInfo,
-  FunctionHandler,
-  FunctionHandlerContext,
-  PluginRuntimeGateway,
-  PluginRuntimeUtils,
-  AssetProgressInput,
-  ResolvedSlotForPlugin,
-  PluginDataWriter,
-  PluginLogger,
-  FunctionStoreView,
-} from './types.js';
+	ParsedPluginMd,
+	ParsedReference,
+	PluginDiscoveryResult,
+	PluginSummary,
+	LoadedRuntime,
+	PluginEntryStatus,
+	PluginRegistryEntry,
+	RegistryChangeEvent,
+	PluginSource,
+	PluginTrustInfo,
+	FunctionHandler,
+	FunctionHandlerContext,
+	PluginRuntimeGateway,
+	PluginRuntimeUtils,
+	AssetProgressInput,
+	ResolvedSlotForPlugin,
+	PluginDataWriter,
+	PluginLogger,
+	FunctionStoreView,
+} from "./types.js";

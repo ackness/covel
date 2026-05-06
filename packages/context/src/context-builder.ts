@@ -13,21 +13,27 @@
  * to its pre-S2-T1 behaviour.
  */
 
-import { applyBudget } from './budget.js';
-import { isEnvEnabled } from '@covel/shared';
-import { messageContentFromHistoryRecord } from './llm-content-parts.js';
-import { buildContextV2, buildContextV2Async } from './prompt-assembler.js';
+import { applyBudget } from "./budget.js";
+import { isEnvEnabled } from "@covel/shared";
+import { messageContentFromHistoryRecord } from "./llm-content-parts.js";
+import { buildContextV2, buildContextV2Async } from "./prompt-assembler.js";
 import {
-  assemblePromptVariables,
-  buildCurrentTurnUserMessage,
-  buildInjectBlocks as _buildInjectBlocks,
-  buildInjectBlocksAsync,
-  interpolateTemplate as _interpolateTemplate,
-  renderCoreMemory,
-  renderWorkingMemory,
-  resolveLocaleLanguageName,
-} from './prompt-internals.js';
-import type { AssembledContext, ContextBuildParams, LLMMessage, MessageHistoryRecord, SummaryRecord } from './types.js';
+	assemblePromptVariables,
+	buildCurrentTurnUserMessage,
+	buildInjectBlocks as _buildInjectBlocks,
+	buildInjectBlocksAsync,
+	interpolateTemplate as _interpolateTemplate,
+	renderCoreMemory,
+	renderWorkingMemory,
+	resolveLocaleLanguageName,
+} from "./prompt-internals.js";
+import type {
+	AssembledContext,
+	ContextBuildParams,
+	LLMMessage,
+	MessageHistoryRecord,
+	SummaryRecord,
+} from "./types.js";
 
 // ── Summary substitution helper (S2-T2 Compactor) ────────────────
 
@@ -46,42 +52,44 @@ import type { AssembledContext, ContextBuildParams, LLMMessage, MessageHistoryRe
  *   `compactedAtTurnId` we resume normal emission.
  */
 function buildMessageHistoryWithSummaries(
-  messageHistory: readonly MessageHistoryRecord[],
-  summaries: readonly SummaryRecord[],
+	messageHistory: readonly MessageHistoryRecord[],
+	summaries: readonly SummaryRecord[],
 ): LLMMessage[] {
-  const compactorEnabled = isEnvEnabled('COVEL_COMPACTOR_V1');
+	const compactorEnabled = isEnvEnabled("COVEL_COMPACTOR_V1");
 
-  if (!compactorEnabled || summaries.length === 0) {
-    return messageHistory.map(toLLMMessage);
-  }
+	if (!compactorEnabled || summaries.length === 0) {
+		return messageHistory.map(toLLMMessage);
+	}
 
-  const summaryById = new Map(summaries.map(s => [s.id, s]));
-  const emittedSummaryIds = new Set<string>();
-  const result: LLMMessage[] = [];
+	const summaryById = new Map(summaries.map((s) => [s.id, s]));
+	const emittedSummaryIds = new Set<string>();
+	const result: LLMMessage[] = [];
 
-  for (const msg of messageHistory) {
-    const compactedId = (msg as MessageHistoryRecord & { compactedAtTurnId?: string }).compactedAtTurnId;
+	for (const msg of messageHistory) {
+		const compactedId = (
+			msg as MessageHistoryRecord & { compactedAtTurnId?: string }
+		).compactedAtTurnId;
 
-    if (compactedId) {
-      // This message is compacted. Emit its summary once (on first encounter).
-      if (!emittedSummaryIds.has(compactedId)) {
-        const summary = summaryById.get(compactedId);
-        if (summary) {
-          emittedSummaryIds.add(compactedId);
-          result.push({
-            role: 'system',
-            content: `[Compacted history: sections=${JSON.stringify(summary.focusSections)}]\n\n${summary.content}`,
-          });
-        }
-      }
-      // Skip the original compacted message regardless
-      continue;
-    }
+		if (compactedId) {
+			// This message is compacted. Emit its summary once (on first encounter).
+			if (!emittedSummaryIds.has(compactedId)) {
+				const summary = summaryById.get(compactedId);
+				if (summary) {
+					emittedSummaryIds.add(compactedId);
+					result.push({
+						role: "system",
+						content: `[Compacted history: sections=${JSON.stringify(summary.focusSections)}]\n\n${summary.content}`,
+					});
+				}
+			}
+			// Skip the original compacted message regardless
+			continue;
+		}
 
-    result.push(toLLMMessage(msg));
-  }
+		result.push(toLLMMessage(msg));
+	}
 
-  return result;
+	return result;
 }
 
 /**
@@ -93,11 +101,11 @@ function buildMessageHistoryWithSummaries(
  * {@link messageContentFromHistoryRecord} for the narrowing rules.
  */
 function toLLMMessage(msg: MessageHistoryRecord): LLMMessage {
-  return {
-    role: msg.role as 'system' | 'user' | 'assistant',
-    content: messageContentFromHistoryRecord(msg),
-    ...(msg.name ? { name: msg.name } : {}),
-  };
+	return {
+		role: msg.role as "system" | "user" | "assistant",
+		content: messageContentFromHistoryRecord(msg),
+		...(msg.name ? { name: msg.name } : {}),
+	};
 }
 
 /**
@@ -166,86 +174,84 @@ export const buildInjectBlocks = _buildInjectBlocks;
  * console.log(ctx.messages);     // [{ role: 'user', content: 'Enter the dungeon' }]
  * ```
  */
-export function buildContext(
-  params: ContextBuildParams,
-): AssembledContext {
-  // V2 gate (S2-T1 + S2-T4 per-plugin opt-in).
-  //
-  // Routing requires BOTH:
-  //   1. Environment flag `COVEL_PROMPT_V2=1` (deployment opt-in)
-  //   2. Manifest `promptVersion === 2` (plugin opt-in)
-  //
-  // Either alone falls through to V1. This double gate lets operators roll
-  // out V2 at the environment level while individual plugins migrate at
-  // their own pace. See §A8 of `devs/docs/insights/covel-improvement-plan.md`.
-  if (
-    isEnvEnabled('COVEL_PROMPT_V2') &&
-    params.manifest.promptVersion === 2
-  ) {
-    return buildContextV2(params);
-  }
+export function buildContext(params: ContextBuildParams): AssembledContext {
+	// V2 gate (S2-T1 + S2-T4 per-plugin opt-in).
+	//
+	// Routing requires BOTH:
+	//   1. Environment flag `COVEL_PROMPT_V2=1` (deployment opt-in)
+	//   2. Manifest `promptVersion === 2` (plugin opt-in)
+	//
+	// Either alone falls through to V1. This double gate lets operators roll
+	// out V2 at the environment level while individual plugins migrate at
+	// their own pace. See §A8 of `devs/docs/insights/covel-improvement-plan.md`.
+	if (isEnvEnabled("COVEL_PROMPT_V2") && params.manifest.promptVersion === 2) {
+		return buildContextV2(params);
+	}
 
-  const { promptTemplate, turnInput } = params;
+	const { promptTemplate, turnInput } = params;
 
-  // Build inject blocks and append to prompt template
-  const injectBlocks = _buildInjectBlocks(params);
-  const rawSystemPrompt = injectBlocks
-    ? `${promptTemplate}\n${injectBlocks}`
-    : promptTemplate;
+	// Build inject blocks and append to prompt template
+	const injectBlocks = _buildInjectBlocks(params);
+	const rawSystemPrompt = injectBlocks
+		? `${promptTemplate}\n${injectBlocks}`
+		: promptTemplate;
 
-  // Assemble the variables object for interpolation (shared with V2).
-  const variables = assemblePromptVariables(params);
+	// Assemble the variables object for interpolation (shared with V2).
+	const variables = assemblePromptVariables(params);
 
-  // Interpolate template variables
-  let systemPrompt = _interpolateTemplate(rawSystemPrompt, variables);
+	// Interpolate template variables
+	let systemPrompt = _interpolateTemplate(rawSystemPrompt, variables);
 
-  // Inject Core Memory blocks (Letta-style) — highest priority context
-  const cmSegment = renderCoreMemory(params.coreMemoryBlocks, params.turnInput.locale);
-  if (cmSegment) {
-    systemPrompt = `${cmSegment}\n\n${systemPrompt}`;
-  }
+	// Inject Core Memory blocks (Letta-style) — highest priority context
+	const cmSegment = renderCoreMemory(
+		params.coreMemoryBlocks,
+		params.turnInput.locale,
+	);
+	if (cmSegment) {
+		systemPrompt = `${cmSegment}\n\n${systemPrompt}`;
+	}
 
-  // Inject Working Memory segment (S3-T3) — placed before other blocks
-  const wmSegment = renderWorkingMemory(params.workingMemory);
-  if (wmSegment) {
-    systemPrompt = `${wmSegment}\n\n${systemPrompt}`;
-  }
+	// Inject Working Memory segment (S3-T3) — placed before other blocks
+	const wmSegment = renderWorkingMemory(params.workingMemory);
+	if (wmSegment) {
+		systemPrompt = `${wmSegment}\n\n${systemPrompt}`;
+	}
 
-  // Inject language constraint based on session locale (V1 legacy: tail position).
-  if (turnInput.locale) {
-    const langName = resolveLocaleLanguageName(turnInput.locale);
-    systemPrompt += `\n\n[LANGUAGE] You MUST respond in ${langName}. All narrative output, tool parameters, and descriptions must be in ${langName}.`;
-  }
+	// Inject language constraint based on session locale (V1 legacy: tail position).
+	if (turnInput.locale) {
+		const langName = resolveLocaleLanguageName(turnInput.locale);
+		systemPrompt += `\n\n[LANGUAGE] You MUST respond in ${langName}. All narrative output, tool parameters, and descriptions must be in ${langName}.`;
+	}
 
-  // Build messages: history + current user message.
-  // When COVEL_COMPACTOR_V1=1 is set, substitute compacted spans with their summary.
-  const historyMessages: LLMMessage[] = buildMessageHistoryWithSummaries(
-    params.messageHistory ?? [],
-    params.summaries ?? [],
-  );
+	// Build messages: history + current user message.
+	// When COVEL_COMPACTOR_V1=1 is set, substitute compacted spans with their summary.
+	const historyMessages: LLMMessage[] = buildMessageHistoryWithSummaries(
+		params.messageHistory ?? [],
+		params.summaries ?? [],
+	);
 
-  const messages: readonly LLMMessage[] = [
-    ...historyMessages,
-    { role: 'user', content: buildCurrentTurnUserMessage(turnInput) },
-  ];
+	const messages: readonly LLMMessage[] = [
+		...historyMessages,
+		{ role: "user", content: buildCurrentTurnUserMessage(turnInput) },
+	];
 
-  // Conditional pruning gate — opt-in via feature flag + caller must supply
-  // both an estimator and a budget config. Default behavior (flag unset) is
-  // unchanged from the pre-S1-T2 semantics.
-  const budgetEnabled =
-    params.estimator !== undefined &&
-    params.contextBudget !== undefined &&
-    isEnvEnabled('COVEL_CONTEXT_BUDGET_V1');
+	// Conditional pruning gate — opt-in via feature flag + caller must supply
+	// both an estimator and a budget config. Default behavior (flag unset) is
+	// unchanged from the pre-S1-T2 semantics.
+	const budgetEnabled =
+		params.estimator !== undefined &&
+		params.contextBudget !== undefined &&
+		isEnvEnabled("COVEL_CONTEXT_BUDGET_V1");
 
-  if (budgetEnabled) {
-    const result = applyBudget(systemPrompt, messages, {
-      ...params.contextBudget!,
-      estimator: params.estimator!,
-    });
-    return { systemPrompt, messages: result.messages };
-  }
+	if (budgetEnabled) {
+		const result = applyBudget(systemPrompt, messages, {
+			...params.contextBudget!,
+			estimator: params.estimator!,
+		});
+		return { systemPrompt, messages: result.messages };
+	}
 
-  return { systemPrompt, messages };
+	return { systemPrompt, messages };
 }
 
 /**
@@ -257,10 +263,12 @@ export function buildContext(
  * (async, supports plugin-data inject). Manifests without plugin-data
  * injects stay on the sync path for zero-risk backward compatibility.
  */
-export function needsAsyncBuild(params: Pick<ContextBuildParams, 'manifest'>): boolean {
-  const injects = params.manifest.input?.inject;
-  if (!injects || injects.length === 0) return false;
-  return injects.some((i) => (i as { kind?: string }).kind === 'plugin-data');
+export function needsAsyncBuild(
+	params: Pick<ContextBuildParams, "manifest">,
+): boolean {
+	const injects = params.manifest.input?.inject;
+	if (!injects || injects.length === 0) return false;
+	return injects.some((i) => (i as { kind?: string }).kind === "plugin-data");
 }
 
 /**
@@ -278,62 +286,62 @@ export function needsAsyncBuild(params: Pick<ContextBuildParams, 'manifest'>): b
  * async is proven stable the sync helpers can be removed per OQ-4.
  */
 export async function buildContextAsync(
-  params: ContextBuildParams,
+	params: ContextBuildParams,
 ): Promise<AssembledContext> {
-  if (
-    isEnvEnabled('COVEL_PROMPT_V2') &&
-    params.manifest.promptVersion === 2
-  ) {
-    return buildContextV2Async(params);
-  }
+	if (isEnvEnabled("COVEL_PROMPT_V2") && params.manifest.promptVersion === 2) {
+		return buildContextV2Async(params);
+	}
 
-  const { promptTemplate, turnInput } = params;
+	const { promptTemplate, turnInput } = params;
 
-  const injectBlocks = await buildInjectBlocksAsync(params);
-  const rawSystemPrompt = injectBlocks
-    ? `${promptTemplate}\n${injectBlocks}`
-    : promptTemplate;
+	const injectBlocks = await buildInjectBlocksAsync(params);
+	const rawSystemPrompt = injectBlocks
+		? `${promptTemplate}\n${injectBlocks}`
+		: promptTemplate;
 
-  const variables = assemblePromptVariables(params);
-  let systemPrompt = _interpolateTemplate(rawSystemPrompt, variables);
+	const variables = assemblePromptVariables(params);
+	let systemPrompt = _interpolateTemplate(rawSystemPrompt, variables);
 
-  const cmSegment2 = renderCoreMemory(params.coreMemoryBlocks, turnInput.locale);
-  if (cmSegment2) {
-    systemPrompt = `${cmSegment2}\n\n${systemPrompt}`;
-  }
+	const cmSegment2 = renderCoreMemory(
+		params.coreMemoryBlocks,
+		turnInput.locale,
+	);
+	if (cmSegment2) {
+		systemPrompt = `${cmSegment2}\n\n${systemPrompt}`;
+	}
 
-  const wmSegment = renderWorkingMemory(params.workingMemory);
-  if (wmSegment) {
-    systemPrompt = `${wmSegment}\n\n${systemPrompt}`;
-  }
+	const wmSegment = renderWorkingMemory(params.workingMemory);
+	if (wmSegment) {
+		systemPrompt = `${wmSegment}\n\n${systemPrompt}`;
+	}
 
-  if (turnInput.locale) {
-    const langName = resolveLocaleLanguageName(turnInput.locale);
-    systemPrompt += `\n\n[LANGUAGE] You MUST respond in ${langName}. All narrative output, tool parameters, and descriptions must be in ${langName}.`;
-  }
+	if (turnInput.locale) {
+		const langName = resolveLocaleLanguageName(turnInput.locale);
+		systemPrompt += `\n\n[LANGUAGE] You MUST respond in ${langName}. All narrative output, tool parameters, and descriptions must be in ${langName}.`;
+	}
 
-  const historyMessages: LLMMessage[] = buildMessageHistoryWithSummaries(
-    params.messageHistory ?? [],
-    params.summaries ?? [],
-  );
+	const historyMessages: LLMMessage[] = buildMessageHistoryWithSummaries(
+		params.messageHistory ?? [],
+		params.summaries ?? [],
+	);
 
-  const messages: readonly LLMMessage[] = [
-    ...historyMessages,
-    { role: 'user', content: buildCurrentTurnUserMessage(turnInput) },
-  ];
+	const messages: readonly LLMMessage[] = [
+		...historyMessages,
+		{ role: "user", content: buildCurrentTurnUserMessage(turnInput) },
+	];
 
-  const budgetEnabled =
-    params.estimator !== undefined &&
-    params.contextBudget !== undefined &&
-    isEnvEnabled('COVEL_CONTEXT_BUDGET_V1');
+	const budgetEnabled =
+		params.estimator !== undefined &&
+		params.contextBudget !== undefined &&
+		isEnvEnabled("COVEL_CONTEXT_BUDGET_V1");
 
-  if (budgetEnabled) {
-    const result = applyBudget(systemPrompt, messages, {
-      ...params.contextBudget!,
-      estimator: params.estimator!,
-    });
-    return { systemPrompt, messages: result.messages };
-  }
+	if (budgetEnabled) {
+		const result = applyBudget(systemPrompt, messages, {
+			...params.contextBudget!,
+			estimator: params.estimator!,
+		});
+		return { systemPrompt, messages: result.messages };
+	}
 
-  return { systemPrompt, messages };
+	return { systemPrompt, messages };
 }

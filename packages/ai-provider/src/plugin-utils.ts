@@ -12,18 +12,18 @@
  */
 
 import {
-  validateBaseUrl as validateBaseUrlInternal,
-  isRetriableStatus,
-  computeBackoffMs,
-  parseRetryAfterMs,
-  sleepWithAbort,
+	validateBaseUrl as validateBaseUrlInternal,
+	isRetriableStatus,
+	computeBackoffMs,
+	parseRetryAfterMs,
+	sleepWithAbort,
 } from "./adapters/http.js";
 
 export interface BaseUrlValidationResult {
-  /** True when the URL passes SSRF policy. */
-  readonly ok: boolean;
-  /** Populated when ok=false; safe to surface in error messages. */
-  readonly reason?: string;
+	/** True when the URL passes SSRF policy. */
+	readonly ok: boolean;
+	/** Populated when ok=false; safe to surface in error messages. */
+	readonly reason?: string;
 }
 
 /**
@@ -33,32 +33,35 @@ export interface BaseUrlValidationResult {
  * error records / logger calls.
  */
 export function validateBaseUrlForPlugin(url: string): BaseUrlValidationResult {
-  if (!url) return { ok: false, reason: "baseUrl is empty" };
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return { ok: false, reason: `baseUrl protocol must be http(s): ${parsed.protocol}` };
-    }
-  } catch {
-    return { ok: false, reason: `baseUrl is not a valid URL: ${url}` };
-  }
-  if (validateBaseUrlInternal(url)) return { ok: true };
-  return {
-    ok: false,
-    reason:
-      `baseUrl rejected by SSRF policy: ${url} ` +
-      `(private/link-local IP, cloud metadata host, or non-loopback http).`,
-  };
+	if (!url) return { ok: false, reason: "baseUrl is empty" };
+	try {
+		const parsed = new URL(url);
+		if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+			return {
+				ok: false,
+				reason: `baseUrl protocol must be http(s): ${parsed.protocol}`,
+			};
+		}
+	} catch {
+		return { ok: false, reason: `baseUrl is not a valid URL: ${url}` };
+	}
+	if (validateBaseUrlInternal(url)) return { ok: true };
+	return {
+		ok: false,
+		reason:
+			`baseUrl rejected by SSRF policy: ${url} ` +
+			`(private/link-local IP, cloud metadata host, or non-loopback http).`,
+	};
 }
 
 export interface FetchWithRetryOptions {
-  /**
-   * Max retries after the initial attempt (default 3 — same as the
-   * provider adapter's policy). Set to 0 to disable retries.
-   */
-  readonly maxRetries?: number;
-  /** Abort signal — propagates into both fetch and the inter-attempt sleep. */
-  readonly signal?: AbortSignal;
+	/**
+	 * Max retries after the initial attempt (default 3 — same as the
+	 * provider adapter's policy). Set to 0 to disable retries.
+	 */
+	readonly maxRetries?: number;
+	/** Abort signal — propagates into both fetch and the inter-attempt sleep. */
+	readonly signal?: AbortSignal;
 }
 
 /**
@@ -70,24 +73,24 @@ export interface FetchWithRetryOptions {
  * `fetch` so retry policy stays consistent across the framework.
  */
 export async function fetchWithRetry(
-  input: string | URL,
-  init: RequestInit & FetchWithRetryOptions = {},
+	input: string | URL,
+	init: RequestInit & FetchWithRetryOptions = {},
 ): Promise<Response> {
-  const { maxRetries = 3, signal, ...rest } = init;
+	const { maxRetries = 3, signal, ...rest } = init;
 
-  const doFetch = (): Promise<Response> =>
-    fetch(input, { ...rest, ...(signal ? { signal } : {}) });
+	const doFetch = (): Promise<Response> =>
+		fetch(input, { ...rest, ...(signal ? { signal } : {}) });
 
-  let response = await doFetch();
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    if (!isRetriableStatus(response.status)) return response;
-    await response.arrayBuffer().catch(() => {
-      /* drain ignored */
-    });
-    const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
-    const delay = retryAfterMs ?? computeBackoffMs(attempt);
-    await sleepWithAbort(delay, signal);
-    response = await doFetch();
-  }
-  return response;
+	let response = await doFetch();
+	for (let attempt = 0; attempt < maxRetries; attempt++) {
+		if (!isRetriableStatus(response.status)) return response;
+		await response.arrayBuffer().catch(() => {
+			/* drain ignored */
+		});
+		const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
+		const delay = retryAfterMs ?? computeBackoffMs(attempt);
+		await sleepWithAbort(delay, signal);
+		response = await doFetch();
+	}
+	return response;
 }

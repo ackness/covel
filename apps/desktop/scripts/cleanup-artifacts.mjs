@@ -28,59 +28,59 @@ import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const DROP_FILE_PATTERNS = [
-  /\.blockmap$/i,
-  /^latest.*\.ya?ml$/i,
-  /^builder-debug\.ya?ml$/i,
-  /^builder-effective-config\.ya?ml$/i,
+	/\.blockmap$/i,
+	/^latest.*\.ya?ml$/i,
+	/^builder-debug\.ya?ml$/i,
+	/^builder-effective-config\.ya?ml$/i,
 ];
 
 function isUnpackedDir(name) {
-  // electron-builder 解包阶段产物：mac, mac-arm64, mac-x64, win-unpacked,
-  // win-ia32-unpacked, linux-unpacked, linux-arm64-unpacked, ...
-  if (name === "mac" || /^mac-(arm64|x64|universal)$/.test(name)) return true;
-  if (name.endsWith("-unpacked")) return true;
-  return false;
+	// electron-builder 解包阶段产物：mac, mac-arm64, mac-x64, win-unpacked,
+	// win-ia32-unpacked, linux-unpacked, linux-arm64-unpacked, ...
+	if (name === "mac" || /^mac-(arm64|x64|universal)$/.test(name)) return true;
+	if (name.endsWith("-unpacked")) return true;
+	return false;
 }
 
 async function runCleanup(outDir, { stripUnpacked }) {
-  let entries;
-  try {
-    entries = await fs.readdir(outDir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
+	let entries;
+	try {
+		entries = await fs.readdir(outDir, { withFileTypes: true });
+	} catch {
+		return [];
+	}
 
-  const removed = [];
-  for (const entry of entries) {
-    const full = path.join(outDir, entry.name);
-    if (entry.isDirectory()) {
-      if (stripUnpacked && isUnpackedDir(entry.name)) {
-        await fs.rm(full, { recursive: true, force: true });
-        removed.push(entry.name + "/");
-      }
-      continue;
-    }
-    if (DROP_FILE_PATTERNS.some((re) => re.test(entry.name))) {
-      await fs.rm(full, { force: true });
-      removed.push(entry.name);
-    }
-  }
+	const removed = [];
+	for (const entry of entries) {
+		const full = path.join(outDir, entry.name);
+		if (entry.isDirectory()) {
+			if (stripUnpacked && isUnpackedDir(entry.name)) {
+				await fs.rm(full, { recursive: true, force: true });
+				removed.push(entry.name + "/");
+			}
+			continue;
+		}
+		if (DROP_FILE_PATTERNS.some((re) => re.test(entry.name))) {
+			await fs.rm(full, { force: true });
+			removed.push(entry.name);
+		}
+	}
 
-  if (removed.length > 0) {
-    const phase = stripUnpacked ? "phase 2 (strip-unpacked)" : "phase 1 (hook)";
-    console.log(
-      `[cleanup-artifacts] ${phase} removed ${removed.length} item(s): ${removed.join(", ")}`,
-    );
-  }
-  return removed;
+	if (removed.length > 0) {
+		const phase = stripUnpacked ? "phase 2 (strip-unpacked)" : "phase 1 (hook)";
+		console.log(
+			`[cleanup-artifacts] ${phase} removed ${removed.length} item(s): ${removed.join(", ")}`,
+		);
+	}
+	return removed;
 }
 
 /** electron-builder `afterAllArtifactBuild` hook — phase 1 only. */
 export default async function cleanupArtifacts(context) {
-  const outDir = context?.outDir;
-  if (!outDir) return [];
-  await runCleanup(outDir, { stripUnpacked: false });
-  return [];
+	const outDir = context?.outDir;
+	if (!outDir) return [];
+	await runCleanup(outDir, { stripUnpacked: false });
+	return [];
 }
 
 // CLI entry point — phase 2 (also runs phase 1 to handle the case where
@@ -93,12 +93,12 @@ export default async function cleanupArtifacts(context) {
 // not us, so the basename guard correctly skips the CLI path.
 const entryBasename = process.argv[1] ? path.basename(process.argv[1]) : "";
 if (entryBasename === "cleanup-artifacts.mjs") {
-  // npm scripts run from repo root, so cwd-relative is the right base.
-  // Allow `--out=<path>` for callers that need to override.
-  const outArg = process.argv.find((a) => a.startsWith("--out="));
-  const outDir = outArg
-    ? path.resolve(outArg.slice("--out=".length))
-    : path.join(process.cwd(), "release", "electron");
-  const stripUnpacked = process.argv.includes("--strip-unpacked");
-  await runCleanup(outDir, { stripUnpacked });
+	// npm scripts run from repo root, so cwd-relative is the right base.
+	// Allow `--out=<path>` for callers that need to override.
+	const outArg = process.argv.find((a) => a.startsWith("--out="));
+	const outDir = outArg
+		? path.resolve(outArg.slice("--out=".length))
+		: path.join(process.cwd(), "release", "electron");
+	const stripUnpacked = process.argv.includes("--strip-unpacked");
+	await runCleanup(outDir, { stripUnpacked });
 }

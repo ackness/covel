@@ -18,11 +18,11 @@
  */
 
 import type {
-  CustomPresetInput,
-  PresetConfig,
-  ProviderDefaults,
-  ProviderProtocol,
-  SlotOverridesInput,
+	CustomPresetInput,
+	PresetConfig,
+	ProviderDefaults,
+	ProviderProtocol,
+	SlotOverridesInput,
 } from "./types.js";
 
 /**
@@ -36,16 +36,16 @@ import type {
  * than throwing.
  */
 export interface OverlayDeps {
-  readonly presetRegistry: {
-    hasPreset?(id: string): boolean;
-    addPreset?(preset: PresetConfig): void;
-    removePreset?(id: string): void;
-  };
-  readonly providerRegistry: {
-    hasProvider?(name: string): boolean;
-    addProvider?(name: string, defaults: ProviderDefaults): void;
-    removeProvider?(name: string): void;
-  };
+	readonly presetRegistry: {
+		hasPreset?(id: string): boolean;
+		addPreset?(preset: PresetConfig): void;
+		removePreset?(id: string): void;
+	};
+	readonly providerRegistry: {
+		hasProvider?(name: string): boolean;
+		addProvider?(name: string, defaults: ProviderDefaults): void;
+		removeProvider?(name: string): void;
+	};
 }
 
 /** Shared across overlay scopes — the registry is a process-wide singleton. */
@@ -63,91 +63,91 @@ const providerRefs = new Map<string, number>();
  * the base registry at the moment the overlay is applied.
  */
 export function applySlotOverlay(
-  deps: OverlayDeps,
-  overrides: SlotOverridesInput | undefined,
+	deps: OverlayDeps,
+	overrides: SlotOverridesInput | undefined,
 ): () => void {
-  const customPresets = overrides?.customPresets;
-  if (!customPresets || customPresets.length === 0) {
-    return noop;
-  }
+	const customPresets = overrides?.customPresets;
+	if (!customPresets || customPresets.length === 0) {
+		return noop;
+	}
 
-  const { hasProvider, addProvider, removeProvider } = deps.providerRegistry;
-  const { hasPreset, addPreset, removePreset } = deps.presetRegistry;
+	const { hasProvider, addProvider, removeProvider } = deps.providerRegistry;
+	const { hasPreset, addPreset, removePreset } = deps.presetRegistry;
 
-  // Registry surface incomplete — silently skip rather than throw. This
-  // lets test doubles using minimal structural mocks still drive the
-  // gateway without having to implement overlay methods.
-  if (!hasProvider || !addProvider || !removeProvider) return noop;
-  if (!hasPreset || !addPreset || !removePreset) return noop;
+	// Registry surface incomplete — silently skip rather than throw. This
+	// lets test doubles using minimal structural mocks still drive the
+	// gateway without having to implement overlay methods.
+	if (!hasProvider || !addProvider || !removeProvider) return noop;
+	if (!hasPreset || !addPreset || !removePreset) return noop;
 
-  // Track the ids WE touched so cleanup only decrements refs for them.
-  const ownedPresetIds: string[] = [];
-  const ownedProviderNames: string[] = [];
+	// Track the ids WE touched so cleanup only decrements refs for them.
+	const ownedPresetIds: string[] = [];
+	const ownedProviderNames: string[] = [];
 
-  for (const cp of customPresets) {
-    if (!isUsableCustomPreset(cp)) continue;
+	for (const cp of customPresets) {
+		if (!isUsableCustomPreset(cp)) continue;
 
-    // Provider registration. Policy:
-    //   - If the module-level ref map already tracks this provider, it's
-    //     overlay-owned — bump the count and take a reference.
-    //   - Else if the base registry has it, leave it alone (never overlay
-    //     an llm.toml / process-wide provider).
-    //   - Else register it fresh and start counting.
-    const providerOverlayOwned = providerRefs.has(cp.provider);
-    if (providerOverlayOwned) {
-      providerRefs.set(cp.provider, (providerRefs.get(cp.provider) ?? 0) + 1);
-      ownedProviderNames.push(cp.provider);
-    } else if (!hasProvider.call(deps.providerRegistry, cp.provider)) {
-      addProvider.call(deps.providerRegistry, cp.provider, {
-        ...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
-        ...(cp.protocol ? { protocol: cp.protocol } : {}),
-      });
-      providerRefs.set(cp.provider, 1);
-      ownedProviderNames.push(cp.provider);
-    }
+		// Provider registration. Policy:
+		//   - If the module-level ref map already tracks this provider, it's
+		//     overlay-owned — bump the count and take a reference.
+		//   - Else if the base registry has it, leave it alone (never overlay
+		//     an llm.toml / process-wide provider).
+		//   - Else register it fresh and start counting.
+		const providerOverlayOwned = providerRefs.has(cp.provider);
+		if (providerOverlayOwned) {
+			providerRefs.set(cp.provider, (providerRefs.get(cp.provider) ?? 0) + 1);
+			ownedProviderNames.push(cp.provider);
+		} else if (!hasProvider.call(deps.providerRegistry, cp.provider)) {
+			addProvider.call(deps.providerRegistry, cp.provider, {
+				...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
+				...(cp.protocol ? { protocol: cp.protocol } : {}),
+			});
+			providerRefs.set(cp.provider, 1);
+			ownedProviderNames.push(cp.provider);
+		}
 
-    // Preset registration — same policy as provider.
-    const presetOverlayOwned = presetRefs.has(cp.id);
-    if (presetOverlayOwned) {
-      presetRefs.set(cp.id, (presetRefs.get(cp.id) ?? 0) + 1);
-      ownedPresetIds.push(cp.id);
-    } else if (!hasPreset.call(deps.presetRegistry, cp.id)) {
-      addPreset.call(deps.presetRegistry, {
-        id: cp.id,
-        name: cp.name || cp.id,
-        provider: cp.provider,
-        model: cp.model,
-        ...(cp.protocol ? { protocol: cp.protocol } : {}),
-        ...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
-        tier: "medium",
-        supportedModes: ["text", "stream"],
-        enabled: true,
-        tag: "text",
-      });
-      presetRefs.set(cp.id, 1);
-      ownedPresetIds.push(cp.id);
-    }
-  }
+		// Preset registration — same policy as provider.
+		const presetOverlayOwned = presetRefs.has(cp.id);
+		if (presetOverlayOwned) {
+			presetRefs.set(cp.id, (presetRefs.get(cp.id) ?? 0) + 1);
+			ownedPresetIds.push(cp.id);
+		} else if (!hasPreset.call(deps.presetRegistry, cp.id)) {
+			addPreset.call(deps.presetRegistry, {
+				id: cp.id,
+				name: cp.name || cp.id,
+				provider: cp.provider,
+				model: cp.model,
+				...(cp.protocol ? { protocol: cp.protocol } : {}),
+				...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
+				tier: "medium",
+				supportedModes: ["text", "stream"],
+				enabled: true,
+				tag: "text",
+			});
+			presetRefs.set(cp.id, 1);
+			ownedPresetIds.push(cp.id);
+		}
+	}
 
-  if (ownedPresetIds.length === 0 && ownedProviderNames.length === 0) {
-    return noop;
-  }
+	if (ownedPresetIds.length === 0 && ownedProviderNames.length === 0) {
+		return noop;
+	}
 
-  let disposed = false;
-  return () => {
-    if (disposed) return;
-    disposed = true;
-    for (const id of ownedPresetIds) {
-      decrementRef(presetRefs, id, () =>
-        removePreset.call(deps.presetRegistry, id),
-      );
-    }
-    for (const name of ownedProviderNames) {
-      decrementRef(providerRefs, name, () =>
-        removeProvider.call(deps.providerRegistry, name),
-      );
-    }
-  };
+	let disposed = false;
+	return () => {
+		if (disposed) return;
+		disposed = true;
+		for (const id of ownedPresetIds) {
+			decrementRef(presetRefs, id, () =>
+				removePreset.call(deps.presetRegistry, id),
+			);
+		}
+		for (const name of ownedProviderNames) {
+			decrementRef(providerRefs, name, () =>
+				removeProvider.call(deps.providerRegistry, name),
+			);
+		}
+	};
 }
 
 /**
@@ -158,48 +158,48 @@ export function applySlotOverlay(
  * callers can fall through to the base slot registry.
  */
 export function resolveSlotOverride(
-  presetId: string | undefined,
-  overrides: SlotOverridesInput | undefined,
+	presetId: string | undefined,
+	overrides: SlotOverridesInput | undefined,
 ): string | undefined {
-  if (!presetId || !overrides?.slotPresetOverrides) return presetId;
-  const override = overrides.slotPresetOverrides[presetId];
-  if (override && override.length > 0) return override;
-  return presetId;
+	if (!presetId || !overrides?.slotPresetOverrides) return presetId;
+	const override = overrides.slotPresetOverrides[presetId];
+	if (override && override.length > 0) return override;
+	return presetId;
 }
 
 function isUsableCustomPreset(cp: CustomPresetInput): boolean {
-  return (
-    typeof cp.id === "string" &&
-    cp.id.length > 0 &&
-    typeof cp.provider === "string" &&
-    cp.provider.length > 0 &&
-    typeof cp.model === "string" &&
-    cp.model.length > 0
-  );
+	return (
+		typeof cp.id === "string" &&
+		cp.id.length > 0 &&
+		typeof cp.provider === "string" &&
+		cp.provider.length > 0 &&
+		typeof cp.model === "string" &&
+		cp.model.length > 0
+	);
 }
 
 function decrementRef(
-  map: Map<string, number>,
-  key: string,
-  onZero: () => void,
+	map: Map<string, number>,
+	key: string,
+	onZero: () => void,
 ): void {
-  const current = map.get(key) ?? 0;
-  if (current <= 1) {
-    map.delete(key);
-    onZero();
-  } else {
-    map.set(key, current - 1);
-  }
+	const current = map.get(key) ?? 0;
+	if (current <= 1) {
+		map.delete(key);
+		onZero();
+	} else {
+		map.set(key, current - 1);
+	}
 }
 
 function noop(): void {
-  /* no overlay applied */
+	/* no overlay applied */
 }
 
 // Kept re-exported for tests that want to assert zero outstanding refs.
 export const __internals = {
-  presetRefs,
-  providerRefs,
+	presetRefs,
+	providerRefs,
 };
 
 // Kept for downstream consumers (no runtime use here, just re-export).

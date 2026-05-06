@@ -22,37 +22,37 @@ import { useSession } from "@/stores/session-store.js";
 import { AssetRender } from "./index.js";
 
 export interface AssetTurnSidebarProps {
-  readonly turnId: string;
-  /** Override the session id (e.g. when rendering historical turns from another session). */
-  readonly sessionId?: string;
+	readonly turnId: string;
+	/** Override the session id (e.g. when rendering historical turns from another session). */
+	readonly sessionId?: string;
 }
 
 export function AssetTurnSidebar({
-  turnId,
-  sessionId: sessionIdOverride,
+	turnId,
+	sessionId: sessionIdOverride,
 }: AssetTurnSidebarProps): ReactElement | null {
-  // Soft-bind: when no SessionProvider is mounted (debug pages, isolated
-  // tests) we return null. Throwing here would crash the catalog renderer.
-  let assets: readonly import("@covel/shared").AssetGenerateView[] | undefined;
-  let sessionId: string | undefined;
-  try {
-    const { state } = useSession();
-    assets = state.assetsByTurn.get(turnId);
-    sessionId = sessionIdOverride ?? state.session?.id ?? "";
-  } catch {
-    return null;
-  }
+	// Soft-bind: when no SessionProvider is mounted (debug pages, isolated
+	// tests) we return null. Throwing here would crash the catalog renderer.
+	let assets: readonly import("@covel/shared").AssetGenerateView[] | undefined;
+	let sessionId: string | undefined;
+	try {
+		const { state } = useSession();
+		assets = state.assetsByTurn.get(turnId);
+		sessionId = sessionIdOverride ?? state.session?.id ?? "";
+	} catch {
+		return null;
+	}
 
-  if (!assets || assets.length === 0) return null;
+	if (!assets || assets.length === 0) return null;
 
-  return (
-    <div
-      className="ui-asset-turn-sidebar flex flex-col gap-3 w-full"
-      data-turn-id={turnId}
-    >
-      {assets.map((view) => (
-        <AssetRender key={view.id} view={view} sessionId={sessionId ?? ""} />
-      ))}
-    </div>
-  );
+	return (
+		<div
+			className="ui-asset-turn-sidebar flex flex-col gap-3 w-full"
+			data-turn-id={turnId}
+		>
+			{assets.map((view) => (
+				<AssetRender key={view.id} view={view} sessionId={sessionId ?? ""} />
+			))}
+		</div>
+	);
 }

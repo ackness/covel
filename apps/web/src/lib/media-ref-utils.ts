@@ -19,14 +19,14 @@ import type { MediaRef } from "@covel/shared";
  * fields. The downstream resolver only needs id/mime/size to function.
  */
 export function isMediaRef(value: unknown): value is MediaRef {
-  if (!value || typeof value !== "object") return false;
-  const v = value as Record<string, unknown>;
-  return (
-    typeof v.id === "string" &&
-    v.id.length > 0 &&
-    typeof v.mime === "string" &&
-    v.mime.length > 0 &&
-    typeof v.size === "number" &&
-    Number.isFinite(v.size)
-  );
+	if (!value || typeof value !== "object") return false;
+	const v = value as Record<string, unknown>;
+	return (
+		typeof v.id === "string" &&
+		v.id.length > 0 &&
+		typeof v.mime === "string" &&
+		v.mime.length > 0 &&
+		typeof v.size === "number" &&
+		Number.isFinite(v.size)
+	);
 }

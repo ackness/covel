@@ -19,7 +19,7 @@
  *   - `community`: third-party, requires explicit per-action approval (PR-7)
  */
 
-export type RpcTrustLevel = 'builtin' | 'official' | 'community';
+export type RpcTrustLevel = "builtin" | "official" | "community";
 
 /**
  * Narrow structural store interface exposed to RPC handlers (LOW-2 fix).
@@ -33,46 +33,48 @@ export type RpcTrustLevel = 'builtin' | 'official' | 'community';
  * widens the contract that every handler can rely on. Keep it minimal.
  */
 export interface RpcHandlerStore {
-  // ── Sessions ─────
-  getSession(id: string): Promise<unknown>;
-  // ── Turn messages ─────
-  listTurnMessages(sessionId: string): Promise<ReadonlyArray<{
-    readonly turnId: string;
-    readonly content: string;
-    readonly order: number;
-    readonly pendingInput?: unknown;
-    readonly name?: string;
-  }>>;
-  // ── Player input persistence ─────
-  savePlayerInput(input: {
-    readonly id: string;
-    readonly sessionId: string;
-    readonly turnId: string;
-    readonly formId: string;
-    readonly values: Record<string, unknown>;
-    readonly createdAt: string;
-  }): Promise<void>;
-  // ── Plugin data KV ─────
-  setPluginData?(record: {
-    readonly sessionId: string;
-    readonly pluginId: string;
-    readonly namespace: string;
-    readonly key: string;
-    readonly value: unknown;
-    readonly createdAt: string;
-    readonly updatedAt: string;
-  }): Promise<void>;
-  getPluginData?(
-    sessionId: string,
-    pluginId: string,
-    namespace: string,
-    key: string,
-  ): Promise<unknown>;
-  listPluginData?(
-    sessionId: string,
-    pluginId: string,
-    namespace: string,
-  ): Promise<ReadonlyArray<{ key: string; value: unknown }>>;
+	// ── Sessions ─────
+	getSession(id: string): Promise<unknown>;
+	// ── Turn messages ─────
+	listTurnMessages(sessionId: string): Promise<
+		ReadonlyArray<{
+			readonly turnId: string;
+			readonly content: string;
+			readonly order: number;
+			readonly pendingInput?: unknown;
+			readonly name?: string;
+		}>
+	>;
+	// ── Player input persistence ─────
+	savePlayerInput(input: {
+		readonly id: string;
+		readonly sessionId: string;
+		readonly turnId: string;
+		readonly formId: string;
+		readonly values: Record<string, unknown>;
+		readonly createdAt: string;
+	}): Promise<void>;
+	// ── Plugin data KV ─────
+	setPluginData?(record: {
+		readonly sessionId: string;
+		readonly pluginId: string;
+		readonly namespace: string;
+		readonly key: string;
+		readonly value: unknown;
+		readonly createdAt: string;
+		readonly updatedAt: string;
+	}): Promise<void>;
+	getPluginData?(
+		sessionId: string,
+		pluginId: string,
+		namespace: string,
+		key: string,
+	): Promise<unknown>;
+	listPluginData?(
+		sessionId: string,
+		pluginId: string,
+		namespace: string,
+	): Promise<ReadonlyArray<{ key: string; value: unknown }>>;
 }
 
 /**
@@ -81,16 +83,16 @@ export interface RpcHandlerStore {
  * dispatch — there is no eager import at parse time.
  */
 export interface RpcActionDecl {
-  /** Relative path to the handler module (default export of `RpcHandler`). */
-  readonly handler: string;
-  /** Optional path to a JSON Schema describing the payload shape. */
-  readonly input?: string;
-  /** Trust level for approval gating. Defaults to the plugin's source trust. */
-  readonly trustLevel?: RpcTrustLevel;
-  /** Whether the handler streams progress events. Defaults to `false`. */
-  readonly streaming?: boolean;
-  /** One-line human-readable description for UI / approval dialogs. */
-  readonly description?: string;
+	/** Relative path to the handler module (default export of `RpcHandler`). */
+	readonly handler: string;
+	/** Optional path to a JSON Schema describing the payload shape. */
+	readonly input?: string;
+	/** Trust level for approval gating. Defaults to the plugin's source trust. */
+	readonly trustLevel?: RpcTrustLevel;
+	/** Whether the handler streams progress events. Defaults to `false`. */
+	readonly streaming?: boolean;
+	/** One-line human-readable description for UI / approval dialogs. */
+	readonly description?: string;
 }
 
 /**
@@ -110,10 +112,10 @@ export type RpcDeclMap = Readonly<Record<string, RpcActionDecl>>;
  * is a 400.
  */
 export interface PluginRpcRequest {
-  readonly pluginId: string;
-  readonly action?: string;
-  readonly runtimeId?: string;
-  readonly payload?: unknown;
+	readonly pluginId: string;
+	readonly action?: string;
+	readonly runtimeId?: string;
+	readonly payload?: unknown;
 }
 
 /**
@@ -121,9 +123,9 @@ export interface PluginRpcRequest {
  * Streaming mode returns SSE — see `docs/reference/protocol.md`.
  */
 export interface PluginRpcResponse {
-  readonly status: 'ok' | 'error' | 'approval-required';
-  readonly result?: unknown;
-  readonly error?: string;
-  /** Set when status === 'approval-required'. PR-7 ties this to the dialog. */
-  readonly approvalId?: string;
+	readonly status: "ok" | "error" | "approval-required";
+	readonly result?: unknown;
+	readonly error?: string;
+	/** Set when status === 'approval-required'. PR-7 ties this to the dialog. */
+	readonly approvalId?: string;
 }

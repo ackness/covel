@@ -26,28 +26,28 @@
  * route the main-loop band through this scheduler.
  */
 
-import type { RuntimeManifest } from '@covel/shared';
-import type { ScheduledGroup } from './types.js';
+import type { RuntimeManifest } from "@covel/shared";
+import type { ScheduledGroup } from "./types.js";
 
 export interface DagScheduleResult {
-  readonly groups: readonly ScheduledGroup[];
-  readonly error?: string;
+	readonly groups: readonly ScheduledGroup[];
+	readonly error?: string;
 }
 
 function collectDependencies(manifest: RuntimeManifest): readonly string[] {
-  const deps = new Set<string>();
-  const injects = manifest.input?.inject ?? [];
-  for (const decl of injects) {
-    const kind = (decl as { kind?: string }).kind;
-    if (kind === undefined || kind === 'runtime') {
-      const from = (decl as { from?: string }).from;
-      if (typeof from === 'string' && from.length > 0) deps.add(from);
-    }
-  }
-  for (const up of manifest.upstreamRequired ?? []) {
-    if (typeof up === 'string' && up.length > 0) deps.add(up);
-  }
-  return [...deps];
+	const deps = new Set<string>();
+	const injects = manifest.input?.inject ?? [];
+	for (const decl of injects) {
+		const kind = (decl as { kind?: string }).kind;
+		if (kind === undefined || kind === "runtime") {
+			const from = (decl as { from?: string }).from;
+			if (typeof from === "string" && from.length > 0) deps.add(from);
+		}
+	}
+	for (const up of manifest.upstreamRequired ?? []) {
+		if (typeof up === "string" && up.length > 0) deps.add(up);
+	}
+	return [...deps];
 }
 
 /**
@@ -56,73 +56,73 @@ function collectDependencies(manifest: RuntimeManifest): readonly string[] {
  * using the lowest priority inside that level.
  */
 export function scheduleByDag(
-  runtimes: readonly RuntimeManifest[],
+	runtimes: readonly RuntimeManifest[],
 ): DagScheduleResult {
-  if (runtimes.length === 0) return { groups: [] };
+	if (runtimes.length === 0) return { groups: [] };
 
-  // Build the in-scope set first so out-of-scope deps are ignored cleanly.
-  const inScope = new Set(runtimes.map((r) => r.name));
-  const inDegree = new Map<string, number>();
-  const dependents = new Map<string, string[]>();
-  const byName = new Map<string, RuntimeManifest>();
+	// Build the in-scope set first so out-of-scope deps are ignored cleanly.
+	const inScope = new Set(runtimes.map((r) => r.name));
+	const inDegree = new Map<string, number>();
+	const dependents = new Map<string, string[]>();
+	const byName = new Map<string, RuntimeManifest>();
 
-  for (const rt of runtimes) {
-    byName.set(rt.name, rt);
-    inDegree.set(rt.name, 0);
-  }
+	for (const rt of runtimes) {
+		byName.set(rt.name, rt);
+		inDegree.set(rt.name, 0);
+	}
 
-  for (const rt of runtimes) {
-    const deps = collectDependencies(rt);
-    for (const dep of deps) {
-      if (!inScope.has(dep)) continue; // out-of-scope — treat as satisfied
-      inDegree.set(rt.name, (inDegree.get(rt.name) ?? 0) + 1);
-      const list = dependents.get(dep) ?? [];
-      list.push(rt.name);
-      dependents.set(dep, list);
-    }
-  }
+	for (const rt of runtimes) {
+		const deps = collectDependencies(rt);
+		for (const dep of deps) {
+			if (!inScope.has(dep)) continue; // out-of-scope — treat as satisfied
+			inDegree.set(rt.name, (inDegree.get(rt.name) ?? 0) + 1);
+			const list = dependents.get(dep) ?? [];
+			list.push(rt.name);
+			dependents.set(dep, list);
+		}
+	}
 
-  const levels: ScheduledGroup[] = [];
-  // Ready = runtimes with inDegree 0, sorted by priority asc then name asc.
-  const pickReady = (): RuntimeManifest[] => {
-    const ready: RuntimeManifest[] = [];
-    for (const [name, deg] of inDegree) {
-      if (deg === 0) {
-        const rt = byName.get(name);
-        if (rt) ready.push(rt);
-      }
-    }
-    ready.sort((a, b) => {
-      const pa = a.priority ?? 0;
-      const pb = b.priority ?? 0;
-      if (pa !== pb) return pa - pb;
-      return a.name.localeCompare(b.name);
-    });
-    return ready;
-  };
+	const levels: ScheduledGroup[] = [];
+	// Ready = runtimes with inDegree 0, sorted by priority asc then name asc.
+	const pickReady = (): RuntimeManifest[] => {
+		const ready: RuntimeManifest[] = [];
+		for (const [name, deg] of inDegree) {
+			if (deg === 0) {
+				const rt = byName.get(name);
+				if (rt) ready.push(rt);
+			}
+		}
+		ready.sort((a, b) => {
+			const pa = a.priority ?? 0;
+			const pb = b.priority ?? 0;
+			if (pa !== pb) return pa - pb;
+			return a.name.localeCompare(b.name);
+		});
+		return ready;
+	};
 
-  while (inDegree.size > 0) {
-    const ready = pickReady();
-    if (ready.length === 0) {
-      // Cycle — return what we built so far with an error. Caller may fall
-      // back to the priority scheduler.
-      return {
-        groups: levels,
-        error: `cycle detected among runtimes: ${[...inDegree.keys()].join(', ')}`,
-      };
-    }
+	while (inDegree.size > 0) {
+		const ready = pickReady();
+		if (ready.length === 0) {
+			// Cycle — return what we built so far with an error. Caller may fall
+			// back to the priority scheduler.
+			return {
+				groups: levels,
+				error: `cycle detected among runtimes: ${[...inDegree.keys()].join(", ")}`,
+			};
+		}
 
-    const priority = ready[0]!.priority ?? 0;
-    levels.push({ priority, runtimes: ready });
+		const priority = ready[0]!.priority ?? 0;
+		levels.push({ priority, runtimes: ready });
 
-    for (const rt of ready) {
-      inDegree.delete(rt.name);
-      for (const down of dependents.get(rt.name) ?? []) {
-        const next = (inDegree.get(down) ?? 0) - 1;
-        inDegree.set(down, next);
-      }
-    }
-  }
+		for (const rt of ready) {
+			inDegree.delete(rt.name);
+			for (const down of dependents.get(rt.name) ?? []) {
+				const next = (inDegree.get(down) ?? 0) - 1;
+				inDegree.set(down, next);
+			}
+		}
+	}
 
-  return { groups: levels };
+	return { groups: levels };
 }

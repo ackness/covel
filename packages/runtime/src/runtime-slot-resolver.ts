@@ -17,15 +17,15 @@
  * `codex/unlocker` does not silently apply to `codex/retriever`.
  */
 
-import type { RuntimeManifest } from '@covel/shared';
+import type { RuntimeManifest } from "@covel/shared";
 
 export function resolveRuntimeSlot(
-  manifest: RuntimeManifest,
-  sessionOverrides: Readonly<Record<string, string>> | undefined,
+	manifest: RuntimeManifest,
+	sessionOverrides: Readonly<Record<string, string>> | undefined,
 ): string | undefined {
-  const sessionSlot = sessionOverrides?.[manifest.name];
-  if (sessionSlot && sessionSlot.length > 0) {
-    return sessionSlot;
-  }
-  return manifest.model;
+	const sessionSlot = sessionOverrides?.[manifest.name];
+	if (sessionSlot && sessionSlot.length > 0) {
+		return sessionSlot;
+	}
+	return manifest.model;
 }
