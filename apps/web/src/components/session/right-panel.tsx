@@ -112,6 +112,12 @@ function compactTabLabel(label: string): string {
 	return chars.slice(0, 4).join("");
 }
 
+function groupShortLabel(group: PluginTabGroup): string | undefined {
+	if (group.id === "chat-mode") return "对话";
+	if (group.id === "world-data") return "维度";
+	return group.shortLabel;
+}
+
 function aggregateSpecsIntoGroups(
 	slotEntries: readonly UISlotEntry[],
 	locale: string,
@@ -236,7 +242,7 @@ export function RightPanel({
 				id: `plugin-${group.id}`,
 				value: `plugin-${group.id}`,
 				label: group.label,
-				shortLabel: group.shortLabel,
+				shortLabel: groupShortLabel(group),
 				icon: resolvePluginIcon(group.icon),
 			})),
 		],
@@ -431,8 +437,10 @@ export function RightPanel({
 														}`}
 														title={p.pluginId}
 													>
-														{pluginShortLabel(
+														{panelProviderLabel(
 															p.pluginId,
+															group.id,
+															p.subs.map((item) => item.sub),
 															sessionState.sessionPlugins,
 															i18n.language,
 														)}
@@ -518,4 +526,18 @@ export function RightPanel({
 			)}
 		</div>
 	);
+}
+
+function panelProviderLabel(
+	pluginId: string,
+	groupId: string,
+	subPanels: readonly SubPanel[],
+	sessionPlugins: readonly { id: string; displayName: unknown }[],
+	locale: string,
+): string {
+	if (groupId === "chat-mode" && subPanels.length > 0) {
+		const first = subPanels[0];
+		return first.shortLabel ?? first.label;
+	}
+	return pluginShortLabel(pluginId, sessionPlugins, locale);
 }

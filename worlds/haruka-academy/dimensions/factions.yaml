@@ -1,6 +1,6 @@
 - id: student-council
   name: 遥风学生会
-  description: 负责学园祭、社团预算和校内纪律，表面严谨，内部也有对理想校园生活的分歧。
+  description: 负责学园祭、社团预算、活动室分配和校内纪律。它代表规则与流程，也承受老师、社团和学生之间的多重压力。
   type: political
   influence: major
   leader: 学生会长・三枝遥
@@ -9,9 +9,12 @@
     - targetId: literature-club
       type: oversight
       description: 因人数不足，学生会正在评估文艺部是否保留独立活动室。
+    - targetId: light-music-club
+      type: scheduling
+      description: 轻音部需要学生会批准主舞台排练时段和音量申请。
 - id: literature-club
   name: 文艺部
-  description: 老牌小社团，成员少但坚持制作学园祭刊物。
+  description: 老牌小社团，成员少但坚持制作学园祭刊物。旧活动室和历年特刊是它的精神核心。
   type: guild
   influence: minor
   leader: 神代澪
@@ -22,7 +25,7 @@
       description: 常因刊物选题与新闻部争抢采访对象。
 - id: news-club
   name: 新闻部
-  description: 掌握校内传闻和学园祭报道权，行动力强，界限感时好时坏。
+  description: 掌握校内传闻和学园祭报道权，行动力强，界限感时好时坏。一次采访可能带来机会，也可能放大误会。
   type: guild
   influence: minor
   leader: 朝仓凛
@@ -33,8 +36,33 @@
       description: 需要学生会批准采访权限，也常让学生会头疼。
 - id: light-music-club
   name: 轻音部
-  description: 以学园祭舞台为目标的乐队社团，气氛自由但排练压力很大。
+  description: 以学园祭主舞台为目标的乐队社团，气氛自由但排练压力很大。成员常把认真说成随便玩玩。
   type: guild
   influence: minor
   leader: 椎名夏帆
   headquarters: 社团楼一层・练习室
+  relations:
+    - targetId: news-club
+      type: publicity
+      description: 新闻部的报道能帮轻音部拉票，也会把排练失误写成热门话题。
+- id: class-2b
+  name: 二年 B 组
+  description: 玩家转入的班级，是日常关系、值日、午休、传闻和班级学园祭企划的核心舞台。
+  type: other
+  influence: major
+  leader: 班主任・小野寺千寻
+  headquarters: 教学楼二层・二年 B 组教室
+  relations:
+    - targetId: literature-club
+      type: member-overlap
+      description: 神代澪同时是班长和文艺部部长，班级事务常与社团压力叠在一起。
+    - targetId: news-club
+      type: rumor-source
+      description: 朝仓凛在班级里收集传闻，也会保护她真正重视的人。
+- id: shopping-street
+  name: 青砾町商店街
+  description: 车站前的小型商业区，学生放学后购买材料、补习、偶遇和绕路回家的地方。
+  type: other
+  influence: minor
+  leader: 商店街会长・海猫书房老板
+  headquarters: 青砾町车站前

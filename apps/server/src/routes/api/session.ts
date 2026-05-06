@@ -39,6 +39,8 @@ const CHAT_MODE_PLUGIN_IDS = [
 
 const WORLD_BLUEPRINT_PLUGIN_ID = "character-blueprint";
 const WORLD_BLUEPRINT_NAMESPACE = "blueprints";
+const CHARACTER_PANEL_PLUGIN_ID = "char-creator";
+const MAX_SCOPED_CHARACTER_ID_LENGTH = 180;
 
 type Env = {
 	Variables: {
@@ -100,6 +102,21 @@ function normalizeWorldCharacterBlueprint(
 	return value as unknown as CharacterBlueprint;
 }
 
+function worldBlueprintCharacterId(
+	sessionId: string,
+	blueprint: CharacterBlueprint,
+): string {
+	const baseId =
+		typeof blueprint.instantiate?.characterId === "string" &&
+		blueprint.instantiate.characterId.length > 0
+			? blueprint.instantiate.characterId
+			: `char-${blueprint.id}`;
+	const scopedId = `${sessionId}-${baseId}`;
+	return scopedId.length <= MAX_SCOPED_CHARACTER_ID_LENGTH
+		? scopedId
+		: `${sessionId}-${blueprint.id}`;
+}
+
 async function importWorldCharacterBlueprints(
 	store: DataStore,
 	sessionId: string,
@@ -121,6 +138,7 @@ async function importWorldCharacterBlueprints(
 	const pluginRecords = blueprints.map((blueprint) => {
 		const upsert = characterBlueprintToCharacterUpsert(blueprint, {
 			now,
+			characterId: worldBlueprintCharacterId(sessionId, blueprint),
 			mirrorPluginId: WORLD_BLUEPRINT_PLUGIN_ID,
 		});
 		return {
@@ -144,6 +162,7 @@ async function importWorldCharacterBlueprints(
 	for (const blueprint of blueprints) {
 		const upsert = characterBlueprintToCharacterUpsert(blueprint, {
 			now,
+			characterId: worldBlueprintCharacterId(sessionId, blueprint),
 			mirrorPluginId: WORLD_BLUEPRINT_PLUGIN_ID,
 		});
 		const characterRecord = {
@@ -164,6 +183,16 @@ async function importWorldCharacterBlueprints(
 			id: randomUUID(),
 			sessionId,
 			pluginId: WORLD_BLUEPRINT_PLUGIN_ID,
+			namespace: "characters",
+			key: characterRecord.id,
+			value: characterRecord,
+			createdAt: now,
+			updatedAt: now,
+		});
+		await store.setPluginData({
+			id: randomUUID(),
+			sessionId,
+			pluginId: CHARACTER_PANEL_PLUGIN_ID,
 			namespace: "characters",
 			key: characterRecord.id,
 			value: characterRecord,

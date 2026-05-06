@@ -14,7 +14,11 @@ import { getDataService } from "@/services/data-service";
 import { migrateLocalStorageToIdb } from "@/services/app-kv-store";
 import { setBlockSchemas } from "@/components/blocks/block-renderer.js";
 import { deepMerge } from "@covel/shared";
-import type { AssetGenerateView, BlockSchemaDeclaration } from "@covel/shared";
+import type {
+	AssetGenerateView,
+	BlockSchemaDeclaration,
+	SnapshotCharacter,
+} from "@covel/shared";
 import { isAssetGenerateView } from "@covel/shared";
 import {
 	createSessionSubscription,
@@ -24,6 +28,7 @@ import {
 import {
 	applyChanges as applyPluginDataStoreChanges,
 	getPluginNamespaceSnapshot,
+	loadPluginData,
 	resetPluginData,
 	setActiveSession as setActivePluginDataSession,
 	type PluginDataChange,
@@ -213,6 +218,21 @@ interface SessionState {
 	 * forms so the player can still see what they originally entered.
 	 */
 	submittedBlockValues: Readonly<Record<string, Record<string, unknown>>>;
+}
+
+function upsertGameStateCharacter(
+	gameState: Record<string, unknown>,
+	character: SnapshotCharacter,
+): Record<string, unknown> {
+	const existing = Array.isArray(gameState.characters)
+		? (gameState.characters as SnapshotCharacter[])
+		: [];
+	const index = existing.findIndex((item) => item.id === character.id);
+	const characters =
+		index >= 0
+			? existing.with(index, { ...existing[index], ...character })
+			: [...existing, character];
+	return { ...gameState, characters };
 }
 
 export interface PendingInteractionDraft {
@@ -1118,6 +1138,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 	const [state, dispatch] = useReducer(reducer, initialState);
 
 	const ds = useMemo(() => getDataService(), []);
+	const stateRef = useRef(state);
+	useEffect(() => {
+		stateRef.current = state;
+	}, [state]);
 
 	// Ref to track current session ID for use in callbacks (avoids stale closures)
 	const sessionIdRef = useRef<string | null>(null);
@@ -1645,6 +1669,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 				}
 				break;
 			}
+			case "character.upserted": {
+				const character = payload.character;
+				if (character && typeof character === "object") {
+					dispatch({
+						type: "SET_GAME_STATE",
+						state: upsertGameStateCharacter(
+							stateRef.current.gameState,
+							character as SnapshotCharacter,
+						),
+					});
+				}
+				break;
+			}
 			// ── Asset events (P0-b) ───────────────────────────────────
 			// The kernel emits one `asset.generated` envelope per `asset.generate`
 			// proposal that survives validation/commit (see session-kernel.ts).
@@ -1790,6 +1827,66 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 					i18n.language,
 				);
 				dispatch({ type: "SET_SESSION", session });
+				setActivePluginDataSession(session.id);
+
+				try {
+					const snapshot = await api.getSessionSnapshot(session.id);
+					const activeSessionId = sessionIdRef.current ?? session.id;
+					if (activeSessionId === session.id) {
+						const enrichedState: Record<string, unknown> = {
+							...snapshot.gameState,
+							characters: snapshot.characters,
+						};
+						if (snapshot.characterSchema) {
+							enrichedState.characterSchema = snapshot.characterSchema;
+						}
+						dispatch({ type: "SET_GAME_STATE", state: enrichedState });
+					}
+				} catch {
+					// Snapshot hydration is best-effort; reconnect and SSE keep state fresh.
+				}
+
+				try {
+					const [blueprints, blueprintCharacters, panelCharacters] =
+						await Promise.all([
+							api.listPluginData(
+								session.id,
+								"character-blueprint",
+								"blueprints",
+							),
+							api.listPluginData(
+								session.id,
+								"character-blueprint",
+								"characters",
+							),
+							api.listPluginData(session.id, "char-creator", "characters"),
+						]);
+					const pluginRows = [
+						["character-blueprint", "blueprints", blueprints],
+						["character-blueprint", "characters", blueprintCharacters],
+						["char-creator", "characters", panelCharacters],
+					] as const;
+					for (const [pluginId, namespace, rows] of pluginRows) {
+						if (rows.length === 0) continue;
+						loadPluginData(
+							pluginId,
+							namespace,
+							rows.map((row) => ({ key: row.key, value: row.value })),
+						);
+						dispatch({
+							type: "PLUGIN_DATA_CHANGED",
+							pluginId,
+							changes: rows.map((row) => ({
+								namespace,
+								key: row.key,
+								value: row.value,
+								operation: "set" as const,
+							})),
+						});
+					}
+				} catch {
+					// Right-panel hydration will retry after ui-spec loading.
+				}
 				// Copy prep-phase runtime bindings to the real session and PATCH them
 				// onto the server record. The per-runtime slot resolver reads
 				// session.runtimeModelOverrides at turn time; without a PATCH, any

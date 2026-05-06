@@ -111,6 +111,11 @@ export interface CharacterUpsertPayload {
 	 * the standard `plugin-data.changed` channel.
 	 */
 	readonly mirrorPluginId?: string;
+	/**
+	 * Additional plugin-data mirror targets for framework panels that aggregate
+	 * characters across multiple character-producing plugins.
+	 */
+	readonly mirrorPluginIds?: readonly string[];
 }
 
 export interface WorkingMemorySetPayload {

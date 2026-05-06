@@ -271,6 +271,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
 			"block.emitted",
 			"ui.rendered",
 			"state.patch.applied",
+			"character.upserted",
 			"hook.fired",
 			"hook.rewrote",
 			"hook.aborted",

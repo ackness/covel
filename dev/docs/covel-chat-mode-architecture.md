@@ -57,6 +57,7 @@ Existing capabilities:
 
 - Pre-game runtimes use priority `0..99` and run in strict priority order.
 - Main-loop runtimes use DAG scheduling from `input.inject` and `upstreamRequired`.
+- Manual-only Chat Mode tools should omit `priority`. Putting a `trigger.type: manual` utility runtime in the Pre-Game band leaves `preGameCompleted` waiting on a runtime that only runs through plugin RPC.
 - Manual plugin RPC can trigger a specific runtime through the normal `executeTurn()` path.
 - Manual-trigger turns skip appending a player chat message.
 - `TurnInputExecutionFlags.suppressPlayerMessage` exists internally for replay-like flows.

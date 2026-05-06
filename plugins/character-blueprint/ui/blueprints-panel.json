@@ -92,7 +92,7 @@
         }
       },
       {
-        "component": "JsonView",
+        "component": "CharacterBlueprintList",
         "props": {
           "value": { "$state": "/entries" }
         }

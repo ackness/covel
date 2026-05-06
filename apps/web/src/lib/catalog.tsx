@@ -661,6 +661,228 @@ const JsonView: ComponentRenderer = ({ element }) => {
 	return <div className="text-[11px]">{renderJsonValue(value, 0)}</div>;
 };
 
+// ── CharacterBlueprintList ───────────────────────────────────────
+
+interface CharacterBlueprintRecordView {
+	readonly key: string;
+	readonly blueprint: {
+		readonly id?: string;
+		readonly name?: string;
+		readonly role?: string;
+		readonly description?: string;
+		readonly source?: string;
+		readonly aliases?: readonly unknown[];
+		readonly tags?: readonly unknown[];
+		readonly attributes?: Record<string, unknown>;
+		readonly persona?: {
+			readonly summary?: string;
+			readonly traits?: readonly unknown[];
+			readonly goals?: readonly unknown[];
+			readonly voice?: string;
+			readonly style?: string;
+		};
+	};
+	readonly importedAt?: string;
+	readonly sourceWorldId?: string;
+	readonly instantiatedCharacterId?: string;
+}
+
+function isRecordLike(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function toTextArray(value: unknown): string[] {
+	if (!Array.isArray(value)) return [];
+	return value
+		.map((item) => (typeof item === "string" ? item.trim() : ""))
+		.filter((item) => item.length > 0);
+}
+
+function formatDateTime(value: string | undefined): string {
+	if (!value) return "";
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return value;
+	return date.toLocaleString(undefined, {
+		month: "2-digit",
+		day: "2-digit",
+		hour: "2-digit",
+		minute: "2-digit",
+	});
+}
+
+function readBlueprintEntries(value: unknown): CharacterBlueprintRecordView[] {
+	const entries = Array.isArray(value) ? value : [];
+	return entries
+		.map((entry, index): CharacterBlueprintRecordView | null => {
+			if (!isRecordLike(entry)) return null;
+			const rawValue = entry.value;
+			if (!isRecordLike(rawValue) || !isRecordLike(rawValue.blueprint)) {
+				return null;
+			}
+			const blueprint =
+				rawValue.blueprint as CharacterBlueprintRecordView["blueprint"];
+			return {
+				key:
+					typeof entry.key === "string"
+						? entry.key
+						: (blueprint.id ?? `blueprint-${index}`),
+				blueprint,
+				importedAt:
+					typeof rawValue.importedAt === "string"
+						? rawValue.importedAt
+						: undefined,
+				sourceWorldId:
+					typeof rawValue.sourceWorldId === "string"
+						? rawValue.sourceWorldId
+						: undefined,
+				instantiatedCharacterId:
+					typeof rawValue.instantiatedCharacterId === "string"
+						? rawValue.instantiatedCharacterId
+						: undefined,
+			};
+		})
+		.filter((entry): entry is CharacterBlueprintRecordView => entry !== null);
+}
+
+function BlueprintChip({
+	children,
+	tone = "muted",
+}: {
+	children: ReactNode;
+	tone?: "muted" | "primary" | "success" | "info";
+}) {
+	return (
+		<span
+			className={clsx(
+				"ui-chip inline-flex max-w-full items-center px-1.5 py-0.5 text-[9px] leading-none border",
+				tone === "primary" &&
+					"border-[var(--accent-primary)]/30 bg-[color-mix(in_oklab,var(--accent-primary)_10%,transparent)] text-[var(--accent-primary)]",
+				tone === "success" &&
+					"border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
+				tone === "info" &&
+					"border-sky-500/25 bg-sky-500/10 text-sky-600 dark:text-sky-300",
+				tone === "muted" && "border-border bg-muted text-muted-foreground",
+			)}
+		>
+			<span className="truncate">{children}</span>
+		</span>
+	);
+}
+
+const CharacterBlueprintList: ComponentRenderer = ({ element }) => {
+	const { t } = useTranslation();
+	const records = readBlueprintEntries(element.props?.value);
+	if (records.length === 0) {
+		return (
+			<div className="ui-band-quiet px-2 py-3 text-center text-[11px] text-muted-foreground">
+				{t("characterBlueprint.empty", "No blueprints imported")}
+			</div>
+		);
+	}
+
+	return (
+		<div className="ui-frame divide-y divide-border/50 overflow-hidden">
+			{records.map((record) => {
+				const blueprint = record.blueprint;
+				const name = blueprint.name ?? blueprint.id ?? record.key;
+				const role = blueprint.role ?? "npc";
+				const tags = toTextArray(blueprint.tags);
+				const aliases = toTextArray(blueprint.aliases);
+				const persona = blueprint.persona ?? {};
+				const attributes = isRecordLike(blueprint.attributes)
+					? Object.entries(blueprint.attributes).slice(0, 4)
+					: [];
+				const instantiated = Boolean(record.instantiatedCharacterId);
+				const roleLabel = t(`character.type.${role}`, role);
+
+				return (
+					<div
+						key={record.key}
+						className="px-3 py-2.5 space-y-2 bg-background/20"
+					>
+						<div className="flex items-center justify-between gap-2 min-w-0">
+							<div className="flex min-w-0 items-center gap-2">
+								<Icons.IdCard className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+								<div className="min-w-0">
+									<div className="truncate text-[13px] font-semibold leading-tight text-foreground">
+										{name}
+									</div>
+									<div className="mt-1 flex flex-wrap gap-1">
+										<BlueprintChip tone="primary">{roleLabel}</BlueprintChip>
+										{instantiated && (
+											<BlueprintChip tone="success">
+												{t(
+													"characterBlueprint.instantiated",
+													"Character linked",
+												)}
+											</BlueprintChip>
+										)}
+										{record.sourceWorldId && (
+											<BlueprintChip tone="info">
+												{record.sourceWorldId}
+											</BlueprintChip>
+										)}
+									</div>
+								</div>
+							</div>
+							{record.importedAt && (
+								<div className="shrink-0 text-[9px] tabular-nums text-muted-foreground">
+									{formatDateTime(record.importedAt)}
+								</div>
+							)}
+						</div>
+
+						{(blueprint.description || persona.summary) && (
+							<p className="line-clamp-3 text-[11px] leading-relaxed text-muted-foreground">
+								{persona.summary ?? blueprint.description}
+							</p>
+						)}
+
+						{(tags.length > 0 || aliases.length > 0) && (
+							<div className="flex flex-wrap gap-1">
+								{aliases.slice(0, 2).map((alias) => (
+									<BlueprintChip key={`alias-${alias}`}>{alias}</BlueprintChip>
+								))}
+								{tags.slice(0, 4).map((tag) => (
+									<BlueprintChip key={`tag-${tag}`} tone="info">
+										{tag}
+									</BlueprintChip>
+								))}
+							</div>
+						)}
+
+						{attributes.length > 0 && (
+							<div className="grid grid-cols-2 gap-x-3 gap-y-1 border-t border-dashed border-border/50 pt-2">
+								{attributes.map(([key, value]) => (
+									<div
+										key={key}
+										className="min-w-0 truncate text-[10px] leading-snug"
+									>
+										<span className="font-mono text-muted-foreground">
+											{key}
+										</span>
+										<span className="text-muted-foreground/60">: </span>
+										<span className="text-foreground/85">
+											{typeof value === "object"
+												? JSON.stringify(value)
+												: String(value)}
+										</span>
+									</div>
+								))}
+							</div>
+						)}
+
+						<div className="text-[9px] text-muted-foreground truncate">
+							{record.instantiatedCharacterId ??
+								t("characterBlueprint.blueprintOnly", "Blueprint only")}
+						</div>
+					</div>
+				);
+			})}
+		</div>
+	);
+};
+
 // ── CharacterFieldsView ─────────────────────────────────────────
 //
 // Schema-aware renderer for a character's `fields` object.
@@ -737,6 +959,14 @@ function AttributeProgressBar({
 	const range = max - min;
 	const pct =
 		range > 0 ? Math.max(0, Math.min(100, ((value - min) / range) * 100)) : 0;
+	const hasNonZeroMin = min !== 0;
+	const baselinePct =
+		range > 0 && min < 0 && max > 0
+			? Math.max(0, Math.min(100, ((0 - min) / range) * 100))
+			: undefined;
+	const valueLabel = hasNonZeroMin
+		? `${value} (${min}..${max})`
+		: `${value}/${max}`;
 	const tone =
 		pct > 60
 			? "bg-emerald-500/80"
@@ -747,15 +977,19 @@ function AttributeProgressBar({
 		<div className="space-y-0.5">
 			<div className="flex items-center justify-between text-[10px]">
 				<span className="text-muted-foreground">{label}</span>
-				<span className="font-mono text-foreground/70">
-					{value}/{max}
-				</span>
+				<span className="font-mono text-foreground/70">{valueLabel}</span>
 			</div>
-			<div className="h-1.5 rounded-full bg-muted overflow-hidden">
+			<div className="relative h-1.5 rounded-full bg-muted overflow-hidden">
 				<div
 					className={clsx("h-full transition-all duration-500", tone)}
 					style={{ width: `${pct}%` }}
 				/>
+				{baselinePct !== undefined && (
+					<div
+						className="absolute top-0 bottom-0 w-px bg-foreground/50"
+						style={{ left: `${baselinePct}%` }}
+					/>
+				)}
 			</div>
 		</div>
 	);
@@ -2493,6 +2727,7 @@ export const covelRegistry: Record<string, ComponentRenderer> = {
 	Accordion,
 	Section,
 	JsonView,
+	CharacterBlueprintList,
 	CharacterFieldsView,
 	// Interactive
 	Button,

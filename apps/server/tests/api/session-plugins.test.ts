@@ -299,7 +299,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
 			const characters = await store.listCharacters("sess-academy");
 			expect(characters).toEqual([
 				expect.objectContaining({
-					id: "npc-test-heroine",
+					id: "sess-academy-npc-test-heroine",
 					name: "Test Heroine",
 					type: "npc",
 					description: "A seeded NPC.",
@@ -315,12 +315,81 @@ describe("Session plugin routes (real sessionRoutes)", () => {
 			);
 			expect(blueprint?.value).toMatchObject({
 				sourceWorldId: "academy-world",
-				instantiatedCharacterId: "npc-test-heroine",
+				instantiatedCharacterId: "sess-academy-npc-test-heroine",
 				blueprint: {
 					id: "test-heroine",
 					name: "Test Heroine",
 				},
 			});
+			const blueprintMirror = await store.getPluginData(
+				"sess-academy",
+				"character-blueprint",
+				"characters",
+				"sess-academy-npc-test-heroine",
+			);
+			expect(blueprintMirror?.value).toMatchObject({
+				id: "sess-academy-npc-test-heroine",
+				name: "Test Heroine",
+			});
+			const characterPanelMirror = await store.getPluginData(
+				"sess-academy",
+				"char-creator",
+				"characters",
+				"sess-academy-npc-test-heroine",
+			);
+			expect(characterPanelMirror?.value).toMatchObject({
+				id: "sess-academy-npc-test-heroine",
+				name: "Test Heroine",
+			});
+		});
+
+		it("scopes imported blueprint character ids per session", async () => {
+			await store.upsertWorld({
+				id: "academy-world-scoped",
+				name: "Academy World Scoped",
+				description: "Test world",
+				metadata: {
+					characterBlueprints: [
+						{
+							schemaVersion: 1,
+							id: "test-heroine-scoped",
+							name: "Test Heroine Scoped",
+							role: "npc",
+							instantiate: {
+								characterId: "npc-test-heroine-scoped",
+								type: "npc",
+							},
+						},
+					],
+				},
+				createdAt: new Date().toISOString(),
+			});
+
+			for (const sessionId of ["sess-academy-a", "sess-academy-b"]) {
+				const res = await app.request("/api/sessions", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						id: sessionId,
+						worldId: "academy-world-scoped",
+						plugins: ["chat-mode-narrator"],
+					}),
+				});
+				expect(res.status).toBe(200);
+				const scopedId = `${sessionId}-npc-test-heroine-scoped`;
+				const characters = await store.listCharacters(sessionId);
+				expect(characters.map((character) => character.id)).toContain(scopedId);
+				const characterPanelMirror = await store.getPluginData(
+					sessionId,
+					"char-creator",
+					"characters",
+					scopedId,
+				);
+				expect(characterPanelMirror?.value).toMatchObject({
+					id: scopedId,
+					name: "Test Heroine Scoped",
+				});
+			}
 		});
 
 		it("enabling chat-mode-narrator replaces default narrator and adds the chat mode bundle", async () => {

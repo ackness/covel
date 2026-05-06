@@ -521,6 +521,16 @@ export function createCommitPipeline(
 					proposalId: effectiveProposal.id,
 					asset: view,
 				});
+			} else if (
+				effectiveProposal.type === "character.upsert" &&
+				result.event
+			) {
+				await emitter.emit("character.upserted", {
+					runtimeId: effectiveProposal.source.runtimeId,
+					pluginId: effectiveProposal.source.pluginId,
+					proposalId: effectiveProposal.id,
+					character: result.event.payload.character,
+				});
 			}
 		}
 
@@ -944,6 +954,17 @@ export function createCommitPipeline(
 					"character.upsert: mirrorPluginId must be a string when provided",
 			};
 		}
+		if (
+			payload.mirrorPluginIds !== undefined &&
+			(!Array.isArray(payload.mirrorPluginIds) ||
+				payload.mirrorPluginIds.some((id) => typeof id !== "string"))
+		) {
+			return {
+				committed: false,
+				error:
+					"character.upsert: mirrorPluginIds must be a string array when provided",
+			};
+		}
 
 		const now = new Date().toISOString();
 		const record = {
@@ -962,28 +983,34 @@ export function createCommitPipeline(
 
 		await store.upsertCharacter(record);
 
-		if (payload.mirrorPluginId && store.setPluginData) {
-			await store.setPluginData({
-				id: crypto.randomUUID(),
-				sessionId: proposal.sessionId,
-				pluginId: payload.mirrorPluginId,
-				namespace: "characters",
-				key: record.id,
-				value: {
-					id: record.id,
-					name: record.name,
-					type: record.type,
-					...(record.description !== undefined
-						? { description: record.description }
-						: {}),
-					...(record.fields !== undefined ? { fields: record.fields } : {}),
-					version: record.version,
-					createdAt: record.createdAt,
-					updatedAt: record.updatedAt,
-				},
-				createdAt: proposal.timestamp,
-				updatedAt: now,
-			});
+		if (store.setPluginData) {
+			const mirrorPluginIds = [
+				...(payload.mirrorPluginId ? [payload.mirrorPluginId] : []),
+				...(payload.mirrorPluginIds ?? []),
+			].filter((pluginId, index, all) => all.indexOf(pluginId) === index);
+			for (const mirrorPluginId of mirrorPluginIds) {
+				await store.setPluginData({
+					id: crypto.randomUUID(),
+					sessionId: proposal.sessionId,
+					pluginId: mirrorPluginId,
+					namespace: "characters",
+					key: record.id,
+					value: {
+						id: record.id,
+						name: record.name,
+						type: record.type,
+						...(record.description !== undefined
+							? { description: record.description }
+							: {}),
+						...(record.fields !== undefined ? { fields: record.fields } : {}),
+						version: record.version,
+						createdAt: record.createdAt,
+						updatedAt: record.updatedAt,
+					},
+					createdAt: proposal.timestamp,
+					updatedAt: now,
+				});
+			}
 		}
 
 		return {

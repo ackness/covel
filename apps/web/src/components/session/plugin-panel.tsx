@@ -131,15 +131,30 @@ export function PluginPanel({
 	interactionLocked = false,
 }: PluginPanelProps) {
 	const { t } = useTranslation();
-	const namespace =
-		(spec.dataSource as Record<string, string> | undefined)?.namespace ??
-		"default";
+	const dataSource = spec.dataSource as Record<string, string> | undefined;
+	const namespace = dataSource?.namespace ?? "default";
+	const sourceKind = dataSource?.source;
 	const liveData = usePluginNamespace(pluginId, namespace);
 	const jobs = usePluginJobs(pluginId);
+	const { state: sessionState } = useSession();
+	const sessionCharacters =
+		sessionState.gameState.characters &&
+		Array.isArray(sessionState.gameState.characters)
+			? Object.fromEntries(
+					sessionState.gameState.characters.map((character, index) => {
+						const value = character as Record<string, unknown>;
+						const key =
+							typeof value.id === "string" ? value.id : `character-${index}`;
+						return [key, value];
+					}),
+				)
+			: {};
 	const frameworkData =
-		namespace === "_jobs"
-			? Object.fromEntries(jobs.map((job) => [job.jobId, job]))
-			: liveData;
+		sourceKind === "session.characters"
+			? sessionCharacters
+			: namespace === "_jobs"
+				? Object.fromEntries(jobs.map((job) => [job.jobId, job]))
+				: liveData;
 	const data = stateOverride ?? frameworkData;
 
 	// Per-action in-flight tracking — surfaced to json-render state under
@@ -217,10 +232,6 @@ export function PluginPanel({
 
 	const flatSpec = useMemo(() => convertToSpec(spec.view), [spec.view]);
 
-	// `useSession` is safe here — PluginPanel only renders inside a loaded
-	// SessionProvider (right panel / plugin-message block). When the panel
-	// is hoisted into a non-session context in future, guard with a null check.
-	const { state: sessionState } = useSession();
 	const sessionId = sessionState.session?.id;
 
 	// Framework-provided default handlers wire plugin buttons to plugin-rpc.

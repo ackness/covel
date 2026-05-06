@@ -968,6 +968,25 @@ describe("createCommitPipeline", () => {
 			});
 		});
 
+		it("can mirror the character snapshot to multiple plugin panels", async () => {
+			const store = createMockStore();
+			const pipeline = createCommitPipeline(store as any);
+			const proposal = makeProposal("character.upsert", {
+				id: "char-3",
+				name: "Rin",
+				mirrorPluginId: "character-blueprint",
+				mirrorPluginIds: ["char-creator", "character-blueprint"],
+			});
+
+			const result = await pipeline.commit(proposal);
+
+			expect(result.committed).toBe(true);
+			expect(store.setPluginData).toHaveBeenCalledTimes(2);
+			expect(
+				store.setPluginData.mock.calls.map((call) => call[0].pluginId),
+			).toEqual(["character-blueprint", "char-creator"]);
+		});
+
 		it("validates required fields", async () => {
 			const store = createMockStore();
 			const pipeline = createCommitPipeline(store as any);

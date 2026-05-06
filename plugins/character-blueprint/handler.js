@@ -3,8 +3,10 @@ import { withPendingProposals } from "@covel/tools";
 
 const BLUEPRINT_NAMESPACE = "blueprints";
 const DEFAULT_MIRROR_PLUGIN_ID = "character-blueprint";
+const CHARACTER_PANEL_PLUGIN_ID = "char-creator";
 const MAX_BLUEPRINT_BYTES = 65_536;
 const BLUEPRINT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+const MAX_SCOPED_CHARACTER_ID_LENGTH = 180;
 
 /**
  * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
@@ -24,7 +26,12 @@ export default async function handler(ctx) {
 				blueprint,
 				importedAt: now,
 				...(shouldInstantiate
-					? { instantiatedCharacterId: characterIdForBlueprint(blueprint) }
+					? {
+							instantiatedCharacterId: scopedCharacterIdForBlueprint(
+								ctx.sessionId,
+								blueprint,
+							),
+						}
 					: {}),
 			},
 		}),
@@ -32,12 +39,18 @@ export default async function handler(ctx) {
 
 	let characterId;
 	if (shouldInstantiate) {
+		characterId = scopedCharacterIdForBlueprint(ctx.sessionId, blueprint);
 		const upsert = characterBlueprintToCharacterUpsert(blueprint, {
+			characterId,
 			now,
 			mirrorPluginId: DEFAULT_MIRROR_PLUGIN_ID,
 		});
-		characterId = upsert.id;
-		proposals.push(makeProposal(ctx, now, "character.upsert", upsert));
+		proposals.push(
+			makeProposal(ctx, now, "character.upsert", {
+				...upsert,
+				mirrorPluginIds: [CHARACTER_PANEL_PLUGIN_ID],
+			}),
+		);
 	}
 
 	return withPendingProposals(
@@ -111,10 +124,12 @@ function normalizeRequiredString(value, field) {
 }
 
 /**
+ * @param {string} sessionId
  * @param {Record<string, unknown>} blueprint
  */
-function characterIdForBlueprint(blueprint) {
+function scopedCharacterIdForBlueprint(sessionId, blueprint) {
 	const instantiate = blueprint.instantiate;
+	let baseId = `char-${blueprint.id}`;
 	if (
 		instantiate &&
 		typeof instantiate === "object" &&
@@ -123,10 +138,13 @@ function characterIdForBlueprint(blueprint) {
 		const characterId = /** @type {Record<string, unknown>} */ (instantiate)
 			.characterId;
 		if (typeof characterId === "string" && characterId.length > 0) {
-			return characterId;
+			baseId = characterId;
 		}
 	}
-	return `char-${blueprint.id}`;
+	const scopedId = `${sessionId}-${baseId}`;
+	return scopedId.length <= MAX_SCOPED_CHARACTER_ID_LENGTH
+		? scopedId
+		: `${sessionId}-${blueprint.id}`;
 }
 
 /**

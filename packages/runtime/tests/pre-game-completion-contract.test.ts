@@ -277,6 +277,39 @@ describe("Pre-Game completion contract", () => {
 		expect(session?.turnCount).toBe(0);
 	});
 
+	it("ignores main-loop manual utilities while deciding Pre-Game completion", async () => {
+		const pregame = pregameManifest("pregame", { priority: 10 });
+		const playerInit = pregameManifest("char-creator/player-init", {
+			priority: 50,
+		});
+		const utility = pregameManifest("character-blueprint", {
+			priority: undefined,
+			trigger: { type: "manual" },
+		});
+
+		const { store, result } = await runPregameTurn(
+			"sess-manual-mainloop",
+			[pregame, playerInit, utility],
+			{
+				pregame: async () => ({ preGameDone: true }),
+				"char-creator/player-init": async () => ({ preGameDone: true }),
+				"character-blueprint": async () => {
+					throw new Error("manual utility should not auto-run");
+				},
+			},
+		);
+
+		const session = await store.getSession("sess-manual-mainloop");
+		expect(result.runtimeResults.map((r) => r.runtimeId)).toEqual([
+			"pregame",
+			"char-creator/player-init",
+		]);
+		expect(session?.preGameCompleted?.slice().sort()).toEqual(
+			["pregame", "char-creator/player-init"].sort(),
+		);
+		expect(session?.turnCount).toBe(1);
+	});
+
 	it("advances turnCount when EVERY Pre-Game runtime reports done in the same turn", async () => {
 		// When both plugins complete in turn 0 (e.g. pregame completes on first
 		// hit, schema-gen guard skips because schema already exists), the kernel

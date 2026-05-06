@@ -94,4 +94,35 @@ describe("scene-prompts manifest and UI loading", () => {
 			},
 		});
 	});
+
+	it("keeps scene prompt choices guide-like without per-card send buttons", async () => {
+		const ui = JSON.parse(
+			readFileSync(
+				path.join(pluginDir, "ui/scene-prompts-block.json"),
+				"utf-8",
+			),
+		) as unknown;
+
+		const actions: string[] = [];
+		const labels: unknown[] = [];
+		function walk(value: unknown): void {
+			if (!value || typeof value !== "object") return;
+			if (Array.isArray(value)) {
+				for (const item of value) walk(item);
+				return;
+			}
+			const obj = value as Record<string, unknown>;
+			const on = obj.on as Record<string, unknown> | undefined;
+			const click = on?.click as Record<string, unknown> | undefined;
+			if (typeof click?.action === "string") actions.push(click.action);
+			const props = obj.props as Record<string, unknown> | undefined;
+			if (props && Object.hasOwn(props, "label")) labels.push(props.label);
+			for (const child of Object.values(obj)) walk(child);
+		}
+		walk(ui);
+
+		expect(actions).toContain("draftMessage");
+		expect(actions).not.toContain("sendMessage");
+		expect(labels).not.toContainEqual({ zh: "发送", en: "Send" });
+	});
 });

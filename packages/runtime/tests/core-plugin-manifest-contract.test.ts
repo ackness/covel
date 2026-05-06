@@ -139,6 +139,22 @@ describe("core plugin manifest contract", () => {
 		]);
 	});
 
+	it("keeps manual Chat Mode utilities outside automatic scheduling", async () => {
+		const manifests = await loadRuntimeManifests();
+		const manualUtilityIds = [
+			"character-blueprint",
+			"character-presence",
+			"player-identity",
+			"living-world-rules",
+		];
+
+		for (const runtimeId of manualUtilityIds) {
+			const manifest = requireRuntime(manifests, runtimeId);
+			expect(manifest.trigger).toMatchObject({ type: "manual" });
+			expect(manifest.priority).toBeUndefined();
+		}
+	});
+
 	it("keeps framework-controlled core plugins enabled as core-plugin manifests", async () => {
 		const manifests = await loadRuntimeManifests();
 		const coreRuntimeIds = [

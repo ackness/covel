@@ -168,7 +168,10 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
 
 		const characters = await store.listCharacters(sessionId);
 		expect(characters.map((character) => character.id)).toEqual(
-			expect.arrayContaining(["npc-kamishiro-mio", "npc-asakura-rin"]),
+			expect.arrayContaining([
+				`${sessionId}-npc-kamishiro-mio`,
+				`${sessionId}-npc-asakura-rin`,
+			]),
 		);
 		const mioBlueprint = await store.getPluginData(
 			sessionId,
@@ -178,7 +181,27 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
 		);
 		expect(mioBlueprint?.value).toMatchObject({
 			sourceWorldId: "haruka-academy",
-			instantiatedCharacterId: "npc-kamishiro-mio",
+			instantiatedCharacterId: `${sessionId}-npc-kamishiro-mio`,
+		});
+		const mioBlueprintMirror = await store.getPluginData(
+			sessionId,
+			"character-blueprint",
+			"characters",
+			`${sessionId}-npc-kamishiro-mio`,
+		);
+		expect(mioBlueprintMirror?.value).toMatchObject({
+			id: `${sessionId}-npc-kamishiro-mio`,
+			name: "神代澪",
+		});
+		const mioCharacterPanelMirror = await store.getPluginData(
+			sessionId,
+			"char-creator",
+			"characters",
+			`${sessionId}-npc-kamishiro-mio`,
+		);
+		expect(mioCharacterPanelMirror?.value).toMatchObject({
+			id: `${sessionId}-npc-kamishiro-mio`,
+			name: "神代澪",
 		});
 
 		const now = new Date().toISOString();

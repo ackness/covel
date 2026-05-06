@@ -4,7 +4,6 @@ description:
   zh: 生活世界规则插件。把 World Info 风格规则保存为 Covel lorebook，并交给 Prompt V2 分段注入。
   en: Living World Rules plugin. Saves World Info style rules as Covel lorebook entries for Prompt V2 segmented injection.
 pluginType: plugin
-priority: 97
 runtimeType: function
 outputKind: system
 handler: ./handler.js

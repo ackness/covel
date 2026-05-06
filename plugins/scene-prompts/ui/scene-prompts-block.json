@@ -32,8 +32,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "点短句加入待发送区；点发送会立刻作为下一条玩家消息。",
-            "en": "Click a prompt to queue it; click Send to post it as the next player message."
+            "zh": "选择一个短句加入待发送区，再从底部统一发送。",
+            "en": "Pick a prompt to queue it, then send from the composer below."
           },
           "variant": "muted",
           "size": "xs"
@@ -60,11 +60,6 @@
                 "component": "Button",
                 "props": { "label": { "$state": "/prompt1Text" }, "variant": "ghost", "size": "compact" },
                 "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/prompt1Text" }, "selectionGroup": "scene-prompts:1" } } }
-              },
-              {
-                "component": "Button",
-                "props": { "label": { "zh": "发送", "en": "Send" }, "variant": "primary", "size": "compact" },
-                "on": { "click": { "action": "sendMessage", "params": { "text": { "$state": "/prompt1Text" } } } }
               }
             ]
           },
@@ -85,11 +80,6 @@
                 "component": "Button",
                 "props": { "label": { "$state": "/prompt2Text" }, "variant": "ghost", "size": "compact" },
                 "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/prompt2Text" }, "selectionGroup": "scene-prompts:2" } } }
-              },
-              {
-                "component": "Button",
-                "props": { "label": { "zh": "发送", "en": "Send" }, "variant": "primary", "size": "compact" },
-                "on": { "click": { "action": "sendMessage", "params": { "text": { "$state": "/prompt2Text" } } } }
               }
             ]
           },
@@ -110,11 +100,6 @@
                 "component": "Button",
                 "props": { "label": { "$state": "/prompt3Text" }, "variant": "ghost", "size": "compact" },
                 "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/prompt3Text" }, "selectionGroup": "scene-prompts:3" } } }
-              },
-              {
-                "component": "Button",
-                "props": { "label": { "zh": "发送", "en": "Send" }, "variant": "primary", "size": "compact" },
-                "on": { "click": { "action": "sendMessage", "params": { "text": { "$state": "/prompt3Text" } } } }
               }
             ]
           },
@@ -135,11 +120,6 @@
                 "component": "Button",
                 "props": { "label": { "$state": "/prompt4Text" }, "variant": "ghost", "size": "compact" },
                 "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/prompt4Text" }, "selectionGroup": "scene-prompts:4" } } }
-              },
-              {
-                "component": "Button",
-                "props": { "label": { "zh": "发送", "en": "Send" }, "variant": "primary", "size": "compact" },
-                "on": { "click": { "action": "sendMessage", "params": { "text": { "$state": "/prompt4Text" } } } }
               }
             ]
           },
@@ -160,11 +140,6 @@
                 "component": "Button",
                 "props": { "label": { "$state": "/prompt5Text" }, "variant": "ghost", "size": "compact" },
                 "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/prompt5Text" }, "selectionGroup": "scene-prompts:5" } } }
-              },
-              {
-                "component": "Button",
-                "props": { "label": { "zh": "发送", "en": "Send" }, "variant": "primary", "size": "compact" },
-                "on": { "click": { "action": "sendMessage", "params": { "text": { "$state": "/prompt5Text" } } } }
               }
             ]
           },
@@ -185,11 +160,6 @@
                 "component": "Button",
                 "props": { "label": { "$state": "/prompt6Text" }, "variant": "ghost", "size": "compact" },
                 "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/prompt6Text" }, "selectionGroup": "scene-prompts:6" } } }
-              },
-              {
-                "component": "Button",
-                "props": { "label": { "zh": "发送", "en": "Send" }, "variant": "primary", "size": "compact" },
-                "on": { "click": { "action": "sendMessage", "params": { "text": { "$state": "/prompt6Text" } } } }
               }
             ]
           }
@@ -218,20 +188,9 @@
             }
           },
           {
-            "component": "Row",
-            "props": { "gap": "sm", "align": "center" },
-            "children": [
-              {
-                "component": "Button",
-                "props": { "label": { "zh": "加入待发送区", "en": "Queue" }, "variant": "ghost", "size": "compact" },
-                "on": { "click": { "action": "draftMessage", "params": { "text": { "$bindState": "/customText" }, "selectionGroup": "scene-prompts:custom" } } }
-              },
-              {
-                "component": "Button",
-                "props": { "label": { "zh": "发送", "en": "Send" }, "variant": "primary", "size": "compact" },
-                "on": { "click": { "action": "sendMessage", "params": { "text": { "$bindState": "/customText" } } } }
-              }
-            ]
+            "component": "Button",
+            "props": { "label": { "zh": "加入待发送区", "en": "Queue" }, "variant": "ghost", "size": "compact" },
+            "on": { "click": { "action": "draftMessage", "params": { "text": { "$bindState": "/customText" }, "selectionGroup": "scene-prompts:custom" } } }
           }
         ]
       }

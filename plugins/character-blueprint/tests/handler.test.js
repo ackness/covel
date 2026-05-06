@@ -92,7 +92,7 @@ describe("character-blueprint handler", () => {
 			imported: true,
 			blueprintId: "mentor-lin",
 			instantiated: true,
-			characterId: "char-lin-yue",
+			characterId: "sess-blueprint-char-lin-yue",
 		});
 
 		const proposals = getPendingProposals(result);
@@ -107,7 +107,7 @@ describe("character-blueprint handler", () => {
 				namespace: "blueprints",
 				key: "mentor-lin",
 				value: {
-					instantiatedCharacterId: "char-lin-yue",
+					instantiatedCharacterId: "sess-blueprint-char-lin-yue",
 				},
 			},
 		});
@@ -118,13 +118,14 @@ describe("character-blueprint handler", () => {
 				runtimeId: "character-blueprint/import",
 			},
 			payload: {
-				id: "char-lin-yue",
+				id: "sess-blueprint-char-lin-yue",
 				name: "Lin Yue",
 				type: "npc",
 				description: "A cautious sword mentor.",
 				fields: { realm: "Golden Core" },
 				version: 1,
 				mirrorPluginId: "character-blueprint",
+				mirrorPluginIds: ["char-creator"],
 			},
 		});
 		expect(proposals[1].payload.createdAt).toEqual(expect.any(String));
@@ -147,7 +148,7 @@ describe("character-blueprint handler", () => {
 			imported: true,
 			blueprintId: "json-mentor",
 			instantiated: true,
-			characterId: "char-json-mentor",
+			characterId: "sess-blueprint-char-json-mentor",
 		});
 		const proposals = getPendingProposals(result);
 		expect(proposals.map((proposal) => proposal.type)).toEqual([

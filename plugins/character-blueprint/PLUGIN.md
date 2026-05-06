@@ -4,7 +4,6 @@ description:
   zh: 角色蓝图导入器。把可导入的玩法/人设源数据保存为 plugin_data，并可通过 character.upsert 实例化为 Covel Character。
   en: Character Blueprint importer. Stores importable playstyle/persona source data as plugin_data and can instantiate it as Covel Character state through character.upsert.
 pluginType: plugin
-priority: 95
 runtimeType: function
 outputKind: system
 handler: ./handler.js
