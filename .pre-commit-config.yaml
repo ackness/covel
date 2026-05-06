@@ -1,0 +1,52 @@
+minimum_pre_commit_version: "4.0.0"
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^pnpm-lock\.yaml$
+      - id: end-of-file-fixer
+        exclude: ^pnpm-lock\.yaml$
+      - id: mixed-line-ending
+        args: [--fix=lf]
+        exclude: ^pnpm-lock\.yaml$
+      - id: check-yaml
+        args: [--unsafe]
+      - id: check-json
+        exclude: (^|/)tsconfig\.json$
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-symlinks
+      - id: destroyed-symlinks
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+        exclude: ^(\.claude/|apps/desktop-tauri/src-tauri/src/main\.rs$)
+      - id: check-added-large-files
+        args: [--maxkb=2048]
+
+  - repo: https://github.com/biomejs/pre-commit
+    rev: v2.4.13
+    hooks:
+      - id: biome-format
+        additional_dependencies: ["@biomejs/biome@2.4.13"]
+        files: \.(jsx?|tsx?|c(js|ts)|m(js|ts)|d\.(ts|cts|mts))$
+        exclude: ^(pnpm-lock\.yaml|apps/web/src/routeTree\.gen\.ts|apps/web/src/index\.css)$
+
+  - repo: https://github.com/oxc-project/mirrors-oxlint
+    rev: v1.63.0
+    hooks:
+      - id: oxlint
+        args: [--fix]
+        types_or: [javascript, jsx, ts, tsx]
+        exclude: ^apps/web/src/routeTree\.gen\.ts$
+
+  - repo: local
+    hooks:
+      - id: pnpm-lint
+        name: pnpm lint
+        entry: pnpm lint
+        language: system
+        pass_filenames: false
+        types_or: [ts, tsx, javascript, jsx]

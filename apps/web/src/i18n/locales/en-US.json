@@ -181,7 +181,6 @@
     "aiCreateTeaser": "Spin up a brand new world from a one-line idea.",
     "aiCreateAction": "Describe your idea",
     "enter": "Enter",
-    "noModelsConfigured": "No model configured",
     "worldsEmptyTitle": "No worlds yet",
     "worldsEmptyDesc": "Generate a new world with AI, or add a world package under the worlds/ folder.",
     "worldsEmptyViewExamples": "View examples",

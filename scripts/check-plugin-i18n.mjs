@@ -30,19 +30,19 @@ const PLUGIN_GLOB = "plugins/**/ui/*.json";
 const EXEMPT_PREFIXES = [];
 
 function isEnglishLocaleKey(key) {
-  return key === "en" || key === "en-US" || key === "en-GB";
+	return key === "en" || key === "en-US" || key === "en-GB";
 }
 
 function isLocaleObject(obj) {
-  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return false;
-  const keys = Object.keys(obj);
-  if (keys.length === 0) return false;
-  // Heuristic: every value is a string, and at least one key matches a known
-  // locale pattern. We intentionally accept arbitrary extra locales (fr, ja)
-  // so long as the English locale is present.
-  const allStrings = keys.every((k) => typeof obj[k] === "string");
-  if (!allStrings) return false;
-  return keys.some(isEnglishLocaleKey);
+	if (!obj || typeof obj !== "object" || Array.isArray(obj)) return false;
+	const keys = Object.keys(obj);
+	if (keys.length === 0) return false;
+	// Heuristic: every value is a string, and at least one key matches a known
+	// locale pattern. We intentionally accept arbitrary extra locales (fr, ja)
+	// so long as the English locale is present.
+	const allStrings = keys.every((k) => typeof obj[k] === "string");
+	if (!allStrings) return false;
+	return keys.some(isEnglishLocaleKey);
 }
 
 /**
@@ -50,84 +50,86 @@ function isLocaleObject(obj) {
  * string that is NOT part of a valid I18nText object.
  */
 function walkValue(value, pathStack, onViolation) {
-  if (value == null) return;
-  if (typeof value === "string") {
-    if (CJK_REGEX.test(value)) {
-      onViolation({ path: pathStack.slice(), value });
-    }
-    return;
-  }
-  if (Array.isArray(value)) {
-    value.forEach((v, i) => {
-      pathStack.push(`[${i}]`);
-      walkValue(v, pathStack, onViolation);
-      pathStack.pop();
-    });
-    return;
-  }
-  if (typeof value === "object") {
-    if (isLocaleObject(value)) {
-      // All string values inside a locale-tagged I18nText object are legal —
-      // stop recursion, they are already paired with an English sibling.
-      return;
-    }
-    for (const [k, v] of Object.entries(value)) {
-      pathStack.push(k);
-      walkValue(v, pathStack, onViolation);
-      pathStack.pop();
-    }
-    return;
-  }
+	if (value == null) return;
+	if (typeof value === "string") {
+		if (CJK_REGEX.test(value)) {
+			onViolation({ path: pathStack.slice(), value });
+		}
+		return;
+	}
+	if (Array.isArray(value)) {
+		value.forEach((v, i) => {
+			pathStack.push(`[${i}]`);
+			walkValue(v, pathStack, onViolation);
+			pathStack.pop();
+		});
+		return;
+	}
+	if (typeof value === "object") {
+		if (isLocaleObject(value)) {
+			// All string values inside a locale-tagged I18nText object are legal —
+			// stop recursion, they are already paired with an English sibling.
+			return;
+		}
+		for (const [k, v] of Object.entries(value)) {
+			pathStack.push(k);
+			walkValue(v, pathStack, onViolation);
+			pathStack.pop();
+		}
+		return;
+	}
 }
 
 async function main() {
-  const files = [];
-  for await (const file of glob(PLUGIN_GLOB, { cwd: REPO_ROOT })) {
-    files.push(file);
-  }
-  files.sort();
+	const files = [];
+	for await (const file of glob(PLUGIN_GLOB, { cwd: REPO_ROOT })) {
+		files.push(file);
+	}
+	files.sort();
 
-  let totalViolations = 0;
-  for (const rel of files) {
-    if (EXEMPT_PREFIXES.some((p) => rel.startsWith(p))) continue;
-    const full = resolve(REPO_ROOT, rel);
-    const text = readFileSync(full, "utf8");
-    let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error(`${rel}: failed to parse JSON — ${err.message}`);
-      totalViolations += 1;
-      continue;
-    }
+	let totalViolations = 0;
+	for (const rel of files) {
+		if (EXEMPT_PREFIXES.some((p) => rel.startsWith(p))) continue;
+		const full = resolve(REPO_ROOT, rel);
+		const text = readFileSync(full, "utf8");
+		let parsed;
+		try {
+			parsed = JSON.parse(text);
+		} catch (err) {
+			// eslint-disable-next-line no-console
+			console.error(`${rel}: failed to parse JSON — ${err.message}`);
+			totalViolations += 1;
+			continue;
+		}
 
-    const violations = [];
-    walkValue(parsed, [], (v) => violations.push(v));
+		const violations = [];
+		walkValue(parsed, [], (v) => violations.push(v));
 
-    for (const v of violations) {
-      totalViolations += 1;
-      const pathStr = v.path.length > 0 ? v.path.join(".") : "(root)";
-      // eslint-disable-next-line no-console
-      console.error(
-        `${rel}: "${pathStr}" contains CJK string "${v.value.slice(0, 80)}" — wrap it in an I18nText object { "zh": "…", "en": "…" }`,
-      );
-    }
-  }
+		for (const v of violations) {
+			totalViolations += 1;
+			const pathStr = v.path.length > 0 ? v.path.join(".") : "(root)";
+			// eslint-disable-next-line no-console
+			console.error(
+				`${rel}: "${pathStr}" contains CJK string "${v.value.slice(0, 80)}" — wrap it in an I18nText object { "zh": "…", "en": "…" }`,
+			);
+		}
+	}
 
-  if (totalViolations > 0) {
-    // eslint-disable-next-line no-console
-    console.error(
-      `\ncheck-plugin-i18n: ${totalViolations} violation(s) across ${files.length} plugin UI file(s)`,
-    );
-    process.exit(1);
-  }
-  // eslint-disable-next-line no-console
-  console.log(`check-plugin-i18n: OK (${files.length} plugin UI file(s) scanned)`);
+	if (totalViolations > 0) {
+		// eslint-disable-next-line no-console
+		console.error(
+			`\ncheck-plugin-i18n: ${totalViolations} violation(s) across ${files.length} plugin UI file(s)`,
+		);
+		process.exit(1);
+	}
+	// eslint-disable-next-line no-console
+	console.log(
+		`check-plugin-i18n: OK (${files.length} plugin UI file(s) scanned)`,
+	);
 }
 
 main().catch((err) => {
-  // eslint-disable-next-line no-console
-  console.error("check-plugin-i18n crashed:", err);
-  process.exit(2);
+	// eslint-disable-next-line no-console
+	console.error("check-plugin-i18n crashed:", err);
+	process.exit(2);
 });

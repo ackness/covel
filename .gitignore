@@ -3,6 +3,13 @@
 # .claude/ is ignored by default but `skills/` is project-owned and tracked.
 .claude/*
 !.claude/skills/
+/.claude/skills/*
+!/.claude/skills/agent-browser/
+!/.claude/skills/agent-browser/**
+!/.claude/skills/create-plugin/
+!/.claude/skills/create-plugin/**
+!/.claude/skills/create-world/
+!/.claude/skills/create-world/**
 # .agents/ is for personal/IDE-global skills (not project-specific).
 .agents/
 .windsurf/

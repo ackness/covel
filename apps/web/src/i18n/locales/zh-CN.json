@@ -181,7 +181,6 @@
     "aiCreateTeaser": "用一句概念，让 AI 起一个全新世界。",
     "aiCreateAction": "描述你的想法",
     "enter": "进入",
-    "noModelsConfigured": "未配置模型",
     "worldsEmptyTitle": "还没有可用的世界",
     "worldsEmptyDesc": "让 AI 生成一个新世界,或把世界包放入 worlds/ 目录。",
     "worldsEmptyViewExamples": "查看示例",
