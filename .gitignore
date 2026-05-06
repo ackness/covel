@@ -132,3 +132,6 @@ docker/docker-compose.mock.replay.yml
 
 # ── Internal handoff bundles / session insights (local-only) ──
 devs/docs/insights/
+
+# ── Local agent context scratch ─────────────────────────────────
+context.md
