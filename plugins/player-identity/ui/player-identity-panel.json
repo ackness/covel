@@ -11,7 +11,7 @@
   "icon": "user-round-cog",
   "group": "chat-mode",
   "groupLabel": {
-    "zh": "Chat Mode",
+    "zh": "对话",
     "en": "Chat Mode"
   },
   "groupOrder": 440,
@@ -25,8 +25,179 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "粘贴玩家身份 JSON，保存后会成为当前会话 Persona，并可同步到 player Character。",
-            "en": "Paste Player Identity JSON. Saving activates it as the session persona and can sync it to the player Character."
+            "zh": "填写玩家身份，保存后可作为当前会话 Persona，并同步到 player Character。",
+            "en": "Fill in the player identity. Saving can activate it as the session persona and sync it to the player Character."
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "Grid",
+        "props": { "cols": 2 },
+        "children": [
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "身份 ID", "en": "Identity ID" },
+              "placeholder": { "zh": "留空自动生成短 ID", "en": "Leave blank to auto-generate a short ID" },
+              "value": { "$bindState": "/form/id" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "玩家姓名", "en": "Player name" },
+              "placeholder": { "zh": "例如：望月遥", "en": "e.g. Haruka" },
+              "value": { "$bindState": "/form/name" }
+            }
+          }
+        ]
+      },
+      {
+        "component": "Textarea",
+        "props": {
+          "label": { "zh": "身份简介", "en": "Description" },
+          "placeholder": {
+            "zh": "你是谁、刚来到哪里、现在最想守住什么。",
+            "en": "Who you are, where you just arrived, and what you want to protect."
+          },
+          "value": { "$bindState": "/form/description" },
+          "rows": 3
+        }
+      },
+      {
+        "component": "Textarea",
+        "props": {
+          "label": { "zh": "说话方式", "en": "Voice" },
+          "placeholder": {
+            "zh": "内心谨慎，回答礼貌，紧张时会短句。",
+            "en": "Cautious inner voice, polite replies, shorter sentences when nervous."
+          },
+          "value": { "$bindState": "/form/voice" },
+          "rows": 3
+        }
+      },
+      {
+        "component": "Grid",
+        "props": { "cols": 2 },
+        "children": [
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "目标", "en": "Goals" },
+              "placeholder": { "zh": "用逗号分隔", "en": "Comma separated" },
+              "value": { "$bindState": "/form/goalsText" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "边界", "en": "Boundaries" },
+              "placeholder": { "zh": "不主动伤害同学, 保守秘密", "en": "avoid harming classmates, keep secrets" },
+              "value": { "$bindState": "/form/boundariesText" }
+            }
+          }
+        ]
+      },
+      {
+        "component": "Grid",
+        "props": { "cols": 3 },
+        "children": [
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "出身", "en": "Origin" },
+              "value": { "$bindState": "/form/origin" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "班级/身份", "en": "Class / identity" },
+              "value": { "$bindState": "/form/className" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "社团/组织", "en": "Club / group" },
+              "value": { "$bindState": "/form/club" }
+            }
+          }
+        ]
+      },
+      {
+        "component": "Input",
+        "props": {
+          "label": { "zh": "关系基调", "en": "Relationship tone" },
+          "placeholder": { "zh": "慢热、真诚、会保持距离", "en": "slow-burn, sincere, keeps some distance" },
+          "value": { "$bindState": "/form/relationshipTone" }
+        }
+      },
+      {
+        "component": "Row",
+        "props": { "gap": "sm" },
+        "children": [
+          {
+            "component": "Button",
+            "props": {
+              "label": {
+                "zh": "保存并启用身份",
+                "en": "Save and activate"
+              },
+              "variant": "primary",
+              "size": "compact"
+            },
+            "on": {
+              "click": {
+                "action": "invokeRuntime",
+                "params": {
+                  "runtimeId": "player-identity",
+                  "payload": {
+                    "profileForm": { "$bindState": "/form" },
+                    "activate": true,
+                    "bindToPlayer": true
+                  }
+                }
+              }
+            }
+          },
+          {
+            "component": "Button",
+            "props": {
+              "label": {
+                "zh": "仅保存身份",
+                "en": "Save only"
+              },
+              "variant": "ghost",
+              "size": "compact"
+            },
+            "on": {
+              "click": {
+                "action": "invokeRuntime",
+                "params": {
+                  "runtimeId": "player-identity",
+                  "payload": {
+                    "profileForm": { "$bindState": "/form" },
+                    "activate": false,
+                    "bindToPlayer": false
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "component": "Separator"
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "JSON 导入",
+            "en": "JSON import"
           },
           "variant": "muted",
           "size": "xs"
@@ -48,8 +219,8 @@
         "component": "Button",
         "props": {
           "label": {
-            "zh": "保存身份",
-            "en": "Save Identity"
+            "zh": "从 JSON 导入",
+            "en": "Import from JSON"
           },
           "variant": "primary",
           "size": "compact"

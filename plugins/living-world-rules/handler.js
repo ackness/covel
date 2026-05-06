@@ -1,4 +1,4 @@
-import { withPendingProposals } from "@covel/tools";
+import { shortId, withPendingProposals } from "@covel/tools";
 
 const RULE_NAMESPACE = "rules";
 const MAX_RULE_BYTES = 65_536;
@@ -20,7 +20,7 @@ const VALID_BUDGET_CLASSES = new Set(["sticky", "flexible", "droppable"]);
  */
 export default async function handler(ctx) {
 	const payload = ctx.manualPayload ?? {};
-	const rule = normalizeRule(readRulePayload(payload));
+	const rule = normalizeRule(readRulePayload(payload, ctx.sessionId));
 	const now = new Date().toISOString();
 	const lorebookEntryId = lorebookIdForRule(rule.id);
 
@@ -49,18 +49,95 @@ export default async function handler(ctx) {
 	);
 }
 
-function readRulePayload(payload) {
+function readRulePayload(payload, sessionId) {
 	if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-		if (typeof payload.ruleJson === "string") {
+		if (
+			typeof payload.ruleJson === "string" &&
+			payload.ruleJson.trim().length > 0
+		) {
 			try {
 				return JSON.parse(payload.ruleJson);
 			} catch {
 				throw new Error("manualPayload.ruleJson must be valid JSON");
 			}
 		}
+		if (payload.ruleForm && typeof payload.ruleForm === "object") {
+			return ruleFromForm(
+				/** @type {Record<string, unknown>} */ (payload.ruleForm),
+				payload.enabled !== false,
+				sessionId,
+			);
+		}
 		return payload.rule;
 	}
 	return undefined;
+}
+
+/**
+ * @param {Record<string, unknown>} form
+ * @param {boolean} enabled
+ * @param {string} sessionId
+ */
+function ruleFromForm(form, enabled, sessionId) {
+	const position = optionalString(form.position);
+	const depth = optionalNumber(form.depth);
+	const title = optionalString(form.title);
+	const content = normalizeRequiredString(form.content, "rule.content");
+	return {
+		schemaVersion: 1,
+		id: optionalString(form.id) ?? shortId("rule", title ?? content, sessionId),
+		...(title ? { title } : {}),
+		content,
+		kind: optionalString(form.kind) ?? "constant",
+		...(optionalString(form.category)
+			? { category: optionalString(form.category) }
+			: {}),
+		enabled,
+		coordinate: {
+			position: position ?? "after_plugin",
+			...(depth !== undefined ? { depth } : {}),
+		},
+		...(optionalString(form.budgetClass)
+			? { budgetClass: optionalString(form.budgetClass) }
+			: {}),
+		...(splitList(form.keysText).length > 0
+			? { keys: splitList(form.keysText) }
+			: {}),
+		...(optionalNumber(form.insertionOrder) !== undefined
+			? { insertionOrder: optionalNumber(form.insertionOrder) }
+			: {}),
+	};
+}
+
+/**
+ * @param {unknown} value
+ */
+function optionalString(value) {
+	return typeof value === "string" && value.trim().length > 0
+		? value.trim()
+		: undefined;
+}
+
+/**
+ * @param {unknown} value
+ */
+function optionalNumber(value) {
+	if (typeof value === "number" && Number.isFinite(value)) return value;
+	if (typeof value !== "string" || value.trim().length === 0) return undefined;
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/**
+ * @param {unknown} value
+ */
+function splitList(value) {
+	if (typeof value !== "string") return [];
+	return value
+		.split(/[,，\n]/)
+		.map((item) => item.trim())
+		.filter(Boolean)
+		.slice(0, 32);
 }
 
 /**

@@ -1,5 +1,5 @@
 import { playerIdentityToCharacterUpsert } from "@covel/shared";
-import { withPendingProposals } from "@covel/tools";
+import { shortId, withPendingProposals } from "@covel/tools";
 
 const PROFILE_NAMESPACE = "profiles";
 const BINDING_NAMESPACE = "session-binding";
@@ -14,14 +14,15 @@ const PROFILE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
  */
 export default async function handler(ctx) {
 	const payload = ctx.manualPayload ?? {};
-	const profile = normalizeProfile(readProfilePayload(payload));
+	const profile = normalizeProfile(readProfilePayload(payload, ctx.sessionId));
 	const shouldActivate = payload.activate !== false;
 	const shouldBindToPlayer = payload.bindToPlayer !== false;
 	const now = new Date().toISOString();
 	const existingPlayer = shouldBindToPlayer
 		? await findExistingPlayer(ctx.store, ctx.sessionId)
 		: undefined;
-	const characterId = existingPlayer?.id ?? `player-${profile.id}`;
+	const characterId =
+		existingPlayer?.id ?? playerCharacterIdForProfile(profile.id);
 
 	const proposals = [
 		makeProposal(ctx, now, "plugin.data", {
@@ -56,7 +57,10 @@ export default async function handler(ctx) {
 				now,
 				"character.upsert",
 				playerIdentityToCharacterUpsert(profile, {
-					existingPlayer,
+					existingPlayer: existingPlayer ?? {
+						id: characterId,
+						name: profile.name,
+					},
 					now,
 					mirrorPluginId: DEFAULT_MIRROR_PLUGIN_ID,
 				}),
@@ -75,18 +79,96 @@ export default async function handler(ctx) {
 	);
 }
 
-function readProfilePayload(payload) {
+function playerCharacterIdForProfile(profileId) {
+	return profileId.startsWith("player-") ? profileId : `player-${profileId}`;
+}
+
+function readProfilePayload(payload, sessionId) {
 	if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-		if (typeof payload.profileJson === "string") {
+		if (
+			typeof payload.profileJson === "string" &&
+			payload.profileJson.trim().length > 0
+		) {
 			try {
 				return JSON.parse(payload.profileJson);
 			} catch {
 				throw new Error("manualPayload.profileJson must be valid JSON");
 			}
 		}
+		if (payload.profileForm && typeof payload.profileForm === "object") {
+			return profileFromForm(
+				/** @type {Record<string, unknown>} */ (payload.profileForm),
+				sessionId,
+			);
+		}
 		return payload.profile;
 	}
 	return undefined;
+}
+
+/**
+ * @param {Record<string, unknown>} form
+ * @param {string} sessionId
+ */
+function profileFromForm(form, sessionId) {
+	const fields = compactRecord({
+		origin: optionalString(form.origin),
+		className: optionalString(form.className),
+		club: optionalString(form.club),
+	});
+	const name = normalizeRequiredString(form.name, "profile.name");
+	const explicitId = optionalString(form.id);
+	return {
+		schemaVersion: 1,
+		id: explicitId ?? shortId("player", name, sessionId),
+		name,
+		...(optionalString(form.description)
+			? { description: optionalString(form.description) }
+			: {}),
+		...(optionalString(form.voice)
+			? { voice: optionalString(form.voice) }
+			: {}),
+		...(splitList(form.goalsText).length > 0
+			? { goals: splitList(form.goalsText) }
+			: {}),
+		...(splitList(form.boundariesText).length > 0
+			? { boundaries: splitList(form.boundariesText) }
+			: {}),
+		...(optionalString(form.relationshipTone)
+			? { relationshipTone: optionalString(form.relationshipTone) }
+			: {}),
+		...(Object.keys(fields).length > 0 ? { fields } : {}),
+	};
+}
+
+/**
+ * @param {unknown} value
+ */
+function optionalString(value) {
+	return typeof value === "string" && value.trim().length > 0
+		? value.trim()
+		: undefined;
+}
+
+/**
+ * @param {unknown} value
+ */
+function splitList(value) {
+	if (typeof value !== "string") return [];
+	return value
+		.split(/[,，\n]/)
+		.map((item) => item.trim())
+		.filter(Boolean)
+		.slice(0, 32);
+}
+
+/**
+ * @param {Record<string, unknown>} value
+ */
+function compactRecord(value) {
+	return Object.fromEntries(
+		Object.entries(value).filter(([, entry]) => entry !== undefined),
+	);
 }
 
 /**

@@ -149,6 +149,8 @@ activity-bar（右侧垂直 Tab 条）每个 Tab 只能显示极窄的文字。�
 
 合并规则与 `groupLabel` 一致——同 `group` 内首个声明者赢；为 robustness 建议同 group 的所有 spec 都重复声明同一 `shortLabel`，避免依赖加载顺序。
 
+插件拥有自己的 UI 文案命名空间。插件组名、插件短标签、面板标签、按钮和表单字段都应写在 `plugins/<id>/ui/*.json` 的 `I18nText` 中；框架 i18n 字典只承载框架自有导航、系统按钮和通用状态文案。多个插件共享同一 `group` 时，每个插件 spec 都应重复声明一致的 `groupLabel`，activity-bar 的短标签由同组第一个 `shortLabel` 决定。
+
 实现位置：`apps/web/src/components/session/right-panel.tsx` 的 `compactTabLabel()` 与 `aggregateSpecsIntoGroups()`。
 
 ### 空状态渲染

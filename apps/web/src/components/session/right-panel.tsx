@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Database, BookOpen, HelpCircle, type LucideIcon } from "lucide-react";
 import * as Icons from "lucide-react";
@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { WorldDocumentPanel } from "./world-document-panel.js";
 import { PluginPanel } from "./plugin-panel.js";
+import type { PluginPanelStateCache } from "./plugin-panel.js";
 import { DatabasePanel } from "./database-panel.js";
 import {
 	fetchServerHealth,
@@ -113,8 +114,6 @@ function compactTabLabel(label: string): string {
 }
 
 function groupShortLabel(group: PluginTabGroup): string | undefined {
-	if (group.id === "chat-mode") return "对话";
-	if (group.id === "world-data") return "维度";
 	return group.shortLabel;
 }
 
@@ -204,6 +203,7 @@ export function RightPanel({
 	onToggleRightPanel,
 }: RightPanelProps) {
 	const { t, i18n } = useTranslation();
+	const pluginPanelStateCacheRef = useRef<PluginPanelStateCache>(new Map());
 	const [storeBackend, setStoreBackend] = useState<string | null>(null);
 	const [rawSlotEntries, setRawSlotEntries] = useState<UISlotEntry[]>([]);
 	const [activePluginSubTab, setActivePluginSubTab] = useState<
@@ -492,6 +492,7 @@ export function RightPanel({
 										key={currentSub.id}
 										pluginId={currentSub.pluginId}
 										spec={currentSub.spec}
+										stateCache={pluginPanelStateCacheRef.current}
 									/>
 								)}
 							</TabsContent>

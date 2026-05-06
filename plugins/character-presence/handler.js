@@ -1,4 +1,4 @@
-import { withPendingProposals } from "@covel/tools";
+import { shortId, withPendingProposals } from "@covel/tools";
 
 const PRESENCE_NAMESPACE = "presence";
 const MAX_PRESENCE_BYTES = 65_536;
@@ -10,7 +10,9 @@ const CHARACTER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
  */
 export default async function handler(ctx) {
 	const payload = ctx.manualPayload ?? {};
-	const presence = normalizePresence(readPresencePayload(payload));
+	const presence = normalizePresence(
+		readPresencePayload(payload, ctx.sessionId),
+	);
 	const now = new Date().toISOString();
 
 	const proposal = {
@@ -42,18 +44,101 @@ export default async function handler(ctx) {
 	);
 }
 
-function readPresencePayload(payload) {
+function readPresencePayload(payload, sessionId) {
 	if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-		if (typeof payload.presenceJson === "string") {
+		if (
+			typeof payload.presenceJson === "string" &&
+			payload.presenceJson.trim().length > 0
+		) {
 			try {
 				return JSON.parse(payload.presenceJson);
 			} catch {
 				throw new Error("manualPayload.presenceJson must be valid JSON");
 			}
 		}
+		if (payload.presenceForm && typeof payload.presenceForm === "object") {
+			return presenceFromForm(
+				/** @type {Record<string, unknown>} */ (payload.presenceForm),
+				sessionId,
+			);
+		}
 		return payload.presence;
 	}
 	return undefined;
+}
+
+/**
+ * @param {Record<string, unknown>} form
+ * @param {string} sessionId
+ */
+function presenceFromForm(form, sessionId) {
+	const displayName = optionalString(form.displayName);
+	const presence = {
+		schemaVersion: 1,
+		characterId:
+			optionalString(form.characterId) ??
+			shortId(
+				"npc",
+				displayName ?? optionalString(form.style) ?? "presence",
+				sessionId,
+			),
+		...(displayName ? { displayName } : {}),
+		...(optionalString(form.style)
+			? { style: optionalString(form.style) }
+			: {}),
+		...(mediaRefFromForm(form, "avatar")
+			? { avatar: mediaRefFromForm(form, "avatar") }
+			: {}),
+		...(mediaRefFromForm(form, "sprite")
+			? { sprite: mediaRefFromForm(form, "sprite") }
+			: {}),
+		...(mediaRefFromForm(form, "voice")
+			? { voice: mediaRefFromForm(form, "voice") }
+			: {}),
+	};
+	const extraKey = optionalString(form.mediaKey);
+	const extraRef = mediaRefFromForm(form, "media");
+	return extraKey && extraRef
+		? { ...presence, media: { [extraKey]: extraRef } }
+		: presence;
+}
+
+/**
+ * @param {Record<string, unknown>} form
+ * @param {string} prefix
+ */
+function mediaRefFromForm(form, prefix) {
+	const id = optionalString(form[`${prefix}Id`]);
+	const mime = optionalString(form[`${prefix}Mime`]);
+	const size = optionalInteger(form[`${prefix}Size`]);
+	if (!id && !mime && size === undefined) return undefined;
+	return {
+		id: id ?? "",
+		mime: mime ?? "",
+		size: size ?? -1,
+		...(optionalString(form[`${prefix}Url`])
+			? { url: optionalString(form[`${prefix}Url`]) }
+			: {}),
+	};
+}
+
+/**
+ * @param {unknown} value
+ */
+function optionalString(value) {
+	return typeof value === "string" && value.trim().length > 0
+		? value.trim()
+		: undefined;
+}
+
+/**
+ * @param {unknown} value
+ */
+function optionalInteger(value) {
+	if (typeof value === "number" && Number.isInteger(value)) return value;
+	if (typeof value !== "string" || value.trim().length === 0) return undefined;
+	const parsed = Number(value);
+	return Number.isInteger(parsed) ? parsed : undefined;
 }
 
 /**

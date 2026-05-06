@@ -212,12 +212,13 @@ function RootLayout() {
 							<button
 								onClick={toggleLocale}
 								aria-label={
-									locale === "zh-CN" ? "Switch to English" : "Switch to Chinese"
+									locale === "zh-CN"
+										? t("onboarding.localeEn", "Switch to English")
+										: t("onboarding.localeZh", "Switch to Chinese")
 								}
 								className="hidden md:flex items-center justify-center h-9 min-w-9 px-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-muted/40 transition-colors rounded-[var(--radius-control)]"
 							>
-								{locale === "zh-CN" ? "EN" : "中"}{" "}
-								{/* i18n-allow: toggle shows the *other* language */}
+								{locale === "zh-CN" ? "EN" : "ZH"}
 							</button>
 							{!isSession && (
 								<Button

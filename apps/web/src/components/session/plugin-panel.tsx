@@ -5,9 +5,14 @@
  * and injects pluginData as initial state.
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { JSONUIProvider, Renderer } from "@json-render/react";
+import {
+	JSONUIProvider,
+	Renderer,
+	createStateStore,
+	type StateStore,
+} from "@json-render/react";
 import { nestedToFlat } from "@json-render/core";
 import type { Spec } from "@json-render/core";
 import { covelRegistry } from "@/lib/catalog.js";
@@ -29,9 +34,12 @@ import {
 import { Button as UIButton } from "@/components/ui/button.js";
 import { X } from "lucide-react";
 
+export type PluginPanelStateCache = Map<string, StateStore>;
+
 export interface PluginPanelProps {
 	pluginId: string;
 	spec: Record<string, unknown>;
+	stateCache?: PluginPanelStateCache;
 	onAction?: (actionName: string, params?: Record<string, unknown>) => void;
 	handlers?: Record<
 		string,
@@ -125,6 +133,7 @@ function resolveEmptyMessage(value: unknown): string {
 export function PluginPanel({
 	pluginId,
 	spec,
+	stateCache,
 	onAction,
 	handlers: explicitHandlers,
 	stateOverride,
@@ -209,6 +218,15 @@ export function PluginPanel({
 		setConfirmRequest(null);
 	}, []);
 
+	const stateCacheKey = `${pluginId}:${String(spec.id ?? spec.label ?? "panel")}`;
+	const stateStoreRef = useRef<StateStore | null>(null);
+	if (!stateStoreRef.current) {
+		const cached = stateCache?.get(stateCacheKey);
+		stateStoreRef.current = cached ?? createStateStore({});
+		if (!cached) stateCache?.set(stateCacheKey, stateStoreRef.current);
+	}
+	const stateStore = stateStoreRef.current;
+
 	const initialState = useMemo(() => {
 		const entries = Object.entries(data).map(([key, value]) => ({
 			key,
@@ -216,6 +234,10 @@ export function PluginPanel({
 		}));
 		return { ...expandIndexedState(data), entries, _invoking: invokingMap };
 	}, [data, invokingMap]);
+	useEffect(() => {
+		const updates = flattenStateForPluginPanel(initialState);
+		stateStore.update(updates);
+	}, [initialState, stateStore]);
 
 	const failedJobs = useMemo(
 		() =>
@@ -599,7 +621,7 @@ export function PluginPanel({
 			)}
 			<JSONUIProvider
 				registry={covelRegistry}
-				initialState={initialState}
+				store={stateStore}
 				handlers={handlers}
 			>
 				<Renderer spec={flatSpec} registry={covelRegistry} />
@@ -644,6 +666,34 @@ function specUsesComponent(node: unknown, component: string): boolean {
 		return children.some((child) => specUsesComponent(child, component));
 	}
 	return false;
+}
+
+function flattenStateForPluginPanel(
+	value: Record<string, unknown>,
+): Record<string, unknown> {
+	const updates: Record<string, unknown> = {};
+	flattenStateValue(updates, "", value);
+	return updates;
+}
+
+function flattenStateValue(
+	updates: Record<string, unknown>,
+	basePath: string,
+	value: unknown,
+): void {
+	if (Array.isArray(value)) {
+		updates[basePath || "/"] = value;
+		return;
+	}
+	if (value && typeof value === "object") {
+		for (const [key, child] of Object.entries(
+			value as Record<string, unknown>,
+		)) {
+			flattenStateValue(updates, `${basePath}/${key}`, child);
+		}
+		return;
+	}
+	updates[basePath || "/"] = value;
 }
 
 function expandIndexedState(

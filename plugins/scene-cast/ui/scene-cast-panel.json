@@ -11,7 +11,7 @@
   "icon": "users-round",
   "group": "chat-mode",
   "groupLabel": {
-    "zh": "Chat Mode",
+    "zh": "对话",
     "en": "Chat Mode"
   },
   "groupOrder": 450,
@@ -38,17 +38,11 @@
         }
       },
       {
-        "component": "JsonView",
+        "component": "SceneCastList",
         "props": {
-          "value": { "$state": "/current/speakers" }
-        }
-      },
-      {
-        "component": "Text",
-        "props": {
-          "content": { "$state": "/current/reason" },
-          "variant": "muted",
-          "size": "xs"
+          "speakers": { "$state": "/current/speakers" },
+          "reason": { "$state": "/current/reason" },
+          "reasonLabel": { "$state": "/current/reasonLabel" }
         }
       }
     ]

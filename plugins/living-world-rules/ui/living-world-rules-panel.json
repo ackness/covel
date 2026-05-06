@@ -11,7 +11,7 @@
   "icon": "book-marked",
   "group": "chat-mode",
   "groupLabel": {
-    "zh": "Chat Mode",
+    "zh": "对话",
     "en": "Chat Mode"
   },
   "groupOrder": 430,
@@ -25,8 +25,195 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "粘贴世界规则 JSON，保存后会写入 Covel lorebook，并在 Prompt V2 中按坐标注入。",
-            "en": "Paste World Rule JSON. Saving writes it to the Covel lorebook and injects it through Prompt V2 coordinates."
+            "zh": "填写会持续影响对话的世界规则。保存后会写入 Covel lorebook，并按坐标注入 Prompt V2。",
+            "en": "Fill in a world rule that influences dialogue. Saving writes it to the Covel lorebook and injects it through Prompt V2 coordinates."
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "Grid",
+        "props": { "cols": 2 },
+        "children": [
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "规则 ID", "en": "Rule ID" },
+              "placeholder": { "zh": "留空自动生成短 ID", "en": "Leave blank to auto-generate a short ID" },
+              "value": { "$bindState": "/form/id" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "标题", "en": "Title" },
+              "placeholder": { "zh": "雨市真名禁忌", "en": "True-name taboo" },
+              "value": { "$bindState": "/form/title" }
+            }
+          }
+        ]
+      },
+      {
+        "component": "Textarea",
+        "props": {
+          "label": { "zh": "规则内容", "en": "Rule content" },
+          "placeholder": {
+            "zh": "雨市里没人会直接说出真实姓名。",
+            "en": "No one in the rain market says their true name directly."
+          },
+          "value": { "$bindState": "/form/content" },
+          "rows": 4
+        }
+      },
+      {
+        "component": "Grid",
+        "props": { "cols": 3 },
+        "children": [
+          {
+            "component": "Select",
+            "props": {
+              "label": { "zh": "类型", "en": "Kind" },
+              "value": { "$bindState": "/form/kind" },
+              "options": [
+                { "value": "constant", "label": { "zh": "常驻", "en": "Constant" } },
+                { "value": "triggered", "label": { "zh": "关键词触发", "en": "Triggered" } },
+                { "value": "evolving", "label": { "zh": "可演化", "en": "Evolving" } }
+              ]
+            }
+          },
+          {
+            "component": "Select",
+            "props": {
+              "label": { "zh": "分类", "en": "Category" },
+              "value": { "$bindState": "/form/category" },
+              "options": [
+                { "value": "", "label": { "zh": "未分类", "en": "Uncategorized" } },
+                { "value": "character", "label": { "zh": "角色", "en": "Character" } },
+                { "value": "scene", "label": { "zh": "场景", "en": "Scene" } },
+                { "value": "relationship", "label": { "zh": "关系", "en": "Relationship" } },
+                { "value": "world", "label": { "zh": "世界", "en": "World" } },
+                { "value": "style", "label": { "zh": "风格", "en": "Style" } }
+              ]
+            }
+          },
+          {
+            "component": "Select",
+            "props": {
+              "label": { "zh": "预算", "en": "Budget" },
+              "value": { "$bindState": "/form/budgetClass" },
+              "options": [
+                { "value": "", "label": { "zh": "默认", "en": "Default" } },
+                { "value": "sticky", "label": { "zh": "常驻", "en": "Sticky" } },
+                { "value": "flexible", "label": { "zh": "弹性", "en": "Flexible" } },
+                { "value": "droppable", "label": { "zh": "可丢弃", "en": "Droppable" } }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "component": "Grid",
+        "props": { "cols": 3 },
+        "children": [
+          {
+            "component": "Select",
+            "props": {
+              "label": { "zh": "注入位置", "en": "Position" },
+              "value": { "$bindState": "/form/position" },
+              "options": [
+                { "value": "after_plugin", "label": { "zh": "插件后", "en": "After plugin" } },
+                { "value": "before_plugin", "label": { "zh": "插件前", "en": "Before plugin" } },
+                { "value": "at_depth", "label": { "zh": "指定深度", "en": "At depth" } }
+              ]
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "深度", "en": "Depth" },
+              "placeholder": { "zh": "位置为指定深度时填写", "en": "Used with at depth" },
+              "value": { "$bindState": "/form/depth" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "顺序", "en": "Order" },
+              "placeholder": { "zh": "默认 500", "en": "Default 500" },
+              "value": { "$bindState": "/form/insertionOrder" }
+            }
+          }
+        ]
+      },
+      {
+        "component": "Input",
+        "props": {
+          "label": { "zh": "关键词", "en": "Keys" },
+          "placeholder": { "zh": "用逗号分隔，用于关键词触发规则", "en": "Comma separated, used by triggered rules" },
+          "value": { "$bindState": "/form/keysText" }
+        }
+      },
+      {
+        "component": "Row",
+        "props": { "gap": "sm" },
+        "children": [
+          {
+            "component": "Button",
+            "props": {
+              "label": {
+                "zh": "保存并启用规则",
+                "en": "Save enabled rule"
+              },
+              "variant": "primary",
+              "size": "compact"
+            },
+            "on": {
+              "click": {
+                "action": "invokeRuntime",
+                "params": {
+                  "runtimeId": "living-world-rules",
+                  "payload": {
+                    "ruleForm": { "$bindState": "/form" }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "component": "Button",
+            "props": {
+              "label": {
+                "zh": "保存为停用",
+                "en": "Save disabled"
+              },
+              "variant": "ghost",
+              "size": "compact"
+            },
+            "on": {
+              "click": {
+                "action": "invokeRuntime",
+                "params": {
+                  "runtimeId": "living-world-rules",
+                  "payload": {
+                    "ruleForm": { "$bindState": "/form" },
+                    "enabled": false
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "component": "Separator"
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "JSON 导入",
+            "en": "JSON import"
           },
           "variant": "muted",
           "size": "xs"
@@ -39,7 +226,10 @@
             "zh": "规则 JSON",
             "en": "Rule JSON"
           },
-          "placeholder": "{ \"schemaVersion\": 1, \"id\": \"rain-market\", \"content\": \"雨市里没人会直接说出真实姓名。\", \"kind\": \"constant\", \"coordinate\": { \"position\": \"before_plugin\" } }",
+          "placeholder": {
+            "zh": "{ \"schemaVersion\": 1, \"id\": \"rain-market\", \"content\": \"雨市里没人会直接说出真实姓名。\", \"kind\": \"constant\", \"coordinate\": { \"position\": \"before_plugin\" } }",
+            "en": "{ \"schemaVersion\": 1, \"id\": \"rain-market\", \"content\": \"No one in the rain market says their true name directly.\", \"kind\": \"constant\", \"coordinate\": { \"position\": \"before_plugin\" } }"
+          },
           "value": { "$bindState": "/draftJson" },
           "rows": 10
         }
@@ -48,8 +238,8 @@
         "component": "Button",
         "props": {
           "label": {
-            "zh": "保存规则",
-            "en": "Save Rule"
+            "zh": "从 JSON 导入",
+            "en": "Import from JSON"
           },
           "variant": "primary",
           "size": "compact"

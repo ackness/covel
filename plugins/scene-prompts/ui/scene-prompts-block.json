@@ -12,7 +12,7 @@
           {
             "component": "Text",
             "props": {
-              "content": "SCENE PROMPTS",
+              "content": { "zh": "场景提示", "en": "SCENE PROMPTS" },
               "variant": "muted",
               "size": "xs",
               "className": "ui-meta"

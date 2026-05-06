@@ -11,7 +11,7 @@
   "icon": "image-plus",
   "group": "chat-mode",
   "groupLabel": {
-    "zh": "Chat Mode",
+    "zh": "对话",
     "en": "Chat Mode"
   },
   "groupOrder": 430,
@@ -25,8 +25,196 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "粘贴角色存在感 JSON，保存头像、立绘、语音与媒体引用。",
-            "en": "Paste Character Presence JSON to save avatar, sprite, voice, and media refs."
+            "zh": "填写角色存在感资源。头像、立绘、语音等引用会保存到当前角色。",
+            "en": "Fill in character presence assets. Avatar, sprite, voice, and media refs are saved for this character."
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "Grid",
+        "props": { "cols": 2 },
+        "children": [
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "角色 ID", "en": "Character ID" },
+              "placeholder": { "zh": "留空自动生成短 ID", "en": "Leave blank to auto-generate a short ID" },
+              "value": { "$bindState": "/form/characterId" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "显示名", "en": "Display name" },
+              "placeholder": { "zh": "例如：林月", "en": "e.g. Lin Yue" },
+              "value": { "$bindState": "/form/displayName" }
+            }
+          }
+        ]
+      },
+      {
+        "component": "Textarea",
+        "props": {
+          "label": { "zh": "表现风格", "en": "Presence style" },
+          "placeholder": {
+            "zh": "立绘偏安静，语音轻声，紧张时视线会避开玩家。",
+            "en": "Quiet sprite direction, soft voice, avoids eye contact when nervous."
+          },
+          "value": { "$bindState": "/form/style" },
+          "rows": 3
+        }
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "头像引用",
+            "en": "Avatar ref"
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "Grid",
+        "props": { "cols": 3 },
+        "children": [
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "头像 Asset ID", "en": "Avatar asset ID" },
+              "value": { "$bindState": "/form/avatarId" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "MIME", "en": "MIME" },
+              "placeholder": { "zh": "image/png", "en": "image/png" },
+              "value": { "$bindState": "/form/avatarMime" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "大小", "en": "Size" },
+              "placeholder": { "zh": "1234", "en": "1234" },
+              "value": { "$bindState": "/form/avatarSize" }
+            }
+          }
+        ]
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "立绘引用",
+            "en": "Sprite ref"
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "Grid",
+        "props": { "cols": 3 },
+        "children": [
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "立绘 Asset ID", "en": "Sprite asset ID" },
+              "value": { "$bindState": "/form/spriteId" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "MIME", "en": "MIME" },
+              "placeholder": { "zh": "image/png", "en": "image/png" },
+              "value": { "$bindState": "/form/spriteMime" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "大小", "en": "Size" },
+              "value": { "$bindState": "/form/spriteSize" }
+            }
+          }
+        ]
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "语音引用",
+            "en": "Voice ref"
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "Grid",
+        "props": { "cols": 3 },
+        "children": [
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "语音 Asset ID", "en": "Voice asset ID" },
+              "value": { "$bindState": "/form/voiceId" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "MIME", "en": "MIME" },
+              "placeholder": { "zh": "audio/wav", "en": "audio/wav" },
+              "value": { "$bindState": "/form/voiceMime" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "大小", "en": "Size" },
+              "value": { "$bindState": "/form/voiceSize" }
+            }
+          }
+        ]
+      },
+      {
+        "component": "Button",
+        "props": {
+          "label": {
+            "zh": "保存存在感",
+            "en": "Save presence"
+          },
+          "variant": "primary",
+          "size": "compact"
+        },
+        "on": {
+          "click": {
+            "action": "invokeRuntime",
+            "params": {
+              "runtimeId": "character-presence",
+              "payload": {
+                "presenceForm": { "$bindState": "/form" }
+              }
+            }
+          }
+        }
+      },
+      {
+        "component": "Separator"
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "JSON 导入",
+            "en": "JSON import"
           },
           "variant": "muted",
           "size": "xs"
@@ -48,8 +236,8 @@
         "component": "Button",
         "props": {
           "label": {
-            "zh": "保存存在感",
-            "en": "Save Presence"
+            "zh": "从 JSON 导入",
+            "en": "Import from JSON"
           },
           "variant": "primary",
           "size": "compact"

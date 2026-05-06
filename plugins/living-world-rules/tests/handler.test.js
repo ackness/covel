@@ -122,6 +122,100 @@ describe("living-world-rules handler", () => {
 		});
 	});
 
+	it("accepts structured rule form payloads", async () => {
+		const result = await handler(
+			ctx({
+				ruleForm: {
+					id: "club-room",
+					title: "活动室门禁",
+					content: "文艺部活动室在放学后只允许社员进入。",
+					kind: "triggered",
+					category: "scene",
+					keysText: "文艺部, 活动室",
+					position: "before_plugin",
+					budgetClass: "sticky",
+					insertionOrder: "80",
+				},
+			}),
+		);
+
+		expect(result).toEqual({
+			saved: true,
+			ruleId: "club-room",
+			lorebookEntryId: "lwr-club-room",
+		});
+		const proposals = getPendingProposals(result);
+		expect(proposals[0]).toMatchObject({
+			type: "plugin.data",
+			payload: {
+				namespace: "rules",
+				key: "club-room",
+				value: {
+					rule: {
+						schemaVersion: 1,
+						id: "club-room",
+						title: "活动室门禁",
+						content: "文艺部活动室在放学后只允许社员进入。",
+						kind: "triggered",
+						category: "scene",
+						keys: ["文艺部", "活动室"],
+						coordinate: { position: "before_plugin" },
+						budgetClass: "sticky",
+						insertionOrder: 80,
+					},
+				},
+			},
+		});
+		expect(proposals[1]).toMatchObject({
+			type: "lorebook.upsert",
+			payload: {
+				entries: [
+					{
+						id: "lwr-club-room",
+						strategy: "selective",
+						position: "before_plugin",
+						insertionOrder: 80,
+						enabled: true,
+						keys: ["文艺部", "活动室"],
+					},
+				],
+			},
+		});
+	});
+
+	it("can save structured rule form payloads as disabled", async () => {
+		const result = await handler(
+			ctx({
+				enabled: false,
+				ruleForm: {
+					id: "old-rule",
+					content: "旧规则暂时停用。",
+				},
+			}),
+		);
+
+		const proposals = getPendingProposals(result);
+		expect(proposals[0].payload.value.rule.enabled).toBe(false);
+		expect(proposals[1].payload.entries[0].enabled).toBe(false);
+	});
+
+	it("generates short rule ids when structured forms leave id blank", async () => {
+		const result = await handler(
+			ctx({
+				ruleForm: {
+					title: "Club Room Rule",
+					content: "文艺部活动室只允许社员进入。",
+				},
+			}),
+		);
+
+		expect(result).toEqual({
+			saved: true,
+			ruleId: "rule-club-room-rule",
+			lorebookEntryId: "lwr-rule-club-room-rule",
+		});
+	});
+
 	it("rejects malformed rules", async () => {
 		await expect(handler(ctx({ ruleJson: "{bad json" }))).rejects.toThrow(
 			"manualPayload.ruleJson must be valid JSON",

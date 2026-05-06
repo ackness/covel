@@ -883,6 +883,140 @@ const CharacterBlueprintList: ComponentRenderer = ({ element }) => {
 	);
 };
 
+// ── SceneCastList ────────────────────────────────────────────────
+
+interface SceneCastSpeakerView {
+	readonly id?: string;
+	readonly name?: string;
+	readonly type?: string;
+	readonly description?: string;
+	readonly score?: number;
+	readonly signals?: readonly unknown[];
+	readonly signalViews?: readonly {
+		readonly id?: string;
+		readonly label?: unknown;
+	}[];
+}
+
+function readSceneCastSpeakers(value: unknown): SceneCastSpeakerView[] {
+	return Array.isArray(value)
+		? value.filter(isRecordLike).map((speaker) => ({
+				id: typeof speaker.id === "string" ? speaker.id : undefined,
+				name: typeof speaker.name === "string" ? speaker.name : undefined,
+				type: typeof speaker.type === "string" ? speaker.type : undefined,
+				description:
+					typeof speaker.description === "string"
+						? speaker.description
+						: undefined,
+				score: typeof speaker.score === "number" ? speaker.score : undefined,
+				signals: Array.isArray(speaker.signals) ? speaker.signals : [],
+				signalViews: Array.isArray(speaker.signalViews)
+					? speaker.signalViews.filter(isRecordLike).map((signal) => ({
+							id: typeof signal.id === "string" ? signal.id : undefined,
+							label: signal.label,
+						}))
+					: [],
+			}))
+		: [];
+}
+
+function compactSpeakerId(value: string | undefined): string {
+	if (!value) return "";
+	const npcIndex = value.lastIndexOf("-npc-");
+	if (npcIndex >= 0) return value.slice(npcIndex + 1);
+	const playerIndex = value.lastIndexOf("-player-");
+	if (playerIndex >= 0) return value.slice(playerIndex + 1);
+	if (value.length <= 28) return value;
+	return value.slice(-28);
+}
+
+const SceneCastList: ComponentRenderer = ({ element }) => {
+	const { t } = useTranslation();
+	const resolve = useI18nResolver();
+	const speakers = readSceneCastSpeakers(element.props?.speakers);
+	const reason =
+		typeof element.props?.reason === "string" ? element.props.reason : "";
+	const reasonLabel = resolve(element.props?.reasonLabel);
+
+	if (speakers.length === 0) {
+		return (
+			<div className="ui-band-quiet px-3 py-4 text-[11px] leading-relaxed text-muted-foreground">
+				{reasonLabel || reason || t("common.noData", "No data")}
+			</div>
+		);
+	}
+
+	return (
+		<div className="space-y-2">
+			{speakers.map((speaker, index) => {
+				const name =
+					(speaker.name ?? compactSpeakerId(speaker.id)) || `#${index + 1}`;
+				const compactId = compactSpeakerId(speaker.id);
+				const signals =
+					speaker.signalViews && speaker.signalViews.length > 0
+						? speaker.signalViews
+						: (speaker.signals ?? []).map((signal) => ({ label: signal }));
+				return (
+					<div
+						key={speaker.id ?? `${name}-${index}`}
+						className="ui-band space-y-2"
+						data-tone="muted"
+					>
+						<div className="flex items-start justify-between gap-3">
+							<div className="min-w-0 space-y-1">
+								<div className="flex min-w-0 items-center gap-2">
+									<Icons.UserRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+									<span className="truncate text-[13px] font-semibold text-foreground">
+										{name}
+									</span>
+									{speaker.type && (
+										<BlueprintChip tone="primary">
+											{t(`character.type.${speaker.type}`, speaker.type)}
+										</BlueprintChip>
+									)}
+								</div>
+								{compactId && (
+									<div className="font-mono text-[10px] text-muted-foreground">
+										{compactId}
+									</div>
+								)}
+							</div>
+							{typeof speaker.score === "number" && (
+								<div className="shrink-0 rounded-[var(--radius-control)] border border-border bg-muted px-2 py-1 text-center">
+									<div className="font-mono text-[13px] text-foreground">
+										{speaker.score}
+									</div>
+								</div>
+							)}
+						</div>
+
+						{speaker.description && (
+							<p className="line-clamp-3 text-[11px] leading-relaxed text-muted-foreground">
+								{speaker.description}
+							</p>
+						)}
+
+						{signals.length > 0 && (
+							<div className="flex flex-wrap gap-1">
+								{signals.map((signal, signalIndex) => (
+									<BlueprintChip key={`${speaker.id ?? index}-${signalIndex}`}>
+										{resolve(signal.label)}
+									</BlueprintChip>
+								))}
+							</div>
+						)}
+					</div>
+				);
+			})}
+			{reason && (
+				<div className="text-[10px] leading-relaxed text-muted-foreground">
+					{reason}
+				</div>
+			)}
+		</div>
+	);
+};
+
 // ── CharacterFieldsView ─────────────────────────────────────────
 //
 // Schema-aware renderer for a character's `fields` object.
@@ -957,18 +1091,28 @@ function AttributeProgressBar({
 	max: number;
 }) {
 	const range = max - min;
-	const pct =
-		range > 0 ? Math.max(0, Math.min(100, ((value - min) / range) * 100)) : 0;
-	const hasNonZeroMin = min !== 0;
+	const isSignedRange = min < 0 && max > 0;
 	const baselinePct =
-		range > 0 && min < 0 && max > 0
+		isSignedRange && range > 0
 			? Math.max(0, Math.min(100, ((0 - min) / range) * 100))
 			: undefined;
-	const valueLabel = hasNonZeroMin
-		? `${value} (${min}..${max})`
+	const pct =
+		range > 0 ? Math.max(0, Math.min(100, ((value - min) / range) * 100)) : 0;
+	const fillLeft = baselinePct === undefined ? 0 : Math.min(baselinePct, pct);
+	const fillWidth =
+		baselinePct === undefined ? pct : Math.max(0, Math.abs(pct - baselinePct));
+	const valueLabel = isSignedRange
+		? value > 0
+			? `+${value}`
+			: String(value)
 		: `${value}/${max}`;
-	const tone =
-		pct > 60
+	const tone = isSignedRange
+		? value > 0
+			? "bg-emerald-500/80"
+			: value < 0
+				? "bg-rose-500/80"
+				: "bg-muted-foreground/35"
+		: pct > 60
 			? "bg-emerald-500/80"
 			: pct > 30
 				? "bg-amber-500/80"
@@ -981,12 +1125,15 @@ function AttributeProgressBar({
 			</div>
 			<div className="relative h-1.5 rounded-full bg-muted overflow-hidden">
 				<div
-					className={clsx("h-full transition-all duration-500", tone)}
-					style={{ width: `${pct}%` }}
+					className={clsx(
+						"absolute top-0 h-full transition-all duration-500",
+						tone,
+					)}
+					style={{ left: `${fillLeft}%`, width: `${fillWidth}%` }}
 				/>
 				{baselinePct !== undefined && (
 					<div
-						className="absolute top-0 bottom-0 w-px bg-foreground/50"
+						className="absolute top-0 bottom-0 w-px bg-foreground/45"
 						style={{ left: `${baselinePct}%` }}
 					/>
 				)}
@@ -2728,6 +2875,7 @@ export const covelRegistry: Record<string, ComponentRenderer> = {
 	Section,
 	JsonView,
 	CharacterBlueprintList,
+	SceneCastList,
 	CharacterFieldsView,
 	// Interactive
 	Button,

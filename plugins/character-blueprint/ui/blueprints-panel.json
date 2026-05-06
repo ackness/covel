@@ -11,7 +11,7 @@
   "icon": "id-card",
   "group": "chat-mode",
   "groupLabel": {
-    "zh": "Chat Mode",
+    "zh": "对话",
     "en": "Chat Mode"
   },
   "groupOrder": 450,
@@ -25,24 +25,178 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "粘贴角色蓝图 JSON，导入后会保存为会话蓝图；勾选实例化时会创建 Covel Character。",
-            "en": "Paste Character Blueprint JSON. Import saves it as a session blueprint; instantiate also creates a Covel Character."
+            "zh": "填写主要信息导入角色蓝图。蓝图会保存到当前会话，并可同步创建为 Covel 角色。",
+            "en": "Fill in the core fields to import a character blueprint. It is saved to this session and can be instantiated as a Covel character."
           },
           "variant": "muted",
           "size": "xs"
         }
       },
       {
+        "component": "Grid",
+        "props": { "cols": 2 },
+        "children": [
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "ID", "en": "ID" },
+              "placeholder": { "zh": "留空自动生成短 ID", "en": "Leave blank to auto-generate a short ID" },
+              "value": { "$bindState": "/form/id" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "名称", "en": "Name" },
+              "placeholder": { "zh": "例如：神代澪", "en": "e.g. Lin Yue" },
+              "value": { "$bindState": "/form/name" }
+            }
+          }
+        ]
+      },
+      {
+        "component": "Grid",
+        "props": { "cols": 2 },
+        "children": [
+          {
+            "component": "Select",
+            "props": {
+              "label": { "zh": "角色类型", "en": "Role" },
+              "value": { "$bindState": "/form/role" },
+              "options": [
+                { "value": "npc", "label": { "zh": "NPC", "en": "NPC" } },
+                { "value": "player", "label": { "zh": "玩家", "en": "Player" } },
+                { "value": "companion", "label": { "zh": "同伴", "en": "Companion" } }
+              ]
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "角色 ID", "en": "Character ID" },
+              "placeholder": { "zh": "默认：npc-蓝图-id", "en": "Default: npc-blueprint-id" },
+              "value": { "$bindState": "/form/characterId" }
+            }
+          }
+        ]
+      },
+      {
         "component": "Textarea",
         "props": {
-          "label": {
-            "zh": "蓝图 JSON",
-            "en": "Blueprint JSON"
+          "label": { "zh": "简介", "en": "Description" },
+          "placeholder": {
+            "zh": "一句话说明角色身份、气质和当前压力。",
+            "en": "One sentence about role, personality, and current pressure."
           },
-          "placeholder": "{ \"schemaVersion\": 1, \"id\": \"mentor-lin\", \"name\": \"Lin Yue\", \"role\": \"npc\" }",
-          "value": { "$bindState": "/draftJson" },
-          "rows": 10
+          "value": { "$bindState": "/form/description" },
+          "rows": 3
         }
+      },
+      {
+        "component": "Textarea",
+        "props": {
+          "label": { "zh": "人格摘要", "en": "Persona summary" },
+          "placeholder": {
+            "zh": "角色在故事里如何说话、如何隐藏情绪、想要什么。",
+            "en": "How this character speaks, hides emotion, and what they want."
+          },
+          "value": { "$bindState": "/form/personaSummary" },
+          "rows": 3
+        }
+      },
+      {
+        "component": "Grid",
+        "props": { "cols": 2 },
+        "children": [
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "别名", "en": "Aliases" },
+              "placeholder": { "zh": "用逗号分隔", "en": "Comma separated" },
+              "value": { "$bindState": "/form/aliasesText" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "标签", "en": "Tags" },
+              "placeholder": { "zh": "classmate, romance-candidate", "en": "classmate, romance-candidate" },
+              "value": { "$bindState": "/form/tagsText" }
+            }
+          }
+        ]
+      },
+      {
+        "component": "Grid",
+        "props": { "cols": 2 },
+        "children": [
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "特质", "en": "Traits" },
+              "placeholder": { "zh": "礼貌, 慢热, 责任感强", "en": "polite, cautious, responsible" },
+              "value": { "$bindState": "/form/traitsText" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "目标", "en": "Goals" },
+              "placeholder": { "zh": "完成刊物, 保住活动室", "en": "finish the issue, protect the room" },
+              "value": { "$bindState": "/form/goalsText" }
+            }
+          }
+        ]
+      },
+      {
+        "component": "Grid",
+        "props": { "cols": 2 },
+        "children": [
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "声音风格", "en": "Voice" },
+              "placeholder": { "zh": "说话轻，句子完整", "en": "quiet, precise sentences" },
+              "value": { "$bindState": "/form/voice" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "动作风格", "en": "Style" },
+              "placeholder": { "zh": "用整理纸张掩饰紧张", "en": "hides nerves by arranging papers" },
+              "value": { "$bindState": "/form/style" }
+            }
+          }
+        ]
+      },
+      {
+        "component": "Grid",
+        "props": { "cols": 3 },
+        "children": [
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "社团/组织", "en": "Club / group" },
+              "value": { "$bindState": "/form/club" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "班级/身份", "en": "Class / identity" },
+              "value": { "$bindState": "/form/className" }
+            }
+          },
+          {
+            "component": "Input",
+            "props": {
+              "label": { "zh": "关系阶段", "en": "Relationship stage" },
+              "placeholder": { "zh": "初识", "en": "stranger" },
+              "value": { "$bindState": "/form/relationshipStage" }
+            }
+          }
+        ]
       },
       {
         "component": "Switch",
@@ -58,8 +212,57 @@
         "component": "Button",
         "props": {
           "label": {
-            "zh": "导入蓝图",
-            "en": "Import Blueprint"
+            "zh": "创建角色蓝图",
+            "en": "Create blueprint"
+          },
+          "variant": "primary",
+          "size": "compact"
+        },
+        "on": {
+          "click": {
+            "action": "invokeRuntime",
+            "params": {
+              "runtimeId": "character-blueprint",
+              "payload": {
+                "blueprintForm": { "$bindState": "/form" },
+                "instantiate": { "$bindState": "/instantiate" }
+              }
+            }
+          }
+        }
+      },
+      {
+        "component": "Separator"
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "JSON 导入",
+            "en": "Advanced JSON import"
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "Textarea",
+        "props": {
+          "label": {
+            "zh": "蓝图 JSON",
+            "en": "Blueprint JSON"
+          },
+          "placeholder": "{ \"schemaVersion\": 1, \"id\": \"mentor-lin\", \"name\": \"Lin Yue\", \"role\": \"npc\" }",
+          "value": { "$bindState": "/draftJson" },
+          "rows": 6
+        }
+      },
+      {
+        "component": "Button",
+        "props": {
+          "label": {
+            "zh": "从 JSON 导入",
+            "en": "Import from JSON"
           },
           "variant": "primary",
           "size": "compact"

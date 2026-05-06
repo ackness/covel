@@ -507,6 +507,8 @@ my-plugin/
 - `node scripts/check-plugin-i18n.mjs` 扫描 `plugins/**/ui/*.json`，禁止出现没有 `en` 兄弟 key 的裸中文字符串
 - `pnpm check:i18n` 会同时跑应用代码（`apps/web`）与插件 JSON 两套扫描；CI 里应作为必选 gate
 
+复杂数据输入建议采用表单优先、JSON 进阶的双入口。常用字段放在 `Input` / `Textarea` / `Select` / `Switch` 中，插件 handler 把表单 payload 规范化为内部 JSON；完整导入、迁移或调试场景保留 `Textarea` JSON 入口。`character-blueprint` 的右侧面板采用这种模式：玩家可直接填写姓名、人设、标签、关系阶段，并通过同一个 handler 写入蓝图数据与角色镜像。
+
 **常见错误**：
 
 ```json

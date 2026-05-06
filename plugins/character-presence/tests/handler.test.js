@@ -87,6 +87,70 @@ describe("character-presence handler", () => {
 		expect(proposals[0].payload.key).toBe("npc:archivist-1");
 	});
 
+	it("accepts structured presence form payloads", async () => {
+		const result = await handler(
+			ctx({
+				presenceForm: {
+					characterId: "mentor-lin",
+					displayName: "林月",
+					style: "语音轻，立绘偏安静。",
+					avatarId: "a".repeat(64),
+					avatarMime: "image/png",
+					avatarSize: "1234",
+					spriteId: "b".repeat(64),
+					spriteMime: "image/png",
+					spriteSize: "5678",
+				},
+			}),
+		);
+
+		expect(result).toEqual({
+			saved: true,
+			characterId: "mentor-lin",
+		});
+		const proposals = getPendingProposals(result);
+		expect(proposals[0]).toMatchObject({
+			type: "plugin.data",
+			payload: {
+				namespace: "presence",
+				key: "mentor-lin",
+				value: {
+					presence: {
+						schemaVersion: 1,
+						characterId: "mentor-lin",
+						displayName: "林月",
+						style: "语音轻，立绘偏安静。",
+						avatar: {
+							id: "a".repeat(64),
+							mime: "image/png",
+							size: 1234,
+						},
+						sprite: {
+							id: "b".repeat(64),
+							mime: "image/png",
+							size: 5678,
+						},
+					},
+				},
+			},
+		});
+	});
+
+	it("generates short character ids when structured forms leave id blank", async () => {
+		const result = await handler(
+			ctx({
+				presenceForm: {
+					displayName: "Transfer Student",
+				},
+			}),
+		);
+
+		expect(result).toEqual({
+			saved: true,
+			characterId: "npc-transfer-student",
+		});
+	});
+
 	it("rejects malformed presence payloads", async () => {
 		await expect(handler(ctx({ presenceJson: "{bad json" }))).rejects.toThrow(
 			"manualPayload.presenceJson must be valid JSON",

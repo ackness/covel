@@ -590,7 +590,7 @@ dimensions:
 
 **`requiredPlugins`** 是世界运行依赖，前端准备页会锁定这些插件。**`recommendedPlugins`** 会在准备页默认选中，**`excludedPlugins`** 会在准备页默认关闭。创建会话时，前端会把最终选择的插件列表传给 `POST /api/sessions`。
 
-**`characterBlueprintSources`** 指向世界包内的角色卡 JSON 文件。文件可以是一张角色卡对象，也可以是角色卡数组。创建 session 时，服务器会把这些角色卡写入 `plugin_data[character-blueprint]["blueprints"]`，并实例化为 `characters` 表中的 NPC，同时镜像到 `plugin_data[character-blueprint]["characters"]`，让 `scene-cast`、角色面板和角色卡插件在首轮就能读到主要角色。
+**`characterBlueprintSources`** 指向世界包内的角色卡 JSON 文件。文件可以是一张角色卡对象，也可以是角色卡数组。创建 session 时，服务器会把这些角色卡写入 `plugin_data[character-blueprint]["blueprints"]`，并实例化为 `characters` 表中的 NPC，同时镜像到 `plugin_data[character-blueprint]["characters"]`，让 `scene-cast`、角色面板和角色卡插件在首轮就能读到主要角色。运行中也可以在 `character-blueprint` 右侧面板用表单创建蓝图；完整迁移或调试时使用 JSON 导入入口。
 
 ## 9. 完整的零代码插件示例
 

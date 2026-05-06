@@ -43,6 +43,10 @@ export default async function handler(ctx) {
 		const activeCast = {
 			speakers: [],
 			reason: "No named NPC has enough current scene salience yet.",
+			reasonLabel: {
+				zh: "当前暂无足够突出的 NPC。",
+				en: "No NPC currently has enough scene salience.",
+			},
 			turnId,
 			updatedAt: new Date().toISOString(),
 		};
@@ -62,6 +66,7 @@ export default async function handler(ctx) {
 		description: candidate.description,
 		score: candidate.score,
 		signals: candidate.signals,
+		signalViews: candidate.signals.map(signalView),
 	}));
 	const activeCast = {
 		speakers,
@@ -79,6 +84,20 @@ export default async function handler(ctx) {
 		},
 		[makePluginDataProposal(ctx, activeCast)],
 	);
+}
+
+function signalView(signal) {
+	const labels = {
+		"mentioned by player": { zh: "玩家提到", en: "Mentioned" },
+		"present in recent messages": { zh: "在场景中", en: "In scene" },
+		"has character profile": { zh: "有角色档案", en: "Profile" },
+		"has tracked state": { zh: "有状态记录", en: "State" },
+		"recently active": { zh: "刚刚活跃", en: "Recent" },
+	};
+	return {
+		id: signal,
+		label: labels[signal] ?? { zh: signal, en: signal },
+	};
 }
 
 function makePluginDataProposal(ctx, activeCast) {
