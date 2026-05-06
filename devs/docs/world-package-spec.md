@@ -45,9 +45,10 @@ worlds/                          # monorepo 根目录下，平行于 plugins/
 
 | 文件 | 必需 | 说明 |
 |------|------|------|
-| `world.yaml` | 是 | 清单（manifest）+ 内联 dimensions |
+| `world.yaml` | 是 | 清单（manifest）+ 内联 dimensions，可选 `worldData` 指向统一数据索引 |
 | `WORLD.md` | 否 | 默认 lore，映射到 `defaultLocale` |
 | `WORLD.{lang}.md` | 否 | 带语言后缀的 lore，`lang` 为 BCP-47 短码 |
+| `data/world.data.yaml` | 否 | v1 统一 world data source 索引；详见 `devs/docs/world-data-filesystem/` |
 
 语言后缀映射规则：
 - `WORLD.zh.md` → `zh-CN`
@@ -86,8 +87,11 @@ recommendedPlugins:               # 可选
   - guide
   - inventory
 
+# ── 统一数据索引 ────────────────────────────────
+worldData: data/world.data.yaml   # 可选，v1 world data source 索引
+
 # ── 结构化维度 ──────────────────────────────────
-dimensions:                       # 可选，WorldDimensions
+dimensions:                       # 可选，WorldDimensions；兼容字段
   geography:
     overview:
       zh-CN: 悬崖与海面之间的港口城市...
@@ -129,6 +133,18 @@ dimensions:                       # 可选，WorldDimensions
   # ... 其余维度省略，schema 同现有 WorldDimensions
 ```
 
+### 3.0.1 worldData v1
+
+`worldData` 指向 world root 下的 descriptor，推荐路径为 `data/world.data.yaml`。当前 v1 MVP 在 world load 阶段支持：
+
+- `sources` map，按 YAML 声明顺序执行，可用 `after` 声明少量依赖。
+- `kind`: `yaml`、`json`、`markdown`、`text`、`media`。
+- `to`: `world:metadata.*`、`plugin:*/*`、`plugin:*/*+lorebook`、`lorebook`、`characters`、`media`。
+- 用户 descriptor override：`~/.covel/world-overrides/<world-id>/world.data.override.yaml`。
+- `WorldRecord.metadata.worldData` 只保存 source id、digest、target、schema、importedAt、order、origin/overridden、diagnostics count。
+
+MVP 已实现 world load 摘要和 `world:metadata.*` 投影；session import、store ledger、plugin `dataSchemas` 写入校验在后续阶段落地。
+
 ### 3.1 Zod Schema 定义
 
 新增 `worldPackageMetaSchema`，复用现有 `worldDimensionsSchema`：
@@ -145,6 +161,7 @@ export const worldPackageMetaSchema = z.object({
   tags: z.array(z.string()).optional(),
   requiredPlugins: z.array(z.string()).optional(),
   recommendedPlugins: z.array(z.string()).optional(),
+  worldData: z.string().min(1).optional(),
   dimensions: worldDimensionsSchema.optional(),
 });
 ```

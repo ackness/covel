@@ -25,6 +25,8 @@ import {
 	DIMENSION_KEYS,
 } from "@covel/shared";
 import type { DataStore, WorldRecord } from "@covel/store";
+import { resolveContainedPath } from "./world-data/safe-path.js";
+import { loadWorldDataSummary } from "./world-data/world-load.js";
 
 async function fileExists(p: string): Promise<boolean> {
 	try {
@@ -81,17 +83,13 @@ async function readLore(
  * Validate that a relative path does not escape the world directory.
  * Returns the resolved absolute path if safe, or null if path traversal detected.
  */
-function resolveSafePath(
+async function resolveSafePath(
 	worldDir: string,
 	relativePath: string,
-): string | null {
-	const resolved = path.resolve(worldDir, relativePath);
-	const rel = path.relative(worldDir, resolved);
-	// Must not escape world directory (no ".." prefix, not absolute)
-	if (rel.startsWith("..") || path.isAbsolute(rel)) {
-		return null;
-	}
-	return resolved;
+): Promise<string | null> {
+	return resolveContainedPath(worldDir, relativePath, {
+		rejectSymlinks: true,
+	});
 }
 
 /**
@@ -115,14 +113,14 @@ async function resolveLocaleDimensionPath(
 			parsed.dir,
 			`${parsed.name}.${lang}${parsed.ext}`,
 		);
-		const safePath = resolveSafePath(worldDir, localePath);
+		const safePath = await resolveSafePath(worldDir, localePath);
 		if (safePath && (await fileExists(safePath))) {
 			return safePath;
 		}
 	}
 
 	// Fallback to original path
-	const safePath = resolveSafePath(worldDir, relativePath);
+	const safePath = await resolveSafePath(worldDir, relativePath);
 	if (safePath && (await fileExists(safePath))) {
 		return safePath;
 	}
@@ -156,7 +154,7 @@ async function loadExternalDimensions(
 		}
 
 		// Path traversal check on the declared path
-		if (!resolveSafePath(worldDir, relativePath)) {
+		if (!(await resolveSafePath(worldDir, relativePath))) {
 			console.warn(
 				`[world-seed] ${worldId}: path traversal detected for "${key}": ${relativePath}, skipping`,
 			);
@@ -230,6 +228,7 @@ export async function loadSingleWorld(
 	const dimensionSources = manifest.dimensionSources as
 		| Record<string, string>
 		| undefined;
+	const worldDataPath = manifest.worldData as string | undefined;
 
 	// Merge inline + external dimensions (external wins for same key)
 	const inlineDims = (manifest.dimensions as Record<string, unknown>) ?? {};
@@ -251,9 +250,37 @@ export async function loadSingleWorld(
 	)
 		? (manifest.characterBlueprintSources as string[])
 		: undefined;
-	const characterBlueprints = characterBlueprintSources
-		? await loadCharacterBlueprints(worldDir, characterBlueprintSources)
-		: undefined;
+	const characterBlueprints =
+		characterBlueprintSources && !worldDataPath
+			? await loadCharacterBlueprints(worldDir, characterBlueprintSources)
+			: undefined;
+
+	const baseMetadata: Record<string, unknown> = {
+		source: "file",
+		dimensions:
+			Object.keys(mergedDimensions).length > 0 ? mergedDimensions : undefined,
+		dimensionSources: dimensionSources,
+		requiredPlugins: manifest.requiredPlugins as string[] | undefined,
+		recommendedPlugins: manifest.recommendedPlugins as string[] | undefined,
+		excludedPlugins: manifest.excludedPlugins as string[] | undefined,
+		worldDataPath,
+		characterBlueprintSources,
+		characterBlueprints,
+	};
+	const worldData = await loadWorldDataSummary({
+		worldRoot: worldDir,
+		worldId,
+		worldDataPath,
+		metadata: baseMetadata,
+		now,
+	});
+	for (const diagnostic of worldData.diagnostics) {
+		if (diagnostic.level === "error") {
+			console.warn(
+				`[world-seed] ${worldId}: worldData ${diagnostic.sourceId ? `${diagnostic.sourceId}: ` : ""}${diagnostic.message}`,
+			);
+		}
+	}
 
 	return {
 		id: worldId,
@@ -268,17 +295,7 @@ export async function loadSingleWorld(
 		lore: lore || undefined,
 		tags: manifest.tags as string[] | undefined,
 		locale: defaultLocale,
-		metadata: {
-			source: "file",
-			dimensions:
-				Object.keys(mergedDimensions).length > 0 ? mergedDimensions : undefined,
-			dimensionSources: dimensionSources,
-			requiredPlugins: manifest.requiredPlugins as string[] | undefined,
-			recommendedPlugins: manifest.recommendedPlugins as string[] | undefined,
-			excludedPlugins: manifest.excludedPlugins as string[] | undefined,
-			characterBlueprintSources,
-			characterBlueprints,
-		},
+		metadata: worldData.metadata,
 		createdAt: now,
 		updatedAt: now,
 	};
@@ -290,7 +307,7 @@ async function loadCharacterBlueprints(
 ): Promise<unknown[]> {
 	const blueprints: unknown[] = [];
 	for (const source of sources) {
-		const fullPath = resolveSafePath(worldDir, source);
+		const fullPath = await resolveSafePath(worldDir, source);
 		if (!fullPath) {
 			throw new Error(
 				`characterBlueprintSources path escapes world dir: ${source}`,

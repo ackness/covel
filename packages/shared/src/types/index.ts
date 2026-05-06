@@ -18,6 +18,18 @@ export type {
 } from "./llm-content-parts.js";
 
 export type {
+	WorldDataSourceKind,
+	WorldDataMergeMode,
+	WorldDataEffect,
+	WorldDataKey,
+	WorldDataSourceDescriptor,
+	WorldDataDescriptor,
+	WorldDataDiagnosticCounts,
+	WorldDataSourceSummary,
+	WorldDataMetadataSummary,
+} from "./world-data.js";
+
+export type {
 	PluginType,
 	RuntimeType,
 	TriggerType,

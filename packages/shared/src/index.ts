@@ -62,6 +62,26 @@ export {
 
 export type { WorldManifestInput } from "./schemas/world.js";
 
+export {
+	worldDataSourceIdRegex,
+	worldDataSourceIdSchema,
+	worldDataSourceKindSchema,
+	worldDataMergeModeSchema,
+	worldDataEffectSchema,
+	worldDataSourceDescriptorSchema,
+	worldDataDescriptorSchema,
+	worldDataSourceDescriptorOverrideSchema,
+	worldDataDescriptorOverrideSchema,
+	worldDataDiagnosticCountsSchema,
+	worldDataSourceSummarySchema,
+	worldDataMetadataSummarySchema,
+} from "./schemas/world-data.js";
+
+export type {
+	WorldDataDescriptorInput,
+	WorldDataDescriptorOverrideInput,
+} from "./schemas/world-data.js";
+
 // ── Validation Utilities ────────────────────────────────────────
 export {
 	validatePluginManifest,

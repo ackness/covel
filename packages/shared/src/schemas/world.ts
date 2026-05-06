@@ -274,6 +274,7 @@ export const worldManifestSchema = z
 		requiredPlugins: z.array(z.string()).optional(),
 		recommendedPlugins: z.array(z.string()).optional(),
 		excludedPlugins: z.array(z.string()).optional(),
+		worldData: z.string().min(1).optional(),
 		characterBlueprintSources: z.array(z.string().min(1)).optional(),
 		dimensions: worldDimensionsSchema.optional(),
 		/** Map of dimension key → relative file path for external dimension files. */

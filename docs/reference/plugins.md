@@ -31,12 +31,13 @@
 
 ### 世界插件推荐字段
 
-`world.yaml` 可以声明 `requiredPlugins`、`recommendedPlugins`、`excludedPlugins` 和 `characterBlueprintSources`。加载后这些值进入 `WorldRecord.metadata`：
+`world.yaml` 可以声明 `requiredPlugins`、`recommendedPlugins`、`excludedPlugins`、`worldData` 和兼容字段 `characterBlueprintSources`。加载后这些值进入 `WorldRecord.metadata`：
 
 - `requiredPlugins`：准备页锁定启用。
 - `recommendedPlugins`：准备页默认启用。
 - `excludedPlugins`：准备页默认关闭。
-- `characterBlueprintSources`：世界包内角色卡 JSON 路径；创建 session 时自动写入 `character-blueprint` 插件数据，并实例化为 NPC character。
+- `worldData`：可选，指向 `data/world.data.yaml`；loader 会读取本地 YAML/JSON/Markdown/Text/Media source，生成轻量 `WorldRecord.metadata.worldData` 摘要，并投影 `world:metadata.*` 目标（当前 MVP 支持 `covel://world/dimensions` 校验）。
+- `characterBlueprintSources`：兼容字段。未声明 `worldData` 的旧世界会继续读取角色卡 JSON；声明 `worldData` 的新世界不会再通过该 legacy shim eager-load `metadata.characterBlueprints`。
 
 对话模式世界通常启用 `chat-mode-narrator`、`scene-cast`、`scene-prompts`、`character-blueprint`、`character-presence`、`player-identity`、`living-world-rules`、`branch-reply`，并排除默认 `narrator`、`guide` 以及包级旧下游插件。多 runtime 插件当前按包选择；例如 `npc-graph/rag-retriever` 和 `npc-graph/extractor` 同属 `npc-graph` 包，准备页会一起启用或关闭。
 
