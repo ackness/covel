@@ -108,7 +108,10 @@ dimensions:
 \`\`\`
 
 ## WORLD.md
-Write 180-350 words of focused lore: setting overview, factions, power system, daily life, and 3 adventure hooks.
+Write 180-350 words of focused lore.
+Start with exactly one H1: "# <world name>".
+Include setting overview, factions, power system, daily life, and 3 adventure hooks.
+Anchor the lore around one core anomaly or pressure mechanism that makes this world distinctive.
 
 ## Rules
 - The first line of the answer must be exactly ===WORLD_YAML===.
@@ -119,6 +122,9 @@ Write 180-350 words of focused lore: setting overview, factions, power system, d
 - startingResources values must be numbers.
 - Enum values must exactly match one listed option.
 - Be creative and specific. Avoid generic fantasy tropes.
-- The openingScenario must present an immediate choice or tension.
+- Do not copy meta wording from the concept into the setting. Never mention tests, validation, prompts, models, cost, cheapness, speed, e2e, API, or framework internals in world content.
+- Avoid literal generic names built only from genre nouns. Coin proper nouns with a local cultural or historical reason.
+- The openingScenario and all 3 adventure hooks must revolve around the same current crisis or pressure mechanism.
+- The openingScenario must present an immediate choice or tension tied to that crisis.
 - Do NOT output anything except the two delimited sections.`;
 }

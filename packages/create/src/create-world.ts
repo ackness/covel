@@ -36,6 +36,25 @@ const WORLD_MANIFEST_ROOT_KEYS = new Set([
   "dimensionSources",
 ]);
 
+const META_CONTENT_PATTERNS = [
+  /测试用/u,
+  /测试目的/u,
+  /低成本/u,
+  /快速验证/u,
+  /提示词/u,
+  /模型/u,
+  /框架内部/u,
+  /\btest(?:ing)?\b/iu,
+  /\bvalidation\b/iu,
+  /\bprompt\b/iu,
+  /\bmodel\b/iu,
+  /\bcost\b/iu,
+  /\bcheap\b/iu,
+  /\be2e\b/iu,
+  /\bapi\b/iu,
+  /\bframework\b/iu,
+];
+
 function log(
   options: CreateWorldOptions,
   level: "info" | "warn" | "error",
@@ -217,6 +236,55 @@ function normalizeGeneratedManifest(
   }
 
   return repairs;
+}
+
+function manifestText(value: unknown, locale: string): string | undefined {
+  if (typeof value === "string") return value;
+  if (!isRecord(value)) return undefined;
+  const localized = value[locale];
+  if (typeof localized === "string") return localized;
+  const fallback = Object.values(value).find(
+    (entry): entry is string => typeof entry === "string",
+  );
+  return fallback;
+}
+
+function normalizeLoreDocument(
+  lore: string,
+  manifest: Record<string, unknown>,
+  locale: string,
+): string {
+  const worldName = manifestText(manifest.name, locale);
+  if (!worldName) return lore.trim();
+
+  const lines = lore.trim().split(/\r?\n/);
+  const firstContentIndex = lines.findIndex((line) => line.trim().length > 0);
+  if (firstContentIndex < 0) return `# ${worldName}`;
+
+  const first = lines[firstContentIndex]!.trim();
+  if (/^#\s+/.test(first)) return lines.join("\n").trim();
+  if (/^#{2,6}\s+/.test(first)) {
+    lines[firstContentIndex] = `# ${first.replace(/^#{2,6}\s+/, "")}`;
+    return lines.join("\n").trim();
+  }
+
+  return [`# ${worldName}`, "", ...lines].join("\n").trim();
+}
+
+function findLoreQualityErrors(lore: string): string[] {
+  const errors: string[] = [];
+  if (!/^#\s+\S/m.test(lore)) {
+    errors.push("WORLD.md must start with an H1 title");
+  }
+  const forbidden = META_CONTENT_PATTERNS.find((pattern) => pattern.test(lore));
+  if (forbidden) {
+    errors.push("WORLD.md contains meta/test/model/cost wording");
+  }
+  const numberedHooks = lore.match(/^\s*\d+\.\s+/gmu)?.length ?? 0;
+  if (numberedHooks < 3) {
+    errors.push("WORLD.md must include 3 numbered adventure hooks");
+  }
+  return errors;
 }
 
 function combineAbortSignals(
@@ -465,6 +533,22 @@ export async function createWorld(
       continue;
     }
 
+    const normalizedLore = normalizeLoreDocument(parsed.lore, yamlData, locale);
+    const loreQualityErrors = findLoreQualityErrors(normalizedLore);
+    if (loreQualityErrors.length > 0) {
+      lastErrors = loreQualityErrors;
+      log(
+        options,
+        "warn",
+        "attempt",
+        attempt + 1,
+        "lore quality failed with",
+        loreQualityErrors.length,
+        "errors",
+      );
+      continue;
+    }
+
     // Extract id from validated data
     const id = yamlData.id as string;
     const lang = locale.split("-")[0];
@@ -491,11 +575,11 @@ export async function createWorld(
 
     await writeFile(
       path.join(worldDir, `WORLD.${lang}.md`),
-      parsed.lore,
+      normalizedLore,
       "utf-8",
     );
     writtenFiles.push(`${id}/WORLD.${lang}.md`);
-    await writeFile(path.join(worldDir, "WORLD.md"), parsed.lore, "utf-8");
+    await writeFile(path.join(worldDir, "WORLD.md"), normalizedLore, "utf-8");
     writtenFiles.push(`${id}/WORLD.md`);
 
     log(options, "info", `done wrote ${writtenFiles.length} files`);
