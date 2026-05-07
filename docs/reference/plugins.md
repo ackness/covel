@@ -42,7 +42,7 @@
 - `requiredPlugins`：准备页锁定启用。
 - `recommendedPlugins`：准备页默认启用。
 - `excludedPlugins`：准备页默认关闭。
-- `worldData`：可选，指向 `data/world.data.yaml`；当前会读取本地 YAML/JSON/Markdown/Text/Media source，生成轻量 `WorldRecord.metadata.worldData` 摘要，投影 `world:metadata.dimensions`，并在 session 创建时导入 `plugin:character-blueprint/blueprints` + `effects: [characters]`。
+- `worldData`：可选，指向 `data/world.data.yaml`；当前会读取本地 YAML/JSON/Markdown/Text/Media source，生成轻量 `WorldRecord.metadata.worldData` 摘要，投影 `world:metadata.dimensions`，并在 session 创建时导入 `plugin:*/*`、`plugin:*/*+lorebook`、`lorebook`、`characters`、`media` + `indexTo`。
 
 第三方插件可以把插件数据声明为 `schema: plugin://<pluginId>/<namespace>` 与 `to: plugin:<pluginId>/<namespace>`。完整格式见 [World Data](world-data.md)。
 
@@ -466,6 +466,34 @@ pluginType: plugin # core-plugin | plugin
 | `function`      | 纯函数执行：直接调用 `handler` 指定的 JS 模块，不调用 LLM，零延迟 |
 
 `function` 类型 runtime 需要额外声明 `handler` 字段指向 JS 模块路径。
+
+### dataSchemas
+
+`dataSchemas` 声明插件哪些 `plugin_data` namespace 可以接收 world package 导入数据。world-data session importer 会在创建 session 前做插件启用检查，并用插件包内 JSON Schema 校验 source item。
+
+```yaml
+dataSchemas:
+  relationships:
+    schemaVersion: 1
+    acceptsWorldData: true
+    schema: ./schemas/relationships.schema.json
+    description: Importable relationship records.
+```
+
+| 字段               | 类型      | 说明                                   |
+| ------------------ | --------- | -------------------------------------- |
+| `schemaVersion`    | `number`  | namespace 数据契约版本                 |
+| `acceptsWorldData` | `boolean` | `true` 时允许 world-data importer 写入 |
+| `schema`           | `string`  | 插件根目录相对 JSON Schema 路径        |
+| `description`      | `string`  | 面向作者的简短说明                     |
+
+多 runtime 插件可以在多个 runtime 的 `PLUGIN.md` 中声明同一 namespace；声明完全一致时合并到插件级 registry，冲突时插件注册失败。第三方 world 包引用该 namespace 时使用：
+
+```yaml
+schema: plugin://social-sim/relationships
+to: plugin:social-sim/relationships
+key: id
+```
 
 ### recursiveCall
 

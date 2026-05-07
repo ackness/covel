@@ -36,6 +36,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  WorldDataImportLedgerRecord,
   LorebookEntryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
@@ -66,6 +67,7 @@ import {
   toTurnMessageRecord,
   toPlayerInputRecord,
   toWorkingMemoryRecord,
+  toWorldDataImportLedgerRecord,
   toLorebookEntryRecord,
   toSessionSummaryRecord,
   toSuspensionRecord,
@@ -227,6 +229,9 @@ export function createSqliteStore(
           .run();
         db.delete(schema.pluginData)
           .where(eq(schema.pluginData.sessionId, id))
+          .run();
+        db.delete(schema.worldDataImportLedger)
+          .where(eq(schema.worldDataImportLedger.sessionId, id))
           .run();
         db.delete(schema.pluginConfigs)
           .where(eq(schema.pluginConfigs.sessionId, id))
@@ -658,6 +663,17 @@ export function createSqliteStore(
         .where(eq(schema.characters.sessionId, sessionId))
         .all();
       return rows.map(toCharacterRecord);
+    },
+
+    async deleteCharacter(sessionId: string, id: string): Promise<void> {
+      db.delete(schema.characters)
+        .where(
+          and(
+            eq(schema.characters.sessionId, sessionId),
+            eq(schema.characters.id, id),
+          ),
+        )
+        .run();
     },
 
     // ── Plugin Data ──────────────────────────────────────────
@@ -1186,6 +1202,85 @@ export function createSqliteStore(
             eq(schema.workingMemory.sessionId, sessionId),
             eq(schema.workingMemory.scope, scope),
             eq(schema.workingMemory.key, key),
+          ),
+        )
+        .run();
+    },
+
+    // ── World Data Import Ledger ─────────────────────────────
+
+    async saveWorldDataImportLedgerBatch(
+      records: readonly WorldDataImportLedgerRecord[],
+    ): Promise<void> {
+      if (records.length === 0) return;
+      db.transaction((tx) => {
+        for (const r of records) {
+          tx.insert(schema.worldDataImportLedger)
+            .values({
+              id: r.id,
+              sessionId: r.sessionId,
+              target: r.target,
+              pluginId: r.pluginId ?? null,
+              namespace: r.namespace ?? null,
+              key: r.key ?? null,
+              sourceWorldId: r.sourceWorldId,
+              sourceId: r.sourceId,
+              sourceDigest: r.sourceDigest,
+              valueHash: r.valueHash,
+              schemaRef: r.schemaRef ?? null,
+              derivedFrom:
+                r.derivedFrom === undefined ? null : toJson(r.derivedFrom),
+              importedAt: r.importedAt,
+              managed: r.managed ? 1 : 0,
+            })
+            .onConflictDoUpdate({
+              target: schema.worldDataImportLedger.id,
+              set: {
+                sessionId: r.sessionId,
+                target: r.target,
+                pluginId: r.pluginId ?? null,
+                namespace: r.namespace ?? null,
+                key: r.key ?? null,
+                sourceWorldId: r.sourceWorldId,
+                sourceId: r.sourceId,
+                sourceDigest: r.sourceDigest,
+                valueHash: r.valueHash,
+                schemaRef: r.schemaRef ?? null,
+                derivedFrom:
+                  r.derivedFrom === undefined ? null : toJson(r.derivedFrom),
+                importedAt: r.importedAt,
+                managed: r.managed ? 1 : 0,
+              },
+            })
+            .run();
+        }
+      });
+    },
+
+    async listWorldDataImportLedger(
+      sessionId: string,
+    ): Promise<readonly WorldDataImportLedgerRecord[]> {
+      const rows = db
+        .select()
+        .from(schema.worldDataImportLedger)
+        .where(eq(schema.worldDataImportLedger.sessionId, sessionId))
+        .orderBy(
+          asc(schema.worldDataImportLedger.importedAt),
+          asc(schema.worldDataImportLedger.id),
+        )
+        .all();
+      return rows.map(toWorldDataImportLedgerRecord);
+    },
+
+    async deleteWorldDataImportLedger(
+      sessionId: string,
+      id: string,
+    ): Promise<void> {
+      db.delete(schema.worldDataImportLedger)
+        .where(
+          and(
+            eq(schema.worldDataImportLedger.sessionId, sessionId),
+            eq(schema.worldDataImportLedger.id, id),
           ),
         )
         .run();

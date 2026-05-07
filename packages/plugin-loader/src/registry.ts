@@ -2,13 +2,58 @@
  * In-memory plugin registry — manages plugin lifecycle and lookup.
  */
 
-import type { RuntimeManifest } from "@covel/shared";
+import {
+  pluginDataSchemaMapSchema,
+  type PluginDataSchemaDecl,
+  type RuntimeManifest,
+} from "@covel/shared";
 import type { EventBus } from "@covel/events";
 import type {
   PluginRegistryEntry,
   PluginSummary,
   RegistryChangeEvent,
 } from "./types.js";
+
+function isSameDataSchema(
+  a: PluginDataSchemaDecl,
+  b: PluginDataSchemaDecl,
+): boolean {
+  return (
+    a.namespace === b.namespace &&
+    a.schemaVersion === b.schemaVersion &&
+    a.acceptsWorldData === b.acceptsWorldData &&
+    a.schema === b.schema &&
+    a.description === b.description
+  );
+}
+
+function mergeDataSchemas(
+  entry: PluginRegistryEntry,
+): Readonly<Record<string, PluginDataSchemaDecl>> | undefined {
+  if (entry.dataSchemas) {
+    return pluginDataSchemaMapSchema.parse(entry.dataSchemas);
+  }
+
+  const manifests = entry.manifests ?? (entry.manifest ? [entry.manifest] : []);
+  const merged: Record<string, PluginDataSchemaDecl> = {};
+
+  for (const parsed of manifests) {
+    const schemas = parsed.manifest.dataSchemas;
+    if (!schemas) continue;
+    for (const [namespace, schema] of Object.entries(schemas)) {
+      const normalized = { ...schema, namespace };
+      const existing = merged[namespace];
+      if (existing && !isSameDataSchema(existing, normalized)) {
+        throw new Error(
+          `Conflicting dataSchemas declaration for namespace "${namespace}" in plugin "${entry.id}"`,
+        );
+      }
+      merged[namespace] = normalized;
+    }
+  }
+
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
 
 export interface PluginRegistryOptions {
   /** Optional EventBus for emitting plugin lifecycle subscription events. */
@@ -84,7 +129,8 @@ export function createPluginRegistry(
 
   return {
     register(entry: PluginRegistryEntry): void {
-      entries.set(entry.id, entry);
+      const dataSchemas = mergeDataSchemas(entry);
+      entries.set(entry.id, dataSchemas ? { ...entry, dataSchemas } : entry);
       emit({ type: "plugin-registered", pluginId: entry.id });
     },
 

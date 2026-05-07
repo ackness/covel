@@ -40,6 +40,7 @@ export type {
   InputToolDecl,
   InputConfig,
   OutputConfig,
+  PluginDataSchemaDecl,
   ToolsConfig,
   ConfigFieldType,
   PluginConfigField,

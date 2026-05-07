@@ -190,6 +190,23 @@ export interface WorkingMemoryRecord {
   readonly updatedAt: string; // ISO
 }
 
+export interface WorldDataImportLedgerRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly target: string;
+  readonly pluginId?: string;
+  readonly namespace?: string;
+  readonly key?: string;
+  readonly sourceWorldId: string;
+  readonly sourceId: string;
+  readonly sourceDigest: string;
+  readonly valueHash: string;
+  readonly schemaRef?: string;
+  readonly derivedFrom?: readonly string[];
+  readonly importedAt: string;
+  readonly managed: boolean;
+}
+
 /**
  * Session-scoped lorebook entry persisted to the store (S3-T2).
  *
@@ -414,6 +431,7 @@ export interface DataStore {
   // ── Characters ──
   upsertCharacter(record: CharacterRecord): Promise<void>;
   listCharacters(sessionId: string): Promise<CharacterRecord[]>;
+  deleteCharacter(sessionId: string, id: string): Promise<void>;
 
   // ── Plugin Data ──
   setPluginData(record: PluginDataRecord): Promise<void>;
@@ -501,6 +519,15 @@ export interface DataStore {
     scope: WorkingMemoryRecord["scope"],
     key: string,
   ): Promise<void>;
+
+  // ── World Data Import Ledger ──
+  saveWorldDataImportLedgerBatch(
+    records: readonly WorldDataImportLedgerRecord[],
+  ): Promise<void>;
+  listWorldDataImportLedger(
+    sessionId: string,
+  ): Promise<readonly WorldDataImportLedgerRecord[]>;
+  deleteWorldDataImportLedger(sessionId: string, id: string): Promise<void>;
 
   // ── Lorebook Entries (S3-T2) ──
   /**

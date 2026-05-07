@@ -118,8 +118,7 @@ activate plugins
 - `character-blueprint`
 - `character-presence`
 - `living-world-rules`
-- `scene-prompts`
-- `branch-reply`
+- `char-creator`
 
 要求：
 
@@ -139,7 +138,7 @@ activate plugins
 - media 数量和大小。
 - override 来源（来自 metadata summary 的 `origin` / `overridden`）。
 
-后续再增加 `/worlds/:id/sync-data`。sync 必须基于 provenance ledger，只覆盖 importer 管理且未被玩家/插件改动的数据。
+`/worlds/:id/sync-data` 已增加。sync 基于 provenance ledger，只覆盖 importer 管理且当前 hash 与 ledger `valueHash` 一致的数据；`force:true` 由用户显式触发。
 
 ## Documentation sync checklist
 

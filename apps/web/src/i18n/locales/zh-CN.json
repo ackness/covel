@@ -264,6 +264,18 @@
     "suspensionAgoDays": "{{count}} 天前",
     "memoryStoreWarning": "重启后数据将丢失",
     "pluginsSelected": "个插件已选",
+    "worldDataPreflight": {
+      "title": "世界数据",
+      "loading": "检查中",
+      "ready": "将导入 {{count}} 项",
+      "empty": "无导入计划",
+      "emptyDetail": "此世界没有 worldData 导入计划。",
+      "warnings": "{{count}} 个警告",
+      "errors": "{{count}} 个错误",
+      "failed": "检查失败",
+      "retry": "重试",
+      "moreTargets": "另有 {{count}} 项"
+    },
     "dbSchema": "结构",
     "dbValues": "数据"
   },

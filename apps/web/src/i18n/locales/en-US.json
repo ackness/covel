@@ -264,6 +264,18 @@
     "suspensionAgoDays": "{{count}}d ago",
     "memoryStoreWarning": "Data lost on restart",
     "pluginsSelected": "plugins selected",
+    "worldDataPreflight": {
+      "title": "World Data",
+      "loading": "Checking",
+      "ready": "{{count}} item(s) will be imported",
+      "empty": "No import plan",
+      "emptyDetail": "This world has no worldData import plan.",
+      "warnings": "{{count}} warning(s)",
+      "errors": "{{count}} error(s)",
+      "failed": "Check failed",
+      "retry": "Retry",
+      "moreTargets": "{{count}} more"
+    },
     "dbSchema": "Schema",
     "dbValues": "Values"
   },

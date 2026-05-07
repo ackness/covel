@@ -21,13 +21,17 @@ export interface MediaSourceSummary {
   readonly digest: string;
 }
 
-export async function summarizeMediaSource(
+export interface MediaSourceFiles {
+  readonly files: readonly string[];
+  readonly bytes: number;
+  readonly digest: string;
+  readonly diagnostics: readonly WorldDataDiagnostic[];
+}
+
+export async function collectMediaSourceFiles(
   source: OrderedWorldDataSource,
   resolvedPath: string,
-): Promise<{
-  summary?: MediaSourceSummary;
-  diagnostics: readonly WorldDataDiagnostic[];
-}> {
+): Promise<MediaSourceFiles> {
   const diagnostics: WorldDataDiagnostic[] = [];
   const sourceStat = await stat(resolvedPath);
   const files: string[] = [];
@@ -48,12 +52,13 @@ export async function summarizeMediaSource(
       path: source.descriptor.path,
       message: "media source must be a file or directory",
     });
-    return { diagnostics };
+    return { files: [], bytes: 0, digest: sha256Hex(""), diagnostics };
   }
 
   files.sort((a, b) => a.localeCompare(b));
   let totalBytes = 0;
   const parts: string[] = [];
+  const acceptedFiles: string[] = [];
   for (const file of files) {
     const ext = path.extname(file).toLowerCase();
     if (!ALLOWED_EXTENSIONS.has(ext)) {
@@ -87,14 +92,31 @@ export async function summarizeMediaSource(
     }
     const digest = await digestFile(file);
     parts.push(`${path.basename(file)}:${digest.digest}:${digest.size}`);
+    acceptedFiles.push(file);
   }
 
   return {
-    summary: {
-      count: parts.length,
-      bytes: totalBytes,
-      digest: sha256Hex(parts.join("\n")),
-    },
+    files: acceptedFiles,
+    bytes: totalBytes,
+    digest: sha256Hex(parts.join("\n")),
     diagnostics,
+  };
+}
+
+export async function summarizeMediaSource(
+  source: OrderedWorldDataSource,
+  resolvedPath: string,
+): Promise<{
+  summary?: MediaSourceSummary;
+  diagnostics: readonly WorldDataDiagnostic[];
+}> {
+  const collected = await collectMediaSourceFiles(source, resolvedPath);
+  return {
+    summary: {
+      count: collected.files.length,
+      bytes: collected.bytes,
+      digest: collected.digest,
+    },
+    diagnostics: collected.diagnostics,
   };
 }

@@ -24,17 +24,26 @@ function makeSummary(
   };
 }
 
-function makeRuntimeManifest(name: string, priority: number): RuntimeManifest {
+function makeRuntimeManifest(
+  name: string,
+  priority: number,
+  overrides?: Partial<RuntimeManifest>,
+): RuntimeManifest {
   return {
     name,
     description: `Runtime ${name}`,
     priority,
+    ...overrides,
   };
 }
 
-function makeParsedPluginMd(name: string, priority: number): ParsedPluginMd {
+function makeParsedPluginMd(
+  name: string,
+  priority: number,
+  overrides?: Partial<RuntimeManifest>,
+): ParsedPluginMd {
   return {
-    manifest: makeRuntimeManifest(name, priority),
+    manifest: makeRuntimeManifest(name, priority, overrides),
     promptTemplate: "",
     referenceLinks: [],
     rawFrontmatter: {},
@@ -72,6 +81,107 @@ describe("PluginRegistry", () => {
       expect(result).toBeDefined();
       expect(result!.id).toBe("alpha");
       expect(result!.summary.name).toBe("Plugin alpha");
+    });
+
+    it("should merge consistent runtime dataSchemas onto the registry entry", () => {
+      const relationships = {
+        namespace: "relationships",
+        schemaVersion: 1,
+        acceptsWorldData: true,
+        schema: "./schemas/relationships.schema.json",
+        description: "Relationship graph",
+      };
+      const entry = makeEntry("world-data", {
+        rootPath: "/plugins/world-data",
+        manifests: [
+          makeParsedPluginMd("world-data/extract", 400, {
+            dataSchemas: { relationships },
+          }),
+          makeParsedPluginMd("world-data/import", 500, {
+            dataSchemas: { relationships },
+          }),
+        ],
+      });
+
+      registry.register(entry);
+
+      expect(registry.get("world-data")?.dataSchemas).toEqual({
+        relationships,
+      });
+      expect(registry.get("world-data")?.rootPath).toBe("/plugins/world-data");
+    });
+
+    it("should normalize directly registered dataSchemas", () => {
+      const entry = makeEntry("world-data", {
+        dataSchemas: {
+          relationships: {
+            schemaVersion: 1,
+            acceptsWorldData: true,
+            schema: "./schemas/relationships.schema.json",
+          },
+        } as never,
+      });
+
+      registry.register(entry);
+
+      expect(
+        registry.get("world-data")?.dataSchemas?.relationships,
+      ).toMatchObject({
+        namespace: "relationships",
+        schemaVersion: 1,
+        acceptsWorldData: true,
+        schema: "./schemas/relationships.schema.json",
+      });
+    });
+
+    it("should reject directly registered dataSchemas with mismatched namespaces", () => {
+      const entry = makeEntry("world-data", {
+        dataSchemas: {
+          relationships: {
+            namespace: "characters",
+            schemaVersion: 1,
+            acceptsWorldData: true,
+            schema: "./schemas/relationships.schema.json",
+          },
+        } as never,
+      });
+
+      expect(() => registry.register(entry)).toThrow(
+        /namespace must match dataSchemas key/,
+      );
+      expect(registry.get("world-data")).toBeUndefined();
+    });
+
+    it("should fail closed on conflicting runtime dataSchemas", () => {
+      const entry = makeEntry("world-data", {
+        manifests: [
+          makeParsedPluginMd("world-data/extract", 400, {
+            dataSchemas: {
+              relationships: {
+                namespace: "relationships",
+                schemaVersion: 1,
+                acceptsWorldData: true,
+                schema: "./schemas/relationships.schema.json",
+              },
+            },
+          }),
+          makeParsedPluginMd("world-data/import", 500, {
+            dataSchemas: {
+              relationships: {
+                namespace: "relationships",
+                schemaVersion: 2,
+                acceptsWorldData: true,
+                schema: "./schemas/relationships.schema.json",
+              },
+            },
+          }),
+        ],
+      });
+
+      expect(() => registry.register(entry)).toThrow(
+        /Conflicting dataSchemas declaration/,
+      );
+      expect(registry.get("world-data")).toBeUndefined();
     });
   });
 

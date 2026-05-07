@@ -3,6 +3,7 @@
  */
 
 import type {
+  PluginDataSchemaDecl,
   MediaRef,
   PluginType,
   RuntimeManifest,
@@ -447,10 +448,14 @@ export type PluginEntryStatus =
 export interface PluginRegistryEntry {
   readonly id: string;
   readonly summary: PluginSummary;
+  /** Absolute plugin root path, used by tooling that resolves plugin-relative assets. */
+  readonly rootPath?: string;
   /** Primary manifest (first runtime). */
   readonly manifest?: ParsedPluginMd;
   /** All manifests for multi-runtime plugins. */
   readonly manifests?: readonly ParsedPluginMd[];
+  /** Plugin-level data schema declarations merged across all runtime manifests. */
+  readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
   readonly loadedRuntimes: ReadonlyMap<string, LoadedRuntime>;
   readonly status: PluginEntryStatus;
   readonly error?: string;

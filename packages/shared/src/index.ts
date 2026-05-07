@@ -29,6 +29,8 @@ export {
   inputConfigSchema,
   outputKindSchema,
   outputConfigSchema,
+  pluginDataSchemaDeclSchema,
+  pluginDataSchemaMapSchema,
   toolsConfigSchema,
   configFieldTypeSchema,
   pluginConfigFieldSchema,

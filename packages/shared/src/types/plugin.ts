@@ -128,6 +128,21 @@ export interface OutputConfig {
   readonly recordAs?: string;
 }
 
+// ── Plugin data schemas ─────────────────────────────────────────
+
+export interface PluginDataSchemaDecl {
+  /** Plugin-data namespace covered by this schema. */
+  readonly namespace: string;
+  /** Schema contract version for this namespace. */
+  readonly schemaVersion: number;
+  /** Whether this namespace can accept imported world-data records. */
+  readonly acceptsWorldData: boolean;
+  /** Plugin-relative path to a JSON Schema file. */
+  readonly schema: string;
+  /** Optional author-facing description for tooling and diagnostics. */
+  readonly description?: string;
+}
+
 // ── Tool declarations ────────────────────────────────────────────
 
 export interface ToolsConfig {
@@ -368,6 +383,7 @@ export interface RuntimeManifest {
   readonly tools?: ToolsConfig;
   readonly input?: InputConfig;
   readonly output?: OutputConfig;
+  readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
   readonly config?: Readonly<Record<string, PluginConfigField>>;
   readonly i18n?: Readonly<Record<string, string>>;
   readonly ui?: UISpec;

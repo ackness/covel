@@ -33,6 +33,12 @@ input:
 tools:
   builtin:
     - create-form
+dataSchemas:
+  characters:
+    schemaVersion: 1
+    acceptsWorldData: true
+    schema: ./schemas/characters.schema.json
+    description: Importable session character records for the character panel.
 ui:
   right:
     - ../../ui/character-panel.json

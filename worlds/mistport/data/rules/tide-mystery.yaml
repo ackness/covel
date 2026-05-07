@@ -1,0 +1,50 @@
+- schemaVersion: 1
+  id: mistport-fog-truth
+  title: 雾中真相
+  content: 雾港的线索经常互相矛盾。每次调查应保留可验证细节、目击者偏见和潮汐造成的证据偏移，让玩家通过追问和比对推进真相。
+  kind: constant
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - 雾
+    - 线索
+    - 目击者
+    - 潮汐
+  insertionOrder: 410
+- schemaVersion: 1
+  id: mistport-tide-clock
+  title: 潮汐时钟
+  content: 涨潮、退潮、灯塔鸣钟和码头封锁会改变可进入地点。行动选择应明确当前潮时，并让时间压力影响探索路线。
+  kind: triggered
+  category: scene
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - 涨潮
+    - 退潮
+    - 灯塔
+    - 码头
+    - 路线
+  insertionOrder: 420
+- schemaVersion: 1
+  id: mistport-ruin-whisper
+  title: 遗迹低语
+  content: 古代遗物带来知识、污染和交易价值。处理遗物时需要同时考虑黑市、教会、船帮和个人记忆的影响。
+  kind: triggered
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - 遗物
+    - 黑市
+    - 教会
+    - 船帮
+    - 记忆
+  insertionOrder: 430

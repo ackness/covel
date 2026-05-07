@@ -294,6 +294,7 @@ export async function bootstrapApi(
       registry.register({
         id: discovery.id,
         summary,
+        rootPath: discovery.rootPath,
         manifest: manifests[0],
         manifests,
         loadedRuntimes: new Map(),

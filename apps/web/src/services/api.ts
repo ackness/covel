@@ -138,6 +138,33 @@ export interface PackageSummary {
   }>;
 }
 
+export type WorldDataPreflightDiagnosticLevel = "info" | "warning" | "error";
+
+export interface WorldDataPreflightDiagnostic {
+  level: WorldDataPreflightDiagnosticLevel;
+  sourceId?: string;
+  path?: string;
+  schema?: string;
+  pointer?: string;
+  message: string;
+}
+
+export interface WorldDataPreflightTarget {
+  kind: "plugin-data" | "lorebook" | "character" | "media-index" | string;
+  target: string;
+  sourceId: string;
+  pluginId?: string;
+  namespace?: string;
+  key?: string;
+}
+
+export interface WorldDataPreflightResponse {
+  imported: boolean;
+  diagnostics: WorldDataPreflightDiagnostic[];
+  planned: number;
+  targets: WorldDataPreflightTarget[];
+}
+
 export interface CommandSummary {
   name: string;
   pluginId: string;
@@ -433,6 +460,20 @@ export async function deleteWorld(id: string): Promise<void> {
   await request<unknown>(`/api/worlds/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
+}
+
+export async function preflightWorldData(
+  worldId: string,
+  body: { plugins?: string[]; sessionId?: string },
+): Promise<WorldDataPreflightResponse> {
+  return request<WorldDataPreflightResponse>(
+    `/api/worlds/${encodeURIComponent(worldId)}/world-data/preflight`,
+    {
+      method: "POST",
+      body: JSON.stringify(body),
+      silentErrors: true,
+    },
+  );
 }
 
 // ── Dimension Import/Export ──────────────────────────────────────────

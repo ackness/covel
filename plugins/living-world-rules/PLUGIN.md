@@ -12,6 +12,12 @@ trigger:
 capabilities:
   - living-world-rules
   - world-info
+dataSchemas:
+  rules:
+    schemaVersion: 1
+    acceptsWorldData: true
+    schema: ./schemas/rules.schema.json
+    description: Importable world info rules that can also project to lorebook.
 ui:
   right:
     - ./ui/living-world-rules-panel.json

@@ -1,0 +1,48 @@
+- schemaVersion: 1
+  id: haruka-dialogue-distance
+  title: 对话距离感
+  content: 玩家与主要角色的关系推进必须通过具体对话、共同任务、承诺兑现和尊重边界体现。角色会在好感、信任、压力和公开亲密度之间产生不同步变化。
+  kind: constant
+  category: relationship
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - 好感
+    - 信任
+    - 压力
+    - 公开亲密度
+  insertionOrder: 410
+- schemaVersion: 1
+  id: haruka-school-calendar
+  title: 学园祭倒计时
+  content: 学园祭筹备、社团审查、考试周、采访报道和主舞台选拔是推动日常关系变化的主要事件来源。每次事件应给出可对话、可选择、可承担后果的校园情境。
+  kind: triggered
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - 学园祭
+    - 社团审查
+    - 考试
+    - 采访
+    - 主舞台
+  insertionOrder: 420
+- schemaVersion: 1
+  id: haruka-romance-boundary
+  title: 校园恋爱边界
+  content: 恋爱描写保持 teen 分级，侧重心动、误会、等待、并肩完成目标和放学路上的对话。避免成人化描写，避免用单次选择直接跳过关系阶段。
+  kind: constant
+  category: style
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - 校园恋爱
+    - teen
+    - 关系阶段
+  insertionOrder: 430

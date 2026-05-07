@@ -64,6 +64,12 @@ describe("parsePluginMd", () => {
           "output:",
           "  schema: combat-result",
           "  recordAs: combat-log",
+          "dataSchemas:",
+          "  relationships:",
+          "    schemaVersion: 1",
+          "    acceptsWorldData: true",
+          "    schema: ./schemas/relationships.schema.json",
+          "    description: Relationship graph",
           "config:",
           "  difficulty:",
           "    type: enum",
@@ -105,6 +111,15 @@ describe("parsePluginMd", () => {
       expect(result.manifest.output).toEqual({
         schema: "combat-result",
         recordAs: "combat-log",
+      });
+      expect(result.manifest.dataSchemas).toEqual({
+        relationships: {
+          namespace: "relationships",
+          schemaVersion: 1,
+          acceptsWorldData: true,
+          schema: "./schemas/relationships.schema.json",
+          description: "Relationship graph",
+        },
       });
       expect(result.manifest.config).toEqual({
         difficulty: {

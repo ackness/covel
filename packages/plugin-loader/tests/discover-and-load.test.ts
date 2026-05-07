@@ -141,6 +141,40 @@ describe("discoverPlugins", () => {
   });
 });
 
+describe("bundled plugin dataSchemas", () => {
+  it("points every built-in dataSchema declaration at an existing JSON file", async () => {
+    const pluginsRoot = path.resolve(import.meta.dirname, "../../../plugins");
+    const discoveries = await discoverPlugins(pluginsRoot);
+    const seen: string[] = [];
+
+    for (const discovery of discoveries) {
+      const manifests = await loadPluginManifest(discovery);
+      for (const parsed of manifests) {
+        for (const [namespace, decl] of Object.entries(
+          parsed.manifest.dataSchemas ?? {},
+        )) {
+          seen.push(`${discovery.id}/${namespace}`);
+          const schemaPath = path.resolve(discovery.rootPath, decl.schema);
+          const relative = path.relative(discovery.rootPath, schemaPath);
+          expect(relative.startsWith("..")).toBe(false);
+          expect(path.isAbsolute(relative)).toBe(false);
+          JSON.parse(await fs.readFile(schemaPath, "utf-8"));
+        }
+      }
+    }
+
+    expect(seen.sort()).toEqual([
+      "char-creator/characters",
+      "char-creator/characters",
+      "character-blueprint/blueprints",
+      "character-blueprint/characters",
+      "character-presence/assets",
+      "character-presence/presence",
+      "living-world-rules/rules",
+    ]);
+  });
+});
+
 // ── loadPluginSummary ───────────────────────────────────────────
 
 describe("loadPluginSummary", () => {

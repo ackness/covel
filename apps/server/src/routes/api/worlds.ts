@@ -5,15 +5,22 @@
 import { Hono } from "hono";
 import { stringify as stringifyYaml } from "yaml";
 import { validateDimensions } from "@covel/shared";
-import type { DataStore, WorldRecord } from "@covel/store";
+import type { DataStore, MediaStore, WorldRecord } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type { PluginRegistry } from "@covel/plugin-loader";
+import {
+  syncWorldDataForSession,
+  preflightWorldDataForSession,
+} from "../../world-data/session-import.js";
 
 type Env = {
   Variables: {
     store: DataStore;
     eventBus: EventBus;
     pluginRegistry: PluginRegistry;
+    mediaStore?: MediaStore;
+    worldsDirs?: readonly string[];
+    covelHome?: string;
   };
 };
 
@@ -128,6 +135,103 @@ worldRoutes.get("/:id", async (c) => {
     return c.json({ error: "World not found" }, 404);
   }
   return c.json(world);
+});
+
+// POST /worlds/:id/world-data/preflight — build a read-only import plan for a
+// proposed or existing session. The caller may pass either sessionId or plugins.
+worldRoutes.post("/:id/world-data/preflight", async (c) => {
+  const store = c.get("store");
+  const pluginRegistry = c.get("pluginRegistry");
+  const worldsDirs = c.get("worldsDirs");
+  const covelHome = c.get("covelHome");
+  const worldId = c.req.param("id");
+  const body: Record<string, unknown> = await c.req
+    .json<Record<string, unknown>>()
+    .catch(() => ({}));
+  const sessionId =
+    typeof body.sessionId === "string" ? body.sessionId : "preflight";
+  const session =
+    typeof body.sessionId === "string"
+      ? await store.getSession(body.sessionId)
+      : null;
+  if (typeof body.sessionId === "string" && !session) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+  if (session && session.worldId !== worldId) {
+    return c.json({ error: "Session world mismatch" }, 400);
+  }
+  const plugins = Array.isArray(body.plugins)
+    ? body.plugins.filter(
+        (pluginId): pluginId is string => typeof pluginId === "string",
+      )
+    : (session?.activePlugins ?? []);
+
+  const result = await preflightWorldDataForSession({
+    sessionId,
+    worldId,
+    worldsDirs,
+    covelHome,
+    now: new Date().toISOString(),
+    preflight: {
+      activePlugins: plugins,
+      registry: pluginRegistry,
+    },
+  });
+
+  return c.json(result);
+});
+
+// POST /worlds/:id/sync-data — reconcile a session's importer-managed
+// worldData rows against the latest world package and user overrides.
+worldRoutes.post("/:id/sync-data", async (c) => {
+  const store = c.get("store");
+  const pluginRegistry = c.get("pluginRegistry");
+  const worldsDirs = c.get("worldsDirs");
+  const covelHome = c.get("covelHome");
+  const mediaStore = c.get("mediaStore");
+  const worldId = c.req.param("id");
+  const body: Record<string, unknown> = await c.req
+    .json<Record<string, unknown>>()
+    .catch(() => ({}));
+  const sessionId = body.sessionId;
+  if (typeof sessionId !== "string") {
+    return c.json({ error: "sessionId (string) is required" }, 400);
+  }
+  const session = await store.getSession(sessionId);
+  if (!session) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+  if (session.worldId !== worldId) {
+    return c.json({ error: "Session world mismatch" }, 400);
+  }
+
+  const result = await syncWorldDataForSession({
+    store,
+    mediaStore,
+    sessionId,
+    worldId,
+    worldsDirs,
+    covelHome,
+    now: new Date().toISOString(),
+    dryRun: body.dryRun !== false,
+    force: body.force === true,
+    deferMediaFinalize: false,
+    preflight: {
+      activePlugins: session.activePlugins ?? [],
+      registry: pluginRegistry,
+    },
+  });
+
+  return c.json({
+    imported: result.imported,
+    dryRun: result.dryRun,
+    diagnostics: result.diagnostics,
+    planned: result.planned,
+    upserted: result.upserted,
+    deleted: result.deleted,
+    unchanged: result.unchanged,
+    conflicts: result.conflicts,
+  });
 });
 
 // POST /worlds

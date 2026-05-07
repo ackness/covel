@@ -135,6 +135,57 @@ export const outputConfigSchema = z
   })
   .strict();
 
+// ── Plugin data schemas ─────────────────────────────────────────
+
+const pluginDataNamespaceSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z][a-z0-9_-]*$/i, {
+    message:
+      "namespace must be a short identifier (letters, digits, underscore, hyphen)",
+  });
+
+const pluginRelativeJsonSchemaPath = z
+  .string()
+  .min(1)
+  .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[a-z0-9_./-]+\.json$/i, {
+    message:
+      "schema must be a plugin-relative .json path (no leading `/`, no `..` segments)",
+  });
+
+export const pluginDataSchemaDeclSchema = z
+  .object({
+    namespace: pluginDataNamespaceSchema.optional(),
+    schemaVersion: z.number().int().positive(),
+    acceptsWorldData: z.boolean(),
+    schema: pluginRelativeJsonSchemaPath,
+    description: z.string().optional(),
+  })
+  .strict();
+
+export const pluginDataSchemaMapSchema = z
+  .record(pluginDataNamespaceSchema, pluginDataSchemaDeclSchema)
+  .transform((schemas) =>
+    Object.fromEntries(
+      Object.entries(schemas).map(([namespace, decl]) => [
+        namespace,
+        { ...decl, namespace: decl.namespace ?? namespace },
+      ]),
+    ),
+  )
+  .superRefine((schemas, ctx) => {
+    for (const [namespace, decl] of Object.entries(schemas)) {
+      if (decl.namespace !== namespace) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [namespace, "namespace"],
+          message: `namespace must match dataSchemas key "${namespace}"`,
+        });
+      }
+    }
+  });
+
 // ── Tools ────────────────────────────────────────────────────────
 
 export const toolsConfigSchema = z
@@ -391,6 +442,7 @@ export const runtimeManifestSchema = z
     tools: toolsConfigSchema.optional(),
     input: inputConfigSchema.optional(),
     output: outputConfigSchema.optional(),
+    dataSchemas: pluginDataSchemaMapSchema.optional(),
     config: z.record(z.string(), pluginConfigFieldSchema).optional(),
     i18n: z.record(z.string(), z.string()).optional(),
     ui: uiSpecSchema.optional(),

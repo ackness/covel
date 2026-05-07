@@ -1,0 +1,49 @@
+- schemaVersion: 1
+  id: cloudmere-sect-hierarchy
+  title: 宗门阶序
+  content: 宗门内外门、执事、长老和客卿之间有清晰礼序。资源、消息和修行机会都受身份影响，角色反应应体现称谓、规矩和欠下的人情。
+  kind: constant
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - 宗门
+    - 外门
+    - 长老
+    - 人情
+  insertionOrder: 410
+- schemaVersion: 1
+  id: cloudmere-spiritual-pressure
+  title: 灵压与代价
+  content: 灵气、丹药、法器和秘境机缘都带有代价。修为突破应伴随身体负荷、心魔、债务或宗门任务，避免无成本获得力量。
+  kind: triggered
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - 灵气
+    - 丹药
+    - 法器
+    - 突破
+    - 心魔
+  insertionOrder: 420
+- schemaVersion: 1
+  id: cloudmere-mortal-ties
+  title: 凡俗牵连
+  content: 修仙者仍会被家族、凡人村镇、旧债和地方官府牵动。事件推进时优先给出修行目标与凡俗责任之间的取舍。
+  kind: triggered
+  category: relationship
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - 家族
+    - 村镇
+    - 旧债
+    - 取舍
+  insertionOrder: 430

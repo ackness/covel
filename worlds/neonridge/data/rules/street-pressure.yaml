@@ -1,0 +1,49 @@
+- schemaVersion: 1
+  id: neonridge-corporate-heat
+  title: 企业热度
+  content: 玩家每次触碰企业资产、机密、代理人或监控网络都会提高被关注程度。后续场景应体现安保升级、价格变化和联系人态度变化。
+  kind: triggered
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - 企业
+    - 监控
+    - 安保
+    - 联系人
+  insertionOrder: 410
+- schemaVersion: 1
+  id: neonridge-augmentation-cost
+  title: 义体代价
+  content: 义体改造会带来账单、维护、排异、黑诊所依赖和身份暴露风险。强化能力时要同时给出资源压力和社会后果。
+  kind: constant
+  category: character
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - 义体
+    - 维护
+    - 排异
+    - 黑诊所
+    - 身份
+  insertionOrder: 420
+- schemaVersion: 1
+  id: neonridge-street-reputation
+  title: 街头声望
+  content: 街头声望可以为负，也可以因守信、背叛、付账、救人或制造混乱而变化。对话选项和 NPC 反应应引用最近的声望变化。
+  kind: triggered
+  category: relationship
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - 街头声望
+    - 守信
+    - 背叛
+    - NPC
+  insertionOrder: 430

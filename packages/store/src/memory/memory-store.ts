@@ -36,6 +36,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  WorldDataImportLedgerRecord,
   LorebookEntryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
@@ -104,6 +105,7 @@ export function createMemoryStore(): DataStore &
   const turnMessages: TurnMessageRecord[] = [];
   const playerInputs: PlayerInputRecord[] = [];
   const workingMemoryEntries = new Map<string, WorkingMemoryRecord>();
+  const worldDataImportLedger = new Map<string, WorldDataImportLedgerRecord>();
   /** Keyed by `${sessionId}:${entryId}`. */
   const lorebookEntries = new Map<string, LorebookEntryRecord>();
   const sessionSummaries: SessionSummaryRecord[] = [];
@@ -182,6 +184,7 @@ export function createMemoryStore(): DataStore &
     readonly turnMessages: TurnMessageRecord[];
     readonly playerInputs: PlayerInputRecord[];
     readonly workingMemoryEntries: Map<string, WorkingMemoryRecord>;
+    readonly worldDataImportLedger: Map<string, WorldDataImportLedgerRecord>;
     readonly lorebookEntries: Map<string, LorebookEntryRecord>;
     readonly sessionSummaries: SessionSummaryRecord[];
     readonly suspensions: Map<string, SuspensionRecord>;
@@ -234,6 +237,7 @@ export function createMemoryStore(): DataStore &
       turnMessages: structuredClone(turnMessages),
       playerInputs: structuredClone(playerInputs),
       workingMemoryEntries: structuredClone(workingMemoryEntries),
+      worldDataImportLedger: structuredClone(worldDataImportLedger),
       lorebookEntries: structuredClone(lorebookEntries),
       sessionSummaries: structuredClone(sessionSummaries),
       suspensions: structuredClone(suspensions),
@@ -285,6 +289,9 @@ export function createMemoryStore(): DataStore &
     workingMemoryEntries.clear();
     for (const [k, v] of snap.workingMemoryEntries)
       workingMemoryEntries.set(k, v);
+    worldDataImportLedger.clear();
+    for (const [k, v] of snap.worldDataImportLedger)
+      worldDataImportLedger.set(k, v);
     lorebookEntries.clear();
     for (const [k, v] of snap.lorebookEntries) lorebookEntries.set(k, v);
     sessionSummaries.length = 0;
@@ -358,6 +365,9 @@ export function createMemoryStore(): DataStore &
       }
       for (const [k, v] of workingMemoryEntries) {
         if (v.sessionId === id) workingMemoryEntries.delete(k);
+      }
+      for (const [k, v] of worldDataImportLedger) {
+        if (v.sessionId === id) worldDataImportLedger.delete(k);
       }
       for (const [k, v] of lorebookEntries) {
         if (v.sessionId === id) lorebookEntries.delete(k);
@@ -576,6 +586,13 @@ export function createMemoryStore(): DataStore &
       return [...characters.values()].filter((r) => r.sessionId === sessionId);
     },
 
+    async deleteCharacter(sessionId, id) {
+      const existing = characters.get(id);
+      if (existing?.sessionId === sessionId) {
+        characters.delete(id);
+      }
+    },
+
     // ── Plugin Data ──
 
     async setPluginData(record) {
@@ -749,6 +766,38 @@ export function createMemoryStore(): DataStore &
     ): Promise<void> {
       const k = workingMemoryKey(sessionId, scope, key);
       workingMemoryEntries.delete(k);
+    },
+
+    // ── World Data Import Ledger ─────────────────────────────
+
+    async saveWorldDataImportLedgerBatch(
+      records: readonly WorldDataImportLedgerRecord[],
+    ): Promise<void> {
+      for (const record of records) {
+        worldDataImportLedger.set(record.id, record);
+      }
+    },
+
+    async listWorldDataImportLedger(
+      sessionId: string,
+    ): Promise<readonly WorldDataImportLedgerRecord[]> {
+      return Array.from(worldDataImportLedger.values())
+        .filter((r) => r.sessionId === sessionId)
+        .sort((a, b) => {
+          const timeDiff = a.importedAt.localeCompare(b.importedAt);
+          if (timeDiff !== 0) return timeDiff;
+          return a.id.localeCompare(b.id);
+        });
+    },
+
+    async deleteWorldDataImportLedger(
+      sessionId: string,
+      id: string,
+    ): Promise<void> {
+      const existing = worldDataImportLedger.get(id);
+      if (existing?.sessionId === sessionId) {
+        worldDataImportLedger.delete(id);
+      }
     },
 
     // ── Lorebook Entries (S3-T2) ───────────────────────────────

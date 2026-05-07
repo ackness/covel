@@ -213,11 +213,11 @@ path: schemas/custom.schema.json
 
 v1 不支持完整 JSONPath，只保留 kind-specific 的简单规则：
 
-| kind                | `key` 语义                                                            |
-| ------------------- | --------------------------------------------------------------------- |
-| `yaml` / `json`     | `id` 或 `characterId` 表示从对象字段提取 key；数组源逐项提取          |
-| `markdown` / `text` | `key` 是 literal record key，例如 `opening-scene`                     |
-| `media`             | `filename` 表示使用不含扩展名的文件名；文件 source 也可给 literal key |
+| kind                | `key` 语义                                                                   |
+| ------------------- | ---------------------------------------------------------------------------- |
+| `yaml` / `json`     | `id` 或 `characterId` 表示从对象字段提取 key；数组源逐项提取                 |
+| `markdown` / `text` | `key` 是 literal record key，例如 `opening-scene`                            |
+| `media`             | `filename` 表示使用完整 basename，包含扩展名；文件 source 也可给 literal key |
 
 需要复杂 key 时，先在源数据里显式写 `id`，或拆成多个 source。
 
@@ -302,25 +302,22 @@ v1 不加载 remote schema。
 
 ```yaml
 dataSchemas:
-  schemaVersion: 1
-  namespaces:
-    blueprints:
-      schema: schemas/blueprint.schema.json
-      key: id
-      acceptsWorldData: true
-      ui: form
+  blueprints:
+    schemaVersion: 1
+    acceptsWorldData: true
+    schema: ./schemas/blueprints.schema.json
+    description: Importable character blueprints.
 ```
 
 字段：
 
-| 字段               | 含义                                                    |
-| ------------------ | ------------------------------------------------------- |
-| `schemaVersion`    | dataSchemas 版本                                        |
-| `namespaces`       | namespace 到 schema 的映射                              |
-| `schema`           | 相对 plugin root 的 JSON Schema 文件                    |
-| `key`              | 默认 key 字段                                           |
-| `acceptsWorldData` | 是否允许 world importer 写入                            |
-| `ui`               | 可选编辑器建议：`form`、`table`、`json`、`asset-picker` |
+| 字段               | 含义                                 |
+| ------------------ | ------------------------------------ |
+| map key            | plugin-data namespace                |
+| `schemaVersion`    | namespace 数据契约版本               |
+| `acceptsWorldData` | 是否允许 world importer 写入         |
+| `schema`           | 相对 plugin root 的 JSON Schema 文件 |
+| `description`      | 面向 world 作者的简短说明            |
 
 loader 必须把 `dataSchemas` 合并为 plugin-level registry；同一 namespace 冲突时报错。schema path 相对 plugin root，并必须做 realpath containment。
 

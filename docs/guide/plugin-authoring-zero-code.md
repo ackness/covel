@@ -584,7 +584,9 @@ sources:
 
 **`worldData`** 指向统一数据索引。`to: world:metadata.dimensions` 会把维度写入 world metadata；`to: plugin:character-blueprint/blueprints` 加上 `effects: [characters]` 会在创建 session 时导入角色卡、实例化 NPC，并镜像到角色面板。运行中也可以在 `character-blueprint` 右侧面板用表单创建蓝图；完整迁移或调试时使用 JSON 导入入口。
 
-第三方内容包可以交付自己的 `world.data.yaml`，或把覆盖文件放到 `~/.covel/world-overrides/<world-id>/world.data.override.yaml`。更多字段见 [World Data reference](../reference/world-data.md)。
+开始游戏前，Web 准备页会根据当前插件选择调用 `POST /api/worlds/<world-id>/world-data/preflight`，展示 planned writes、目标摘要和 diagnostics。已有 session 可以调用 `POST /api/worlds/<world-id>/sync-data` 同步 importer 管理的数据；接口默认 dry-run，传 `dryRun:false` 才会写入，传 `force:true` 才会覆盖冲突。
+
+第三方内容包可以交付自己的 `world.data.yaml`，或把覆盖文件放到 `~/.covel/world-overrides/<world-id>/world.data.override.yaml`。导入第三方插件数据时，目标插件需要在 `PLUGIN.md` 声明 `dataSchemas`，并提供 JSON Schema。更多字段见 [World Data reference](../reference/world-data.md)。
 
 ## 9. 完整的零代码插件示例
 

@@ -414,6 +414,22 @@ sources:
       });
     }
 
+    for (const [worldId, ruleSourceId] of [
+      ["cloudmere", "cultivationRules"],
+      ["mistport", "tideRules"],
+      ["neonridge", "streetRules"],
+    ] as const) {
+      const record = await loadSingleWorld(path.join(worldsRoot, worldId));
+      expect(record?.metadata?.worldData).toMatchObject({
+        sources: expect.arrayContaining([
+          expect.objectContaining({
+            id: ruleSourceId,
+            target: "plugin:living-world-rules/rules+lorebook",
+          }),
+        ]),
+      });
+    }
+
     const haruka = await loadSingleWorld(
       path.join(worldsRoot, "haruka-academy"),
     );

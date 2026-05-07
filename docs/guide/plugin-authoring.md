@@ -27,6 +27,40 @@
 
 ---
 
+## World Data 与插件数据契约
+
+插件可以通过 `PLUGIN.md` frontmatter 的 `dataSchemas` 声明可导入的 `plugin_data` namespace。世界包在 `data/world.data.yaml` 中使用 `schema: plugin://<pluginId>/<namespace>` 和 `to: plugin:<pluginId>/<namespace>` 引用该契约；服务器会在创建 session 前做 preflight，并用插件包内 JSON Schema 校验每条 source item。
+
+```yaml
+dataSchemas:
+  relationships:
+    schemaVersion: 1
+    acceptsWorldData: true
+    schema: ./schemas/relationships.schema.json
+    description: Importable relationship records.
+```
+
+字段规则：
+
+- `schema` 相对插件根目录，并经过 realpath containment 校验。
+- 多 runtime 插件的 `dataSchemas` 会合并为 plugin-level registry；同一 namespace 的声明需要完全一致。
+- world-data importer 只接受 `acceptsWorldData: true` 的 namespace。
+- 导入的数据写入 `plugin_data`、`lorebook`、`characters` 或 media index 后，会记录到 `world_data_import_ledger`，供 `/api/worlds/:id/sync-data` 做 dry-run、冲突检测和同步。
+
+世界包引用示例：
+
+```yaml
+sources:
+  social-links:
+    kind: yaml
+    path: data/social/links.yaml
+    schema: plugin://social-sim/relationships
+    to: plugin:social-sim/relationships
+    key: id
+```
+
+完整 target URI、override 目录、preflight 和 sync API 见 [World Data reference](../reference/world-data.md)。
+
 ## 附录
 
 ### A. 内置 UI 工具快速参考

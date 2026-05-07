@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plugin://living-world-rules/rules",
+  "oneOf": [
+    { "$ref": "#/$defs/rule" },
+    {
+      "type": "object",
+      "required": ["rule"],
+      "properties": {
+        "rule": { "$ref": "#/$defs/rule" },
+        "lorebookEntryId": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  ],
+  "$defs": {
+    "rule": {
+      "type": "object",
+      "required": ["schemaVersion", "id", "content"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+        },
+        "title": { "type": "string" },
+        "content": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["constant", "triggered", "evolving"] },
+        "category": {
+          "enum": ["character", "scene", "relationship", "world", "style"]
+        },
+        "enabled": { "type": "boolean" },
+        "coordinate": {
+          "type": "object",
+          "properties": {
+            "position": {
+              "enum": ["before_plugin", "after_plugin", "at_depth"]
+            },
+            "depth": { "type": "number" }
+          },
+          "additionalProperties": true
+        },
+        "budgetClass": { "enum": ["sticky", "flexible", "droppable"] },
+        "keys": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "insertionOrder": { "type": "number" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

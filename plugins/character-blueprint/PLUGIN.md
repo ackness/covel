@@ -11,6 +11,17 @@ trigger:
   type: manual
 capabilities:
   - character-blueprint
+dataSchemas:
+  blueprints:
+    schemaVersion: 1
+    acceptsWorldData: true
+    schema: ./schemas/blueprints.schema.json
+    description: Importable world character blueprints.
+  characters:
+    schemaVersion: 1
+    acceptsWorldData: true
+    schema: ./schemas/characters.schema.json
+    description: Imported character mirror records created from blueprints.
 ui:
   right:
     - ./ui/blueprints-panel.json

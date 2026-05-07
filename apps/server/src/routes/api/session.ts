@@ -23,7 +23,12 @@ import { buildSessionSnapshot } from "@covel/runtime";
 import { characterBlueprintToCharacterUpsert } from "@covel/shared";
 import type { CharacterBlueprint } from "@covel/shared";
 import { signMediaTokenForSession } from "../../middleware/media-token.js";
-import { importWorldDataForSession } from "../../world-data/session-import.js";
+import {
+  cleanupWorldDataMediaRefs,
+  finalizeWorldDataMediaRefs,
+  importWorldDataForSession,
+  type WorldDataImportedMediaRef,
+} from "../../world-data/session-import.js";
 
 const SAFE_WORLD_ID_RE = /^[a-z0-9_-]{1,64}$/i;
 const SAFE_SESSION_ID_RE = /^[a-z0-9_-]{1,128}$/i;
@@ -378,18 +383,45 @@ sessionRoutes.post("/", async (c) => {
     updatedAt: now,
   };
 
-  // Persist BEFORE activating plugins to avoid registry/store inconsistency
-  await store.createSession(session);
-  const importedWorldData = await importWorldDataForSession({
-    store,
-    sessionId: id,
-    worldId: rawWorldId,
-    worldsDirs,
-    covelHome,
-    now,
-  });
-  if (!importedWorldData) {
-    await importWorldCharacterBlueprints(store, id, rawWorldId, now);
+  let importedMediaRefs: readonly WorldDataImportedMediaRef[] = [];
+  await store.beginTx();
+  try {
+    await store.createSession(session);
+    const importedWorldData = await importWorldDataForSession({
+      store,
+      mediaStore: c.get("mediaStore"),
+      sessionId: id,
+      worldId: rawWorldId,
+      worldsDirs,
+      covelHome,
+      now,
+      preflight: {
+        activePlugins: plugins,
+        registry: pluginRegistry,
+      },
+      deferMediaFinalize: true,
+    });
+    importedMediaRefs = importedWorldData.mediaRefs;
+    if (!importedWorldData.imported) {
+      await importWorldCharacterBlueprints(store, id, rawWorldId, now);
+    }
+    await store.commitTx();
+  } catch (err) {
+    await store.rollbackTx();
+    throw err;
+  }
+  try {
+    await finalizeWorldDataMediaRefs({
+      mediaStore: c.get("mediaStore"),
+      refs: importedMediaRefs,
+    });
+  } catch (err) {
+    await store.deleteSession(id);
+    await cleanupWorldDataMediaRefs({
+      mediaStore: c.get("mediaStore"),
+      refs: importedMediaRefs,
+    });
+    throw err;
   }
 
   for (const pluginId of plugins) {

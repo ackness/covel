@@ -17,6 +17,7 @@ Before changing anything non-trivial, consult the matching reference doc — the
 | Project intro, quick start, roadmap                 | [README.md](./README.md) · [docs/README.md](./docs/README.md)                                                               |
 | End-to-end turn pipeline, full architecture         | [docs/architecture/flow.md](./docs/architecture/flow.md)                                                                    |
 | Plugin registry (all plugins, priorities, triggers) | [docs/reference/plugins.md](./docs/reference/plugins.md)                                                                    |
+| World Data (`worldData`, source import, overrides)  | [docs/reference/world-data.md](./docs/reference/world-data.md)                                                              |
 | Tool registry (builtin + local, approval policy)    | [docs/reference/tools.md](./docs/reference/tools.md)                                                                        |
 | HTTP API (all endpoints, request/response, curl)    | [docs/reference/api.md](./docs/reference/api.md)                                                                            |
 | Protocol (SSE events, envelope, Transport layer)    | [docs/reference/protocol.md](./docs/reference/protocol.md)                                                                  |
@@ -34,7 +35,7 @@ Before changing anything non-trivial, consult the matching reference doc — the
 | Desktop packaging (Electron), signing, notarisation | [apps/desktop/PACKAGING.md](./apps/desktop/PACKAGING.md)                                                                    |
 | Desktop packaging (Tauri), signing, notarisation    | [apps/desktop-tauri/PACKAGING.md](./apps/desktop-tauri/PACKAGING.md)                                                        |
 | Prompt externalisation spec                         | [devs/docs/prompt-externalization-spec.md](./devs/docs/prompt-externalization-spec.md)                                      |
-| World package spec (world.yaml + WORLD.md)          | [devs/docs/world-package-spec.md](./devs/docs/world-package-spec.md)                                                        |
+| World package spec (world.yaml + WORLD.md + data)   | [devs/docs/world-package-spec.md](./devs/docs/world-package-spec.md)                                                        |
 | Plugin system requirements, refactor plans          | [devs/docs/plugin-system-req.md](./devs/docs/plugin-system-req.md) · [devs/docs/refactor-plan/](./devs/docs/refactor-plan/) |
 | Architecture audit follow-up tickets (F3/F4/F5/F7)  | [devs/docs/architecture-audit-followups/](./devs/docs/architecture-audit-followups/)                                        |
 | Contributing & release workflow                     | [docs/CONTRIBUTING.md](./docs/CONTRIBUTING.md)                                                                              |
@@ -116,7 +117,7 @@ packages/           14 internal packages: shared, context, ai-provider,
 
 plugins/            8 core plugins (see docs/reference/plugins.md)
 prompts/            Externalised prompt templates (locale-aware markdown)
-worlds/             File-based world packages (cloudmere / mistport / neonridge)
+worlds/             File-based world packages (cloudmere / mistport / neonridge / haruka-academy)
 ```
 
 Dependency flow (rough):
@@ -227,21 +228,24 @@ All store writes key on `pluginId`; all trace logs key on `runtimeId`.
 
 **Any code change that touches framework-visible surface area MUST update the matching doc in the same PR.** Missing sync = incomplete PR.
 
-| Change                                    | Doc to update                                                       |
-| ----------------------------------------- | ------------------------------------------------------------------- |
-| Add/modify/remove plugin                  | `docs/reference/plugins.md`                                         |
-| Add/modify/remove tool (builtin or local) | `docs/reference/tools.md`                                           |
-| Change approval policy / tool trust tier  | `docs/reference/tools.md`                                           |
-| Add/change model slot                     | `docs/reference/slots.md` (create if missing)                       |
-| Change SSE event type / protocol          | `docs/reference/protocol.md`                                        |
-| Change right-panel tab / data source      | `docs/reference/ui-panels.md`                                       |
-| Add/change API endpoint                   | `docs/reference/api.md`                                             |
-| Change package structure / deps           | `CLAUDE.md` (Workspace + Dependency Flow)                           |
-| Add/change PLUGIN.md frontmatter field    | `docs/reference/plugins.md` + `docs/guide/plugin-authoring.md`      |
-| Add/change RPC action / framework default | `docs/reference/api.md` (plugin-rpc) + `docs/reference/protocol.md` |
-| Add/change approval flow / trust level    | `docs/reference/api.md` + `docs/reference/protocol.md`              |
-| Modify `README.md` (English, primary)     | `README.zh-CN.md` (must sync in same PR)                            |
-| Modify `README.zh-CN.md`                  | `README.md` (must sync in same PR)                                  |
+| Change                                    | Doc to update                                                                                    |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Add/modify/remove plugin                  | `docs/reference/plugins.md`                                                                      |
+| Add/modify/remove tool (builtin or local) | `docs/reference/tools.md`                                                                        |
+| Change approval policy / tool trust tier  | `docs/reference/tools.md`                                                                        |
+| Add/change model slot                     | `docs/reference/slots.md` (create if missing)                                                    |
+| Change SSE event type / protocol          | `docs/reference/protocol.md`                                                                     |
+| Change right-panel tab / data source      | `docs/reference/ui-panels.md`                                                                    |
+| Add/change API endpoint                   | `docs/reference/api.md`                                                                          |
+| Change package structure / deps           | `CLAUDE.md` (Workspace + Dependency Flow)                                                        |
+| Add/change PLUGIN.md frontmatter field    | `docs/reference/plugins.md` + `docs/guide/plugin-authoring.md`                                   |
+| Add/change `PLUGIN.md dataSchemas`        | `docs/reference/plugins.md` + `docs/guide/plugin-authoring*.md` + `docs/reference/world-data.md` |
+| Add/change world package `worldData`      | `docs/reference/world-data.md` + `devs/docs/world-package-spec.md` + relevant guide docs         |
+| Add/change world-data import/sync rules   | `docs/reference/world-data.md` + `docs/reference/api.md` + `docs/reference/transactions.md`      |
+| Add/change RPC action / framework default | `docs/reference/api.md` (plugin-rpc) + `docs/reference/protocol.md`                              |
+| Add/change approval flow / trust level    | `docs/reference/api.md` + `docs/reference/protocol.md`                                           |
+| Modify `README.md` (English, primary)     | `README.zh-CN.md` (must sync in same PR)                                                         |
+| Modify `README.zh-CN.md`                  | `README.md` (must sync in same PR)                                                               |
 
 ### Plugin authoring contract
 

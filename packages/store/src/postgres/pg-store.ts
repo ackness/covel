@@ -34,6 +34,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  WorldDataImportLedgerRecord,
   LorebookEntryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
@@ -63,6 +64,7 @@ import {
   toTurnMessageRecord,
   toPlayerInputRecord,
   toWorkingMemoryRecord,
+  toWorldDataImportLedgerRecord,
   toLorebookEntryRecord,
   toSessionSummaryRecord,
   toSuspensionRecord,
@@ -216,6 +218,9 @@ export async function createPgStore(
         await tx
           .delete(schema.pluginData)
           .where(eq(schema.pluginData.sessionId, id));
+        await tx
+          .delete(schema.worldDataImportLedger)
+          .where(eq(schema.worldDataImportLedger.sessionId, id));
         await tx
           .delete(schema.pluginConfigs)
           .where(eq(schema.pluginConfigs.sessionId, id));
@@ -626,6 +631,17 @@ export async function createPgStore(
         .from(schema.characters)
         .where(eq(schema.characters.sessionId, sessionId));
       return rows.map(toCharacterRecord);
+    },
+
+    async deleteCharacter(sessionId: string, id: string): Promise<void> {
+      await db
+        .delete(schema.characters)
+        .where(
+          and(
+            eq(schema.characters.sessionId, sessionId),
+            eq(schema.characters.id, id),
+          ),
+        );
     },
 
     // ── Plugin Data ──────────────────────────────────────────
@@ -1147,6 +1163,82 @@ export async function createPgStore(
             eq(schema.workingMemory.sessionId, sessionId),
             eq(schema.workingMemory.scope, scope),
             eq(schema.workingMemory.key, key),
+          ),
+        );
+    },
+
+    // ── World Data Import Ledger ─────────────────────────────
+
+    async saveWorldDataImportLedgerBatch(
+      records: readonly WorldDataImportLedgerRecord[],
+    ): Promise<void> {
+      if (records.length === 0) return;
+      await db.transaction(async (tx) => {
+        for (const r of records) {
+          await tx
+            .insert(schema.worldDataImportLedger)
+            .values({
+              id: r.id,
+              sessionId: r.sessionId,
+              target: r.target,
+              pluginId: r.pluginId ?? null,
+              namespace: r.namespace ?? null,
+              key: r.key ?? null,
+              sourceWorldId: r.sourceWorldId,
+              sourceId: r.sourceId,
+              sourceDigest: r.sourceDigest,
+              valueHash: r.valueHash,
+              schemaRef: r.schemaRef ?? null,
+              derivedFrom: (r.derivedFrom ?? null) as unknown,
+              importedAt: r.importedAt,
+              managed: r.managed ? 1 : 0,
+            })
+            .onConflictDoUpdate({
+              target: schema.worldDataImportLedger.id,
+              set: {
+                sessionId: r.sessionId,
+                target: r.target,
+                pluginId: r.pluginId ?? null,
+                namespace: r.namespace ?? null,
+                key: r.key ?? null,
+                sourceWorldId: r.sourceWorldId,
+                sourceId: r.sourceId,
+                sourceDigest: r.sourceDigest,
+                valueHash: r.valueHash,
+                schemaRef: r.schemaRef ?? null,
+                derivedFrom: (r.derivedFrom ?? null) as unknown,
+                importedAt: r.importedAt,
+                managed: r.managed ? 1 : 0,
+              },
+            });
+        }
+      });
+    },
+
+    async listWorldDataImportLedger(
+      sessionId: string,
+    ): Promise<readonly WorldDataImportLedgerRecord[]> {
+      const rows = await db
+        .select()
+        .from(schema.worldDataImportLedger)
+        .where(eq(schema.worldDataImportLedger.sessionId, sessionId))
+        .orderBy(
+          asc(schema.worldDataImportLedger.importedAt),
+          asc(schema.worldDataImportLedger.id),
+        );
+      return rows.map(toWorldDataImportLedgerRecord);
+    },
+
+    async deleteWorldDataImportLedger(
+      sessionId: string,
+      id: string,
+    ): Promise<void> {
+      await db
+        .delete(schema.worldDataImportLedger)
+        .where(
+          and(
+            eq(schema.worldDataImportLedger.sessionId, sessionId),
+            eq(schema.worldDataImportLedger.id, id),
           ),
         );
     },

@@ -29,6 +29,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  WorldDataImportLedgerRecord,
   LorebookEntryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
@@ -232,6 +233,25 @@ export function createTables(sqlite: Database.Database): void {
       UNIQUE (session_id, plugin_id, namespace, key)
     );
     CREATE INDEX IF NOT EXISTS plugin_data_session_id_idx ON plugin_data(session_id);
+
+    CREATE TABLE IF NOT EXISTS world_data_import_ledger (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      target TEXT NOT NULL,
+      plugin_id TEXT,
+      namespace TEXT,
+      key TEXT,
+      source_world_id TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      source_digest TEXT NOT NULL,
+      value_hash TEXT NOT NULL,
+      schema_ref TEXT,
+      derived_from TEXT,
+      imported_at TEXT NOT NULL,
+      managed INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE INDEX IF NOT EXISTS world_data_import_ledger_session_id_idx ON world_data_import_ledger(session_id);
+    CREATE INDEX IF NOT EXISTS world_data_import_ledger_source_idx ON world_data_import_ledger(session_id, source_world_id, source_id);
 
     CREATE TABLE IF NOT EXISTS plugin_configs (
       id TEXT PRIMARY KEY,
@@ -804,6 +824,30 @@ export function toWorkingMemoryRecord(
     value: fromJsonRequired(row.value),
     schemaRef: row.schemaRef ?? undefined,
     updatedAt: row.updatedAt,
+  };
+}
+
+export function toWorldDataImportLedgerRecord(
+  row: typeof schema.worldDataImportLedger.$inferSelect,
+): WorldDataImportLedgerRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    target: row.target,
+    pluginId: row.pluginId ?? undefined,
+    namespace: row.namespace ?? undefined,
+    key: row.key ?? undefined,
+    sourceWorldId: row.sourceWorldId,
+    sourceId: row.sourceId,
+    sourceDigest: row.sourceDigest,
+    valueHash: row.valueHash,
+    schemaRef: row.schemaRef ?? undefined,
+    derivedFrom:
+      row.derivedFrom == null
+        ? undefined
+        : ((fromJsonRequired(row.derivedFrom) as string[] | null) ?? []),
+    importedAt: row.importedAt,
+    managed: row.managed !== 0,
   };
 }
 

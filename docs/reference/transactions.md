@@ -178,6 +178,30 @@ if (txEnabled && typeof store.beginTx === "function") {
 Explicit opt-out preserves the legacy behavior from before `S4-T1`
 (serial apply, no rollback on mid-sequence failure).
 
+## World Data import
+
+Session creation with `worldData` uses the same `DataStore` transaction
+contract. The server builds and validates the import plan first, then wraps
+the session row plus importer-managed writes in one transaction:
+
+- `sessions`
+- `plugin_data`
+- `lorebook`
+- `characters`
+- media index rows stored in `plugin_data`
+- `world_data_import_ledger`
+
+`world_data_import_ledger` records provenance for every importer-managed
+session row: target, plugin id, namespace, key, source digest, value hash,
+schema ref, source id, and managed flag. `/api/worlds/:id/sync-data` uses
+that ledger for dry-run, hash-based conflict detection, and explicit
+`force` sync.
+
+Media bytes live in `MediaStore`, which has a separate lifecycle from
+`DataStore`. World-data import validates media during preflight, writes the
+media object before the session-store media index row, and rolls back the
+`DataStore` transaction on failure.
+
 ### Opting out
 
 Set the env var at server boot:

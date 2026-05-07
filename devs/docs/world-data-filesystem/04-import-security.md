@@ -145,7 +145,7 @@ media 目录导入规则：
 - 默认只读一层文件，不递归。
 - 跳过隐藏文件。
 - 稳定排序：按相对路径字典序。
-- `key: filename` 使用不含扩展名的 basename。
+- `key: filename` 使用完整 basename，包含扩展名。
 
 ## Schema 解析
 
@@ -198,7 +198,7 @@ commitTx
 
 MediaStore 没有事务，所以 v1 采用固定顺序：
 
-1. preflight 阶段读取 media、校验 MIME/size/digest，并先执行 `MediaStore.put()`，失败则不进入 DataStore commit。
+1. preflight 阶段读取 media、校验 MIME/size/digest；DataStore transaction 内写入 media index 前执行 `MediaStore.put()`，失败则回滚 DataStore transaction。
 2. `beginTx` 后写入 session、plugin_data、lorebook、characters、media index 和 ledger。
 3. DataStore commit 成功后调用 `MediaStore.addRef()` 授权当前 session。
 4. session 创建接口在所有 `addRef()` 成功后才返回成功；若授权失败，v1 执行补偿删除刚创建的 session 及其 import 写入，不激活插件，并返回错误 diagnostic。v1 不实现 pending retry 状态。
@@ -230,7 +230,7 @@ type WorldDataImportLedger = {
 
 `valueHash` 按目标类型计算 canonical JSON hash：plugin-data 使用业务 value；lorebook 使用 importer 管理字段；character 排除非托管的 volatile timestamp；media index 使用包含 `MediaRef.id` 的索引 value。
 
-后续 sync 规则：
+当前 sync 规则：
 
 - 只自动覆盖 `managed: true` 的记录。
 - 覆盖前检查当前 value hash 是否仍等于上次 `valueHash`。

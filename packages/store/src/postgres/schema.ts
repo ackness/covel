@@ -280,6 +280,36 @@ export const pluginData = pgTable(
   ],
 );
 
+// ── World Data Import Ledger ────────────────────────────────────
+
+export const worldDataImportLedger = pgTable(
+  "world_data_import_ledger",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id").notNull(),
+    target: text("target").notNull(),
+    pluginId: text("plugin_id"),
+    namespace: text("namespace"),
+    key: text("key"),
+    sourceWorldId: text("source_world_id").notNull(),
+    sourceId: text("source_id").notNull(),
+    sourceDigest: text("source_digest").notNull(),
+    valueHash: text("value_hash").notNull(),
+    schemaRef: text("schema_ref"),
+    derivedFrom: jsonb("derived_from"),
+    importedAt: text("imported_at").notNull(),
+    managed: integer("managed").notNull().default(1),
+  },
+  (table) => [
+    index("pg_world_data_import_ledger_session_id_idx").on(table.sessionId),
+    index("pg_world_data_import_ledger_source_idx").on(
+      table.sessionId,
+      table.sourceWorldId,
+      table.sourceId,
+    ),
+  ],
+);
+
 // ── Plugin Configs ──────────────────────────────────────────────
 
 export const pluginConfigs = pgTable(

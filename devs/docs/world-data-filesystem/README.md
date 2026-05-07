@@ -65,6 +65,8 @@ v1 只做本地、确定性、低风险导入：
 - world 包 path 统一相对 world root，用户 override path 相对 `~/.covel/world-overrides/<world-id>/`
 - source 全量校验后生成 import plan，再写入 session store
 - media 在 session 创建时导入/授权，不在 world load 阶段绑定 session
+- 开始游戏前 Web UI 调用 preflight 展示计划写入和 diagnostics
+- `/worlds/:id/sync-data` 基于 provenance ledger 做 dry-run、冲突检测和同步
 
 暂不实现：SQLite、remote source、CUE、RO-Crate 导出、复杂 override 系统。
 
@@ -76,7 +78,7 @@ v1 只做本地、确定性、低风险导入：
 - world 文件可以声明 `plugin:xxx/ns`，但 importer 只把它当数据，并要求目标插件已安装/被选中且声明兼容 `dataSchemas`。
 - importer 只做路径、解析、schema 校验和投影；玩法字段含义由插件 schema、handler 和 UI 负责。
 - `WorldRecord.metadata.worldData` 只存 source id、digest、target、schema、importedAt、order、origin/overridden、diagnostics count，不塞大体量源数据。
-- 每条导入记录必须有 provenance，后续 sync 只能覆盖 importer 管理且未被玩家/插件改动的数据。
+- 每条导入记录必须有 provenance；sync 只能覆盖 importer 管理且当前 hash 与 ledger 一致的数据。
 - 用户本地 override 放在 Covel home：`~/.covel/world-overrides/<world-id>/`，不修改原 world 包。
 
 ## 文档结构

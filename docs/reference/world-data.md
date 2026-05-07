@@ -81,12 +81,22 @@ sources:
 
 当前支持：
 
-| URI                                     | 说明                                                  |
-| --------------------------------------- | ----------------------------------------------------- |
-| `world:metadata.dimensions`             | world load 阶段写入 `WorldRecord.metadata.dimensions` |
-| `plugin:character-blueprint/blueprints` | session 创建阶段写入角色蓝图 plugin-data              |
+| URI                                | 阶段           | 说明                                                |
+| ---------------------------------- | -------------- | --------------------------------------------------- |
+| `world:metadata.dimensions`        | world load     | 写入 `WorldRecord.metadata.dimensions`              |
+| `plugin:<id>/<namespace>`          | session create | 写入目标插件的 `plugin_data`                        |
+| `plugin:<id>/<namespace>+lorebook` | session create | 写入 `plugin_data`，并同步生成 session lorebook row |
+| `lorebook`                         | session create | 直接写入 session lorebook                           |
+| `characters`                       | session create | 直接 upsert session character                       |
+| `media` + `indexTo`                | session create | 导入媒体并把索引写入 `plugin_data`                  |
 
-设计文档中还定义了 `plugin:*/*+lorebook`、`lorebook`、`characters`、`media`、`indexTo`，这些属于后续扩展点。
+`plugin:*/*` 与 `indexTo` 都会做 preflight：
+
+- 目标插件已注册。
+- 目标插件在本 session 最终启用插件列表中。
+- 目标 namespace 在插件 `dataSchemas` 中声明。
+- `acceptsWorldData: true`。
+- 插件包内 JSON Schema 校验 source item 通过。
 
 ## Character Blueprint Import
 
@@ -108,8 +118,9 @@ sources:
 
 - 写入 `plugin_data[character-blueprint][blueprints]`
 - 根据 `effects: [characters]` 写入 `characters`
-- 镜像到 `plugin_data[character-blueprint][characters]`
-- 镜像到 `plugin_data[char-creator][characters]`
+- 镜像到当前 session 已启用、且声明 `dataSchemas.characters.acceptsWorldData: true` 的插件
+
+角色面板类第三方插件可以接收同一份角色记录。插件只要声明 `characters` namespace，并在 session 插件列表中启用，就会收到由 world data 实例化出的 CharacterRecord。
 
 ## Third-Party Extension
 
@@ -175,7 +186,18 @@ sources:
 2. 在 runtime 或工具中读取 `plugin_data[<pluginId>][<namespace>]`。
 3. 给 world 包作者提供最小可运行的 `data/world.data.yaml` 片段。
 
-当前框架会解析并汇总任意合法 `plugin:<pluginId>/<namespace>` target。session 自动导入阶段已经接入 `plugin:character-blueprint/blueprints`。第三方插件接入自动导入时，应实现专属 importer 或后续统一 importer hook。
+插件需要在 `PLUGIN.md` frontmatter 声明 `dataSchemas`：
+
+```yaml
+dataSchemas:
+  relationships:
+    schemaVersion: 1
+    acceptsWorldData: true
+    schema: ./schemas/relationships.schema.json
+    description: Importable relationship records.
+```
+
+`schema` 是插件根目录相对路径，当前要求 JSON Schema 文件。多 runtime 插件可以在多个 runtime 的 `PLUGIN.md` 中声明同一 namespace；声明内容一致时会合并到 plugin-level registry，冲突时插件注册失败。session 自动导入会读取该 schema 并用 Ajv 校验每个 source item。
 
 插件数据文件建议使用数组作为批量格式：
 
@@ -194,6 +216,32 @@ schema: plugin://social-sim/relationships
 to: plugin:social-sim/relationships
 key: id
 ```
+
+创建 session 时，框架会把每条实际提交的 `plugin_data`、`lorebook`、`character`、`media index` 写入 `world_data_import_ledger`，记录 `target`、`pluginId`、`namespace`、`key`、`sourceDigest`、`valueHash`、`schemaRef` 和 `sourceId`。session 创建会用 store transaction 包住 session、plugin-data、lorebook、characters 与 ledger 写入；导入失败时会回滚这些 store row。
+
+### Preflight 与 Sync
+
+开始游戏前可以调用：
+
+```http
+POST /api/worlds/<world-id>/world-data/preflight
+```
+
+请求传 `plugins` 时按当前插件选择预检；传 `sessionId` 时按已有 session 的 active plugins 预检。内置 Web UI 在开始游戏前会自动调用该接口，展示 planned writes、目标摘要和 diagnostics。
+
+已有 session 可以调用：
+
+```http
+POST /api/worlds/<world-id>/sync-data
+```
+
+默认 dry-run，返回 `upserted`、`deleted`、`unchanged` 和 `conflicts`。传 `dryRun:false` 才写入。同步规则：
+
+1. 只处理 ledger 中 `managed=true` 且 `sourceWorldId` 匹配当前 world 的 row。
+2. 当前目标 row 的 hash 与 ledger `valueHash` 一致时才自动覆盖或删除。
+3. 目标 row 被玩家或插件改动时返回 `conflicts.reason = "modified"`。
+4. 目标 row 缺失时返回 `conflicts.reason = "missing"`。
+5. 传 `force:true` 时允许覆盖 modified/missing 冲突。
 
 ### World 包与插件包的边界
 
@@ -258,6 +306,8 @@ sources:
 
 ## Current Limits
 
-- `plugin:character-blueprint/blueprints` 是当前已接入 session importer 的 plugin target。
-- `world:metadata.dimensions` 是当前已投影的 world metadata target。
-- 插件 `dataSchemas` registry、media import、`+lorebook`、SQLite、remote source 属于后续阶段。
+- v1 source 只读取本地 `yaml`、`json`、`markdown`、`text`、`media`。
+- media source 只扫描一层目录，使用 v1 扩展名 allowlist 和大小限制。
+- `merge` 只支持 `replace` 与 `skipExisting`。
+- `key` 只支持简单字段名、markdown/text literal key、media `filename`。
+- remote、SQLite source、CUE、RO-Crate、复杂 JSON Patch override 属于后续阶段。

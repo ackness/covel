@@ -137,7 +137,7 @@ dimensions: # 可选，WorldDimensions；兼容字段
 
 ### 3.0.1 worldData v1
 
-`worldData` 指向 world root 下的 descriptor，推荐路径为 `data/world.data.yaml`。当前 v1 MVP 在 world load 阶段支持：
+`worldData` 指向 world root 下的 descriptor，推荐路径为 `data/world.data.yaml`。当前 v1 支持：
 
 - `sources` map，按 YAML 声明顺序执行，可用 `after` 声明少量依赖。
 - `kind`: `yaml`、`json`、`markdown`、`text`、`media`。
@@ -145,7 +145,7 @@ dimensions: # 可选，WorldDimensions；兼容字段
 - 用户 descriptor override：`~/.covel/world-overrides/<world-id>/world.data.override.yaml`。
 - `WorldRecord.metadata.worldData` 只保存 source id、digest、target、schema、importedAt、order、origin/overridden、diagnostics count。
 
-MVP 已实现 world load 摘要和 `world:metadata.*` 投影；session import、store ledger、plugin `dataSchemas` 写入校验在后续阶段落地。
+world load 阶段生成轻量摘要并投影 `world:metadata.dimensions`。session create 阶段会重建 import plan，校验目标插件启用状态、`dataSchemas.acceptsWorldData` 和插件包内 JSON Schema，然后写入 plugin-data、lorebook、characters、media index 与 `world_data_import_ledger`。session、plugin-data、lorebook、characters 与 ledger 写入处于同一个 store transaction。
 
 ### 3.1 Zod Schema 定义
 

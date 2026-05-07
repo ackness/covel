@@ -177,7 +177,34 @@ const result = pipeline.check(
 
 **社区（community）信任级别的特殊处理：** 框架 bootstrap 不会立即 import community 插件的 `tools.local`，而是延后到首次 `POST /api/approvals/:approvalId/decision` 决策为 `allow` 时（或下一次 plugin-rpc 执行时 just-in-time），通过 `activatePluginLocalTools(pluginId)` 一次性导入并注册到 toolMap。激活是幂等的，社区插件作者无需做额外配置——声明 `tools.local` + 通过审批后即可执行。
 
-## 4. 多 Runtime 插件
+## 4. World Data Schema 契约
+
+插件要接收世界包或 override 包携带的数据，需要在 `PLUGIN.md` frontmatter 声明 `dataSchemas`。每个 namespace 对应一个插件根目录内的 JSON Schema 文件；world-data importer 会在 session 创建前校验目标插件启用状态、namespace 声明和 source item schema。
+
+```yaml
+dataSchemas:
+  relationships:
+    schemaVersion: 1
+    acceptsWorldData: true
+    schema: ./schemas/relationships.schema.json
+    description: Importable relationship records.
+```
+
+world 包使用 `plugin://<pluginId>/<namespace>` 作为 schema URI，并用 `plugin:<pluginId>/<namespace>` 作为导入目标：
+
+```yaml
+sources:
+  relationships:
+    kind: yaml
+    path: data/social/relationships.yaml
+    schema: plugin://social-sim/relationships
+    to: plugin:social-sim/relationships
+    key: id
+```
+
+导入成功后，每条 `plugin_data`、`lorebook`、`character` 和 media index 都会写入 `world_data_import_ledger`。`POST /api/worlds/:id/sync-data` 基于 ledger 做 dry-run、hash 冲突检测和同步。完整格式见 [World Data reference](../reference/world-data.md)。
+
+## 5. 多 Runtime 插件
 
 一个插件可以包含多个 runtime（每个 runtime 一份独立的 PLUGIN.md），适用于复杂的游戏系统：
 
@@ -221,7 +248,7 @@ interface PluginManifest {
 }
 ```
 
-## 4.1 函数 Runtime、手动触发与后台执行
+## 6. 函数 Runtime、手动触发与后台执行
 
 `runtimeType: function` 表示"跳过 LLM,直接执行 JS 模块"。用于调用外部 API、做纯计算、写 plugin-data 等不需要 LLM 推理的场景。
 
@@ -461,7 +488,7 @@ export default async function handler(ctx) {
 }
 ```
 
-## 5. 发布和分享
+## 7. 发布和分享
 
 ### 插件信任等级
 
@@ -510,7 +537,7 @@ my-plugin/
 - 前端组件（UI 通过 blockSchema 或交互协议集成）
 - 直接 SDK 调用（LLM 调用通过 model slot 绑定）
 
-## 6. 插件国际化（i18n）
+## 8. 插件国际化（i18n）
 
 **所有面向玩家的 UI 字符串必须用 `I18nText` 对象（至少 `zh` + `en`）。** 详情见 [docs/reference/ui-panels.md 的「插件 UI 文本 I18nText 规范」](../reference/ui-panels.md#插件-ui-文本-i18ntext-规范)。
 

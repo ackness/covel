@@ -11,6 +11,17 @@ trigger:
   type: manual
 capabilities:
   - character-presence
+dataSchemas:
+  presence:
+    schemaVersion: 1
+    acceptsWorldData: true
+    schema: ./schemas/presence.schema.json
+    description: Importable character media presence records.
+  assets:
+    schemaVersion: 1
+    acceptsWorldData: true
+    schema: ./schemas/assets.schema.json
+    description: Media asset index records imported from world packages.
 ui:
   right:
     - ./ui/character-presence-panel.json

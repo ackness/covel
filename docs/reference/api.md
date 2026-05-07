@@ -136,15 +136,17 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 世界管理
 
-| 方法  | 路径                                | 描述                                                                             |
-| ----- | ----------------------------------- | -------------------------------------------------------------------------------- |
-| GET   | `/api/worlds`                       | 列出所有世界                                                                     |
-| GET   | `/api/worlds/:id`                   | 获取世界详情                                                                     |
-| POST  | `/api/worlds`                       | 创建/更新世界                                                                    |
-| PATCH | `/api/worlds/:id`                   | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                  |
-| GET   | `/api/worlds/:id/dimensions/export` | 导出世界维度（YAML/JSON）                                                        |
-| POST  | `/api/worlds/:id/dimensions/import` | 导入世界维度                                                                     |
-| POST  | `/api/worlds/:id/sync-dimensions`   | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key |
+| 方法  | 路径                                   | 描述                                                                             |
+| ----- | -------------------------------------- | -------------------------------------------------------------------------------- |
+| GET   | `/api/worlds`                          | 列出所有世界                                                                     |
+| GET   | `/api/worlds/:id`                      | 获取世界详情                                                                     |
+| POST  | `/api/worlds`                          | 创建/更新世界                                                                    |
+| PATCH | `/api/worlds/:id`                      | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                  |
+| GET   | `/api/worlds/:id/dimensions/export`    | 导出世界维度（YAML/JSON）                                                        |
+| POST  | `/api/worlds/:id/dimensions/import`    | 导入世界维度                                                                     |
+| POST  | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key |
+| POST  | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要       |
+| POST  | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force |
 
 ### 会话管理
 
@@ -678,6 +680,86 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ```json
 { "success": true, "syncedKeys": ["geography", "factions", ...], "entryCount": 9 }
+```
+
+#### `POST /api/worlds/:id/world-data/preflight`
+
+只读预检 worldData 导入计划。请求可以传 `sessionId` 使用现有 session 的插件列表，也可以传 `plugins` 预检创建 session 前的插件选择。
+
+**请求体:**
+
+```json
+{ "plugins": ["character-blueprint", "char-creator", "living-world-rules"] }
+```
+
+或：
+
+```json
+{ "sessionId": "haruka-academy-abcd1234" }
+```
+
+**响应:**
+
+```json
+{
+  "imported": true,
+  "planned": 12,
+  "diagnostics": [],
+  "targets": [
+    {
+      "kind": "plugin-data",
+      "target": "plugin:character-blueprint/blueprints",
+      "sourceId": "cast",
+      "pluginId": "character-blueprint",
+      "namespace": "blueprints",
+      "key": "kamishiro-mio"
+    }
+  ]
+}
+```
+
+#### `POST /api/worlds/:id/sync-data`
+
+同步已有 session 中由 worldData importer 管理的数据。默认 dry-run；传 `dryRun:false` 才写入。同步只处理 `world_data_import_ledger.managed=true` 的 row，并用 `valueHash` 检测玩家或插件是否修改过目标数据。
+
+**请求体:**
+
+```json
+{ "sessionId": "haruka-academy-abcd1234" }
+```
+
+执行写入：
+
+```json
+{ "sessionId": "haruka-academy-abcd1234", "dryRun": false }
+```
+
+强制覆盖冲突：
+
+```json
+{ "sessionId": "haruka-academy-abcd1234", "dryRun": false, "force": true }
+```
+
+**响应:**
+
+```json
+{
+  "imported": true,
+  "dryRun": true,
+  "diagnostics": [],
+  "planned": 12,
+  "upserted": 2,
+  "deleted": 1,
+  "unchanged": 9,
+  "conflicts": [
+    {
+      "target": "plugin:character-blueprint/blueprints",
+      "key": "kamishiro-mio",
+      "sourceId": "cast",
+      "reason": "modified"
+    }
+  ]
+}
 ```
 
 ---

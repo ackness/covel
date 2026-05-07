@@ -25,6 +25,7 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  WorldDataImportLedgerRecord,
   LorebookEntryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
@@ -319,6 +320,28 @@ function makeWorkingMemory(
     scope: "player",
     value: { data: "test" },
     updatedAt: ts(),
+    ...overrides,
+  };
+}
+
+function makeWorldDataImportLedger(
+  overrides?: Partial<WorldDataImportLedgerRecord>,
+): WorldDataImportLedgerRecord {
+  return {
+    id: id(),
+    sessionId: "sess-1",
+    target: "plugin-data",
+    pluginId: "plugin-1",
+    namespace: "world",
+    key: "entry-1",
+    sourceWorldId: "world-source",
+    sourceId: "source-1",
+    sourceDigest: "sha256:source",
+    valueHash: "sha256:value",
+    schemaRef: "schema://world-data/v1",
+    derivedFrom: ["base-1"],
+    importedAt: ts(),
+    managed: true,
     ...overrides,
   };
 }
@@ -855,6 +878,31 @@ export function runStoreContractTests(
         expect(list).toHaveLength(1);
         expect(list[0].name).toBe("Dark Hero");
         expect(list[0].version).toBe(2);
+      });
+
+      it("deletes a character by sessionId and id", async () => {
+        const char = makeCharacter({
+          id: "char-delete",
+          sessionId: "sess-characters-delete",
+        });
+        const other = makeCharacter({
+          id: "char-keep",
+          sessionId: "sess-characters-delete-other",
+        });
+        await store.upsertCharacter(char);
+        await store.upsertCharacter(other);
+
+        await store.deleteCharacter("sess-characters-delete", "char-delete");
+        await store.deleteCharacter("sess-characters-delete", "char-keep");
+
+        expect(await store.listCharacters("sess-characters-delete")).toEqual(
+          [],
+        );
+        expect(
+          (await store.listCharacters("sess-characters-delete-other")).map(
+            (r) => r.id,
+          ),
+        ).toEqual(["char-keep"]);
       });
     });
 
@@ -1857,6 +1905,102 @@ export function runStoreContractTests(
       });
     });
 
+    // ── World Data Import Ledger ─────────────────────────────
+
+    describe("WorldDataImportLedger", () => {
+      it("saves a batch and lists rows sorted by importedAt then id", async () => {
+        const first = makeWorldDataImportLedger({
+          id: "ledger-a",
+          sessionId: "ledger-batch",
+          importedAt: ts(0),
+          derivedFrom: ["source-root"],
+        });
+        const second = makeWorldDataImportLedger({
+          id: "ledger-b",
+          sessionId: "ledger-batch",
+          target: "working-memory",
+          pluginId: undefined,
+          namespace: undefined,
+          key: undefined,
+          schemaRef: undefined,
+          derivedFrom: undefined,
+          importedAt: ts(0),
+          managed: false,
+        });
+
+        await store.saveWorldDataImportLedgerBatch([second, first]);
+
+        const list = await store.listWorldDataImportLedger("ledger-batch");
+        expect(list.map((r) => r.id)).toEqual(["ledger-a", "ledger-b"]);
+        expect(list[0].derivedFrom).toEqual(["source-root"]);
+        expect(list[1].pluginId).toBeUndefined();
+        expect(list[1].managed).toBe(false);
+      });
+
+      it("isolates rows by sessionId", async () => {
+        await store.saveWorldDataImportLedgerBatch([
+          makeWorldDataImportLedger({
+            id: "ledger-session-a",
+            sessionId: "ledger-A",
+          }),
+          makeWorldDataImportLedger({
+            id: "ledger-session-b",
+            sessionId: "ledger-B",
+          }),
+        ]);
+
+        const a = await store.listWorldDataImportLedger("ledger-A");
+        const b = await store.listWorldDataImportLedger("ledger-B");
+        expect(a.map((r) => r.id)).toEqual(["ledger-session-a"]);
+        expect(b.map((r) => r.id)).toEqual(["ledger-session-b"]);
+      });
+
+      it("rolls back ledger writes inside a transaction", async () => {
+        await store.beginTx();
+        await store.saveWorldDataImportLedgerBatch([
+          makeWorldDataImportLedger({
+            id: "ledger-rollback-row",
+            sessionId: "ledger-rollback",
+          }),
+        ]);
+        await store.rollbackTx();
+
+        const list = await store.listWorldDataImportLedger("ledger-rollback");
+        expect(list).toHaveLength(0);
+      });
+
+      it("deletes one ledger row by sessionId and id", async () => {
+        await store.saveWorldDataImportLedgerBatch([
+          makeWorldDataImportLedger({
+            id: "ledger-delete",
+            sessionId: "ledger-delete-session",
+          }),
+          makeWorldDataImportLedger({
+            id: "ledger-keep",
+            sessionId: "ledger-delete-other",
+          }),
+        ]);
+
+        await store.deleteWorldDataImportLedger(
+          "ledger-delete-session",
+          "ledger-delete",
+        );
+        await store.deleteWorldDataImportLedger(
+          "ledger-delete-session",
+          "ledger-keep",
+        );
+
+        expect(
+          await store.listWorldDataImportLedger("ledger-delete-session"),
+        ).toEqual([]);
+        expect(
+          (await store.listWorldDataImportLedger("ledger-delete-other")).map(
+            (r) => r.id,
+          ),
+        ).toEqual(["ledger-keep"]);
+      });
+    });
+
     // ── Session Summaries (S2-T2) ────────────────────────────
 
     describe("SessionSummaries", () => {
@@ -2382,6 +2526,9 @@ export function runStoreContractTests(
         await store.appendTurnMessage(makeTurnMessage({ sessionId }));
         await store.savePlayerInput(makePlayerInput({ sessionId }));
         await store.upsertWorkingMemory(makeWorkingMemory({ sessionId }));
+        await store.saveWorldDataImportLedgerBatch([
+          makeWorldDataImportLedger({ sessionId }),
+        ]);
         await store.upsertLorebookEntries([makeLorebookEntry({ sessionId })]);
         await store.saveSessionSummary(makeSessionSummary({ sessionId }));
         await store.saveSuspension(makeSuspension({ sessionId }));
@@ -2435,6 +2582,9 @@ export function runStoreContractTests(
         expect(await store.listTurnMessages(sessionId)).toHaveLength(0);
         expect(await store.listPlayerInputs(sessionId)).toHaveLength(0);
         expect(await store.listWorkingMemory(sessionId)).toHaveLength(0);
+        expect(await store.listWorldDataImportLedger(sessionId)).toHaveLength(
+          0,
+        );
         expect(await store.listSessionLorebookEntries(sessionId)).toHaveLength(
           0,
         );

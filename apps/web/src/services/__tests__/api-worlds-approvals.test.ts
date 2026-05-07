@@ -26,7 +26,8 @@ Object.defineProperty(globalThis, "localStorage", {
 });
 
 const apiModule = await import("../api.js");
-const { updateWorld, importDimensions, listApprovals } = apiModule;
+const { updateWorld, importDimensions, preflightWorldData, listApprovals } =
+  apiModule;
 
 function mockFetchOnce(body: unknown, status = 200): void {
   vi.stubGlobal(
@@ -91,6 +92,41 @@ describe("world API mapping", () => {
 
     expect(world.dimensions).toEqual({
       factions: { groups: ["Guild"] },
+    });
+  });
+
+  it("preflightWorldData posts selected plugins and returns plan details", async () => {
+    mockFetchOnce({
+      imported: true,
+      diagnostics: [],
+      planned: 1,
+      targets: [
+        {
+          kind: "plugin-data",
+          target: "plugin:world-notes/facts",
+          sourceId: "facts",
+          pluginId: "world-notes",
+          namespace: "facts",
+          key: "one",
+        },
+      ],
+    });
+
+    const result = await preflightWorldData("world/1", {
+      plugins: ["world-notes"],
+    });
+
+    expect(result.planned).toBe(1);
+    expect(result.targets[0]).toMatchObject({
+      pluginId: "world-notes",
+      namespace: "facts",
+    });
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/worlds/world%2F1/world-data/preflight",
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      plugins: ["world-notes"],
     });
   });
 });

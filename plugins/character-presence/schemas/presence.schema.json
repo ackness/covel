@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plugin://character-presence/presence",
+  "oneOf": [
+    { "$ref": "#/$defs/presence" },
+    {
+      "type": "object",
+      "required": ["presence"],
+      "properties": {
+        "presence": { "$ref": "#/$defs/presence" },
+        "updatedAt": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  ],
+  "$defs": {
+    "presence": {
+      "type": "object",
+      "required": ["schemaVersion", "characterId"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "characterId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+        },
+        "displayName": { "type": "string" },
+        "style": { "type": "string" },
+        "avatar": { "$ref": "#/$defs/mediaRef" },
+        "sprite": { "$ref": "#/$defs/mediaRef" },
+        "voice": { "$ref": "#/$defs/mediaRef" },
+        "media": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/mediaRef" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "mediaRef": {
+      "type": "object",
+      "required": ["id", "mime", "size"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "mime": { "type": "string", "minLength": 1 },
+        "size": { "type": "integer", "minimum": 0 },
+        "url": { "type": "string" },
+        "meta": { "type": "object" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

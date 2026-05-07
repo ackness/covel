@@ -20,7 +20,7 @@ v1 只实现本地 world data：
 
 ## 核心实现原则
 
-1. importer 不硬编码玩法插件 ID。
+1. importer 的通用目标路径按 URI、registry 和 schema 驱动；v1 允许少量框架级 `effects` 映射来桥接现有核心角色系统。
 2. importer 只做路径、解析、schema 校验、key 提取和投影。
 3. plugin 字段业务语义属于插件 schema、handler 和 UI。
 4. world load 阶段不保存大 source value。
@@ -299,7 +299,7 @@ world load 阶段只扫描摘要：
 
 ### 实现内容
 
-当前状态：Phase C MVP 已完成 world-load summary、override root、本地 source 读取和 `world:metadata.dimensions` 投影；Phase D 已完成最小路径：session 创建阶段支持 `plugin:character-blueprint/blueprints` 与 `effects: [characters]`。
+当前状态：Phase C 已完成 world-load summary、override root、本地 source 读取和 `world:metadata.dimensions` 投影；Phase D 已完成 session 创建阶段的通用 importer，支持 `plugin:*/*`、`plugin:*/*+lorebook`、`lorebook`、`characters`、`media + indexTo`、ledger、preflight 和 transaction rollback。`POST /api/worlds/:id/world-data/preflight` 已提供只读预检入口。
 
 1. 注入 `WorldPackageResolver` / `WorldDataImporter`
 
@@ -312,7 +312,7 @@ compute final plugin set
 rebuild full import plan from descriptor/source
 preflight plugin targets and dataSchemas
 preflight duplicate keys / merge
-preflight media and MediaStore.put()
+preflight media allowlist / size / digest
 beginTx
   createSession
   write plugin_data
@@ -321,6 +321,7 @@ beginTx
   write media index plugin_data
   write ledger per committed row
 commitTx
+MediaStore.recordOwnership()
 MediaStore.addRef()
 activate plugins
 ```
@@ -338,7 +339,7 @@ activate plugins
 
 - YAML/JSON：`key: id` / `characterId` 提取字段
 - Markdown/Text：`key` 是 literal
-- Media：`filename` 或 literal
+- Media：`filename` 使用完整 basename，包含扩展名；也可使用 literal
 
 5. merge 规则
 
@@ -360,8 +361,8 @@ world load 阶段写入的 `WorldRecord.metadata.worldData` 不进入 session-sc
 
 7. media failure policy
 
-- `put()` 失败：不创建 session
-- `addRef()` 失败：执行补偿 rollback：删除刚创建的 session（级联删除或显式删除 plugin_data/lorebook/characters/ledger），不激活插件，返回 error diagnostic。v1 不实现 pending retry 状态；后续如需要再引入 import_failed/session retry。
+- `put()` 失败：DataStore transaction 回滚，不创建 session
+- `recordOwnership()` / `addRef()` 失败：执行补偿 rollback：删除刚创建的 session（级联删除或显式删除 plugin_data/lorebook/characters/ledger），清理 importer 新建且未被其他 session 引用的 media asset，不激活插件，返回 error diagnostic。v1 不实现 pending retry 状态；后续如需要再引入 import_failed/session retry。
 
 ### 测试
 
@@ -387,7 +388,8 @@ world load 阶段写入的 `WorldRecord.metadata.worldData` 不进入 session-sc
 - `plugins/character-presence/schemas/*.schema.json`
 - `plugins/living-world-rules/PLUGIN.md`
 - `plugins/living-world-rules/schemas/*.schema.json`
-- 可选：`plugins/scene-prompts/PLUGIN.md`
+- `plugins/char-creator/runtimes/*/PLUGIN.md`
+- `plugins/char-creator/schemas/*.schema.json`
 - 一个小型 v1 world fixture
 
 ### 实现内容
@@ -396,7 +398,7 @@ world load 阶段写入的 `WorldRecord.metadata.worldData` 不进入 session-sc
 - JSON Schema `$ref` 仅使用同文件 fragment；不要引入 remote/file `$ref`
 - schema 和 handler 接受范围保持一致
 - handler tests 增加 importer-accepted payload
-- 添加一个最小 v1 world，不急着迁移所有 bundled worlds
+- bundled worlds 使用 `worldData` v1 descriptor；Haruka Academy 作为含角色卡的 v1 fixture
 
 ### 注意
 
@@ -491,7 +493,7 @@ pnpm lint
 
 ### 1. 旧 `characterBlueprintSources` 完全兼容
 
-当前旧 importer 硬编码 `character-blueprint` / `char-creator`。v1 要避免新硬编码。
+旧 importer 硬编码 `character-blueprint` / `char-creator`。v1 的通用 plugin target 路径通过 target URI 和 `dataSchemas` 工作；`effects: [characters]` 是框架级兼容映射，用来把角色蓝图投影到 session characters，并镜像到当前 session 已启用、且声明 `dataSchemas.characters.acceptsWorldData: true` 的插件。
 
 决策：legacy shim 只服务没有 `worldData` 的旧世界包。只要 world 声明了 `worldData`，就必须走新 generic importer；同时禁止 v1 source 写入 `world:metadata.characterBlueprints` 来触发旧 shim。后续 phase 再用 data-driven mirror/capability 完全移除 legacy shim。
 
@@ -501,11 +503,19 @@ v1 先放 `PLUGIN.md` frontmatter，loader 合并为 plugin-level registry。后
 
 ### 3. MediaStore 非事务
 
-固定顺序为：preflight put -> DataStore transaction -> addRef -> success。`addRef` 失败时 v1 做补偿删除刚创建的 session 并返回失败，不实现 pending retry path。
+固定顺序为：preflight media -> DataStore transaction 内 put/index -> commit -> recordOwnership/addRef -> success。授权失败时 v1 做补偿删除刚创建的 session、清理 importer 新建 media，并返回失败，不实现 pending retry path。
 
-### 4. Sync 暂缓
+### 4. Sync
 
-ledger 先落地，但 `/sync-data` 和 UI conflict resolution 后置。v1 只保证初始 session import 有 provenance。
+`POST /api/worlds/:id/sync-data` 已落地。接口默认 dry-run，基于 `world_data_import_ledger` 只处理 importer 管理的数据：
+
+- `managed=true`
+- `sourceWorldId` 等于当前 world
+- 当前目标 row 的 hash 与 ledger `valueHash` 一致
+
+当目标 row 被玩家或插件修改时返回 `conflicts.reason = "modified"`；当目标 row 缺失时返回 `conflicts.reason = "missing"`。传 `dryRun:false` 执行写入，传 `force:true` 允许覆盖冲突。media index 删除会清理对应 importer-managed media ref。
+
+开始游戏前的 Web UI 已接入 `POST /api/worlds/:id/world-data/preflight`，会随插件选择展示计划写入、目标摘要和 diagnostics。更复杂的 conflict resolution UI 留给后续 session 内管理界面。
 
 ## 最小验收标准
 
@@ -516,4 +526,6 @@ ledger 先落地，但 `/sync-data` 和 UI conflict resolution 后置。v1 只�
 - media source 能 put/index/addRef 并通过 media-token 访问。
 - 每个实际写入 row 都有 ledger。
 - 没有新增 framework 对具体玩法 plugin ID 的硬编码。
+- `/sync-data` dry-run、apply、modified conflict 有 API 覆盖。
+- 开始游戏前插件选择区展示 worldData preflight 结果。
 - targeted tests 和 `pnpm lint` 通过。

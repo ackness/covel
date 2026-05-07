@@ -29,6 +29,12 @@ tools:
     - update-character
     - list-characters
     - get-character
+dataSchemas:
+  characters:
+    schemaVersion: 1
+    acceptsWorldData: true
+    schema: ./schemas/characters.schema.json
+    description: Importable session character records for the character panel.
 postHistory:
   role: system
   content: |

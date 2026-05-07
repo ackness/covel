@@ -5,3 +5,10 @@ sources:
     path: data/dimensions.yaml
     schema: covel://world/dimensions
     to: world:metadata.dimensions
+  streetRules:
+    kind: yaml
+    path: data/rules/street-pressure.yaml
+    schema: plugin://living-world-rules/rules
+    to: plugin:living-world-rules/rules+lorebook
+    key: id
+    after: dimensions

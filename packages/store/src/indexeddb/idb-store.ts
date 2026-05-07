@@ -44,13 +44,14 @@ import type {
   TurnMessageRecord,
   PlayerInputRecord,
   WorkingMemoryRecord,
+  WorldDataImportLedgerRecord,
   LorebookEntryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
   SnapshotRecord,
 } from "../types.js";
 
-const DB_VERSION = 8;
+const DB_VERSION = 9;
 
 async function initDb(dbName: string): Promise<IDBPDatabase> {
   return openDB(dbName, DB_VERSION, {
@@ -213,6 +214,18 @@ async function initDb(dbName: string): Promise<IDBPDatabase> {
         }
         db.createObjectStore("sessions", { keyPath: "id" });
       }
+
+      if (oldVersion < 9) {
+        const ledger = db.createObjectStore("world_data_import_ledger", {
+          keyPath: "id",
+        });
+        ledger.createIndex("sessionId", "sessionId");
+        ledger.createIndex("source", [
+          "sessionId",
+          "sourceWorldId",
+          "sourceId",
+        ]);
+      }
     },
   });
 }
@@ -236,6 +249,7 @@ const OBJECT_STORES = [
   "turnMessages",
   "playerInputs",
   "plugin_data",
+  "world_data_import_ledger",
   "working_memory",
   "lorebook_entries",
   "sessionSummaries",
@@ -378,6 +392,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
       // pluginConfigs and plugin_data have composite indexes; full-scan filter.
       await cascadeByFilter("pluginConfigs");
       await cascadeByFilter("plugin_data");
+      await cascadeByIndex("world_data_import_ledger");
       await deleteAndTrack("sessions", id);
     },
 
@@ -589,6 +604,15 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
 
     async listCharacters(sessionId: string): Promise<CharacterRecord[]> {
       return db.getAllFromIndex("characters", "sessionId", sessionId);
+    },
+
+    async deleteCharacter(sessionId: string, id: string): Promise<void> {
+      const existing = (await db.get("characters", id)) as
+        | CharacterRecord
+        | undefined;
+      if (existing?.sessionId === sessionId) {
+        await deleteAndTrack("characters", id);
+      }
     },
 
     // ── Plugin Data ──
@@ -935,6 +959,47 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
       );
       if (existing) {
         await deleteAndTrack("working_memory", existing.id);
+      }
+    },
+
+    // ── World Data Import Ledger ─────────────────────────────
+
+    async saveWorldDataImportLedgerBatch(
+      records: readonly WorldDataImportLedgerRecord[],
+    ): Promise<void> {
+      if (records.length === 0) return;
+      await ensureStoreSnapshot("world_data_import_ledger");
+      const tx = db.transaction("world_data_import_ledger", "readwrite");
+      for (const record of records) {
+        await tx.store.put(structuredClone(record));
+      }
+      await tx.done;
+    },
+
+    async listWorldDataImportLedger(
+      sessionId: string,
+    ): Promise<readonly WorldDataImportLedgerRecord[]> {
+      const rows = (await db.getAllFromIndex(
+        "world_data_import_ledger",
+        "sessionId",
+        sessionId,
+      )) as WorldDataImportLedgerRecord[];
+      return rows.sort((a, b) => {
+        const timeDiff = a.importedAt.localeCompare(b.importedAt);
+        if (timeDiff !== 0) return timeDiff;
+        return a.id.localeCompare(b.id);
+      });
+    },
+
+    async deleteWorldDataImportLedger(
+      sessionId: string,
+      id: string,
+    ): Promise<void> {
+      const existing = (await db.get("world_data_import_ledger", id)) as
+        | WorldDataImportLedgerRecord
+        | undefined;
+      if (existing?.sessionId === sessionId) {
+        await deleteAndTrack("world_data_import_ledger", id);
       }
     },
 

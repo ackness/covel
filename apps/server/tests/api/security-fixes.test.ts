@@ -4,14 +4,22 @@
  * RED phase: all tests should FAIL before fixes are applied.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Hono } from "hono";
 import { createStateManager, type StateManager } from "@covel/state";
 import {
   createPluginRegistry,
   type PluginRegistry,
 } from "@covel/plugin-loader";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import {
+  createMemoryMediaStore,
+  createMemoryStore,
+  type DataStore,
+  type MediaStore,
+} from "@covel/store";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import { stateRoutes } from "../../src/routes/api/state.js";
 import { rateLimiter } from "../../src/middleware/rate-limit.js";
@@ -23,12 +31,18 @@ function createTestApp(deps: {
   store: DataStore;
   stateManager: StateManager;
   pluginRegistry: PluginRegistry;
+  mediaStore?: MediaStore;
+  worldsDirs?: readonly string[];
+  covelHome?: string;
 }) {
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("store", deps.store);
     c.set("stateManager", deps.stateManager);
     c.set("pluginRegistry", deps.pluginRegistry);
+    if (deps.mediaStore) c.set("mediaStore", deps.mediaStore);
+    if (deps.worldsDirs) c.set("worldsDirs", deps.worldsDirs);
+    if (deps.covelHome) c.set("covelHome", deps.covelHome);
     await next();
   });
   app.route("/api/sessions", sessionRoutes);
@@ -260,6 +274,64 @@ function makeAiStackStub() {
   } as never;
 }
 
+async function makeWorldPackage(options: {
+  readonly id: string;
+  readonly descriptor: string;
+  readonly files: Readonly<Record<string, string>>;
+}): Promise<{ worldsDir: string; worldId: string }> {
+  const worldsDir = await mkdtemp(path.join(tmpdir(), "covel-api-worlds-"));
+  const worldRoot = path.join(worldsDir, options.id);
+  await mkdir(path.join(worldRoot, "data"), { recursive: true });
+  await writeFile(
+    path.join(worldRoot, "world.yaml"),
+    `schemaVersion: "1"
+id: ${options.id}
+name: API Test World
+summary: Test world
+defaultLocale: zh-CN
+worldData: data/world.data.yaml
+`,
+  );
+  await writeFile(
+    path.join(worldRoot, "data/world.data.yaml"),
+    options.descriptor,
+  );
+  for (const [relativePath, content] of Object.entries(options.files)) {
+    await mkdir(path.dirname(path.join(worldRoot, relativePath)), {
+      recursive: true,
+    });
+    await writeFile(path.join(worldRoot, relativePath), content);
+  }
+  return { worldsDir, worldId: options.id };
+}
+
+function registerPresenceAssetsPlugin(pluginRegistry: PluginRegistry): void {
+  pluginRegistry.register({
+    id: "character-presence",
+    rootPath: path.resolve(
+      import.meta.dirname,
+      "../../../../plugins/character-presence",
+    ),
+    summary: {
+      id: "character-presence",
+      name: "Presence",
+      description: "",
+      pluginType: "plugin",
+      runtimeCount: 0,
+    },
+    dataSchemas: {
+      assets: {
+        namespace: "assets",
+        schemaVersion: 1,
+        acceptsWorldData: true,
+        schema: "./schemas/assets.schema.json",
+      },
+    },
+    loadedRuntimes: new Map(),
+    status: "registered",
+  });
+}
+
 // ── HIGH: plugins/disable must validate pluginId ────────────────
 
 describe("[HIGH] plugins/disable validates pluginId", () => {
@@ -382,5 +454,133 @@ describe("[HIGH] Plugin activation happens after session persist", () => {
     const session = await store.getSession(body.id);
     expect(session).not.toBeNull();
     expect(session!.activePlugins).toContain("test-plugin");
+  });
+});
+
+describe("[HIGH] Session creation rolls back when world-data import fails", () => {
+  let app: Hono;
+  let store: DataStore;
+  let pluginRegistry: PluginRegistry;
+
+  beforeEach(() => {
+    store = createMemoryStore();
+    pluginRegistry = createPluginRegistry();
+    app = createTestApp({
+      store,
+      stateManager: createStateManager(store),
+      pluginRegistry,
+    });
+  });
+
+  it("does not leave a persisted session after import failure", async () => {
+    const failingStore = new Proxy(store, {
+      get(target, prop, receiver) {
+        if (prop === "setPluginDataBatch") {
+          return vi.fn(async () => {
+            throw new Error("simulated import failure");
+          });
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as DataStore;
+
+    app = createTestApp({
+      store: failingStore,
+      stateManager: createStateManager(failingStore),
+      pluginRegistry,
+    });
+
+    await store.upsertWorld({
+      id: "rollback-world",
+      name: "Rollback World",
+      description: "Test world",
+      metadata: {
+        characterBlueprints: [
+          {
+            schemaVersion: 1,
+            id: "rollback-heroine",
+            name: "Rollback Heroine",
+            role: "npc",
+          },
+        ],
+      },
+      createdAt: new Date().toISOString(),
+    });
+
+    const res = await app.request("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: "sess-rollback",
+        worldId: "rollback-world",
+      }),
+    });
+
+    expect(res.status).toBe(500);
+    expect(await store.getSession("sess-rollback")).toBeNull();
+    expect(await store.listCharacters("sess-rollback")).toEqual([]);
+  });
+
+  it("deletes the committed session and imported media when media finalization fails", async () => {
+    const world = await makeWorldPackage({
+      id: "media-finalize-world",
+      descriptor: `schemaVersion: 1
+sources:
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: plugin:character-presence/assets
+    key: filename
+`,
+      files: {
+        "media/portraits/mio.png": "png-ish",
+      },
+    });
+    registerPresenceAssetsPlugin(pluginRegistry);
+    const mediaStore = createMemoryMediaStore();
+    const failingMediaStore = new Proxy(mediaStore, {
+      get(target, prop, receiver) {
+        if (prop === "addRef") {
+          return async () => {
+            throw new Error("simulated media ref failure");
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as MediaStore;
+
+    app = createTestApp({
+      store,
+      stateManager: createStateManager(store),
+      pluginRegistry,
+      mediaStore: failingMediaStore,
+      worldsDirs: [world.worldsDir],
+    });
+
+    const res = await app.request("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: "sess-media-finalize",
+        worldId: world.worldId,
+        plugins: ["character-presence"],
+      }),
+    });
+
+    expect(res.status).toBe(500);
+    expect(await store.getSession("sess-media-finalize")).toBeNull();
+    expect(
+      await store.listPluginData(
+        "sess-media-finalize",
+        "character-presence",
+        "assets",
+      ),
+    ).toEqual([]);
+    expect(
+      await store.listWorldDataImportLedger("sess-media-finalize"),
+    ).toEqual([]);
+    expect(await mediaStore.listAssets()).toEqual([]);
+    expect(await mediaStore.listRefs()).toEqual([]);
   });
 });

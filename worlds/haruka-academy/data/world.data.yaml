@@ -14,3 +14,10 @@ sources:
     effects:
       - characters
     after: dimensions
+  campusRules:
+    kind: yaml
+    path: data/rules/campus-life.yaml
+    schema: plugin://living-world-rules/rules
+    to: plugin:living-world-rules/rules+lorebook
+    key: id
+    after: cast
