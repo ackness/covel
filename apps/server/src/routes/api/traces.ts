@@ -6,6 +6,8 @@ import { createHash } from "node:crypto";
 import { Hono } from "hono";
 import { mediaRefSchema, type MediaRef } from "@covel/shared";
 import type { DataStore, TraceEventRecord } from "@covel/store";
+import type { PluginRegistry } from "@covel/plugin-loader";
+import { buildSessionDiscoverySnapshot } from "./discovery.js";
 
 /**
  * Marker prefix used on the synthetic `MediaRef.id` field for legacy assets.
@@ -31,6 +33,8 @@ const LEGACY_PLUGIN_DATA_ROW_LIMIT = 200;
 type Env = {
   Variables: {
     store: DataStore;
+    pluginRegistry?: PluginRegistry;
+    builtinToolNames?: readonly string[];
   };
 };
 
@@ -42,10 +46,17 @@ traceRoutes.get("/:sessionId", async (c) => {
   const sessionId = c.req.param("sessionId");
 
   const events = await listTraceEventsWithLegacyAssets(store, sessionId);
+  const discovery = await buildSessionDiscoverySnapshot({
+    store,
+    registry: c.get("pluginRegistry"),
+    sessionId,
+    builtinToolNames: c.get("builtinToolNames"),
+  });
 
   return c.json({
     sessionId,
     count: events.length,
+    discovery,
     events: events.map(toApiTraceEvent),
   });
 });
@@ -56,6 +67,12 @@ traceRoutes.get("/:sessionId/turns", async (c) => {
   const sessionId = c.req.param("sessionId");
 
   const events = await listTraceEventsWithLegacyAssets(store, sessionId);
+  const discovery = await buildSessionDiscoverySnapshot({
+    store,
+    registry: c.get("pluginRegistry"),
+    sessionId,
+    builtinToolNames: c.get("builtinToolNames"),
+  });
 
   // Group events by turnId
   const turnMap = new Map<string, TraceEventRecord[]>();
@@ -96,6 +113,7 @@ traceRoutes.get("/:sessionId/turns", async (c) => {
   return c.json({
     sessionId,
     turnCount: turns.length,
+    discovery,
     turns,
   });
 });

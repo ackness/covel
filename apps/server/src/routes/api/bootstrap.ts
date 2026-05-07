@@ -81,6 +81,7 @@ import {
 import { sessionRoutes } from "./session.js";
 import { turnRoutes } from "./turn.js";
 import { pluginRoutes } from "./plugins.js";
+import { frameworkRoutes } from "./framework.js";
 import { stateRoutes } from "./state.js";
 import { eventRoutes } from "./events.js";
 import { createHealthRoutes } from "./health.js";
@@ -1001,6 +1002,7 @@ export async function bootstrapApi(
     if (config.mediaStore) {
       c.set("mediaStore", config.mediaStore);
     }
+    c.set("builtinToolNames", [...builtinToolNames].sort());
     await next();
   });
 
@@ -1032,6 +1034,7 @@ export async function bootstrapApi(
   app.route("/api/sessions", sessionApprovalRoutes); // PR-7: per-session approvals listing
   app.route("/api/approvals", approvalRoutes); // PR-7: approval lookup + decision
   app.route("/api/plugins", pluginRoutes);
+  app.route("/api/framework", frameworkRoutes);
   app.route("/api/events", eventRoutes);
   app.route("/api/events", subscribeRoutes);
   app.route("/api/worlds", worldRoutes);

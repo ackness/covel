@@ -184,4 +184,81 @@ describe("Plugin Data REST API routes", () => {
     );
     expect(res.status).toBe(403);
   });
+
+  it("GET _index lists namespaces and keys without values", async () => {
+    const now = new Date().toISOString();
+    await store.setPluginData({
+      id: "pd-index-1",
+      sessionId,
+      pluginId,
+      namespace: "entries",
+      key: "alpha",
+      value: { title: "Alpha" },
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.setPluginData({
+      id: "pd-index-2",
+      sessionId,
+      pluginId,
+      namespace: "entries",
+      key: "beta",
+      value: ["hidden"],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.setPluginData({
+      id: "pd-index-3",
+      sessionId,
+      pluginId,
+      namespace: "settings",
+      key: "theme",
+      value: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const res = await app.request(
+      `/api/sessions/${sessionId}/plugin-data/${pluginId}/_index`,
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ sessionId, pluginId });
+    expect(body.namespaces).toEqual([
+      {
+        namespace: "entries",
+        count: 2,
+        latestUpdatedAt: now,
+        keys: [
+          {
+            key: "alpha",
+            createdAt: now,
+            updatedAt: now,
+            valueType: "object",
+          },
+          {
+            key: "beta",
+            createdAt: now,
+            updatedAt: now,
+            valueType: "array",
+          },
+        ],
+      },
+      {
+        namespace: "settings",
+        count: 1,
+        latestUpdatedAt: now,
+        keys: [
+          {
+            key: "theme",
+            createdAt: now,
+            updatedAt: now,
+            valueType: "null",
+          },
+        ],
+      },
+    ]);
+    expect(JSON.stringify(body)).not.toContain("Alpha");
+    expect(JSON.stringify(body)).not.toContain("hidden");
+  });
 });

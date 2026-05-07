@@ -256,6 +256,8 @@ function DebugPage() {
   const [snapshotData, setSnapshotData] = useState<Awaited<
     ReturnType<typeof api.getSessionSnapshot>
   > | null>(null);
+  const [traceDiscovery, setTraceDiscovery] =
+    useState<api.TraceDiscovery | null>(null);
 
   // Sync URL when selected session changes
   const selectSession = useCallback(
@@ -297,6 +299,7 @@ function DebugPage() {
     try {
       const data = await api.fetchTraceTurns(selectedSessionId);
       setTurns(data.turns);
+      setTraceDiscovery(data.discovery ?? null);
       // Auto-expand latest turn
       if (data.turns.length > 0) {
         setExpandedTurns((prev) => {
@@ -307,6 +310,7 @@ function DebugPage() {
       }
     } catch {
       setTurns([]);
+      setTraceDiscovery(null);
     } finally {
       setLoading(false);
     }
@@ -590,6 +594,55 @@ function DebugPage() {
                             locale: snapshotData.session.locale,
                           }}
                         />
+                      </DataSection>
+
+                      {/* Framework/plugin discovery */}
+                      <DataSection
+                        title={t("debugger.dataSection.frameworkCapabilities")}
+                        icon={<Shield className="w-3.5 h-3.5" />}
+                      >
+                        {traceDiscovery ? (
+                          <FrameworkDiscoveryPanel
+                            framework={traceDiscovery.framework}
+                          />
+                        ) : (
+                          <p className="text-xs text-muted-foreground italic">
+                            {t("debugger.noFrameworkCapabilities")}
+                          </p>
+                        )}
+                      </DataSection>
+
+                      <DataSection
+                        title={`${t("debugger.dataSection.pluginContracts")} (${traceDiscovery?.plugins.length ?? 0})`}
+                        icon={<FileJson className="w-3.5 h-3.5" />}
+                      >
+                        {traceDiscovery && traceDiscovery.plugins.length > 0 ? (
+                          <PluginContractsPanel
+                            plugins={traceDiscovery.plugins}
+                          />
+                        ) : (
+                          <p className="text-xs text-muted-foreground italic">
+                            {t("debugger.noPluginContracts")}
+                          </p>
+                        )}
+                      </DataSection>
+
+                      <DataSection
+                        title={`${t("debugger.dataSection.pluginDataIndex")} (${traceDiscovery?.pluginData.length ?? 0})`}
+                        icon={<Database className="w-3.5 h-3.5" />}
+                      >
+                        {traceDiscovery &&
+                        traceDiscovery.pluginData.some(
+                          (entry) => entry.namespaces.length > 0,
+                        ) ? (
+                          <PluginDataIndexPanel
+                            pluginData={traceDiscovery.pluginData}
+                          />
+                        ) : (
+                          <p className="text-xs text-muted-foreground italic">
+                            {t("debugger.noPluginDataIndex")}
+                          </p>
+                        )}
                       </DataSection>
 
                       {/* Characters */}
@@ -1571,6 +1624,223 @@ function extractDetail(event: api.TraceEvent): string {
 }
 
 // ── Session Data View Helpers ─────────────────────────────────────
+
+function FrameworkDiscoveryPanel({
+  framework,
+}: {
+  framework: Record<string, unknown>;
+}) {
+  const pluginManifest = recordValue(framework.pluginManifest);
+  const pluginData = recordValue(framework.pluginData);
+  const tools = recordValue(framework.tools);
+  const worldData = recordValue(framework.worldData);
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+        <DiscoveryMetric
+          label="manifest"
+          values={[
+            `${stringArray(pluginManifest.triggerTypes).length} triggers`,
+            `${stringArray(pluginManifest.outputKinds).length} outputs`,
+            `${stringArray(pluginManifest.uiSlots).join(", ") || "no slots"}`,
+          ]}
+        />
+        <DiscoveryMetric
+          label="plugin_data"
+          values={[
+            String(pluginData.scope ?? ""),
+            `${stringArray(pluginData.writePaths).length} writes`,
+            `${stringArray(pluginData.readPaths).length} reads`,
+          ]}
+        />
+        <DiscoveryMetric label="tools" values={stringArray(tools.builtin)} />
+        <DiscoveryMetric
+          label="world_data"
+          values={[
+            `${stringArray(worldData.sourceKinds).length} sources`,
+            `${stringArray(worldData.mergeModes).length} merge modes`,
+            `${stringArray(worldData.targetUris).length} targets`,
+          ]}
+        />
+      </div>
+      <JsonBlock data={framework} />
+    </div>
+  );
+}
+
+function PluginContractsPanel({ plugins }: { plugins: api.PluginContract[] }) {
+  return (
+    <div className="space-y-2">
+      {plugins.map((plugin) => {
+        const builtinTools = plugin.tools?.builtin ?? [];
+        const localTools = plugin.tools?.local ?? [];
+        const uiCount =
+          (plugin.ui?.right?.length ?? 0) +
+          (plugin.ui?.message?.length ?? 0) +
+          (plugin.ui?.left?.length ?? 0);
+        return (
+          <div key={plugin.id} className="border border-border p-2 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold font-mono">
+                {plugin.id}
+              </span>
+              {plugin.status && (
+                <Badge variant="outline" className="text-[9px]">
+                  {plugin.status}
+                </Badge>
+              )}
+              {plugin.runtimeCount != null && (
+                <Badge variant="secondary" className="text-[9px]">
+                  {plugin.runtimeCount} runtime
+                </Badge>
+              )}
+            </div>
+            {plugin.description && (
+              <p className="text-[11px] text-muted-foreground">
+                {plugin.description}
+              </p>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <DiscoveryMetric
+                label="capabilities"
+                values={plugin.capabilities ?? []}
+              />
+              <DiscoveryMetric
+                label="plugin_data"
+                values={plugin.declaredPluginDataNamespaces ?? []}
+              />
+              <DiscoveryMetric
+                label="tools"
+                values={[
+                  ...builtinTools.map((name) => `builtin:${name}`),
+                  ...localTools.map((tool) => `local:${tool.name}`),
+                ]}
+              />
+              <DiscoveryMetric
+                label="extension"
+                values={[
+                  `${plugin.rpc?.length ?? 0} rpc`,
+                  `${uiCount} ui`,
+                  `${Object.keys(plugin.dataSchemas ?? {}).length} schemas`,
+                ]}
+              />
+            </div>
+            <JsonBlock data={plugin} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PluginDataIndexPanel({
+  pluginData,
+}: {
+  pluginData: api.PluginDataDiscoveryIndex[];
+}) {
+  return (
+    <div className="space-y-2">
+      {pluginData
+        .filter((entry) => entry.namespaces.length > 0)
+        .map((entry) => (
+          <div key={entry.pluginId} className="border border-border p-2">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-semibold font-mono">
+                {entry.pluginId}
+              </span>
+              <Badge variant="outline" className="text-[9px]">
+                {entry.namespaces.length} namespaces
+              </Badge>
+            </div>
+            <div className="space-y-2">
+              {entry.namespaces.map((namespace) => (
+                <div
+                  key={namespace.namespace}
+                  className="bg-muted/10 border border-border/60 p-2"
+                >
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <span className="text-[11px] font-mono">
+                      {namespace.namespace}
+                    </span>
+                    <Badge variant="secondary" className="text-[9px]">
+                      {namespace.count} keys
+                    </Badge>
+                    {namespace.latestUpdatedAt && (
+                      <span className="text-[9px] text-muted-foreground">
+                        {fmtTime(namespace.latestUpdatedAt, {
+                          withMillis: false,
+                          alwaysDate: true,
+                        })}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
+                    {namespace.keys.map((key) => (
+                      <div
+                        key={key.key}
+                        className="flex items-center justify-between gap-2 text-[10px] font-mono text-muted-foreground"
+                      >
+                        <span className="truncate">{key.key}</span>
+                        <Badge variant="outline" className="text-[9px]">
+                          {key.valueType}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+    </div>
+  );
+}
+
+function DiscoveryMetric({
+  label,
+  values,
+}: {
+  label: string;
+  values: string[];
+}) {
+  return (
+    <div className="border border-border/60 bg-muted/10 p-2 min-w-0">
+      <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1">
+        {label}
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {values.length === 0 ? (
+          <span className="text-[10px] text-muted-foreground italic">
+            empty
+          </span>
+        ) : (
+          values.map((value) => (
+            <Badge
+              key={value}
+              variant="outline"
+              className="text-[9px] max-w-full truncate"
+            >
+              {value}
+            </Badge>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
 
 function DataSection({
   title,

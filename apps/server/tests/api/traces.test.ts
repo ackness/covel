@@ -2,23 +2,44 @@ import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { mediaRefSchema } from "@covel/shared";
 import {
+  createPluginRegistry,
+  type PluginRegistry,
+  type PluginRegistryEntry,
+  type PluginSummary,
+} from "@covel/plugin-loader";
+import {
   createMemoryStore,
   type DataStore,
   type SessionRecord,
 } from "@covel/store";
 import { traceRoutes } from "../../src/routes/api/traces.js";
 
-function makeApp(store: DataStore): Hono {
+function makeApp(
+  store: DataStore,
+  options?: {
+    registry?: PluginRegistry;
+    builtinToolNames?: readonly string[];
+  },
+): Hono {
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("store", store);
+    if (options?.registry) {
+      c.set("pluginRegistry" as never, options.registry);
+    }
+    if (options?.builtinToolNames) {
+      c.set("builtinToolNames" as never, options.builtinToolNames);
+    }
     await next();
   });
   app.route("/api/traces", traceRoutes);
   return app;
 }
 
-function makeSession(id: string): SessionRecord {
+function makeSession(
+  id: string,
+  overrides?: Partial<SessionRecord>,
+): SessionRecord {
   const now = new Date().toISOString();
   return {
     id,
@@ -29,6 +50,80 @@ function makeSession(id: string): SessionRecord {
     activePlugins: [],
     createdAt: now,
     updatedAt: now,
+    ...overrides,
+  };
+}
+
+function makeSummary(overrides?: Partial<PluginSummary>): PluginSummary {
+  return {
+    id: "image-plugin",
+    name: "Image Plugin",
+    description: "Image plugin",
+    pluginType: "plugin",
+    runtimeCount: 1,
+    ...overrides,
+  };
+}
+
+function makeEntry(
+  overrides?: Partial<PluginRegistryEntry>,
+): PluginRegistryEntry {
+  const parsed = {
+    manifest: {
+      name: "image-plugin",
+      description: "Image plugin runtime",
+      pluginType: "plugin",
+      outputKind: "plugin",
+      runtimeType: "function",
+      trigger: { type: "manual" },
+      capabilities: ["image-generation"],
+      input: {
+        inject: [
+          {
+            kind: "plugin-data",
+            namespace: "images",
+            as: "<images>",
+            format: "summary",
+          },
+        ],
+      },
+      dataSchemas: {
+        images: {
+          namespace: "images",
+          schemaVersion: 1,
+          acceptsWorldData: true,
+          schema: "./schemas/images.json",
+        },
+      },
+      tools: {
+        builtin: ["plugin-data-get"],
+        local: ["./tools/save-image.js"],
+      },
+      ui: {
+        right: ["./ui/panel.json"],
+      },
+    },
+    promptTemplate: "",
+    referenceLinks: [],
+    rawFrontmatter: {},
+  };
+
+  return {
+    id: "image-plugin",
+    summary: makeSummary(),
+    manifest: parsed,
+    manifests: [parsed],
+    dataSchemas: {
+      images: {
+        namespace: "images",
+        schemaVersion: 1,
+        acceptsWorldData: true,
+        schema: "./schemas/images.json",
+      },
+    },
+    loadedRuntimes: new Map(),
+    status: "registered",
+    ...overrides,
   };
 }
 
@@ -342,5 +437,80 @@ describe("traceRoutes legacy asset adapter", () => {
     // Must not exceed the cap regardless of how many rows exist.
     expect(legacyEvents.length).toBeLessThanOrEqual(ROW_LIMIT);
     expect(legacyEvents.length).toBeGreaterThan(0);
+  });
+
+  it("includes a discovery snapshot on trace turns without plugin_data values", async () => {
+    const store = createMemoryStore();
+    await store.createSession(
+      makeSession("sess-discovery", { activePlugins: ["image-plugin"] }),
+    );
+    await store.setPluginData({
+      id: "pd-discovery",
+      sessionId: "sess-discovery",
+      pluginId: "image-plugin",
+      namespace: "images",
+      key: "cover",
+      value: { secret: "do-not-leak", url: "https://example.test/cover.png" },
+      createdAt: "2026-05-07T00:00:00.000Z",
+      updatedAt: "2026-05-07T00:00:01.000Z",
+    });
+
+    const registry = createPluginRegistry();
+    registry.register(makeEntry());
+    const app = makeApp(store, {
+      registry,
+      builtinToolNames: ["plugin-data-get", "plugin-data-set"],
+    });
+
+    const res = await app.request("/api/traces/sess-discovery/turns");
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      discovery: {
+        framework: {
+          pluginData: { writePaths: string[] };
+          tools: { builtin: string[] };
+        };
+        plugins: Array<{
+          id: string;
+          declaredPluginDataNamespaces: string[];
+          tools: { builtin: string[] };
+        }>;
+        pluginData: Array<{
+          pluginId: string;
+          namespaces: Array<{
+            namespace: string;
+            count: number;
+            keys: Array<{ key: string; valueType: string }>;
+          }>;
+        }>;
+      };
+    };
+
+    expect(body.discovery.framework.tools.builtin).toEqual([
+      "plugin-data-get",
+      "plugin-data-set",
+    ]);
+    expect(body.discovery.framework.pluginData.writePaths).toContain(
+      "function-output:pluginData[]",
+    );
+    expect(body.discovery.plugins[0]).toMatchObject({
+      id: "image-plugin",
+      declaredPluginDataNamespaces: ["images"],
+      tools: { builtin: ["plugin-data-get"] },
+    });
+    expect(body.discovery.pluginData[0]).toMatchObject({
+      pluginId: "image-plugin",
+      namespaces: [
+        {
+          namespace: "images",
+          count: 1,
+          keys: [{ key: "cover", valueType: "object" }],
+        },
+      ],
+    });
+    expect(JSON.stringify(body.discovery.pluginData)).not.toContain(
+      "do-not-leak",
+    );
   });
 });

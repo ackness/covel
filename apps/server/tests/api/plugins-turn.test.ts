@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
 import { pluginRoutes } from "../../src/routes/api/plugins.js";
+import { frameworkRoutes } from "../../src/routes/api/framework.js";
 import { turnRoutes } from "../../src/routes/api/turn.js";
 import {
   createPluginRegistry,
@@ -42,6 +43,27 @@ function makeEntry(
   };
 }
 
+function makeParsedManifest(
+  manifest: Partial<import("@covel/shared").RuntimeManifest> & {
+    name: string;
+    description?: string;
+  },
+) {
+  return {
+    manifest: {
+      name: manifest.name,
+      description: manifest.description ?? `${manifest.name} runtime`,
+      pluginType: "plugin",
+      outputKind: "plugin",
+      trigger: { type: "manual" },
+      ...manifest,
+    },
+    promptTemplate: "",
+    referenceLinks: [],
+    rawFrontmatter: {},
+  };
+}
+
 // ── App factory ──────────────────────────────────────────────────
 
 type AppVariables = {
@@ -62,6 +84,7 @@ function createTestApp(vars: AppVariables): Hono {
   });
 
   app.route("/api/plugins", pluginRoutes);
+  app.route("/api/framework", frameworkRoutes);
   app.route("/api/session", turnRoutes);
   return app;
 }
@@ -140,6 +163,122 @@ describe("V2 Plugin Routes", () => {
       expect(res.status).toBe(404);
       const body = await res.json();
       expect(body.error).toBeDefined();
+    });
+  });
+
+  describe("GET /api/plugins/:id/contract", () => {
+    it("returns manifest-derived plugin contracts for tooling", async () => {
+      const parsed = makeParsedManifest({
+        name: "my-plugin/runner",
+        capabilities: ["image-generation"],
+        runtimeType: "function",
+        execution: "background",
+        tools: {
+          builtin: ["plugin-data-get"],
+          local: ["./tools/save-image.js"],
+        },
+        input: {
+          inject: [
+            {
+              kind: "plugin-data",
+              namespace: "images",
+              as: "<images>",
+              format: "summary",
+              maxEntries: 50,
+            },
+          ],
+        },
+        dataSchemas: {
+          images: {
+            namespace: "images",
+            schemaVersion: 1,
+            acceptsWorldData: true,
+            schema: "./schemas/images.json",
+          },
+        },
+        ui: { right: ["./ui/panel.json"], message: ["./ui/message.json"] },
+        rpc: {
+          regenerate: {
+            handler: "./rpc/regenerate.js",
+            description: "Regenerate an image.",
+          },
+        },
+      });
+      registry.register(
+        makeEntry({
+          id: "my-plugin",
+          summary: makeSummary({ id: "my-plugin", name: "My Plugin" }),
+          manifest: parsed,
+          manifests: [parsed],
+        }),
+      );
+
+      const res = await app.request("/api/plugins/my-plugin/contract");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toMatchObject({
+        id: "my-plugin",
+        capabilities: ["image-generation"],
+        declaredPluginDataNamespaces: ["images"],
+        dataSchemas: {
+          images: {
+            schemaVersion: 1,
+            acceptsWorldData: true,
+            schema: "./schemas/images.json",
+          },
+        },
+      });
+      expect(body.tools.local).toEqual([
+        {
+          runtimeId: "my-plugin/runner",
+          path: "./tools/save-image.js",
+          name: "save-image",
+        },
+      ]);
+      expect(body.runtimes[0]).toMatchObject({
+        id: "my-plugin/runner",
+        runtimeType: "function",
+        readablePluginDataNamespaces: ["images"],
+        writablePluginDataNamespaces: ["images"],
+      });
+      expect(body.rpc).toEqual([
+        {
+          runtimeId: "my-plugin/runner",
+          action: "regenerate",
+          handler: "./rpc/regenerate.js",
+          streaming: false,
+          description: "Regenerate an image.",
+        },
+      ]);
+    });
+
+    it("keeps missing plugin contract requests as 404", async () => {
+      const res = await app.request("/api/plugins/missing/contract");
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe("GET /api/framework/capabilities", () => {
+    it("returns framework-level capability enums and discovery anchors", async () => {
+      const res = await app.request("/api/framework/capabilities");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.framework.pluginManifest.triggerTypes).toContain("manual");
+      expect(body.framework.pluginManifest.uiSlots).toEqual([
+        "right",
+        "message",
+        "left",
+      ]);
+      expect(body.framework.pluginData.writePaths).toContain(
+        "function-output:pluginData[]",
+      );
+      expect(body.framework.worldData.targetUris).toContain(
+        "plugin:<pluginId>/<namespace>",
+      );
+      expect(body.framework.proposals.pluginDataTypes).toEqual([
+        "plugin.data",
+        "plugin.data.batch",
+      ]);
     });
   });
 

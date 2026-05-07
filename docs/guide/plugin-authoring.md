@@ -24,12 +24,13 @@
 | 写单元 / 集成 / 真实 LLM E2E 测试                           | [docs/guide/plugin-testing.md](./plugin-testing.md) · [docs/guide/e2e-plugin-verify.md](./e2e-plugin-verify.md)                                                        |
 | 看内置工具完整清单 + 审批策略                               | [docs/reference/tools.md](../reference/tools.md)                                                                                                                       |
 | 看 prompt 如何组装（10 段 + cache_control）                 | [docs/reference/prompt-structure.md](../reference/prompt-structure.md)                                                                                                 |
+| 程序化发现框架和插件提供哪些字段、工具、数据 namespace      | [docs/reference/api.md 插件管理](../reference/api.md#插件管理)                                                                                                         |
 
 ---
 
 ## World Data 与插件数据契约
 
-插件可以通过 `PLUGIN.md` frontmatter 的 `dataSchemas` 声明可导入的 `plugin_data` namespace。世界包在 `data/world.data.yaml` 中使用 `schema: plugin://<pluginId>/<namespace>` 和 `to: plugin:<pluginId>/<namespace>` 引用该契约；服务器会在创建 session 前做 preflight，并用插件包内 JSON Schema 校验每条 source item。
+插件可以通过 `PLUGIN.md` frontmatter 的 `dataSchemas` 声明可导入的 `plugin_data` namespace。世界包在 `data/world.data.yaml` 中使用 `schema: plugin://<pluginId>/<namespace>` 和 `to: plugin:<pluginId>/<namespace>` 引用该契约；服务器会在创建 session 前做 preflight，确认 schema URI 与 target namespace 兼容，并用插件包内 JSON Schema 校验每条 source item。
 
 ```yaml
 dataSchemas:
@@ -60,6 +61,17 @@ sources:
 ```
 
 完整 target URI、override 目录、preflight 和 sync API 见 [World Data reference](../reference/world-data.md)。
+
+## 程序化发现能力
+
+第三方开发者和 AI Agent 可以先调用 discovery API，再决定该读哪份文档或写哪个字段：
+
+- `GET /api/framework/capabilities`：框架支持的 manifest 枚举、builtin tools、proposal types、world-data target/schema URI、plugin-data 写入路径。
+- `GET /api/plugins/:id/contract`：某个插件声明的 runtimes、capabilities、tools、rpc actions、UI slots、`dataSchemas` 和 plugin-data namespace。
+- `GET /api/plugins/:id/plugin-data-contract`：某个插件的 plugin-data namespace/schema 子集。
+- `GET /api/sessions/:id/plugin-data/:pluginId/_index`：某个 session 下插件实际已有的 namespace/key 索引，不返回 value。
+
+这组 API 回答“当前框架和插件声明支持什么”；具体字段含义仍以 `docs/reference/`、插件 JSON Schema 和插件自己的 `PLUGIN.md` 为准。
 
 ## 附录
 

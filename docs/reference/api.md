@@ -189,10 +189,13 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 全局插件
 
-| 方法 | 路径               | 描述               |
-| ---- | ------------------ | ------------------ |
-| GET  | `/api/plugins`     | 列出所有已加载插件 |
-| GET  | `/api/plugins/:id` | 获取插件详情       |
+| 方法 | 路径                                    | 描述                                                          |
+| ---- | --------------------------------------- | ------------------------------------------------------------- |
+| GET  | `/api/framework/capabilities`           | 框架级能力索引：manifest 枚举、工具、proposal、world-data URI |
+| GET  | `/api/plugins`                          | 列出所有已加载插件                                            |
+| GET  | `/api/plugins/:id`                      | 获取插件详情                                                  |
+| GET  | `/api/plugins/:id/contract`             | 获取插件完整开发契约                                          |
+| GET  | `/api/plugins/:id/plugin-data-contract` | 获取插件数据 namespace/schema 契约                            |
 
 ### 状态查询
 
@@ -1490,6 +1493,60 @@ rpc:
 
 ### 插件管理
 
+#### `GET /api/framework/capabilities`
+
+返回框架级 discovery 索引，供第三方开发者、外部工具和 AI Agent 程序化判断“Covel 当前支持哪些字段、URI、工具和事件”。它描述框架能力，不依赖某个具体插件。
+
+**响应节选:**
+
+```json
+{
+  "schemaVersion": 1,
+  "framework": {
+    "pluginManifest": {
+      "triggerTypes": [
+        "auto",
+        "manual",
+        "scheduled",
+        "conditional",
+        "event",
+        "error-retry"
+      ],
+      "outputKinds": ["story", "plugin", "system"],
+      "runtimeTypes": ["agent", "function"],
+      "executionModes": ["sync", "background"],
+      "inputInjectKinds": ["runtime", "plugin-data"],
+      "uiSlots": ["right", "message", "left"]
+    },
+    "pluginData": {
+      "scope": "(sessionId, pluginId, namespace, key)",
+      "reservedNamespaces": [
+        "_jobs",
+        "_logs",
+        "__ui_right__",
+        "__ui_message__"
+      ],
+      "writePaths": [
+        "builtin-tool:plugin-data-set",
+        "function-output:pluginData[]"
+      ]
+    },
+    "worldData": {
+      "targetUris": [
+        "world:metadata.<path>",
+        "plugin:<pluginId>/<namespace>",
+        "plugin:<pluginId>/<namespace>+lorebook"
+      ],
+      "schemaUris": [
+        "covel://world/dimensions",
+        "plugin://<pluginId>/<namespace>",
+        "<local-json-schema-path>"
+      ]
+    }
+  }
+}
+```
+
 #### `GET /api/plugins`
 
 列出所有已加载的插件。`name` 与 `description` 是 `I18nText`（可能是字符串或 `{ "<locale>": "..." }` 字典）。`capabilities` 为该插件所有 runtime 声明的 capability 并集；`outputKind` 取首个 runtime 的输出类别（`story` / `plugin` / `system`）；`source` 是框架根据加载路径派定的信任层级（`builtin` / `official` / `community`）。
@@ -1558,6 +1615,85 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 ```json
 {
   "error": "Plugin \"narrator\" not found"
+}
+```
+
+#### `GET /api/plugins/:id/contract`
+
+返回单个插件从 `PLUGIN.md` manifest 聚合出的开发契约。多 runtime 插件会把所有 runtime 合并为 plugin-level 视图，同时保留 `runtimes[]` 明细。该端点用于回答“这个插件声明了哪些 capabilities、工具、RPC action、UI slot、`dataSchemas` 和 plugin-data namespace”。
+
+**响应节选:**
+
+```json
+{
+  "id": "codex",
+  "capabilities": ["codex"],
+  "declaredPluginDataNamespaces": ["entries"],
+  "dataSchemas": {
+    "entries": {
+      "namespace": "entries",
+      "schemaVersion": 1,
+      "acceptsWorldData": true,
+      "schema": "./schemas/entries.schema.json"
+    }
+  },
+  "tools": {
+    "builtin": [],
+    "local": [
+      {
+        "runtimeId": "codex",
+        "path": "./tools/unlock-codex-entries.js",
+        "name": "unlock-codex-entries"
+      }
+    ]
+  },
+  "ui": {
+    "right": [{ "runtimeId": "codex", "path": "./ui/codex-panel.json" }],
+    "message": [{ "runtimeId": "codex", "path": "./ui/codex-message.json" }],
+    "left": []
+  },
+  "runtimes": [
+    {
+      "id": "codex",
+      "runtimeType": "agent",
+      "readablePluginDataNamespaces": ["entries"],
+      "writablePluginDataNamespaces": ["entries"],
+      "input": {
+        "inject": [
+          {
+            "kind": "plugin-data",
+            "namespace": "entries",
+            "as": "<existing-entries>"
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+`declaredPluginDataNamespaces` 来自 `dataSchemas` 和 `input.inject: plugin-data`。运行时动态 key（如 `entries/<entryId>`、`images/<turnId>`）不会在这里枚举；需要结合 schema、插件文档或 `_index` 端点查看当前 session 的实际 key。
+
+#### `GET /api/plugins/:id/plugin-data-contract`
+
+返回 `GET /api/plugins/:id/contract` 的 plugin-data 子集，适合只关心数据保存/导入契约的工具。
+
+**响应节选:**
+
+```json
+{
+  "pluginId": "codex",
+  "dataSchemas": {
+    "entries": {
+      "namespace": "entries",
+      "schemaVersion": 1,
+      "acceptsWorldData": true,
+      "schema": "./schemas/entries.schema.json"
+    }
+  },
+  "declaredPluginDataNamespaces": ["entries"],
+  "writablePluginDataNamespaces": ["entries"],
+  "readablePluginDataNamespaces": ["entries"]
 }
 ```
 
@@ -1746,6 +1882,40 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
   "items": [
     { "namespace": "schema", "key": "attributes", "value": { ... }, "updatedAt": "..." },
     { "namespace": "schema", "key": "skills", "value": { ... }, "updatedAt": "..." }
+  ]
+}
+```
+
+#### `GET /api/sessions/:id/plugin-data/:pluginId/_index`
+
+列出某 session 下某插件已经存在的 plugin-data namespace 和 key，不返回 `value`。这个端点用于调试、AI Agent 自动发现当前 session 数据形态、或 UI 构建轻量索引。
+
+**响应:**
+
+```json
+{
+  "sessionId": "cloudmere-a1b2c3d4",
+  "pluginId": "codex",
+  "namespaces": [
+    {
+      "namespace": "entries",
+      "count": 2,
+      "latestUpdatedAt": "2026-05-07T10:00:00.000Z",
+      "keys": [
+        {
+          "key": "codex-001",
+          "createdAt": "...",
+          "updatedAt": "...",
+          "valueType": "object"
+        },
+        {
+          "key": "codex-002",
+          "createdAt": "...",
+          "updatedAt": "...",
+          "valueType": "object"
+        }
+      ]
+    }
   ]
 }
 ```

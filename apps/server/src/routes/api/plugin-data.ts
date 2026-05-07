@@ -14,6 +14,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
+import { buildPluginDataIndex } from "./discovery.js";
 
 type Env = {
   Variables: {
@@ -52,6 +53,26 @@ function validatePluginAccess(
   }
   return null;
 }
+
+// GET /session/:id/plugin-data/:pluginId/_index — list namespaces/keys without values
+pluginDataRoutes.get("/:id/plugin-data/:pluginId/_index", async (c) => {
+  const store = c.get("store");
+  const registry = c.get("pluginRegistry");
+  const sessionId = c.req.param("id");
+  const session = await store.getSession(sessionId);
+  if (!session) return c.json({ error: "Session not found" }, 404);
+  const pluginId = c.req.param("pluginId");
+
+  const accessErr = validatePluginAccess(registry, pluginId, sessionId, false);
+  if (accessErr) return c.json({ error: accessErr.error }, accessErr.status);
+
+  const records = await store.listPluginData(sessionId, pluginId);
+  return c.json({
+    sessionId,
+    pluginId,
+    namespaces: buildPluginDataIndex(records),
+  });
+});
 
 // GET /session/:id/plugin-data/:pluginId/:namespace
 pluginDataRoutes.get("/:id/plugin-data/:pluginId/:namespace", async (c) => {

@@ -2043,15 +2043,70 @@ export interface TurnTrace {
   events: TraceEvent[];
 }
 
-export async function fetchTraceEvents(
-  sessionId: string,
-): Promise<{ sessionId: string; count: number; events: TraceEvent[] }> {
+export interface PluginDataKeyIndex {
+  key: string;
+  createdAt: string;
+  updatedAt: string;
+  valueType: string;
+}
+
+export interface PluginDataNamespaceIndex {
+  namespace: string;
+  count: number;
+  latestUpdatedAt?: string;
+  keys: PluginDataKeyIndex[];
+}
+
+export interface PluginDataDiscoveryIndex {
+  pluginId: string;
+  namespaces: PluginDataNamespaceIndex[];
+}
+
+export interface PluginContract {
+  id: string;
+  name: string;
+  description?: string;
+  pluginType?: string;
+  runtimeCount?: number;
+  status?: string;
+  source?: string;
+  capabilities?: string[];
+  declaredPluginDataNamespaces?: string[];
+  tools?: {
+    builtin?: string[];
+    local?: Array<{ runtimeId: string; path: string; name: string }>;
+  };
+  rpc?: Array<Record<string, unknown>>;
+  ui?: {
+    right?: Array<{ runtimeId: string; path: string }>;
+    message?: Array<{ runtimeId: string; path: string }>;
+    left?: Array<{ runtimeId: string; path: string }>;
+  };
+  runtimes?: Array<Record<string, unknown>>;
+  dataSchemas?: Record<string, unknown>;
+}
+
+export interface TraceDiscovery {
+  framework: Record<string, unknown>;
+  plugins: PluginContract[];
+  pluginData: PluginDataDiscoveryIndex[];
+}
+
+export async function fetchTraceEvents(sessionId: string): Promise<{
+  sessionId: string;
+  count: number;
+  discovery?: TraceDiscovery;
+  events: TraceEvent[];
+}> {
   return request(`/api/traces/${encodeURIComponent(sessionId)}`);
 }
 
-export async function fetchTraceTurns(
-  sessionId: string,
-): Promise<{ sessionId: string; turnCount: number; turns: TurnTrace[] }> {
+export async function fetchTraceTurns(sessionId: string): Promise<{
+  sessionId: string;
+  turnCount: number;
+  discovery?: TraceDiscovery;
+  turns: TurnTrace[];
+}> {
   return request(`/api/traces/${encodeURIComponent(sessionId)}/turns`);
 }
 
