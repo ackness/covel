@@ -3,6 +3,7 @@
 > 面向**内容创作者**：只写 Markdown + YAML frontmatter，不写任何 JS/TS。一个合法的 Covel 插件最少只需要一个 `PLUGIN.md`。
 
 > **读完你能做到**
+>
 > - 写一个只靠 `PLUGIN.md` 就能运行的插件
 > - 根据场景选对触发类型（`auto` / `scheduled` / `event` / `manual`）
 > - 用框架内置的四个 UI 工具（`render-ui` / `create-form` / `create-choices` / `create-notification`）产生玩家可交互块。`render-ui` 是通用的 parts 模型（详见 [docs/reference/tools.md#render-ui](../reference/tools.md#render-ui)），后三个是 form / choices / notification 的语义糖。
@@ -44,14 +45,17 @@ trigger:
 你是一个互动叙事游戏的叙述者（Narrator）。你必须完全基于世界观设定进行叙事，不可编造与设定矛盾的内容。
 
 ## 世界观设定
+
 <world-lore>
 {{ world.lore }}
 </world-lore>
 
 ## 玩家当前输入
+
 {{ player.message }}
 
 ## 叙事规则
+
 - 使用第二人称叙述（"你..."）
 - 严格遵循世界观中的地理、势力、力量体系等设定
 - 长度控制在 300-600 字
@@ -62,25 +66,25 @@ trigger:
 
 ## 2. Frontmatter 字段详解
 
-| 字段 | 必需 | 类型 | 说明 |
-|------|------|------|------|
-| `name` | 是 | string | 插件唯一标识（建议与目录名一致） |
-| `description` | 是 | string | 插件功能描述（展示给玩家） |
-| `pluginType` | 否 | `core-plugin` / `plugin` | `core-plugin` 不可禁用，`plugin` 可按需启用/禁用。默认 `plugin` |
-| `priority` | 是 | number (0-1000) | 执行优先级，数字越小越先执行 |
-| `model` | 否 | string | 使用的模型 slot（如 `ds`、`fast`、`balance`）。不填则用 `default` |
-| `outputKind` | 否 | `story` / `plugin` / `system` | 输出在 UI 中的展示方式。`story` 显示在主聊天流，`plugin`（默认）可能被隐藏，`system` 不展示 |
-| `capabilities` | 否 | string[] | 能力标签，框架通过能力发现插件而非 ID。如 `[narrative]`、`[world-data-provider]`、`[image-generation]` |
-| `trigger` | 否 | object | 触发配置（见下方详解） |
-| `tools` | 否 | object | 工具声明（见[进阶指南](./plugin-authoring-agent.md)） |
-| `input` | 否 | object | 输入注入声明（见[进阶指南](./plugin-authoring-agent.md)） |
-| `config` | 否 | object | 配置字段定义（见第 7 节） |
-| `timeoutMs` | 否 | number | Runtime 总时长硬上限，默认 60000 |
-| `maxSteps` | 否 | number | 单次 attempt 内的 tool-call 步数上限，默认 10 |
-| `maxRetries` | 否 | number | LLM 调用失败/超时/工具循环时的重试次数，默认 1 |
-| `callTimeoutMs` | 否 | number | 单次 LLM 调用时长（ms），默认从 `timeoutMs` + `maxRetries` 推算 |
-| `firstTokenTimeoutMs` | 否 | number | 流式首 token 超时（ms），默认 30000 |
-| `loopDetectionThreshold` | 否 | number | 连续相同 tool call 的判定阈值，默认 3；0 关闭 |
+| 字段                     | 必需 | 类型                          | 说明                                                                                                   |
+| ------------------------ | ---- | ----------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `name`                   | 是   | string                        | 插件唯一标识（建议与目录名一致）                                                                       |
+| `description`            | 是   | string                        | 插件功能描述（展示给玩家）                                                                             |
+| `pluginType`             | 否   | `core-plugin` / `plugin`      | `core-plugin` 不可禁用，`plugin` 可按需启用/禁用。默认 `plugin`                                        |
+| `priority`               | 是   | number (0-1000)               | 执行优先级，数字越小越先执行                                                                           |
+| `model`                  | 否   | string                        | 使用的模型 slot（如 `ds`、`fast`、`balance`）。不填则用 `default`                                      |
+| `outputKind`             | 否   | `story` / `plugin` / `system` | 输出在 UI 中的展示方式。`story` 显示在主聊天流，`plugin`（默认）可能被隐藏，`system` 不展示            |
+| `capabilities`           | 否   | string[]                      | 能力标签，框架通过能力发现插件而非 ID。如 `[narrative]`、`[world-data-provider]`、`[image-generation]` |
+| `trigger`                | 否   | object                        | 触发配置（见下方详解）                                                                                 |
+| `tools`                  | 否   | object                        | 工具声明（见[进阶指南](./plugin-authoring-agent.md)）                                                  |
+| `input`                  | 否   | object                        | 输入注入声明（见[进阶指南](./plugin-authoring-agent.md)）                                              |
+| `config`                 | 否   | object                        | 配置字段定义（见第 7 节）                                                                              |
+| `timeoutMs`              | 否   | number                        | Runtime 总时长硬上限，默认 60000                                                                       |
+| `maxSteps`               | 否   | number                        | 单次 attempt 内的 tool-call 步数上限，默认 10                                                          |
+| `maxRetries`             | 否   | number                        | LLM 调用失败/超时/工具循环时的重试次数，默认 1                                                         |
+| `callTimeoutMs`          | 否   | number                        | 单次 LLM 调用时长（ms），默认从 `timeoutMs` + `maxRetries` 推算                                        |
+| `firstTokenTimeoutMs`    | 否   | number                        | 流式首 token 超时（ms），默认 30000                                                                    |
+| `loopDetectionThreshold` | 否   | number                        | 连续相同 tool call 的判定阈值，默认 3；0 关闭                                                          |
 
 **智能重试说明（默认已启用）：**
 
@@ -94,12 +98,12 @@ trigger:
 
 **优先级参考区间（与 `packages/runtime/src/scheduler.ts` 实际边界一致）：**
 
-| 区间 | 用途 | 示例 |
-|------|------|------|
-| 0-99 | Pre-Game 初始化（首轮 turnNumber=0 才会被调度） | pregame (10), world-init/schema-gen (40), char-creator/player-init (50) |
-| 100-499 | pre-narrator / 本轮只读准备 | persona (100), codex (450) |
-| 500 | narrator | narrator (500) |
-| 501-1000 | post-narrator / 状态写入与后台任务 | codex/post (650), image (800), memory (900) |
+| 区间     | 用途                                            | 示例                                                                    |
+| -------- | ----------------------------------------------- | ----------------------------------------------------------------------- |
+| 0-99     | Pre-Game 初始化（首轮 turnNumber=0 才会被调度） | pregame (10), world-init/schema-gen (40), char-creator/player-init (50) |
+| 100-499  | pre-narrator / 本轮只读准备                     | persona (100), codex (450)                                              |
+| 500      | narrator                                        | narrator (500)                                                          |
+| 501-1000 | post-narrator / 状态写入与后台任务              | codex/post (650), image (800), memory (900)                             |
 
 > **band 边界由 scheduler 强制**：`turnNumber === 0` 只调度 priority `<= 99`，`turnNumber >= 1` 只调度 priority `> 99`。把初始化插件放到 100-199 会让它们在主循环里运行，而不是 Pre-Game。500 前后只读/写入是推荐的语义约定，由插件作者遵守，框架不做强制检查。
 
@@ -110,12 +114,12 @@ PLUGIN.md 的 Markdown 正文就是发给 LLM 的 system prompt。框架会在�
 **可用模板变量：**
 
 ```markdown
-{{ world.lore }}              <!-- 世界观 Markdown 文本 -->
-{{ world.dimensions }}        <!-- 世界维度信息（地理、势力等） -->
-{{ world.openingScenario }}   <!-- 开场场景描述 -->
-{{ world.tone }}              <!-- 叙事风格设定 -->
-{{ player.message }}          <!-- 当前玩家输入 -->
-{{ codex.entries }}           <!-- 已有图鉴条目（如插件需要） -->
+{{ world.lore }} <!-- 世界观 Markdown 文本 -->
+{{ world.dimensions }} <!-- 世界维度信息（地理、势力等） -->
+{{ world.openingScenario }} <!-- 开场场景描述 -->
+{{ world.tone }} <!-- 叙事风格设定 -->
+{{ player.message }} <!-- 当前玩家输入 -->
+{{ codex.entries }} <!-- 已有图鉴条目（如插件需要） -->
 ```
 
 **提示词最佳实践：**
@@ -142,6 +146,7 @@ trigger:
 你是一个事件追踪系统。分析每轮叙事，识别重要事件。
 
 ## 当前叙事
+
 {{ player.message }}
 
 ## 你的任务
@@ -176,7 +181,7 @@ trigger:
 ```yaml
 trigger:
   type: scheduled
-  interval: 5          # 每 5 轮触发一次
+  interval: 5 # 每 5 轮触发一次
 ```
 
 适用于：记忆总结（每 N 轮整理一次）、定期检查。
@@ -187,7 +192,7 @@ trigger:
 trigger:
   type: scheduled
   interval: 1
-  maxTriggerCount: 1   # 只触发一次（如角色创建）
+  maxTriggerCount: 1 # 只触发一次（如角色创建）
 ```
 
 ### event — 监听事件触发
@@ -195,7 +200,7 @@ trigger:
 ```yaml
 trigger:
   type: event
-  topic: combat-start  # 当 combat-start 事件发出时触发
+  topic: combat-start # 当 combat-start 事件发出时触发
 ```
 
 适用于：战斗系统（收到战斗事件才运行）、特殊场景插件。
@@ -226,9 +231,9 @@ trigger:
 ```yaml
 trigger:
   type: auto
-  cooldownTurns: 3     # 触发后至少间隔 3 轮
-  maxTriggerCount: 10  # 整个会话最多触发 10 次
-  startTurn: 2         # 等到 playing 阶段第 2 轮起才开始介入
+  cooldownTurns: 3 # 触发后至少间隔 3 轮
+  maxTriggerCount: 10 # 整个会话最多触发 10 次
+  startTurn: 2 # 等到 playing 阶段第 2 轮起才开始介入
 ```
 
 > `startTurn` 是按 **playing 段** 计数（不是全局 turnNumber），所以"等待玩家先经历两轮再介入"在 pre-game 多少初始化轮次都不影响结果。
@@ -237,11 +242,11 @@ trigger:
 
 Covel 的 turn pipeline 把每一轮拆成三段：
 
-| 段 | 优先级 | 推荐职责 | 对 store 的权限 |
-|---|---|---|---|
-| **pre-narrator** | 101–499 | 检索、加载、向本轮 context 注入信息 | **建议只读**（不改持久状态） |
-| **narrator** | 500 | 生成本轮叙事 | 只写 narrativeOutput |
-| **post-narrator** | 501–1000 | 状态变更、抽取、结算、为下一轮准备 | 可写（state.patch / record.upsert / plugin-data-set） |
+| 段                | 优先级   | 推荐职责                            | 对 store 的权限                                       |
+| ----------------- | -------- | ----------------------------------- | ----------------------------------------------------- |
+| **pre-narrator**  | 101–499  | 检索、加载、向本轮 context 注入信息 | **建议只读**（不改持久状态）                          |
+| **narrator**      | 500      | 生成本轮叙事                        | 只写 narrativeOutput                                  |
+| **post-narrator** | 501–1000 | 状态变更、抽取、结算、为下一轮准备  | 可写（state.patch / record.upsert / plugin-data-set） |
 
 #### 为什么需要这个约定
 
@@ -255,8 +260,8 @@ Covel 的 turn pipeline 把每一轮拆成三段：
 
 **首选模式**：把"既读又写"的插件拆成两个 runtime：
 
-| 插件 | pre runtime（只读）| post runtime（写）|
-|---|---|---|
+| 插件        | pre runtime（只读）                           | post runtime（写）                           |
+| ----------- | --------------------------------------------- | -------------------------------------------- |
 | `npc-graph` | `rag-retriever` (490) — 查图谱注入 npcContext | `extractor` (620) — 基于叙事 upsert 节点和边 |
 
 **例外是 OK 的**：
@@ -267,6 +272,7 @@ Covel 的 turn pipeline 把每一轮拆成三段：
 - `char-creator/character-tracker` (750) 是 agent runtime，先 `list-characters` 给自己看现有角色 id 列表，再决定 create/update。同理不需要拆。
 
 判断标准：**这次"读"的结果有没有被别的 runtime 消费？**
+
 - 是 → 拆出 pre runtime，通过 `input.inject` 显式声明数据流
 - 否 → 留在原 runtime 里，作为内部 dedup / scratch state
 
@@ -275,6 +281,7 @@ Covel 的 turn pipeline 把每一轮拆成三段：
 **场景**：任何需要"先看已有状态再决定新增 / 更新"的 agent runtime。典型代表：codex 要避免重复条目、tracker 要避免重复建 NPC、extractor 要避免重复建边。
 
 **错误做法**：在 prompt 里写一句"你必须先调用 `plugin-data-list` 拿已有数据"。
+
 - 依赖 LLM 的 instruction following，偶发偷懒就会退化成"每轮当全新条目处理" → 重复条目爆炸
 - 多花一次 LLM round-trip（第一次拿数据，第二次才写入），成本和延迟都翻倍
 
@@ -289,8 +296,8 @@ input:
     - kind: plugin-data
       namespace: entries
       as: "<existing-entries>"
-      format: summary          # summary | ids-only | full
-      maxEntries: 100          # 1..500，超出走两段式截断
+      format: summary # summary | ids-only | full
+      maxEntries: 100 # 1..500，超出走两段式截断
 ```
 
 LLM 拿到的 prompt 里会有两个 XML 块：
@@ -416,6 +423,7 @@ tools:
 
 ```markdown
 ### create-notification
+
 每解锁一个新条目，发一条通知。使用 `success` 级别，标题格式："📖 发现新知识：{title}"
 ```
 
@@ -485,13 +493,13 @@ config:
 
 支持的字段类型：
 
-| type | 说明 | 额外参数 |
-|------|------|---------|
-| `string` | 文本输入 | — |
-| `integer` | 整数 | `min`, `max` |
-| `number` | 小数 | `min`, `max` |
-| `boolean` | 开关 | — |
-| `enum` | 下拉选择 | `options`（必需） |
+| type      | 说明     | 额外参数          |
+| --------- | -------- | ----------------- |
+| `string`  | 文本输入 | —                 |
+| `integer` | 整数     | `min`, `max`      |
+| `number`  | 小数     | `min`, `max`      |
+| `boolean` | 开关     | —                 |
+| `enum`    | 下拉选择 | `options`（必需） |
 
 框架会自动根据 config 定义渲染设置面板。
 
@@ -502,7 +510,11 @@ config:
 ```
 worlds/my-world/
 ├── world.yaml       # 元信息清单
-└── WORLD.md         # 世界观文本（Markdown）
+├── WORLD.md         # 世界观文本（Markdown）
+└── data/
+    ├── world.data.yaml
+    ├── dimensions.yaml
+    └── characters/cast.json
 ```
 
 **world.yaml 示例：**
@@ -537,52 +549,32 @@ excludedPlugins:
   - scene-prompts
   - branch-reply
 
-characterBlueprintSources:
-  - ./characters/main-cast.json
-
-dimensions:
-  geography:
-    overview: 九州大陆东南的广袤灵域...
-    regions:
-      - name: 青萍山
-        description: 青萍宗所在的灵脉山峰
-        climate: 四季如春，常有灵雾缭绕
-        landmarks:
-          - name: 试炼场
-            description: 年度试炼大会的比武场地
-
-  factions:
-    - id: qingping-sect
-      name: 青萍宗
-      description: 偏居一隅的中小宗门
-      type: guild
-      influence: minor
-      leader: 宗主・陆沉渊（金丹后期）
-
-  powerSystem:
-    name: 灵气修炼
-    type: cultivation
-    tiers:
-      - name: 练气
-        rank: 1
-        description: 感应灵气并引入体内
-
-  tone:
-    genres:
-      - xianxia
-    narrativeStyle: 古风仙侠笔触，山水灵秀中暗藏宗门权谋。
-
-  startingConditions:
-    openingScenario: >-
-      试炼大会三日后举行，你正在坊市采购备战物资...
-    startingLocation: 青萍山・坊市
-    # 可选 — 给会话首屏的 SessionCanvasHero 用：
-    openingHook: 试炼三日，野脉初现。     # 一句"扉页大字"
-    openingChips:                       # 2-4 个短 tag
-      - 青萍外门
-      - 试炼前夜
-      - 野生灵脉
+worldData: data/world.data.yaml
 ```
+
+`data/world.data.yaml` 示例：
+
+```yaml
+schemaVersion: 1
+sources:
+  dimensions:
+    kind: yaml
+    path: data/dimensions.yaml
+    schema: covel://world/dimensions
+    to: world:metadata.dimensions
+
+  cast:
+    kind: json
+    path: data/characters/cast.json
+    schema: plugin://character-blueprint/blueprints
+    to: plugin:character-blueprint/blueprints
+    key: id
+    effects:
+      - characters
+    after: dimensions
+```
+
+`data/dimensions.yaml` 保存世界维度，格式与 `WorldDimensions` 相同。可以包含 `geography`、`factions`、`powerSystem`、`history`、`economy`、`socialStructure`、`tone`、`mechanics`、`startingConditions` 等字段。
 
 `openingHook` / `openingChips` 都接受 `string` 或 `{ "zh-CN": ..., "en-US": ... }`，留空时前端会回落到 `world.name` + `world.tags`。
 
@@ -590,7 +582,9 @@ dimensions:
 
 **`requiredPlugins`** 是世界运行依赖，前端准备页会锁定这些插件。**`recommendedPlugins`** 会在准备页默认选中，**`excludedPlugins`** 会在准备页默认关闭。创建会话时，前端会把最终选择的插件列表传给 `POST /api/sessions`。
 
-**`characterBlueprintSources`** 指向世界包内的角色卡 JSON 文件。文件可以是一张角色卡对象，也可以是角色卡数组。创建 session 时，服务器会把这些角色卡写入 `plugin_data[character-blueprint]["blueprints"]`，并实例化为 `characters` 表中的 NPC，同时镜像到 `plugin_data[character-blueprint]["characters"]`，让 `scene-cast`、角色面板和角色卡插件在首轮就能读到主要角色。运行中也可以在 `character-blueprint` 右侧面板用表单创建蓝图；完整迁移或调试时使用 JSON 导入入口。
+**`worldData`** 指向统一数据索引。`to: world:metadata.dimensions` 会把维度写入 world metadata；`to: plugin:character-blueprint/blueprints` 加上 `effects: [characters]` 会在创建 session 时导入角色卡、实例化 NPC，并镜像到角色面板。运行中也可以在 `character-blueprint` 右侧面板用表单创建蓝图；完整迁移或调试时使用 JSON 导入入口。
+
+第三方内容包可以交付自己的 `world.data.yaml`，或把覆盖文件放到 `~/.covel/world-overrides/<world-id>/world.data.override.yaml`。更多字段见 [World Data reference](../reference/world-data.md)。
 
 ## 9. 完整的零代码插件示例
 
@@ -629,6 +623,7 @@ config:
 你是故事引导助手。你的任务是在每轮叙事后为玩家提供行动选项。
 
 ## 当前叙事
+
 {{ player.message }}
 
 ## 你的任务

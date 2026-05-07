@@ -26,14 +26,4 @@ excludedPlugins:
   - scene-cast
   - scene-prompts
   - branch-reply
-
-dimensionSources:
-  geography: ./dimensions/geography.yaml
-  factions: ./dimensions/factions.yaml
-  powerSystem: ./dimensions/power-system.yaml
-  history: ./dimensions/history.yaml
-  economy: ./dimensions/economy.yaml
-  socialStructure: ./dimensions/social-structure.yaml
-  tone: ./dimensions/tone.yaml
-  mechanics: ./dimensions/mechanics.yaml
-  startingConditions: ./dimensions/starting-conditions.yaml
+worldData: data/world.data.yaml

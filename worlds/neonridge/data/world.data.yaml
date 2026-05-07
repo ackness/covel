@@ -1,0 +1,7 @@
+schemaVersion: 1
+sources:
+  dimensions:
+    kind: yaml
+    path: data/dimensions.yaml
+    schema: covel://world/dimensions
+    to: world:metadata.dimensions

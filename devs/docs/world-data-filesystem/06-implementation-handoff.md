@@ -270,8 +270,8 @@ world load 阶段只扫描摘要：
 
 - `dimensions` / `dimensionSources` 转成 synthetic source summary
 - `characterBlueprintSources` 转成 synthetic source summary
-- 如果 world 使用 `worldData`，不要再通过旧 `metadata.characterBlueprints` shim 写 plugin-data
-- legacy shim 仅用于没有 `worldData` 的旧世界包，并标记 transitional
+- 声明 `worldData` 的世界走统一 source 导入
+- `characterBlueprintSources` 仅服务旧世界包
 
 ### 测试
 
@@ -283,6 +283,7 @@ world load 阶段只扫描摘要：
 - worldData summary 不含大 value
 - media directory scan 稳定
 - 旧 worlds 仍能加载
+- 同时声明 `worldData` 与 `characterBlueprintSources` 的世界会跳过旧角色卡 eager-load
 
 ## Phase D：Session importer 与 API 集成
 
@@ -297,6 +298,8 @@ world load 阶段只扫描摘要：
 - server API tests
 
 ### 实现内容
+
+当前状态：Phase C MVP 已完成 world-load summary、override root、本地 source 读取和 `world:metadata.dimensions` 投影；Phase D 已完成最小路径：session 创建阶段支持 `plugin:character-blueprint/blueprints` 与 `effects: [characters]`。
 
 1. 注入 `WorldPackageResolver` / `WorldDataImporter`
 

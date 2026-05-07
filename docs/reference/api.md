@@ -12,11 +12,11 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 
 服务器端支持三种存储后端，通过环境变量 `STORE_BACKEND` 配置：
 
-| 后端 | 值 | 用途 |
-|------|-----|------|
-| SQLite | `sqlite` (默认) | 本机开发 / 单机部署，数据落到 `./data/covel.db` |
-| Memory | `memory` | 测试或一次性 demo，数据存于内存，重启丢失 |
-| PostgreSQL | `pg` | 生产环境，需配置 `DATABASE_URL`；**多实例部署自动启用 `pg_advisory_lock` 分布式会话锁，跨 Node 进程对同一 session 互斥** |
+| 后端       | 值              | 用途                                                                                                                     |
+| ---------- | --------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| SQLite     | `sqlite` (默认) | 本机开发 / 单机部署，数据落到 `./data/covel.db`                                                                          |
+| Memory     | `memory`        | 测试或一次性 demo，数据存于内存，重启丢失                                                                                |
+| PostgreSQL | `pg`            | 生产环境，需配置 `DATABASE_URL`；**多实例部署自动启用 `pg_advisory_lock` 分布式会话锁，跨 Node 进程对同一 session 互斥** |
 
 > **注意**: IndexedDB (IDB) 是**前端专用**的存储后端，仅在浏览器中使用，服务器端不可用。
 
@@ -130,79 +130,79 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 健康检查
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/health` | 健康检查 |
+| 方法 | 路径          | 描述     |
+| ---- | ------------- | -------- |
+| GET  | `/api/health` | 健康检查 |
 
 ### 世界管理
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/worlds` | 列出所有世界 |
-| GET | `/api/worlds/:id` | 获取世界详情 |
-| POST | `/api/worlds` | 创建/更新世界 |
-| PATCH | `/api/worlds/:id` | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并） |
-| GET | `/api/worlds/:id/dimensions/export` | 导出世界维度（YAML/JSON） |
-| POST | `/api/worlds/:id/dimensions/import` | 导入世界维度 |
-| POST | `/api/worlds/:id/sync-dimensions` | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key |
+| 方法  | 路径                                | 描述                                                                             |
+| ----- | ----------------------------------- | -------------------------------------------------------------------------------- |
+| GET   | `/api/worlds`                       | 列出所有世界                                                                     |
+| GET   | `/api/worlds/:id`                   | 获取世界详情                                                                     |
+| POST  | `/api/worlds`                       | 创建/更新世界                                                                    |
+| PATCH | `/api/worlds/:id`                   | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                  |
+| GET   | `/api/worlds/:id/dimensions/export` | 导出世界维度（YAML/JSON）                                                        |
+| POST  | `/api/worlds/:id/dimensions/import` | 导入世界维度                                                                     |
+| POST  | `/api/worlds/:id/sync-dimensions`   | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key |
 
 ### 会话管理
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/sessions` | 列出所有会话（可选 `?worldId=` 过滤） |
-| POST | `/api/sessions` | 创建新会话 |
-| GET | `/api/sessions/:id` | 获取会话信息 |
-| PATCH | `/api/sessions/:id` | 更新会话字段（`status` / `runtimeModelOverrides`） |
-| DELETE | `/api/sessions/:id` | 删除会话 |
+| 方法   | 路径                | 描述                                               |
+| ------ | ------------------- | -------------------------------------------------- |
+| GET    | `/api/sessions`     | 列出所有会话（可选 `?worldId=` 过滤）              |
+| POST   | `/api/sessions`     | 创建新会话                                         |
+| GET    | `/api/sessions/:id` | 获取会话信息                                       |
+| PATCH  | `/api/sessions/:id` | 更新会话字段（`status` / `runtimeModelOverrides`） |
+| DELETE | `/api/sessions/:id` | 删除会话                                           |
 
 ### 会话快照
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/sessions/:id/snapshot` | 获取完整会话快照（用于客户端恢复/重连） |
+| 方法 | 路径                         | 描述                                    |
+| ---- | ---------------------------- | --------------------------------------- |
+| GET  | `/api/sessions/:id/snapshot` | 获取完整会话快照（用于客户端恢复/重连） |
 
 ### Turn 执行
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
+| 方法 | 路径                     | 描述         |
+| ---- | ------------------------ | ------------ |
 | POST | `/api/sessions/:id/turn` | 执行玩家回合 |
 
 ### 玩家交互
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| POST | `/api/sessions/:id/submit-inputs` | 提交玩家交互响应(legacy alias,转发到 plugin-rpc `submit-form`) |
-| POST | `/api/sessions/:id/plugin-rpc` | **PR-3** 统一插件 RPC 通道(action 级 / runtime 级) |
-| GET  | `/api/sessions/:id/approvals` | **PR-7** 列出该 session 的待批准 RPC 请求 |
-| POST | `/api/approvals/:approvalId/decision` | **PR-7** 提交玩家批准决定(allow/deny + once/session) |
+| 方法 | 路径                                  | 描述                                                           |
+| ---- | ------------------------------------- | -------------------------------------------------------------- |
+| POST | `/api/sessions/:id/submit-inputs`     | 提交玩家交互响应(legacy alias,转发到 plugin-rpc `submit-form`) |
+| POST | `/api/sessions/:id/plugin-rpc`        | **PR-3** 统一插件 RPC 通道(action 级 / runtime 级)             |
+| GET  | `/api/sessions/:id/approvals`         | **PR-7** 列出该 session 的待批准 RPC 请求                      |
+| POST | `/api/approvals/:approvalId/decision` | **PR-7** 提交玩家批准决定(allow/deny + once/session)           |
 
 ### 会话插件管理
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/sessions/:id/plugins` | 列出会话的活跃/可用插件 |
-| POST | `/api/sessions/:id/plugins/enable` | 启用插件（body: `{ pluginId }`） |
+| 方法 | 路径                                | 描述                                                   |
+| ---- | ----------------------------------- | ------------------------------------------------------ |
+| GET  | `/api/sessions/:id/plugins`         | 列出会话的活跃/可用插件                                |
+| POST | `/api/sessions/:id/plugins/enable`  | 启用插件（body: `{ pluginId }`）                       |
 | POST | `/api/sessions/:id/plugins/disable` | 禁用插件（body: `{ pluginId }`，core-plugin 返回 403） |
 
 ### 全局插件
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/plugins` | 列出所有已加载插件 |
-| GET | `/api/plugins/:id` | 获取插件详情 |
+| 方法 | 路径               | 描述               |
+| ---- | ------------------ | ------------------ |
+| GET  | `/api/plugins`     | 列出所有已加载插件 |
+| GET  | `/api/plugins/:id` | 获取插件详情       |
 
 ### 状态查询
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/sessions/:id/state` | 获取所有状态表 |
+| 方法 | 路径                      | 描述           |
+| ---- | ------------------------- | -------------- |
+| GET  | `/api/sessions/:id/state` | 获取所有状态表 |
 
 ### 消息历史
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/sessions/:id/messages` | 获取会话消息列表 |
+| 方法 | 路径                              | 描述                            |
+| ---- | --------------------------------- | ------------------------------- |
+| GET  | `/api/sessions/:id/messages`      | 获取会话消息列表                |
 | POST | `/api/sessions/:id/messages/sync` | 同步消息（LocalDataService 用） |
 
 ### 统一翻译层（Runtime Outputs / Interaction Records，PR-1）
@@ -211,14 +211,15 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 > **接入状态（2026-04-27）**：服务端写入和查询 API 已实现并有测试覆盖；当前内置 Web UI 暂未直接消费这些 HTTP 查询端点，debug 页面主要使用 `/api/traces/*` 与 `/api/sessions/:id/snapshot`。这些端点保留为 observability / API client 能力，不应因 UI 暂未接入而删除。
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/sessions/:id/runtime-outputs` | 列出该 session 的 runtime 输出记录，支持 `?runtimeId=` / `?pluginId=` / `?since=` / `?limit=` 过滤，按 timestamp 降序 |
-| GET | `/api/sessions/:id/runtime-outputs/:outputId` | 获取单条 runtime 输出记录 |
-| GET | `/api/sessions/:id/runtime-outputs/:outputId/full-prompt` | 从 `turn_messages` + `rawPromptDelta` 重建该次 LLM 调用的完整 prompt 历史（best-effort） |
-| GET | `/api/sessions/:id/interaction-records` | 列出该 session 的外部输入记录，支持 `?type=` / `?source=` / `?targetPluginId=` / `?limit=` 过滤 |
+| 方法 | 路径                                                      | 描述                                                                                                                  |
+| ---- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| GET  | `/api/sessions/:id/runtime-outputs`                       | 列出该 session 的 runtime 输出记录，支持 `?runtimeId=` / `?pluginId=` / `?since=` / `?limit=` 过滤，按 timestamp 降序 |
+| GET  | `/api/sessions/:id/runtime-outputs/:outputId`             | 获取单条 runtime 输出记录                                                                                             |
+| GET  | `/api/sessions/:id/runtime-outputs/:outputId/full-prompt` | 从 `turn_messages` + `rawPromptDelta` 重建该次 LLM 调用的完整 prompt 历史（best-effort）                              |
+| GET  | `/api/sessions/:id/interaction-records`                   | 列出该 session 的外部输入记录，支持 `?type=` / `?source=` / `?targetPluginId=` / `?limit=` 过滤                       |
 
 **`RuntimeOutput` 结构**：
+
 ```ts
 {
   id: string,
@@ -242,6 +243,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 ```
 
 **`InteractionRecord` 结构**：
+
 ```ts
 {
   id: string,
@@ -259,21 +261,21 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 ```
 
 **注意**：
+
 - 翻译层写入是 best-effort。失败只打 warn，不阻塞 turn pipeline
 - `rawPromptDelta` 在 PR-1 首迭代中不会被 turn-executor 自动填充。接入 LLM 调用链的 delta 采集在后续迭代完成
 - full-prompt 重建端点目前用 turn_messages + delta 做近似还原，对 compaction 后的 session 可能不完全精确 —— 调试用途足够，审计场景需要走 trace_events
-
 
 ### 插件数据（Plugin Data）
 
 > **接入状态（2026-04-27）**：内置 Web UI 目前使用 GET/list 读取 plugin-data（右侧面板、message UI specs、plugin data store）。PUT/DELETE 是管理/API 写入口，当前内置 Web UI 暂未直接调用；插件 runtime 推荐通过 plugin-data tools、plugin RPC 或 proposal 写入。PUT/DELETE 保持兼容，但若未来收窄攻击面，应先标记 deprecated 或加 admin/debug gate，而不是静默删除。
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/sessions/:id/plugin-data/:pluginId/:namespace` | 列出某 namespace 下的数据 |
-| GET | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 获取单条数据 |
-| PUT | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 写入/更新数据 |
-| DELETE | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 删除数据 |
+| 方法   | 路径                                                      | 描述                      |
+| ------ | --------------------------------------------------------- | ------------------------- |
+| GET    | `/api/sessions/:id/plugin-data/:pluginId/:namespace`      | 列出某 namespace 下的数据 |
+| GET    | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 获取单条数据              |
+| PUT    | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 写入/更新数据             |
+| DELETE | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 删除数据                  |
 
 ### Working Memory（工作记忆）
 
@@ -281,24 +283,25 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 >
 > **接入状态（2026-04-27）**：Working Memory 的 store / proposal / prompt injection 是运行时功能；下列 HTTP CRUD 是管理/调试接口，当前内置 Web UI 暂未直接消费。若未来收敛写路径，应保持 URL/响应兼容，优先替换内部实现而不是直接删除。
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/sessions/:id/working-memory` | 列出该 session 的所有工作记忆条目 |
-| PUT | `/api/sessions/:id/working-memory/:scope/:key` | 写入/更新工作记忆（scope: player \| story \| shared） |
-| DELETE | `/api/sessions/:id/working-memory/:scope/:key` | 删除工作记忆条目 |
-| GET | `/api/sessions/:id/memory-blocks` | 只读返回 Letta 风格的 memory blocks（story scope，需 `COVEL_MEMORY_V1=1`）。2026-04-27 从 `/:id/memory` 重命名以避免与 `memory` 插件 id 冲突。 |
+| 方法   | 路径                                           | 描述                                                                                                                                           |
+| ------ | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/sessions/:id/working-memory`             | 列出该 session 的所有工作记忆条目                                                                                                              |
+| PUT    | `/api/sessions/:id/working-memory/:scope/:key` | 写入/更新工作记忆（scope: player \| story \| shared）                                                                                          |
+| DELETE | `/api/sessions/:id/working-memory/:scope/:key` | 删除工作记忆条目                                                                                                                               |
+| GET    | `/api/sessions/:id/memory-blocks`              | 只读返回 Letta 风格的 memory blocks（story scope，需 `COVEL_MEMORY_V1=1`）。2026-04-27 从 `/:id/memory` 重命名以避免与 `memory` 插件 id 冲突。 |
 
 ### Lorebook（S3-T6）
 
 Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由插件通过 proposal commit 管道写入 store 层的 `lorebook_entries` 表，这些端点提供玩家 UI 与程序化读取视图，**不走提案系统**（单项 toggle/删除为 MVP 级别的直接写入）。
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/sessions/:id/lorebook` | 列出该 session 的所有 lorebook 词条（按 `insertionOrder` 升序） |
-| PATCH | `/api/sessions/:id/lorebook/:entryId` | 切换单条词条的 `enabled` 标志，body: `{ enabled: boolean }` |
-| DELETE | `/api/sessions/:id/lorebook/:entryId` | 删除单条词条 |
+| 方法   | 路径                                  | 描述                                                            |
+| ------ | ------------------------------------- | --------------------------------------------------------------- |
+| GET    | `/api/sessions/:id/lorebook`          | 列出该 session 的所有 lorebook 词条（按 `insertionOrder` 升序） |
+| PATCH  | `/api/sessions/:id/lorebook/:entryId` | 切换单条词条的 `enabled` 标志，body: `{ enabled: boolean }`     |
+| DELETE | `/api/sessions/:id/lorebook/:entryId` | 删除单条词条                                                    |
 
 响应：
+
 - `GET` → `{ entries: LorebookEntryRecord[] }`（见 `packages/store/src/types.ts`）
 - `PATCH` → `{ success: true, entryId, enabled }`
 - `DELETE` → `{ success: true }`
@@ -309,11 +312,11 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 > 需要环境变量 `COVEL_SUSPEND_V1=1`。关闭时 `POST /resume` 与 `DELETE /suspensions/:suspensionId` 返回 `503`，`GET /suspensions` 返回空列表。
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| POST | `/api/sessions/:id/resume` | 用提交的 data 重新启动指定 suspensionId 对应的 runtime |
-| GET | `/api/sessions/:id/suspensions` | 列出当前 session 所有未解决的挂起项 |
-| DELETE | `/api/sessions/:id/suspensions/:suspensionId` | 放弃一个挂起项（删除记录） |
+| 方法   | 路径                                          | 描述                                                   |
+| ------ | --------------------------------------------- | ------------------------------------------------------ |
+| POST   | `/api/sessions/:id/resume`                    | 用提交的 data 重新启动指定 suspensionId 对应的 runtime |
+| GET    | `/api/sessions/:id/suspensions`               | 列出当前 session 所有未解决的挂起项                    |
+| DELETE | `/api/sessions/:id/suspensions/:suspensionId` | 放弃一个挂起项（删除记录）                             |
 
 ### Snapshot / Fork（S4-T2）
 
@@ -321,82 +324,82 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 >
 > **接入状态（2026-04-27）**：服务端手动快照、列表和 fork 能力已实现并有测试覆盖；当前内置 Web UI 只直接使用 `GET /api/sessions/:id/snapshot` 做恢复/重连，暂未提供手动快照列表或 fork 操作界面。
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| POST | `/api/sessions/:id/snapshot` | 创建一份手动快照（kind=`manual`） |
-| GET | `/api/sessions/:id/snapshots` | 列出当前 session 所有物化快照（auto / manual / fork） |
-| POST | `/api/sessions/:id/fork` | 从指定 snapshotId 物化一个新 session，拷贝状态与截至 cursor 的消息 |
+| 方法 | 路径                          | 描述                                                               |
+| ---- | ----------------------------- | ------------------------------------------------------------------ |
+| POST | `/api/sessions/:id/snapshot`  | 创建一份手动快照（kind=`manual`）                                  |
+| GET  | `/api/sessions/:id/snapshots` | 列出当前 session 所有物化快照（auto / manual / fork）              |
+| POST | `/api/sessions/:id/fork`      | 从指定 snapshotId 物化一个新 session，拷贝状态与截至 cursor 的消息 |
 
 ### 角色数据
 
 > **接入状态（2026-04-27）**：当前内置 Web UI 主要通过 `GET /api/sessions/:id/snapshot` 获取角色快照；本节 REST 端点保留为轻量读取/管理 API。插件 runtime 推荐使用 `create-character` / `update-character` / `list-characters` / `get-character` 工具维护角色。`POST /characters` 是兼容管理入口，后续若收敛角色写路径，应保持 URL/响应兼容并优先替换内部实现。
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/sessions/:id/characters` | 获取会话角色列表 |
-| POST | `/api/sessions/:id/characters` | 创建/更新角色 |
+| 方法 | 路径                           | 描述             |
+| ---- | ------------------------------ | ---------------- |
+| GET  | `/api/sessions/:id/characters` | 获取会话角色列表 |
+| POST | `/api/sessions/:id/characters` | 创建/更新角色    |
 
 ### Actions（SSE 桥接）
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
+| 方法 | 路径           | 描述                                                       |
+| ---- | -------------- | ---------------------------------------------------------- |
 | POST | `/api/actions` | SSE 动作桥接（发送消息/执行命令 → Turn 执行 → SSE 事件流） |
 
 ### 事件系统
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/events/stream?sessionId=xxx` | SSE 实时事件流（支持 topic 过滤和重放） |
-| POST | `/api/events/emit` | 注入外部事件 |
+| 方法 | 路径                               | 描述                                    |
+| ---- | ---------------------------------- | --------------------------------------- |
+| GET  | `/api/events/stream?sessionId=xxx` | SSE 实时事件流（支持 topic 过滤和重放） |
+| POST | `/api/events/emit`                 | 注入外部事件                            |
 
 ### AI 生成
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| POST | `/api/ai/ping` | 测试 LLM 提供商连通性 |
-| POST | `/api/ai/generate-world` | AI 生成世界包 |
+| 方法 | 路径                     | 描述                  |
+| ---- | ------------------------ | --------------------- |
+| POST | `/api/ai/ping`           | 测试 LLM 提供商连通性 |
+| POST | `/api/ai/generate-world` | AI 生成世界包         |
 
 ### 模型数据库（Model DB）
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/model-db` | 获取模型数据库信息 |
-| GET | `/api/model-db/search?q=xxx` | 搜索模型 |
-| GET | `/api/model-db/lookup?model=xxx` | 查找模型能力 |
-| POST | `/api/model-db/refresh` | 刷新模型数据库 |
+| 方法 | 路径                             | 描述               |
+| ---- | -------------------------------- | ------------------ |
+| GET  | `/api/model-db`                  | 获取模型数据库信息 |
+| GET  | `/api/model-db/search?q=xxx`     | 搜索模型           |
+| GET  | `/api/model-db/lookup?model=xxx` | 查找模型能力       |
+| POST | `/api/model-db/refresh`          | 刷新模型数据库     |
 
 ### Trace 调试
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/traces/:sessionId` | 获取会话所有 trace 事件 |
-| GET | `/api/traces/:sessionId/turns` | 按 Turn 分组的 trace 事件 |
+| 方法 | 路径                           | 描述                      |
+| ---- | ------------------------------ | ------------------------- |
+| GET  | `/api/traces/:sessionId`       | 获取会话所有 trace 事件   |
+| GET  | `/api/traces/:sessionId/turns` | 按 Turn 分组的 trace 事件 |
 
 ### 媒体管理
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/media/:id?token=<signed>` | 内容寻址媒体下载（HMAC token + 会话引用校验） |
-| POST | `/api/media/cleanup` | 破坏性维护端点：默认禁用 (`COVEL_MEDIA_CLEANUP_ENABLED`)，商业层 503，`dryRun:false` 需 `X-Confirm-Cleanup: yes` |
+| 方法 | 路径                            | 描述                                                                                                             |
+| ---- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| GET  | `/api/media/:id?token=<signed>` | 内容寻址媒体下载（HMAC token + 会话引用校验）                                                                    |
+| POST | `/api/media/cleanup`            | 破坏性维护端点：默认禁用 (`COVEL_MEDIA_CLEANUP_ENABLED`)，商业层 503，`dryRun:false` 需 `X-Confirm-Cleanup: yes` |
 
 ### 配置信息
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/api/presets` | 列出配置的模型预设 |
-| GET | `/api/packages` | 列出已加载插件包（含 runtime/tool/`userSettings` 信息） |
-| GET | `/api/commands` | 列出注册的命令 |
-| GET | `/api/block-schemas` | 列出插件 block schema |
-| GET | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件 |
-| GET | `/api/llm-config` | 返回 slot 配置与能力信息 |
-| GET | `/api/provider-keys` | 桌面 bearer client 返回原始 provider key；其他请求返回 masked availability |
-| GET | `/api/config/info` | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等） |
-| GET | `/api/config/keys` | 仅桌面：列出已配置的 provider（不返回值） |
-| PUT | `/api/config/keys` | 仅桌面：写入 `<covelHome>/keys.env`；body `{ provider: value }` |
-| GET | `/api/config/settings` | 仅桌面：读取 `<covelHome>/settings.json`（unified SettingsStore） |
-| PUT | `/api/config/settings` | 仅桌面：原子写 `settings.json`；body `{ entries: Record<string, unknown> }` |
-| PUT | `/api/config/data-root` | 仅桌面：改写 `config.toml` 的 `data_root` 行，需要重启服务器 |
-| POST | `/api/config/open-folder` | 仅桌面：打开 config/data/logs 目录或 `llm.toml` / `keys.env` |
+| 方法 | 路径                           | 描述                                                                                    |
+| ---- | ------------------------------ | --------------------------------------------------------------------------------------- |
+| GET  | `/api/presets`                 | 列出配置的模型预设                                                                      |
+| GET  | `/api/packages`                | 列出已加载插件包（含 runtime/tool/`userSettings` 信息）                                 |
+| GET  | `/api/commands`                | 列出注册的命令                                                                          |
+| GET  | `/api/block-schemas`           | 列出插件 block schema                                                                   |
+| GET  | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件 |
+| GET  | `/api/llm-config`              | 返回 slot 配置与能力信息                                                                |
+| GET  | `/api/provider-keys`           | 桌面 bearer client 返回原始 provider key；其他请求返回 masked availability              |
+| GET  | `/api/config/info`             | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等）                             |
+| GET  | `/api/config/keys`             | 仅桌面：列出已配置的 provider（不返回值）                                               |
+| PUT  | `/api/config/keys`             | 仅桌面：写入 `<covelHome>/keys.env`；body `{ provider: value }`                         |
+| GET  | `/api/config/settings`         | 仅桌面：读取 `<covelHome>/settings.json`（unified SettingsStore）                       |
+| PUT  | `/api/config/settings`         | 仅桌面：原子写 `settings.json`；body `{ entries: Record<string, unknown> }`             |
+| PUT  | `/api/config/data-root`        | 仅桌面：改写 `config.toml` 的 `data_root` 行，需要重启服务器                            |
+| POST | `/api/config/open-folder`      | 仅桌面：打开 config/data/logs 目录或 `llm.toml` / `keys.env`                            |
 
 #### GET /api/ui-specs
 
@@ -404,8 +407,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 **查询参数：**
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
+| 参数        | 类型           | 说明                                                                       |
+| ----------- | -------------- | -------------------------------------------------------------------------- |
 | `sessionId` | string（可选） | 指定后只返回该会话激活集中的插件；省略时返回全局所有已加载插件（向后兼容） |
 
 **响应格式**：
@@ -434,8 +437,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ### Runtime 调用
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
+| 方法 | 路径                  | 描述                           |
+| ---- | --------------------- | ------------------------------ |
 | POST | `/api/runtime/invoke` | 独立调用单个 Runtime（计划中） |
 
 ---
@@ -466,13 +469,13 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 }
 ```
 
-| 字段 | 说明 |
-|------|------|
-| `storeBackend` | 当前存储后端（`memory` / `sqlite` / `pg`），前端据此选择 `LocalDataService` 或 `RemoteDataService`。默认 `sqlite`。 |
-| `bootId` | 服务器启动 ID（UUID），每次重启变化，可用于检测服务器重启 |
-| `vector.capable` | 当前后端是否支持向量检索（受 store 类型 + 编译时 vector 扩展可用性影响） |
-| `vector.driver` | `sqlite-vss` / `pgvector` / `in-memory` / `none` |
-| `vector.modelCount` / `vector.tableCount` | 已注册的 embedding 模型数量及对应物理表数量（每个模型一张表） |
+| 字段                                      | 说明                                                                                                                |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `storeBackend`                            | 当前存储后端（`memory` / `sqlite` / `pg`），前端据此选择 `LocalDataService` 或 `RemoteDataService`。默认 `sqlite`。 |
+| `bootId`                                  | 服务器启动 ID（UUID），每次重启变化，可用于检测服务器重启                                                           |
+| `vector.capable`                          | 当前后端是否支持向量检索（受 store 类型 + 编译时 vector 扩展可用性影响）                                            |
+| `vector.driver`                           | `sqlite-vss` / `pgvector` / `in-memory` / `none`                                                                    |
+| `vector.modelCount` / `vector.tableCount` | 已注册的 embedding 模型数量及对应物理表数量（每个模型一张表）                                                       |
 
 ---
 
@@ -497,7 +500,20 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
         "requiredPlugins": ["pregame", "world-init", "char-creator"],
         "recommendedPlugins": ["narrator", "guide"],
         "excludedPlugins": ["chat-mode-narrator"],
-        "characterBlueprintSources": ["./characters/main-cast.json"]
+        "worldDataPath": "data/world.data.yaml",
+        "worldData": {
+          "schemaVersion": 1,
+          "sources": [
+            {
+              "id": "dimensions",
+              "target": "world:metadata.dimensions",
+              "digest": "sha256:...",
+              "order": 0,
+              "origin": "world",
+              "diagnostics": { "info": 0, "warning": 0, "error": 0 }
+            }
+          ]
+        }
       },
       "createdAt": "2025-01-15T10:00:00.000Z",
       "updatedAt": "2025-01-15T10:00:00.000Z"
@@ -512,8 +528,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 **参数:**
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
+| 参数 | 位置 | 说明                      |
+| ---- | ---- | ------------------------- |
 | `id` | 路径 | 世界 ID（如 `cloudmere`） |
 
 **响应 200:**
@@ -530,8 +546,20 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
     "requiredPlugins": ["pregame", "world-init", "char-creator"],
     "recommendedPlugins": ["narrator", "guide"],
     "excludedPlugins": ["chat-mode-narrator"],
-    "characterBlueprintSources": ["./characters/main-cast.json"],
-    "characterBlueprints": []
+    "worldDataPath": "data/world.data.yaml",
+    "worldData": {
+      "schemaVersion": 1,
+      "sources": [
+        {
+          "id": "dimensions",
+          "target": "world:metadata.dimensions",
+          "digest": "sha256:...",
+          "order": 0,
+          "origin": "world",
+          "diagnostics": { "info": 0, "warning": 0, "error": 0 }
+        }
+      ]
+    }
   },
   "createdAt": "2025-01-15T10:00:00.000Z",
   "updatedAt": "2025-01-15T10:00:00.000Z"
@@ -582,9 +610,9 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 **参数:**
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
-| `id` | 路径 | 世界 ID |
+| 参数     | 位置 | 说明                    |
+| -------- | ---- | ----------------------- |
+| `id`     | 路径 | 世界 ID                 |
 | `format` | 查询 | `yaml`（默认）或 `json` |
 
 **响应:** 以 `Content-Disposition: attachment` 返回维度数据文件。
@@ -694,12 +722,12 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 }
 ```
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `worldId` | string | 否 | 关联的世界 ID（校验: `/^[a-z0-9_-]{1,64}$/i`） |
-| `locale` | string | 否 | 语言区域，默认 `zh-CN` |
-| `plugins` | string[] | 否 | 要激活的插件 ID 列表 |
-| `id` | string | 否 | 客户端自定义会话 ID（如不提供则自动生成 `{worldId}-{uuid8}`） |
+| 字段      | 类型     | 必填 | 说明                                                          |
+| --------- | -------- | ---- | ------------------------------------------------------------- |
+| `worldId` | string   | 否   | 关联的世界 ID（校验: `/^[a-z0-9_-]{1,64}$/i`）                |
+| `locale`  | string   | 否   | 语言区域，默认 `zh-CN`                                        |
+| `plugins` | string[] | 否   | 要激活的插件 ID 列表                                          |
+| `id`      | string   | 否   | 客户端自定义会话 ID（如不提供则自动生成 `{worldId}-{uuid8}`） |
 
 世界包字段会影响准备页和 session 初始化：
 
@@ -738,8 +766,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 **参数:**
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
+| 参数 | 位置 | 说明    |
+| ---- | ---- | ------- |
 | `id` | 路径 | 会话 ID |
 
 **响应 200:**
@@ -750,7 +778,11 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
   "worldId": "cloudmere",
   "status": "active",
   "turnCount": 3,
-  "preGameCompleted": ["pregame", "world-init/schema-gen", "char-creator/player-init"],
+  "preGameCompleted": [
+    "pregame",
+    "world-init/schema-gen",
+    "char-creator/player-init"
+  ],
   "locale": "zh-CN",
   "activePlugins": ["pregame", "narrator"],
   "createdAt": "2025-01-15T10:00:00.000Z",
@@ -772,8 +804,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 **参数:**
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
+| 参数 | 位置 | 说明    |
+| ---- | ---- | ------- |
 | `id` | 路径 | 会话 ID |
 
 **请求体:**
@@ -794,6 +826,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 - `runtimeModelOverrides`(可选,object) — PR-6 引入。Per-runtime 模型 slot 覆盖,key 为 runtime ID(`pluginId` 或 `pluginId/runtimeName`,必须匹配 `/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?$/`),value 为 `llm.toml` 中定义的 slot 名(如 `default` / `fast` / `balance`)。框架在每次 turn 执行前快照该字段,resolver 优先查找 session override → 然后 fallback 到 `manifest.model` → 最后 `default`。空对象 `{}` 清除所有覆盖。插件列表与 Session Prep 会暴露 runtime 的声明 slot；若声明 slot 未配置，UI 会提示补充 `[covel.<slot>]`，不会静默改绑到不相关的文本 slot。**Provider 与 API key 仍走前端 localStorage + `X-Provider-Keys` header,不入库,以保护隐私。**
 
 **校验规则(runtimeModelOverrides):**
+
 - 必须是对象(`null` / 数组 / 非对象类型 → 400)
 - 最多 64 条目
 - 空字符串 key / 非字符串 value / 不匹配 pattern 的 key 会被静默剥离
@@ -807,8 +840,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 **参数:**
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
+| 参数 | 位置 | 说明    |
+| ---- | ---- | ------- |
 | `id` | 路径 | 会话 ID |
 
 **响应 200:**
@@ -839,8 +872,8 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 **参数:**
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
+| 参数 | 位置 | 说明    |
+| ---- | ---- | ------- |
 | `id` | 路径 | 会话 ID |
 
 **请求体:**
@@ -853,11 +886,11 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 }
 ```
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `message` | string | 是 | 玩家的文字输入 |
-| `locale` | string | 否 | 覆盖会话语言 |
-| `model` | string | 否 | 覆盖 LLM 模型（API 级别） |
+| 字段      | 类型   | 必填 | 说明                      |
+| --------- | ------ | ---- | ------------------------- |
+| `message` | string | 是   | 玩家的文字输入            |
+| `locale`  | string | 否   | 覆盖会话语言              |
+| `model`   | string | 否   | 覆盖 LLM 模型（API 级别） |
 
 **响应:**
 
@@ -907,8 +940,8 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 **参数:**
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
+| 参数 | 位置 | 说明    |
+| ---- | ---- | ------- |
 | `id` | 路径 | 会话 ID |
 
 **请求体（批量提交）:**
@@ -930,20 +963,20 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 }
 ```
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `turnId` | string | 是 | 产生该交互的 Turn ID |
-| `submissions` | Submission[] | 是* | 提交数组 |
+| 字段          | 类型         | 必填 | 说明                 |
+| ------------- | ------------ | ---- | -------------------- |
+| `turnId`      | string       | 是   | 产生该交互的 Turn ID |
+| `submissions` | Submission[] | 是\* | 提交数组             |
 
 \*也支持遗留的单表单格式 `{ formId, values }`。
 
 **Submission 对象:**
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `interactionId` | string | 交互 ID，来自 Turn 输出的 `pendingInputs` |
-| `type` | `"form"` \| `"choice"` \| `"confirmation"` | 交互类型 |
-| `values` | object | 玩家输入的值 |
+| 字段            | 类型                                       | 说明                                      |
+| --------------- | ------------------------------------------ | ----------------------------------------- |
+| `interactionId` | string                                     | 交互 ID，来自 Turn 输出的 `pendingInputs` |
+| `type`          | `"form"` \| `"choice"` \| `"confirmation"` | 交互类型                                  |
+| `values`        | object                                     | 玩家输入的值                              |
 
 **三种交互类型的 values 格式：**
 
@@ -1035,8 +1068,8 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 **参数:**
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
+| 参数 | 位置 | 说明    |
+| ---- | ---- | ------- |
 | `id` | 路径 | 会话 ID |
 
 **请求体:**
@@ -1048,7 +1081,11 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
   "payload": {
     "turnId": "a1b2c3d4-...",
     "submissions": [
-      { "interactionId": "char-form", "type": "form", "values": { "name": "艾尔文" } }
+      {
+        "interactionId": "char-form",
+        "type": "form",
+        "values": { "name": "艾尔文" }
+      }
     ]
   }
 }
@@ -1074,12 +1111,12 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 }
 ```
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `pluginId` | string | 插件 ID(框架默认 handler 用 `framework` 占位即可) |
-| `action` | string(可选) | RPC action 名,kebab-case。与 `runtimeId` 互斥 |
-| `runtimeId` | string(可选) | runtime 全名(如 `my-plugin/my-runtime`)。与 `action` 互斥 |
-| `payload` | unknown | handler 的输入数据 / agent runtime 的 manualPayload / function runtime 的 `ctx.manualPayload` |
+| 字段                        | 类型          | 说明                                                                                                                                                                                                  |
+| --------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pluginId`                  | string        | 插件 ID(框架默认 handler 用 `framework` 占位即可)                                                                                                                                                     |
+| `action`                    | string(可选)  | RPC action 名,kebab-case。与 `runtimeId` 互斥                                                                                                                                                         |
+| `runtimeId`                 | string(可选)  | runtime 全名(如 `my-plugin/my-runtime`)。与 `action` 互斥                                                                                                                                             |
+| `payload`                   | unknown       | handler 的输入数据 / agent runtime 的 manualPayload / function runtime 的 `ctx.manualPayload`                                                                                                         |
 | `expectsBackgroundFollower` | boolean(可选) | runtime 级 sync 入口若只是生成 prompt 并预计触发后台 follower，可设为 `true`。框架会立即写入 `_jobs` 占位并返回 202，随后在后台执行入口 runtime 与 follower，避免 UI 等 prompt LLM 完成后才出现任务。 |
 
 **解析顺序(action 级):**
@@ -1089,8 +1126,8 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 **框架默认 action:**
 
-| Action | 说明 |
-|--------|------|
+| Action        | 说明                                                                        |
+| ------------- | --------------------------------------------------------------------------- |
 | `submit-form` | 等同于 submit-inputs:持久化玩家输入、找模板消息、按 `{{字段}}` 填充自然语言 |
 
 **响应 200 — action 级:**
@@ -1098,7 +1135,9 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 ```json
 {
   "status": "ok",
-  "result": { /* 取决于 handler */ }
+  "result": {
+    /* 取决于 handler */
+  }
 }
 ```
 
@@ -1114,7 +1153,9 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
       "pluginId": "dashscope-image-gen",
       "status": "ok",
       "durationMs": 3421,
-      "output": { /* runtime final output (parsed envelope) */ }
+      "output": {
+        /* runtime final output (parsed envelope) */
+      }
     }
   ],
   "durationMs": 3480
@@ -1205,12 +1246,12 @@ value         : {
 
 **错误响应:**
 
-| 状态码 | 触发条件 |
-|-------|---------|
-| 400 | `pluginId` 缺失 / `action` 与 `runtimeId` 同时设置或同时缺失 / `RpcValidationError` / `plugin-mismatch`(runtimeId 不属于 pluginId) |
-| 404 | 会话不存在 / `unknown-action`(action 未注册) / `runtime-not-active`(runtimeId 未加载到该 session) |
-| 429 | `queue-full`(community trust 的待批准队列满) |
-| 500 | handler 抛出未处理异常 / handler 模块加载失败 / `runtime-execution-failed` / `background-enqueue-failed` |
+| 状态码 | 触发条件                                                                                                                           |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `pluginId` 缺失 / `action` 与 `runtimeId` 同时设置或同时缺失 / `RpcValidationError` / `plugin-mismatch`(runtimeId 不属于 pluginId) |
+| 404    | 会话不存在 / `unknown-action`(action 未注册) / `runtime-not-active`(runtimeId 未加载到该 session)                                  |
+| 429    | `queue-full`(community trust 的待批准队列满)                                                                                       |
+| 500    | handler 抛出未处理异常 / handler 模块加载失败 / `runtime-execution-failed` / `background-enqueue-failed`                           |
 
 > 注意: background 模式下 runtime 内部异常 **不会**映射为 5xx HTTP 状态 —— 202 已经发出,失败信息写入 `_jobs/{jobId}.value.error`,前端通过 SSE 感知。
 
@@ -1223,12 +1264,12 @@ description: ...
 rpc:
   regenerate:
     handler: ./rpc/regenerate.js
-    input: ./rpc/regenerate.schema.json   # 可选
-    streaming: false                       # 默认 false
+    input: ./rpc/regenerate.schema.json # 可选
+    streaming: false # 默认 false
     description: 重新生成上一次叙事
   cancel:
     handler: ./rpc/cancel.js
-    trustLevel: builtin                    # 强制 builtin 信任
+    trustLevel: builtin # 强制 builtin 信任
 ---
 ```
 
@@ -1274,9 +1315,9 @@ rpc:
 
 #### `POST /api/sessions/:id/plugin-rpc` 的额外响应状态
 
-| 状态码 | 含义 |
-|-------|------|
-| 202 | `community` 信任级别需要 approval。响应体见下 |
+| 状态码 | 含义                                          |
+| ------ | --------------------------------------------- |
+| 202    | `community` 信任级别需要 approval。响应体见下 |
 
 **202 响应体:**
 
@@ -1289,7 +1330,9 @@ rpc:
     "sessionId": "sess-...",
     "pluginId": "third-party-plugin",
     "action": "do-thing",
-    "payload": { /* 原始 payload */ },
+    "payload": {
+      /* 原始 payload */
+    },
     "trustLevel": "community",
     "requestedAt": "2026-04-15T20:00:00.000Z",
     "description": "Run the thing"
@@ -1324,10 +1367,10 @@ rpc:
 }
 ```
 
-| 字段 | 类型 | 必需 | 说明 |
-|------|------|------|------|
-| `decision` | `"allow"` \| `"deny"` | 是 | 玩家选择 |
-| `scope` | `"once"` \| `"session"` | 仅 allow 时 | `once`(默认):允许这一次后过期,需重新批准;`session`:缓存到本 session 结束 |
+| 字段       | 类型                    | 必需        | 说明                                                                     |
+| ---------- | ----------------------- | ----------- | ------------------------------------------------------------------------ |
+| `decision` | `"allow"` \| `"deny"`   | 是          | 玩家选择                                                                 |
+| `scope`    | `"once"` \| `"session"` | 仅 allow 时 | `once`(默认):允许这一次后过期,需重新批准;`session`:缓存到本 session 结束 |
 
 **响应 200:**
 
@@ -1336,24 +1379,26 @@ rpc:
   "ok": true,
   "decision": "allow",
   "scope": "once",
-  "pending": { /* 原始 pending 数据,已从队列移除 */ }
+  "pending": {
+    /* 原始 pending 数据,已从队列移除 */
+  }
 }
 ```
 
 **错误响应:**
 
-| 状态码 | 触发条件 |
-|-------|---------|
-| 400 | `decision` 字段缺失 / 非 `allow` 或 `deny` / `scope` 非法 |
-| 404 | `approvalId` 不存在或已被消费 |
+| 状态码 | 触发条件                                                  |
+| ------ | --------------------------------------------------------- |
+| 400    | `decision` 字段缺失 / 非 `allow` 或 `deny` / `scope` 非法 |
+| 404    | `approvalId` 不存在或已被消费                             |
 
 #### 信任等级与 approval 行为
 
-| 信任等级 | 来源 | Approval 行为 |
-|---------|------|--------------|
-| `builtin` | 框架自带 / 框架默认 handler | 永远直接执行 |
-| `official` | 维护团队白名单 | 永远直接执行 |
-| `community` | 第三方,默认级别 | 每次都需要玩家批准,除非 session-cache 命中 |
+| 信任等级    | 来源                        | Approval 行为                              |
+| ----------- | --------------------------- | ------------------------------------------ |
+| `builtin`   | 框架自带 / 框架默认 handler | 永远直接执行                               |
+| `official`  | 维护团队白名单              | 永远直接执行                               |
+| `community` | 第三方,默认级别             | 每次都需要玩家批准,除非 session-cache 命中 |
 
 > One-time grant 的 TTL 为 60 秒。如果玩家批准后 60 秒内没有发起对应的 dispatch,grant 会过期,需要重新走 dialog 流程。
 
@@ -1406,8 +1451,8 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 **参数:**
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
+| 参数 | 位置 | 说明                     |
+| ---- | ---- | ------------------------ |
 | `id` | 路径 | 插件 ID（如 `narrator`） |
 
 **响应 200:**
@@ -1510,8 +1555,8 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 **参数:**
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
+| 参数 | 位置 | 说明    |
+| ---- | ---- | ------- |
 | `id` | 路径 | 会话 ID |
 
 **响应 200:**
@@ -1565,8 +1610,8 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 **参数:**
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
+| 参数 | 位置 | 说明    |
+| ---- | ---- | ------- |
 | `id` | 路径 | 会话 ID |
 
 **响应:**
@@ -1606,10 +1651,10 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 **参数:**
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
-| `id` | 路径 | 会话 ID |
-| `pluginId` | 路径 | 插件 ID（如 `world-init`） |
+| 参数        | 位置 | 说明                                   |
+| ----------- | ---- | -------------------------------------- |
+| `id`        | 路径 | 会话 ID                                |
+| `pluginId`  | 路径 | 插件 ID（如 `world-init`）             |
 | `namespace` | 路径 | 数据命名空间（如 `schema`, `entries`） |
 
 **响应:**
@@ -1731,7 +1776,9 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 ```json
 {
   "suspensionId": "susp_abc123",
-  "data": { /* shape 必须匹配 suspension.resumeSchema */ }
+  "data": {
+    /* shape 必须匹配 suspension.resumeSchema */
+  }
 }
 ```
 
@@ -1745,12 +1792,12 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 **错误码:**
 
-| 状态 | 触发条件 |
-|------|---------|
-| `400` | 缺少 `X-Provider-Keys`、JSON body 错误、`suspensionId` 缺失或 schema 校验失败 |
+| 状态  | 触发条件                                                                          |
+| ----- | --------------------------------------------------------------------------------- |
+| `400` | 缺少 `X-Provider-Keys`、JSON body 错误、`suspensionId` 缺失或 schema 校验失败     |
 | `404` | session、suspension 不存在，或 suspension 已 resolved，或 runtime manifest 找不到 |
-| `500` | `resumeSuspendedRuntime()` 抛出错误 |
-| `503` | `COVEL_SUSPEND_V1` 未启用 |
+| `500` | `resumeSuspendedRuntime()` 抛出错误                                               |
+| `503` | `COVEL_SUSPEND_V1` 未启用                                                         |
 
 #### `GET /api/sessions/:id/suspensions`
 
@@ -1768,8 +1815,14 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
       "runtimeId": "core-foo/bar",
       "pluginId": "core-foo",
       "reason": "需要玩家选择路线",
-      "resumeSchema": { "type": "object", "required": ["choice"], "properties": { "choice": { "type": "string" } } },
-      "pendingContinuation": { /* runtime-internal serialized state */ },
+      "resumeSchema": {
+        "type": "object",
+        "required": ["choice"],
+        "properties": { "choice": { "type": "string" } }
+      },
+      "pendingContinuation": {
+        /* runtime-internal serialized state */
+      },
       "createdAt": "2026-04-12T00:00:00.000Z",
       "resolvedAt": null
     }
@@ -1813,12 +1866,22 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
     "payload": {
       "schemaVersion": 1,
       "turnId": "turn-42",
-      "characters": [ /* ... */ ],
-      "stateEntries": [ /* ... */ ],
-      "pluginData": [ /* ... */ ],
-      "workingMemory": [ /* ... */ ],
+      "characters": [
+        /* ... */
+      ],
+      "stateEntries": [
+        /* ... */
+      ],
+      "pluginData": [
+        /* ... */
+      ],
+      "workingMemory": [
+        /* ... */
+      ],
       "lorebookEntries": [],
-      "suspensions": [ /* 未解决的 SuspensionRecord[] */ ],
+      "suspensions": [
+        /* 未解决的 SuspensionRecord[] */
+      ],
       "messagesCursor": "tm_abc"
     },
     "createdAt": "2026-04-13T00:00:00.000Z"
@@ -1833,7 +1896,11 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 列出指定 session 的所有快照（`auto` / `manual` / `fork`），按 `createdAt` 升序。
 
 ```json
-{ "snapshots": [ /* SnapshotRecord[] */ ] }
+{
+  "snapshots": [
+    /* SnapshotRecord[] */
+  ]
+}
 ```
 
 session 不存在时返回 `404`。
@@ -1847,6 +1914,7 @@ session 不存在时返回 `404`。
 ```
 
 服务端会：
+
 1. 创建新 sessionId（`{worldId}-{uuid8}`）；
 2. 复用父 session 的 locale / activePlugins / status / turnCount / preGameCompleted；
 3. **拷贝** characters / state entries / plugin data / working memory / state schemas / unresolved suspensions 到新 session；
@@ -1881,8 +1949,8 @@ session 不存在时返回 `404`。
 
 **参数:**
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
+| 参数 | 位置 | 说明    |
+| ---- | ---- | ------- |
 | `id` | 路径 | 会话 ID |
 
 **响应:**
@@ -1911,8 +1979,8 @@ session 不存在时返回 `404`。
 
 **参数:**
 
-| 参数 | 位置 | 说明 |
-|------|------|------|
+| 参数 | 位置 | 说明    |
+| ---- | ---- | ------- |
 | `id` | 路径 | 会话 ID |
 
 **请求体:**
@@ -1928,14 +1996,14 @@ session 不存在时返回 `404`。
 }
 ```
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `id` | string | 是 | 角色 ID |
-| `name` | string | 是 | 角色名称 |
-| `type` | string | 是 | 角色类型（如 `player`, `npc`） |
-| `description` | string | 否 | 角色描述 |
-| `fields` | object | 否 | 自定义属性（JSON） |
-| `version` | number | 是 | 版本号 |
+| 字段          | 类型   | 必填 | 说明                           |
+| ------------- | ------ | ---- | ------------------------------ |
+| `id`          | string | 是   | 角色 ID                        |
+| `name`        | string | 是   | 角色名称                       |
+| `type`        | string | 是   | 角色类型（如 `player`, `npc`） |
+| `description` | string | 否   | 角色描述                       |
+| `fields`      | object | 否   | 自定义属性（JSON）             |
+| `version`     | number | 是   | 版本号                         |
 
 **响应:**
 
@@ -1965,11 +2033,11 @@ session 不存在时返回 `404`。
 
 **查询参数:**
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `sessionId` | string | 是 | 会话 ID |
-| `topics` | string | 否 | 逗号分隔的 topic 过滤（如 `runtime,state`） |
-| `lastEventId` | string | 否 | 从此 ID 之后重放事件（用于断线重连） |
+| 参数          | 类型   | 必填 | 说明                                        |
+| ------------- | ------ | ---- | ------------------------------------------- |
+| `sessionId`   | string | 是   | 会话 ID                                     |
+| `topics`      | string | 否   | 逗号分隔的 topic 过滤（如 `runtime,state`） |
+| `lastEventId` | string | 否   | 从此 ID 之后重放事件（用于断线重连）        |
 
 **示例:**
 
@@ -2028,12 +2096,12 @@ id: evt-002
 }
 ```
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `topic` | string | 是 | 事件主题 |
-| `payload` | object | 否 | 事件负载数据 |
-| `sessionId` | string | 是 | 目标会话 ID |
-| `targetRuntime` | string | 否 | 指定接收事件的 Runtime |
+| 字段            | 类型   | 必填 | 说明                   |
+| --------------- | ------ | ---- | ---------------------- |
+| `topic`         | string | 是   | 事件主题               |
+| `payload`       | object | 否   | 事件负载数据           |
+| `sessionId`     | string | 是   | 目标会话 ID            |
+| `targetRuntime` | string | 否   | 指定接收事件的 Runtime |
 
 **响应:**
 
@@ -2074,10 +2142,10 @@ id: evt-002
 }
 ```
 
-| `payload` 字段 | 适用 `type` | 说明 |
-|----------------|-------------|------|
-| `content` | `send_message` | 玩家自然语言输入。`actions.ts` 优先读取此字段。 |
-| `command` | `execute_command` | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。 |
+| `payload` 字段 | 适用 `type`       | 说明                                                 |
+| -------------- | ----------------- | ---------------------------------------------------- |
+| `content`      | `send_message`    | 玩家自然语言输入。`actions.ts` 优先读取此字段。      |
+| `command`      | `execute_command` | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。 |
 
 > 旧版示例曾使用 `payload.message`，但服务端从未读取该字段，已统一为 `content` / `command`。
 
@@ -2085,13 +2153,13 @@ id: evt-002
 
 ```ts
 interface SseEnvelope {
-  type: string;            // 事件子类型，参见下方「SSE 协议」
-  requestId: string;       // 请求关联 ID（来自请求体）
-  traceId: string;         // 本回合的 trace ID
+  type: string; // 事件子类型，参见下方「SSE 协议」
+  requestId: string; // 请求关联 ID（来自请求体）
+  traceId: string; // 本回合的 trace ID
   sessionId: string;
   turnId?: string;
-  flowId: string;          // 等于 traceId
-  seq: number;             // 该流内自增
+  flowId: string; // 等于 traceId
+  seq: number; // 该流内自增
   timestamp: string;
   payload: Record<string, unknown>;
 }
@@ -2137,11 +2205,11 @@ AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、
 }
 ```
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `concept` | string | 是 | 世界概念描述（最多 2000 字符） |
-| `locale` | string | 否 | 语言区域，默认 `zh-CN` |
-| `model` | string | 否 | 覆盖 LLM 模型 |
+| 字段      | 类型   | 必填 | 说明                           |
+| --------- | ------ | ---- | ------------------------------ |
+| `concept` | string | 是   | 世界概念描述（最多 2000 字符） |
+| `locale`  | string | 否   | 语言区域，默认 `zh-CN`         |
+| `model`   | string | 否   | 覆盖 LLM 模型                  |
 
 **响应 200:** 生成的世界包数据。
 
@@ -2231,13 +2299,13 @@ AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、
 
 **默认禁用。** 必须显式启用：
 
-| 条件 | 行为 |
-|------|------|
-| `COVEL_MEDIA_CLEANUP_ENABLED` 未设为 truthy（`true` / `1`） | 403 `{ "error": "cleanup endpoint disabled", "code": "forbidden" }` |
-| `DEPLOYMENT_TIER=commercial` | 503 `{ "error": "cleanup endpoint not available in this deployment tier", "code": "unavailable" }` — 在管理员鉴权中间件就绪前永远不在商业部署可用 |
-| `dryRun:false` 且无 `X-Confirm-Cleanup: yes` 请求头 | 400 `{ "error": "confirmation header missing: …", "code": "invalid_request" }` |
-| 同一时刻第二次并发请求 | 429 `{ "error": "Operation already in progress" }` (singleFlight) |
-| 任一会话的扫描行数超过 `scanLimit`（默认 1000） | 400 `{ "error": "scan limit exceeded for session …", "code": "limit_exceeded" }` |
+| 条件                                                        | 行为                                                                                                                                              |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `COVEL_MEDIA_CLEANUP_ENABLED` 未设为 truthy（`true` / `1`） | 403 `{ "error": "cleanup endpoint disabled", "code": "forbidden" }`                                                                               |
+| `DEPLOYMENT_TIER=commercial`                                | 503 `{ "error": "cleanup endpoint not available in this deployment tier", "code": "unavailable" }` — 在管理员鉴权中间件就绪前永远不在商业部署可用 |
+| `dryRun:false` 且无 `X-Confirm-Cleanup: yes` 请求头         | 400 `{ "error": "confirmation header missing: …", "code": "invalid_request" }`                                                                    |
+| 同一时刻第二次并发请求                                      | 429 `{ "error": "Operation already in progress" }` (singleFlight)                                                                                 |
+| 任一会话的扫描行数超过 `scanLimit`（默认 1000）             | 400 `{ "error": "scan limit exceeded for session …", "code": "limit_exceeded" }`                                                                  |
 
 **请求体:**
 
@@ -2299,10 +2367,10 @@ COVEL_MEDIA_CLEANUP_ENABLED=true \
 
 Covel 有两条独立的 SSE 流，**信封格式和帧格式都不同**：
 
-| 端点 | 帧形态 | 信封 | 客户端 | 说明 |
-|------|--------|------|--------|------|
-| `POST /api/actions` | data-only（`data: {...}`，无 `event:` 头） | `SseEnvelope`（带 `requestId/traceId/flowId/seq`） | `fetch()` + `ReadableStream`（`api.ts:sendAction`） | 回合内主流：narrative / runtime lifecycle / 工具调用 trace 等 |
-| `GET /api/events/stream` | 命名事件（`event: <type>\ndata: {...}`） | `ProtocolEvent`（带 `id/source`），并由 server 经 EventBus 广播 | `EventSource` + `addEventListener('<type>')`（`subscription.ts`） | 回合外辅助通道：跨 session 通知 / 持久订阅 / 重连补放 |
+| 端点                     | 帧形态                                     | 信封                                                            | 客户端                                                            | 说明                                                          |
+| ------------------------ | ------------------------------------------ | --------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------- |
+| `POST /api/actions`      | data-only（`data: {...}`，无 `event:` 头） | `SseEnvelope`（带 `requestId/traceId/flowId/seq`）              | `fetch()` + `ReadableStream`（`api.ts:sendAction`）               | 回合内主流：narrative / runtime lifecycle / 工具调用 trace 等 |
+| `GET /api/events/stream` | 命名事件（`event: <type>\ndata: {...}`）   | `ProtocolEvent`（带 `id/source`），并由 server 经 EventBus 广播 | `EventSource` + `addEventListener('<type>')`（`subscription.ts`） | 回合外辅助通道：跨 session 通知 / 持久订阅 / 重连补放         |
 
 > 关键差异：`/api/actions` 使用 data-only 帧，前端**无法**通过 `EventSource.addEventListener` 订阅；`/api/events/stream` 才是命名事件。
 
@@ -2310,59 +2378,59 @@ Covel 有两条独立的 SSE 流，**信封格式和帧格式都不同**：
 
 完整定义见 `packages/shared/src/types/protocol.ts`。
 
-| 类型 | 分类 | 说明 |
-|------|------|------|
-| `narrative.delta` | 叙事 | 叙事文本增量（逐 token 流式） |
-| `narrative.completed` | 叙事 | 叙事文本完成 |
-| `interaction.requested` | 交互 | 请求玩家输入（表单/选择/确认） |
-| `interaction.completed` | 交互 | 玩家交互完成 |
-| `ui.rendered` | UI | `ui.render` proposal commit 后发出 |
-| `ui.part.update` | UI | UI part 状态更新（每个 part 一条） |
-| `state.changed` | 状态 | 游戏状态变更 |
-| `state.snapshot` | 状态 | 状态快照 |
-| `state.snapshot.created` | 状态 | 自动 / 手动 / fork 写入 snapshot 后发出（需 `COVEL_SNAPSHOTS_V1=1`） |
-| `session.forked` | 会话 | `POST /api/sessions/:id/fork` 物化子 session 后发出 |
-| `execution.started` | 执行生命周期 | Turn 执行开始 |
-| `runtime.started` | 执行生命周期 | 单个 Runtime 开始执行 |
-| `runtime.completed` | 执行生命周期 | 单个 Runtime 执行完成 |
-| `runtime.failed` | 执行生命周期 | Runtime 执行失败 |
-| `execution.completed` | 执行生命周期 | Turn 执行完成 |
-| `record.updated` | 会话生命周期 | 记录更新（角色、任务等） |
-| `event.emitted` | 会话生命周期 | 事件发射 |
-| `asset.progress` | 资产 | 多模态生成进度（`0..100`） |
-| `asset.generated` | 资产 | `asset.generate` proposal commit 后发出 |
-| `world.dimensions.changed` | 世界 | 世界维度文件变更（热更新） |
-| `plugin-data.changed` | 插件数据 | `plugin-data-set` / DELETE / batch 等所有写路径 |
-| `turn.suspended` | 流程控制 | `suspend()` 工具序列化 pendingContinuation（需 `COVEL_SUSPEND_V1=1`） |
-| `turn.resumed` | 流程控制 | `POST /api/sessions/:id/resume` 重启 runtime |
-| `error.occurred` | 系统 | 执行错误 |
-| `connection.restored` | 系统 | 连接恢复 |
+| 类型                       | 分类         | 说明                                                                  |
+| -------------------------- | ------------ | --------------------------------------------------------------------- |
+| `narrative.delta`          | 叙事         | 叙事文本增量（逐 token 流式）                                         |
+| `narrative.completed`      | 叙事         | 叙事文本完成                                                          |
+| `interaction.requested`    | 交互         | 请求玩家输入（表单/选择/确认）                                        |
+| `interaction.completed`    | 交互         | 玩家交互完成                                                          |
+| `ui.rendered`              | UI           | `ui.render` proposal commit 后发出                                    |
+| `ui.part.update`           | UI           | UI part 状态更新（每个 part 一条）                                    |
+| `state.changed`            | 状态         | 游戏状态变更                                                          |
+| `state.snapshot`           | 状态         | 状态快照                                                              |
+| `state.snapshot.created`   | 状态         | 自动 / 手动 / fork 写入 snapshot 后发出（需 `COVEL_SNAPSHOTS_V1=1`）  |
+| `session.forked`           | 会话         | `POST /api/sessions/:id/fork` 物化子 session 后发出                   |
+| `execution.started`        | 执行生命周期 | Turn 执行开始                                                         |
+| `runtime.started`          | 执行生命周期 | 单个 Runtime 开始执行                                                 |
+| `runtime.completed`        | 执行生命周期 | 单个 Runtime 执行完成                                                 |
+| `runtime.failed`           | 执行生命周期 | Runtime 执行失败                                                      |
+| `execution.completed`      | 执行生命周期 | Turn 执行完成                                                         |
+| `record.updated`           | 会话生命周期 | 记录更新（角色、任务等）                                              |
+| `event.emitted`            | 会话生命周期 | 事件发射                                                              |
+| `asset.progress`           | 资产         | 多模态生成进度（`0..100`）                                            |
+| `asset.generated`          | 资产         | `asset.generate` proposal commit 后发出                               |
+| `world.dimensions.changed` | 世界         | 世界维度文件变更（热更新）                                            |
+| `plugin-data.changed`      | 插件数据     | `plugin-data-set` / DELETE / batch 等所有写路径                       |
+| `turn.suspended`           | 流程控制     | `suspend()` 工具序列化 pendingContinuation（需 `COVEL_SUSPEND_V1=1`） |
+| `turn.resumed`             | 流程控制     | `POST /api/sessions/:id/resume` 重启 runtime                          |
+| `error.occurred`           | 系统         | 执行错误                                                              |
+| `connection.restored`      | 系统         | 连接恢复                                                              |
 
 ### 实现私有事件（不在 `ProtocolEventType` 内）
 
 下列事件**只**经 `/api/actions` 流转发，未来稳定后才会进 enum。当前消费方需做兼容性处理：
 
-| 事件 | 来源 | 说明 |
-|------|------|------|
-| `runtime.skipped` | `actions.ts` | runtime 因 cooldown / startTurn / maxTriggerCount 跳过 |
-| `character.upserted` | `session-kernel.ts` | `character.upsert` proposal commit 后发出（与 `record.updated` 平行） |
-| `tool.calling` / `tool.completed` / `tool.failed` | TurnEmitter | 工具调用 trace（debug timeline 用） |
-| `llm.calling` / `llm.responded` / `message.completed` | TurnEmitter | LLM 调用 trace |
-| `block.emitted` / `state.patch.applied` | TurnEmitter | 块发出 / state patch 应用 trace |
-| `hook.fired` / `hook.rewrote` / `hook.aborted` | TurnEmitter | Hook 行为 trace |
+| 事件                                                  | 来源                | 说明                                                                  |
+| ----------------------------------------------------- | ------------------- | --------------------------------------------------------------------- |
+| `runtime.skipped`                                     | `actions.ts`        | runtime 因 cooldown / startTurn / maxTriggerCount 跳过                |
+| `character.upserted`                                  | `session-kernel.ts` | `character.upsert` proposal commit 后发出（与 `record.updated` 平行） |
+| `tool.calling` / `tool.completed` / `tool.failed`     | TurnEmitter         | 工具调用 trace（debug timeline 用）                                   |
+| `llm.calling` / `llm.responded` / `message.completed` | TurnEmitter         | LLM 调用 trace                                                        |
+| `block.emitted` / `state.patch.applied`               | TurnEmitter         | 块发出 / state patch 应用 trace                                       |
+| `hook.fired` / `hook.rewrote` / `hook.aborted`        | TurnEmitter         | Hook 行为 trace                                                       |
 
 ### 信封格式
 
 ```typescript
 // /api/actions data-only 帧每条 data: 的形态
 interface SseEnvelope {
-  type: string;            // 见上表 + 实现私有事件
+  type: string; // 见上表 + 实现私有事件
   requestId: string;
   traceId: string;
   sessionId: string;
   turnId?: string;
-  flowId: string;          // = traceId
-  seq: number;             // 该流内自增
+  flowId: string; // = traceId
+  seq: number; // 该流内自增
   timestamp: string;
   payload: Record<string, unknown>;
 }
@@ -2422,12 +2490,12 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 
 ### 存储后端对比
 
-| 能力 | Memory | SQLite | PostgreSQL |
-|------|--------|--------|------------|
-| 持久化 | 否 (重启丢失) | 是 (本地文件) | 是 (远程数据库) |
-| 并发 | 单进程 | 单进程 | 多进程（`pg_advisory_lock` 实现 session 级跨进程串行化） |
-| 适用场景 | 测试 / 一次性 demo | 单机部署（默认） | 生产环境 |
-| 配置 | `STORE_BACKEND=memory` | 默认（`STORE_BACKEND=sqlite`，可显式指定） | `STORE_BACKEND=pg` + `DATABASE_URL` |
+| 能力     | Memory                 | SQLite                                     | PostgreSQL                                               |
+| -------- | ---------------------- | ------------------------------------------ | -------------------------------------------------------- |
+| 持久化   | 否 (重启丢失)          | 是 (本地文件)                              | 是 (远程数据库)                                          |
+| 并发     | 单进程                 | 单进程                                     | 多进程（`pg_advisory_lock` 实现 session 级跨进程串行化） |
+| 适用场景 | 测试 / 一次性 demo     | 单机部署（默认）                           | 生产环境                                                 |
+| 配置     | `STORE_BACKEND=memory` | 默认（`STORE_BACKEND=sqlite`，可显式指定） | `STORE_BACKEND=pg` + `DATABASE_URL`                      |
 
 > **多进程部署 session 锁**：当 `STORE_BACKEND=pg` 时，服务器启动日志会输出 `session lock: pg-advisory`。每次 `/api/actions` / `/api/sessions/:id/turn` / `/api/sessions/:id/resume` 都会在专用 PG 连接上拿到 `pg_advisory_lock(hash(sessionId))`，确保同一 session 在任意时刻只有一个 Node 进程执行 turn。Memory / SQLite 后端使用进程内 `Map` 锁，足以覆盖单进程场景。
 
@@ -2435,13 +2503,13 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 
 完整 registry 见 [`docs/guide/env-registry.md`](../guide/env-registry.md)。
 
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `STORE_BACKEND` | 存储后端类型 | `sqlite` |
-| `SQLITE_PATH` | SQLite 数据库路径 | `./data/covel.db` |
-| `DATABASE_URL` | PostgreSQL 连接字符串 | - |
-| `SERVER_PORT` | 服务器端口 | `3001` |
-| `DEPLOYMENT_TIER` | 部署层级 | - |
-| `CORS_ORIGIN` | CORS 允许的源 | - |
-| `ENABLE_DEBUG_PAGE` | 启用调试页面 | - |
-| `RATE_LIMIT_RPM` | 速率限制 (请求/分钟) | - |
+| 变量                | 说明                  | 默认值            |
+| ------------------- | --------------------- | ----------------- |
+| `STORE_BACKEND`     | 存储后端类型          | `sqlite`          |
+| `SQLITE_PATH`       | SQLite 数据库路径     | `./data/covel.db` |
+| `DATABASE_URL`      | PostgreSQL 连接字符串 | -                 |
+| `SERVER_PORT`       | 服务器端口            | `3001`            |
+| `DEPLOYMENT_TIER`   | 部署层级              | -                 |
+| `CORS_ORIGIN`       | CORS 允许的源         | -                 |
+| `ENABLE_DEBUG_PAGE` | 启用调试页面          | -                 |
+| `RATE_LIMIT_RPM`    | 速率限制 (请求/分钟)  | -                 |

@@ -271,21 +271,6 @@ const perRequestLlm = createPerRequestLlmMiddleware({
 	defaultLlmAdapter: llmAdapter,
 	defaultPluginGateway: pluginGateway,
 });
-const api = await bootstrapApi({
-	pluginsDir: bundledPluginsDir,
-	pluginsDirs,
-	llmAdapter,
-	pluginGateway,
-	pluginUtils,
-	store,
-	storeBackend,
-	mediaStore,
-	ensureEmbeddingLock,
-	preferredMemorySlot,
-	perRequestMiddleware: [perRequestLlm],
-	sessionLock,
-});
-
 // ── Seed worlds ──────────────────────────────────────────────────
 // Bundled worlds are always seeded. When COVEL_USER_WORLDS_DIR is set
 // (desktop app points it at userData/worlds), user-created worlds are
@@ -297,6 +282,23 @@ const worldsDirs = [bundledWorldsDir];
 if (userWorldsDir && userWorldsDir !== bundledWorldsDir) {
 	worldsDirs.push(userWorldsDir);
 }
+
+const api = await bootstrapApi({
+	pluginsDir: bundledPluginsDir,
+	pluginsDirs,
+	worldsDirs,
+	covelHome: env.covelHome,
+	llmAdapter,
+	pluginGateway,
+	pluginUtils,
+	store,
+	storeBackend,
+	mediaStore,
+	ensureEmbeddingLock,
+	preferredMemorySlot,
+	perRequestMiddleware: [perRequestLlm],
+	sessionLock,
+});
 
 for (const dir of worldsDirs) {
 	try {

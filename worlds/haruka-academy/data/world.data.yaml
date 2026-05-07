@@ -1,0 +1,16 @@
+schemaVersion: 1
+sources:
+  dimensions:
+    kind: yaml
+    path: data/dimensions.yaml
+    schema: covel://world/dimensions
+    to: world:metadata.dimensions
+  cast:
+    kind: json
+    path: characters/main-cast.json
+    schema: plugin://character-blueprint/blueprints
+    to: plugin:character-blueprint/blueprints
+    key: id
+    effects:
+      - characters
+    after: dimensions

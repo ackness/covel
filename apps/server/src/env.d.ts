@@ -88,6 +88,8 @@ declare module "hono" {
 		 * `/api/sessions/:id/media-token`, and runtime `ctx.media`.
 		 */
 		mediaStore?: MediaStore;
+		worldsDirs?: readonly string[];
+		covelHome?: string;
 		ensureEmbeddingLock?: EnsureEmbeddingLockFn;
 		hookPipeline?: HookPipeline;
 		/**

@@ -5,12 +5,14 @@
 > **前置要求**：先完成 [零代码](./plugin-authoring-zero-code.md) 和 [进阶（agent + 本地 JS）](./plugin-authoring-agent.md)。
 
 > **读完你能做到**
+>
 > - 从 `@covel/shared` / `@covel/plugin-loader` 导入并正确使用插件相关类型
 > - 用 MockLLM 的响应队列 + 自定义工具 + 多轮 harness 做复杂集成测试
 > - 用 `createApprovalPipeline` 定制工具审批规则（allow / ask / deny）
 > - 在一个插件里组织多个 runtime（`runtimes/*/PLUGIN.md`）
 > - 按发布 checklist 完成社区插件的上架准备
 > - 满足 `I18nText` 规范让插件 UI 文本双语化
+> - 为第三方 world 包约定 `plugin://<pluginId>/<namespace>` 数据 schema，并通过 `worldData` 导入插件数据
 
 ---
 
@@ -21,45 +23,45 @@
 ```typescript
 import type {
   // 插件类型
-  PluginType,           // 'core-plugin' | 'plugin'
-  PluginManifest,       // 完整插件清单
-  RuntimeManifest,      // 运行时清单（PLUGIN.md frontmatter 的解析结果）
+  PluginType, // 'core-plugin' | 'plugin'
+  PluginManifest, // 完整插件清单
+  RuntimeManifest, // 运行时清单（PLUGIN.md frontmatter 的解析结果）
 
   // 触发系统
-  TriggerType,          // 'auto' | 'manual' | 'scheduled' | 'event' | 'error-retry'（conditional 为 reserved）
-  TriggerConfig,        // { type, interval?, condition?, topic?, maxTriggerCount?, cooldownTurns? }
+  TriggerType, // 'auto' | 'manual' | 'scheduled' | 'event' | 'error-retry'（conditional 为 reserved）
+  TriggerConfig, // { type, interval?, condition?, topic?, maxTriggerCount?, cooldownTurns? }
 
   // 输入/输出
-  InputConfig,          // { inject?, tools? }
-  InputInjectDecl,      // { from, field, as }
-  OutputConfig,         // { schema?, recordAs? }
+  InputConfig, // { inject?, tools? }
+  InputInjectDecl, // { from, field, as }
+  OutputConfig, // { schema?, recordAs? }
 
   // 工具
-  ToolsConfig,          // { builtin?, local? }
+  ToolsConfig, // { builtin?, local? }
 
   // 配置
-  ConfigFieldType,      // 'string' | 'integer' | 'number' | 'boolean' | 'enum'
-  PluginConfigField,    // { type, default?, min?, max?, options?, label?, description? }
+  ConfigFieldType, // 'string' | 'integer' | 'number' | 'boolean' | 'enum'
+  PluginConfigField, // { type, default?, min?, max?, options?, label?, description? }
 
   // 运行时数据
-  TurnInput,            // 每轮输入
-  TurnResult,           // 每轮输出
-  RuntimeResult,        // 单个 runtime 的执行结果
-} from '@covel/shared';
+  TurnInput, // 每轮输入
+  TurnResult, // 每轮输出
+  RuntimeResult, // 单个 runtime 的执行结果
+} from "@covel/shared";
 ```
 
 从 `@covel/plugin-loader` 获取加载相关类型：
 
 ```typescript
 import type {
-  ParsedPluginMd,       // 解析后的 PLUGIN.md
-  ParsedReference,      // 解析后的参考文件
-  PluginDiscoveryResult,// 发现结果
-  LoadedRuntime,        // 完全加载的 runtime
-  PluginRegistryEntry,  // 注册表条目
-  PluginSource,         // 'builtin' | 'official' | 'community'
-  PluginTrustInfo,      // { source, requiresApproval, autoLoad }
-} from '@covel/plugin-loader';
+  ParsedPluginMd, // 解析后的 PLUGIN.md
+  ParsedReference, // 解析后的参考文件
+  PluginDiscoveryResult, // 发现结果
+  LoadedRuntime, // 完全加载的 runtime
+  PluginRegistryEntry, // 注册表条目
+  PluginSource, // 'builtin' | 'official' | 'community'
+  PluginTrustInfo, // { source, requiresApproval, autoLoad }
+} from "@covel/plugin-loader";
 ```
 
 ## 2. TestHarness 高级用法
@@ -71,9 +73,9 @@ const mockLLM = new MockLLM();
 
 // 默认响应
 mockLLM.defaultResponse = {
-  content: '你来到了一片神秘的森林...',
+  content: "你来到了一片神秘的森林...",
   toolCalls: [],
-  finishReason: 'stop',
+  finishReason: "stop",
   usage: { inputTokens: 100, outputTokens: 50 },
 };
 ```
@@ -81,27 +83,27 @@ mockLLM.defaultResponse = {
 **注入额外工具：**
 
 ```typescript
-import { tool } from '@covel/tools';
-import { z } from 'zod';
+import { tool } from "@covel/tools";
+import { z } from "zod";
 
 const customTool = tool({
-  name: 'test-helper',
-  description: 'Test helper tool',
+  name: "test-helper",
+  description: "Test helper tool",
   parameters: z.object({ value: z.string() }),
   execute: async (params) => ({ echoed: params.value }),
 });
 
 const harness = await createTestHarness({
-  pluginsDir: path.resolve(__dirname, '../../'),
-  tools: [customTool],  // 额外注册的工具
+  pluginsDir: path.resolve(__dirname, "../../"),
+  tools: [customTool], // 额外注册的工具
 });
 ```
 
 **断言 Store 状态：**
 
 ```typescript
-const harness = await createTestHarness({ pluginsDir: '...' });
-await harness.executeTurn('开始游戏');
+const harness = await createTestHarness({ pluginsDir: "..." });
+await harness.executeTurn("开始游戏");
 
 // 通过 store 检查持久化的数据
 const store = harness.store;
@@ -111,13 +113,13 @@ const store = harness.store;
 **多轮测试：**
 
 ```typescript
-const harness = await createTestHarness({ pluginsDir: '...' });
+const harness = await createTestHarness({ pluginsDir: "..." });
 
 // 第一轮
-const result1 = await harness.executeTurn('开始游戏');
+const result1 = await harness.executeTurn("开始游戏");
 
 // 第二轮（TestHarness 自动递增 turnId）
-const result2 = await harness.executeTurn('我要去探索森林');
+const result2 = await harness.executeTurn("我要去探索森林");
 
 // 断言跨轮状态变化
 expect(mockLLM.calls).toHaveLength(2);
@@ -127,31 +129,31 @@ expect(mockLLM.calls).toHaveLength(2);
 
 工具调用经过 `ApprovalPipeline` 审批。当前默认规则：
 
-| 来源 | 规则 | 说明 |
-|------|------|------|
-| `builtin:*` | allow | 框架内置工具，始终放行 |
-| `local:*` | allow | 插件本地工具，自动放行 |
-| `third-party:*` | deny | 未知来源工具，拒绝执行 |
+| 来源            | 规则  | 说明                   |
+| --------------- | ----- | ---------------------- |
+| `builtin:*`     | allow | 框架内置工具，始终放行 |
+| `local:*`       | allow | 插件本地工具，自动放行 |
+| `third-party:*` | deny  | 未知来源工具，拒绝执行 |
 
 **自定义审批规则（用于测试或特殊场景）：**
 
 ```typescript
-import { createApprovalPipeline } from '@covel/approval';
-import type { PermissionRule } from '@covel/approval';
+import { createApprovalPipeline } from "@covel/approval";
+import type { PermissionRule } from "@covel/approval";
 
 const rules: PermissionRule[] = [
-  { pattern: 'builtin:*', action: 'allow' },
-  { pattern: 'local:*', action: 'allow' },
-  { pattern: 'dangerous-tool', action: 'ask' },    // 需要玩家确认
-  { pattern: 'third-party:*', action: 'deny' },
+  { pattern: "builtin:*", action: "allow" },
+  { pattern: "local:*", action: "allow" },
+  { pattern: "dangerous-tool", action: "ask" }, // 需要玩家确认
+  { pattern: "third-party:*", action: "deny" },
 ];
 
 const pipeline = createApprovalPipeline(store, rules);
 
 // 检查工具是否需要审批
 const result = pipeline.check(
-  { toolName: 'dangerous-tool', sessionId: 'sess-1', turnId: 'turn-1' },
-  'local',
+  { toolName: "dangerous-tool", sessionId: "sess-1", turnId: "turn-1" },
+  "local",
 );
 // result: { needsApproval: true, reason: 'rule-ask' }
 ```
@@ -166,6 +168,7 @@ const result = pipeline.check(
 **来源分类：**
 
 框架 bootstrap 时自动分类：
+
 - `builtinUITools` 中的工具 → `builtin`
 - 插件 `tools/` 目录加载的工具 → `local`
 - 其他 → `third-party`（预留给社区插件）
@@ -251,29 +254,32 @@ export default async function handler(
 
 `FunctionHandlerContext` 暴露的字段(仅列和插件作者最相关的):
 
-| 字段 | 类型 | 用途 |
-|------|------|------|
-| `sessionId` | `string` | 当前 session ID |
-| `turnId` | `string` | 当前 turn ID(触发该 runtime 的 turn) |
-| `pluginId` / `runtimeId` | `string` | 本 runtime 的身份(和 manifest 里一致) |
-| `locale` | `string` | `zh-CN` / `en` / ...,来自 session / 请求 |
-| `store` | `FunctionStoreView` | 绑定当前 session/plugin 的只读 DataStore 视图：`getPluginData(namespace, key)` / `listPluginData(namespace)` / `getSession()` / `listTurnMessages(limit?)`。写入使用 `ctx.pluginData` 或 handler return 值 |
-| `gateway` | `PluginRuntimeGateway?` | 文本/object 生成 + slot 解析。签名见下 |
-| `utils` | `PluginRuntimeUtils?` | SSRF 安全的 URL 校验 + 带重试的 fetch。插件自管 wire 时使用 |
-| `manualPayload` | `unknown?` | 仅在 `POST /plugin-rpc` 手动触发时注入,为请求体的 `payload` 字段 |
-| `triggerEvent` | `{ topic, data }?` | 仅 event 触发时存在,包含触发该 runtime 的事件 |
+| 字段                     | 类型                    | 用途                                                                                                                                                                                                       |
+| ------------------------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sessionId`              | `string`                | 当前 session ID                                                                                                                                                                                            |
+| `turnId`                 | `string`                | 当前 turn ID(触发该 runtime 的 turn)                                                                                                                                                                       |
+| `pluginId` / `runtimeId` | `string`                | 本 runtime 的身份(和 manifest 里一致)                                                                                                                                                                      |
+| `locale`                 | `string`                | `zh-CN` / `en` / ...,来自 session / 请求                                                                                                                                                                   |
+| `store`                  | `FunctionStoreView`     | 绑定当前 session/plugin 的只读 DataStore 视图：`getPluginData(namespace, key)` / `listPluginData(namespace)` / `getSession()` / `listTurnMessages(limit?)`。写入使用 `ctx.pluginData` 或 handler return 值 |
+| `gateway`                | `PluginRuntimeGateway?` | 文本/object 生成 + slot 解析。签名见下                                                                                                                                                                     |
+| `utils`                  | `PluginRuntimeUtils?`   | SSRF 安全的 URL 校验 + 带重试的 fetch。插件自管 wire 时使用                                                                                                                                                |
+| `manualPayload`          | `unknown?`              | 仅在 `POST /plugin-rpc` 手动触发时注入,为请求体的 `payload` 字段                                                                                                                                           |
+| `triggerEvent`           | `{ topic, data }?`      | 仅 event 触发时存在,包含触发该 runtime 的事件                                                                                                                                                              |
 
 **`ctx.gateway`:** function runtime 调用 LLM 的入口。绝不允许直接 `fetch` 文本 provider URL 或导入文本 SDK —— 这样会跳过 slot 解析、密钥管理、SSRF 防护和 replay cache。
 
 ```ts
 // 文本补全
 const res = await ctx.gateway.generateText({
-  presetId: 'fast',                                // 可选;缺省走 manifest.model / default slot
-  messages: [{ role: 'user', content: '...' }],
+  presetId: "fast", // 可选;缺省走 manifest.model / default slot
+  messages: [{ role: "user", content: "..." }],
 });
 
 // 解析 slot 配置(图像 / 自管 wire 的插件用)
-const slot = ctx.gateway.resolveSlot({ presetId: 'image', fallbackTag: 'image' });
+const slot = ctx.gateway.resolveSlot({
+  presetId: "image",
+  fallbackTag: "image",
+});
 if (slot) {
   // slot = { presetId, provider, baseUrl, apiKey, model, tag, metadata, ... }
   // 拿到凭据后用任意 SDK / fetch 调供应商
@@ -335,7 +341,7 @@ const response = await ctx.utils.fetchWithRetry(`${slot.baseUrl}/...`, {
 
 ```yaml
 runtimeType: function
-execution: background    # 默认 sync
+execution: background # 默认 sync
 trigger: { type: manual }
 handler: ./handler.js
 ```
@@ -356,7 +362,7 @@ handler: ./handler.js
 # runtimes/prompt-generator/PLUGIN.md
 name: my-image-gen/prompt-generator
 priority: 600
-runtimeType: agent                     # 用 LLM 生成 prompt
+runtimeType: agent # 用 LLM 生成 prompt
 trigger: { type: manual }
 # frontmatter 的 output 只接受 { schema, recordAs }(outputConfigSchema 是 strict)。
 # 事件由 agent 在 runtime output JSON 里输出 events[] 数组,normalizeOutput
@@ -368,8 +374,8 @@ trigger: { type: manual }
 # runtimes/image-generator/PLUGIN.md
 name: my-image-gen/image-generator
 priority: 610
-runtimeType: function                  # 纯 JS,直接调 provider
-execution: background                  # 不阻塞 turn
+runtimeType: function # 纯 JS,直接调 provider
+execution: background # 不阻塞 turn
 trigger:
   type: event
   topic: image.generate.requested
@@ -386,53 +392,68 @@ export default async function handler(ctx) {
   const prompt = ctx.triggerEvent?.data?.prompt;
 
   // 1. 拿 slot 凭据(凭据全部住在 ~/.covel/llm.toml,不复制到插件设置)
-  const slot = ctx.gateway.resolveSlot({ presetId: 'image', fallbackTag: 'image' });
-  if (!slot) throw new Error('image slot not configured in llm.toml');
+  const slot = ctx.gateway.resolveSlot({
+    presetId: "image",
+    fallbackTag: "image",
+  });
+  if (!slot) throw new Error("image slot not configured in llm.toml");
 
   // 2. SSRF 守卫
   const guard = ctx.utils.validateBaseUrl(slot.baseUrl);
   if (!guard.ok) throw new Error(`Bad baseUrl: ${guard.reason}`);
 
   // 3. 任选 SDK 或裸 fetch 调供应商。这里演示 OpenAI Images API 同步形态。
-  const response = await ctx.utils.fetchWithRetry(`${slot.baseUrl}/images/generations`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${slot.apiKey}`,
+  const response = await ctx.utils.fetchWithRetry(
+    `${slot.baseUrl}/images/generations`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${slot.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: slot.model,
+        prompt,
+        n: 1,
+        response_format: "b64_json",
+      }),
     },
-    body: JSON.stringify({ model: slot.model, prompt, n: 1, response_format: 'b64_json' }),
-  });
+  );
   const payload = await response.json();
   const first = payload.data?.[0] ?? {};
-  const mimeType = 'image/png';
+  const mimeType = "image/png";
   let ref = null;
-  if (typeof first.b64_json === 'string') {
-    ref = await ctx.media.put(Buffer.from(first.b64_json, 'base64'), mimeType, {
+  if (typeof first.b64_json === "string") {
+    ref = await ctx.media.put(Buffer.from(first.b64_json, "base64"), mimeType, {
       prompt,
       provider: slot.provider,
       model: slot.model,
     });
-  } else if (typeof first.url === 'string') {
+  } else if (typeof first.url === "string") {
     ref = await ctx.media.ingestUrl(first.url, {
-      allowedMimes: ['image/png', 'image/jpeg', 'image/webp'],
+      allowedMimes: ["image/png", "image/jpeg", "image/webp"],
       meta: { prompt, provider: slot.provider, model: slot.model },
     });
   }
-  if (!ref) throw new Error('image provider returned no usable media');
+  if (!ref) throw new Error("image provider returned no usable media");
 
   return {
     imageId: ctx.turnId,
-    status: 'done',
+    status: "done",
     ref,
     // framework picks this up → commits one plugin.data proposal for gallery indexing
     pluginData: [
-      { namespace: 'images', key: ctx.turnId, value: { status: 'done', ref, prompt, mimeType } },
+      {
+        namespace: "images",
+        key: ctx.turnId,
+        value: { status: "done", ref, prompt, mimeType },
+      },
     ],
     // framework normalizes this to Proposal{ type: 'asset.generate' }
     assetGenerations: [
       {
         ref,
-        modality: 'image',
+        modality: "image",
         meta: { prompt, provider: slot.provider, model: slot.model },
       },
     ],
@@ -444,11 +465,11 @@ export default async function handler(ctx) {
 
 ### 插件信任等级
 
-| 来源 | 标识 | 加载方式 |
-|------|------|---------|
-| `builtin` | 绿色徽章 | 自动加载，无需确认 |
-| `official` | 绿色徽章 | 白名单匹配，自动加载 |
-| `community` | 橙色/红色警告 | 需用户确认后加载 |
+| 来源        | 标识          | 加载方式             |
+| ----------- | ------------- | -------------------- |
+| `builtin`   | 绿色徽章      | 自动加载，无需确认   |
+| `official`  | 绿色徽章      | 白名单匹配，自动加载 |
+| `community` | 橙色/红色警告 | 需用户确认后加载     |
 
 ### 插件最低要求
 
@@ -474,6 +495,7 @@ my-plugin/
 ### 插件作者约束
 
 **允许依赖的公开 API：**
+
 - PLUGIN.md manifest 格式
 - `@covel/tools` 的 `tool()` 包装函数
 - 内置工具（create-form、create-choices、create-notification）
@@ -482,6 +504,7 @@ my-plugin/
 - `@covel/plugin-test-utils` 测试工具
 
 **禁止依赖：**
+
 - 数据库表名或 ORM 模型
 - 内核调度器、路由器等内部模块
 - 前端组件（UI 通过 blockSchema 或交互协议集成）
@@ -493,17 +516,18 @@ my-plugin/
 
 适用范围：
 
-| 位置 | 必须 I18nText 的字段 | 示例 |
-|------|---------------------|------|
-| `plugins/<id>/ui/*.json` | `label` / `groupLabel` / `emptyState.message` / `searchPlaceholder` / `emptyMessage` / `footer` | `{ "label": { "zh": "角色", "en": "Characters" } }` |
-| json-render spec 叶节点 | `Text.content` / `Button.label` / `Badge.label` / `Input.placeholder` / `FormField.label` / `Alert.title` / `Alert.message` | `{ "content": { "zh": "…", "en": "…" } }` |
-| `world.yaml` / `WORLD.*.md` | `name` / `description` / dimension 描述字段 | 世界包通过 `WORLD.zh.md` / `WORLD.en.md` 提供正文 |
+| 位置                        | 必须 I18nText 的字段                                                                                                        | 示例                                                |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `plugins/<id>/ui/*.json`    | `label` / `groupLabel` / `emptyState.message` / `searchPlaceholder` / `emptyMessage` / `footer`                             | `{ "label": { "zh": "角色", "en": "Characters" } }` |
+| json-render spec 叶节点     | `Text.content` / `Button.label` / `Badge.label` / `Input.placeholder` / `FormField.label` / `Alert.title` / `Alert.message` | `{ "content": { "zh": "…", "en": "…" } }`           |
+| `world.yaml` / `WORLD.*.md` | `name` / `description` / dimension 描述字段                                                                                 | 世界包通过 `WORLD.zh.md` / `WORLD.en.md` 提供正文   |
 
 无需 i18n 的情形：纯标识符（`icon` 名称、`iconColor`、状态字符串、图像 URL）、多 locale 共用的短词（`"Ping"`、`"NEW"`）、数值或布尔常量。
 
 **回退逻辑**：`resolveI18n(value, locale)` 优先匹配当前 locale，其次语言前缀（`zh-CN` → `zh`），再退到 `en-US` / `en`，最后取对象中任一字符串。切换语言时，json-render 子树会通过 `useI18nResolver()` 自动重渲染。
 
 **合规脚本**：
+
 - `node scripts/check-plugin-i18n.mjs` 扫描 `plugins/**/ui/*.json`，禁止出现没有 `en` 兄弟 key 的裸中文字符串
 - `pnpm check:i18n` 会同时跑应用代码（`apps/web`）与插件 JSON 两套扫描；CI 里应作为必选 gate
 

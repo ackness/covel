@@ -115,6 +115,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
 	let registry: Awaited<ReturnType<typeof bootstrapApi>>["registry"];
 
 	const pluginsDir = path.resolve(import.meta.dirname, "../../../../plugins");
+	const worldsDir = path.resolve(import.meta.dirname, "../../../../worlds");
 	const worldDir = path.resolve(
 		import.meta.dirname,
 		"../../../../worlds/haruka-academy",
@@ -124,6 +125,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
 		mockLLM = new ChatModeMockLLM();
 		const result = await bootstrapApi({
 			pluginsDir,
+			worldsDirs: [worldsDir],
 			llmAdapter: mockLLM,
 			store: createMemoryStore(),
 			storeBackend: "memory",
@@ -181,6 +183,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
 		);
 		expect(mioBlueprint?.value).toMatchObject({
 			sourceWorldId: "haruka-academy",
+			sourceId: "cast",
 			instantiatedCharacterId: `${sessionId}-npc-kamishiro-mio`,
 		});
 		const mioBlueprintMirror = await store.getPluginData(

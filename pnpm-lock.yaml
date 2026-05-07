@@ -26,6 +26,9 @@ importers:
       playwright:
         specifier: ^1.59.1
         version: 1.59.1
+      prettier:
+        specifier: ^3.8.3
+        version: 3.8.3
       sqlite-vec:
         specifier: ^0.1.9
         version: 0.1.9
@@ -625,6 +628,47 @@ importers:
         specifier: ^4.1.4
         version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
+  plugins/character-blueprint:
+    dependencies:
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
+    devDependencies:
+      '@covel/plugin-loader':
+        specifier: workspace:*
+        version: link:../../packages/plugin-loader
+      vitest:
+        specifier: ^4.1.4
+        version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+
+  plugins/character-presence:
+    dependencies:
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
+    devDependencies:
+      '@covel/plugin-loader':
+        specifier: workspace:*
+        version: link:../../packages/plugin-loader
+      vitest:
+        specifier: ^4.1.4
+        version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+
+  plugins/chat-mode-narrator:
+    devDependencies:
+      '@covel/plugin-loader':
+        specifier: workspace:*
+        version: link:../../packages/plugin-loader
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      vitest:
+        specifier: ^4.1.4
+        version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+
   plugins/codex:
     devDependencies:
       '@covel/context':
@@ -667,6 +711,19 @@ importers:
         specifier: ^4.1.4
         version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
+  plugins/living-world-rules:
+    dependencies:
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
+    devDependencies:
+      '@covel/plugin-loader':
+        specifier: workspace:*
+        version: link:../../packages/plugin-loader
+      vitest:
+        specifier: ^4.1.4
+        version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+
   plugins/memory: {}
 
   plugins/narrator:
@@ -699,7 +756,56 @@ importers:
         specifier: ^4.1.4
         version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
+  plugins/player-identity:
+    dependencies:
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
+    devDependencies:
+      '@covel/plugin-loader':
+        specifier: workspace:*
+        version: link:../../packages/plugin-loader
+      vitest:
+        specifier: ^4.1.4
+        version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+
   plugins/pregame: {}
+
+  plugins/scene-cast:
+    devDependencies:
+      '@covel/plugin-loader':
+        specifier: workspace:*
+        version: link:../../packages/plugin-loader
+      '@covel/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
+      vitest:
+        specifier: ^4.1.4
+        version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+
+  plugins/scene-prompts:
+    devDependencies:
+      '@covel/plugin-loader':
+        specifier: workspace:*
+        version: link:../../packages/plugin-loader
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
+      vitest:
+        specifier: ^4.1.4
+        version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
   plugins/world-init:
     dependencies:

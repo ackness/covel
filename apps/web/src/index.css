@@ -10,11 +10,13 @@
    ───────────────────────────────────────────────────────────────────── */
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif,
-    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-sans:
+    "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --font-display: "Fraunces", "Newsreader", ui-serif, Georgia, serif;
   --font-serif: "Fraunces", "Newsreader", ui-serif, Georgia, serif;
-  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-mono:
+    "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   --color-background: oklch(97% 0.008 90);
   --color-foreground: oklch(20% 0.018 60);
@@ -45,8 +47,16 @@
 :root {
   /* ── Surfaces (layered, do NOT add a Card per item) ────────────── */
   --surface-page: var(--color-background);
-  --surface-rail: color-mix(in oklab, var(--color-background) 92%, var(--color-foreground) 4%);
-  --surface-inset: color-mix(in oklab, var(--color-background) 90%, var(--color-foreground) 6%);
+  --surface-rail: color-mix(
+    in oklab,
+    var(--color-background) 92%,
+    var(--color-foreground) 4%
+  );
+  --surface-inset: color-mix(
+    in oklab,
+    var(--color-background) 90%,
+    var(--color-foreground) 6%
+  );
   --surface-elevated: var(--color-card);
   --surface-dialog: var(--color-card);
   --surface-player: color-mix(in oklab, var(--color-primary) 12%, transparent);
@@ -60,7 +70,11 @@
 
   /* ── Edges & rules ────────────────────────────────────────────── */
   --rule-color: var(--color-border);
-  --rule-strong-color: color-mix(in oklab, var(--color-foreground) 35%, transparent);
+  --rule-strong-color: color-mix(
+    in oklab,
+    var(--color-foreground) 35%,
+    transparent
+  );
   --rule-style: solid;
   --rule-thickness: 1px;
   --rule-strong-thickness: 1px;
@@ -254,7 +268,8 @@
 
 .ui-rule-strong {
   border: 0;
-  border-top: var(--rule-strong-thickness) var(--rule-style) var(--rule-strong-color);
+  border-top: var(--rule-strong-thickness) var(--rule-style)
+    var(--rule-strong-color);
   height: 0;
   width: 100%;
 }
@@ -327,10 +342,18 @@
   opacity: 0.45;
 }
 
-.ui-band[data-tone="warning"]::before { background: var(--accent-warning); }
-.ui-band[data-tone="danger"]::before { background: var(--accent-danger); }
-.ui-band[data-tone="success"]::before { background: var(--accent-success); }
-.ui-band[data-tone="info"]::before { background: var(--accent-secondary); }
+.ui-band[data-tone="warning"]::before {
+  background: var(--accent-warning);
+}
+.ui-band[data-tone="danger"]::before {
+  background: var(--accent-danger);
+}
+.ui-band[data-tone="success"]::before {
+  background: var(--accent-success);
+}
+.ui-band[data-tone="info"]::before {
+  background: var(--accent-secondary);
+}
 
 .ui-band-quiet {
   background: transparent;
@@ -362,7 +385,8 @@
   position: relative;
   padding: 1rem 1.125rem;
   background: var(--surface-inset);
-  border-top: var(--rule-strong-thickness) var(--rule-style) var(--rule-strong-color);
+  border-top: var(--rule-strong-thickness) var(--rule-style)
+    var(--rule-strong-color);
   border-bottom: var(--rule-thickness) var(--rule-style) var(--rule-color);
 }
 
@@ -524,7 +548,10 @@
   border: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-foreground);
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
   cursor: pointer;
 }
 
@@ -539,7 +566,11 @@
 }
 
 .ui-btn-primary:hover {
-  background: color-mix(in oklab, var(--color-foreground) 88%, var(--accent-primary) 12%);
+  background: color-mix(
+    in oklab,
+    var(--color-foreground) 88%,
+    var(--accent-primary) 12%
+  );
 }
 
 .ui-btn-quiet {
@@ -619,7 +650,9 @@
   border-bottom: 1px solid var(--color-border);
   text-align: left;
   cursor: pointer;
-  transition: border-color 150ms ease, background 150ms ease;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
 }
 
 .ui-choice:hover {
@@ -657,13 +690,24 @@
 
 /* Animations */
 @keyframes ui-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 @keyframes ui-blink {
-  0%, 50% { opacity: 1; }
-  50.01%, 100% { opacity: 0; }
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
 }
 
 .ui-pulse-dot {
@@ -699,12 +743,19 @@
 }
 
 /* Wider invisible hit-target so the 1px hairline is still grabable */
-.ui-resize-handle.cursor-col-resize::before { left: -3px; right: -3px; }
-.ui-resize-handle.cursor-row-resize::before { top: -3px; bottom: -3px; }
+.ui-resize-handle.cursor-col-resize::before {
+  left: -3px;
+  right: -3px;
+}
+.ui-resize-handle.cursor-row-resize::before {
+  top: -3px;
+  bottom: -3px;
+}
 
 .ui-resize-handle:hover {
   background: var(--accent-primary) !important;
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent-primary) 35%, transparent);
+  box-shadow: 0 0 0 1px
+    color-mix(in oklab, var(--accent-primary) 35%, transparent);
 }
 
 .ui-resize-handle[data-separator="dragging"] {
@@ -718,7 +769,8 @@
 /* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklab, var(--color-foreground) 14%, transparent) transparent;
+  scrollbar-color: color-mix(in oklab, var(--color-foreground) 14%, transparent)
+    transparent;
 }
 
 /* WebKit / Blink */
@@ -754,5 +806,6 @@
 /* `.ui-scroll` is now a no-op alias kept for backward compat */
 .ui-scroll {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklab, var(--color-foreground) 14%, transparent) transparent;
+  scrollbar-color: color-mix(in oklab, var(--color-foreground) 14%, transparent)
+    transparent;
 }

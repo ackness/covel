@@ -14,7 +14,7 @@ See: [docs/reference/plugins.md](./reference/plugins.md), [docs/architecture/flo
 
 ## Capability
 
-A string tag on a runtime manifest that advertises what the runtime *does* (e.g. `narrative`, `world-data-provider`, `image-generation`). Framework code discovers plugins by capability, never by hardcoded plugin ID.
+A string tag on a runtime manifest that advertises what the runtime _does_ (e.g. `narrative`, `world-data-provider`, `image-generation`). Framework code discovers plugins by capability, never by hardcoded plugin ID.
 
 See: [docs/reference/plugins.md](./reference/plugins.md), CLAUDE.md "Framework ↔ Plugin Isolation Rule".
 
@@ -92,9 +92,9 @@ See: [docs/architecture/flow.md](./architecture/flow.md), [docs/reference/protoc
 
 ## World
 
-A bundled content package (`worlds/<id>/`) containing `world.yaml` + `WORLD.md` plus optional plugin overrides, lorebook seeds, and character templates. Loaded at server boot from `COVEL_WORLDS_DIR`; one world powers many sessions.
+A bundled content package (`worlds/<id>/`) containing `world.yaml`, `WORLD.md`, and optional `data/world.data.yaml` sources for dimensions, character blueprints, rules, scene templates, and media indexes. Loaded at server boot from `COVEL_WORLDS_DIR`; one world powers many sessions.
 
-See: [devs/docs/world-package-spec.md](../devs/docs/world-package-spec.md).
+See: [docs/reference/world-data.md](./reference/world-data.md).
 
 ## Related
 

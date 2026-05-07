@@ -346,6 +346,86 @@ sources:
 		});
 	});
 
+	it("does not eager-load legacy character blueprints when worldData is declared", async () => {
+		const root = await makeTempWorld();
+		await mkdir(path.join(root, "data"), { recursive: true });
+		await mkdir(path.join(root, "characters"), { recursive: true });
+		await writeFile(
+			path.join(root, "world.yaml"),
+			`schemaVersion: "1"
+id: demo-world
+name: Demo
+summary: Demo world
+defaultLocale: zh-CN
+worldData: data/world.data.yaml
+characterBlueprintSources:
+  - characters/main-cast.json
+`,
+		);
+		await writeFile(
+			path.join(root, "data/world.data.yaml"),
+			`schemaVersion: 1
+sources:
+  dimensions:
+    kind: yaml
+    path: data/dimensions.yaml
+    schema: covel://world/dimensions
+    to: world:metadata.dimensions
+`,
+		);
+		await writeFile(
+			path.join(root, "data/dimensions.yaml"),
+			"tone:\n  genres: [测试]\n  contentRating: teen\n",
+		);
+		await writeFile(
+			path.join(root, "characters/main-cast.json"),
+			JSON.stringify([
+				{ schemaVersion: 1, id: "mio", name: "Mio", role: "npc" },
+			]),
+		);
+
+		const record = await loadSingleWorld(root);
+
+		expect(record?.metadata?.characterBlueprints).toBeUndefined();
+		expect(record?.metadata?.worldData).toMatchObject({
+			schemaVersion: 1,
+			sources: [{ id: "dimensions", target: "world:metadata.dimensions" }],
+		});
+	});
+
+	it("loads bundled worlds through worldData descriptors", async () => {
+		const worldsRoot = path.resolve(import.meta.dirname, "../../../../worlds");
+		for (const worldId of [
+			"cloudmere",
+			"haruka-academy",
+			"mistport",
+			"neonridge",
+		]) {
+			const record = await loadSingleWorld(path.join(worldsRoot, worldId));
+			expect(record?.metadata?.dimensions).toBeTruthy();
+			expect(record?.metadata?.worldData).toMatchObject({
+				schemaVersion: 1,
+				sources: expect.arrayContaining([
+					expect.objectContaining({
+						id: "dimensions",
+						target: "world:metadata.dimensions",
+					}),
+				]),
+			});
+		}
+
+		const haruka = await loadSingleWorld(path.join(worldsRoot, "haruka-academy"));
+		expect(haruka?.metadata?.characterBlueprints).toBeUndefined();
+		expect(haruka?.metadata?.worldData).toMatchObject({
+			sources: expect.arrayContaining([
+				expect.objectContaining({
+					id: "cast",
+					target: "plugin:character-blueprint/blueprints",
+				}),
+			]),
+		});
+	});
+
 	it("rejects dangerous metadata targets", () => {
 		expect(
 			parseWorldDataTarget("world:metadata.__proto__.polluted"),

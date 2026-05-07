@@ -117,6 +117,10 @@ export interface ApiBootstrapConfig {
 	 * shadow a core plugin.
 	 */
 	readonly pluginsDirs?: readonly string[];
+	/** Ordered world package directories. Later directories override earlier ones for session imports. */
+	readonly worldsDirs?: readonly string[];
+	/** Covel home directory for user world overrides. */
+	readonly covelHome?: string;
 	/** LLM adapter (real or mock). */
 	readonly llmAdapter: LLMAdapter;
 	/**
@@ -984,6 +988,12 @@ export async function bootstrapApi(
 		c.set("prepareToolsForSession", prepareToolsForSession);
 		c.set("getPluginSource", getPluginSource);
 		c.set("activatePluginLocalTools", activatePluginLocalTools);
+		if (config.worldsDirs) {
+			c.set("worldsDirs", config.worldsDirs);
+		}
+		if (config.covelHome) {
+			c.set("covelHome", config.covelHome);
+		}
 		if (config.ensureEmbeddingLock) {
 			c.set("ensureEmbeddingLock", config.ensureEmbeddingLock);
 		}

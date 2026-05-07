@@ -23,6 +23,7 @@ import { buildSessionSnapshot } from "@covel/runtime";
 import { characterBlueprintToCharacterUpsert } from "@covel/shared";
 import type { CharacterBlueprint } from "@covel/shared";
 import { signMediaTokenForSession } from "../../middleware/media-token.js";
+import { importWorldDataForSession } from "../../world-data/session-import.js";
 
 const SAFE_WORLD_ID_RE = /^[a-z0-9_-]{1,64}$/i;
 const SAFE_SESSION_ID_RE = /^[a-z0-9_-]{1,128}$/i;
@@ -47,6 +48,8 @@ type Env = {
 		store: DataStore;
 		pluginRegistry: PluginRegistry;
 		mediaStore?: MediaStore;
+		worldsDirs?: readonly string[];
+		covelHome?: string;
 	};
 };
 
@@ -316,6 +319,8 @@ sessionRoutes.get("/", async (c) => {
 sessionRoutes.post("/", async (c) => {
 	const store = c.get("store");
 	const pluginRegistry = c.get("pluginRegistry");
+	const worldsDirs = c.get("worldsDirs");
+	const covelHome = c.get("covelHome");
 	const body = await c.req.json<Record<string, unknown>>();
 
 	const rawWorldId =
@@ -375,7 +380,17 @@ sessionRoutes.post("/", async (c) => {
 
 	// Persist BEFORE activating plugins to avoid registry/store inconsistency
 	await store.createSession(session);
-	await importWorldCharacterBlueprints(store, id, rawWorldId, now);
+	const importedWorldData = await importWorldDataForSession({
+		store,
+		sessionId: id,
+		worldId: rawWorldId,
+		worldsDirs,
+		covelHome,
+		now,
+	});
+	if (!importedWorldData) {
+		await importWorldCharacterBlueprints(store, id, rawWorldId, now);
+	}
 
 	for (const pluginId of plugins) {
 		if (typeof pluginId === "string" && pluginRegistry.get(pluginId)) {

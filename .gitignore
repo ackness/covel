@@ -25,7 +25,10 @@ plans/
 fixtures/
 output/
 progress.md
-
+.pi/subagents/
+context.md
+meta-prompt.md
+plan.md
 
 # Cursor
 .cursorignore
@@ -75,6 +78,8 @@ apps/server/drizzle/
 
 # ── Local data (SQLite, etc.) ───────────────────────────────────
 data/
+!worlds/*/data/
+!worlds/*/data/**
 
 # ── Docker volumes (local dev) ──────────────────────────────────
 docker/data/
@@ -132,6 +137,3 @@ docker/docker-compose.mock.replay.yml
 
 # ── Internal handoff bundles / session insights (local-only) ──
 devs/docs/insights/
-
-# ── Local agent context scratch ─────────────────────────────────
-context.md

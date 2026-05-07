@@ -31,6 +31,7 @@ docs/
 │   ├── protocol.md
 │   ├── plugins.md
 │   ├── tools.md
+│   ├── world-data.md
 │   ├── ui-panels.md
 │   ├── ui-components.md     # json-render 组件目录
 │   ├── prompt-structure.md
@@ -49,11 +50,12 @@ docs/
 2. **贡献准备** — [`CONTRIBUTING.md`](./CONTRIBUTING.md) 的 Code style / Commit / Release 段
 3. **写插件** — [`guide/plugin-authoring.md`](./guide/plugin-authoring.md) + [`reference/plugins.md`](./reference/plugins.md)
 4. **做主题** — [`guide/themes.md`](./guide/themes.md) + [`reference/theme-packages.md`](./reference/theme-packages.md)
-5. **理解执行** — [`architecture/flow.md`](./architecture/flow.md) 描述整条回合管线
-6. **查 API** — [`reference/api.md`](./reference/api.md) 与 [`reference/protocol.md`](./reference/protocol.md)
-7. **测试插件** — [`guide/plugin-testing.md`](./guide/plugin-testing.md) 的 harness / MockLLM / `e2e-plugin-verify` 选型
-8. **查术语** — [`glossary.md`](./glossary.md) 对 session / runtime / slot / binding / proposal 等核心概念给出一页式定义
-9. **发布** — [`CONTRIBUTING.md#release-process`](./CONTRIBUTING.md#release-process) + [`../apps/desktop/PACKAGING.md`](../apps/desktop/PACKAGING.md)（Electron）/ [`../apps/desktop-tauri/PACKAGING.md`](../apps/desktop-tauri/PACKAGING.md)（Tauri）
+5. **做世界包 / 内容包** — [`reference/world-data.md`](./reference/world-data.md) 定义 `data/world.data.yaml`、第三方插件数据和 override 包
+6. **理解执行** — [`architecture/flow.md`](./architecture/flow.md) 描述整条回合管线
+7. **查 API** — [`reference/api.md`](./reference/api.md) 与 [`reference/protocol.md`](./reference/protocol.md)
+8. **测试插件** — [`guide/plugin-testing.md`](./guide/plugin-testing.md) 的 harness / MockLLM / `e2e-plugin-verify` 选型
+9. **查术语** — [`glossary.md`](./glossary.md) 对 session / runtime / slot / binding / proposal 等核心概念给出一页式定义
+10. **发布** — [`CONTRIBUTING.md#release-process`](./CONTRIBUTING.md#release-process) + [`../apps/desktop/PACKAGING.md`](../apps/desktop/PACKAGING.md)（Electron）/ [`../apps/desktop-tauri/PACKAGING.md`](../apps/desktop-tauri/PACKAGING.md)（Tauri）
 
 ## 文档约定
 
