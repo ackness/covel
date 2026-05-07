@@ -4,7 +4,12 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createEventBus } from "@covel/events";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import {
+  createMemoryMediaStore,
+  createMemoryStore,
+  type DataStore,
+  type MediaStore,
+} from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { worldRoutes } from "../../src/routes/api/worlds.js";
 import { loadSessionConfig } from "../../src/routes/api/load-session-config.js";
@@ -14,6 +19,7 @@ type Env = {
     store: DataStore;
     eventBus: ReturnType<typeof createEventBus>;
     pluginRegistry: PluginRegistry;
+    mediaStore?: MediaStore;
     worldsDirs?: readonly string[];
     covelHome?: string;
   };
@@ -22,7 +28,11 @@ type Env = {
 function createTestApp(
   store: DataStore,
   pluginRegistry: PluginRegistry,
-  options: { worldsDirs?: readonly string[]; covelHome?: string } = {},
+  options: {
+    mediaStore?: MediaStore;
+    worldsDirs?: readonly string[];
+    covelHome?: string;
+  } = {},
 ): Hono<Env> {
   const eventBus = createEventBus();
   const app = new Hono<Env>();
@@ -30,6 +40,7 @@ function createTestApp(
     c.set("store", store);
     c.set("eventBus", eventBus);
     c.set("pluginRegistry", pluginRegistry);
+    if (options.mediaStore) c.set("mediaStore", options.mediaStore);
     if (options.worldsDirs) c.set("worldsDirs", options.worldsDirs);
     if (options.covelHome) c.set("covelHome", options.covelHome);
     await next();
@@ -91,6 +102,38 @@ sources:
     JSON.stringify([{ id: "one", content: "One fact." }]),
   );
   return { worldsDir };
+}
+
+async function makeMediaWorldDataFixture() {
+  const worldsDir = await mkdtemp(path.join(tmpdir(), "covel-worlds-media-"));
+  const worldRoot = path.join(worldsDir, "media-world");
+  const descriptorPath = path.join(worldRoot, "data/world.data.yaml");
+  await mkdir(path.join(worldRoot, "data"), { recursive: true });
+  await mkdir(path.join(worldRoot, "media/portraits"), { recursive: true });
+  await writeFile(
+    path.join(worldRoot, "world.yaml"),
+    `schemaVersion: "1"
+id: media-world
+name: Media World
+summary: Media world
+defaultLocale: zh-CN
+worldData: data/world.data.yaml
+`,
+  );
+  await writeFile(
+    descriptorPath,
+    `schemaVersion: 1
+sources:
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: plugin:character-presence/assets
+    key: filename
+`,
+  );
+  await writeFile(path.join(worldRoot, "media/portraits/mio.png"), "png-ish");
+  return { worldsDir, descriptorPath };
 }
 
 describe("world routes", () => {
@@ -457,5 +500,114 @@ describe("world routes", () => {
     expect(
       await store.getPluginData("sync-conflict", "world-notes", "facts", "one"),
     ).toMatchObject({ value: { id: "one", content: "Player edited." } });
+  });
+
+  it("POST /api/worlds/:id/sync-data removes only the current session media ref for shared assets", async () => {
+    const { worldsDir, descriptorPath } = await makeMediaWorldDataFixture();
+    const now = new Date().toISOString();
+    const mediaStore = createMemoryMediaStore();
+    const pluginRegistry = {
+      findPluginByCapability: () => undefined,
+      get: (pluginId: string) =>
+        pluginId === "character-presence"
+          ? {
+              id: "character-presence",
+              dataSchemas: {
+                assets: {
+                  namespace: "assets",
+                  schemaVersion: 1,
+                  acceptsWorldData: true,
+                },
+              },
+            }
+          : undefined,
+    } as PluginRegistry;
+    app = createTestApp(store, pluginRegistry, {
+      mediaStore,
+      worldsDirs: [worldsDir],
+    });
+    for (const sessionId of ["media-a", "media-b"]) {
+      await store.createSession({
+        id: sessionId,
+        worldId: "media-world",
+        status: "active",
+        turnCount: 0,
+        preGameCompleted: [],
+        locale: "zh-CN",
+        activePlugins: ["character-presence"],
+        createdAt: now,
+        updatedAt: now,
+      });
+      const res = await app.request("/api/worlds/media-world/sync-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, dryRun: false }),
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({
+        dryRun: false,
+        upserted: 1,
+        deleted: 0,
+        conflicts: [],
+      });
+    }
+
+    const mediaRowB = await store.getPluginData(
+      "media-b",
+      "character-presence",
+      "assets",
+      "mio.png",
+    );
+    const mediaId =
+      typeof (mediaRowB?.value as { ref?: { id?: unknown } } | undefined)?.ref
+        ?.id === "string"
+        ? (mediaRowB?.value as { ref: { id: string } }).ref.id
+        : undefined;
+    expect(mediaId).toEqual(expect.any(String));
+    expect(await mediaStore.lookup(mediaId!)).not.toBeNull();
+    expect(await mediaStore.isReferencedBy(mediaId!, "media-a")).toBe(true);
+    expect(await mediaStore.isReferencedBy(mediaId!, "media-b")).toBe(true);
+
+    await writeFile(
+      descriptorPath,
+      `schemaVersion: 1
+sources: {}
+`,
+    );
+    const removeA = await app.request("/api/worlds/media-world/sync-data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "media-a", dryRun: false }),
+    });
+
+    expect(removeA.status).toBe(200);
+    expect(await removeA.json()).toMatchObject({
+      dryRun: false,
+      upserted: 0,
+      deleted: 1,
+      conflicts: [],
+    });
+    expect(
+      await store.getPluginData(
+        "media-a",
+        "character-presence",
+        "assets",
+        "mio.png",
+      ),
+    ).toBeNull();
+    expect(
+      await store.getPluginData(
+        "media-b",
+        "character-presence",
+        "assets",
+        "mio.png",
+      ),
+    ).toBeTruthy();
+    expect(await mediaStore.lookup(mediaId!)).not.toBeNull();
+    expect(await mediaStore.exists(mediaId!)).toBe(true);
+    expect(await mediaStore.isReferencedBy(mediaId!, "media-b")).toBe(true);
+    expect(
+      (await mediaStore.listRefs()).filter((ref) => ref.mediaId === mediaId),
+    ).toContainEqual(expect.objectContaining({ sessionId: "media-b" }));
   });
 });

@@ -79,6 +79,11 @@ export function createSqliteS3MetadataAdapter(
     INSERT OR IGNORE INTO media_refs (session_id, media_id, plugin_id, created_at)
     VALUES (@sessionId, @mediaId, @pluginId, @createdAt)
   `);
+  const removeRef = sqlite.prepare(`
+    DELETE FROM media_refs
+    WHERE media_id = @mediaId
+      AND session_id = @sessionId
+  `);
   const checkOwner = sqlite.prepare(
     "SELECT owner_session_id AS ownerSessionId FROM media_assets WHERE id = ?",
   );
@@ -147,6 +152,10 @@ export function createSqliteS3MetadataAdapter(
         pluginId: pluginId ?? null,
         createdAt: new Date().toISOString(),
       });
+    },
+
+    async removeRef(id, sessionId) {
+      removeRef.run({ mediaId: id, sessionId });
     },
 
     async isReferencedBy(id, sessionId) {

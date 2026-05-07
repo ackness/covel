@@ -105,6 +105,8 @@ export interface S3MediaMetadataAdapter {
   ): Promise<void>;
   /** Idempotent on (sessionId, mediaId); plugin_id is first-writer metadata only. */
   addRef(id: string, sessionId: string, pluginId?: string): Promise<void>;
+  /** Remove only one session's explicit ref; bytes and owner metadata remain. */
+  removeRef(id: string, sessionId: string): Promise<void>;
   isReferencedBy(id: string, sessionId: string): Promise<boolean>;
   listAssets(): Promise<readonly MediaAssetRecord[]>;
   listRefs(): Promise<readonly MediaRefRecord[]>;
@@ -350,6 +352,11 @@ export function createMemoryMediaStore(): MediaStore {
       }
     },
 
+    async removeRef(id, sessionId) {
+      refs.get(sessionId)?.delete(id);
+      refRows.delete(`${sessionId}\u0000${id}`);
+    },
+
     async isReferencedBy(id, sessionId) {
       const owner = owners.get(id);
       if (owner?.sessionId === sessionId) return true;
@@ -544,6 +551,14 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
       `;
     },
 
+    async removeRef(id, sessionId) {
+      await sql`
+        DELETE FROM media_refs
+        WHERE media_id = ${id}
+          AND session_id = ${sessionId}
+      `;
+    },
+
     async isReferencedBy(id, sessionId) {
       const rows = await sql<{ one: number }[]>`
         SELECT 1 AS one
@@ -683,6 +698,9 @@ function createInMemoryS3MetadataAdapter(): S3MediaMetadataAdapter {
         pluginId: pluginId ?? null,
         createdAt: new Date().toISOString(),
       });
+    },
+    async removeRef(id, sessionId) {
+      refRows.delete(`${sessionId}\u0000${id}`);
     },
     async isReferencedBy(id, sessionId) {
       const asset = assets.get(id);
@@ -858,6 +876,10 @@ export function createS3MediaStore(
       await adapter.addRef(id, sessionId, pluginId);
     },
 
+    async removeRef(id, sessionId) {
+      await adapter.removeRef(id, sessionId);
+    },
+
     async isReferencedBy(id, sessionId) {
       return adapter.isReferencedBy(id, sessionId);
     },
@@ -946,6 +968,11 @@ export function createSqliteMediaStore(
   const insertRef = sqlite.prepare(`
     INSERT OR IGNORE INTO media_refs (session_id, media_id, plugin_id, created_at)
     VALUES (@sessionId, @mediaId, @pluginId, @createdAt)
+  `);
+  const removeRef = sqlite.prepare(`
+    DELETE FROM media_refs
+    WHERE media_id = @mediaId
+      AND session_id = @sessionId
   `);
   const checkOwner = sqlite.prepare(
     "SELECT owner_session_id AS ownerSessionId FROM media_assets WHERE id = ?",
@@ -1065,6 +1092,10 @@ export function createSqliteMediaStore(
         pluginId: pluginId ?? null,
         createdAt: new Date().toISOString(),
       });
+    },
+
+    async removeRef(id, sessionId) {
+      removeRef.run({ mediaId: id, sessionId });
     },
 
     async isReferencedBy(id, sessionId) {

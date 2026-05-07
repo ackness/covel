@@ -2,15 +2,6 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { parse as parseYaml } from "yaml";
-import {
-  Ajv2020,
-  type AnySchema,
-  type ValidateFunction,
-} from "ajv/dist/2020.js";
-import {
-  characterBlueprintToCharacterUpsert,
-  type CharacterBlueprint,
-} from "@covel/shared";
 import type {
   CharacterRecord,
   DataStore,
@@ -23,21 +14,26 @@ import type { PluginRegistry, PluginRegistryEntry } from "@covel/plugin-loader";
 import { canonicalJson, digestFile, sha256Hex } from "./digest.js";
 import { loadWorldDataDescriptor } from "./descriptor.js";
 import { collectMediaSourceFiles } from "./media.js";
-import { resolveContainedPath } from "./safe-path.js";
 import { readWorldDataSource } from "./source-reader.js";
+import {
+  characterBlueprintAdapter,
+  characterMirrorTargets,
+  characterRecordForCharacterEffect,
+  characterRecordFromValue,
+} from "./character-effects.js";
+import {
+  parsePluginSchemaUri,
+  pluginSchemaUriForTarget,
+  resolveWorldDataSchema,
+  validateWorldDataSchemaValue,
+  type WorldDataSchemaRef,
+} from "./schema-registry.js";
 import {
   parseWorldDataIndexTarget,
   parseWorldDataTarget,
   type ParsedWorldDataTarget,
 } from "./target-uri.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "./types.js";
-
-const WORLD_BLUEPRINT_PLUGIN_ID = "character-blueprint";
-const WORLD_BLUEPRINT_NAMESPACE = "blueprints";
-const MAX_SCOPED_CHARACTER_ID_LENGTH = 180;
-
-const ajv = new Ajv2020({ allErrors: true, strict: false });
-const schemaValidatorCache = new Map<string, ValidateFunction>();
 
 type PluginDataTarget = Extract<ParsedWorldDataTarget, { kind: "plugin-data" }>;
 
@@ -166,33 +162,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function normalizeWorldCharacterBlueprint(
-  value: unknown,
-): CharacterBlueprint | null {
-  if (!isRecord(value)) return null;
-  if (value.schemaVersion !== 1) return null;
-  if (typeof value.id !== "string" || value.id.length === 0) return null;
-  if (typeof value.name !== "string" || value.name.length === 0) return null;
-  return value as unknown as CharacterBlueprint;
-}
-
 function sourceItems(value: unknown): readonly unknown[] {
   return Array.isArray(value) ? value : [value];
-}
-
-function worldBlueprintCharacterId(
-  sessionId: string,
-  blueprint: CharacterBlueprint,
-): string {
-  const baseId =
-    typeof blueprint.instantiate?.characterId === "string" &&
-    blueprint.instantiate.characterId.length > 0
-      ? blueprint.instantiate.characterId
-      : `char-${blueprint.id}`;
-  const scopedId = `${sessionId}-${baseId}`;
-  return scopedId.length <= MAX_SCOPED_CHARACTER_ID_LENGTH
-    ? scopedId
-    : `${sessionId}-${blueprint.id}`;
 }
 
 async function readWorldManifest(worldRoot: string): Promise<{
@@ -274,54 +245,35 @@ function preflightPluginTarget(
   return diagnostics;
 }
 
-async function loadPluginDataValidator(
-  entry: PluginRegistryEntry,
-  target: PluginDataTarget,
-): Promise<ValidateFunction | null> {
-  const schemaDecl = entry.dataSchemas?.[target.namespace];
-  if (!schemaDecl || typeof schemaDecl.schema !== "string") return null;
-  if (!entry.rootPath) {
-    throw new Error(
-      `plugin "${target.pluginId}" data schema for namespace "${target.namespace}" cannot be resolved without a plugin root path`,
-    );
-  }
-  const schemaPath = await resolveContainedPath(
-    entry.rootPath,
-    schemaDecl.schema,
-    {
-      rejectSymlinks: true,
-    },
-  );
-  if (!schemaPath) {
-    throw new Error(
-      `plugin "${target.pluginId}" data schema for namespace "${target.namespace}" is invalid or escapes plugin root`,
-    );
-  }
-  const cacheKey = `${entry.id}:${target.namespace}:${schemaPath}`;
-  const cached = schemaValidatorCache.get(cacheKey);
-  if (cached) return cached;
-  const raw = JSON.parse(await readFile(schemaPath, "utf-8")) as AnySchema;
-  const validate = ajv.compile(raw);
-  schemaValidatorCache.set(cacheKey, validate);
-  return validate;
-}
-
 async function validatePluginDataValue(options: {
   readonly target: PluginDataTarget;
   readonly source: OrderedWorldDataSource;
   readonly value: unknown;
+  readonly schema?: WorldDataSchemaRef | null;
   readonly deps?: WorldDataImportPreflightDeps;
 }): Promise<WorldDataDiagnostic | null> {
-  const entry = getPreflightPluginEntry(options.deps, options.target.pluginId);
-  if (!entry) return null;
-  const validate = await loadPluginDataValidator(entry, options.target);
-  if (!validate) return null;
-  if (validate(options.value)) return null;
-  return {
-    level: "error",
-    sourceId: options.source.id,
-    message: `worldData value for plugin "${options.target.pluginId}" namespace "${options.target.namespace}" failed schema validation: ${ajv.errorsText(validate.errors)}`,
-  };
+  const schema =
+    options.schema?.kind === "plugin" &&
+    options.schema.pluginId === options.target.pluginId &&
+    options.schema.namespace === options.target.namespace
+      ? options.schema
+      : await resolveWorldDataSchema({
+          source: {
+            ...options.source,
+            descriptor: {
+              ...options.source.descriptor,
+              schema: pluginSchemaUriForTarget(options.target),
+            },
+          },
+          deps: options.deps,
+        });
+  if (!schema || "level" in schema) return schema;
+  return validateWorldDataSchemaValue({
+    schema,
+    source: options.source,
+    value: options.value,
+    label: `worldData value for plugin "${options.target.pluginId}" namespace "${options.target.namespace}"`,
+  });
 }
 
 function itemKey(
@@ -368,6 +320,74 @@ function isPluginTarget(
   target: ParsedWorldDataTarget | null,
 ): target is PluginDataTarget {
   return target?.kind === "plugin-data";
+}
+
+function pluginSchemaTargetCompatibilityDiagnostic(
+  source: OrderedWorldDataSource,
+  target: ParsedWorldDataTarget,
+): WorldDataDiagnostic | null {
+  const schemaUri = source.descriptor.schema;
+  if (!schemaUri || target.kind !== "plugin-data") return null;
+  const pluginSchema = parsePluginSchemaUri(schemaUri);
+  if (!pluginSchema) return null;
+  if (
+    pluginSchema.pluginId === target.pluginId &&
+    pluginSchema.namespace === target.namespace
+  ) {
+    return null;
+  }
+  return {
+    level: "error",
+    sourceId: source.id,
+    schema: schemaUri,
+    message: `worldData schema "${schemaUri}" is incompatible with target "${source.descriptor.to}"; plugin schema namespace must match the plugin target`,
+  };
+}
+
+function valuesForSourceSchemaValidation(
+  source: OrderedWorldDataSource,
+  value: unknown,
+): readonly unknown[] {
+  if (source.descriptor.kind === "media") return [];
+  if (
+    source.descriptor.key &&
+    Array.isArray(value) &&
+    source.descriptor.schema !== "covel://world/dimensions"
+  ) {
+    return value;
+  }
+  return [value];
+}
+
+function validateSourceSchemaValues(options: {
+  readonly source: OrderedWorldDataSource;
+  readonly schema: WorldDataSchemaRef | null;
+  readonly target: ParsedWorldDataTarget;
+  readonly value: unknown;
+}): readonly WorldDataDiagnostic[] {
+  if (!options.schema) return [];
+  if (
+    options.schema.kind === "plugin" &&
+    options.target.kind === "plugin-data" &&
+    options.schema.pluginId === options.target.pluginId &&
+    options.schema.namespace === options.target.namespace
+  ) {
+    return [];
+  }
+  const diagnostics: WorldDataDiagnostic[] = [];
+  for (const value of valuesForSourceSchemaValidation(
+    options.source,
+    options.value,
+  )) {
+    const validation = validateWorldDataSchemaValue({
+      schema: options.schema,
+      source: options.source,
+      value,
+      label: `worldData source "${options.source.id}" value`,
+    });
+    if (validation) diagnostics.push(validation);
+  }
+  return diagnostics;
 }
 
 function valueToLorebookContent(value: unknown): string {
@@ -430,79 +450,19 @@ function lorebookStrategy(
   return "constant";
 }
 
-function characterRecordFromValue(
-  sessionId: string,
-  value: unknown,
-  now: string,
-): CharacterRecord | null {
-  if (!isRecord(value)) return null;
-  const id = typeof value.id === "string" ? value.id : undefined;
-  const name = typeof value.name === "string" ? value.name : undefined;
-  if (!id || !name) return null;
-  return {
-    id,
-    sessionId,
-    name,
-    type: typeof value.type === "string" ? value.type : "npc",
-    ...(typeof value.description === "string"
-      ? { description: value.description }
-      : {}),
-    ...(value.fields !== undefined ? { fields: value.fields } : {}),
-    version: typeof value.version === "number" ? value.version : 1,
-    createdAt: typeof value.createdAt === "string" ? value.createdAt : now,
-    updatedAt: now,
-  };
-}
-
-function characterFromBlueprint(
-  sessionId: string,
-  blueprint: CharacterBlueprint,
-  now: string,
-): CharacterRecord {
-  const upsert = characterBlueprintToCharacterUpsert(blueprint, {
-    now,
-    characterId: worldBlueprintCharacterId(sessionId, blueprint),
-    mirrorPluginId: WORLD_BLUEPRINT_PLUGIN_ID,
-  });
-  return {
-    id: upsert.id,
-    sessionId,
-    name: upsert.name,
-    type: upsert.type ?? "npc",
-    ...(upsert.description !== undefined
-      ? { description: upsert.description }
-      : {}),
-    ...(upsert.fields !== undefined ? { fields: upsert.fields } : {}),
-    version: upsert.version ?? 1,
-    createdAt: upsert.createdAt ?? now,
-    updatedAt: now,
-  };
-}
-
-function characterMirrorTargetIds(
-  deps: WorldDataImportPreflightDeps | undefined,
-): readonly string[] {
-  const activePlugins = deps?.activePlugins ?? [];
-  return activePlugins.filter((pluginId) => {
-    const schema = getPreflightPluginEntry(deps, pluginId)?.dataSchemas
-      ?.characters;
-    return schema?.acceptsWorldData === true;
-  });
-}
-
 function characterMirrorWrites(options: {
   source: OrderedWorldDataSource;
   sourceDigest: string;
   character: CharacterRecord;
   deps?: WorldDataImportPreflightDeps;
 }): PlannedWrite[] {
-  return characterMirrorTargetIds(options.deps).map((pluginId) => ({
+  return characterMirrorTargets(options.deps).map((target) => ({
     kind: "plugin-data" as const,
-    target: `plugin:${pluginId}/characters`,
+    target: target.target,
     source: options.source,
     sourceDigest: options.sourceDigest,
-    pluginId,
-    namespace: "characters",
+    pluginId: target.pluginId,
+    namespace: target.namespace,
     key: options.character.id,
     value: options.character,
     derivedFrom: [options.character.id],
@@ -521,11 +481,11 @@ function derivedPluginTargetsForSource(
     if (indexTarget) targets.push(indexTarget);
   }
   if (source.descriptor.effects?.includes("characters")) {
-    for (const pluginId of characterMirrorTargetIds(deps)) {
+    for (const target of characterMirrorTargets(deps)) {
       targets.push({
         kind: "plugin-data",
-        pluginId,
-        namespace: "characters",
+        pluginId: target.pluginId,
+        namespace: target.namespace,
         lorebook: false,
       });
     }
@@ -567,6 +527,7 @@ async function appendStructuredPlans(options: {
   sessionId: string;
   worldId: string;
   now: string;
+  schema: WorldDataSchemaRef | null;
   deps?: WorldDataImportPreflightDeps;
 }): Promise<void> {
   const { source, target } = options;
@@ -583,25 +544,19 @@ async function appendStructuredPlans(options: {
     }
 
     if (target.kind === "plugin-data") {
-      const blueprint = normalizeWorldCharacterBlueprint(value);
-      const pluginValue =
-        target.pluginId === WORLD_BLUEPRINT_PLUGIN_ID &&
-        target.namespace === WORLD_BLUEPRINT_NAMESPACE
-          ? {
-              blueprint: value,
-              importedAt: options.now,
-              sourceWorldId: options.worldId,
-              sourceId: source.id,
-              instantiatedCharacterId:
-                blueprint !== null
-                  ? worldBlueprintCharacterId(options.sessionId, blueprint)
-                  : undefined,
-            }
-          : value;
+      const pluginValue = characterBlueprintAdapter({
+        target,
+        value,
+        sessionId: options.sessionId,
+        worldId: options.worldId,
+        sourceId: source.id,
+        now: options.now,
+      }).value;
       const validationError = await validatePluginDataValue({
         target,
         source,
         value: pluginValue,
+        schema: options.schema,
         deps: options.deps,
       });
       if (validationError) {
@@ -667,13 +622,13 @@ async function appendStructuredPlans(options: {
       });
     }
 
-    const blueprint = normalizeWorldCharacterBlueprint(value);
-    if (blueprint && source.descriptor.effects?.includes("characters")) {
-      const character = characterFromBlueprint(
-        options.sessionId,
-        blueprint,
-        options.now,
-      );
+    if (source.descriptor.effects?.includes("characters")) {
+      const character = characterRecordForCharacterEffect({
+        sessionId: options.sessionId,
+        value,
+        now: options.now,
+      });
+      if (!character) continue;
       options.writes.push({
         kind: "character",
         target: "characters",
@@ -737,6 +692,22 @@ async function buildImportPlan(options: {
         });
       }
     }
+    const compatibilityDiagnostic = pluginSchemaTargetCompatibilityDiagnostic(
+      source,
+      target,
+    );
+    if (compatibilityDiagnostic) {
+      diagnostics.push(compatibilityDiagnostic);
+      continue;
+    }
+    const resolvedSchema = await resolveWorldDataSchema({
+      source,
+      deps: options.deps,
+    });
+    if (resolvedSchema && "level" in resolvedSchema) {
+      diagnostics.push({ sourceId: source.id, ...resolvedSchema });
+      continue;
+    }
 
     const read = await readWorldDataSource(source);
     diagnostics.push(...read.diagnostics);
@@ -753,6 +724,17 @@ async function buildImportPlan(options: {
     if (
       mediaFiles?.diagnostics.some((diagnostic) => diagnostic.level === "error")
     ) {
+      continue;
+    }
+
+    const schemaDiagnostics = validateSourceSchemaValues({
+      source,
+      schema: resolvedSchema,
+      target,
+      value: read.value,
+    });
+    diagnostics.push(...schemaDiagnostics);
+    if (schemaDiagnostics.some((diagnostic) => diagnostic.level === "error")) {
       continue;
     }
 
@@ -787,6 +769,7 @@ async function buildImportPlan(options: {
             target: indexTarget,
             source,
             value,
+            schema: null,
             deps: options.deps,
           });
           if (validationError) {
@@ -818,6 +801,7 @@ async function buildImportPlan(options: {
       sessionId: options.sessionId,
       worldId: options.worldId,
       now: options.now,
+      schema: resolvedSchema,
       deps: options.deps,
     });
   }
@@ -1015,6 +999,20 @@ function writeKey(write: PlannedWrite): string {
   return `${write.target}:::${write.key}`;
 }
 
+async function maybeDeleteOwnedUnreferencedMedia(options: {
+  mediaStore: MediaStore;
+  mediaId: string;
+  sessionId: string;
+}): Promise<void> {
+  const lookup = await options.mediaStore.lookup(options.mediaId);
+  if (lookup?.ownerSessionId !== options.sessionId) return;
+  const refs = (await options.mediaStore.listRefs()).filter(
+    (ref) => ref.mediaId === options.mediaId,
+  );
+  if (refs.length > 0) return;
+  await options.mediaStore.delete(options.mediaId, { force: true });
+}
+
 async function currentHashForLedger(options: {
   store: DataStore;
   sessionId: string;
@@ -1087,7 +1085,12 @@ async function deleteLedgerTarget(options: {
       const mediaId = typeof ref?.id === "string" ? ref.id : undefined;
       if (mediaId) {
         try {
-          await options.mediaStore.delete(mediaId, { force: true });
+          await options.mediaStore.removeRef(mediaId, sessionId);
+          await maybeDeleteOwnedUnreferencedMedia({
+            mediaStore: options.mediaStore,
+            mediaId,
+            sessionId,
+          });
         } catch {
           // Data sync should continue deleting the remaining managed rows.
         }

@@ -1,13 +1,14 @@
 import { homedir } from "node:os";
 import path from "node:path";
-import {
-  formatValidationErrors,
-  validateDimensions,
-  type WorldDataMetadataSummary,
-} from "@covel/shared";
+import { type WorldDataMetadataSummary } from "@covel/shared";
 import { digestFile, sha256Hex } from "./digest.js";
 import { loadWorldDataDescriptor } from "./descriptor.js";
 import { readWorldDataSource } from "./source-reader.js";
+import {
+  parsePluginSchemaUri,
+  resolveWorldDataSchema,
+  validateWorldDataSchemaValue,
+} from "./schema-registry.js";
 import {
   parseWorldDataIndexTarget,
   parseWorldDataTarget,
@@ -51,25 +52,26 @@ function setMetadataPath(
   current[segments[segments.length - 1]!] = value;
 }
 
-function validateSourceSchema(
+async function validateSourceSchema(
   source: OrderedWorldDataSource,
   value: unknown,
-): readonly WorldDataDiagnostic[] {
+): Promise<readonly WorldDataDiagnostic[]> {
   if (!source.descriptor.schema) return [];
-  if (source.descriptor.schema === "covel://world/dimensions") {
-    const validation = validateDimensions(value);
-    if (!validation.valid) {
-      return [
-        {
-          level: "error",
-          sourceId: source.id,
-          schema: source.descriptor.schema,
-          message: `invalid world dimensions:\n${formatValidationErrors(validation.errors ?? [])}`,
-        },
-      ];
-    }
+  if (parsePluginSchemaUri(source.descriptor.schema)) {
+    return [];
   }
-  return [];
+  const schema = await resolveWorldDataSchema({ source });
+  if (!schema) return [];
+  if ("level" in schema) {
+    return [{ sourceId: source.id, ...schema }];
+  }
+  const validation = validateWorldDataSchemaValue({
+    schema,
+    source,
+    value,
+    label: `worldData source "${source.id}" value`,
+  });
+  return validation ? [validation] : [];
 }
 
 async function summarizeSource(
@@ -114,7 +116,7 @@ async function summarizeSource(
     };
   }
 
-  diagnostics.push(...validateSourceSchema(source, read.value));
+  diagnostics.push(...(await validateSourceSchema(source, read.value)));
   const digest = await digestFile(read.path);
   if (
     parsedTarget?.kind === "world-metadata" &&

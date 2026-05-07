@@ -311,6 +311,10 @@ export async function createIndexedDbMediaStore(
       });
     },
 
+    async removeRef(id, sessionId) {
+      await db.delete(STORE_REFS, refKey(id, sessionId));
+    },
+
     async isReferencedBy(id, sessionId) {
       const record = await db.get(STORE_ASSETS, id);
       if (record?.ownerSessionId === sessionId) return true;

@@ -200,7 +200,10 @@ that ledger for dry-run, hash-based conflict detection, and explicit
 Media bytes live in `MediaStore`, which has a separate lifecycle from
 `DataStore`. World-data import validates media during preflight, writes the
 media object before the session-store media index row, and rolls back the
-`DataStore` transaction on failure.
+`DataStore` transaction on failure. Sync deletion of importer-managed media
+index rows removes only the current session's explicit media ref; the
+content-addressed media asset is deleted only when the current session owns it
+and no refs remain.
 
 ### Opting out
 

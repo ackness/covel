@@ -113,6 +113,12 @@ export interface MediaStore {
    */
   addRef(id: string, sessionId: string, pluginId?: string): Promise<void>;
   /**
+   * Idempotently remove one session's explicit ref for an asset. This does
+   * not delete bytes or ownership metadata; callers that want to reclaim the
+   * asset must first verify ownership and remaining refs.
+   */
+  removeRef(id: string, sessionId: string): Promise<void>;
+  /**
    * True if `sessionId` owns the asset OR has a row in `media_refs` for it.
    * The route handler uses this to gate dereferencing.
    */

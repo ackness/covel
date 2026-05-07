@@ -215,6 +215,92 @@ sources:
     expect(result.metadata.dimensions).toBeUndefined();
   });
 
+  it("validates world-local schema paths", async () => {
+    const root = await makeTempWorld();
+    await mkdir(path.join(root, "data"), { recursive: true });
+    await mkdir(path.join(root, "schemas"), { recursive: true });
+    await writeFile(
+      path.join(root, "data/world.data.yaml"),
+      `schemaVersion: 1
+sources:
+  facts:
+    kind: json
+    path: data/fact.json
+    schema: schemas/fact.schema.json
+    to: world:metadata.facts
+`,
+    );
+    await writeFile(path.join(root, "data/fact.json"), JSON.stringify({}));
+    await writeFile(
+      path.join(root, "schemas/fact.schema.json"),
+      JSON.stringify({
+        type: "object",
+        required: ["content"],
+        properties: { content: { type: "string" } },
+      }),
+    );
+
+    const result = await loadWorldDataSummary({
+      worldRoot: root,
+      worldId: "demo",
+      worldDataPath: "data/world.data.yaml",
+    });
+
+    expect(
+      result.diagnostics.some(
+        (d) =>
+          d.level === "error" &&
+          d.sourceId === "facts" &&
+          /failed schema validation/.test(d.message),
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects world-local schema symlink escapes", async () => {
+    const root = await makeTempWorld();
+    const outside = await mkdtemp(path.join(tmpdir(), "covel-schema-outside-"));
+    await mkdir(path.join(root, "data"), { recursive: true });
+    await mkdir(path.join(root, "schemas"), { recursive: true });
+    await writeFile(
+      path.join(outside, "fact.schema.json"),
+      JSON.stringify({ type: "object" }),
+    );
+    await symlink(
+      path.join(outside, "fact.schema.json"),
+      path.join(root, "schemas/fact.schema.json"),
+    );
+    await writeFile(
+      path.join(root, "data/world.data.yaml"),
+      `schemaVersion: 1
+sources:
+  facts:
+    kind: json
+    path: data/fact.json
+    schema: schemas/fact.schema.json
+    to: world:metadata.facts
+`,
+    );
+    await writeFile(
+      path.join(root, "data/fact.json"),
+      JSON.stringify({ content: "ok" }),
+    );
+
+    const result = await loadWorldDataSummary({
+      worldRoot: root,
+      worldId: "demo",
+      worldDataPath: "data/world.data.yaml",
+    });
+
+    expect(
+      result.diagnostics.some(
+        (d) =>
+          d.level === "error" &&
+          d.sourceId === "facts" &&
+          /schema path is invalid or escapes/.test(d.message),
+      ),
+    ).toBe(true);
+  });
+
   it("rejects non-finite YAML numbers as non-JSON values", async () => {
     const root = await makeTempWorld();
     await mkdir(path.join(root, "data"), { recursive: true });

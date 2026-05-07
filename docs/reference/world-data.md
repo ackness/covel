@@ -63,32 +63,51 @@ sources:
 
 字段：
 
-| 字段      | 说明                                                                      |
-| --------- | ------------------------------------------------------------------------- |
-| `kind`    | `yaml`、`json`、`markdown`、`text`、`media`                               |
-| `path`    | 相对 world root 的文件或目录                                              |
-| `schema`  | `covel://...`、`plugin://<pluginId>/<namespace>`、或 world 内 schema path |
-| `to`      | 写入目标 URI                                                              |
-| `key`     | 简单字段名，例如 `id`、`characterId`、`filename`                          |
-| `indexTo` | media source 的索引目标 URI                                               |
-| `effects` | 额外投影；当前 `characters` 会把角色蓝图实例化为角色                      |
-| `after`   | source 顺序依赖                                                           |
-| `enabled` | 布尔值；`false` 会跳过该 source                                           |
-| `locale`  | source 对应的内容语言                                                     |
-| `merge`   | `replace` 或 `skipExisting`                                               |
+| 字段      | 必填 | 可选值 / 格式                                                                          | 说明                                                                                      |
+| --------- | ---- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `kind`    | yes  | `yaml`、`json`、`markdown`、`text`、`media`                                            | source 读取器类型。                                                                       |
+| `path`    | yes  | 非空字符串                                                                             | 相对 descriptor root 的文件或目录。world 包相对 world root；override 相对 override root。 |
+| `schema`  | no   | `covel://world/dimensions`、`plugin://<pluginId>/<namespace>`、或本地 JSON Schema path | 校验用 schema。`plugin://...` 是 schema URI。                                             |
+| `to`      | yes  | 见 [Target URI](#target-uri)                                                           | 写入目标 URI。`plugin:<id>/<namespace>` 是 target URI。                                   |
+| `key`     | no   | 简单字段名，例如 `id`、`characterId`、`filename`                                       | 批量 source 的稳定 key。media 常用 `filename`。                                           |
+| `indexTo` | no   | `plugin:<id>/<namespace>`                                                              | 仅 media source 使用，把媒体索引写入插件数据。                                            |
+| `effects` | no   | `characters`                                                                           | 额外投影；当前 `characters` 会把角色蓝图或简洁角色记录实例化为角色。                      |
+| `after`   | no   | source id 或 source id 数组                                                            | source 顺序依赖。source id 必须先声明且满足命名规则。                                     |
+| `enabled` | no   | boolean                                                                                | `false` 会跳过该 source。                                                                 |
+| `locale`  | no   | 长度至少 2 的字符串                                                                    | source 对应的内容语言。                                                                   |
+| `merge`   | no   | `replace`、`skipExisting`                                                              | 写入冲突策略。                                                                            |
+
+`source id` 必须匹配 `^[a-z][a-zA-Z0-9_-]{0,63}$`。descriptor 顶层目前只接受 `schemaVersion: 1` 和 `sources`。
 
 ## Target URI
 
 当前支持：
 
-| URI                                | 阶段           | 说明                                                |
-| ---------------------------------- | -------------- | --------------------------------------------------- |
-| `world:metadata.dimensions`        | world load     | 写入 `WorldRecord.metadata.dimensions`              |
-| `plugin:<id>/<namespace>`          | session create | 写入目标插件的 `plugin_data`                        |
-| `plugin:<id>/<namespace>+lorebook` | session create | 写入 `plugin_data`，并同步生成 session lorebook row |
-| `lorebook`                         | session create | 直接写入 session lorebook                           |
-| `characters`                       | session create | 直接 upsert session character                       |
-| `media` + `indexTo`                | session create | 导入媒体并把索引写入 `plugin_data`                  |
+| URI                                | 阶段           | 说明                                                                                       |
+| ---------------------------------- | -------------- | ------------------------------------------------------------------------------------------ |
+| `world:metadata.<path>`            | world load     | 写入 `WorldRecord.metadata` 子路径；当前 world-load MVP 只投影 `world:metadata.dimensions` |
+| `plugin:<id>/<namespace>`          | session create | 写入目标插件的 `plugin_data`                                                               |
+| `plugin:<id>/<namespace>+lorebook` | session create | 写入 `plugin_data`，并同步生成 session lorebook row                                        |
+| `lorebook`                         | session create | 直接写入 session lorebook                                                                  |
+| `characters`                       | session create | 直接 upsert session character                                                              |
+| `media` + `indexTo`                | session create | 导入媒体并把索引写入 `plugin_data`                                                         |
+
+URI grammar：
+
+| Syntax                                   | 用途       | 规则                                                                                                                                |
+| ---------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `plugin:<pluginId>/<namespace>`          | target URI | `pluginId` 匹配 `^[a-z][a-z0-9-]*$`；`namespace` 匹配 `^[a-z][a-zA-Z0-9_-]{0,63}$`。                                                |
+| `plugin:<pluginId>/<namespace>+lorebook` | target URI | 同时写 `plugin_data` 和 lorebook。                                                                                                  |
+| `plugin://<pluginId>/<namespace>`        | schema URI | 用于 `schema` 字段，指向插件 `dataSchemas.<namespace>`。                                                                            |
+| `covel://world/dimensions`               | schema URI | 内置 world dimensions schema。                                                                                                      |
+| `world:metadata.<path>`                  | target URI | path 只允许字母、数字、`_`、`.`、`-`；禁止 `__proto__`、`constructor`、`prototype`；当前拒绝 `world:metadata.characterBlueprints`。 |
+
+`plugin://...` 和 `plugin:...` 的用途不同：`schema` 说明“用哪个 schema 校验”，`to` 说明“写到哪里”。因此同一个 source 通常同时写：
+
+```yaml
+schema: plugin://character-blueprint/blueprints
+to: plugin:character-blueprint/blueprints
+```
 
 `plugin:*/*` 与 `indexTo` 都会做 preflight：
 
@@ -96,7 +115,10 @@ sources:
 - 目标插件在本 session 最终启用插件列表中。
 - 目标 namespace 在插件 `dataSchemas` 中声明。
 - `acceptsWorldData: true`。
-- 插件包内 JSON Schema 校验 source item 通过。
+- `schema` 为 `plugin://<id>/<namespace>` 时必须和 `to: plugin:<id>/<namespace>` 兼容。
+- 插件包内 JSON Schema、world/override 本地 JSON Schema 或内置 schema 校验通过。
+
+world load 阶段只强校验内置 schema 和本地 schema；`plugin://...` schema 在 session import/preflight 阶段结合当前启用插件严格校验。
 
 ## Character Blueprint Import
 
@@ -121,6 +143,8 @@ sources:
 - 镜像到当前 session 已启用、且声明 `dataSchemas.characters.acceptsWorldData: true` 的插件
 
 角色面板类第三方插件可以接收同一份角色记录。插件只要声明 `characters` namespace，并在 session 插件列表中启用，就会收到由 world data 实例化出的 CharacterRecord。
+
+`effects: [characters]` 也接受简洁角色记录，例如 `{ "id": "mio", "name": "Mio", "type": "npc" }`。这种记录会直接生成 session character，并镜像到当前启用且声明 `dataSchemas.characters.acceptsWorldData: true` 的插件。
 
 ## Third-Party Extension
 
@@ -240,8 +264,11 @@ POST /api/worlds/<world-id>/sync-data
 1. 只处理 ledger 中 `managed=true` 且 `sourceWorldId` 匹配当前 world 的 row。
 2. 当前目标 row 的 hash 与 ledger `valueHash` 一致时才自动覆盖或删除。
 3. 目标 row 被玩家或插件改动时返回 `conflicts.reason = "modified"`。
-4. 目标 row 缺失时返回 `conflicts.reason = "missing"`。
-5. 传 `force:true` 时允许覆盖 modified/missing 冲突。
+4. planned write 仍存在但目标 row 缺失时返回 `conflicts.reason = "missing"`。
+5. source 已移除且目标 row 也已缺失时，只清理 stale ledger，不报告 conflict。
+6. 传 `force:true` 时允许覆盖 modified/missing 冲突。
+
+media index 同步删除只移除当前 session 的 media ref。只有 asset owner 是当前 session 且没有其他 refs 时，服务器才会删除底层 content-addressed media asset。
 
 ### World 包与插件包的边界
 

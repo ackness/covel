@@ -194,6 +194,58 @@ export function runMediaStoreContractTests(
       expect(yRefs[0]?.pluginId).toBe("plugin-A");
     });
 
+    it("removeRef only removes the specified session ref and preserves shared assets", async () => {
+      const store = await createStore();
+      const ref = await store.put(PNG, "image/png");
+      await store.recordOwnership(ref.id, "sess-OWNER", "plugin-OWNER");
+      await store.addRef(ref.id, "sess-A", "plugin-A");
+      await store.addRef(ref.id, "sess-B", "plugin-B");
+
+      await store.removeRef(ref.id, "sess-A");
+
+      expect(await store.exists(ref.id)).toBe(true);
+      expect(await store.lookup(ref.id)).toMatchObject({
+        id: ref.id,
+        ownerSessionId: "sess-OWNER",
+      });
+      expect(await store.isReferencedBy(ref.id, "sess-A")).toBe(false);
+      expect(await store.isReferencedBy(ref.id, "sess-B")).toBe(true);
+      expect(await store.isReferencedBy(ref.id, "sess-OWNER")).toBe(true);
+      expect(await store.get(ref)).toBeTruthy();
+      expect(await store.listRefs()).toContainEqual(
+        expect.objectContaining({
+          mediaId: ref.id,
+          sessionId: "sess-B",
+          pluginId: "plugin-B",
+        }),
+      );
+    });
+
+    it("can delete an owned asset after its last explicit ref is removed", async () => {
+      const store = await createStore();
+      const ref = await store.put(PNG, "image/png");
+      await store.recordOwnership(ref.id, "sess-OWNER", "plugin-OWNER");
+      await store.addRef(ref.id, "sess-OWNER", "plugin-OWNER");
+
+      await store.removeRef(ref.id, "sess-OWNER");
+      const remainingRefs = (await store.listRefs()).filter(
+        (row) => row.mediaId === ref.id,
+      );
+      const lookup = await store.lookup(ref.id);
+      if (
+        lookup?.ownerSessionId === "sess-OWNER" &&
+        remainingRefs.length === 0
+      ) {
+        await store.delete(ref.id, { force: true });
+      }
+
+      expect(await store.exists(ref.id)).toBe(false);
+      expect(await store.lookup(ref.id)).toBeNull();
+      expect(
+        (await store.listRefs()).filter((row) => row.mediaId === ref.id),
+      ).toEqual([]);
+    });
+
     it("lists assets and refs for lifecycle scans", async () => {
       const store = await createStore();
       const ref = await store.put(PNG, "image/png", { label: "scan" });

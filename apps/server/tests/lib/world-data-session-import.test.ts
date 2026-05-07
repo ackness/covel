@@ -13,7 +13,10 @@ import {
   createMemoryStore,
   type DataStore,
 } from "@covel/store";
-import { importWorldDataForSession } from "../../src/world-data/session-import.js";
+import {
+  importWorldDataForSession,
+  syncWorldDataForSession,
+} from "../../src/world-data/session-import.js";
 
 const NOW = "2026-01-01T00:00:00.000Z";
 
@@ -63,6 +66,25 @@ async function makeStore(activePlugins: readonly string[]): Promise<DataStore> {
     updatedAt: NOW,
   });
   return store;
+}
+
+async function addSession(
+  store: DataStore,
+  id: string,
+  activePlugins: readonly string[],
+  worldId = "demo-world",
+): Promise<void> {
+  await store.createSession({
+    id,
+    worldId,
+    status: "active",
+    turnCount: 0,
+    preGameCompleted: [],
+    locale: "zh-CN",
+    activePlugins,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
 }
 
 function registry(entries: Record<string, readonly string[]>) {
@@ -387,6 +409,144 @@ sources:
     ).toEqual([]);
   });
 
+  it("rejects mismatched plugin schema and plugin target namespaces", async () => {
+    const pluginRoot = await mkdtemp(
+      path.join(tmpdir(), "covel-schema-plugin-"),
+    );
+    await mkdir(path.join(pluginRoot, "schemas"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, "schemas/ns.schema.json"),
+      JSON.stringify({ type: "object" }),
+    );
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  facts:
+    kind: json
+    path: data/fact.json
+    schema: plugin://a/ns
+    to: plugin:b/ns
+    key: id
+`,
+      files: { "data/fact.json": JSON.stringify({ id: "one" }) },
+    });
+    const store = await makeStore(["b"]);
+
+    await expect(
+      importWorldDataForSession({
+        store,
+        sessionId: "sess-1",
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+        preflight: {
+          activePlugins: ["b"],
+          registry: registryWithSchema({
+            a: { rootPath: pluginRoot, namespaces: ["ns"] },
+            b: { rootPath: pluginRoot, namespaces: ["ns"] },
+          }),
+        },
+      }),
+    ).rejects.toThrow(/incompatible with target/);
+  });
+
+  it("validates and rejects source values with world-local schema paths", async () => {
+    const descriptor = `schemaVersion: 1
+sources:
+  facts:
+    kind: json
+    path: data/facts.json
+    schema: schemas/fact.schema.json
+    to: plugin:world-notes/facts
+    key: id
+`;
+    const schema = JSON.stringify({
+      type: "object",
+      required: ["id", "content"],
+      properties: {
+        id: { type: "string" },
+        content: { type: "string" },
+      },
+      additionalProperties: true,
+    });
+    const valid = await makeWorld({
+      id: "valid-world",
+      descriptor,
+      files: {
+        "data/facts.json": JSON.stringify([
+          { id: "rain", content: "Rain matters." },
+        ]),
+        "schemas/fact.schema.json": schema,
+      },
+    });
+    const validStore = await makeStore(["world-notes"]);
+
+    const result = await importWorldDataForSession({
+      store: validStore,
+      sessionId: "sess-1",
+      worldId: valid.worldId,
+      worldsDirs: [valid.worldsDir],
+      now: NOW,
+      preflight: {
+        activePlugins: ["world-notes"],
+        registry: registry({ "world-notes": ["facts"] }),
+      },
+    });
+
+    expect(result.written).toBe(1);
+
+    const invalid = await makeWorld({
+      id: "invalid-world",
+      descriptor,
+      files: {
+        "data/facts.json": JSON.stringify([{ id: "rain" }]),
+        "schemas/fact.schema.json": schema,
+      },
+    });
+    const invalidStore = await makeStore(["world-notes"]);
+
+    await expect(
+      importWorldDataForSession({
+        store: invalidStore,
+        sessionId: "sess-1",
+        worldId: invalid.worldId,
+        worldsDirs: [invalid.worldsDir],
+        now: NOW,
+        preflight: {
+          activePlugins: ["world-notes"],
+          registry: registry({ "world-notes": ["facts"] }),
+        },
+      }),
+    ).rejects.toThrow(/source "facts" value failed schema validation/);
+  });
+
+  it("rejects invalid covel world dimensions during session import", async () => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  dimensions:
+    kind: yaml
+    path: data/dimensions.yaml
+    schema: covel://world/dimensions
+    to: world:metadata.dimensions
+`,
+      files: {
+        "data/dimensions.yaml": "tone:\n  genres: []\n  contentRating: teen\n",
+      },
+    });
+    const store = await makeStore([]);
+
+    await expect(
+      importWorldDataForSession({
+        store,
+        sessionId: "sess-1",
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+      }),
+    ).rejects.toThrow(/invalid world dimensions/);
+  });
+
   it("cleans imported media when later store writes fail", async () => {
     const { worldsDir, worldId } = await makeWorld({
       descriptor: `schemaVersion: 1
@@ -484,6 +644,79 @@ sources:
     expect(
       await store.listPluginData("sess-1", "char-creator", "characters"),
     ).toEqual([]);
+  });
+
+  it("creates character effects from concise plugin-data character records", async () => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  cast:
+    kind: json
+    path: data/cast.json
+    to: plugin:world-cast/cast
+    key: id
+    effects:
+      - characters
+`,
+      files: {
+        "data/cast.json": JSON.stringify({
+          id: "mio",
+          name: "Mio",
+          type: "npc",
+          description: "Keeps the archive keys.",
+          fields: { mood: "focused" },
+        }),
+      },
+    });
+    const store = await makeStore([
+      "world-cast",
+      "char-creator",
+      "third-party-cast",
+    ]);
+
+    const result = await importWorldDataForSession({
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      preflight: {
+        activePlugins: ["world-cast", "char-creator", "third-party-cast"],
+        registry: registry({
+          "world-cast": ["cast"],
+          "char-creator": ["characters"],
+          "third-party-cast": ["characters"],
+        }),
+      },
+    });
+
+    expect(result.written).toBe(4);
+    expect(await store.listCharacters("sess-1")).toMatchObject([
+      {
+        id: "mio",
+        name: "Mio",
+        type: "npc",
+        description: "Keeps the archive keys.",
+        fields: { mood: "focused" },
+      },
+    ]);
+    expect(
+      await store.getPluginData("sess-1", "char-creator", "characters", "mio"),
+    ).toMatchObject({
+      value: {
+        id: "mio",
+        name: "Mio",
+        sessionId: "sess-1",
+      },
+    });
+    expect(
+      await store.getPluginData(
+        "sess-1",
+        "third-party-cast",
+        "characters",
+        "mio",
+      ),
+    ).toBeTruthy();
   });
 
   it("skips existing rows with merge skipExisting", async () => {
@@ -728,6 +961,106 @@ sources:
     expect(
       await store.listPluginData("sess-1", "character-presence", "assets"),
     ).toEqual([]);
+  });
+
+  it("sync deletion removes only the current session ref for shared imported media", async () => {
+    const { worldsDir, worldRoot, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: plugin:character-presence/assets
+    key: filename
+`,
+      files: {
+        "media/portraits/mio.png": "png-ish",
+      },
+    });
+    const store = createMemoryStore();
+    await addSession(store, "sess-a", ["character-presence"], worldId);
+    await addSession(store, "sess-b", ["character-presence"], worldId);
+    const mediaStore = createMemoryMediaStore();
+    const preflight = {
+      activePlugins: ["character-presence"],
+      registry: registry({ "character-presence": ["assets"] }),
+    };
+
+    for (const sessionId of ["sess-a", "sess-b"]) {
+      const result = await importWorldDataForSession({
+        store,
+        mediaStore,
+        sessionId,
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+        preflight,
+      });
+      expect(result.written).toBe(1);
+    }
+
+    const mediaRowB = await store.getPluginData(
+      "sess-b",
+      "character-presence",
+      "assets",
+      "mio.png",
+    );
+    const mediaId =
+      typeof (mediaRowB?.value as { ref?: { id?: unknown } } | undefined)?.ref
+        ?.id === "string"
+        ? (mediaRowB?.value as { ref: { id: string } }).ref.id
+        : undefined;
+    expect(mediaId).toEqual(expect.any(String));
+    expect(await mediaStore.isReferencedBy(mediaId!, "sess-a")).toBe(true);
+    expect(await mediaStore.isReferencedBy(mediaId!, "sess-b")).toBe(true);
+
+    await writeFile(
+      path.join(worldRoot, "data/world.data.yaml"),
+      `schemaVersion: 1
+sources: {}
+`,
+    );
+    const sync = await syncWorldDataForSession({
+      store,
+      mediaStore,
+      sessionId: "sess-a",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      dryRun: false,
+      preflight,
+    });
+
+    expect(sync).toMatchObject({
+      imported: true,
+      dryRun: false,
+      upserted: 0,
+      deleted: 1,
+      conflicts: [],
+    });
+    expect(
+      await store.getPluginData(
+        "sess-a",
+        "character-presence",
+        "assets",
+        "mio.png",
+      ),
+    ).toBeNull();
+    expect(
+      await store.getPluginData(
+        "sess-b",
+        "character-presence",
+        "assets",
+        "mio.png",
+      ),
+    ).toBeTruthy();
+    expect(await mediaStore.lookup(mediaId!)).not.toBeNull();
+    expect(await mediaStore.exists(mediaId!)).toBe(true);
+    expect(await mediaStore.isReferencedBy(mediaId!, "sess-b")).toBe(true);
+    expect(
+      (await mediaStore.listRefs()).filter((ref) => ref.mediaId === mediaId),
+    ).not.toContainEqual(expect.objectContaining({ sessionId: "sess-a" }));
   });
 
   it("imports bundled haruka academy data with real plugin schemas", async () => {

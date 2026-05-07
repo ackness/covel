@@ -119,6 +119,9 @@ function createMockMediaStore(options: MockMediaStoreOptions = {}): {
     async addRef() {
       // No-op: the test fixture seeds references via the `references` set.
     },
+    async removeRef() {
+      // No-op: the test fixture seeds references via the `references` set.
+    },
     async isReferencedBy(id, sessionId) {
       const a = assets.get(id);
       return a ? a.references.has(sessionId) : false;

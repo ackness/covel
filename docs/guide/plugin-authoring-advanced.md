@@ -179,7 +179,7 @@ const result = pipeline.check(
 
 ## 4. World Data Schema 契约
 
-插件要接收世界包或 override 包携带的数据，需要在 `PLUGIN.md` frontmatter 声明 `dataSchemas`。每个 namespace 对应一个插件根目录内的 JSON Schema 文件；world-data importer 会在 session 创建前校验目标插件启用状态、namespace 声明和 source item schema。
+插件要接收世界包或 override 包携带的数据，需要在 `PLUGIN.md` frontmatter 声明 `dataSchemas`。每个 namespace 对应一个插件根目录内的 JSON Schema 文件；world-data importer 会在 session 创建前校验目标插件启用状态、namespace 声明、schema URI 与 target namespace 兼容性，以及 source item schema。
 
 ```yaml
 dataSchemas:
